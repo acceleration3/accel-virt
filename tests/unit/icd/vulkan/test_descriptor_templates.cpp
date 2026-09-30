@@ -12,8 +12,11 @@
 #include "icd/vulkan/descriptor_template_table.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/submission/command_header.hpp"
+#include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -173,6 +176,44 @@ TEST(icd_descriptor_templates, a_template_is_remembered_and_sizes_the_blob_it_ca
   rig.update_entry()(rig.device(), reinterpret_cast<VkDescriptorSet>(0x42u), made, blob);
   CHECK_EQ(rig.blob_on_the_wire(), 0u);
   CHECK(rig.rig().root().templates().invariants_hold()); }
+
+/* VK_KHR_maintenance6 moved the template push into a structure, whose pData
+ * has no length in the registry either: the template the ICD remembers sizes
+ * it, the bytes cross whole, and a null one carries nothing. DXVK 3 will not
+ * make a device without maintenance6. */
+TEST(icd_descriptor_templates, a_maintenance6_template_push_carries_the_template_s_blob)
+{ TemplateRig rig;
+  const VkDescriptorUpdateTemplate made = rig.make(4u, 16u, 0x9300u);
+  CHECK(made != VK_NULL_HANDLE);
+  std::uint8_t blob[16u + 4u * image_bytes] = {};
+  for (std::uint32_t at = 0u; at < sizeof blob; at++) blob[at] = static_cast<std::uint8_t>(0xA0u + at);
+  VkPushDescriptorSetWithTemplateInfo push = {};
+  push.sType = VK_STRUCTURE_TYPE_PUSH_DESCRIPTOR_SET_WITH_TEMPLATE_INFO;
+  push.descriptorUpdateTemplate = made;
+  push.layout = reinterpret_cast<VkPipelineLayout>(0x77u);
+  push.set = 3u;
+  const bool cases[2] = {true, false};
+  for (const bool carried : cases) {
+      push.pData = carried ? blob : nullptr;
+      std::uint8_t   wire[1024] = {};
+      av::WireWriter writer(wire, sizeof wire);
+      serialize_VkPushDescriptorSetWithTemplateInfo(writer, push);
+      CHECK_STATUS(writer.status(), av::Status::ok);
+      WireReader    reader(wire, writer.offset());
+      std::uint8_t  block[1024] = {};
+      av::WireArena arena(block, sizeof block);
+      VkPushDescriptorSetWithTemplateInfo decoded = {};
+      CHECK(deserialize_VkPushDescriptorSetWithTemplateInfo(reader, &decoded, arena));
+      CHECK_EQ(reader.remaining(), 0u);
+      CHECK_EQ(decoded.set, 3u);
+      CHECK(decoded.layout == push.layout);
+      if (carried) {
+          CHECK(decoded.pData != nullptr);
+          CHECK_EQ(std::memcmp(decoded.pData, blob, sizeof blob), 0);
+      } else {
+          CHECK(decoded.pData == nullptr);
+      }
+  } }
 
 /* A null blob carries nothing whatever the template says, and a template of no
  * entries reads nothing whatever the blob is. */

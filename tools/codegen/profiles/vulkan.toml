@@ -186,6 +186,54 @@ include = [
     # application takes the branch, asks for vkMapMemory2KHR, and gets a
     # null pointer back from a driver that said it could.
 
+    # What current DXVK (3.1) and vkd3d-proton (3.0) use and this did not
+    # carry (audit of third_party/, 2026-09-30). DXVK 3.1 will not make a
+    # device without load_store_op_none and maintenance6; the rest each
+    # enable a path the libraries take when offered - most are a feature
+    # structure, a SPIR-V capability or an enum and no command. The window
+    # system ones (present_id, present_wait, swapchain_maintenance1,
+    # incremental_present, swapchain_mutable_format, hdr_metadata) are the
+    # ICD's own to implement, not the host's to carry, and are not here.
+    # Nor is VK_EXT_device_fault: vkGetDeviceFaultInfoEXT's vendor binary is
+    # an application buffer the struct gives no length for, and a host
+    # writing through a pointer that never crossed would take the device
+    # down to report that it went down.
+    "VK_KHR_load_store_op_none",
+    "VK_KHR_maintenance6",
+    "VK_KHR_maintenance7",
+    "VK_KHR_maintenance8",
+    "VK_EXT_border_color_swizzle",
+    "VK_EXT_conservative_rasterization",
+    "VK_EXT_depth_bias_control",
+    "VK_EXT_dynamic_rendering_unused_attachments",
+    "VK_EXT_fragment_shader_interlock",
+    "VK_EXT_multi_draw",
+    "VK_EXT_non_seamless_cube_map",
+    "VK_EXT_sample_locations",
+    "VK_EXT_shader_module_identifier",
+    "VK_EXT_shader_stencil_export",
+    "VK_KHR_shader_float_controls2",
+    "VK_KHR_shader_subgroup_uniform_control_flow",
+    "VK_AMD_shader_fragment_mask",
+    "VK_AMD_buffer_marker",
+    "VK_KHR_compute_shader_derivatives",
+    "VK_KHR_fragment_shader_barycentric",
+    "VK_EXT_shader_image_atomic_int64",
+    "VK_KHR_shader_maximal_reconvergence",
+    "VK_KHR_shader_quad_control",
+    "VK_EXT_image_sliced_view_of_3d",
+    "VK_EXT_image_compression_control",
+    "VK_KHR_calibrated_timestamps",
+    "VK_AMD_device_coherent_memory",
+    "VK_AMD_shader_core_properties",
+    "VK_AMD_shader_core_properties2",
+    "VK_AMD_shader_explicit_vertex_parameter",
+    "VK_MESA_image_alignment_control",
+    "VK_KHR_cooperative_matrix",
+    "VK_AMD_anti_lag",
+    "VK_KHR_ray_tracing_maintenance1",
+    "VK_EXT_pipeline_library_group_handles",
+
     "VK_KHR_push_descriptor",
     "VK_KHR_fragment_shading_rate",
     "VK_KHR_acceleration_structure",

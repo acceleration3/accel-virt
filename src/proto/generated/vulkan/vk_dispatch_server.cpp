@@ -6442,6 +6442,297 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
+    case ::av::vkproto::kCmd_vkAntiLagUpdateAMD: {
+        AV_SCOPE("server:vkAntiLagUpdateAMD");
+        VkDevice device = VK_NULL_HANDLE;
+        VkAntiLagDataAMD pData_local{};
+        if (!deserialize_VkDevice(r, device)) return false;
+        if (!deserialize_VkAntiLagDataAMD(r, &pData_local, arena)) return false;
+        s.on_vkAntiLagUpdateAMD(device, &pData_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT: {
+        AV_SCOPE("server:vkCmdBindDescriptorBufferEmbeddedSamplers2EXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkBindDescriptorBufferEmbeddedSamplersInfoEXT pBindDescriptorBufferEmbeddedSamplersInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkBindDescriptorBufferEmbeddedSamplersInfoEXT(r, &pBindDescriptorBufferEmbeddedSamplersInfo_local, arena)) return false;
+        s.on_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer, &pBindDescriptorBufferEmbeddedSamplersInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdBindDescriptorSets2KHR: {
+        AV_SCOPE("server:vkCmdBindDescriptorSets2KHR");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkBindDescriptorSetsInfo pBindDescriptorSetsInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkBindDescriptorSetsInfo(r, &pBindDescriptorSetsInfo_local, arena)) return false;
+        s.on_vkCmdBindDescriptorSets2KHR(commandBuffer, &pBindDescriptorSetsInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdDrawMultiEXT: {
+        AV_SCOPE("server:vkCmdDrawMultiEXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        uint32_t drawCount{};
+        VkMultiDrawInfoEXT* pVertexInfo_storage = nullptr;
+        size_t pVertexInfo_storage_count = 0;
+        uint32_t instanceCount{};
+        uint32_t firstInstance{};
+        uint32_t stride{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!r.read_pod(drawCount)) return false;
+        pVertexInfo_storage_count = static_cast<size_t>(drawCount);
+        if (pVertexInfo_storage_count != 0) {
+            pVertexInfo_storage = arena.allocate<VkMultiDrawInfoEXT>(pVertexInfo_storage_count);
+            if (pVertexInfo_storage == nullptr) return false;
+            for (size_t rvk_z = 0; rvk_z < pVertexInfo_storage_count; ++rvk_z) { pVertexInfo_storage[rvk_z] = {}; }
+        }
+        for (size_t rvk_i = 0; rvk_i < pVertexInfo_storage_count; ++rvk_i) {
+            if (!deserialize_VkMultiDrawInfoEXT(r, &pVertexInfo_storage[rvk_i], arena)) return false;
+        }
+        if (!r.read_pod(instanceCount)) return false;
+        if (!r.read_pod(firstInstance)) return false;
+        if (!r.read_pod(stride)) return false;
+        s.on_vkCmdDrawMultiEXT(commandBuffer, drawCount, pVertexInfo_storage, instanceCount, firstInstance, stride);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdPushConstants2KHR: {
+        AV_SCOPE("server:vkCmdPushConstants2KHR");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkPushConstantsInfo pPushConstantsInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkPushConstantsInfo(r, &pPushConstantsInfo_local, arena)) return false;
+        s.on_vkCmdPushConstants2KHR(commandBuffer, &pPushConstantsInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdPushDescriptorSet2KHR: {
+        AV_SCOPE("server:vkCmdPushDescriptorSet2KHR");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkPushDescriptorSetInfo pPushDescriptorSetInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkPushDescriptorSetInfo(r, &pPushDescriptorSetInfo_local, arena)) return false;
+        s.on_vkCmdPushDescriptorSet2KHR(commandBuffer, &pPushDescriptorSetInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdPushDescriptorSetWithTemplate2KHR: {
+        AV_SCOPE("server:vkCmdPushDescriptorSetWithTemplate2KHR");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkPushDescriptorSetWithTemplateInfo pPushDescriptorSetWithTemplateInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkPushDescriptorSetWithTemplateInfo(r, &pPushDescriptorSetWithTemplateInfo_local, arena)) return false;
+        s.on_vkCmdPushDescriptorSetWithTemplate2KHR(commandBuffer, &pPushDescriptorSetWithTemplateInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdSetDepthBias2EXT: {
+        AV_SCOPE("server:vkCmdSetDepthBias2EXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkDepthBiasInfoEXT pDepthBiasInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkDepthBiasInfoEXT(r, &pDepthBiasInfo_local, arena)) return false;
+        s.on_vkCmdSetDepthBias2EXT(commandBuffer, &pDepthBiasInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdSetDescriptorBufferOffsets2EXT: {
+        AV_SCOPE("server:vkCmdSetDescriptorBufferOffsets2EXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkSetDescriptorBufferOffsetsInfoEXT pSetDescriptorBufferOffsetsInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkSetDescriptorBufferOffsetsInfoEXT(r, &pSetDescriptorBufferOffsetsInfo_local, arena)) return false;
+        s.on_vkCmdSetDescriptorBufferOffsets2EXT(commandBuffer, &pSetDescriptorBufferOffsetsInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdSetSampleLocationsEXT: {
+        AV_SCOPE("server:vkCmdSetSampleLocationsEXT");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkSampleLocationsInfoEXT pSampleLocationsInfo_local{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkSampleLocationsInfoEXT(r, &pSampleLocationsInfo_local, arena)) return false;
+        s.on_vkCmdSetSampleLocationsEXT(commandBuffer, &pSampleLocationsInfo_local);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdTraceRaysIndirect2KHR: {
+        AV_SCOPE("server:vkCmdTraceRaysIndirect2KHR");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkDeviceAddress indirectDeviceAddress{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!r.read_pod(indirectDeviceAddress)) return false;
+        s.on_vkCmdTraceRaysIndirect2KHR(commandBuffer, indirectDeviceAddress);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdWriteBufferMarker2AMD: {
+        AV_SCOPE("server:vkCmdWriteBufferMarker2AMD");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkPipelineStageFlags2 stage{};
+        VkBuffer dstBuffer = VK_NULL_HANDLE;
+        VkDeviceSize dstOffset{};
+        uint32_t marker{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!r.read_pod(stage)) return false;
+        if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (!r.read_pod(dstOffset)) return false;
+        if (!r.read_pod(marker)) return false;
+        s.on_vkCmdWriteBufferMarker2AMD(commandBuffer, stage, dstBuffer, dstOffset, marker);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkCmdWriteBufferMarkerAMD: {
+        AV_SCOPE("server:vkCmdWriteBufferMarkerAMD");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkPipelineStageFlagBits pipelineStage{};
+        VkBuffer dstBuffer = VK_NULL_HANDLE;
+        VkDeviceSize dstOffset{};
+        uint32_t marker{};
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!r.read_pod(pipelineStage)) return false;
+        if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (!r.read_pod(dstOffset)) return false;
+        if (!r.read_pod(marker)) return false;
+        s.on_vkCmdWriteBufferMarkerAMD(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetCalibratedTimestampsKHR: {
+        AV_SCOPE("server:vkGetCalibratedTimestampsKHR");
+        VkDevice device = VK_NULL_HANDLE;
+        uint32_t timestampCount{};
+        VkCalibratedTimestampInfoKHR* pTimestampInfos_storage = nullptr;
+        size_t pTimestampInfos_storage_count = 0;
+        uint64_t* pTimestamps_storage = nullptr;
+        size_t pTimestamps_storage_count = 0;
+        uint64_t pMaxDeviation_out{};
+        if (!deserialize_VkDevice(r, device)) return false;
+        if (!r.read_pod(timestampCount)) return false;
+        pTimestampInfos_storage_count = static_cast<size_t>(timestampCount);
+        if (pTimestampInfos_storage_count != 0) {
+            pTimestampInfos_storage = arena.allocate<VkCalibratedTimestampInfoKHR>(pTimestampInfos_storage_count);
+            if (pTimestampInfos_storage == nullptr) return false;
+            for (size_t rvk_z = 0; rvk_z < pTimestampInfos_storage_count; ++rvk_z) { pTimestampInfos_storage[rvk_z] = {}; }
+        }
+        for (size_t rvk_i = 0; rvk_i < pTimestampInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkCalibratedTimestampInfoKHR(r, &pTimestampInfos_storage[rvk_i], arena)) return false;
+        }
+        pTimestamps_storage_count = static_cast<size_t>(timestampCount);
+        if (pTimestamps_storage_count != 0) {
+            pTimestamps_storage = arena.allocate<uint64_t>(pTimestamps_storage_count);
+            if (pTimestamps_storage == nullptr) return false;
+            for (size_t rvk_z = 0; rvk_z < pTimestamps_storage_count; ++rvk_z) { pTimestamps_storage[rvk_z] = {}; }
+        }
+        VkResult result = s.on_vkGetCalibratedTimestampsKHR(device, timestampCount, pTimestampInfos_storage, pTimestamps_storage, &pMaxDeviation_out);
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pTimestamps_storage_count; ++rvk_z) { pTimestamps_storage[rvk_z] = {}; }
+            pMaxDeviation_out = {};
+        }
+        for (size_t rvk_k = 0; rvk_k < pTimestamps_storage_count; ++rvk_k) {
+            reply.write_pod(pTimestamps_storage[rvk_k]);
+        }
+        reply.write_pod(pMaxDeviation_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceCalibrateableTimeDomainsKHR");
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+        uint8_t array_present = 0;
+        uint32_t pTimeDomainCount_local = 0;
+        VkTimeDomainKHR* pTimeDomains_storage = nullptr;
+        size_t pTimeDomains_storage_count = 0;
+        if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
+        if (!r.read_pod(array_present)) return false;
+        if (array_present) {
+            if (!r.read_pod(pTimeDomainCount_local)) return false;
+            pTimeDomains_storage_count = static_cast<size_t>(pTimeDomainCount_local);
+            if (pTimeDomains_storage_count != 0) {
+                pTimeDomains_storage = arena.allocate<VkTimeDomainKHR>(pTimeDomains_storage_count);
+                if (pTimeDomains_storage == nullptr) return false;
+                for (size_t rvk_z = 0; rvk_z < pTimeDomains_storage_count; ++rvk_z) { pTimeDomains_storage[rvk_z] = {}; }
+            }
+        }
+        VkResult result = s.on_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(physicalDevice, &pTimeDomainCount_local, array_present ? pTimeDomains_storage : nullptr);
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        uint32_t pTimeDomainCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pTimeDomainCount_local;
+        if (array_present && pTimeDomainCount_sent > pTimeDomains_storage_count) {
+            pTimeDomainCount_sent = static_cast<uint32_t>(pTimeDomains_storage_count);
+        }
+        reply.write_pod(pTimeDomainCount_sent);
+        if (array_present) {
+            for (uint32_t k = 0; k < pTimeDomainCount_sent; ++k) {
+                reply.write_pod(pTimeDomains_storage[k]);
+            }
+        }
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+        uint8_t array_present = 0;
+        uint32_t pPropertyCount_local = 0;
+        VkCooperativeMatrixPropertiesKHR* pProperties_storage = nullptr;
+        size_t pProperties_storage_count = 0;
+        if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
+        if (!r.read_pod(array_present)) return false;
+        if (array_present) {
+            if (!r.read_pod(pPropertyCount_local)) return false;
+            pProperties_storage_count = static_cast<size_t>(pPropertyCount_local);
+            if (pProperties_storage_count != 0) {
+                pProperties_storage = arena.allocate<VkCooperativeMatrixPropertiesKHR>(pProperties_storage_count);
+                if (pProperties_storage == nullptr) return false;
+                for (size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
+            }
+            for (size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR; pProperties_storage[rvk_e].pNext = nullptr; }
+        }
+        VkResult result = s.on_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(physicalDevice, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        uint32_t pPropertyCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPropertyCount_local;
+        if (array_present && pPropertyCount_sent > pProperties_storage_count) {
+            pPropertyCount_sent = static_cast<uint32_t>(pProperties_storage_count);
+        }
+        reply.write_pod(pPropertyCount_sent);
+        if (array_present) {
+            for (uint32_t k = 0; k < pPropertyCount_sent; ++k) {
+                serialize_VkCooperativeMatrixPropertiesKHR(reply, pProperties_storage[k]);
+            }
+        }
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetPhysicalDeviceMultisamplePropertiesEXT: {
+        AV_SCOPE("server:vkGetPhysicalDeviceMultisamplePropertiesEXT");
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+        VkSampleCountFlagBits samples{};
+        VkMultisamplePropertiesEXT pMultisampleProperties_out{};
+        if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
+        if (!r.read_pod(samples)) return false;
+        if (!r.read_pod(pMultisampleProperties_out.sType)) return false;
+        if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMultisampleProperties_out), arena)) return false;
+        s.on_vkGetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice, samples, &pMultisampleProperties_out);
+        reply.write_pod<int32_t>(0);
+        serialize_VkMultisamplePropertiesEXT(reply, pMultisampleProperties_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetShaderModuleCreateInfoIdentifierEXT: {
+        AV_SCOPE("server:vkGetShaderModuleCreateInfoIdentifierEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkShaderModuleCreateInfo pCreateInfo_local{};
+        VkShaderModuleIdentifierEXT pIdentifier_out{};
+        if (!deserialize_VkDevice(r, device)) return false;
+        if (!deserialize_VkShaderModuleCreateInfo(r, &pCreateInfo_local, arena)) return false;
+        if (!r.read_pod(pIdentifier_out.sType)) return false;
+        if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pIdentifier_out), arena)) return false;
+        s.on_vkGetShaderModuleCreateInfoIdentifierEXT(device, &pCreateInfo_local, &pIdentifier_out);
+        reply.write_pod<int32_t>(0);
+        serialize_VkShaderModuleIdentifierEXT(reply, pIdentifier_out);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkGetShaderModuleIdentifierEXT: {
+        AV_SCOPE("server:vkGetShaderModuleIdentifierEXT");
+        VkDevice device = VK_NULL_HANDLE;
+        VkShaderModule shaderModule = VK_NULL_HANDLE;
+        VkShaderModuleIdentifierEXT pIdentifier_out{};
+        if (!deserialize_VkDevice(r, device)) return false;
+        if (!deserialize_VkShaderModule(r, shaderModule)) return false;
+        if (!r.read_pod(pIdentifier_out.sType)) return false;
+        if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pIdentifier_out), arena)) return false;
+        s.on_vkGetShaderModuleIdentifierEXT(device, shaderModule, &pIdentifier_out);
+        reply.write_pod<int32_t>(0);
+        serialize_VkShaderModuleIdentifierEXT(reply, pIdentifier_out);
+        return true;
+    }
     default:
         return false;
     }

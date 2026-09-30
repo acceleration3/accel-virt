@@ -407,6 +407,25 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000101A2u: return "vkGetSemaphoreFdKHR";
         case 0x000101A3u: return "vkImportFenceFdKHR";
         case 0x000101A4u: return "vkImportSemaphoreFdKHR";
+        case 0x000101A7u: return "vkAntiLagUpdateAMD";
+        case 0x000101A8u: return "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT";
+        case 0x000101A9u: return "vkCmdBindDescriptorSets2KHR";
+        case 0x000101AAu: return "vkCmdDrawMultiEXT";
+        case 0x000101ACu: return "vkCmdPushConstants2KHR";
+        case 0x000101ADu: return "vkCmdPushDescriptorSet2KHR";
+        case 0x000101AEu: return "vkCmdPushDescriptorSetWithTemplate2KHR";
+        case 0x000101AFu: return "vkCmdSetDepthBias2EXT";
+        case 0x000101B0u: return "vkCmdSetDescriptorBufferOffsets2EXT";
+        case 0x000101B1u: return "vkCmdSetSampleLocationsEXT";
+        case 0x000101B2u: return "vkCmdTraceRaysIndirect2KHR";
+        case 0x000101B3u: return "vkCmdWriteBufferMarker2AMD";
+        case 0x000101B4u: return "vkCmdWriteBufferMarkerAMD";
+        case 0x000101B5u: return "vkGetCalibratedTimestampsKHR";
+        case 0x000101B7u: return "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR";
+        case 0x000101B8u: return "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR";
+        case 0x000101B9u: return "vkGetPhysicalDeviceMultisamplePropertiesEXT";
+        case 0x000101BAu: return "vkGetShaderModuleCreateInfoIdentifierEXT";
+        case 0x000101BBu: return "vkGetShaderModuleIdentifierEXT";
         default: return "unknown";
     }
 }

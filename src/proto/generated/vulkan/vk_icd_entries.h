@@ -403,6 +403,25 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetMemoryFdPropertiesKHR(VkDevice device, 
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd);
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo);
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkAntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD* pData);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo* pBindDescriptorSetsInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer, const VkPushDescriptorSetInfo* pPushDescriptorSetInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushDescriptorSetWithTemplate2KHR(VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDepthBias2EXT(VkCommandBuffer commandBuffer, const VkDepthBiasInfoEXT* pDepthBiasInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDescriptorBufferOffsets2EXT(VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetSampleLocationsEXT(VkCommandBuffer commandBuffer, const VkSampleLocationsInfoEXT* pSampleLocationsInfo);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker);
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetCalibratedTimestampsKHR(VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoKHR* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation);
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainKHR* pTimeDomains);
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkCooperativeMatrixPropertiesKHR* pProperties);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice physicalDevice, VkSampleCountFlagBits samples, VkMultisamplePropertiesEXT* pMultisampleProperties);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleCreateInfoIdentifierEXT(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, VkShaderModuleIdentifierEXT* pIdentifier);
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleIdentifierEXT(VkDevice device, VkShaderModule shaderModule, VkShaderModuleIdentifierEXT* pIdentifier);
 
 // The object the loader dispatches a command on, from its first
 // parameter in vk.xml: a global command takes no dispatchable handle,

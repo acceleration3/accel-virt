@@ -2247,8 +2247,110 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportSemaphoreFdKHR(VkDevice device, cons
     return ::av::vkproto::rvk_vkImportSemaphoreFdKHR(conn->transport(), device, pImportSemaphoreFdInfo);
 }
 
+VKAPI_ATTR void VKAPI_CALL Wrap_vkAntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD* pData) {
+    AV_SCOPE("vkAntiLagUpdateAMD");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::rvk_vkAntiLagUpdateAMD(conn->transport(), device, pData);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo) {
+    AV_SCOPE("vkCmdBindDescriptorBufferEmbeddedSamplers2EXT");
+    ::av::vkproto::rvk_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(::av::icd::record_target(commandBuffer), commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo* pBindDescriptorSetsInfo) {
+    AV_SCOPE("vkCmdBindDescriptorSets2KHR");
+    ::av::vkproto::rvk_vkCmdBindDescriptorSets2KHR(::av::icd::record_target(commandBuffer), commandBuffer, pBindDescriptorSetsInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride) {
+    AV_SCOPE("vkCmdDrawMultiEXT");
+    ::av::vkproto::rvk_vkCmdDrawMultiEXT(::av::icd::record_target(commandBuffer), commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo) {
+    AV_SCOPE("vkCmdPushConstants2KHR");
+    ::av::vkproto::rvk_vkCmdPushConstants2KHR(::av::icd::record_target(commandBuffer), commandBuffer, pPushConstantsInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer, const VkPushDescriptorSetInfo* pPushDescriptorSetInfo) {
+    AV_SCOPE("vkCmdPushDescriptorSet2KHR");
+    ::av::vkproto::rvk_vkCmdPushDescriptorSet2KHR(::av::icd::record_target(commandBuffer), commandBuffer, pPushDescriptorSetInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushDescriptorSetWithTemplate2KHR(VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo) {
+    AV_SCOPE("vkCmdPushDescriptorSetWithTemplate2KHR");
+    ::av::vkproto::rvk_vkCmdPushDescriptorSetWithTemplate2KHR(::av::icd::record_target(commandBuffer), commandBuffer, pPushDescriptorSetWithTemplateInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDepthBias2EXT(VkCommandBuffer commandBuffer, const VkDepthBiasInfoEXT* pDepthBiasInfo) {
+    AV_SCOPE("vkCmdSetDepthBias2EXT");
+    ::av::vkproto::rvk_vkCmdSetDepthBias2EXT(::av::icd::record_target(commandBuffer), commandBuffer, pDepthBiasInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetDescriptorBufferOffsets2EXT(VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo) {
+    AV_SCOPE("vkCmdSetDescriptorBufferOffsets2EXT");
+    ::av::vkproto::rvk_vkCmdSetDescriptorBufferOffsets2EXT(::av::icd::record_target(commandBuffer), commandBuffer, pSetDescriptorBufferOffsetsInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdSetSampleLocationsEXT(VkCommandBuffer commandBuffer, const VkSampleLocationsInfoEXT* pSampleLocationsInfo) {
+    AV_SCOPE("vkCmdSetSampleLocationsEXT");
+    ::av::vkproto::rvk_vkCmdSetSampleLocationsEXT(::av::icd::record_target(commandBuffer), commandBuffer, pSampleLocationsInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) {
+    AV_SCOPE("vkCmdTraceRaysIndirect2KHR");
+    ::av::vkproto::rvk_vkCmdTraceRaysIndirect2KHR(::av::icd::record_target(commandBuffer), commandBuffer, indirectDeviceAddress);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker) {
+    AV_SCOPE("vkCmdWriteBufferMarker2AMD");
+    ::av::vkproto::rvk_vkCmdWriteBufferMarker2AMD(::av::icd::record_target(commandBuffer), commandBuffer, stage, dstBuffer, dstOffset, marker);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker) {
+    AV_SCOPE("vkCmdWriteBufferMarkerAMD");
+    ::av::vkproto::rvk_vkCmdWriteBufferMarkerAMD(::av::icd::record_target(commandBuffer), commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetCalibratedTimestampsKHR(VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoKHR* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation) {
+    AV_SCOPE("vkGetCalibratedTimestampsKHR");
+    auto* conn = ::av::icd::connection_of(device);
+    return ::av::vkproto::rvk_vkGetCalibratedTimestampsKHR(conn->transport(), device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainKHR* pTimeDomains) {
+    AV_SCOPE("vkGetPhysicalDeviceCalibrateableTimeDomainsKHR");
+    auto* conn = ::av::icd::connection_of(physicalDevice);
+    return ::av::vkproto::rvk_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(conn->transport(), physicalDevice, pTimeDomainCount, pTimeDomains);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkCooperativeMatrixPropertiesKHR* pProperties) {
+    AV_SCOPE("vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+    auto* conn = ::av::icd::connection_of(physicalDevice);
+    return ::av::vkproto::rvk_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(conn->transport(), physicalDevice, pPropertyCount, pProperties);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice physicalDevice, VkSampleCountFlagBits samples, VkMultisamplePropertiesEXT* pMultisampleProperties) {
+    AV_SCOPE("vkGetPhysicalDeviceMultisamplePropertiesEXT");
+    auto* conn = ::av::icd::connection_of(physicalDevice);
+    ::av::vkproto::rvk_vkGetPhysicalDeviceMultisamplePropertiesEXT(conn->transport(), physicalDevice, samples, pMultisampleProperties);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleCreateInfoIdentifierEXT(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, VkShaderModuleIdentifierEXT* pIdentifier) {
+    AV_SCOPE("vkGetShaderModuleCreateInfoIdentifierEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::rvk_vkGetShaderModuleCreateInfoIdentifierEXT(conn->transport(), device, pCreateInfo, pIdentifier);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkGetShaderModuleIdentifierEXT(VkDevice device, VkShaderModule shaderModule, VkShaderModuleIdentifierEXT* pIdentifier) {
+    AV_SCOPE("vkGetShaderModuleIdentifierEXT");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::rvk_vkGetShaderModuleIdentifierEXT(conn->transport(), device, shaderModule, pIdentifier);
+}
+
 namespace {
-const Entry kWrapperTable[388] = {
+const Entry kWrapperTable[407] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance), DispatchLevel::instance },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice), DispatchLevel::device },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue), DispatchLevel::device },
@@ -2637,6 +2739,25 @@ const Entry kWrapperTable[388] = {
     Entry{ "vkGetSemaphoreFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetSemaphoreFdKHR), DispatchLevel::device },
     Entry{ "vkImportFenceFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkImportFenceFdKHR), DispatchLevel::device },
     Entry{ "vkImportSemaphoreFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkImportSemaphoreFdKHR), DispatchLevel::device },
+    Entry{ "vkAntiLagUpdateAMD", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkAntiLagUpdateAMD), DispatchLevel::device },
+    Entry{ "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT), DispatchLevel::device },
+    Entry{ "vkCmdBindDescriptorSets2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBindDescriptorSets2KHR), DispatchLevel::device },
+    Entry{ "vkCmdDrawMultiEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdDrawMultiEXT), DispatchLevel::device },
+    Entry{ "vkCmdPushConstants2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushConstants2KHR), DispatchLevel::device },
+    Entry{ "vkCmdPushDescriptorSet2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushDescriptorSet2KHR), DispatchLevel::device },
+    Entry{ "vkCmdPushDescriptorSetWithTemplate2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushDescriptorSetWithTemplate2KHR), DispatchLevel::device },
+    Entry{ "vkCmdSetDepthBias2EXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDepthBias2EXT), DispatchLevel::device },
+    Entry{ "vkCmdSetDescriptorBufferOffsets2EXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDescriptorBufferOffsets2EXT), DispatchLevel::device },
+    Entry{ "vkCmdSetSampleLocationsEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetSampleLocationsEXT), DispatchLevel::device },
+    Entry{ "vkCmdTraceRaysIndirect2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdTraceRaysIndirect2KHR), DispatchLevel::device },
+    Entry{ "vkCmdWriteBufferMarker2AMD", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdWriteBufferMarker2AMD), DispatchLevel::device },
+    Entry{ "vkCmdWriteBufferMarkerAMD", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdWriteBufferMarkerAMD), DispatchLevel::device },
+    Entry{ "vkGetCalibratedTimestampsKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetCalibratedTimestampsKHR), DispatchLevel::device },
+    Entry{ "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR), DispatchLevel::physical_device },
+    Entry{ "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR), DispatchLevel::physical_device },
+    Entry{ "vkGetPhysicalDeviceMultisamplePropertiesEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceMultisamplePropertiesEXT), DispatchLevel::physical_device },
+    Entry{ "vkGetShaderModuleCreateInfoIdentifierEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetShaderModuleCreateInfoIdentifierEXT), DispatchLevel::device },
+    Entry{ "vkGetShaderModuleIdentifierEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetShaderModuleIdentifierEXT), DispatchLevel::device },
 };
 }  // namespace
 
@@ -2647,6 +2768,6 @@ const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
 size_t EntryTable::size() const noexcept { return count_; }
 
-EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 388u}; }
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 407u}; }
 
 }  // namespace av::vkicd::generated

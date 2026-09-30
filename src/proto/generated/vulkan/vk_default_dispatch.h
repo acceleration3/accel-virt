@@ -667,6 +667,33 @@ public:
     VkResult on_vkImportSemaphoreFdKHR(VkDevice, const VkImportSemaphoreFdInfoKHR*) override {
         return VK_SUCCESS;
     }
+    void on_vkAntiLagUpdateAMD(VkDevice, const VkAntiLagDataAMD*) override {}
+    void on_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(VkCommandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT*) override {}
+    void on_vkCmdBindDescriptorSets2KHR(VkCommandBuffer, const VkBindDescriptorSetsInfo*) override {}
+    void on_vkCmdDrawMultiEXT(VkCommandBuffer, uint32_t, const VkMultiDrawInfoEXT*, uint32_t, uint32_t, uint32_t) override {}
+    void on_vkCmdPushConstants2KHR(VkCommandBuffer, const VkPushConstantsInfo*) override {}
+    void on_vkCmdPushDescriptorSet2KHR(VkCommandBuffer, const VkPushDescriptorSetInfo*) override {}
+    void on_vkCmdPushDescriptorSetWithTemplate2KHR(VkCommandBuffer, const VkPushDescriptorSetWithTemplateInfo*) override {}
+    void on_vkCmdSetDepthBias2EXT(VkCommandBuffer, const VkDepthBiasInfoEXT*) override {}
+    void on_vkCmdSetDescriptorBufferOffsets2EXT(VkCommandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT*) override {}
+    void on_vkCmdSetSampleLocationsEXT(VkCommandBuffer, const VkSampleLocationsInfoEXT*) override {}
+    void on_vkCmdTraceRaysIndirect2KHR(VkCommandBuffer, VkDeviceAddress) override {}
+    void on_vkCmdWriteBufferMarker2AMD(VkCommandBuffer, VkPipelineStageFlags2, VkBuffer, VkDeviceSize, uint32_t) override {}
+    void on_vkCmdWriteBufferMarkerAMD(VkCommandBuffer, VkPipelineStageFlagBits, VkBuffer, VkDeviceSize, uint32_t) override {}
+    VkResult on_vkGetCalibratedTimestampsKHR(VkDevice, uint32_t, const VkCalibratedTimestampInfoKHR*, uint64_t*, uint64_t*) override {
+        return VK_SUCCESS;
+    }
+    VkResult on_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainKHR*) override {
+        if (pTimeDomainCount != nullptr) { *pTimeDomainCount = 0; }
+        return VK_SUCCESS;
+    }
+    VkResult on_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice, uint32_t* pPropertyCount, VkCooperativeMatrixPropertiesKHR*) override {
+        if (pPropertyCount != nullptr) { *pPropertyCount = 0; }
+        return VK_SUCCESS;
+    }
+    void on_vkGetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice, VkSampleCountFlagBits, VkMultisamplePropertiesEXT*) override {}
+    void on_vkGetShaderModuleCreateInfoIdentifierEXT(VkDevice, const VkShaderModuleCreateInfo*, VkShaderModuleIdentifierEXT*) override {}
+    void on_vkGetShaderModuleIdentifierEXT(VkDevice, VkShaderModule, VkShaderModuleIdentifierEXT*) override {}
 };
 
 }  // namespace av::vkproto

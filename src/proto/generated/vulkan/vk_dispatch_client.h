@@ -397,5 +397,24 @@ VkResult rvk_vkGetMemoryFdPropertiesKHR(::av::ClientTransport& t, VkDevice devic
 VkResult rvk_vkGetSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd);
 VkResult rvk_vkImportFenceFdKHR(::av::ClientTransport& t, VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo);
 VkResult rvk_vkImportSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo);
+void rvk_vkAntiLagUpdateAMD(::av::ClientTransport& t, VkDevice device, const VkAntiLagDataAMD* pData);
+void rvk_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo);
+void rvk_vkCmdBindDescriptorSets2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo* pBindDescriptorSetsInfo);
+void rvk_vkCmdDrawMultiEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride);
+void rvk_vkCmdPushConstants2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo);
+void rvk_vkCmdPushDescriptorSet2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkPushDescriptorSetInfo* pPushDescriptorSetInfo);
+void rvk_vkCmdPushDescriptorSetWithTemplate2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo);
+void rvk_vkCmdSetDepthBias2EXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkDepthBiasInfoEXT* pDepthBiasInfo);
+void rvk_vkCmdSetDescriptorBufferOffsets2EXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo);
+void rvk_vkCmdSetSampleLocationsEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSampleLocationsInfoEXT* pSampleLocationsInfo);
+void rvk_vkCmdTraceRaysIndirect2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress);
+void rvk_vkCmdWriteBufferMarker2AMD(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker);
+void rvk_vkCmdWriteBufferMarkerAMD(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker);
+VkResult rvk_vkGetCalibratedTimestampsKHR(::av::ClientTransport& t, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoKHR* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation);
+VkResult rvk_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainKHR* pTimeDomains);
+VkResult rvk_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkCooperativeMatrixPropertiesKHR* pProperties);
+void rvk_vkGetPhysicalDeviceMultisamplePropertiesEXT(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkSampleCountFlagBits samples, VkMultisamplePropertiesEXT* pMultisampleProperties);
+void rvk_vkGetShaderModuleCreateInfoIdentifierEXT(::av::ClientTransport& t, VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, VkShaderModuleIdentifierEXT* pIdentifier);
+void rvk_vkGetShaderModuleIdentifierEXT(::av::ClientTransport& t, VkDevice device, VkShaderModule shaderModule, VkShaderModuleIdentifierEXT* pIdentifier);
 
 }  // namespace av::vkproto

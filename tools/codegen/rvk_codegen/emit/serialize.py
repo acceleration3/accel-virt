@@ -135,6 +135,29 @@ def _expr_to_cpp(expr: str, prefix: str) -> str:
     return re.sub(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\b", sub, expr)
 
 
+_TEMPLATE_SIBLINGS: dict[int, str | None] = {}
+
+
+def _template_sibling(reg: Registry, m: StructMember) -> str | None:
+    """The ``VkDescriptorUpdateTemplate`` member beside ``m`` in its struct.
+
+    VK_KHR_maintenance6 moved the ``WithTemplate`` push into a struct
+    (``VkPushDescriptorSetWithTemplateInfo``), and its ``pData`` has no ``len``
+    there either: the template sizes it, exactly as it does the command
+    parameter ``classify.template_sibling`` answers for.
+    """
+    key = id(m)
+    if key not in _TEMPLATE_SIBLINGS:
+        found = None
+        for owner in reg.structs.values():
+            if any(member is m for member in owner.members):
+                found = next((o.name for o in owner.members
+                              if o.type.base == classify.TEMPLATE_HANDLE and o.type.pointer_depth == 0), None)
+                break
+        _TEMPLATE_SIBLINGS[key] = found
+    return _TEMPLATE_SIBLINGS[key]
+
+
 def _classify_member(reg: Registry, m: StructMember) -> str:
     if m.name == "pNext":
         return "pnext"
@@ -164,6 +187,8 @@ def _classify_member(reg: Registry, m: StructMember) -> str:
             # length, which it dereferences and dies on.
             if parts:
                 return "void_blob"
+            if _template_sibling(reg, m) is not None:
+                return "template_blob"
             # Otherwise genuinely opaque — host pointers, function
             # pointers. Nothing sensible to put on a wire.
             return "unknown_ptr"
@@ -412,6 +437,15 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        }",
             "    }",
         ]
+    if kind == "template_blob":
+        template = _template_sibling(reg, m)
+        return [
+            "    {",
+            f"        const uint64_t rvk_blob = v.{m.name} != nullptr ? descriptor_template_bytes(v.{template}) : 0;",
+            "        buf.write_varint(rvk_blob);",
+            f"        if (rvk_blob != 0) {{ buf.write(v.{m.name}, static_cast<size_t>(rvk_blob)); }}",
+            "    }",
+        ]
     if kind == "void_blob":
         size = _len_components(m)[0]
         return [
@@ -542,6 +576,21 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"                if (!deserialize_{m.type.base}(r, &arr[i], arena)) {{ return false; }}",
             "            }",
             f"            out->{m.name} = arr;",
+            "        }",
+            "    }",
+        ]
+    if kind == "template_blob":
+        return [
+            "    {",
+            "        uint64_t rvk_blob = 0;",
+            "        if (!r.read_varint(rvk_blob)) { return false; }",
+            "        if (rvk_blob == 0) {",
+            f"            out->{m.name} = nullptr;",
+            "        } else {",
+            "            if (rvk_blob > r.remaining()) { return false; }",
+            "            char* blob = arena.allocate_chars(static_cast<size_t>(rvk_blob));",
+            "            if (blob == nullptr || !r.read(blob, static_cast<size_t>(rvk_blob))) { return false; }",
+            f"            out->{m.name} = blob;",
             "        }",
             "    }",
         ]

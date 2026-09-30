@@ -204,6 +204,65 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
      * VK_KHR_image_format_list not supported". Core in 1.2; its one
      * structure crosses in an image's create. */
     {"VK_KHR_image_format_list", 1u, "reported_extensions.an_image_s_format_list_reaches_the_host"},
+    /* What DXVK 3.1 and vkd3d-proton 3.0 use (audit of third_party/,
+     * 2026-09-30). DXVK requires robustness2, depth clip enable, load/store
+     * op none and maintenance 5 and 6, and vkd3d-proton robustness2; without
+     * them neither makes a device. The rest each open a path the libraries
+     * take when offered. Deliberately absent: the ray-tracing family (not
+     * yet proved end to end), calibrated timestamps (the host's time domains
+     * are not the guest's), AMD anti-lag (its markers are the host's
+     * presents, not these), and descriptor buffers (the profile says why). */
+    {"VK_EXT_robustness2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_depth_clip_enable", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_custom_border_color", 12u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_4444_formats", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_attachment_feedback_loop_layout", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_memory_priority", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_pageable_device_local_memory", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_image_view_min_lod", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_mutable_descriptor_type", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_graphics_pipeline_library", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_transform_feedback", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_maintenance5", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_maintenance6", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_maintenance7", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_maintenance8", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_extended_dynamic_state", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_extended_dynamic_state2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_extended_dynamic_state3", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_line_rasterization", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_conditional_rendering", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_mesh_shader", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_fragment_shading_rate", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_dynamic_rendering_local_read", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_border_color_swizzle", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_depth_bias_control", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_dynamic_rendering_unused_attachments", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_fragment_shader_interlock", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_non_seamless_cube_map", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_shader_module_identifier", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_shader_float_controls2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_shader_subgroup_uniform_control_flow", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_compute_shader_derivatives", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_fragment_shader_barycentric", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_shader_image_atomic_int64", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_shader_maximal_reconvergence", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_shader_quad_control", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_image_sliced_view_of_3d", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_image_compression_control", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_AMD_device_coherent_memory", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_MESA_image_alignment_control", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_cooperative_matrix", 2u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_pipeline_library", 1u, "reported_extensions.a_pipeline_library_in_a_create_reaches_the_host"},
+    {"VK_KHR_load_store_op_none", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_EXT_shader_stencil_export", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_AMD_shader_fragment_mask", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_AMD_shader_explicit_vertex_parameter", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_EXT_conservative_rasterization", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_EXT_sample_locations", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_AMD_buffer_marker", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_AMD_shader_core_properties", 2u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
+    {"VK_AMD_shader_core_properties2", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The instance extensions this ICD reports. The *2 queries are its own entry

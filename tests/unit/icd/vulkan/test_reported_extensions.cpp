@@ -140,7 +140,37 @@ TEST(reported_extensions, every_feature_structure_an_application_chains_reaches_
       {"VK_EXT_mutable_descriptor_type", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT},
       {"VK_EXT_graphics_pipeline_library",
        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT},
-      {"VK_EXT_transform_feedback", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT}};
+      {"VK_EXT_transform_feedback", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT},
+      {"VK_KHR_maintenance5", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR},
+      {"VK_KHR_maintenance6", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES_KHR},
+      {"VK_KHR_maintenance7", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR},
+      {"VK_KHR_maintenance8", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR},
+      {"VK_EXT_extended_dynamic_state", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT},
+      {"VK_EXT_extended_dynamic_state2", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT},
+      {"VK_EXT_extended_dynamic_state3", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT},
+      {"VK_EXT_line_rasterization", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT},
+      {"VK_EXT_conditional_rendering", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT},
+      {"VK_EXT_mesh_shader", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT},
+      {"VK_KHR_fragment_shading_rate", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR},
+      {"VK_KHR_dynamic_rendering_local_read", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES_KHR},
+      {"VK_EXT_border_color_swizzle", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT},
+      {"VK_EXT_depth_bias_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT},
+      {"VK_EXT_dynamic_rendering_unused_attachments", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT},
+      {"VK_EXT_fragment_shader_interlock", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT},
+      {"VK_EXT_non_seamless_cube_map", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT},
+      {"VK_EXT_shader_module_identifier", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT},
+      {"VK_KHR_shader_float_controls2", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES_KHR},
+      {"VK_KHR_shader_subgroup_uniform_control_flow", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR},
+      {"VK_KHR_compute_shader_derivatives", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR},
+      {"VK_KHR_fragment_shader_barycentric", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR},
+      {"VK_EXT_shader_image_atomic_int64", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT},
+      {"VK_KHR_shader_maximal_reconvergence", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR},
+      {"VK_KHR_shader_quad_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR},
+      {"VK_EXT_image_sliced_view_of_3d", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT},
+      {"VK_EXT_image_compression_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT},
+      {"VK_AMD_device_coherent_memory", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD},
+      {"VK_MESA_image_alignment_control", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA},
+      {"VK_KHR_cooperative_matrix", VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR}};
   const auto features2 =
       rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
   CHECK(features2 != nullptr);
@@ -160,6 +190,53 @@ TEST(reported_extensions, every_feature_structure_an_application_chains_reaches_
       CHECK(chained.pNext == nullptr);
   }
   CHECK(rig.rig().root().invariants_hold()); }
+
+/* Extensions whose substance is a SPIR-V capability, an enum value or a
+ * property the host answers, with no feature structure to carry: what makes
+ * each real is that the host's device is made with it enabled, so the value an
+ * application then uses is legal there. */
+TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_on_the_host)
+{ ExtensionsRig rig;
+  const char *const names[] = {
+                                "VK_KHR_load_store_op_none",
+                                "VK_EXT_shader_stencil_export",
+                                "VK_AMD_shader_fragment_mask",
+                                "VK_AMD_shader_explicit_vertex_parameter",
+                                "VK_EXT_conservative_rasterization",
+                                "VK_EXT_sample_locations",
+                                "VK_AMD_buffer_marker",
+                                "VK_AMD_shader_core_properties",
+                                "VK_AMD_shader_core_properties2"};
+  const auto create = rig.entry<VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *,
+                                             const VkAllocationCallbacks *, VkDevice *)>("vkCreateDevice");
+  const auto destroy = rig.entry<void (*)(VkDevice, const VkAllocationCallbacks *)>("vkDestroyDevice");
+  /* One a device: the journal keeps a command's first bytes, and one name
+   * is what fits beside the rest of the create. */
+  for (const char *const name : names) {
+      VkDeviceCreateInfo info = {};
+      info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+      info.enabledExtensionCount = 1u;
+      info.ppEnabledExtensionNames = &name;
+      rig.rig().host().vk_handle(0, ScriptedHost::vk_device + 1u);
+      VkDevice made = VK_NULL_HANDLE;
+      CHECK_EQ(create(rig.physical(), &info, nullptr, &made), VK_SUCCESS);
+      std::uint32_t sent = rig.rig().kmt().commands();
+      while (sent > 0u && rig.rig().kmt().command_id(sent - 1u) != static_cast<std::uint32_t>(kCmd_vkCreateDevice))
+          sent--;
+      CHECK(sent > 0u);
+      const std::uint8_t *bytes = rig.rig().kmt().command_bytes(sent - 1u);
+      WireReader          body(bytes + CommandHeader::encoded_size,
+                               MockKmt::journal_bytes - CommandHeader::encoded_size);
+      static_cast<void>(body.read_u64());   /* the physical device */
+      std::uint8_t block[1024] = {};
+      WireArena    arena(block, sizeof block);
+      VkDeviceCreateInfo decoded = {};
+      CHECK(deserialize_VkDeviceCreateInfo(body, &decoded, arena));
+      CHECK_EQ(decoded.enabledExtensionCount, 1u);
+      CHECK(decoded.ppEnabledExtensionNames != nullptr && decoded.ppEnabledExtensionNames[0] != nullptr &&
+            std::strcmp(decoded.ppEnabledExtensionNames[0], name) == 0);
+      destroy(made, nullptr);
+  } }
 
 /* A node of an extension the generator does not carry is not sent: the
  * application reads back what it wrote, which is what "not supported" looks

@@ -1847,6 +1847,177 @@ public:
         }
         return pfn_vkImportSemaphoreFdKHR_(device, pImportSemaphoreFdInfo);
     }
+    void on_vkAntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD* pData) override {
+        if (pfn_vkAntiLagUpdateAMD_ == nullptr) {
+            pfn_vkAntiLagUpdateAMD_ = reinterpret_cast<PFN_vkAntiLagUpdateAMD>(::vkGetInstanceProcAddr(instance_, "vkAntiLagUpdateAMD"));
+        }
+        if (pfn_vkAntiLagUpdateAMD_ == nullptr) {
+            return;
+        }
+        pfn_vkAntiLagUpdateAMD_(device, pData);
+    }
+    void on_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(VkCommandBuffer commandBuffer, const VkBindDescriptorBufferEmbeddedSamplersInfoEXT* pBindDescriptorBufferEmbeddedSamplersInfo) override {
+        if (pfn_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT_ == nullptr) {
+            pfn_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT_ = reinterpret_cast<PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT>(::vkGetInstanceProcAddr(instance_, "vkCmdBindDescriptorBufferEmbeddedSamplers2EXT"));
+        }
+        if (pfn_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT_(commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo);
+    }
+    void on_vkCmdBindDescriptorSets2KHR(VkCommandBuffer commandBuffer, const VkBindDescriptorSetsInfo* pBindDescriptorSetsInfo) override {
+        if (pfn_vkCmdBindDescriptorSets2KHR_ == nullptr) {
+            pfn_vkCmdBindDescriptorSets2KHR_ = reinterpret_cast<PFN_vkCmdBindDescriptorSets2KHR>(::vkGetInstanceProcAddr(instance_, "vkCmdBindDescriptorSets2KHR"));
+        }
+        if (pfn_vkCmdBindDescriptorSets2KHR_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdBindDescriptorSets2KHR_(commandBuffer, pBindDescriptorSetsInfo);
+    }
+    void on_vkCmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount, const VkMultiDrawInfoEXT* pVertexInfo, uint32_t instanceCount, uint32_t firstInstance, uint32_t stride) override {
+        if (pfn_vkCmdDrawMultiEXT_ == nullptr) {
+            pfn_vkCmdDrawMultiEXT_ = reinterpret_cast<PFN_vkCmdDrawMultiEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdDrawMultiEXT"));
+        }
+        if (pfn_vkCmdDrawMultiEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdDrawMultiEXT_(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride);
+    }
+    void on_vkCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo) override {
+        if (pfn_vkCmdPushConstants2KHR_ == nullptr) {
+            pfn_vkCmdPushConstants2KHR_ = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(::vkGetInstanceProcAddr(instance_, "vkCmdPushConstants2KHR"));
+        }
+        if (pfn_vkCmdPushConstants2KHR_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdPushConstants2KHR_(commandBuffer, pPushConstantsInfo);
+    }
+    void on_vkCmdPushDescriptorSet2KHR(VkCommandBuffer commandBuffer, const VkPushDescriptorSetInfo* pPushDescriptorSetInfo) override {
+        if (pfn_vkCmdPushDescriptorSet2KHR_ == nullptr) {
+            pfn_vkCmdPushDescriptorSet2KHR_ = reinterpret_cast<PFN_vkCmdPushDescriptorSet2KHR>(::vkGetInstanceProcAddr(instance_, "vkCmdPushDescriptorSet2KHR"));
+        }
+        if (pfn_vkCmdPushDescriptorSet2KHR_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdPushDescriptorSet2KHR_(commandBuffer, pPushDescriptorSetInfo);
+    }
+    void on_vkCmdPushDescriptorSetWithTemplate2KHR(VkCommandBuffer commandBuffer, const VkPushDescriptorSetWithTemplateInfo* pPushDescriptorSetWithTemplateInfo) override {
+        if (pfn_vkCmdPushDescriptorSetWithTemplate2KHR_ == nullptr) {
+            pfn_vkCmdPushDescriptorSetWithTemplate2KHR_ = reinterpret_cast<PFN_vkCmdPushDescriptorSetWithTemplate2KHR>(::vkGetInstanceProcAddr(instance_, "vkCmdPushDescriptorSetWithTemplate2KHR"));
+        }
+        if (pfn_vkCmdPushDescriptorSetWithTemplate2KHR_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdPushDescriptorSetWithTemplate2KHR_(commandBuffer, pPushDescriptorSetWithTemplateInfo);
+    }
+    void on_vkCmdSetDepthBias2EXT(VkCommandBuffer commandBuffer, const VkDepthBiasInfoEXT* pDepthBiasInfo) override {
+        if (pfn_vkCmdSetDepthBias2EXT_ == nullptr) {
+            pfn_vkCmdSetDepthBias2EXT_ = reinterpret_cast<PFN_vkCmdSetDepthBias2EXT>(::vkGetInstanceProcAddr(instance_, "vkCmdSetDepthBias2EXT"));
+        }
+        if (pfn_vkCmdSetDepthBias2EXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdSetDepthBias2EXT_(commandBuffer, pDepthBiasInfo);
+    }
+    void on_vkCmdSetDescriptorBufferOffsets2EXT(VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo) override {
+        if (pfn_vkCmdSetDescriptorBufferOffsets2EXT_ == nullptr) {
+            pfn_vkCmdSetDescriptorBufferOffsets2EXT_ = reinterpret_cast<PFN_vkCmdSetDescriptorBufferOffsets2EXT>(::vkGetInstanceProcAddr(instance_, "vkCmdSetDescriptorBufferOffsets2EXT"));
+        }
+        if (pfn_vkCmdSetDescriptorBufferOffsets2EXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdSetDescriptorBufferOffsets2EXT_(commandBuffer, pSetDescriptorBufferOffsetsInfo);
+    }
+    void on_vkCmdSetSampleLocationsEXT(VkCommandBuffer commandBuffer, const VkSampleLocationsInfoEXT* pSampleLocationsInfo) override {
+        if (pfn_vkCmdSetSampleLocationsEXT_ == nullptr) {
+            pfn_vkCmdSetSampleLocationsEXT_ = reinterpret_cast<PFN_vkCmdSetSampleLocationsEXT>(::vkGetInstanceProcAddr(instance_, "vkCmdSetSampleLocationsEXT"));
+        }
+        if (pfn_vkCmdSetSampleLocationsEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdSetSampleLocationsEXT_(commandBuffer, pSampleLocationsInfo);
+    }
+    void on_vkCmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress) override {
+        if (pfn_vkCmdTraceRaysIndirect2KHR_ == nullptr) {
+            pfn_vkCmdTraceRaysIndirect2KHR_ = reinterpret_cast<PFN_vkCmdTraceRaysIndirect2KHR>(::vkGetInstanceProcAddr(instance_, "vkCmdTraceRaysIndirect2KHR"));
+        }
+        if (pfn_vkCmdTraceRaysIndirect2KHR_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdTraceRaysIndirect2KHR_(commandBuffer, indirectDeviceAddress);
+    }
+    void on_vkCmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker) override {
+        if (pfn_vkCmdWriteBufferMarker2AMD_ == nullptr) {
+            pfn_vkCmdWriteBufferMarker2AMD_ = reinterpret_cast<PFN_vkCmdWriteBufferMarker2AMD>(::vkGetInstanceProcAddr(instance_, "vkCmdWriteBufferMarker2AMD"));
+        }
+        if (pfn_vkCmdWriteBufferMarker2AMD_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdWriteBufferMarker2AMD_(commandBuffer, stage, dstBuffer, dstOffset, marker);
+    }
+    void on_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkBuffer dstBuffer, VkDeviceSize dstOffset, uint32_t marker) override {
+        if (pfn_vkCmdWriteBufferMarkerAMD_ == nullptr) {
+            pfn_vkCmdWriteBufferMarkerAMD_ = reinterpret_cast<PFN_vkCmdWriteBufferMarkerAMD>(::vkGetInstanceProcAddr(instance_, "vkCmdWriteBufferMarkerAMD"));
+        }
+        if (pfn_vkCmdWriteBufferMarkerAMD_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdWriteBufferMarkerAMD_(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
+    }
+    VkResult on_vkGetCalibratedTimestampsKHR(VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoKHR* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation) override {
+        if (pfn_vkGetCalibratedTimestampsKHR_ == nullptr) {
+            pfn_vkGetCalibratedTimestampsKHR_ = reinterpret_cast<PFN_vkGetCalibratedTimestampsKHR>(::vkGetInstanceProcAddr(instance_, "vkGetCalibratedTimestampsKHR"));
+        }
+        if (pfn_vkGetCalibratedTimestampsKHR_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkGetCalibratedTimestampsKHR_(device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation);
+    }
+    VkResult on_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainKHR* pTimeDomains) override {
+        if (pfn_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR_ == nullptr) {
+            pfn_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR_ = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR>(::vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"));
+        }
+        if (pfn_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR_(physicalDevice, pTimeDomainCount, pTimeDomains);
+    }
+    VkResult on_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkCooperativeMatrixPropertiesKHR* pProperties) override {
+        if (pfn_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR_ == nullptr) {
+            pfn_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR_ = reinterpret_cast<PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR>(::vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR"));
+        }
+        if (pfn_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR_ == nullptr) {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
+        return pfn_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR_(physicalDevice, pPropertyCount, pProperties);
+    }
+    void on_vkGetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice physicalDevice, VkSampleCountFlagBits samples, VkMultisamplePropertiesEXT* pMultisampleProperties) override {
+        if (pfn_vkGetPhysicalDeviceMultisamplePropertiesEXT_ == nullptr) {
+            pfn_vkGetPhysicalDeviceMultisamplePropertiesEXT_ = reinterpret_cast<PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT>(::vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceMultisamplePropertiesEXT"));
+        }
+        if (pfn_vkGetPhysicalDeviceMultisamplePropertiesEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetPhysicalDeviceMultisamplePropertiesEXT_(physicalDevice, samples, pMultisampleProperties);
+    }
+    void on_vkGetShaderModuleCreateInfoIdentifierEXT(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, VkShaderModuleIdentifierEXT* pIdentifier) override {
+        if (pfn_vkGetShaderModuleCreateInfoIdentifierEXT_ == nullptr) {
+            pfn_vkGetShaderModuleCreateInfoIdentifierEXT_ = reinterpret_cast<PFN_vkGetShaderModuleCreateInfoIdentifierEXT>(::vkGetInstanceProcAddr(instance_, "vkGetShaderModuleCreateInfoIdentifierEXT"));
+        }
+        if (pfn_vkGetShaderModuleCreateInfoIdentifierEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetShaderModuleCreateInfoIdentifierEXT_(device, pCreateInfo, pIdentifier);
+    }
+    void on_vkGetShaderModuleIdentifierEXT(VkDevice device, VkShaderModule shaderModule, VkShaderModuleIdentifierEXT* pIdentifier) override {
+        if (pfn_vkGetShaderModuleIdentifierEXT_ == nullptr) {
+            pfn_vkGetShaderModuleIdentifierEXT_ = reinterpret_cast<PFN_vkGetShaderModuleIdentifierEXT>(::vkGetInstanceProcAddr(instance_, "vkGetShaderModuleIdentifierEXT"));
+        }
+        if (pfn_vkGetShaderModuleIdentifierEXT_ == nullptr) {
+            return;
+        }
+        pfn_vkGetShaderModuleIdentifierEXT_(device, shaderModule, pIdentifier);
+    }
 
 private:
     VkInstance instance_ = VK_NULL_HANDLE;
@@ -1961,6 +2132,25 @@ private:
     PFN_vkGetSemaphoreFdKHR pfn_vkGetSemaphoreFdKHR_ = nullptr;
     PFN_vkImportFenceFdKHR pfn_vkImportFenceFdKHR_ = nullptr;
     PFN_vkImportSemaphoreFdKHR pfn_vkImportSemaphoreFdKHR_ = nullptr;
+    PFN_vkAntiLagUpdateAMD pfn_vkAntiLagUpdateAMD_ = nullptr;
+    PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT pfn_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT_ = nullptr;
+    PFN_vkCmdBindDescriptorSets2KHR pfn_vkCmdBindDescriptorSets2KHR_ = nullptr;
+    PFN_vkCmdDrawMultiEXT pfn_vkCmdDrawMultiEXT_ = nullptr;
+    PFN_vkCmdPushConstants2KHR pfn_vkCmdPushConstants2KHR_ = nullptr;
+    PFN_vkCmdPushDescriptorSet2KHR pfn_vkCmdPushDescriptorSet2KHR_ = nullptr;
+    PFN_vkCmdPushDescriptorSetWithTemplate2KHR pfn_vkCmdPushDescriptorSetWithTemplate2KHR_ = nullptr;
+    PFN_vkCmdSetDepthBias2EXT pfn_vkCmdSetDepthBias2EXT_ = nullptr;
+    PFN_vkCmdSetDescriptorBufferOffsets2EXT pfn_vkCmdSetDescriptorBufferOffsets2EXT_ = nullptr;
+    PFN_vkCmdSetSampleLocationsEXT pfn_vkCmdSetSampleLocationsEXT_ = nullptr;
+    PFN_vkCmdTraceRaysIndirect2KHR pfn_vkCmdTraceRaysIndirect2KHR_ = nullptr;
+    PFN_vkCmdWriteBufferMarker2AMD pfn_vkCmdWriteBufferMarker2AMD_ = nullptr;
+    PFN_vkCmdWriteBufferMarkerAMD pfn_vkCmdWriteBufferMarkerAMD_ = nullptr;
+    PFN_vkGetCalibratedTimestampsKHR pfn_vkGetCalibratedTimestampsKHR_ = nullptr;
+    PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR pfn_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR_ = nullptr;
+    PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR pfn_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR_ = nullptr;
+    PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT pfn_vkGetPhysicalDeviceMultisamplePropertiesEXT_ = nullptr;
+    PFN_vkGetShaderModuleCreateInfoIdentifierEXT pfn_vkGetShaderModuleCreateInfoIdentifierEXT_ = nullptr;
+    PFN_vkGetShaderModuleIdentifierEXT pfn_vkGetShaderModuleIdentifierEXT_ = nullptr;
 };
 
 }  // namespace av::vkproto
