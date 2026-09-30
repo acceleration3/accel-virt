@@ -63,12 +63,20 @@ static void virtio_gpu_rvk_pci_realize(VirtIOPCIProxy *proxy, Error **errp)
     pci_config_set_revision(config, host.revision);
 }
 
+/* ioeventfd on by default, as virtio-blk-pci and virtio-net-pci have it;
+ * virtio-gpu-pci leaves it off. Off, a queue kick is an MMIO exit QEMU handles
+ * on the vCPU under the BQL, and the main loop holds the BQL while it draws
+ * the display: the vCPU waited milliseconds in the kick, and the display DPC
+ * it was running - and every interrupt aimed at that vCPU - with it. Set here
+ * rather than as a property default because the property is the base's, and
+ * after its default so that ioeventfd=off still wins. */
 static void virtio_gpu_rvk_pci_initfn(Object *obj)
 {
     VirtIOGPURvkPCI *dev = VIRTIO_GPU_RVK_PCI(obj);
 
     virtio_instance_init_common(obj, &dev->vdev, sizeof(dev->vdev), TYPE_VIRTIO_GPU_RVK);
     VIRTIO_GPU_PCI_BASE(obj)->vgpu = VIRTIO_GPU_BASE(&dev->vdev);
+    VIRTIO_PCI(obj)->flags |= VIRTIO_PCI_FLAG_USE_IOEVENTFD;
 }
 
 static void virtio_gpu_rvk_pci_class_init(ObjectClass *klass, const void *data)
