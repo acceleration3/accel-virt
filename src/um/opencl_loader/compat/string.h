@@ -10,7 +10,7 @@ extern "C" {
 
 #ifndef _SIZE_T_DEFINED
 #define _SIZE_T_DEFINED
-typedef unsigned long long size_t;
+typedef __SIZE_TYPE__ size_t;
 #endif
 
 void  *memcpy(void *to, const void *from, size_t bytes);

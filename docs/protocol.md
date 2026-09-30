@@ -715,6 +715,9 @@ then the process's views and the pages. Pages a device may still hold - it
 did not answer the destroy or the unrefs - are kept out of use for good rather
 than freed.
 
+A 32-bit process can address only its low 4 GiB, so a view that would end above
+that is refused and the context with it.
+
 ### Context views record (user mode -> guest driver, escape)
 
 The private data of one `D3DKMTEscape` whose `hContext` names a live rvk

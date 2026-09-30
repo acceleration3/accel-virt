@@ -18,9 +18,13 @@ import argparse
 import struct
 import sys
 
+MACHINE_I386 = 0x014C
 MACHINE_AMD64 = 0x8664
-MACHINES = {0x014C: "IMAGE_FILE_MACHINE_I386", MACHINE_AMD64: "IMAGE_FILE_MACHINE_AMD64",
+MACHINES = {MACHINE_I386: "IMAGE_FILE_MACHINE_I386", MACHINE_AMD64: "IMAGE_FILE_MACHINE_AMD64",
             0xAA64: "IMAGE_FILE_MACHINE_ARM64"}
+# --machine: the x64 drivers and programs, or the x86 drivers a 32-bit process
+# loads.
+MACHINE_NAMES = {"amd64": MACHINE_AMD64, "i386": MACHINE_I386}
 SUBSYSTEM_WINDOWS_GUI = 2
 SUBSYSTEM_WINDOWS_CUI = 3
 SUBSYSTEMS = {1: "IMAGE_SUBSYSTEM_NATIVE", SUBSYSTEM_WINDOWS_GUI: "IMAGE_SUBSYSTEM_WINDOWS_GUI",
@@ -38,8 +42,10 @@ RELOCATION_DIRECTORY = 5
 DELAY_IMPORT_DIRECTORY = 13
 RELOCATION_BLOCK_HEADER = 8
 # IMAGE_REL_BASED_DIR64: the whole 64-bit pointer at the entry's RVA has the
-# image base added to it. Type 0 is IMAGE_REL_BASED_ABSOLUTE, the padding every
-# linker ends a block with, and it relocates nothing.
+# image base added to it; IMAGE_REL_BASED_HIGHLOW the whole 32-bit one, in a
+# PE32 image. Type 0 is IMAGE_REL_BASED_ABSOLUTE, the padding every linker ends
+# a block with, and it relocates nothing.
+RELOCATED_HIGHLOW = 3
 RELOCATED_DIR64 = 10
 KNOWN_DIRECTORIES = 16
 SECTION_HEADER_SIZE = 40
@@ -72,10 +78,12 @@ class PeImage:
         self.characteristics = self.u16(coff + 18)
         optional = coff + 20
         magic = self.u16(optional)
+        # PE32 has BaseOfData where PE32+'s 8-byte ImageBase begins, so its
+        # 4-byte ImageBase is 4 bytes further on.
         if magic == OPTIONAL_PE32_PLUS:
-            count_at, self.thunk_size = 108, 8
+            count_at, self.thunk_size, base_at = 108, 8, 24
         elif magic == OPTIONAL_PE32:
-            count_at, self.thunk_size = 92, 4
+            count_at, self.thunk_size, base_at = 92, 4, 28
         else:
             raise Malformed(f"optional header magic 0x{magic:X}")
         directory_count = min(self.u32(optional + count_at), KNOWN_DIRECTORIES)
@@ -83,7 +91,7 @@ class PeImage:
         if directories_at + 8 * directory_count > optional + optional_size:
             raise Malformed("the data directories overrun the optional header")
         self.subsystem = self.u16(optional + 68)
-        self.image_base = int.from_bytes(self.bytes_at(optional + 24, self.thunk_size), "little")
+        self.image_base = int.from_bytes(self.bytes_at(optional + base_at, self.thunk_size), "little")
         self.directories = [(self.u32(directories_at + 8 * index), self.u32(directories_at + 8 * index + 4))
                             for index in range(directory_count)]
         sections = optional + optional_size
@@ -173,8 +181,8 @@ class PeImage:
             table += self.thunk_size
 
     def relocated_pointers(self):
-        """The RVA and value of every 64-bit pointer the base relocation table
-        names, as the file holds them."""
+        """The RVA and value of every pointer the base relocation table names,
+        as the file holds them: 64-bit ones, and a PE32 image's 32-bit ones."""
         at, remaining = self.directories[RELOCATION_DIRECTORY] if len(self.directories) > RELOCATION_DIRECTORY \
             else (0, 0)
         found = []
@@ -190,6 +198,9 @@ class PeImage:
                 if entry >> 12 == RELOCATED_DIR64:
                     rva = page + (entry & 0xFFF)
                     found.append((rva, self.u64_at(rva)))
+                elif entry >> 12 == RELOCATED_HIGHLOW:
+                    rva = page + (entry & 0xFFF)
+                    found.append((rva, self.u32_at(rva)))
             at, remaining = at + size, remaining - size
         return found
 
@@ -221,8 +232,9 @@ def name_of(table, value):
 
 def violations_of(image, arguments):
     violations = []
-    if image.machine != MACHINE_AMD64:
-        violations.append(f"machine {name_of(MACHINES, image.machine)}, want {MACHINES[MACHINE_AMD64]}")
+    wanted_machine = MACHINE_NAMES[arguments.machine]
+    if image.machine != wanted_machine:
+        violations.append(f"machine {name_of(MACHINES, image.machine)}, want {MACHINES[wanted_machine]}")
     wanted = (SUBSYSTEM_WINDOWS_GUI, SUBSYSTEM_WINDOWS_CUI) if arguments.dll else (SUBSYSTEM_WINDOWS_CUI,)
     if image.subsystem not in wanted:
         violations.append(f"subsystem {name_of(SUBSYSTEMS, image.subsystem)}, want "
@@ -262,6 +274,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("image")
     parser.add_argument("--dll", action="store_true")
+    parser.add_argument("--machine", choices=sorted(MACHINE_NAMES), default="amd64",
+                        help="the architecture the image must be built for")
     parser.add_argument("--require-import", action="append", default=[])
     parser.add_argument("--allow-import", action="append", default=[],
                         help="a module beyond gdi32, kernel32 and ntdll the image may import")

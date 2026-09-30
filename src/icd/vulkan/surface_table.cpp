@@ -1,6 +1,7 @@
 #include "icd/vulkan/surface_table.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/vulkan/handle_bits.hpp"
 
 namespace av::icd {
 
@@ -18,7 +19,7 @@ VkResult SurfaceTable::create(VkInstance instance, void *window, VkSurfaceKHR &s
         if (slot.window_ != nullptr) continue;
         slot.instance_ = instance;
         slot.window_ = window;
-        surface = reinterpret_cast<VkSurfaceKHR>(&slot);
+        surface = HandleBits(&slot).as<VkSurfaceKHR>();
         return VK_SUCCESS;
     }
     return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -28,7 +29,7 @@ void SurfaceTable::destroy(VkInstance instance, VkSurfaceKHR surface)
 {
     AV_SCOPE("SurfaceTable::destroy");
     for (SurfaceSlot &slot : slots_) {
-        if (reinterpret_cast<VkSurfaceKHR>(&slot) != surface || slot.instance_ != instance) continue;
+        if (HandleBits(&slot).as<VkSurfaceKHR>() != surface || slot.instance_ != instance) continue;
         slot = SurfaceSlot{};
     }
 }
@@ -69,7 +70,7 @@ const SurfaceSlot *SurfaceTable::slot_of(VkSurfaceKHR surface) const
 {
     AV_SCOPE("SurfaceTable::slot_of");
     for (const SurfaceSlot &slot : slots_)
-        if (static_cast<const void *>(surface) == &slot) return &slot;
+        if (HandleBits(surface).as<const SurfaceSlot *>() == &slot) return &slot;
     return nullptr;
 }
 

@@ -40,6 +40,11 @@ rvkvk.json = 1
 rvkgl.dll = 1
 rvkcl.dll = 1
 rvkumd.dll = 1
+rvkvk32.dll = 1
+rvkvk32.json = 1
+rvkgl32.dll = 1
+rvkcl32.dll = 1
+rvkumd32.dll = 1
 
 ; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
 [Manufacturer]
@@ -69,8 +74,8 @@ AddReg       = Rvkgpu_SoftwareSettings, Rvkgpu_Scheduler
 ; LoadLibraryExW: a bare name is looked for in System32, never in the driver
 ; store, and the runtime answers DXGI_ERROR_UNSUPPORTED - which is what kept
 ; every process, the desktop compositor included, on WARP. PostProcessUMDFileName
-; translates only a GPU-PV guest's names. No UserModeDriverNameWow: the 32-bit
-; arm is feature 061's.
+; translates only a GPU-PV guest's names. The 32-bit arm, UserModeDriverNameWow,
+; is below with the other Wow values.
 ; The scheduler never preempts: this adapter cannot give back a batch the host
 ; was handed, so a preemption is answered only once the node has run dry, and a
 ; process that keeps it fed would starve the request into a TDR. Off, the node's
@@ -97,6 +102,19 @@ HKR,, OpenGLFlags, 0x00010001, 1
 ; tolerates a multi-string. Written multi-string, the ICD is found on one path
 ; and silently missed on the other.
 HKR,, OpenCLDriverName, 0x00000000, "%13%\rvkcl.dll"
+; The same four for a 32-bit process, which each reader looks up under its
+; Wow name: dxgkrnl for the Direct3D and OpenGL values (DpiGetAdapterInfo reads
+; UserModeDriverNameWow, OpenGLDriverNameWow, OpenGLVersionWow and
+; OpenGLFlagsWow for a WoW64 caller), the Vulkan and OpenCL loaders for theirs
+; when IsWow64Process says so. %13% paths again: the driver store is exempt from
+; WoW64's System32 redirection, so a 32-bit process loads the x86 DLLs from the
+; same directory as the 64-bit ones.
+HKR,, UserModeDriverNameWow, 0x00010000, "%13%\rvkumd32.dll", "%13%\rvkumd32.dll", "%13%\rvkumd32.dll", "%13%\rvkumd32.dll"
+HKR,, VulkanDriverNameWow, 0x00010000, "%13%\rvkvk32.json"
+HKR,, OpenGLDriverNameWow, 0x00010000, "%13%\rvkgl32.dll"
+HKR,, OpenGLVersionWow, 0x00010001, 2
+HKR,, OpenGLFlagsWow, 0x00010001, 1
+HKR,, OpenCLDriverNameWow, 0x00000000, "%13%\rvkcl32.dll"
 ; The WDDM features this driver implements and this adapter may use, turned on
 ; where the OS stages them off (feature 049, research.md §19). dxgkrnl's
 ; ConfigureFeature reads Features\<DXGK_FEATURE_ID in decimal>\Enabled from the
@@ -116,6 +134,11 @@ rvkvk.json
 rvkgl.dll
 rvkcl.dll
 rvkumd.dll
+rvkvk32.dll
+rvkvk32.json
+rvkgl32.dll
+rvkcl32.dll
+rvkumd32.dll
 
 ; One message for each of the device's own sources - control, cursor and
 ; configuration changes - and eight the rvk contexts' fence queues share

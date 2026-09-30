@@ -977,23 +977,22 @@ TEST(cl_icd_root, a_context_property_this_driver_does_not_implement_is_refused)
 
   /* Nothing is sent: the list is judged before a transport is even made. */
   const std::uint32_t before = rig.kmt().commands();
-  const std::uint64_t unknown[] = {0x4242u, 1u, 0u};
+  const cl_context_properties unknown[] = {0x4242, 1, 0};
   cl_int              error = CL_SUCCESS;
   CHECK(rig.root().create_context(unknown, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
 
   /* A property named twice, which the API calls an error rather than a
    * last-one-wins. */
-  const std::uint64_t twice[] = {static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC), 0u,
-                                 static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC), 1u, 0u};
+  const cl_context_properties twice[] = {CL_CONTEXT_INTEROP_USER_SYNC, 0, CL_CONTEXT_INTEROP_USER_SYNC, 1, 0};
   CHECK(rig.root().create_context(twice, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
 
   /* And a list with no terminator inside the bound, which is the one this
    * must refuse rather than read. */
-  std::uint64_t unterminated[ClPropertyList::max_pairs * 2u + 3u] = {};
+  cl_context_properties unterminated[ClPropertyList::max_pairs * 2u + 3u] = {};
   for (std::uint32_t pair = 0u; pair <= ClPropertyList::max_pairs; ++pair)
-      unterminated[pair * 2u] = static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC) + pair;
+      unterminated[pair * 2u] = CL_CONTEXT_INTEROP_USER_SYNC + static_cast<cl_context_properties>(pair);
   CHECK(rig.root().create_context(unterminated, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
   CHECK_EQ(rig.kmt().commands(), before);
@@ -1006,9 +1005,7 @@ TEST(cl_icd_root, a_context_named_on_another_platform_is_refused_and_on_this_one
 
   cl_int              error = CL_SUCCESS;
   int                 elsewhere = 0;
-  const std::uint64_t other[] = {
-      static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM),
-      static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&elsewhere)), 0u};
+  const cl_context_properties other[] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(&elsewhere), 0};
   CHECK(rig.root().create_context(other, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PLATFORM);
 
@@ -1017,10 +1014,8 @@ TEST(cl_icd_root, a_context_named_on_another_platform_is_refused_and_on_this_one
   cl_platform_id      ours = nullptr;
   cl_uint             platforms = 0u;
   CHECK_EQ(rig.root().platform_ids(1u, &ours, &platforms), CL_SUCCESS);
-  const std::uint64_t named[] = {
-      static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM),
-      static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(ours)),
-      static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC), 0u, 0u};
+  const cl_context_properties named[] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(ours),
+                                         CL_CONTEXT_INTEROP_USER_SYNC, 0, 0};
   rig.host().blob_import(0u, 0x77u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);

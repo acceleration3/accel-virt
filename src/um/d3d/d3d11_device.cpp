@@ -136,6 +136,18 @@ void D3d11Device::set_error(HRESULT result)
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
 }
 
+void D3d11Device::not_implemented(const char *call)
+{
+    AV_SCOPE("D3d11Device::not_implemented");
+    char       line[128] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: ");
+    text.append(call);
+    text.append(" is not implemented");
+    log_.write(text.text());
+    set_error(E_NOTIMPL);
+}
+
 bool D3d11Device::context_local(void *handle, const void *immediate, size_t bytes) const
 {
     AV_SCOPE("D3d11Device::context_local");
@@ -693,7 +705,7 @@ VOID D3d11Device::update_tile_mappings(D3D10DDI_HRESOURCE, UINT, const D3DWDDM1_
                                        const UINT *, const UINT *, UINT)
 {
     AV_SCOPE("D3d11Device::update_tile_mappings");
-    set_error(E_NOTIMPL);
+    not_implemented("pfnUpdateTileMappings");
 }
 
 VOID D3d11Device::copy_tile_mappings(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
@@ -701,21 +713,21 @@ VOID D3d11Device::copy_tile_mappings(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TIL
                                      const D3DWDDM1_3DDI_TILE_REGION_SIZE *, UINT)
 {
     AV_SCOPE("D3d11Device::copy_tile_mappings");
-    set_error(E_NOTIMPL);
+    not_implemented("pfnCopyTileMappings");
 }
 
 VOID D3d11Device::copy_tiles(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
                              const D3DWDDM1_3DDI_TILE_REGION_SIZE *, D3D10DDI_HRESOURCE, UINT64, UINT)
 {
     AV_SCOPE("D3d11Device::copy_tiles");
-    set_error(E_NOTIMPL);
+    not_implemented("pfnCopyTiles");
 }
 
 VOID D3d11Device::update_tiles(D3D10DDI_HRESOURCE, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,
                                const D3DWDDM1_3DDI_TILE_REGION_SIZE *, const void *, UINT)
 {
     AV_SCOPE("D3d11Device::update_tiles");
-    set_error(E_NOTIMPL);
+    not_implemented("pfnUpdateTiles");
 }
 
 VOID D3d11Device::tiled_resource_barrier(D3D11DDI_HANDLETYPE, void *, D3D11DDI_HANDLETYPE, void *)
@@ -733,14 +745,40 @@ VOID D3d11Device::get_mip_packing(D3D10DDI_HRESOURCE, UINT *packed, UINT *tiles)
 VOID D3d11Device::resize_tile_pool(D3D10DDI_HRESOURCE, UINT64)
 {
     AV_SCOPE("D3d11Device::resize_tile_pool");
-    set_error(E_NOTIMPL);
+    not_implemented("pfnResizeTilePool");
 }
 
-VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE, UINT, D3DKMT_HANDLE *, D3DWDDM2_0DDI_TEXTURE_LAYOUT *,
-                                      UINT *, D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT *)
+/* The runtime asks this of a texture it made through its Direct3D 10 layer,
+ * right after making it (CResource::FinalConstruct), and a refusal there fails
+ * the texture. The texture's contents live on the host; what the guest has of
+ * it is the shadow Map hands out, laid out by row, so that is the layout
+ * answered: row-major, each subresource at the offset and with the pitches Map
+ * gives, and the allocation the kernel knows it by, if any. The runtime's own
+ * answer for a removed device has the same shape (DDI_GetResourceLayout_DR:
+ * no handle, TL_ROW_MAJOR, no swizzle transition). */
+VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE handle, UINT count, D3DKMT_HANDLE *allocation,
+                                      D3DWDDM2_0DDI_TEXTURE_LAYOUT *layout, UINT *swizzle_transition,
+                                      D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT *subresources)
 {
     AV_SCOPE("D3d11Device::get_resource_layout");
-    set_error(E_NOTIMPL);
+    const ResourceRecord &resource = record(handle);
+    if (allocation != nullptr) *allocation = resource.allocation;
+    if (layout != nullptr) *layout = D3DWDDM2_0DDI_TL_ROW_MAJOR;
+    if (swizzle_transition != nullptr) *swizzle_transition = no_swizzle_transition;
+    if (subresources == nullptr) return;
+    const uint32_t known = subresource_count(resource);
+    for (UINT index = 0u; index < count; index++) {
+        D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT &out = subresources[index];
+        out = {};
+        if (index >= known) continue;
+        uint32_t width = 0u;
+        uint32_t height = 0u;
+        uint32_t depth = 0u;
+        extent(resource, index, width, height, depth);
+        out.BaseOffset = subresource_offset(resource, index);
+        out.RowPitch = row_bytes(resource, width);
+        out.DepthPitch = out.RowPitch * rows(resource, height);
+    }
 }
 
 }  // namespace av::d3d11

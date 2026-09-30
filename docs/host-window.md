@@ -24,6 +24,9 @@ The kernel driver owns the window. VidMm never places anything in it.
    same memfd pages write-back. A write-combined guest mapping of pages the
    host maps write-back is an aliasing the SDM leaves undefined, and it reads
    stale data.
+   A 32-bit process can address only its low 4 GiB, so a view that would end
+   above that is taken back and the chunk goes to guest RAM instead (below).
+
 4. **Release.** The driver unmaps the process's view, UNMAP_BLOB and UNREF go
    to the device and are answered, and only then does the range return to the
    bitmap. If the range were handed out again earlier, the next blob could be

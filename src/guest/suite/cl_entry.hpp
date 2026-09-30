@@ -10,6 +10,8 @@
 #ifndef AV_CL_ENTRY_HPP
 #define AV_CL_ENTRY_HPP
 
+#include "core/support/runtime_call.hpp"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -69,7 +71,7 @@ public:
     virtual void   *create_user_event(void *context, int32_t &error) = 0;
     virtual int32_t set_user_event_status(void *event, int32_t status) = 0;
     virtual int32_t watch_event(void *event, int32_t status,
-                                void (*notify)(void *event, int32_t status, void *user_data),
+                                void(AV_RUNTIME_CALL *notify)(void *event, int32_t status, void *user_data),
                                 void *user_data) = 0;
     virtual int32_t wait_for_event(void *event) = 0;
 

@@ -1,6 +1,7 @@
 #include "icd/vulkan/icd_root.hpp"
 
 #include "guest/transport/shared_object_call.hpp"
+#include "icd/vulkan/handle_bits.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
@@ -1082,7 +1083,7 @@ void IcdRoot::release_idle_fences(LoaderHandle &device)
         if (queue == nullptr) return;
         if (queue->idle_fence() == 0u) continue;
         vkproto::rvk_vkDestroyFence(device.connection()->transport(), static_cast<VkDevice>(static_cast<void *>(&device)),
-                                    reinterpret_cast<VkFence>(queue->idle_fence()), nullptr);
+                                    HandleBits(queue->idle_fence()).as<VkFence>(), nullptr);
         queue->keep_idle_fence(0u);
     }
 }
@@ -1541,13 +1542,13 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
     idle_waited_++;
     const auto        device = static_cast<VkDevice>(static_cast<void *>(made->parent()));
     ClientTransport  &transport = connection.transport();
-    VkFence fence = reinterpret_cast<VkFence>(made->idle_fence());
+    VkFence fence = HandleBits(made->idle_fence()).as<VkFence>();
     if (fence == VK_NULL_HANDLE) {
         VkFenceCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         const VkResult created = vkproto::rvk_vkCreateFence(transport, device, &info, nullptr, &fence);
         if (created != VK_SUCCESS) return created;
-        made->keep_idle_fence(reinterpret_cast<uint64_t>(fence));
+        made->keep_idle_fence(HandleBits(fence).value());
     } else {
         const VkResult reset = vkproto::rvk_vkResetFences(transport, device, 1u, &fence);
         if (reset != VK_SUCCESS) return reset;

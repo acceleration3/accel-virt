@@ -11,6 +11,35 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 /* The offsets dxgkrnl writes its answers at, so a header subset that widened a
  * union cannot make a zero handle look like the runtime's answer:
  * DxgkCreateDeviceImpl writes the device handle at +0x0c of D3DKMT_CREATEDEVICE. */
+/* A 32-bit process has the x86 layout, which dxgkrnl's WoW64 path reads as
+ * such. */
+#if defined(_M_IX86)
+static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hAdapter) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, Flags) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hDevice) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, hDevice) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, NumAllocations) == 0x1Cu);
+static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, pAllocationInfo2) == 0x20u);
+static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, hAllocation) == 0x00u);
+static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, pPrivateDriverData) == 0x08u);
+static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, PrivateDriverDataSize) == 0x0Cu);
+static_assert(__builtin_offsetof(D3DKMT_LOCK2, hDevice) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_LOCK2, hAllocation) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_LOCK2, pData) == 0x0Cu);
+static_assert(__builtin_offsetof(D3DKMT_UNLOCK2, hAllocation) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hAdapter) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hDevice) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, VidPnSourceId) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_ADAPTERINFO, AdapterLuid) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, hAdapter) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, MemorySegmentGroup) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, Budget) == 0x10u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, CurrentUsage) == 0x18u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, Type) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, pPrivateDriverData) == 0x10u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, PrivateDriverDataSize) == 0x14u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, hContext) == 0x18u);
+#else
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hAdapter) == 0x00u);
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, Flags) == 0x08u);
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hDevice) == 0x0Cu);
@@ -36,6 +65,7 @@ static_assert(__builtin_offsetof(D3DKMT_ESCAPE, Type) == 0x08u);
 static_assert(__builtin_offsetof(D3DKMT_ESCAPE, pPrivateDriverData) == 0x10u);
 static_assert(__builtin_offsetof(D3DKMT_ESCAPE, PrivateDriverDataSize) == 0x18u);
 static_assert(__builtin_offsetof(D3DKMT_ESCAPE, hContext) == 0x1Cu);
+#endif
 
 namespace av {
 
@@ -52,20 +82,27 @@ namespace {
  * process can open by name, which is what a shared object wants. */
 struct ShareAttributes {
     unsigned long length;
-    unsigned long length_padding;
     void         *root_directory;
     void         *object_name;
     unsigned long attributes;
-    unsigned long attributes_padding;
     void         *security_descriptor;
     void         *security_quality_of_service;
 };
+#if defined(_M_IX86)
+static_assert(sizeof(ShareAttributes) == 24u);
+static_assert(__builtin_offsetof(ShareAttributes, root_directory) == 0x04u);
+static_assert(__builtin_offsetof(ShareAttributes, object_name) == 0x08u);
+static_assert(__builtin_offsetof(ShareAttributes, attributes) == 0x0Cu);
+static_assert(__builtin_offsetof(ShareAttributes, security_descriptor) == 0x10u);
+static_assert(__builtin_offsetof(ShareAttributes, security_quality_of_service) == 0x14u);
+#else
 static_assert(sizeof(ShareAttributes) == 48u);
 static_assert(__builtin_offsetof(ShareAttributes, root_directory) == 0x08u);
 static_assert(__builtin_offsetof(ShareAttributes, object_name) == 0x10u);
 static_assert(__builtin_offsetof(ShareAttributes, attributes) == 0x18u);
 static_assert(__builtin_offsetof(ShareAttributes, security_descriptor) == 0x20u);
 static_assert(__builtin_offsetof(ShareAttributes, security_quality_of_service) == 0x28u);
+#endif
 
 constexpr uint64_t page_bytes = 4096u;
 constexpr size_t   max_descriptor_bytes = 256u;

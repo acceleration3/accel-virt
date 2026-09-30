@@ -38,7 +38,7 @@ enum : int32_t { complete = 0 };
 
 /* An ABI boundary C requires: clSetEventCallback takes a bare function and one
  * argument, so the probe is the argument and this forwards straight into it. */
-void callback_ran(void *, int32_t status, void *user_data)
+void AV_RUNTIME_CALL callback_ran(void *, int32_t status, void *user_data)
 {
     AV_SCOPE("callback_ran");
     static_cast<ClProbe *>(user_data)->callback_arrived(status);

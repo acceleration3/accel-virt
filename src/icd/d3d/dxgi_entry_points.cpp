@@ -2,6 +2,7 @@
  * behind its argument's hDevice and asks it. No logic here. */
 #include "icd/d3d/dxgi_entry_points.hpp"
 
+#include "core/support/runtime_call.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/ddi/dxgi1_6_1_ddi_base_functions_record.hpp"
 #include "icd/d3d/ddi/dxgi_ddi_args_record.hpp"
@@ -23,7 +24,7 @@ UmdDevice *device_behind(const void *args)
 }
 
 #define AV_DXGI_LATER(name, entry)                                                                                 \
-    extern "C" Hresult name(DxgiDdiArgRecord *args)                                                                           \
+    extern "C" Hresult AV_RUNTIME_CALL name(DxgiDdiArgRecord *args)                                                                           \
     {                                                                                                              \
         UmdDevice *const device = device_behind(args);                                                             \
         return device == nullptr ? hr_invalid_arg : device->dxgi().until_later(args, entry);                       \
@@ -44,61 +45,61 @@ AV_DXGI_LATER(rvkumd_dxgi_present_multiplane_overlay1, "pfnPresentMultiplaneOver
 
 #undef AV_DXGI_LATER
 
-extern "C" Hresult rvkumd_dxgi_get_gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_get_gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().gamma_caps(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_set_resource_priority(DxgiDdiArgRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_set_resource_priority(DxgiDdiArgRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().resource_priority(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_get_multiplane_overlay_caps(DxgiDdiArgGetMultiplaneOverlayCapsRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_get_multiplane_overlay_caps(DxgiDdiArgGetMultiplaneOverlayCapsRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().overlay_caps(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_get_multiplane_overlay_group_caps(DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_get_multiplane_overlay_group_caps(DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().overlay_group_caps(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_check_present_duration_support(DxgiDdiArgCheckPresentDurationSupportRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_check_present_duration_support(DxgiDdiArgCheckPresentDurationSupportRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().present_duration(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_offer_resources1(DxgiDdiArgRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_offer_resources1(DxgiDdiArgRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().offer_resources(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().reclaim_resources(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().reclaim_resources1(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_trim_residency_set(DxgiDdiArgRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_trim_residency_set(DxgiDdiArgRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().trim_residency(args);
 }
 
-extern "C" Hresult rvkumd_dxgi_check_multiplane_overlay_color_space_support(
+extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_check_multiplane_overlay_color_space_support(
     DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord *args)
 {
     UmdDevice *const device = device_behind(args);

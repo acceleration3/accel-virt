@@ -92,11 +92,13 @@ private:
     };
     /* An MDL's byte count is a ULONG. */
     static constexpr uint64_t max_mapping_bytes = 0xFFFFF000u;
+    /* The first address a 32-bit process cannot hold. */
+    static constexpr uint64_t wow64_address_limit = uint64_t{1} << 32u;
 
     /* `mdl`, whose pages its caller wrote and marked locked, mapped into the
      * calling process; the mapping owns the MDL from then on, and frees it
      * whatever the answer. */
-    Status map_mdl_to_process(PMDL mdl, uint64_t &view, void *&mapping);
+    Status map_mdl_to_process(PMDL mdl, uint64_t bytes, uint64_t &view, void *&mapping);
 
     /* ZwSetValueKey on the device's driver key, opened for the one write. */
     Status write_driver_value(void *physical_device_object, const char *name, ULONG type, const void *bytes,

@@ -666,6 +666,28 @@ add_test(NAME guest_image
                  ${CMAKE_BINARY_DIR}/guest/rvktest.exe
                  --require-import D3DKMTSubmitCommand)
 
+# ---- the same tree for 32-bit processes: the x86 drivers a WoW64 process
+# loads through rvkgpu.inf's *Wow values, and its programs to prove them with.
+# The drivers are named rvkvk32.dll and so on: both sets install into one
+# driver store directory. ----------------------------------------------------
+ExternalProject_Add(rvktest32
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/um
+  BINARY_DIR ${CMAKE_BINARY_DIR}/guest32
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
+  COMMAND ${CMAKE_COMMAND} -G Ninja -S <SOURCE_DIR> -B <BINARY_DIR>
+          -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
+          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR} -DAV_GUEST_ARCH=x86
+  BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+  BUILD_ALWAYS ON
+  INSTALL_COMMAND ""
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest32/rvkvk32.dll ${CMAKE_BINARY_DIR}/guest32/rvkgl32.dll
+                   ${CMAKE_BINARY_DIR}/guest32/rvkcl32.dll ${CMAKE_BINARY_DIR}/guest32/rvkumd32.dll
+                   ${CMAKE_BINARY_DIR}/guest32/rvktest.exe)
+ExternalProject_Add_StepDependencies(rvktest32 configure
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags_c.cmake)
+
 # The probe binds to the Khronos loader and nothing else beyond the three
 # (feature 045).
 # It links OpenCL beside Vulkan from feature 053: the shared-object steps are
@@ -744,6 +766,44 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/opencl-loader/loader/icd.c)
   add_test(NAME opencl_loader_image
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                    ${CMAKE_BINARY_DIR}/guest/OpenCL.dll --dll
+                   --allow-import cfgmgr32.dll --allow-import advapi32.dll --allow-import ole32.dll
+                   --require-export clGetPlatformIDs --require-import CM_Get_Device_ID_ListW)
+endif()
+
+# The 32-bit drivers, held to what the 64-bit ones are: x86 images, each
+# exporting exactly its loader's names, undecorated although every one of them
+# is __stdcall on x86.
+add_test(NAME rvkvk32_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest32/rvkvk32.dll --machine i386 --dll --only-exports
+                 --allow-import user32.dll
+                 --require-export vk_icdNegotiateLoaderICDInterfaceVersion
+                 --require-export vk_icdGetInstanceProcAddr)
+add_test(NAME rvkgl32_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest32/rvkgl32.dll --machine i386 --dll --only-exports
+                 --allow-import user32.dll
+                 --require-export DrvValidateVersion --require-export DrvSetCallbackProcs
+                 --require-export DrvDescribePixelFormat --require-export DrvSetPixelFormat
+                 --require-export DrvCreateContext --require-export DrvCreateLayerContext
+                 --require-export DrvDeleteContext --require-export DrvSetContext
+                 --require-export DrvReleaseContext --require-export DrvCopyContext
+                 --require-export DrvShareLists --require-export DrvGetProcAddress
+                 --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
+                 --require-export DrvSwapBuffers)
+add_test(NAME rvkumd32_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest32/rvkumd32.dll --machine i386 --dll --only-exports
+                 --require-export OpenAdapter10_2 --require-export OpenAdapter12)
+add_test(NAME rvkcl32_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest32/rvkcl32.dll --machine i386 --dll --only-exports
+                 --require-export clGetExtensionFunctionAddress
+                 --require-export clIcdGetPlatformIDsKHR)
+if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/opencl-loader/loader/icd.c)
+  add_test(NAME opencl_loader32_image
+           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                   ${CMAKE_BINARY_DIR}/guest32/OpenCL.dll --machine i386 --dll
                    --allow-import cfgmgr32.dll --allow-import advapi32.dll --allow-import ole32.dll
                    --require-export clGetPlatformIDs --require-import CM_Get_Device_ID_ListW)
 endif()

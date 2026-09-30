@@ -5,6 +5,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/vulkan/handle_bits.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
 namespace av::icd {
@@ -13,16 +14,6 @@ namespace {
 
 constexpr size_t line_bytes = 160u;
 
-VkDeviceMemory as_memory(uint64_t host)
-{
-    AV_SCOPE("as_memory");
-    return reinterpret_cast<VkDeviceMemory>(host);
-}
-uint64_t       as_host(VkDeviceMemory memory)
-{
-    AV_SCOPE("as_host");
-    return reinterpret_cast<uint64_t>(memory);
-}
 
 }  // namespace
 
@@ -78,7 +69,7 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
         note("vkAllocateMemory: no host-visible memory, status", static_cast<uint64_t>(status));
         return refusal();
     }
-    memory = as_memory(placed->memory());
+    memory = HandleBits(placed->memory()).as<VkDeviceMemory>();
     return VK_SUCCESS;
 }
 
@@ -92,7 +83,7 @@ void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocati
 {
     AV_SCOPE("DeviceMemory::free");
     if (memory == VK_NULL_HANDLE) return;
-    ChunkPlacement *const placed = chunks_.find(as_host(memory));
+    ChunkPlacement *const placed = chunks_.find(HandleBits(memory).value());
     if (placed == nullptr) {
         vkproto::rvk_vkFreeMemory(connection_.transport(), device, memory, allocator);
         return;
@@ -105,7 +96,7 @@ VkResult DeviceMemory::map(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceS
                            void *&data) const
 {
     AV_SCOPE("DeviceMemory::map");
-    const ChunkPlacement *const placed = chunks_.find(as_host(memory));
+    const ChunkPlacement *const placed = chunks_.find(HandleBits(memory).value());
     if (placed == nullptr || flags != 0u || size == 0u || offset >= placed->bytes()) return VK_ERROR_MEMORY_MAP_FAILED;
     if (size != VK_WHOLE_SIZE && size > placed->bytes() - offset) return VK_ERROR_MEMORY_MAP_FAILED;
     data = const_cast<unsigned char *>(placed->view() + offset);

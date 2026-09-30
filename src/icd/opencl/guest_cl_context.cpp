@@ -47,13 +47,13 @@ bool GuestClContext::shares_gl() const
     return state_ == State::made && gl_share_ != 0u;
 }
 
-void GuestClContext::keep_properties(const uint64_t *properties)
+void GuestClContext::keep_properties(const cl_context_properties *properties)
 {
     AV_SCOPE("GuestClContext::keep_properties");
     static_cast<void>(properties_.read(properties));
 }
 
-uint32_t GuestClContext::properties(uint64_t *out, uint32_t capacity) const
+uint32_t GuestClContext::properties(cl_context_properties *out, uint32_t capacity) const
 {
     AV_SCOPE("GuestClContext::properties");
     return properties_.lay_out(out, capacity);

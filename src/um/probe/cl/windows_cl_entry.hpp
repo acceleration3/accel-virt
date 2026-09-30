@@ -7,6 +7,7 @@
 #ifndef AV_UM_WINDOWS_CL_ENTRY_HPP
 #define AV_UM_WINDOWS_CL_ENTRY_HPP
 
+#include "core/support/runtime_call.hpp"
 #include "guest/suite/cl_entry.hpp"
 
 #include <stddef.h>
@@ -57,7 +58,7 @@ public:
     void   *create_user_event(void *context, int32_t &error) override;
     int32_t set_user_event_status(void *event, int32_t status) override;
     int32_t watch_event(void *event, int32_t status,
-                        void (*notify)(void *event, int32_t status, void *user_data),
+                        void(AV_RUNTIME_CALL *notify)(void *event, int32_t status, void *user_data),
                         void *user_data) override;
     int32_t wait_for_event(void *event) override;
 

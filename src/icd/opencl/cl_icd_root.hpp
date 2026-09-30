@@ -110,7 +110,7 @@ public:
      * CL_WGL_HDC_KHR) makes the context from that OpenGL context, which must
      * be current on the calling thread and one this process's OpenGL ICD
      * made; any other is CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR. */
-    cl_context create_context(const uint64_t *properties, const cl_device_id *devices,
+    cl_context create_context(const cl_context_properties *properties, const cl_device_id *devices,
                               cl_uint num_devices, cl_int *error);
     cl_int     retain_context(cl_context context);
     cl_int     release_context(cl_context context);
@@ -341,7 +341,8 @@ private:
                                        size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
      * no property named twice, and every name one of `allowed`. */
-    cl_int           judge(const uint64_t *properties, const uint64_t *allowed,
+    template <typename Property>
+    cl_int           judge(const Property *properties, const uint64_t *allowed,
                            uint32_t allowed_count, ClPropertyList &read) const;
     /* Fetches the bytes of every non-blocking read waiting on one of these
      * events, now that the host has reached them. The first failure, or

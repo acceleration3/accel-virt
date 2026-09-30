@@ -12,10 +12,10 @@
 extern "C" {
 #endif
 
-typedef unsigned long long size_t_av;
+typedef __SIZE_TYPE__ size_t_av;
 #ifndef _SIZE_T_DEFINED
 #define _SIZE_T_DEFINED
-typedef unsigned long long size_t;
+typedef __SIZE_TYPE__ size_t;
 #endif
 
 void *malloc(size_t bytes);

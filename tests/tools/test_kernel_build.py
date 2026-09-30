@@ -104,6 +104,8 @@ class KernelPlatformLinks(unittest.TestCase):
                      # Every function opens a trace scope, and the locks mark the table.
                      "src/core/trace/function_scope.cpp", "src/core/trace/scope_binding.cpp",
                      "src/core/trace/trace_table.cpp", "src/core/trace/trace_layout.cpp",
+                     # A table's layout is laid over the byte range it is given.
+                     "src/core/support/byte_range.cpp",
                      # A table records its events into its ring.
                      "src/core/trace/event_ring.cpp", "src/core/trace/event_ring_layout.cpp",
                      "src/proto/resources/guest_page_list.cpp",

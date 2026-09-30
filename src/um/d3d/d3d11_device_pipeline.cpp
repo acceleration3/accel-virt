@@ -618,7 +618,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
         still_drawing();
         return;
     }
-    if (data != nullptr && size != 0u) __builtin_memcpy(data, answer, size < answered ? size : answered);
+    if (data != nullptr && size != 0u) __builtin_memcpy(data, answer, static_cast<size_t>(size < answered ? size : answered));
 }
 
 }  // namespace av::d3d11

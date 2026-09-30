@@ -2,6 +2,7 @@
 
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
 
+#include "core/support/runtime_call.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -66,8 +67,7 @@ uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
         void    *pPrivateDriverData;
         uint32_t PrivateDriverDataSize;
     };
-    /* x64 has one calling convention, so no __stdcall: the host build refuses the attribute. */
-    using QueryAdapterInfoCb = int32_t (*)(void *, QueryAdapterInfo *);
+    using QueryAdapterInfoCb = int32_t(AV_RUNTIME_CALL *)(void *, QueryAdapterInfo *);
     const auto query = reinterpret_cast<QueryAdapterInfoCb>(
         static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks)->pfnQueryAdapterInfoCb);
     uint64_t         words[2] = {};

@@ -8,6 +8,8 @@
 
 namespace av {
 
+class ByteRange;
+
 class TraceLayout {
 public:
     enum : uint32_t {
@@ -37,9 +39,10 @@ public:
 
     /* The layout of `slots` slots, clamped to max_slots. */
     explicit TraceLayout(uint32_t slots);
-    /* The most slots `bytes` holds, clamped to max_slots; 0 slots when not
-     * even the header fits. */
-    explicit TraceLayout(size_t bytes);
+    /* The most slots `region` holds, clamped to max_slots; 0 slots when not
+     * even the header fits. A region, not a byte count: on x86 a size_t is a
+     * uint32_t, and the two constructors would be one. */
+    explicit TraceLayout(const ByteRange &region);
 
     uint32_t slots() const;
     size_t   bytes() const;

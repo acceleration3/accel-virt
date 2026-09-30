@@ -201,7 +201,8 @@ uint64_t BufferMapping::next_change(const uint8_t *known, uint64_t at) const
     AV_SCOPE("BufferMapping::next_change");
     for (; at + word <= length_; at += word)
         if (__builtin_memcmp(block_ + at, known + at, word) != 0) return at;
-    const bool tail_differs = at < length_ && __builtin_memcmp(block_ + at, known + at, length_ - at) != 0;
+    const bool tail_differs =
+        at < length_ && __builtin_memcmp(block_ + at, known + at, static_cast<size_t>(length_ - at)) != 0;
     return tail_differs ? at : length_;
 }
 
@@ -212,7 +213,8 @@ uint64_t BufferMapping::change_end(const uint8_t *known, uint64_t from) const
     uint64_t at = end;
     for (; at + word <= length_ && at - end < merge_gap; at += word)
         if (__builtin_memcmp(block_ + at, known + at, word) != 0) end = at + word;
-    if (at < length_ && at - end < merge_gap && __builtin_memcmp(block_ + at, known + at, length_ - at) != 0)
+    if (at < length_ && at - end < merge_gap &&
+        __builtin_memcmp(block_ + at, known + at, static_cast<size_t>(length_ - at)) != 0)
         end = length_;
     return end;
 }

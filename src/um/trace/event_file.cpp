@@ -109,7 +109,7 @@ Status EventFile::open(const char *module, uint32_t process, size_t bytes)
     constexpr DWORD set_sparse = 0x000900C4u;
     DWORD returned = 0u;
     static_cast<void>(DeviceIoControl(file, set_sparse, nullptr, 0u, nullptr, 0u, &returned, nullptr));
-    const HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READWRITE, static_cast<DWORD>(bytes >> 32u),
+    const HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READWRITE, static_cast<DWORD>(static_cast<uint64_t>(bytes) >> 32u),
                                               static_cast<DWORD>(bytes), nullptr);
     if (mapping == nullptr) return Status::no_memory;
     void *const view = MapViewOfFile(mapping, FILE_MAP_WRITE, 0u, 0u, bytes);

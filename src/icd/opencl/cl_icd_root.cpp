@@ -388,7 +388,8 @@ void *ClIcdRoot::wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t 
     return object;
 }
 
-cl_int ClIcdRoot::judge(const uint64_t *properties, const uint64_t *allowed, uint32_t allowed_count,
+template <typename Property>
+cl_int ClIcdRoot::judge(const Property *properties, const uint64_t *allowed, uint32_t allowed_count,
                         ClPropertyList &read) const
 {
     AV_SCOPE("ClIcdRoot::judge");
@@ -413,7 +414,7 @@ cl_int ClIcdRoot::judge(const uint64_t *properties, const uint64_t *allowed, uin
     return CL_SUCCESS;
 }
 
-cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device_id *devices,
+cl_context ClIcdRoot::create_context(const cl_context_properties *properties, const cl_device_id *devices,
                                      cl_uint num_devices, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_context");
@@ -1480,9 +1481,9 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
         return asked.give(&device, sizeof device);
     }
     case CL_CONTEXT_PROPERTIES: {
-        uint64_t       laid[ClPropertyList::max_pairs * 2u + 1u];
-        const uint32_t values = held->context()->properties(laid, ClPropertyList::max_pairs * 2u + 1u);
-        return asked.give(laid, values * sizeof(uint64_t));
+        cl_context_properties laid[ClPropertyList::max_pairs * 2u + 1u];
+        const uint32_t        values = held->context()->properties(laid, ClPropertyList::max_pairs * 2u + 1u);
+        return asked.give(laid, values * sizeof(cl_context_properties));
     }
     default:
         return CL_INVALID_VALUE;
@@ -2219,7 +2220,7 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
         static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR)};
     ClPropertyList list;
     const cl_int   judged_list =
-        judge(reinterpret_cast<const uint64_t *>(properties), allowed, 4u, list);
+        judge(properties, allowed, 4u, list);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t platform = 0u;
     if (list.names(static_cast<uint64_t>(CL_CONTEXT_PLATFORM), platform) && platform != 0u &&

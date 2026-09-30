@@ -31,16 +31,18 @@ int32_t APIENTRY DrvSetPixelFormat(void *dc, int32_t index)
     return gl_icd_binding.root().set_pixel_format(dc, index);
 }
 
+/* A handle is a 16-bit generation over a 16-bit slot (GlContextTable), so it
+ * is whole in a 32-bit process's DHGLRC. */
 uintptr_t APIENTRY DrvCreateContext(void *dc)
 {
     AV_SCOPE("DrvCreateContext");
-    return gl_icd_binding.root().create_context(dc);
+    return static_cast<uintptr_t>(gl_icd_binding.root().create_context(dc));
 }
 
 uintptr_t APIENTRY DrvCreateLayerContext(void *dc, int32_t layer)
 {
     AV_SCOPE("DrvCreateLayerContext");
-    return gl_icd_binding.root().create_layer_context(dc, layer);
+    return static_cast<uintptr_t>(gl_icd_binding.root().create_layer_context(dc, layer));
 }
 
 int32_t APIENTRY DrvDeleteContext(uintptr_t context)

@@ -1,5 +1,7 @@
 #include "core/trace/trace_table.hpp"
 
+#include "core/support/byte_range.hpp"
+
 #include "core/trace/event_ring.hpp"
 
 #include "core/trace/scope_name.hpp"
@@ -23,7 +25,7 @@ TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), max_dep
 Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module, uint32_t process)
 {
     if (region_ != nullptr) return Status::invalid_state;
-    const TraceLayout fit(bytes);
+    const TraceLayout fit(ByteRange(reinterpret_cast<uintptr_t>(region), bytes));
     if (region == nullptr || fit.slots() == 0u || module == nullptr) return Status::invalid_parameter;
     if (reinterpret_cast<uintptr_t>(region) % alignof(uint64_t) != 0u) return Status::invalid_parameter;
     size_t length = 0u;

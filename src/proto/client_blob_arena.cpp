@@ -75,7 +75,7 @@ void ClientBlobArena::give_back(const ClientBlobLease &lease)
     AV_SCOPE("ClientBlobArena::give_back");
     /* Only the top: a bump arena cannot free a lease with another taken after
      * it, and the only lease not yet sent is the last one taken. */
-    if (lease.taken() && lease.offset() + lease.bytes() == used_) used_ = lease.offset();
+    if (lease.taken() && lease.offset() + lease.bytes() == used_) used_ = static_cast<size_t>(lease.offset());
 }
 
 void ClientBlobArena::retire_all()

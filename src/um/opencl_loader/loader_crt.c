@@ -11,7 +11,7 @@
  * it. The sizes are small and few: a vendor list and the strings in it. */
 #include <windows.h>
 
-typedef unsigned long long av_size_t;
+typedef __SIZE_TYPE__ av_size_t;
 
 void *malloc(av_size_t bytes)
 {

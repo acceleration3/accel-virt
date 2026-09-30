@@ -226,13 +226,13 @@ int32_t WindowsClEntry::set_user_event_status(void *event, int32_t status)
 }
 
 int32_t WindowsClEntry::watch_event(void *event, int32_t status,
-                                    void (*notify)(void *event, int32_t status, void *user_data),
+                                    void(AV_RUNTIME_CALL *notify)(void *event, int32_t status, void *user_data),
                                     void *user_data)
 {
     AV_SCOPE("WindowsClEntry::watch_event");
-    /* The probe's callback takes the event as a void pointer; on x64 Windows
-     * CL_CALLBACK is the one calling convention there is, so only the handle's
-     * type differs and the cast is a rename. */
+    /* The probe's callback takes the event as a void pointer and is declared
+     * AV_RUNTIME_CALL, which is CL_CALLBACK's convention on either
+     * architecture, so only the handle's type differs and the cast is a rename. */
     using Notify = void(CL_CALLBACK *)(cl_event, cl_int, void *);
     return clSetEventCallback(static_cast<cl_event>(event), status,
                               reinterpret_cast<Notify>(notify), user_data);

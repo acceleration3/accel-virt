@@ -27,7 +27,6 @@ struct D3d10ddiargCreateDeviceRecord {
     void                 *hRTCoreLayer;
     const void           *pUMCallbacks;
     uint32_t              Flags;
-    uint32_t              Padding;
     void                 *ppfnRetrieveSubObject;
 };
 

@@ -81,8 +81,7 @@ cl_context CL_API_CALL create_context(const cl_context_properties *properties, c
         return nullptr;
     }
     ClNotedError noted(cl_icd_binding.root(), "clCreateContext", error);
-    return cl_icd_binding.root().create_context(reinterpret_cast<const uint64_t *>(properties), devices, num_devices,
-                                                noted.pointer());
+    return cl_icd_binding.root().create_context(properties, devices, num_devices, noted.pointer());
 }
 
 cl_int CL_API_CALL retain_context(cl_context context)

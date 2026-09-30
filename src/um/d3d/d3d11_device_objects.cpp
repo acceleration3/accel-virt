@@ -587,7 +587,7 @@ VOID D3d11Device::create_geometry_shader_with_stream_output(const D3D11DDIARG_CR
     /* A declaration with no shader streams the vertex shader's output: the
      * runtime hands a null code pointer then, which the host cannot compile. */
     if (args->pShaderCode == nullptr) {
-        set_error(E_NOTIMPL);
+        not_implemented("pfnCreateGeometryShaderWithStreamOutput with no shader");
         return;
     }
     create_shader(stage_geometry, args->pShaderCode, shader, signatures->pInputSignature,

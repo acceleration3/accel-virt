@@ -11,6 +11,7 @@
 #ifndef AV_SCRIPTED_CL_HPP
 #define AV_SCRIPTED_CL_HPP
 
+#include "core/support/runtime_call.hpp"
 #include "guest/suite/cl_entry.hpp"
 
 #include <cstddef>
@@ -203,7 +204,7 @@ public:
 private:
     enum class Kind : std::uint32_t { none, context, queue, buffer, program, kernel, event };
 
-    using Notify = void (*)(void *event, std::int32_t status, void *user_data);
+    using Notify = void(AV_RUNTIME_CALL *)(void *event, std::int32_t status, void *user_data);
 
     struct Object {
         Kind          kind = Kind::none;

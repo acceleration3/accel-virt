@@ -12,7 +12,9 @@ INF = ROOT / "src" / "km" / "rvkgpu.inf"
 DEVICE = ROOT / "src" / "device" / "qemu" / "virtio-gpu-pci-rvk.c"
 DRIVER_BUILD = ROOT / "src" / "km" / "CMakeLists.txt"
 MANIFEST = ROOT / "src" / "um" / "vulkan" / "rvkvk.json"
-PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkcl.dll", "rvkumd.dll")
+PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkcl.dll", "rvkumd.dll",
+                 # What a WoW64 process loads.
+                 "rvkvk32.dll", "rvkvk32.json", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll")
 REDHAT_QUMRANET = 0x1AF4
 VIRTIO_GPU = 0x1050
 
@@ -97,9 +99,9 @@ class DriverPackage(unittest.TestCase):
         reads OpenGLDriverName as a string and OpenGLVersion and OpenGLFlags as
         type-checked REG_DWORDs from the software key; opengl32 asks for them
         with KMTQAITYPE_UMOPENGLINFO. Flags must be 1, or opengl32 describes
-        pixel formats itself and never asks the ICD. The WOW values wait for
-        a 32-bit ICD (061), and the global OpenGLDrivers key is the pre-WDDM
-        path FR-001 forbids."""
+        pixel formats itself and never asks the ICD. A WoW64 caller is answered
+        the ...Wow values, which name the 32-bit ICD, and the global
+        OpenGLDrivers key is the pre-WDDM path FR-001 forbids."""
         software = self.software_section()
         section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         values = {match.group(1): (match.group(2), match.group(3))
@@ -107,15 +109,15 @@ class DriverPackage(unittest.TestCase):
                                            section, re.M)}
         self.assertEqual(values, {"OpenGLDriverName": ("0x00010000", '"%13%\\rvkgl.dll"'),
                                   "OpenGLVersion": ("0x00010001", "2"),
-                                  "OpenGLFlags": ("0x00010001", "1")})
+                                  "OpenGLFlags": ("0x00010001", "1"),
+                                  "OpenGLDriverNameWow": ("0x00010000", '"%13%\\rvkgl32.dll"'),
+                                  "OpenGLVersionWow": ("0x00010001", "2"),
+                                  "OpenGLFlagsWow": ("0x00010001", "1")})
         self.assertNotIn("OpenGLDrivers", self.text)
-        # No ...Wow value is written: the 32-bit arm is feature 061's. Comments
-        # may say so, so this reads the directives rather than the whole file.
-        directives = "\n".join(line for line in self.text.splitlines() if not line.lstrip().startswith(";"))
-        self.assertNotIn("Wow", directives)
-        self.assertIn("rvkgl.dll = 1", self.text)
         files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
-        self.assertIn("rvkgl.dll", files.split())
+        for name in ("rvkgl.dll", "rvkgl32.dll"):
+            self.assertIn(name + " = 1", self.text)
+            self.assertIn(name, files.split())
 
     def test_registers_the_opencl_icd_as_a_single_string_through_the_adapter(self):
         """Feature 052, contracts/icd_interface.md: the loader's first discovery
@@ -124,17 +126,16 @@ class DriverPackage(unittest.TestCase):
         value of another type; only the slower SetupAPI path tolerates a
         multi-string. So this value is 0x00000000 where VulkanDriverName and
         OpenGLDriverName are 0x00010000 - written multi-string the ICD would be
-        found on one path and silently missed on the other. OpenCLDriverNameWow
-        waits for a 32-bit ICD (061), and the global Khronos vendors key is the
-        path FR-001 forbids."""
+        found on one path and silently missed on the other. The loader in a
+        WoW64 process reads OpenCLDriverNameWow, a single string the same way,
+        and the global Khronos vendors key is the path FR-001 forbids."""
         software = self.software_section()
         section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         values = {match.group(1): (match.group(2), match.group(3))
                   for match in re.finditer(r"^HKR,,\s*(OpenCL\w*),\s*(0x[0-9A-Fa-f]{8}),\s*(.+?)\s*$",
                                            section, re.M)}
-        self.assertEqual(values, {"OpenCLDriverName": ("0x00000000", '"%13%\\rvkcl.dll"')})
-        self.assertNotEqual(values["OpenCLDriverName"][0], "0x00010000")
-        self.assertNotIn("OpenCLDriverNameWow", self.text)
+        self.assertEqual(values, {"OpenCLDriverName": ("0x00000000", '"%13%\\rvkcl.dll"'),
+                                  "OpenCLDriverNameWow": ("0x00000000", '"%13%\\rvkcl32.dll"')})
         self.assertNotIn("Khronos", self.text)
         self.assertIn("rvkcl.dll = 1", self.text)
         files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
@@ -249,8 +250,11 @@ class Provisioning(unittest.TestCase):
                  if "=" in line and not line.lstrip().startswith(";")}
         runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
         staged = set(re.findall(r'PACKAGE_DIRECTORY \+ "\\\\([\w.]+)"', runner))
-        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkcl.dll",
-                                 "rvkumd.dll"})
+        # The 32-bit drivers are staged by name from one list, each from where
+        # they were built.
+        listed = re.search(r"^DRIVERS32 = \(([^)]*)\)", runner, re.MULTILINE).group(1)
+        staged |= set(re.findall(r'"([\w.]+)"', listed))
+        self.assertEqual(named, set(PACKAGE_FILES))
         self.assertEqual(staged, named | {"rvkgpu.inf"})
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
         self.assertIn("New-FileCatalog -Path $Package ", script)

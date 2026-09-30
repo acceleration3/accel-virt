@@ -29,7 +29,7 @@ struct ClPropertyListProbe {
 
 TEST(cl_property_list, a_null_list_and_an_empty_one_are_both_no_properties)
 { ClPropertyList list;
-  CHECK(list.read(nullptr));
+  CHECK(list.read(static_cast<const std::uint64_t *>(nullptr)));
   CHECK_EQ(list.pairs(), 0u);
   CHECK(!list.repeated());
   const std::uint64_t empty[] = {0u};
@@ -132,7 +132,27 @@ TEST(cl_property_list, a_list_lays_out_as_it_was_written_or_not_at_all)
   std::uint64_t short_of[4] = {9u, 9u, 9u, 9u};
   CHECK_EQ(list.lay_out(short_of, 4u), 0u);
   CHECK_EQ(short_of[0], 9u);
-  CHECK_EQ(list.lay_out(nullptr, 5u), 0u);
+  CHECK_EQ(list.lay_out(static_cast<std::uint64_t *>(nullptr), 5u), 0u);
   ClPropertyList none;
-  CHECK(none.read(nullptr));
+  CHECK(none.read(static_cast<const std::uint64_t *>(nullptr)));
   CHECK_EQ(none.lay_out(out, 5u), 0u); }
+
+/* A 32-bit process's cl_context_properties is a 32-bit intptr_t: its list is
+ * read four bytes an element, a value past 2 GiB widens without its sign, and
+ * the list laid out again is the one the application wrote. */
+TEST(cl_property_list, a_narrow_list_is_read_and_laid_out_in_its_own_width)
+{ ClPropertyList list;
+  const std::uint32_t narrow[] = {0x1084u, 0x80000010u, 0x10B6u, 7u, 0u, 0xDEADu};
+  CHECK(list.read(narrow));
+  CHECK_EQ(list.pairs(), 2u);
+  CHECK_EQ(list.name_at(0u), 0x1084u);
+  CHECK_EQ(list.value_at(0u), 0x80000010u);
+  CHECK_EQ(list.value_at(1u), 7u);
+  std::uint32_t out[5] = {9u, 9u, 9u, 9u, 9u};
+  CHECK_EQ(list.lay_out(out, 5u), 5u);
+  CHECK_EQ(out[0], 0x1084u);
+  CHECK_EQ(out[1], 0x80000010u);
+  CHECK_EQ(out[2], 0x10B6u);
+  CHECK_EQ(out[3], 7u);
+  CHECK_EQ(out[4], 0u);
+  CHECK(list.invariants_hold()); }

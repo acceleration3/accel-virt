@@ -82,6 +82,9 @@ public:
 
 private:
     static constexpr uint32_t stage_count = 6u;
+    /* D3DWDDM2_0DDI's MipLevelSwizzleTransition for a layout with no swizzled
+     * levels, as the runtime's own removed-device answer writes it. */
+    static constexpr UINT     no_swizzle_transition = 0xFFu;
 
     /* The record in a runtime handle's block. */
     ResourceRecord &record(D3D10DDI_HRESOURCE handle) const;
@@ -91,6 +94,10 @@ private:
     /* An error the runtime learns of through the core layer's callback: the
      * only way a slot that returns nothing reports one. */
     void            set_error(HRESULT result);
+    /* E_NOTIMPL for the DDI named `call`, which the log names: a void DDI's
+     * refusal otherwise reaches the application only as a device error, and a
+     * program that does not check for one fails later somewhere else. */
+    void            not_implemented(const char *call);
     /* The work an asynchronous read waits on is not done yet: a status the
      * application polls on, reported without the error log's write. */
     void            still_drawing();

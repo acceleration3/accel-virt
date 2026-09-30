@@ -472,7 +472,7 @@ TEST(cl_icd_root_refusals, a_context_on_another_vendors_platform_is_refused)
   /* CL_CONTEXT_PLATFORM naming a platform this driver does not own. The
    * loader may hand any ICD a list built for another, and answering it would
    * be answering for a driver that is not this one. */
-  const std::uint64_t stranger[] = {static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM), 0x1234u, 0u};
+  const cl_context_properties stranger[] = {CL_CONTEXT_PLATFORM, 0x1234, 0};
   cl_device_id        device = opened.device();
   cl_int              error = CL_SUCCESS;
   const std::uint32_t sent = rig.kmt().commands();
@@ -484,9 +484,7 @@ TEST(cl_icd_root_refusals, a_context_on_another_vendors_platform_is_refused)
    * naming a platform of nothing - which is the list an application builds
    * when it has no preference. */
   cl_platform_id      mine = this_platform(rig);
-  const std::uint64_t ours[] = {static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM),
-                                static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(mine)),
-                                0u};
+  const cl_context_properties ours[] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(mine), 0};
   rig.host().blob_import(0u, 0x79u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
@@ -773,7 +771,7 @@ TEST(cl_icd_root_refusals, a_platform_property_of_nothing_is_no_preference_at_al
   Opened   opened(rig);
   CHECK(opened.made());
   if (!opened.made()) return;
-  const std::uint64_t none[] = {static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM), 0u, 0u};
+  const cl_context_properties none[] = {CL_CONTEXT_PLATFORM, 0, 0};
   cl_device_id        device = opened.device();
   rig.host().blob_import(0u, 0x7Fu);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);

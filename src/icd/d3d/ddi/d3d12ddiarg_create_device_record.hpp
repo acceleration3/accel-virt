@@ -21,10 +21,8 @@ struct D3d12ddiargCreateDeviceRecord {
     void       *hDrvDevice;
     const void *p12UMCallbacks;
     uint32_t    Flags;
-    uint32_t    Padding;
     void       *pReserveRanges;
     uint32_t    NumReserveRanges;
-    uint32_t    Padding2;
 };
 
 }  // namespace av::d3d

@@ -148,8 +148,13 @@ class GuestSuiteRun(unittest.TestCase):
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
                      "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkcl.dll", "rvkclprobe.exe",
                      "OpenCL.dll", "rvkumd.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
-                     "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
+                     "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd", "rvkvk32.json"):
             (self.scratch / name).write_bytes(name.encode() * 100)
+        # The 32-bit drivers, from a directory of their own as a build makes them.
+        self.drivers32 = self.scratch / "guest32"
+        self.drivers32.mkdir()
+        for name in ("rvkvk32.dll", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll"):
+            (self.drivers32 / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
         self.environment = dict(os.environ, FAKE_GUEST_JOURNAL=str(self.journal),
@@ -172,7 +177,8 @@ class GuestSuiteRun(unittest.TestCase):
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--gl-icd", self.scratch / "rvkgl.dll", "--cl-icd", self.scratch / "rvkcl.dll",
-                     "--umd", self.scratch / "rvkumd.dll",
+                     "--umd", self.scratch / "rvkumd.dll", "--drivers32", self.drivers32,
+                     "--icd32-manifest", self.scratch / "rvkvk32.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -212,7 +218,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 10)
+        self.assertEqual(events.count("file"), 15)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
@@ -225,6 +231,11 @@ class GuestSuiteRun(unittest.TestCase):
         # And the Direct3D user-mode driver, which the software key names four
         # times over (feature 055).
         self.assertIn("file C:\\rvk\\package\\rvkumd.dll 1000", lines)
+        # And the 32-bit drivers the *Wow values name, with the 32-bit Vulkan
+        # manifest, for a WoW64 process.
+        for name in ("rvkvk32.dll", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll"):
+            self.assertIn(f"file C:\\rvk\\package\\{name} {len(name) * 100}", lines)
+        self.assertIn("file C:\\rvk\\package\\rvkvk32.json 1200", lines)
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\rvk\\rvkinspect.exe 1400", lines)
@@ -1891,7 +1902,8 @@ class GuestSuiteRun(unittest.TestCase):
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--gl-icd", self.scratch / "rvkgl.dll",
-                     "--umd", self.scratch / "rvkumd.dll",
+                     "--umd", self.scratch / "rvkumd.dll", "--drivers32", self.drivers32,
+                     "--icd32-manifest", self.scratch / "rvkvk32.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,

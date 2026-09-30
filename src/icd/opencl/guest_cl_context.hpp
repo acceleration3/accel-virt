@@ -94,9 +94,9 @@ public:
     bool                 shares_gl() const;
     /* The list clCreateContext was given, kept for CL_CONTEXT_PROPERTIES: a
      * list already judged, so it reads. */
-    void                 keep_properties(const uint64_t *properties);
+    void                 keep_properties(const cl_context_properties *properties);
     /* That list laid out into `out`, and how many values it is; 0 for none. */
-    uint32_t             properties(uint64_t *out, uint32_t capacity) const;
+    uint32_t             properties(cl_context_properties *out, uint32_t capacity) const;
 
     /* What a call sends through: null unless made and not lost. A faulted
      * transport makes the context lost here, which is why every call goes

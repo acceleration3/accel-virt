@@ -65,6 +65,33 @@ void WindowsCrash::write(const char *module, TraceTable &table, TraceHost &host,
     CloseHandle(file);
 }
 
+#if defined(_M_IX86)
+/* x86 has no unwind tables to walk, so the frame-pointer chain is followed:
+ * each frame holds the caller's EBP and above it the return address. A frame
+ * outside the thread's stack, or one not above the last, ends the walk rather
+ * than fault inside the handler; a function built without a frame pointer
+ * hides its caller, which is what an x86 stack walk without symbols can give. */
+uint32_t WindowsCrash::unwind(void *pointers)
+{
+    AV_SCOPE("WindowsCrash::unwind");
+    const CONTEXT &context = *static_cast<EXCEPTION_POINTERS *>(pointers)->ContextRecord;
+    const NT_TIB  *stack = reinterpret_cast<const NT_TIB *>(NtCurrentTeb());
+    const uintptr_t low = reinterpret_cast<uintptr_t>(stack->StackLimit);
+    const uintptr_t high = reinterpret_cast<uintptr_t>(stack->StackBase);
+    uint32_t count = 0u;
+    returns_[count++] = context.Eip;
+    uintptr_t frame = context.Ebp;
+    while (count < CrashReport::max_frames && frame >= low && high - frame >= 2u * sizeof(uintptr_t) &&
+           frame % sizeof(uintptr_t) == 0u) {
+        const uintptr_t *const words = reinterpret_cast<const uintptr_t *>(frame);
+        if (words[1] == 0u) break;
+        returns_[count++] = words[1];
+        if (words[0] <= frame) break;
+        frame = words[0];
+    }
+    return count;
+}
+#else
 uint32_t WindowsCrash::unwind(void *pointers)
 {
     AV_SCOPE("WindowsCrash::unwind");
@@ -87,5 +114,6 @@ uint32_t WindowsCrash::unwind(void *pointers)
     }
     return count;
 }
+#endif
 
 }  // namespace av

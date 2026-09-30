@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/vulkan/handle_bits.hpp"
 #include "proto/wire/foreign_enum.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/surface_properties.hpp"
@@ -112,7 +113,7 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
             return made;
         }
         if (Swapchain *const old = find(device, info->oldSwapchain); old != nullptr) old->retire();
-        *swapchain = reinterpret_cast<VkSwapchainKHR>(&slot);
+        *swapchain = HandleBits(&slot).as<VkSwapchainKHR>();
         return VK_SUCCESS;
     }
     return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -122,7 +123,7 @@ void Presentation::destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain)
 {
     AV_SCOPE("Presentation::destroy_swapchain");
     for (SwapchainSlot &slot : slots_)
-        if (reinterpret_cast<VkSwapchainKHR>(&slot) == swapchain && find(device, swapchain) != nullptr) destroy(slot);
+        if (HandleBits(&slot).as<VkSwapchainKHR>() == swapchain && find(device, swapchain) != nullptr) destroy(slot);
 }
 
 VkResult Presentation::swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count,
@@ -221,7 +222,7 @@ Swapchain *Presentation::find(VkDevice device, VkSwapchainKHR swapchain)
 {
     AV_SCOPE("Presentation::find");
     for (SwapchainSlot &slot : slots_) {
-        if (reinterpret_cast<VkSwapchainKHR>(&slot) != swapchain || !slot.chain_.constructed()) continue;
+        if (HandleBits(&slot).as<VkSwapchainKHR>() != swapchain || !slot.chain_.constructed()) continue;
         Swapchain &chain = slot.chain_.object();
         return device == VK_NULL_HANDLE || chain.device() == device ? &chain : nullptr;
     }

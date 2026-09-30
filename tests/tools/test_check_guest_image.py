@@ -25,31 +25,48 @@ extern "C" void *vk_icdGetInstanceProcAddr(void *instance, const char *name) { r
 """
 
 ICD_EXPORTS = ("vk_icdNegotiateLoaderICDInterfaceVersion", "vk_icdGetInstanceProcAddr")
+X86_BASE = 0x10000000
+
+
+# A table of pointers to its own code, which gives an image base relocations.
+POINTERS = """
+extern "C" long vk_icdNegotiateLoaderICDInterfaceVersion(unsigned *version);
+extern "C" void *const own_entries[] = {reinterpret_cast<void *>(&vk_icdNegotiateLoaderICDInterfaceVersion)};
+"""
+
+# What each architecture is built as: the target, llvm-dlltool's machine, and
+# what lld-link needs to resolve an x86 __stdcall import against the
+# undecorated import library src/um/CMakeLists.txt makes.
+ARCHITECTURES = {"amd64": ("x86_64-pc-windows-msvc", "i386:x86-64", []),
+                 "i386": ("i686-pc-windows-msvc", "i386", ["-stdcall-fixup"])}
 
 
 class Image:
-    """A small x64 image importing `modules`, linked for `subsystem`; a DLL
-    exporting `exports` when it names any."""
+    """A small image importing `modules`, linked for `subsystem`; a DLL
+    exporting `exports` when it names any; x64 unless `machine` says i386."""
 
-    def __init__(self, directory, name, subsystem, modules, exports=()):
+    def __init__(self, directory, name, subsystem, modules, exports=(), machine="amd64", base=None):
+        target, dlltool_machine, fixup = ARCHITECTURES[machine]
         self.path = directory / (f"{name}.dll" if exports else f"{name}.exe")
         source = directory / f"{name}.cpp"
-        source.write_text(LIBRARY if exports else PROGRAM)
+        source.write_text(LIBRARY + POINTERS if exports else PROGRAM)
         libraries = []
         for module, symbols in modules.items():
             definition = directory / f"{name}-{module}.def"
             definition.write_text(f"LIBRARY {module}\nEXPORTS\n" + "\n".join(symbols) + "\n")
             library = directory / f"{name}-{module}.lib"
-            self.step("llvm-dlltool", "-m", "i386:x86-64", "-d", definition, "-l", library)
+            self.step("llvm-dlltool", "-m", dlltool_machine, "-d", definition, "-l", library)
             libraries.append(library)
         link = []
         if exports:
             definition = directory / f"{name}.def"
             definition.write_text(f"LIBRARY {name}\nEXPORTS\n" + "\n".join(exports) + "\n")
             link = ["/DLL", f"/DEF:{definition}"]
-        self.step("clang-cl", "--target=x86_64-pc-windows-msvc", "/nologo", "/c", "/GS-",
+        if base is not None:
+            link.append(f"/BASE:0x{base:X}")
+        self.step("clang-cl", f"--target={target}", "/nologo", "/c", "/GS-",
                   f"/Fo{directory / (name + '.obj')}", source)
-        self.step("lld-link", "/nologo", f"/SUBSYSTEM:{subsystem}", "/ENTRY:entry", "/NODEFAULTLIB",
+        self.step("lld-link", "/nologo", f"/SUBSYSTEM:{subsystem}", "/ENTRY:entry", "/NODEFAULTLIB", *fixup,
                   *link, f"/OUT:{self.path}", directory / f"{name}.obj", *libraries)
 
     @staticmethod
@@ -159,6 +176,8 @@ class GuestImageCheck(unittest.TestCase):
                             {"d3d12.dll": ["D3DKMTEnumAdapters2"], "kernel32.dll": ["ExitProcess"]})
         cls.icd = Image(cls.scratch, "icd", "WINDOWS", {"gdi32.dll": ["D3DKMTEnumAdapters2"]},
                         exports=ICD_EXPORTS)
+        cls.icd32 = Image(cls.scratch, "icd32", "WINDOWS", {"gdi32.dll": ["D3DKMTEnumAdapters2"]},
+                          exports=ICD_EXPORTS, machine="i386", base=X86_BASE)
 
     @classmethod
     def tearDownClass(cls):
@@ -203,6 +222,33 @@ class GuestImageCheck(unittest.TestCase):
         result = run(CHECK, self.icd.path, *arguments)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("guest_image: ok", result.stdout)
+
+    def test_a_32_bit_dll_passes_as_i386_and_is_refused_as_the_default_amd64(self):
+        """The x86 drivers a WoW64 process loads, checked as what they are."""
+        arguments = ["--dll", "--only-exports", "--require-import", "D3DKMTEnumAdapters2"]
+        for export in ICD_EXPORTS:
+            arguments += ["--require-export", export]
+        result = run(CHECK, self.icd32.path, "--machine", "i386", *arguments)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("guest_image: ok", result.stdout)
+        result = run(CHECK, self.icd32.path, *arguments)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("machine IMAGE_FILE_MACHINE_I386, want IMAGE_FILE_MACHINE_AMD64", result.stderr)
+        result = run(CHECK, self.icd.path, "--machine", "i386", *arguments)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("machine IMAGE_FILE_MACHINE_AMD64, want IMAGE_FILE_MACHINE_I386", result.stderr)
+
+    def test_a_32_bit_images_base_and_32_bit_relocations_are_read(self):
+        """PE32's ImageBase is four bytes past where PE32+'s begins, and its
+        pointers are HIGHLOW relocations: each one read holds an address inside
+        the image, above its base."""
+        image = check_guest_image.PeImage(self.icd32.path.read_bytes())
+        self.assertEqual(image.image_base, X86_BASE)
+        pointers = image.relocated_pointers()
+        self.assertTrue(pointers)
+        for _, value in pointers:
+            self.assertGreater(value, X86_BASE)
+            self.assertLess(value, X86_BASE + 0x100000)
 
     def test_a_linked_dll_is_refused_as_an_executable_and_for_an_export_it_lacks(self):
         result = run(CHECK, self.icd.path, "--require-export", "vk_icdGetPhysicalDeviceProcAddr")

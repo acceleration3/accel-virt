@@ -98,9 +98,10 @@ AV_SAME_OFFSET(D3d12ddiargOpenAdapterRecord, hAdapter, D3D12DDIARG_OPENADAPTER, 
 AV_SAME_OFFSET(D3d12ddiargOpenAdapterRecord, pAdapterCallbacks, D3D12DDIARG_OPENADAPTER, pAdapterCallbacks);
 AV_SAME_OFFSET(D3d12ddiargOpenAdapterRecord, pAdapterFuncs, D3D12DDIARG_OPENADAPTER, pAdapterFuncs);
 
-/* 0x40 is the region D3D12Core clears before the open (research.md §12). */
+/* Eight slots are the region D3D12Core clears before the open (research.md
+ * §12): 0x40 bytes in a 64-bit process, 0x20 in a 32-bit one. */
 AV_SAME_SIZE(D3d12ddiAdapterFuncsRecord, D3D12DDI_ADAPTERFUNCS);
-static_assert(sizeof(D3D12DDI_ADAPTERFUNCS) == 0x40);
+static_assert(sizeof(D3D12DDI_ADAPTERFUNCS) == 8u * sizeof(void *));
 AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnCalcPrivateDeviceSize, D3D12DDI_ADAPTERFUNCS,
                pfnCalcPrivateDeviceSize);
 AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnCreateDevice, D3D12DDI_ADAPTERFUNCS, pfnCreateDevice);

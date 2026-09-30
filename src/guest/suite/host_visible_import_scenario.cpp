@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
+#include "proto/generated/vulkan/vk_serialize.h"
 
 namespace av {
 
@@ -95,7 +96,10 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
     buffers_[side] = buffer;
     const Status imported = import_chunk(side);
     if (imported != Status::ok) return imported;
-    const VkDeviceMemory memory = reinterpret_cast<VkDeviceMemory>(imports_[side].memory());
+    /* The generated identity, which takes a handle's bits in either build's
+     * shape of the type. */
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    static_cast<void>(vkproto::wire_to_handle(imports_[side].memory(), memory));
     const VkResult bound = vkproto::rvk_vkBindBufferMemory(transport, chain_.device(), buffers_[side], memory, 0u);
     return steps_.check_result(names.bind_buffer, bound);
 }

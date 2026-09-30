@@ -1,3 +1,4 @@
+#include "core/support/byte_range.hpp"
 #include "core/trace/trace_layout.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -22,10 +23,10 @@ TEST(trace_layout, a_slot_count_is_clamped_to_256)
   CHECK_EQ(TraceLayout(std::uint32_t{0xFFFFFFFFu}).slots(), 256u); }
 
 TEST(trace_layout, a_size_holds_whole_slots_only)
-{ CHECK_EQ(TraceLayout(std::size_t{0}).slots(), 0u);
-  CHECK_EQ(TraceLayout(std::size_t{95}).slots(), 0u);
-  CHECK_EQ(TraceLayout(std::size_t{96}).slots(), 0u);
-  CHECK_EQ(TraceLayout(std::size_t{96 + 823}).slots(), 0u);
-  CHECK_EQ(TraceLayout(std::size_t{96 + 824}).slots(), 1u);
-  CHECK_EQ(TraceLayout(std::size_t{96 + 2 * 824 - 1}).slots(), 1u);
-  CHECK_EQ(TraceLayout(std::size_t{0xFFFFFFFFFFFFFFFFull}).slots(), 256u); }
+{ CHECK_EQ(TraceLayout(av::ByteRange(0u, 0)).slots(), 0u);
+  CHECK_EQ(TraceLayout(av::ByteRange(0u, 95)).slots(), 0u);
+  CHECK_EQ(TraceLayout(av::ByteRange(0u, 96)).slots(), 0u);
+  CHECK_EQ(TraceLayout(av::ByteRange(0u, 96 + 823)).slots(), 0u);
+  CHECK_EQ(TraceLayout(av::ByteRange(0u, 96 + 824)).slots(), 1u);
+  CHECK_EQ(TraceLayout(av::ByteRange(0u, 96 + 2 * 824 - 1)).slots(), 1u);
+  CHECK_EQ(TraceLayout(av::ByteRange(0u, 0xFFFFFFFFFFFFFFFFull)).slots(), 256u); }

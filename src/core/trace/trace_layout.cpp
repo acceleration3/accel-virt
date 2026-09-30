@@ -1,13 +1,16 @@
 #include "core/trace/trace_layout.hpp"
 
+#include "core/support/byte_range.hpp"
+
 namespace av {
 
 TraceLayout::TraceLayout(uint32_t slots) : slots_(slots < max_slots ? slots : static_cast<uint32_t>(max_slots)) {}
 
-TraceLayout::TraceLayout(size_t bytes) : slots_(0u)
+TraceLayout::TraceLayout(const ByteRange &region) : slots_(0u)
 {
+    const uint64_t bytes = region.size();
     if (bytes < header_bytes) return;
-    const size_t fit = (bytes - header_bytes) / slot_bytes;
+    const uint64_t fit = (bytes - header_bytes) / slot_bytes;
     slots_ = fit < max_slots ? static_cast<uint32_t>(fit) : static_cast<uint32_t>(max_slots);
 }
 

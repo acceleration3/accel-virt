@@ -33,13 +33,32 @@ list(APPEND RVKTEST_SOURCES
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_descriptor_template_default.cpp
   ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
 
+# The tree is built once per guest architecture (AV_GUEST_ARCH, from the
+# toolchain): x64, and x86 for the drivers a 32-bit process loads.
+if(AV_GUEST_ARCH STREQUAL "x86")
+  set(AV_DLLTOOL_MACHINE i386)
+  # What the compiler calls on x86 that a C runtime would define - the stack
+  # probe and 64-bit arithmetic - comes from ntdll's own exports, as memcpy
+  # does; the x64 probe is assembly of its own.
+  set(AV_RUNTIME_HELPERS ntdll_x86)
+  set(AV_STACK_PROBE "")
+  list(REMOVE_ITEM RVKTEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+  # Every Vulkan non-dispatchable handle is one uint64_t on x86; this makes
+  # each a type of its own, ahead of any Khronos header.
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/FI${CMAKE_CURRENT_SOURCE_DIR}/../icd/vulkan/non_dispatchable_handle.hpp>)
+else()
+  set(AV_DLLTOOL_MACHINE i386:x86-64)
+  set(AV_RUNTIME_HELPERS "")
+  set(AV_STACK_PROBE ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+endif()
+
 # Import libraries naming exactly what the programs call; the SDK's own are
 # not in the kit. vulkan-1 is the Khronos loader, which only the probe calls.
 set(RVKTEST_IMPORTS "")
-foreach(module gdi32 kernel32 ntdll vulkan-1)
+foreach(module gdi32 kernel32 ntdll ${AV_RUNTIME_HELPERS} vulkan-1)
   set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
   add_custom_command(OUTPUT ${library}
-    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    COMMAND llvm-dlltool -m ${AV_DLLTOOL_MACHINE} -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
   list(APPEND RVKTEST_IMPORTS ${library})
 endforeach()
@@ -69,7 +88,7 @@ set(RVKCLPROBE_IMPORTS "")
 foreach(module OpenCL)
   set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}_import.lib)
   add_custom_command(OUTPUT ${library}
-    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    COMMAND llvm-dlltool -m ${AV_DLLTOOL_MACHINE} -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
   list(APPEND RVKCLPROBE_IMPORTS ${library})
 endforeach()
@@ -119,7 +138,7 @@ list(APPEND RVKVK_SOURCES
 # The probe's module-level assembly is Intel syntax that LTO's IR assembler
 # reads as AT&T: it stays an ordinary object.
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp PROPERTIES COMPILE_OPTIONS -fno-lto)
-add_library(rvkvk SHARED ${RVKVK_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_library(rvkvk SHARED ${RVKVK_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(rvkvk rvktest_imports)
 set_target_properties(rvkvk PROPERTIES PREFIX "")
 target_include_directories(rvkvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -142,7 +161,7 @@ set(RVKGLPROBE_IMPORTS "")
 foreach(module opengl32 user32)
   set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
   add_custom_command(OUTPUT ${library}
-    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    COMMAND llvm-dlltool -m ${AV_DLLTOOL_MACHINE} -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
   list(APPEND RVKGLPROBE_IMPORTS ${library})
 endforeach()
@@ -170,7 +189,7 @@ list(APPEND RVKGL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
   ${RVKTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
   ${RVKTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
-add_library(rvkgl SHARED ${RVKGL_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_library(rvkgl SHARED ${RVKGL_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(rvkgl rvktest_imports rvkglprobe_imports)
 set_target_properties(rvkgl PROPERTIES PREFIX "")
 target_include_directories(rvkgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -207,7 +226,7 @@ list(APPEND RVKCL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
   ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
-add_library(rvkcl SHARED ${RVKCL_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_library(rvkcl SHARED ${RVKCL_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(rvkcl rvktest_imports)
 set_target_properties(rvkcl PROPERTIES PREFIX "")
 # compat/ first: it answers the <type_traits> the generated ICD stubs include,
@@ -246,7 +265,7 @@ set(RVKD3DPROBE_IMPORTS "")
 foreach(module d3d9 d3d11 d3d12 dxgi)
   set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
   add_custom_command(OUTPUT ${library}
-    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    COMMAND llvm-dlltool -m ${AV_DLLTOOL_MACHINE} -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
   list(APPEND RVKD3DPROBE_IMPORTS ${library})
 endforeach()
@@ -352,7 +371,7 @@ if(EXISTS ${OPENCL_LOADER_TREE}/loader/icd.c)
   foreach(module cfgmgr32 advapi32 ole32)
     set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
     add_custom_command(OUTPUT ${library}
-      COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+      COMMAND llvm-dlltool -m ${AV_DLLTOOL_MACHINE} -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
     list(APPEND OPENCL_LOADER_IMPORTS ${library})
   endforeach()
@@ -415,7 +434,7 @@ list(APPEND RVKUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp)
-add_library(rvkumd SHARED ${RVKUMD_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_library(rvkumd SHARED ${RVKUMD_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(rvkumd rvktest_imports)
 set_target_properties(rvkumd PROPERTIES PREFIX "")
 target_include_directories(rvkumd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -427,3 +446,11 @@ target_compile_options(rvkumd PRIVATE -imsvc/windows-kit/wdk-shared)
 target_link_options(rvkumd PRIVATE /ENTRY:rvkumd_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/d3d/rvkumd.def)
 set_property(TARGET rvkumd APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/d3d/rvkumd.def)
 target_link_libraries(rvkumd PRIVATE ${RVKTEST_IMPORTS})
+
+# The 32-bit drivers are the same files a WoW64 process loads beside the 64-bit
+# ones, from one driver store directory: rvkgpu.inf's *Wow values name them.
+if(AV_GUEST_ARCH STREQUAL "x86")
+  foreach(driver rvkvk rvkgl rvkcl rvkumd)
+    set_target_properties(${driver} PROPERTIES OUTPUT_NAME ${driver}32)
+  endforeach()
+endif()

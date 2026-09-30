@@ -177,7 +177,7 @@ Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_
     const PFN_NUMBER  first = static_cast<PFN_NUMBER>(physical >> PAGE_SHIFT);
     for (uint64_t page = 0u; page < bytes >> PAGE_SHIFT; page++) frames[page] = first + page;
     mdl->MdlFlags |= MDL_PAGES_LOCKED;
-    return map_mdl_to_process(mdl, view, mapping);
+    return map_mdl_to_process(mdl, bytes, view, mapping);
 }
 
 /* A mapping of its own over the same frames, so unmap_from_process frees what
@@ -195,12 +195,12 @@ Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&
     RtlCopyMemory(MmGetMdlPfnArray(mdl), MmGetMdlPfnArray(owned),
                   ADDRESS_AND_SIZE_TO_SPAN_PAGES(nullptr, bytes) * sizeof(PFN_NUMBER));
     mdl->MdlFlags |= MDL_PAGES_LOCKED;
-    return map_mdl_to_process(mdl, view, mapping);
+    return map_mdl_to_process(mdl, bytes, view, mapping);
 }
 
 /* A user-mode mapping the process's address space refuses is raised as an
  * exception, not answered with null. */
-Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t &view, void *&mapping)
+Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, uint64_t &view, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_mdl_to_process");
     ScopeExit free_mdl([mdl] { IoFreeMdl(mdl); });
@@ -215,6 +215,13 @@ Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t &view, void *&mappi
         user = nullptr;
     }
     if (user == nullptr) return Status::no_memory;
+    /* A 32-bit process addresses only its low 4 GiB. The memory manager places
+     * a WoW64 process's views there; one that ended past it would be truncated
+     * by the process into some other address, so it is taken back. */
+    if (IoIs32bitProcess(nullptr) && reinterpret_cast<uint64_t>(user) + bytes > wow64_address_limit) {
+        MmUnmapLockedPages(user, mdl);
+        return Status::no_memory;
+    }
     PEPROCESS const process = PsGetCurrentProcess();
     ObReferenceObject(process);
     *record = ProcessMapping{mdl, user, process};
