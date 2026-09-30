@@ -12,6 +12,7 @@
 
 #include "core/ddi/entry_points.hpp"
 #include "core/miniport/driver_trace.hpp"
+#include "core/miniport/image_exit.hpp"
 #include "core/miniport/miniport.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/support/object_storage.hpp"
@@ -28,7 +29,7 @@ template <typename PlatformType, typename TraceHostType>
 struct DriverImageProbe;
 
 template <typename PlatformType, typename TraceHostType>
-class DriverImage {
+class DriverImage final : public ImageExit {
 public:
     DriverImage() = default;
     DriverImage(const DriverImage &) = delete;
@@ -57,7 +58,7 @@ public:
             platform_.destroy();
             return NtStatus(Status::invalid_state).value();
         }
-        miniport_binding.bind(miniport_.object());
+        miniport_binding.bind(miniport_.object(), this);
         const int32_t registered =
             platform.register_miniport(driver_object, registry_path, miniport_.object().ddi_table());
         if (registered < 0) {
@@ -71,9 +72,10 @@ public:
         return registered;
     }
 
-    /* After DxgkDdiUnload, or when registration failed. The table outlives the
-     * miniport, whose teardown still opens scopes. */
-    void leave()
+    /* At DxgkDdiUnload (MiniportBinding::unload), or when registration
+     * failed. The table outlives the miniport, whose teardown still opens
+     * scopes. */
+    void leave() override
     {
         AV_SCOPE("DriverImage::leave");
         miniport_binding.unbind();

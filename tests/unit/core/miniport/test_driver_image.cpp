@@ -29,6 +29,7 @@ struct DriverImageProbe<MockPlatform, MockTraceHost> {
     explicit DriverImageProbe(DriverImage<MockPlatform, MockTraceHost> &target) : image(target) {}
     Status occupy_miniport_storage(MockPlatform &platform) { return image.miniport_.construct(platform); }
     void   release_miniport_storage() { image.miniport_.destroy(); }
+    bool   platform_kept() const { return image.platform_.constructed(); }
     DriverImage<MockPlatform, MockTraceHost> &image;
 };
 
@@ -135,6 +136,23 @@ TEST(driver_image_enter, occupied_root_storage_is_refused)
   CHECK(av::miniport_binding.miniport() == nullptr);
   CHECK(av::scope_binding.table() == nullptr);
   probe.release_miniport_storage(); }
+
+/* DxgkDdiUnload is the image's end, not only its adapters': the platform - its
+ * log thread - and the trace table go with it, before dxgkrnl unmaps the code
+ * they run. A live driver upgrade bugchecked 0xCE in the log thread when they
+ * stayed. */
+TEST(driver_image_leave, unload_leaves_the_whole_image)
+{ Entered entered;
+  CHECK_EQ(entered.enter_traced(), 0);
+  int pdo = 0; void *context = nullptr;
+  CHECK_EQ(AvDdiAddDevice(&pdo, &context), 0);
+  DriverImageProbe<MockPlatform, MockTraceHost> probe(entered.image());
+  CHECK(probe.platform_kept());
+  AvDdiUnload();
+  CHECK(av::miniport_binding.miniport() == nullptr);
+  CHECK(!probe.platform_kept());
+  /* Nothing is bound to leave twice. */
+  AvDdiUnload(); }
 
 TEST(driver_image_leave, unbinds_and_releases_everything)
 { Entered entered;

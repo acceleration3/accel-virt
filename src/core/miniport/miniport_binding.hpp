@@ -8,11 +8,13 @@
 
 namespace av {
 
+class ImageExit;
 class Miniport;
 
 class MiniportBinding {
 public:
-    void      bind(Miniport &miniport);
+    /* `exit`, where there is one, is what unload ends with. */
+    void      bind(Miniport &miniport, ImageExit *exit = nullptr);
     void      unbind();
     Miniport *miniport() const;
 
@@ -23,7 +25,8 @@ public:
     void    unload();
 
 private:
-    Miniport *miniport_ = nullptr;
+    Miniport  *miniport_ = nullptr;
+    ImageExit *exit_ = nullptr;
 };
 
 }  // namespace av
