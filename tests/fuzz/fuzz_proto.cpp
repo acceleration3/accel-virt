@@ -60,7 +60,10 @@ void setup_round_trip(const std::uint8_t *bytes, std::size_t length)
     std::uint8_t again[av::ContextSetup::encoded_size] = {};
     if (decoded.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
     if (std::memcmp(again, bytes, length) != 0) __builtin_trap();
-    if (decoded.sub_api() != av::SubApi::opengl && !decoded.options().defaults()) __builtin_trap();
+    if (decoded.sub_api() == av::SubApi::opencl && !decoded.options().shares_only()) __builtin_trap();
+    if (decoded.sub_api() != av::SubApi::opengl && decoded.sub_api() != av::SubApi::opencl &&
+        !decoded.options().defaults())
+        __builtin_trap();
 }
 
 void ring_sequence(const std::uint8_t *bytes, std::size_t length)

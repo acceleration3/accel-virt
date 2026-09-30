@@ -77,6 +77,11 @@ namespace {
 constexpr std::uint32_t draw_bytes = 32u;
 /* What fills the connection's command limit exactly. */
 constexpr std::uint32_t draws_to_the_limit = static_cast<std::uint32_t>(Connection::command_bytes / draw_bytes);
+/* What one batch carries before the next draw no longer has its room: the block
+ * at the command limit, less a header and the room a command is lent. */
+constexpr std::uint32_t draws_per_batch = static_cast<std::uint32_t>(
+    (Connection::command_bytes - av::CommandHeader::encoded_size - av::icd::CommandBatch::command_room) / draw_bytes +
+    1u);
 /* Not a handle the root made: it crosses as 0, which is all a batch needs. */
 const VkCommandBuffer command_buffer = VK_NULL_HANDLE;
 
@@ -188,29 +193,42 @@ TEST(command_batch, discard_drops_what_was_recorded)
   ShippedBatch shipped(rig.kmt(), rig.ring());
   rig.check_shipped_draws(shipped, 5u, 2u); }
 
-TEST(command_batch, a_batch_filling_the_command_limit_exactly_ships)
-{ BatchRig rig;
-  for (std::uint32_t index = 0u; index < draws_to_the_limit; index++) rig.draw(index);
-  CHECK_EQ(CommandBatchProbe::used(rig.batch()), Connection::command_bytes);
-  CHECK_STATUS(rig.batch().end(), Status::ok);
-  ShippedBatch shipped(rig.kmt(), rig.ring());
-  rig.check_shipped_draws(shipped, 0u, draws_to_the_limit); }
-
-TEST(command_batch, a_batch_past_the_command_limit_answers_no_memory_at_end_and_ships_nothing)
+/* A recording past what one batch holds ships the block as a batch of its own
+ * once the next command no longer has its room, and goes on recording: the host
+ * records a command buffer's commands in the order they arrive, whichever
+ * batch carried them. */
+TEST(command_batch, a_recording_past_the_command_limit_goes_as_several_batches)
 { BatchRig rig;
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
-  for (std::uint32_t index = 0u; index <= draws_to_the_limit; index++) rig.draw(index);
-  CHECK_EQ(CommandBatchProbe::used(rig.batch()), Connection::command_bytes);
-  /* Later commands are refused too, rather than recorded after a gap. */
-  rig.draw(0xFFFFu);
-  CHECK_STATUS(rig.batch().end(), Status::no_memory);
-  CHECK(rig.batch().invariants_hold());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted);
-  /* The failure went with the recording: the next one ships. */
-  rig.draw(3u);
+  for (std::uint32_t index = 0u; index < draws_to_the_limit; index++) rig.draw(index);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted + 1u);
+  { ShippedBatch first(rig.kmt(), rig.ring());
+    rig.check_shipped_draws(first, 0u, draws_per_batch); }
+  CHECK_EQ(CommandBatchProbe::used(rig.batch()), (draws_to_the_limit - draws_per_batch) * draw_bytes);
   CHECK_STATUS(rig.batch().end(), Status::ok);
   ShippedBatch shipped(rig.kmt(), rig.ring());
-  rig.check_shipped_draws(shipped, 3u, 1u); }
+  rig.check_shipped_draws(shipped, draws_per_batch, draws_to_the_limit - draws_per_batch); }
+
+/* A full block the connection cannot ship when the next command needs its room
+ * fails the recording: later commands are refused rather than recorded after a
+ * gap, and end answers it with nothing shipped. The next recording ships. */
+TEST(command_batch, a_full_block_the_connection_refuses_answers_no_memory_at_end)
+{ BatchRig rig;
+  for (std::uint32_t index = 0u; index < draws_per_batch; index++) rig.draw(index);
+  /* A faulted transport refuses every publish. */
+  rig.kmt().withhold_answer_at(1u);
+  std::uint64_t instance = 0u;
+  VkInstanceCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  CHECK_EQ(rvk_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
+  const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
+  rig.draw(draws_per_batch);
+  rig.draw(0xFFFFu);
+  CHECK_EQ(CommandBatchProbe::used(rig.batch()), draws_per_batch * draw_bytes);
+  CHECK_STATUS(rig.batch().end(), Status::no_memory);
+  CHECK(rig.batch().invariants_hold());
+  CHECK_EQ(CommandBatchProbe::used(rig.batch()), 0u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted); }
 
 /* The block grows 32, 64, 128 and 256 KiB: whichever of those allocations is
  * refused, end answers no_memory, nothing is shipped, and the memory the
