@@ -59,7 +59,12 @@ public:
     bool invariants_hold() const;
 
 private:
+    static constexpr size_t refusal_line_bytes = 128u;
+
     [[nodiscard]] VkResult judge(const VkSwapchainCreateInfoKHR &info, SurfaceProperties &surface) const;
+    /* One log line naming what a create asked that this refuses, and the
+     * value beside it: what is offered, or the other half of the pair. */
+    void refused(const char *what, uint64_t asked, uint64_t beside) const;
     VkResult               window_state() const;
     void                   to_bgra(const uint8_t *rows) const;
     /* Whether the images are BGRA, a DIB's own channel order. */

@@ -276,7 +276,7 @@ TEST(swapchain, a_create_structure_this_driver_cannot_present_is_refused)
       case 1u: info.minImageCount = SurfaceProperties::min_images - 1u; break;
       case 2u: info.minImageCount = SurfaceProperties::max_images + 1u; break;
       case 3u: info.imageArrayLayers = 2u; break;
-      case 4u: info.imageUsage = VK_IMAGE_USAGE_STORAGE_BIT; break;
+      case 4u: info.imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT; break;
       case 5u: info.preTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR; break;
       case 6u: info.compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR; break;
       case 7u: info.imageFormat = VK_FORMAT_R5G6B5_UNORM_PACK16; break;

@@ -70,6 +70,12 @@ include = [
     "VK_KHR_timeline_semaphore",
     "VK_KHR_buffer_device_address",
     "VK_KHR_draw_indirect_count",
+    # DXVK before 2.0 requires this one by name (khrImageFormatList,
+    # DxvkExtMode::Required) and refuses the device without it: Portal's
+    # Vulkan renderer, DXVK 1.8.1, failed "Required Vulkan extension
+    # VK_KHR_image_format_list not supported". No commands, one core struct
+    # the chain codec already carries.
+    "VK_KHR_image_format_list",
     "VK_KHR_descriptor_update_template",
     "VK_KHR_maintenance1",
     "VK_KHR_maintenance3",

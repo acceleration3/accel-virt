@@ -18,8 +18,13 @@ public:
     static constexpr uint32_t max_images = 8u;
     static constexpr uint32_t format_count = 4u;
     static constexpr uint32_t mode_count = 2u;
+    /* A swapchain image here is an ordinary host image, so it takes any use
+     * one can. Storage is asked by DXVK before 2.0, which writes the back
+     * buffer from a compute shader, as Windows drivers' surfaces offer:
+     * without it Portal's Vulkan renderer failed "Failed to create swap chain". */
     static constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                               VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+                                               VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                               VK_IMAGE_USAGE_STORAGE_BIT;
 
     SurfaceProperties(WindowSurface &windows, void *window);
     SurfaceProperties(const SurfaceProperties &) = delete;

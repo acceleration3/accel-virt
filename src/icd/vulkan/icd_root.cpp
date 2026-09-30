@@ -199,6 +199,11 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_KHR_synchronization2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_EXT_vertex_attribute_divisor", 3u,
             "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    /* DXVK before 2.0 declines a device without it: Portal's Vulkan
+     * renderer (DXVK 1.8.1) failed "Required Vulkan extension
+     * VK_KHR_image_format_list not supported". Core in 1.2; its one
+     * structure crosses in an image's create. */
+    {"VK_KHR_image_format_list", 1u, "reported_extensions.an_image_s_format_list_reaches_the_host"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The instance extensions this ICD reports. The *2 queries are its own entry

@@ -59,6 +59,7 @@ inline constexpr const char* kImplementedDeviceExtensions[] = {
     "VK_KHR_external_semaphore_win32",
     "VK_KHR_fragment_shading_rate",
     "VK_KHR_get_memory_requirements2",
+    "VK_KHR_image_format_list",
     "VK_KHR_maintenance1",
     "VK_KHR_maintenance3",
     "VK_KHR_maintenance4",

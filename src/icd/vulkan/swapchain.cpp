@@ -1,6 +1,7 @@
 #include "icd/vulkan/swapchain.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/common/window_surface.hpp"
@@ -75,19 +76,58 @@ VkResult Swapchain::judge(const VkSwapchainCreateInfoKHR &info, SurfacePropertie
     if (capabilities.currentExtent.width == 0u || capabilities.currentExtent.height == 0u)
         return VK_ERROR_INITIALIZATION_FAILED;
     if (info.imageExtent.width != capabilities.currentExtent.width ||
-        info.imageExtent.height != capabilities.currentExtent.height)
+        info.imageExtent.height != capabilities.currentExtent.height) {
+        refused("width, the window's", info.imageExtent.width, capabilities.currentExtent.width);
+        refused("height, the window's", info.imageExtent.height, capabilities.currentExtent.height);
         return VK_ERROR_OUT_OF_DATE_KHR;
-    const bool fits = foreign_enum(info.sType) == static_cast<int32_t>(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR) &&
-                      info.minImageCount >= capabilities.minImageCount &&
-                      info.minImageCount <= capabilities.maxImageCount && info.imageArrayLayers == 1u &&
-                      (info.imageUsage & ~capabilities.supportedUsageFlags) == 0u &&
-                      foreign_enum(info.preTransform) ==
-                          static_cast<int32_t>(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) &&
-                      foreign_enum(info.compositeAlpha) ==
-                          static_cast<int32_t>(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) &&
-                      surface.offers_format(foreign_enum(info.imageFormat), foreign_enum(info.imageColorSpace)) &&
-                      surface.offers_mode(foreign_enum(info.presentMode));
+    }
+    /* Each check is named in the log, so a refusal says which; an application
+     * reports only that the swapchain failed (Portal: "Failed to create swap
+     * chain"). */
+    struct Check {
+        bool        holds;
+        const char *what;
+        uint64_t    asked;
+        uint64_t    offered;
+    };
+    const Check checks[] = {
+        {foreign_enum(info.sType) == static_cast<int32_t>(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR), "sType",
+         static_cast<uint32_t>(foreign_enum(info.sType)), VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR},
+        {info.minImageCount >= capabilities.minImageCount && info.minImageCount <= capabilities.maxImageCount,
+         "image count, the most", info.minImageCount, capabilities.maxImageCount},
+        {info.imageArrayLayers == 1u, "array layers", info.imageArrayLayers, 1u},
+        {(info.imageUsage & ~capabilities.supportedUsageFlags) == 0u, "usage", info.imageUsage,
+         capabilities.supportedUsageFlags},
+        {foreign_enum(info.preTransform) == static_cast<int32_t>(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR),
+         "transform", static_cast<uint32_t>(foreign_enum(info.preTransform)), VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR},
+        {foreign_enum(info.compositeAlpha) == static_cast<int32_t>(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR), "alpha",
+         static_cast<uint32_t>(foreign_enum(info.compositeAlpha)), VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR},
+        {surface.offers_format(foreign_enum(info.imageFormat), foreign_enum(info.imageColorSpace)),
+         "format, in colour space", static_cast<uint32_t>(foreign_enum(info.imageFormat)),
+         static_cast<uint32_t>(foreign_enum(info.imageColorSpace))},
+        {surface.offers_mode(foreign_enum(info.presentMode)), "present mode",
+         static_cast<uint32_t>(foreign_enum(info.presentMode)), 0u}};
+    bool fits = true;
+    for (const Check &check : checks) {
+        if (check.holds) continue;
+        refused(check.what, check.asked, check.offered);
+        fits = false;
+    }
     return fits ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+}
+
+void Swapchain::refused(const char *what, uint64_t asked, uint64_t beside) const
+{
+    AV_SCOPE("Swapchain::refused");
+    char       line[refusal_line_bytes] = {};
+    TextBuffer text(line, sizeof line);
+    text.append("rvkvk: a swapchain is refused on its ");
+    text.append(what);
+    text.append(": ");
+    text.append_decimal(asked);
+    text.append(" / ");
+    text.append_decimal(beside);
+    log_.write(text.text());
 }
 
 VkResult Swapchain::images(uint32_t &count, VkImage *images) const

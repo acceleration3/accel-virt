@@ -255,6 +255,53 @@ TEST(reported_extensions, a_pipeline_library_in_a_create_reaches_the_host)
   CHECK(library_list);
   CHECK(library_parts); }
 
+/* An image's list of the formats its views take is a structure in its create,
+ * and it is what VK_KHR_image_format_list is: it crosses with the create, each
+ * format in order. DXVK before 2.0 will not make a device without it. */
+TEST(reported_extensions, an_image_s_format_list_reaches_the_host)
+{ ExtensionsRig rig;
+  const auto    create_image =
+      rig.entry<VkResult (*)(VkDevice, const VkImageCreateInfo *, const VkAllocationCallbacks *, VkImage *)>(
+          "vkCreateImage");
+  CHECK(create_image != nullptr);
+  const VkFormat           views[2] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB};
+  VkImageFormatListCreateInfo formats = {};
+  formats.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
+  formats.viewFormatCount = 2u;
+  formats.pViewFormats = views;
+  VkImageCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  create.pNext = &formats;
+  create.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+  create.imageType = VK_IMAGE_TYPE_2D;
+  create.format = VK_FORMAT_R8G8B8A8_UNORM;
+  create.extent = {64u, 64u, 1u};
+  create.mipLevels = 1u;
+  create.arrayLayers = 1u;
+  create.samples = VK_SAMPLE_COUNT_1_BIT;
+  create.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+  VkImage made = VK_NULL_HANDLE;
+  rig.rig().host().vk_handle(0, 0xB11u);
+  static_cast<void>(create_image(rig.device(), &create, nullptr, &made));
+  CHECK_EQ(rig.rig().kmt().command_id(rig.rig().kmt().commands() - 1u),
+           static_cast<std::uint32_t>(kCmd_vkCreateImage));
+  const std::uint8_t *bytes = rig.rig().kmt().command_bytes(rig.rig().kmt().commands() - 1u);
+  WireReader          body(bytes + CommandHeader::encoded_size,
+                           MockKmt::journal_bytes - CommandHeader::encoded_size);
+  static_cast<void>(body.read_u64());   /* the device */
+  std::uint8_t block[4096] = {};
+  WireArena    arena(block, sizeof block);
+  VkImageCreateInfo decoded = {};
+  CHECK(deserialize_VkImageCreateInfo(body, &decoded, arena));
+  const auto *list = static_cast<const VkImageFormatListCreateInfo *>(decoded.pNext);
+  CHECK(list != nullptr);
+  CHECK_EQ(static_cast<std::uint32_t>(list->sType),
+           static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO));
+  CHECK_EQ(list->viewFormatCount, 2u);
+  CHECK_EQ(static_cast<std::uint32_t>(list->pViewFormats[0]), static_cast<std::uint32_t>(VK_FORMAT_R8G8B8A8_UNORM));
+  CHECK_EQ(static_cast<std::uint32_t>(list->pViewFormats[1]), static_cast<std::uint32_t>(VK_FORMAT_R8G8B8A8_SRGB));
+  CHECK(list->pNext == nullptr); }
+
 /* US2 scenarios 1 and 2. What vkd3d-proton requires is mostly core features of
  * Vulkan 1.2 and 1.3 rather than extensions: dynamic rendering,
  * synchronization2, timeline semaphores, buffer device address, descriptor

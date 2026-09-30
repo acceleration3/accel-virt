@@ -98,10 +98,15 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     uint32_t         adapter = 0u;
     uint32_t         kmt_device = 0u;
-    if (info == nullptr || !root_.present_context(device, physical, adapter, kmt_device))
+    if (info == nullptr || !root_.present_context(device, physical, adapter, kmt_device)) {
+        log_.write("rvkvk: a swapchain is refused: its device has no adapter to present on");
         return VK_ERROR_INITIALIZATION_FAILED;
+    }
     void *const window = surfaces_.window_of(info->surface);
-    if (window == nullptr) return VK_ERROR_SURFACE_LOST_KHR;
+    if (window == nullptr) {
+        log_.write("rvkvk: a swapchain is refused: its surface names no window");
+        return VK_ERROR_SURFACE_LOST_KHR;
+    }
     for (SwapchainSlot &slot : slots_) {
         if (slot.chain_.constructed()) continue;
         static_cast<void>(
