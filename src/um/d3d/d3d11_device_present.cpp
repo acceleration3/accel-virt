@@ -1,9 +1,11 @@
 /* What the kernel sees of a device: allocations for resources that are
  * presented, scanned out or shared, and the presents themselves.
  *
- * The host renders; the kernel scans out and blits guest memory. So a present
- * first reads the host's pixels back into the presented resource's allocation
- * (publish), then hands that allocation to dxgkrnl through DXGI's present
+ * The host renders. DWM composes a flip-model buffer and the display scans out
+ * a primary from the host's own texture, under the key the miniport minted;
+ * the kernel blits a blt-model buffer from guest memory. So only that present
+ * reads the host's pixels back into the buffer's allocation first (publish),
+ * and every present hands the allocation to dxgkrnl through DXGI's present
  * callback, on a context of the device's own. */
 #include "core/platform/block_source.hpp"
 #include "core/support/text_buffer.hpp"
@@ -68,7 +70,7 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
         text.append_hex(static_cast<uint32_t>(resident), 8u);
         log_.write(text.text());
     }
-    resource.primary = primary ? 1u : 0u;
+    resource.present_model = d3d::SwapChainBuffer(primary, create.MiscFlags).model();
     resource.vidpn_source = primary ? create.pPrimaryDesc->VidPnSourceId : 0u;
     return S_OK;
 }
@@ -108,31 +110,41 @@ HRESULT D3d11Device::publish(ResourceRecord &resource, uint32_t subresource)
     return read ? S_OK : E_FAIL;
 }
 
+/* Where the kernel reads a frame from is the buffer's presentation model
+ * (SwapChainBuffer), not the present's flags - the runtime marks a windowed
+ * present of either model Blt. A flipped buffer is composed, and a primary
+ * scanned out, from the host's own texture under its key; only a blt-model
+ * present with no destination is copied from the buffer's pages. A buffer the
+ * host holds no texture for is only ever its pages. */
 HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
-                                     void *dxgi_context, DXGI_DDI_PRESENT_FLAGS flags)
+                                     void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_surface");
-    /* A keyed image is shown by the host from the host's own copy (the
-     * scanout's SCANOUT_IMAGE, and DWM opening it by key), so nothing is read
-     * back: the host only has to have finished drawing it before the flip. */
-    if (source.shared_key != 0u) {
-        /* A flush, not a round trip: the present then waits in its context
-         * behind the batch this publishes (present_to_kernel), and DWM and the
-         * scanout wait on the present. */
-        if (wire().flush() != Status::ok) {
-            set_error(D3DDDIERR_DEVICEREMOVED);
-            return DXGI_ERROR_DEVICE_REMOVED;
-        }
-        /* A blt-model present with no destination is copied by the kernel from
-         * the surface's own pages into the window's redirection surface
-         * (RedirectedBlt), which DWM then composes: the host's image has to be
-         * in those pages first. */
-        if (flags.Blt != 0u && destination == nullptr) {
-            const HRESULT published = publish(source, subresource);
-            if (FAILED(published)) return published;
-        }
-        return present_to_kernel(source, destination, dxgi_context);
+    if (source.shared_key == 0u) return present_pages(source, subresource, destination, dxgi_context);
+    /* A flush, not a round trip: the present then waits in its context behind
+     * the batch this publishes (present_to_kernel), and DWM and the scanout
+     * wait on the present. */
+    if (wire().flush() != Status::ok) {
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return DXGI_ERROR_DEVICE_REMOVED;
     }
+    switch (source.present_model) {
+    case d3d::SwapChainBuffer::Model::flip:
+    case d3d::SwapChainBuffer::Model::scanout: break;
+    case d3d::SwapChainBuffer::Model::blt:
+        if (destination == nullptr) return present_pages(source, subresource, destination, dxgi_context);
+        break;
+    }
+    return present_to_kernel(source, destination, dxgi_context);
+}
+
+/* A present the kernel copies from the buffer's own pages - into the window's
+ * redirection surface (RedirectedBlt), which DWM then composes: the host's
+ * pixels are read back into them first. */
+HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
+                                   void *dxgi_context)
+{
+    AV_SCOPE("D3d11Device::present_pages");
     const HRESULT published = publish(source, subresource);
     if (FAILED(published) && removed_on_host()) {
         set_error(D3DDDIERR_DEVICEREMOVED);
@@ -195,7 +207,7 @@ HRESULT D3d11Device::present(DXGI_DDI_ARG_PRESENT *args)
     refresh_guest_surfaces();
     ResourceRecord &source = record(args->hSurfaceToPresent);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
-    return present_surface(source, args->SrcSubResourceIndex, destination, args->pDXGIContext, args->Flags);
+    return present_surface(source, args->SrcSubResourceIndex, destination, args->pDXGIContext);
 }
 
 HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
@@ -205,8 +217,7 @@ HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
     if (args->SurfacesToPresent == 0u || args->phSurfacesToPresent == nullptr) return E_INVALIDARG;
     ResourceRecord &source = record(args->phSurfacesToPresent[0].hSurface);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
-    return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext,
-                           args->Flags);
+    return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext);
 }
 
 HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)
@@ -260,7 +271,7 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         to.shadow = from.shadow;
         to.shadow_bytes = from.shadow_bytes;
         to.mapped_write = from.mapped_write;
-        to.primary = from.primary;
+        to.present_model = from.present_model;
         to.vidpn_source = from.vidpn_source;
     }
     /* The host rebinds what was bound of the views it remade

@@ -165,7 +165,9 @@ private:
     void refresh_guest_surface(ResourceRecord &resource);
     void forget_guest_surface(const ResourceRecord &resource);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
-                            void *dxgi_context, DXGI_DDI_PRESENT_FLAGS flags);
+                            void *dxgi_context);
+    HRESULT present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
+                          void *dxgi_context);
     HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context);
     /* The kernel context's next packet - a present, a fence the runtime
      * signals - waits for the batches the ring carried: the kernel's refusal

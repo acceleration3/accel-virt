@@ -8,6 +8,8 @@
 #ifndef AV_UM_D3D11_RECORDS_HPP
 #define AV_UM_D3D11_RECORDS_HPP
 
+#include "icd/d3d/swap_chain_buffer.hpp"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -35,7 +37,7 @@ struct ResourceRecord {
     uint32_t mips;
     uint32_t layers; /* array slices; six a cube */
     uint32_t samples;
-    uint32_t primary; /* scanned out: DXGI_DDI_PRIMARY_DESC was given */
+    d3d::SwapChainBuffer::Model present_model; /* how a presented buffer's frames reach the screen */
     uint32_t vidpn_source;
     uint32_t mapped_write; /* subresources written through a map since their last upload, a bit each (first 32) */
     uint32_t allocation;   /* D3DKMT_HANDLE, 0 for none */
