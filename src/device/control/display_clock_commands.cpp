@@ -5,7 +5,7 @@
 #include "device/control/control_request.hpp"
 #include "device/display/display_clock.hpp"
 #include "device/host/host.hpp"
-#include "proto/virtio_gpu/display_clock_request.hpp"
+#include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/display_timing_request.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -21,7 +21,7 @@ bool DisplayClockCommands::answer(ControlRequest &request, uint32_t type)
 {
     AV_SCOPE("DisplayClockCommands::answer");
     host_.require_main_loop("DisplayClockCommands::answer");
-    if (type == DisplayClockRequest::type) register_page(request);
+    if (type == PageRequest::display_clock) register_page(request);
     else if (type == DisplayTimingRequest::type) retime(request);
     else return false;
     return true;
@@ -32,11 +32,11 @@ bool DisplayClockCommands::answer(ControlRequest &request, uint32_t type)
 void DisplayClockCommands::register_page(ControlRequest &request)
 {
     AV_SCOPE("DisplayClockCommands::register_page");
-    uint8_t             bytes[DisplayClockRequest::encoded_size] = {};
-    WireReader          reader(bytes, request.read(0u, bytes, sizeof bytes));
-    DisplayClockRequest clock;
-    GpuResponse         response;
-    const Status        attached = clock.decode(reader) == Status::ok ? clock_.attach(clock.address()) : Status::malformed;
+    uint8_t      bytes[PageRequest::encoded_size] = {};
+    WireReader   reader(bytes, request.read(0u, bytes, sizeof bytes));
+    PageRequest  clock;
+    GpuResponse  response;
+    const Status attached = clock.decode(reader) == Status::ok ? clock_.attach(clock.address()) : Status::malformed;
     if (attached == Status::no_memory) response.set(GpuResponse::err_out_of_memory);
     else response.set(attached == Status::ok ? GpuResponse::ok_nodata : GpuResponse::err_invalid_parameter);
     if (attached != Status::ok) {

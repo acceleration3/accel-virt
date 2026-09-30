@@ -87,6 +87,8 @@ Each feature bit is something the host **proved**, not something it hopes for
 | 1 | `gpu_exported_memory` | memory allocated on the bound host GPU can be placed in that region and read back correctly through it (feature 039's `HostMemoryProbe`; on NVIDIA this works through dma-buf and not through an opaque fd) |
 | 2 | `guest_memory_import` | the host GPU can address guest pages directly, `VK_EXT_external_memory_host` (feature 039's `GuestImportProbe`, which refuses anything that is not a direct mapping) |
 | 3 | `dmabuf_scanout` | a display head's console can show a dma-buf, so a blob may be scanned out instead of transferred (feature 058) |
+| 4 | `present_engine` | the device moves queued presents on its own thread (see "Present engine") |
+| 5 | `present_from_image` | a queued present's source may be a host image, which this device can read (see "Present engine"); set only with bit 4 |
 
 Bit 3 is the one bit the device cannot decide when it describes the capset, and
 the reason is QEMU's own order: `qemu_init_displays()` runs after
@@ -1070,9 +1072,9 @@ the device core by the loopback suite (`tests/loopback/`):
 
 ## Fence queues and interrupts (device -> guest)
 
-`virtio-gpu-rvk-pci` has 67 virtqueues: control (0), cursor (1), a fence
-queue per doorbell page, queue `2 + n` for doorbell `n`, and the display line
-(66, see "Display clock"). A fence queue carries
+`virtio-gpu-rvk-pci` has 68 virtqueues: control (0), cursor (1), a fence
+queue per doorbell page, queue `2 + n` for doorbell `n`, the display line
+(66, see "Display clock") and the present line (67, see "Present engine"). A fence queue carries
 no requests - a kick is ignored - and exists so the driver can give each
 context's interrupts a vector with `queue_msix_vector`; queues may share a
 vector, and one left at `VIRTIO_MSI_NO_VECTOR` raises nothing. The PCI
@@ -1185,6 +1187,95 @@ guest writes only `interrupt_every`; the device reads it at each blank and
 treats it as hostile (any value is a divisor or none). The guest never trusts
 the device either: a wrong magic, version or head count is a page it ignores,
 and a sequence that goes backwards is a blank it does not report.
+
+## Present engine (guest -> device, device -> guest)
+
+A present's pixels - dxgkrnl's own blts and fills, and an application's
+blt-model present into its window's redirection surface - are the device's
+work, and the device does it on a thread of its own. The present copy above
+answers only once every pixel has moved, from QEMU's main loop: the
+application's present waited for it, and for whatever else the main loop was
+doing (drawing the host's window). Here the miniport hands a present over and
+returns; the device moves the pixels off the main loop, in the order it was
+given them, and says which it has moved through a page and an interrupt line,
+as the display clock says its blanks. dxgkrnl's packet for the present
+completes then, and nothing reads the destination before.
+
+A device offers the engine with capset bit 4, `present_engine`, and a source
+that is a host image rather than guest pages with bit 5, `present_from_image`;
+the miniport uses the present copy above on a device without them.
+
+### The present line
+
+Queue 67, after the display line, carries no requests and exists for its
+interrupt, as the fence queues do (`rvkgpu.sys` treats it as fence queue 65).
+The device raises it after writing `completed` whenever tickets complete; one
+interrupt may stand for several.
+
+### Registering the page (control queue)
+
+`0x02F6`, laid out as the display clock's registration: the header, then the
+guest physical address of a 4 KiB page, 4 KiB aligned, 0 to stop. `OK_NODATA`,
+or `ERR_INVALID_PARAMETER` for an address that is not aligned or not guest RAM
+the device can map. A virtio reset forgets the page and every present not yet
+moved; the miniport registers the page again at each start.
+
+### Queueing a present (control queue)
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F7`, context 0, no fence |
+| 24 | 8 | ticket | the count of queued presents since the page was registered, this one included: the first is 1 |
+| 32 | 4 | source_kind | 0 guest pages, 1 a host image |
+| 36 | 4 | reserved | 0 |
+| 40 | 8 | source_key | an image source's: the identity the host shares the image under (a presented surface's key); otherwise 0 |
+| 48 | 4 | operation | 1 blt, 2 colour fill |
+| 52 | 4 | flags | bit 0 swaps each pixel's first and third byte, as in the present copy; blt only |
+| 56 | 4 | colour | a fill's four bytes; 0 for a blt |
+| 60 | 4 | region_count | 1 to 256 |
+| 64 | 4 | source_entries | a page source's: 1 to 16384; an image's and a fill's: 0 |
+| 68 | 4 | destination_entries | 1 to 16384 |
+| 72 | 4 | source_pitch | a page source's, as in the present copy; an image's and a fill's: 0 |
+| 76 | 4 | destination_pitch | as in the present copy |
+| 80 | 16 each | source entries | virtio memory entries |
+| | 16 each | destination entries | |
+| | 24 each | regions | as in the present copy; an image source's x and y are the image's pixels |
+
+It travels as the present copy does: the fixed part in a control slot, the rest
+as a second read-only buffer of the miniport's contiguous memory, which the
+device reads when it takes the request and the miniport keeps until the ticket
+completes. The device answers at once: `OK_NODATA` once it has taken the
+request - the pixels move later - or `ERR_INVALID_PARAMETER` for one that
+breaks a rule above or names memory that is not guest RAM, which moves nothing.
+Either way the ticket completes in its turn: the device counts every queued
+present it is handed while a page is registered, refused ones included, and
+the nth completes as ticket n - a request whose ticket is not its count is
+refused. `completed` never passes a ticket the device has not finished with,
+and never skips one. Without a page the request is refused and not counted.
+The device holds at most 16 presents it has not moved; one past that is
+refused, so a miniport keeps no more than 16 outstanding.
+
+An image source is the host's image as the host has it once the work every
+context published before this request has run: subresource 0 of a 2D image of
+four-byte pixels, read as its format lays them (a red-first image arrives
+red-first, as its guest pages would hold it; the swap flag says whether the
+destination wants the other order). A region with a row outside the image or
+the destination is refused where it goes wrong, as in the present copy.
+
+### The page, 4 KiB, little-endian
+
+| Offset | Size | Writer | Field | |
+|--:|--:|---|---|---|
+| 0 | 4 | device | magic | `0x504B5652` (`"RVKP"`) |
+| 4 | 4 | device | version | 1 |
+| 8 | 8 | device | completed | the last ticket whose pixels have moved, or that was refused; 0 before the first |
+| 16 | 8 | device | refused | tickets refused so far |
+| 24 | 4072 | | reserved | 0 |
+
+`completed` and `refused` are each written as one aligned eight-byte store, and
+`refused` before `completed`. The guest trusts nothing: a wrong magic or
+version is a page it ignores, and a `completed` that goes backwards or past the
+last ticket it sent is one it does not act on.
 
 ## Wire recordings (device -> a file on the host)
 

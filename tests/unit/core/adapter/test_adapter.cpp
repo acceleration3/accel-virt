@@ -77,7 +77,7 @@
 #include "core/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "core/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "harness/device/fake_display_clock.hpp"
-#include "proto/virtio_gpu/display_clock_request.hpp"
+#include "proto/virtio_gpu/page_request.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
@@ -364,7 +364,7 @@ private:
                                                              static_cast<std::uint32_t>(answer.length())));
             return;
         }
-        if (asked == av::DisplayClockRequest::type) {
+        if (asked == av::PageRequest::display_clock) {
             fixture->clock_.answer(fixture->control());
             return;
         }

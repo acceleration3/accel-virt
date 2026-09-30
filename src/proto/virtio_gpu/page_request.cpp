@@ -1,18 +1,18 @@
-#include "proto/virtio_gpu/display_clock_request.hpp"
+#include "proto/virtio_gpu/page_request.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
 
-DisplayClockRequest::DisplayClockRequest() : address_(0u)
+PageRequest::PageRequest() : address_(0u)
 {
-    AV_SCOPE("DisplayClockRequest::DisplayClockRequest");
+    AV_SCOPE("PageRequest::PageRequest");
 }
 
-Status DisplayClockRequest::decode(WireReader &reader)
+Status PageRequest::decode(WireReader &reader)
 {
-    AV_SCOPE("DisplayClockRequest::decode");
+    AV_SCOPE("PageRequest::decode");
     if (reader.remaining() < encoded_size) return Status::malformed;
     for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
     const uint64_t address = reader.read_u64();
@@ -21,9 +21,9 @@ Status DisplayClockRequest::decode(WireReader &reader)
     return Status::ok;
 }
 
-uint64_t DisplayClockRequest::address() const
+uint64_t PageRequest::address() const
 {
-    AV_SCOPE("DisplayClockRequest::address");
+    AV_SCOPE("PageRequest::address");
     return address_;
 }
 

@@ -30,6 +30,11 @@ public:
      * reads the capset, not at realize: QEMU registers its display backends
      * after every device is realized. */
     static constexpr uint64_t feature_dmabuf_scanout = 8u;
+    /* The device moves queued presents on a thread of its own and says which
+     * it has moved through a page (docs/protocol.md, "Present engine"). */
+    static constexpr uint64_t feature_present_engine = 16u;
+    /* A queued present's source may be a host image, read by its key. */
+    static constexpr uint64_t feature_present_from_image = 32u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,

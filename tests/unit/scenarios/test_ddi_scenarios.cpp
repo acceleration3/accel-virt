@@ -41,7 +41,7 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
-#include "proto/virtio_gpu/display_clock_request.hpp"
+#include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 #include "core/platform/log_budget.hpp"
@@ -285,7 +285,7 @@ private:
                                                             static_cast<std::uint32_t>(answer.length())));
             return;
         }
-        if (asked == av::DisplayClockRequest::type) {
+        if (asked == av::PageRequest::display_clock) {
             device->clock_.answer(device->control());
             return;
         }

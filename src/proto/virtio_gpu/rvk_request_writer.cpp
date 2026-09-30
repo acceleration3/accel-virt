@@ -5,7 +5,7 @@
 
 #include "proto/context/context_setup.hpp"
 #include "proto/wire/wire_writer.hpp"
-#include "proto/virtio_gpu/display_clock_request.hpp"
+#include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/virtio_gpu/display_timing_request.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
@@ -171,8 +171,20 @@ Status RvkRequestWriter::display_modes()
 Status RvkRequestWriter::display_clock(uint64_t address)
 {
     AV_SCOPE("RvkRequestWriter::display_clock");
+    return page(PageRequest::display_clock, address);
+}
+
+Status RvkRequestWriter::present_engine(uint64_t address)
+{
+    AV_SCOPE("RvkRequestWriter::present_engine");
+    return page(PageRequest::present_engine, address);
+}
+
+Status RvkRequestWriter::page(uint32_t type, uint64_t address)
+{
+    AV_SCOPE("RvkRequestWriter::page");
     WireWriter writer(bytes_, capacity_);
-    if (!begin(writer, DisplayClockRequest::type, 0u, DisplayClockRequest::encoded_size)) return Status::too_large;
+    if (!begin(writer, type, 0u, PageRequest::encoded_size)) return Status::too_large;
     writer.write_u64(address);
     return Status::ok;
 }

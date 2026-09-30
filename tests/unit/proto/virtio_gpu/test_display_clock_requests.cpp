@@ -1,10 +1,11 @@
-/* DISPLAY_CLOCK and DISPLAY_TIMING as the driver writes them and the device
- * reads them: the header, then the page's address, or the head and its rate.
+/* DISPLAY_CLOCK, PRESENT_ENGINE and DISPLAY_TIMING as the driver writes them
+ * and the device reads them: the header, then the page's address, or the head
+ * and its rate.
  * A page address that is not a page's, a rate outside 1 Hz to 1 kHz, or a
  * request too short for its fields decodes to nothing. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "proto/virtio_gpu/display_clock_request.hpp"
+#include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/display_timing_request.hpp"
 #include "proto/virtio_gpu/rvk_request_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -12,7 +13,7 @@
 #include <cstdint>
 #include <cstring>
 
-using av::DisplayClockRequest;
+using av::PageRequest;
 using av::DisplayTimingRequest;
 using av::RvkRequestWriter;
 using av::Status;
@@ -33,20 +34,35 @@ TEST(display_clock_request, the_writer_s_request_decodes_to_its_page)
 { std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
   RvkRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0x1234567000u), Status::ok);
-  CHECK_EQ(writer.length(), DisplayClockRequest::encoded_size);
-  CHECK_EQ(type_of(bytes), DisplayClockRequest::type);
+  CHECK_EQ(writer.length(), PageRequest::encoded_size);
+  CHECK_EQ(type_of(bytes), PageRequest::display_clock);
   WireReader reader(bytes, writer.length());
-  DisplayClockRequest clock;
+  PageRequest clock;
   CHECK_STATUS(clock.decode(reader), Status::ok);
   CHECK_EQ(clock.address(), 0x1234567000u);
-  CHECK_EQ(reader.offset(), DisplayClockRequest::encoded_size); }
+  CHECK_EQ(reader.offset(), PageRequest::encoded_size); }
+
+/* The present engine's page travels as the clock's does, under its own type. */
+TEST(display_clock_request, the_present_engine_s_page_is_named_under_its_own_type)
+{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
+  RvkRequestWriter writer(bytes, sizeof bytes);
+  CHECK_STATUS(writer.present_engine(0x7654321000u), Status::ok);
+  CHECK_EQ(writer.length(), PageRequest::encoded_size);
+  CHECK_EQ(type_of(bytes), 0x02F6u);
+  CHECK_EQ(PageRequest::present_engine, 0x02F6u);
+  WireReader reader(bytes, writer.length());
+  PageRequest page;
+  CHECK_STATUS(page.decode(reader), Status::ok);
+  CHECK_EQ(page.address(), 0x7654321000u);
+  RvkRequestWriter small(bytes, PageRequest::encoded_size - 1u);
+  CHECK_STATUS(small.present_engine(0x1000u), Status::too_large); }
 
 TEST(display_clock_request, no_page_is_a_request_to_stop)
 { std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
   RvkRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0u), Status::ok);
   WireReader reader(bytes, writer.length());
-  DisplayClockRequest clock;
+  PageRequest clock;
   CHECK_STATUS(clock.decode(reader), Status::ok);
   CHECK_EQ(clock.address(), 0u); }
 
@@ -54,23 +70,23 @@ TEST(display_clock_request, an_address_off_a_page_or_a_short_request_is_malforme
 { std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
   RvkRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0x5000u), Status::ok);
-  WireReader short_reader(bytes, DisplayClockRequest::encoded_size - 1u);
-  DisplayClockRequest short_clock;
+  WireReader short_reader(bytes, PageRequest::encoded_size - 1u);
+  PageRequest short_clock;
   CHECK_STATUS(short_clock.decode(short_reader), Status::malformed);
   CHECK_EQ(short_clock.address(), 0u);
   const std::uint64_t off_page[] = {0x5001u, 0x5800u, 0x5FFFu};
   for (const std::uint64_t address : off_page) {
       CHECK_STATUS(writer.display_clock(address), Status::ok);
       WireReader reader(bytes, writer.length());
-      DisplayClockRequest clock;
+      PageRequest clock;
       CHECK_STATUS(clock.decode(reader), Status::malformed);
       CHECK_EQ(clock.address(), 0u);
   }
   bytes[31] = 0x80u;   /* the address's top byte: the whole u64 is read */
   bytes[24] = 0u;
   bytes[25] = 0u;
-  WireReader high_reader(bytes, DisplayClockRequest::encoded_size);
-  DisplayClockRequest high;
+  WireReader high_reader(bytes, PageRequest::encoded_size);
+  PageRequest high;
   CHECK_STATUS(high.decode(high_reader), Status::ok);
   CHECK_EQ(high.address() >> 56u, 0x80u); }
 
@@ -112,7 +128,7 @@ TEST(display_timing_request, the_rate_s_bounds_are_inclusive_and_past_them_is_ma
   CHECK_EQ(short_timing.head(), 0u); }
 
 TEST(display_clock_request, a_writer_too_small_writes_neither)
-{ std::uint8_t bytes[DisplayClockRequest::encoded_size - 1u] = {};
+{ std::uint8_t bytes[PageRequest::encoded_size - 1u] = {};
   RvkRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0x1000u), Status::too_large);
   CHECK_EQ(writer.length(), 0u);

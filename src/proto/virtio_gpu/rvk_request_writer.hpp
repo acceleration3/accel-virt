@@ -55,8 +55,11 @@ public:
     /* GET_DISPLAY_MODES: the modes the host's display offers (DisplayModeSet). */
     [[nodiscard]] Status display_modes();
     /* DISPLAY_CLOCK: the page the device publishes vertical blanks in, 0 for
-     * none (DisplayClockRequest). */
+     * none (PageRequest). */
     [[nodiscard]] Status display_clock(uint64_t address);
+    /* PRESENT_ENGINE: the page the device says which queued presents it has
+     * moved in, 0 for none (PageRequest). */
+    [[nodiscard]] Status present_engine(uint64_t address);
     /* DISPLAY_TIMING: head `head` blanks at `refresh_millihz` (DisplayTimingRequest). */
     [[nodiscard]] Status display_timing(uint32_t head, uint32_t refresh_millihz);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
@@ -88,6 +91,8 @@ private:
 
     /* Starts a request of `size` bytes with its header; false when it cannot fit. */
     bool begin(WireWriter &writer, uint32_t type, uint32_t context_id, size_t size);
+    /* A request naming one page, of `type` (PageRequest). */
+    [[nodiscard]] Status page(uint32_t type, uint64_t address);
 
     uint8_t *bytes_;
     size_t   capacity_;
