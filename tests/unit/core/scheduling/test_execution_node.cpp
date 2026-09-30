@@ -403,6 +403,24 @@ TEST(execution_node_release_overdue, leaves_plain_packets_and_finished_packets_a
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u); }
 
+/* The DPC reads the clock before it asks, and another processor may queue a
+ * held packet in between: one queued after `now` is the youngest there is,
+ * not one that has waited since the clock began. */
+TEST(execution_node_release_overdue, a_packet_queued_after_the_clock_was_read_stays_held)
+{ Fixture fixture;
+  int owner = 0;
+  const std::uint64_t read_before = fixture.platform().interrupt_time();
+  fixture.platform().advance_time(5u);
+  CHECK_STATUS(fixture.node().submit(1u, &owner, 7u), Status::ok);
+  CHECK_EQ(fixture.node().release_overdue(read_before), 0u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  CHECK_EQ(fixture.node().pending(), 1u);
+  fixture.node().finish(&owner, 7u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 1u); }
+
 TEST(execution_node_release_overdue, only_the_overdue_packet_goes_a_younger_one_stays_held)
 { Fixture fixture;
   int first = 0;

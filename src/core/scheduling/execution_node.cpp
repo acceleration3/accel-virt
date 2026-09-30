@@ -71,7 +71,9 @@ uint32_t ExecutionNode::release_overdue(uint64_t now)
     uint32_t released = 0u;
     for (uint32_t index = 0u; index < count_; index++) {
         const uint32_t slot = (head_ + index) % capacity;
-        if (awaited_[slot] == 0u || now - queued_at_[slot] < park_deadline) continue;
+        /* Added rather than subtracted: the DPC reads `now` before this, and a
+         * packet queued on another processor in between is younger than it. */
+        if (awaited_[slot] == 0u || now < queued_at_[slot] + park_deadline) continue;
         awaited_[slot] = 0u;
         released++;
     }
