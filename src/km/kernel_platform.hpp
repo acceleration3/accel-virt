@@ -82,14 +82,20 @@ private:
     /* The longest registry value name core writes, NUL included. */
     static constexpr size_t value_name_chars = 64u;
 
-    /* What map_to_process hands out and unmap_from_process takes back: the
-     * MDL over the device pages, the view it has in the process, and the
+    /* What map_to_process and map_pages_to_process hand out and
+     * unmap_from_process takes back: the MDL over the device pages (null for
+     * a view of a pages section), the view it has in the process, and the
      * process itself, referenced so that it is still the same process - alive
      * or exited - when the view is taken down. */
     struct ProcessMapping {
         PMDL      mdl;
         PVOID     view;
         PEPROCESS process;
+    };
+    /* What allocate_pages keeps ahead of the MDL it hands out, in one block. */
+    struct SectionPages {
+        PVOID section;
+        PVOID system_view;
     };
     /* An MDL's byte count is a ULONG. */
     static constexpr uint64_t max_mapping_bytes = 0xFFFFF000u;

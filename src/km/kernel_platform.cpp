@@ -75,26 +75,63 @@ uint64_t KernelPlatform::physical_address(void *block)
     return static_cast<uint64_t>(MmGetPhysicalAddress(block).QuadPart);
 }
 
-/* From anywhere in RAM, since the device reads guest physical memory directly;
- * all of it or nothing (MM_ALLOCATE_FULLY_REQUIRED), and zeroed, which is
- * MmAllocatePagesForMdlEx's default. The MDL's byte count is a ULONG. */
+/* A committed pagefile section whose pages are locked through a view of it in
+ * system space: they stay where they are until release_pages, as a device
+ * holding their addresses needs, and a process maps the section itself (see
+ * map_pages_to_process). Demand-zero, so zeroed. The record is the locked MDL,
+ * which read_page_frames reads like any other, with the section and its
+ * system view ahead of it in the same block. The MDL's byte count is a ULONG. */
 void *KernelPlatform::allocate_pages(uint64_t bytes)
 {
     AV_SCOPE("KernelPlatform::allocate_pages");
     if (bytes == 0u || bytes > max_mapping_bytes || (bytes & (PAGE_SIZE - 1u)) != 0u) return nullptr;
-    PHYSICAL_ADDRESS lowest = {};
-    PHYSICAL_ADDRESS highest = {};
-    PHYSICAL_ADDRESS skip = {};
-    highest.QuadPart = MAXLONGLONG;
-    return MmAllocatePagesForMdlEx(lowest, highest, skip, static_cast<SIZE_T>(bytes), MmCached,
-                                   MM_ALLOCATE_FULLY_REQUIRED);
+    OBJECT_ATTRIBUTES attributes;
+    InitializeObjectAttributes(&attributes, nullptr, OBJ_KERNEL_HANDLE, nullptr, nullptr);
+    LARGE_INTEGER size = {};
+    size.QuadPart = static_cast<LONGLONG>(bytes);
+    HANDLE handle = nullptr;
+    if (!NT_SUCCESS(ZwCreateSection(&handle, SECTION_ALL_ACCESS, &attributes, &size, PAGE_READWRITE, SEC_COMMIT,
+                                    nullptr)))
+        return nullptr;
+    PVOID          section = nullptr;
+    const NTSTATUS referenced = ObReferenceObjectByHandle(handle, SECTION_ALL_ACCESS, nullptr, KernelMode, &section,
+                                                          nullptr);
+    ZwClose(handle);
+    if (!NT_SUCCESS(referenced)) return nullptr;
+    ScopeExit drop_section([section] { ObDereferenceObject(section); });
+    PVOID  system_view = nullptr;
+    SIZE_T view_bytes = 0u;
+    if (!NT_SUCCESS(MmMapViewInSystemSpace(section, &system_view, &view_bytes))) return nullptr;
+    ScopeExit   unmap_view([system_view] { MmUnmapViewInSystemSpace(system_view); });
+    const SIZE_T mdl_bytes = MmSizeOfMdl(system_view, static_cast<SIZE_T>(bytes));
+    auto *const  block = static_cast<SectionPages *>(
+        ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(SectionPages) + mdl_bytes, pool_tag_));
+    if (block == nullptr) return nullptr;
+    ScopeExit   free_block([this, block] { ExFreePoolWithTag(block, pool_tag_); });
+    auto *const mdl = reinterpret_cast<PMDL>(block + 1);
+    MmInitializeMdl(mdl, system_view, static_cast<SIZE_T>(bytes));
+    __try {
+        MmProbeAndLockPages(mdl, KernelMode, IoWriteAccess);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+    *block = SectionPages{section, system_view};
+    drop_section.dismiss();
+    unmap_view.dismiss();
+    free_block.dismiss();
+    return mdl;
 }
 
+/* The section itself lives on in any view a process still has of it. */
 void KernelPlatform::release_pages(void *pages)
 {
     AV_SCOPE("KernelPlatform::release_pages");
-    MmFreePagesFromMdl(static_cast<PMDL>(pages));
-    ExFreePool(pages);
+    auto *const          mdl = static_cast<PMDL>(pages);
+    SectionPages *const block = reinterpret_cast<SectionPages *>(mdl) - 1;
+    MmUnlockPages(mdl);
+    MmUnmapViewInSystemSpace(block->system_view);
+    ObDereferenceObject(block->section);
+    ExFreePoolWithTag(block, pool_tag_);
 }
 
 /* MmGetMdlPfnArray is the only way to the pages of a locked MDL; the span the
@@ -183,22 +220,44 @@ Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_
     return map_mdl_to_process(mdl, bytes, view, mapping);
 }
 
-/* A mapping of its own over the same frames, so unmap_from_process frees what
- * it maps whichever kind of memory it was, and the pages' own MDL stays the
- * record release_pages takes. */
+/* A view of the pages' section: the process's own memory, which stays valid
+ * for as long as the process has the view, whatever the driver has let go of
+ * since (see unmap_from_process). A 32-bit process addresses only its low
+ * 4 GiB; a zero-bits value past 32 is the mask the view must fit under. */
 Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_pages_to_process");
     view = 0u;
     mapping = nullptr;
-    auto *const  owned = static_cast<MDL *>(pages);
-    const ULONG  bytes = MmGetMdlByteCount(owned);
-    PMDL const   mdl = IoAllocateMdl(nullptr, bytes, FALSE, FALSE, nullptr);
-    if (mdl == nullptr) return Status::no_memory;
-    RtlCopyMemory(MmGetMdlPfnArray(mdl), MmGetMdlPfnArray(owned),
-                  ADDRESS_AND_SIZE_TO_SPAN_PAGES(nullptr, bytes) * sizeof(PFN_NUMBER));
-    mdl->MdlFlags |= MDL_PAGES_LOCKED;
-    return map_mdl_to_process(mdl, bytes, view, mapping);
+    auto *const               mdl = static_cast<PMDL>(pages);
+    const SectionPages *const block = reinterpret_cast<SectionPages *>(mdl) - 1;
+    auto *const               record =
+        static_cast<ProcessMapping *>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(ProcessMapping), pool_tag_));
+    if (record == nullptr) return Status::no_memory;
+    ScopeExit free_record([this, record] { ExFreePoolWithTag(record, pool_tag_); });
+    HANDLE    handle = nullptr;
+    if (!NT_SUCCESS(ObOpenObjectByPointer(block->section, OBJ_KERNEL_HANDLE, nullptr,
+                                          SECTION_MAP_READ | SECTION_MAP_WRITE, nullptr, KernelMode, &handle)))
+        return Status::no_memory;
+    const bool      narrow = IoIs32bitProcess(nullptr) != FALSE;
+    const ULONG_PTR zero_bits = narrow ? static_cast<ULONG_PTR>(wow64_address_limit - 1u) : 0u;
+    PVOID           user = nullptr;
+    SIZE_T          user_bytes = 0u;
+    const NTSTATUS  mapped = ZwMapViewOfSection(handle, ZwCurrentProcess(), &user, zero_bits, 0u, nullptr,
+                                                &user_bytes, ViewUnmap, 0u, PAGE_READWRITE);
+    ZwClose(handle);
+    if (!NT_SUCCESS(mapped)) return Status::no_memory;
+    if (narrow && reinterpret_cast<uint64_t>(user) + user_bytes > wow64_address_limit) {
+        static_cast<void>(ZwUnmapViewOfSection(ZwCurrentProcess(), user));
+        return Status::no_memory;
+    }
+    PEPROCESS const process = PsGetCurrentProcess();
+    ObReferenceObject(process);
+    *record = ProcessMapping{nullptr, user, process};
+    free_record.dismiss();
+    view = reinterpret_cast<uint64_t>(user);
+    mapping = record;
+    return Status::ok;
 }
 
 /* A user-mode mapping the process's address space refuses is raised as an
@@ -235,14 +294,25 @@ Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, uint64_t &vi
     return Status::ok;
 }
 
-/* A view comes down in the process it was made in: here if that is the caller,
- * attached to it if it is still running, and not at all if it has exited, which
- * took the view with its address space. */
+/* A view comes down in the process it was made in, and not at all if that has
+ * exited, which took the view with its address space. A device memory view is
+ * taken out of a process still running by attaching to it. A view of a pages
+ * section is not: a teardown from another process is dxgkrnl stopping the
+ * adapter under this one, whose threads may be in the ring this moment - a
+ * live driver upgrade faulted DWM and every Direct3D process in
+ * TransportRing::read_head. That view stays, memory the section keeps valid,
+ * until the process unmaps it or exits. dxgkrnl tears down attached to the
+ * process, so it is the calling thread's own process that is asked. */
 void KernelPlatform::unmap_from_process(void *mapping)
 {
     AV_SCOPE("KernelPlatform::unmap_from_process");
     auto *const record = static_cast<ProcessMapping *>(mapping);
-    if (PsGetCurrentProcess() == record->process) {
+    const bool  here = PsGetCurrentProcess() == record->process;
+    if (record->mdl == nullptr) {
+        /* A process that unmapped the view itself leaves nothing to take. */
+        if (PsGetThreadProcess(PsGetCurrentThread()) == record->process)
+            static_cast<void>(ZwUnmapViewOfSection(ZwCurrentProcess(), record->view));
+    } else if (here) {
         MmUnmapLockedPages(record->view, record->mdl);
     } else if (PsGetProcessExitStatus(record->process) == STATUS_PENDING) {
         KAPC_STATE attached = {};
@@ -250,7 +320,7 @@ void KernelPlatform::unmap_from_process(void *mapping)
         MmUnmapLockedPages(record->view, record->mdl);
         KeUnstackDetachProcess(&attached);
     }
-    IoFreeMdl(record->mdl);
+    if (record->mdl != nullptr) IoFreeMdl(record->mdl);
     ObDereferenceObject(record->process);
     ExFreePoolWithTag(record, pool_tag_);
 }
