@@ -54,7 +54,19 @@ TEST(device_identity, knows_nothing_until_it_is_told)
   DeviceIdentity identity(platform);
   CHECK(!identity.known());
   CHECK(!identity.changed());
+  CHECK(!identity.offers(1u));
   CHECK(identity.invariants_hold()); }
+
+/* What the device offers is what the capset it started on said, and nothing
+ * once forgotten. */
+TEST(device_identity, offers_what_the_capset_it_started_on_said)
+{ MockPlatform platform;
+  DeviceIdentity identity(platform);
+  identity.remember(capset());   /* features: host-visible memory only */
+  CHECK(identity.offers(CapsetInfo::feature_host_visible_memory));
+  CHECK(!identity.offers(CapsetInfo::feature_present_engine));
+  identity.forget();
+  CHECK(!identity.offers(CapsetInfo::feature_host_visible_memory)); }
 
 TEST(device_identity, the_same_device_is_accepted)
 { MockPlatform platform;

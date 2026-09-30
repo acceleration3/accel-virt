@@ -127,6 +127,23 @@ Status GpuCommandQueue::send(const uint8_t *request, size_t length)
     return Status::ok;
 }
 
+Status GpuCommandQueue::send_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload)
+{
+    AV_SCOPE("GpuCommandQueue::send_carrying");
+    platform_.require_irql_at_most(Irql::dispatch, "GpuCommandQueue::send_carrying");
+    if (slots_ == nullptr) return Status::invalid_state;
+    if (request == nullptr || length == 0u || !payload.continues_request()) return Status::invalid_parameter;
+    if (length > GpuRequestWriter::max_request_size) return Status::too_large;
+    {
+        SpinLockGuard lock(lock_);
+        uint32_t     slot = no_slot;
+        const Status status = send_locked(request, length, &payload, 1u, slot);
+        if (status != Status::ok) return status;
+    }
+    transport_.notify(queue_);
+    return Status::ok;
+}
+
 /* The answer a request carries is only read here: the DPC's harvest counts and
  * drops the rest, so an exchange records the slot it is waiting on and takes
  * the bytes out of whichever caller harvests it first. */
@@ -142,8 +159,7 @@ Status GpuCommandQueue::exchange_carrying(const uint8_t *request, size_t length,
 {
     AV_SCOPE("GpuCommandQueue::exchange_carrying");
     written = 0u;
-    if (payload.length() == 0u || payload.direction() != SegmentDirection::device_reads)
-        return Status::invalid_parameter;
+    if (!payload.continues_request()) return Status::invalid_parameter;
     return exchange_segments(request, length, &payload, 1u, response, capacity, written);
 }
 

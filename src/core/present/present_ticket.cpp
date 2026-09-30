@@ -1,0 +1,65 @@
+#include "core/present/present_ticket.hpp"
+
+#include "core/platform/log_budget.hpp"
+#include "core/platform/platform.hpp"
+#include "core/present/present_queue.hpp"
+#include "core/present/present_surface.hpp"
+#include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
+#include "proto/virtio_gpu/present_copy_request.hpp"
+
+namespace av {
+
+PresentTicket::PresentTicket(Platform &platform, LogBudget &budget, PresentQueue *queue, PixelMover &fallback)
+    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), ticket_(0u)
+{
+    AV_SCOPE("PresentTicket::PresentTicket");
+}
+
+Status PresentTicket::copy(const PresentSurface &source, const PresentSurface &destination,
+                           const PresentRegion *regions, uint32_t count)
+{
+    AV_SCOPE("PresentTicket::copy");
+    if (queued(source.blt_into(destination, count), &source, destination, regions)) return Status::ok;
+    return fallback_.copy(source, destination, regions, count);
+}
+
+Status PresentTicket::fill(const PresentSurface &destination, uint32_t colour, const PresentRegion *regions,
+                           uint32_t count)
+{
+    AV_SCOPE("PresentTicket::fill");
+    if (queued(destination.fill_with(colour, count), nullptr, destination, regions)) return Status::ok;
+    return fallback_.fill(destination, colour, regions, count);
+}
+
+/* A present the queue refuses is moved at once and its packet waits for
+ * nothing: the tickets before it are the device's to finish, and what it
+ * would have followed is already queued. */
+bool PresentTicket::queued(const PresentCopyRequest &request, const PresentSurface *source,
+                           const PresentSurface &destination, const PresentRegion *regions)
+{
+    AV_SCOPE("PresentTicket::queued");
+    if (queue_ == nullptr) return false;
+    uint64_t     ticket = 0u;
+    const Status status = queue_->queue(request, source, destination, regions, ticket);
+    if (status == Status::ok) {
+        ticket_ = ticket;
+        return true;
+    }
+    if (!budget_.allows()) return false;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: the present engine did not take a present, status ");
+    message.append_decimal(static_cast<uint32_t>(status));
+    message.append("; it moves now");
+    platform_.log(message.text());
+    return false;
+}
+
+uint64_t PresentTicket::ticket() const
+{
+    AV_SCOPE("PresentTicket::ticket");
+    return ticket_;
+}
+
+}  // namespace av

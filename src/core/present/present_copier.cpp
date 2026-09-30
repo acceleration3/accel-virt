@@ -42,11 +42,8 @@ Status PresentCopier::copy(const PresentSurface &source, const PresentSurface &d
                            const PresentRegion *regions, uint32_t count)
 {
     AV_SCOPE("PresentCopier::copy");
-    const PresentCopyRequest request(PresentOperation::blt,
-                                     source.swaps_with(destination) ? PresentCopyRequest::flag_swap_red_blue : 0u, 0u,
-                                     count, source.runs(), source.layout().pitch(), destination.runs(),
-                                     destination.layout().pitch());
-    if (ask(request, &source, destination, regions, count) == Status::ok) return Status::ok;
+    if (ask(source.blt_into(destination, count), &source, destination, regions, count) == Status::ok)
+        return Status::ok;
     log_refusal();
     return fallback_.copy(source, destination, regions, count);
 }
@@ -55,9 +52,8 @@ Status PresentCopier::fill(const PresentSurface &destination, uint32_t colour, c
                            uint32_t count)
 {
     AV_SCOPE("PresentCopier::fill");
-    const PresentCopyRequest request(PresentOperation::color_fill, 0u, colour, count, 0u, 0u, destination.runs(),
-                                     destination.layout().pitch());
-    if (ask(request, nullptr, destination, regions, count) == Status::ok) return Status::ok;
+    if (ask(destination.fill_with(colour, count), nullptr, destination, regions, count) == Status::ok)
+        return Status::ok;
     log_refusal();
     return fallback_.fill(destination, colour, regions, count);
 }

@@ -38,6 +38,12 @@ bool DeviceIdentity::known() const
     return known_;
 }
 
+bool DeviceIdentity::offers(uint64_t feature) const
+{
+    AV_SCOPE("DeviceIdentity::offers");
+    return known_ && started_on_.has_feature(feature);
+}
+
 bool DeviceIdentity::changed() const
 {
     AV_SCOPE("DeviceIdentity::changed");

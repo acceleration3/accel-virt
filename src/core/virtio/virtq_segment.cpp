@@ -26,4 +26,10 @@ SegmentDirection VirtqSegment::direction() const
     return direction_;
 }
 
+bool VirtqSegment::continues_request() const
+{
+    AV_SCOPE("VirtqSegment::continues_request");
+    return length_ != 0u && direction_ == SegmentDirection::device_reads;
+}
+
 }  // namespace av

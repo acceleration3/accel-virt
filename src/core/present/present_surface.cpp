@@ -2,6 +2,7 @@
 
 #include "core/platform/platform.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/virtio_gpu/present_copy_request.hpp"
 
 namespace av {
 
@@ -50,6 +51,19 @@ void PresentSurface::write_runs(WireWriter &writer) const
 {
     AV_SCOPE("PresentSurface::write_runs");
     pages_.write_runs(writer);
+}
+
+PresentCopyRequest PresentSurface::blt_into(const PresentSurface &destination, uint32_t regions) const
+{
+    AV_SCOPE("PresentSurface::blt_into");
+    return PresentCopyRequest(PresentOperation::blt, swaps_with(destination) ? PresentCopyRequest::flag_swap_red_blue : 0u,
+                              0u, regions, runs(), layout_.pitch(), destination.runs(), destination.layout().pitch());
+}
+
+PresentCopyRequest PresentSurface::fill_with(uint32_t colour, uint32_t regions) const
+{
+    AV_SCOPE("PresentSurface::fill_with");
+    return PresentCopyRequest(PresentOperation::color_fill, 0u, colour, regions, 0u, 0u, runs(), layout_.pitch());
 }
 
 }  // namespace av

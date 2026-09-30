@@ -14,6 +14,7 @@
 namespace av {
 
 class Platform;
+class PresentCopyRequest;
 class WireWriter;
 
 class PresentSurface {
@@ -37,6 +38,11 @@ public:
     /* The pages as the device is told them (GuestPageList::write_runs). */
     uint32_t             runs() const;
     void                 write_runs(WireWriter &writer) const;
+    /* What the device is told of a blt of `regions` regions from this surface
+     * into `destination`, and of a fill of `colour` over `regions` of this one
+     * (PresentCopyRequest). */
+    PresentCopyRequest   blt_into(const PresentSurface &destination, uint32_t regions) const;
+    PresentCopyRequest   fill_with(uint32_t colour, uint32_t regions) const;
 
 private:
     SurfaceLayout layout_;

@@ -6,12 +6,15 @@
 #include "harness/platform/mock_platform.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
+#include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 
 using av::GuestPageList;
+using av::PresentCopyRequest;
+using av::PresentOperation;
 using av::MockPlatform;
 using av::PresentSurface;
 using av::SurfaceLayout;
@@ -95,3 +98,31 @@ TEST(present_surface, tells_its_pages_as_runs)
   CHECK_EQ(reader.read_u32(), 0u);
   CHECK_EQ(reader.read_u64(), 0x9000u);
   CHECK_EQ(reader.read_u32(), 0x1000u); }
+
+/* What the device is told of a present between two surfaces: the source's
+ * runs and pitch, the destination's, and a swap only between byte orders
+ * that disagree; a fill has a colour and no source. */
+TEST(present_surface, states_a_blt_or_a_fill_as_the_device_is_told_it)
+{ const std::uint64_t  frames[] = {0x4000u, 0x5000u, 0x9000u};
+  const std::uint64_t  frame = 0x20000u;
+  const PresentSurface source(SurfaceLayout(4u, 4u, 32u, 64u), GuestPageList(frames, 3u));
+  const PresentSurface destination(SurfaceLayout(4u, 4u, 21u, 16u), GuestPageList(&frame, 1u));
+  const PresentCopyRequest blt = source.blt_into(destination, 3u);
+  CHECK(blt.operation() == PresentOperation::blt);
+  CHECK(blt.swaps_red_and_blue());
+  CHECK_EQ(blt.colour(), 0u);
+  CHECK_EQ(blt.regions(), 3u);
+  CHECK_EQ(blt.source_entries(), 2u);
+  CHECK_EQ(blt.source_pitch(), 64u);
+  CHECK_EQ(blt.destination_entries(), 1u);
+  CHECK_EQ(blt.destination_pitch(), 16u);
+  CHECK(!destination.blt_into(destination, 1u).swaps_red_and_blue());
+  const PresentCopyRequest fill = destination.fill_with(0xFF00FF00u, 2u);
+  CHECK(fill.operation() == PresentOperation::color_fill);
+  CHECK(!fill.swaps_red_and_blue());
+  CHECK_EQ(fill.colour(), 0xFF00FF00u);
+  CHECK_EQ(fill.regions(), 2u);
+  CHECK_EQ(fill.source_entries(), 0u);
+  CHECK_EQ(fill.source_pitch(), 0u);
+  CHECK_EQ(fill.destination_entries(), 1u);
+  CHECK_EQ(fill.destination_pitch(), 16u); }

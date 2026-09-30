@@ -53,6 +53,8 @@ public:
     uint8_t              read_isr();
     /* A virtio-gpu request, not waited on: invalid_state unless running. */
     [[nodiscard]] Status send_control(const uint8_t *request, size_t length);
+    /* The same, the request continuing in `payload` (GpuCommandQueue::send_carrying). */
+    [[nodiscard]] Status send_control_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload);
     /* A control request and the answer to it, waited for at PASSIVE: what the
      * driver uses before dxgkrnl has connected the interrupt. One at a time,
      * whoever asks: a second waits for the first's answer. */

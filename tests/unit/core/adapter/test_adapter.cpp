@@ -54,6 +54,9 @@
 #include "core/ddi/dxgkarg_present_record.hpp"
 #include "device/control/control_request.hpp"
 #include "device/control/present_commands.hpp"
+#include "device/control/present_engine_commands.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/present/present_engine.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
@@ -96,7 +99,10 @@
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/commands/present_command.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/submission/present_ticket_record.hpp"
+#include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
@@ -118,6 +124,7 @@
 #include <optional>
 #include <utility>
 #include <cstring>
+#include <time.h>
 
 namespace av {
 
@@ -239,11 +246,12 @@ constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
 
 /* A device that says it has a host-visible region; whether it really presents
  * one is the PCI walk's answer, and both have to agree (feature 041). */
-av::CapsetInfo host_capset(const std::uint8_t *uuid, std::uint32_t sub_apis = 1u)
+av::CapsetInfo host_capset(const std::uint8_t *uuid, std::uint32_t sub_apis = 1u,
+                           std::uint64_t features = av::CapsetInfo::feature_host_visible_memory)
 {
     return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                               av::ProtocolVersion::current_minor),
-                          sub_apis, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
+                          sub_apis, 64u, 12u, 24u, features,
                           av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
 }
 
@@ -254,6 +262,7 @@ public:
         host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
             return static_cast<MockPlatform *>(context)->translate_physical(address, static_cast<std::size_t>(length));
         }, &platform_);
+        CHECK_STATUS(present_engine_.initialize(), av::Status::ok);
     }
     ~Fixture() { static_cast<void>(adapter_.stop_device()); }
 
@@ -304,6 +313,15 @@ public:
      * another device (feature 040, FR-005). */
     void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
     void                   offer_opengl() { capset_ = host_capset(first_gpu, 0x3u); }
+    /* A device with the present engine, whose own core takes the page and
+     * moves the presents on its own thread (docs/protocol.md). */
+    void                   offer_present_engine()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine);
+    }
+    /* The device takes what the driver sent without waiting for an answer. */
+    void                   serve() { answer_display_info(this); }
     /* The modes the host offers from the next ask on (GET_DISPLAY_MODES); a
      * fixture offering none answers that ask as a device from before it would. */
     void                   offer_modes(const av::DisplayModeSet &modes) { offered_modes_ = modes; }
@@ -368,6 +386,11 @@ private:
             fixture->clock_.answer(fixture->control());
             return;
         }
+        if (asked == av::PageRequest::present_engine || asked == av::QueuedPresentRequest::type) {
+            static_cast<void>(fixture->control().answer_all(fixture->present_request_, sizeof fixture->present_request_,
+                                                            &Fixture::answer_present_engine, fixture));
+            return;
+        }
         if ((asked == get_capset_info || asked == get_capset) && fixture->ignore_capset_) return;
         if (asked == get_capset_info || asked == get_capset) {
             av::GpuResponse answer;
@@ -422,9 +445,25 @@ private:
         return static_cast<std::uint32_t>(given);
     }
 
+    static std::uint32_t answer_present_engine(void *context, const std::uint8_t *request, std::uint32_t length,
+                                               std::uint8_t *answer, std::uint32_t room)
+    {
+        auto *const        fixture = static_cast<Fixture *>(context);
+        std::uint32_t      type = 0u;
+        std::memcpy(&type, request, sizeof type);
+        av::MockRequest    mock(request, length);
+        av::ControlRequest control(fixture->host_, &mock);
+        static_cast<void>(av::PresentEngineCommands(fixture->host_, fixture->present_engine_).answer(control, type));
+        const std::size_t given = mock.response_size() < room ? mock.response_size() : room;
+        std::memcpy(answer, mock.response_bytes(), given);
+        return static_cast<std::uint32_t>(given);
+    }
+
     MockPlatform          platform_;
     av::MockHost          host_;
     av::PresentCommands   present_commands_{host_};
+    av::FenceInterrupts   present_interrupts_{host_};
+    av::PresentEngine     present_engine_{host_, present_interrupts_};
     std::uint8_t          present_request_[0x9000] = {};
     std::uint32_t         present_copies_ = 0u;
     FakeVirtioGpuFunction function_;
@@ -1670,6 +1709,142 @@ TEST(adapter_present, an_application_s_blt_on_a_virtual_context_moves_its_pixels
   CHECK_EQ(fixture.present_copies(), 1u);
   const StateDump dump(fixture);
   CHECK(dump.holds("presents_unmoved=0"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A present whose sub-rectangles do not fit one DMA buffer is written over
+ * several passes, each its own packet: each pass moves the sub-rectangles it
+ * wrote, so every one of them arrives - and a pass with room for none moves
+ * nothing and asks again. */
+TEST(adapter_present, each_pass_of_a_present_moves_the_sub_rectangles_it_wrote)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  const av::RectRecord rows[] = {{0, 0, side, 1}, {0, 3, side, 4}};
+  std::uint8_t             dma[av::PresentCommand::header_size + av::PresentCommand::sub_rectangle_size] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = av::PresentCommand::header_size;   /* no room for a sub-rectangle */
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  present.SubRectCnt = 2u;
+  present.pDstSubRects = rows;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), 0xC01E0001u);
+  CHECK_EQ(fixture.present_copies(), 0u);
+  present.DmaSize = sizeof dma;   /* room for one */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), 0xC01E0001u);
+  CHECK_EQ(present.MultipassOffset, 1u);
+  CHECK_EQ(fixture.present_copies(), 1u);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side);   /* the first row */
+  present.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(fixture.present_copies(), 2u);
+  CHECK_EQ(destination.count(MappedSurface::colour), 2u * MappedSurface::side);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A device with the present engine: DdiPresent queues the blt and returns
+ * before any pixel has moved, naming the ticket in the packet's private data;
+ * the packet is held on the node until the device's thread has moved the
+ * pixels and its page says so. Private data naming a ticket the queue never
+ * gave holds nothing. */
+TEST(adapter_present, a_queued_blt_holds_its_packet_until_the_engine_has_moved_the_pixels)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.platform().logged_line("moved by the device's present engine"));
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  std::uint8_t             private_data[av::PresentTicketRecord::encoded_size] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pDmaBufferPrivateData = private_data;
+  present.DmaBufferPrivateDataSize = sizeof private_data;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(fixture.present_copies(), 0u);
+  CHECK_EQ(destination.count(MappedSurface::colour), 0u);   /* queued, not moved */
+  CHECK(present.pDmaBufferPrivateData == private_data + sizeof private_data);
+  CHECK_EQ(present.DmaBufferPrivateDataSize, 0u);
+  av::PresentTicketRecord record;
+  CHECK_STATUS(record.decode(private_data, sizeof private_data), av::Status::ok);
+  CHECK(record.ticket() == 1u);
+
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.pDmaBufferPrivateData = private_data;
+  submit.DmaBufferPrivateDataSize = sizeof private_data;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);   /* held: nothing has moved */
+
+  fixture.serve();
+  const timespec pause = {0, 100000};
+  for (std::uint32_t waited = 0u; waited < 20000u && destination.count(MappedSurface::colour) == 0u; waited++)
+      nanosleep(&pause, nullptr);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  for (std::uint32_t waited = 0u; waited < 20000u && fixture.dxgkrnl().interrupts() == before; waited++) {
+      fixture.platform().set_irql(Irql::dispatch);
+      fixture.adapter().dpc_routine();
+      fixture.platform().set_irql(Irql::passive);
+      nanosleep(&pause, nullptr);
+  }
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
+
+  /* Another epoch, or a ticket never given: an ordinary packet. */
+  const av::PresentTicketRecord forged[] = {av::PresentTicketRecord(record.epoch() + 1u, 1u),
+                                            av::PresentTicketRecord(record.epoch(), 2u)};
+  std::uint32_t fence = 2u;
+  for (const av::PresentTicketRecord &named : forged) {
+      CHECK_STATUS(named.encode(private_data, sizeof private_data), av::Status::ok);
+      submit.SubmissionFenceId = fence;
+      CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+      fixture.platform().set_irql(Irql::dispatch);
+      fixture.adapter().dpc_routine();
+      fixture.platform().set_irql(Irql::passive);
+      CHECK_EQ(fixture.dxgkrnl().interrupt(fixture.dxgkrnl().interrupts() - 1u).FenceId, fence);
+      fence++;
+  }
+  CHECK(fixture.adapter().invariants_hold());
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 

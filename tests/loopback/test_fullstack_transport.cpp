@@ -201,7 +201,8 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   connection.close();
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(rig.device().device().blobs(), 0u);
-  CHECK_EQ(rig.device().host().live_guest_mappings(), 1u);   /* the display clock's page, the device's while it runs */
+  /* The display clock's page and the present engine's, the device's while it runs. */
+  CHECK_EQ(rig.device().host().live_guest_mappings(), 2u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 

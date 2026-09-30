@@ -31,6 +31,9 @@ public:
      * A refusal is remembered and logged once. */
     bool accept(const CapsetInfo &capset);
     bool known() const;
+    /* Whether the device it started on offers `feature` (CapsetInfo); false
+     * before StartDevice has asked. */
+    bool offers(uint64_t feature) const;
     /* Whether the device under this adapter was found to be another one. */
     bool changed() const;
     /* StopDevice: the next start is a device of its own. */

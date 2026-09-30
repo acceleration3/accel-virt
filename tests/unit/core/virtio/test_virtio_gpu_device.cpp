@@ -232,6 +232,26 @@ TEST(virtio_gpu_device_harvest_control, collects_every_completed_request)
   CHECK_EQ(mapped.platform().logged(), 0u);
   CHECK_EQ(mapped.platform().unclaimed_violations(), 0u); }
 
+/* A request with a payload goes on the control queue unwaited, at DISPATCH as
+ * SubmitCommand could send one, and only while the device runs. */
+TEST(virtio_gpu_device_send_control_carrying, publishes_the_request_and_its_payload_while_running)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice    device(mapped.platform(), mapped.mappings(), mapped.layout());
+  const VirtqSegment payload(0x30000u, 256u, SegmentDirection::device_reads);
+  CHECK_STATUS(device.send_control_carrying(request_bytes, sizeof request_bytes, payload), Status::invalid_state);
+  CHECK_STATUS(device.start(3u), Status::ok);
+  mapped.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(device.send_control_carrying(request_bytes, sizeof request_bytes, payload), Status::ok);
+  mapped.platform().set_irql(Irql::passive);
+  FakeVirtqueueDevice fake = mapped.queue_device(0u);
+  CHECK_EQ(fake.respond_all(ok_nodata), 1u);
+  CHECK_EQ(fake.seen(1u).address, 0x30000u);
+  std::uint32_t completed = 0u;
+  CHECK_STATUS(device.harvest_control(completed), Status::ok);
+  CHECK_EQ(completed, 1u);
+  CHECK_EQ(mapped.platform().unclaimed_violations(), 0u); }
+
 TEST(virtio_gpu_device_harvest_control, a_refused_request_is_logged_not_failed)
 { MappedFunction mapped;
   CHECK_STATUS(mapped.map(), Status::ok);

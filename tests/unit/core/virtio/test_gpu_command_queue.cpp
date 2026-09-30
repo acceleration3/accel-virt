@@ -450,6 +450,52 @@ TEST(gpu_command_queue_exchange, carries_a_payload_the_device_reads_after_the_re
   CHECK(fixture.control().invariants_hold());
   fixture.platform().release_contiguous(payload, payload_bytes); }
 
+/* A request sent with a payload is published as the same chain an exchange
+ * makes and left: the call returns before any answer, and the harvest that
+ * finds it used frees its slot. */
+TEST(gpu_command_queue_send, carries_a_payload_without_waiting_for_the_answer)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  const VirtqSegment payload(0x20000u, 512u, SegmentDirection::device_reads);
+  CHECK(payload.continues_request());
+  const std::size_t length = move_request(4);
+  CHECK_STATUS(fixture.control().send_carrying(request_bytes, length, payload), Status::ok);
+  CHECK_EQ(fixture.control().in_flight(), 1u);
+  FakeVirtqueueDevice device = fixture.device(0u);
+  CHECK_EQ(device.respond_all(ok_nodata), 1u);
+  CHECK_EQ(device.seen_count(), 3u);
+  CHECK_EQ(device.seen(0u).length, length);
+  CHECK_EQ(device.seen(1u).address, 0x20000u);
+  CHECK_EQ(device.seen(1u).length, 512u);
+  CHECK_EQ(device.seen(1u).flags & flag_write, 0u);
+  CHECK_EQ(device.seen(2u).flags & flag_write, flag_write);
+  std::uint32_t completed = 0u, refused = 0u;
+  CHECK_STATUS(fixture.control().harvest(completed, refused), Status::ok);
+  CHECK_EQ(completed, 1u);
+  CHECK_EQ(refused, 0u);
+  CHECK_EQ(fixture.control().in_flight(), 0u);
+  CHECK(fixture.control().invariants_hold()); }
+
+TEST(gpu_command_queue_send, refuses_a_payload_that_continues_nothing_or_a_request_too_wide)
+{ Fixture fixture;
+  const VirtqSegment payload(0x20000u, 512u, SegmentDirection::device_reads);
+  CHECK_STATUS(fixture.control().send_carrying(request_bytes, move_request(1), payload), Status::invalid_state);
+  CHECK_STATUS(fixture.start(), Status::ok);
+  const VirtqSegment empty(0x20000u, 0u, SegmentDirection::device_reads);
+  const VirtqSegment written(0x20000u, 64u, SegmentDirection::device_writes);
+  CHECK(!empty.continues_request());
+  CHECK(!written.continues_request());
+  CHECK_STATUS(fixture.control().send_carrying(request_bytes, move_request(1), empty), Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().send_carrying(request_bytes, move_request(1), written), Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().send_carrying(nullptr, 8u, payload), Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().send_carrying(request_bytes, 0u, payload), Status::invalid_parameter);
+  std::uint8_t wide[GpuRequestWriter::max_request_size + 1u] = {};
+  CHECK_STATUS(fixture.control().send_carrying(wide, sizeof wide, payload), Status::too_large);
+  for (std::uint32_t slot = 0u; slot < GpuCommandQueue::slot_count; slot++)
+      CHECK_STATUS(fixture.control().send_carrying(request_bytes, move_request(1), payload), Status::ok);
+  CHECK_STATUS(fixture.control().send_carrying(request_bytes, move_request(1), payload), Status::no_space);
+  CHECK_EQ(fixture.control().in_flight(), GpuCommandQueue::slot_count); }
+
 /* A payload of nothing, or one the device would write, is no request's
  * continuation, and nothing is published. */
 TEST(gpu_command_queue_exchange, refuses_a_payload_that_is_empty_or_written_by_the_device)

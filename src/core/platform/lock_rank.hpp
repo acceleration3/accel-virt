@@ -23,6 +23,8 @@ enum class LockRank : uint16_t {
                                   and opened beside it from the device table (feature 053) */
     present_payload = 117u,    /* wait mutex: PresentCopier's payload, held while the request carrying
                                   it waits for the device's answer */
+    present_queue = 118u,      /* wait mutex: PresentQueue's next ticket and its payloads, held while one
+                                  present is written and sent, never while it is moved */
     control_exchanges = 120u,  /* wait mutex: one control request and its answer at a time, whoever
                                   asks - a present's copy beside an rvk context's request sequence */
     dpc = 150u,                /* spin lock: the adapter's DPC, which KeInsertQueueDpc may run on two

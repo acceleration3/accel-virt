@@ -15,6 +15,8 @@ public:
     uint64_t         physical_address() const;
     uint32_t         length() const;
     SegmentDirection direction() const;
+    /* Whether this can continue a request: bytes the device reads. */
+    bool             continues_request() const;
 
 private:
     uint64_t         physical_address_;

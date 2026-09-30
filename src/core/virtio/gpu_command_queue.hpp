@@ -46,6 +46,10 @@ public:
     [[nodiscard]] Status activate(uint16_t vector);
     /* no_space while every slot is in flight. */
     [[nodiscard]] Status send(const uint8_t *request, size_t length);
+    /* The same, the request continuing in `payload` as exchange_carrying's
+     * does, not waited on: the caller keeps the payload until the device has
+     * read it. */
+    [[nodiscard]] Status send_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload);
     /* Sends `request` and waits for the device's answer to it, copying at most
      * `capacity` bytes into `response` and counting them in `written`. Passive
      * only: it stalls between polls, and harvests the queue itself, so it

@@ -21,7 +21,9 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "proto/context/capset_info.hpp"
 #include "proto/submission/follow_record.hpp"
+#include "proto/submission/present_ticket_record.hpp"
 #include "proto/context/context_views_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
@@ -80,6 +82,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/commands/rectangle.hpp"
 #include "core/present/present_request.hpp"
+#include "core/present/present_ticket.hpp"
 #include "core/present/presented_allocations.hpp"
 #include "core/rvk/capset_exchange.hpp"
 #include "core/scheduling/patch_request.hpp"
@@ -119,7 +122,7 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), mapped_pixels_(platform), copier_(), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), mapped_pixels_(platform), copier_(), presents_(), present_epochs_(0u), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
       segment_(platform), host_visible_(platform), memory_(platform, segment_), window_(platform),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
@@ -214,6 +217,7 @@ void Adapter::remember_device()
     const Status   read = exchange.read(capset);
     if (read == Status::ok) {
         identity_.remember(capset);
+        start_presents();
         host_visible_.offer(capset);
         memory_.offer_local(capset);
         scanout_.offer(capset);
@@ -272,6 +276,7 @@ Status Adapter::power_up()
     const Status status = device_.object().start(resources_.message_interrupts());
     if (status != Status::ok) device_.destroy();
     if (status == Status::ok) start_copier();
+    if (status == Status::ok) start_presents();
     if (status == Status::ok) attach_clock();
     cursor_.forget_device();
     scanout_.forget_device();
@@ -286,6 +291,7 @@ Status Adapter::power_down()
     /* A reset destroys every host context and blob, and the device object goes
      * with it. The window stays offered for whatever brings the device back. */
     rvk_contexts_.abandon_all();
+    presents_.destroy();
     copier_.destroy();
     const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
@@ -304,6 +310,30 @@ void Adapter::attach_clock()
     TextBuffer message(bytes, sizeof bytes);
     message.append("rvkgpu: the device refused the display clock, status 0x");
     message.append_hex(static_cast<uint32_t>(NtStatus(attached).value()), 8u);
+    platform_.log(message.text());
+}
+
+/* A device that does not offer the engine, or will not take its page, has
+ * its presents moved before DdiPresent returns, as before the engine; the
+ * line says which. The capset is the one StartDevice read: a power-up before
+ * it knows nothing yet, and StartDevice starts the engine once it does. */
+void Adapter::start_presents()
+{
+    AV_SCOPE("Adapter::start_presents");
+    if (!device_.constructed() || presents_.constructed() || !identity_.offers(CapsetInfo::feature_present_engine))
+        return;
+    present_epochs_++;
+    if (presents_.construct(platform_, device_.object(), present_epochs_) != Status::ok) return;
+    const Status started = presents_.object().start();
+    if (started == Status::ok) {
+        platform_.log("rvkgpu: presents are moved by the device's present engine");
+        return;
+    }
+    presents_.destroy();
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: the device's present engine was not started, status 0x");
+    message.append_hex(static_cast<uint32_t>(NtStatus(started).value()), 8u);
     platform_.log(message.text());
 }
 
@@ -443,6 +473,7 @@ void Adapter::dpc_routine()
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
     rvk_contexts_.serve(node_, hw_submissions_);
+    if (harvest && presents_.constructed()) node_.finish(&presents_.object(), presents_.object().completed());
     const uint32_t overdue = node_.release_overdue(now);
     if (overdue != 0u && budget_.allows()) platform_.log("rvkgpu: a held packet passed its deadline and was let go");
     if (node_.complete(notification_) != Status::ok && budget_.allows())
@@ -1458,12 +1489,15 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     PresentOperation named = PresentOperation::blt;
     if (presented < 0 && presented != more_dma_buffer)
         log_refused_present(*request, writing.operation(named) == Status::ok);
-    if (presented == 0) {
+    /* Each pass moves the sub-rectangles its DMA buffer carries, and its
+     * packet waits for them; a pass that found no room wrote none. */
+    const uint32_t end = presented == 0 ? request->SubRectCnt : request->MultipassOffset;
+    if (presented == 0 || (presented == more_dma_buffer && end != first)) {
         PresentOperation kind = PresentOperation::blt;
         /* A present that was written named an operation this driver presents:
          * `present` refuses every other one before it writes anything. */
         static_cast<void>(writing.operation(kind));
-        move_presented_pixels(*request, kind, first);
+        mark_present(*request, move_presented_pixels(*request, kind, first, end));
     }
     log_failure("rvkgpu: Present", presented);
     return presented;
@@ -1472,32 +1506,33 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
 /* The pixels a blt or a fill names move here, whichever form names them
  * (PresentedAllocations): dxgkrnl's own presents, and an application's
  * blt-model present into its window's redirection surface. */
-void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first)
+uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first,
+                                       uint32_t end)
 {
     AV_SCOPE("Adapter::move_presented_pixels");
     const bool filling = kind == PresentOperation::color_fill;
-    if (kind == PresentOperation::flip) return;
+    if (kind == PresentOperation::flip) return 0u;
     const PresentedAllocations named(request);
     void *const                source_handle = filling ? nullptr : named.source();
     void *const                destination_handle = named.destination();
     if (destination_handle == nullptr || (!filling && source_handle == nullptr)) {
         log_unmoved_present("list", request, request.NumSrcAllocations, request.NumDstAllocations);
-        return;
+        return 0u;
     }
     DeviceAllocation *const source = filling ? nullptr : devices_.opened(source_handle);
     DeviceAllocation *const destination = devices_.opened(destination_handle);
     if (destination == nullptr || (!filling && source == nullptr)) {
         log_unmoved_present("handles", request, request.NumSrcAllocations, request.NumDstAllocations);
-        return;
+        return 0u;
     }
     const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
-    PixelMover          &mover = copier_.constructed() && present_ ? static_cast<PixelMover &>(copier_.object())
-                                                                  : mapped_pixels_;
-    PresentBlit          blit(platform_, mover, source != nullptr ? &read : nullptr, written);
+    PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
+                         immediate_mover());
+    PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
-    const uint32_t  count = request.SubRectCnt - first;
+    const uint32_t  count = end - first;
     const RectRecord *const rectangles = count != 0u ? request.pDstSubRects + first : nullptr;
     const Rectangle   from(request.SrcRect.left, request.SrcRect.top, request.SrcRect.right, request.SrcRect.bottom);
     const Status      moved = filling ? blit.fill(request.Color, into, rectangles, count)
@@ -1509,6 +1544,31 @@ void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Present
                                 destination->allocation().descriptor().kind(), from, into);
     }
     present_rows_ += blit.rows();
+    return ticket.ticket();
+}
+
+PixelMover &Adapter::immediate_mover()
+{
+    AV_SCOPE("Adapter::immediate_mover");
+    if (copier_.constructed() && present_) return copier_.object();
+    return mapped_pixels_;
+}
+
+/* dxgkrnl hands the private data on to SubmitCommandVirtual with the packet
+ * this present's DMA buffer becomes, from where the pointer started to where
+ * it was left, as it does the DMA buffer's bytes. */
+void Adapter::mark_present(DxgkargPresentRecord &request, uint64_t ticket)
+{
+    AV_SCOPE("Adapter::mark_present");
+    if (ticket == 0u || request.pDmaBufferPrivateData == nullptr ||
+        request.DmaBufferPrivateDataSize < PresentTicketRecord::encoded_size)
+        return;
+    auto *const private_data = static_cast<uint8_t *>(request.pDmaBufferPrivateData);
+    if (PresentTicketRecord(presents_.object().epoch(), ticket)
+            .encode(private_data, request.DmaBufferPrivateDataSize) != Status::ok)
+        return;
+    request.pDmaBufferPrivateData = private_data + PresentTicketRecord::encoded_size;
+    request.DmaBufferPrivateDataSize -= static_cast<uint32_t>(PresentTicketRecord::encoded_size);
 }
 
 void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool operation_named)
@@ -1883,17 +1943,21 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
     const bool   follows =
         !context->is_rvk() && follow.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
                                             request->DmaBufferPrivateDataSize) == Status::ok;
-    const Status status = context->is_rvk() ? submit_rvk(*request, awaited)
-                          : follows         ? submit_follow(*context, follow, request->SubmissionFenceId, owner, awaited)
-                                            : node_.submit(request->SubmissionFenceId);
+    Status       status = Status::ok;
+    const bool   presented = submit_present(*request, status, owner, awaited);
+    if (!presented)
+        status = context->is_rvk() ? submit_rvk(*request, awaited)
+                 : follows         ? submit_follow(*context, follow, request->SubmissionFenceId, owner, awaited)
+                                   : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) {
         /* Only a batch the device already finished needs this DPC: its
          * interrupt may have come before the packet was queued. One still
          * running is reported by the interrupt it raises when it finishes,
          * and a DPC per submission doubled the work dxgkrnl's DPC lock
          * serializes. */
-        if (awaited == 0u || rvk_contexts_.completed_already(owner, awaited))
-            static_cast<void>(dxgkrnl_.queue_dpc());
+        const bool done = presented ? presents_.object().completed() >= awaited
+                                    : rvk_contexts_.completed_already(owner, awaited);
+        if (awaited == 0u || done) static_cast<void>(dxgkrnl_.queue_dpc());
         return NtStatus(Status::ok).value();
     }
     /* A refusal is what dxgkrnl answers the process with, and may be what puts
@@ -1929,6 +1993,26 @@ Status Adapter::submit_follow(const Context &context, const FollowRecord &follow
     const Status queued = node_.submit(fence, followed, awaited);
     if (queued == Status::ok) rvk_contexts_.kick(followed);
     return queued;
+}
+
+/* Checked before the context's own kind: a present's DMA buffer comes to any
+ * context, and its private data is the miniport's, written by DdiPresent. A
+ * record that names no present of the queue's - another epoch, a ticket never
+ * queued - holds nothing, so a process cannot park the node on one. */
+bool Adapter::submit_present(const DxgkargSubmitCommandVirtualRecord &request, Status &status, void *&owner,
+                             uint64_t &awaited)
+{
+    AV_SCOPE("Adapter::submit_present");
+    PresentTicketRecord record;
+    if (!presents_.constructed() ||
+        record.decode(static_cast<const uint8_t *>(request.pDmaBufferPrivateData), request.DmaBufferPrivateDataSize) !=
+            Status::ok ||
+        !presents_.object().holds(record))
+        return false;
+    owner = &presents_.object();
+    awaited = record.ticket();
+    status = node_.submit(request.SubmissionFenceId, owner, awaited);
+    return true;
 }
 
 void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)
@@ -2225,7 +2309,9 @@ bool Adapter::invariants_hold() const
     AV_SCOPE("Adapter::invariants_hold");
     const bool powered_only_when_started = !device_.constructed() || started_;
     const bool mapped_only_when_started = mappings_.mapped_bars() == 0u || started_;
-    return powered_only_when_started && mapped_only_when_started;
+    const bool presents_with_the_device =
+        !presents_.constructed() || (device_.constructed() && presents_.object().invariants_hold());
+    return powered_only_when_started && mapped_only_when_started && presents_with_the_device;
 }
 
 }  // namespace av

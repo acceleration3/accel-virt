@@ -116,6 +116,13 @@ Status VirtioGpuDevice::send_control(const uint8_t *request, size_t length)
     return running_ ? control_.send(request, length) : Status::invalid_state;
 }
 
+Status VirtioGpuDevice::send_control_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload)
+{
+    AV_SCOPE("VirtioGpuDevice::send_control_carrying");
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::send_control_carrying");
+    return running_ ? control_.send_carrying(request, length, payload) : Status::invalid_state;
+}
+
 Status VirtioGpuDevice::ask_control(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
                                     uint32_t &written)
 {

@@ -27,7 +27,9 @@
 #include "core/pci/bar_mappings.hpp"
 #include "core/pci/resource_list.hpp"
 #include "core/present/mapped_pixels.hpp"
+#include "core/present/pixel_mover.hpp"
 #include "core/present/present_copier.hpp"
+#include "core/present/present_queue.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/platform/platform.hpp"
 #include "core/scheduling/context_table.hpp"
@@ -284,8 +286,17 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The pixels of a present nothing else executes (feature 046). */
-    void move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first);
+    /* The pixels of a present nothing else executes (feature 046): the
+     * sub-rectangles [first, end), or the whole rectangle for a present with
+     * none. The ticket its packet waits for, 0 when they have already moved. */
+    uint64_t move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first,
+                                   uint32_t end);
+    /* The present's private data names `ticket`, so its packet waits for the
+     * pixels (PresentTicketRecord); nothing for 0 or no room. */
+    void     mark_present(DxgkargPresentRecord &request, uint64_t ticket);
+    /* What moves a present's pixels when neither the engine nor the device's
+     * present copy is there. */
+    PixelMover &immediate_mover();
     void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);
@@ -353,6 +364,10 @@ private:
     [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
     [[nodiscard]] Status submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence,
                                        void *&owner, uint64_t &awaited);
+    /* A present's packet: held on the node until the present engine finished
+     * its ticket. Whether the private data named one of the queue's. */
+    bool                 submit_present(const DxgkargSubmitCommandVirtualRecord &request, Status &status,
+                                        void *&owner, uint64_t &awaited);
     /* StartDevice: which device this adapter is running on, so the one it wakes
      * up to can be told apart from it. A device that will not say leaves
      * nothing to compare, and the adapter runs as it did before. */
@@ -365,6 +380,9 @@ private:
     void                 judge_device();
     [[nodiscard]] Status power_up();
     void                 start_copier();
+    /* A device just started that offers the present engine: the engine's
+     * page registered, and presents queued to it from now on. */
+    void                 start_presents();
     /* A device just started: the display clock's page registered with it. */
     void                 attach_clock();
     /* Which sources have a committed mode: what a power transition puts back. */
@@ -434,6 +452,10 @@ private:
     MappedPixels                   mapped_pixels_;
     /* What moves them while it can: made with the device and gone with it. */
     ObjectStorage<PresentCopier>   copier_;
+    /* What hands them to the device's own thread instead, where it offers
+     * one: made with the device, under the next epoch, and gone with it. */
+    ObjectStorage<PresentQueue>    presents_;
+    uint32_t                       present_epochs_;
     ObjectStorage<MappedRegisterWindow> doorbells_;
     /* The doorbells processes hold on hardware queues (feature 049): made with
      * the mapping they hand out pages of, and gone with it. */
