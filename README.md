@@ -595,6 +595,13 @@ threads, driver and device state, crash reports and the driver log. Add it with
 - `tools/frame_breakdown.py` cuts the result into frames and shows where each
   one's time went.
 - `tools/profile_sample.sh` does all of the above for one sample.
+- `tools/frame_pacing.py run` records one WPR trace of the guest - scheduling,
+  CPU samples with stacks, DPCs and ISRs, dxgkrnl, DWM and the flip manager -
+  under a Windows.Graphics.Capture workload, and accounts for every DWM frame:
+  the capture rule, and where the render thread's time went in the slow ones
+  ([`docs/frame-pacing.md`](docs/frame-pacing.md)).
+- `tools/guest_cpu_profile.py <process>` names a guest process's hottest
+  functions, the kernel's included.
 
 **Wire recordings.** Record what crossed the wire, then print it or replay it
 into an executor library, on this GPU or another one:
@@ -752,6 +759,8 @@ tests/conformance/            the executor ABI's conformance suite, for any exec
 tools/                        gates, fetches, generators, reports, profilers
   codegen/                      the command generator and its profiles and registries
   guest/                        run_guest_suite.py, provision.ps1, guest_shell.py, read_bugcheck.py
+    probes/                       wgc_probe.exe and etw_schema.exe, the guest's side of frame_pacing.py
+  etw/                          ETL reading, the guest's event schemas, scheduling, DWM frames, symbols
   host/                         list_gpus.py, device captures, host-memory probes
   mcp/                          rvk_inspect.py
   re/                           symbol and binary fetching for reverse engineering
@@ -770,6 +779,7 @@ third_party/                  fetched and pinned: windows-kit, khronos, qemu, dx
 | [`docs/host-window.md`](docs/host-window.md) | Host-visible memory: the hostmem window, and dedicated video memory |
 | [`docs/renderer.md`](docs/renderer.md) | The renderer process: where the line is, what crosses it, recovery |
 | [`docs/trace.md`](docs/trace.md) | Thread and state tracking, crash reports, the trace table format |
+| [`docs/frame-pacing.md`](docs/frame-pacing.md) | Why a guest frame came late: the frame-pacing recording and report, and the WGC capture rule |
 | [`docs/testing.md`](docs/testing.md) | The five test layers, and preparing and debugging a guest image |
 | [`docs/kb/`](docs/kb/) | The WDDM 3.2 knowledge base: the architecture, the kernel-mode contract, memory, scheduling, display, user mode, the 3.x changes, Microsoft's GPU-PV and WARP drivers as case studies |
 | [`docs/kb/12-re-cookbook.md`](docs/kb/12-re-cookbook.md) | How to keep reverse engineering: fetching binaries and PDBs, Ghidra, symbols |
