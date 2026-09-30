@@ -1,0 +1,204 @@
+#include "core/display/device_vblank.hpp"
+
+#include "core/display/display_mode.hpp"
+#include "core/display/display_sources.hpp"
+#include "core/display/flip_view.hpp"
+#include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
+#include "core/virtio/virtio_gpu_device.hpp"
+#include "proto/display/vblank_record.hpp"
+#include "proto/virtio_gpu/gpu_response_reader.hpp"
+#include "proto/virtio_gpu/rvk_request_writer.hpp"
+
+namespace av {
+
+DeviceVblank::DeviceVblank(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
+    : platform_(platform), sources_(sources), notification_(platform, dxgkrnl), page_(platform),
+      phase_(), layer_(), reporting_(false), suspended_(false), suspended_reporting_(false), sequence_(0u),
+      blanks_(0u), missed_(0u), reported_(0u), enables_(0u), window_start_(0u)
+      {
+          AV_SCOPE("DeviceVblank::DeviceVblank");
+      }
+
+Status DeviceVblank::initialize()
+{
+    AV_SCOPE("DeviceVblank::initialize");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::initialize");
+    return page_.initialize();
+}
+
+void DeviceVblank::destroy()
+{
+    AV_SCOPE("DeviceVblank::destroy");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::destroy");
+    reporting_ = false;
+    page_.release();
+    phase_.forget();
+}
+
+Status DeviceVblank::attach(VirtioGpuDevice &device)
+{
+    AV_SCOPE("DeviceVblank::attach");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::attach");
+    if (page_.address() == 0u) return Status::invalid_state;
+    uint8_t          request[RvkRequestWriter::max_request_size] = {};
+    RvkRequestWriter writer(request, sizeof request);
+    static_cast<void>(writer.display_clock(page_.address()));
+    uint8_t      answer[response_bytes] = {};
+    uint32_t     written = 0u;
+    const Status asked = device.ask_control(request, writer.length(), answer, sizeof answer, written);
+    if (asked != Status::ok) return asked;
+    GpuResponseReader response;
+    const Status      decoded = response.decode(answer, written);
+    if (decoded != Status::ok) return decoded;
+    if (!response.ok()) return Status::not_supported;
+    /* A page the device takes is one it zeroes: whatever was asked before is
+     * asked again, and the count starts where the device's is. */
+    platform_.store_atomic(sequence_, 0u);
+    phase_.forget();
+    ask();
+    return Status::ok;
+}
+
+/* A waiter wants the blank after it asked: one the page already shows came
+ * before, while nothing was reported and no DPC need have looked, and is taken
+ * as seen rather than reported the moment a DPC does. */
+Status DeviceVblank::enable()
+{
+    AV_SCOPE("DeviceVblank::enable");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::enable");
+    if (page_.address() == 0u) return Status::invalid_state;
+    VblankRecord blank;
+    if (page_.read(target, blank) == Status::ok && blank.sequence() > platform_.load_atomic(sequence_))
+        platform_.store_atomic(sequence_, blank.sequence());
+    enables_++;
+    reporting_ = true;
+    ask();
+    return Status::ok;
+}
+
+void DeviceVblank::disable()
+{
+    AV_SCOPE("DeviceVblank::disable");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::disable");
+    reporting_ = false;
+    ask();
+}
+
+void DeviceVblank::suspend()
+{
+    AV_SCOPE("DeviceVblank::suspend");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::suspend");
+    suspended_reporting_ = reporting_;
+    reporting_ = false;
+    suspended_ = true;
+    blanks_ = 0u;
+    missed_ = 0u;
+    reported_ = 0u;
+    enables_ = 0u;
+}
+
+Status DeviceVblank::resume()
+{
+    AV_SCOPE("DeviceVblank::resume");
+    platform_.require_irql_at_most(Irql::passive, "DeviceVblank::resume");
+    suspended_ = false;
+    reporting_ = suspended_reporting_;
+    suspended_reporting_ = false;
+    ask();
+    return page_.address() != 0u ? Status::ok : Status::invalid_state;
+}
+
+void DeviceVblank::ask()
+{
+    AV_SCOPE("DeviceVblank::ask");
+    page_.ask(target, reporting_ ? 1u : sweep_every);
+}
+
+void DeviceVblank::tick(uint64_t now, bool latching)
+{
+    AV_SCOPE("DeviceVblank::tick");
+    platform_.require_irql_at_most(Irql::dispatch, "DeviceVblank::tick");
+    if (suspended_) return;
+    VblankRecord   blank;
+    const uint64_t seen = platform_.load_atomic(sequence_);
+    if (page_.read(target, blank) != Status::ok || blank.sequence() <= seen) return;
+    if (blanks_ == 0u) window_start_ = now;
+    missed_ += seen != 0u ? static_cast<uint32_t>(blank.sequence() - seen - 1u) : 0u;
+    blanks_ += seen != 0u ? static_cast<uint32_t>(blank.sequence() - seen) : 1u;
+    platform_.store_atomic(sequence_, blank.sequence());
+    phase_.observe(blank.sequence(), now, blank.period_ns());
+    if (reporting_) {
+        if (report(sources_.shown(target, latching ? blank.latched() : 0u)) == Status::ok) reported_++;
+        else platform_.log("rvkgpu: a vsync was refused");
+    }
+    if (blanks_ >= blanks_per_report) report_rate(now);
+}
+
+/* A multiplane flip is retired only by a multiplane vsync, and one that
+ * disabled every plane only by one with no layers; an address flip only by a
+ * plain vsync naming it. */
+Status DeviceVblank::report(const FlipView &shown)
+{
+    AV_SCOPE("DeviceVblank::report");
+    switch (shown.kind()) {
+    case FlipView::Kind::planes_disabled: return notification_.report_multiplane_vsync(target, nullptr, 0u);
+    case FlipView::Kind::base_plane:
+        shown.layer(layer_);
+        return notification_.report_multiplane_vsync(target, &layer_, 1u);
+    case FlipView::Kind::address: break;
+    }
+    return notification_.report_vsync(target, shown.address());
+}
+
+/* Blanks the DPC did not see one by one are ones a late DPC folded into one
+ * report: counted, since they are what a user sees as a stutter. */
+void DeviceVblank::report_rate(uint64_t now)
+{
+    AV_SCOPE("DeviceVblank::report_rate");
+    char       bytes[128];
+    TextBuffer line(bytes, sizeof bytes);
+    line.append("rvkgpu: vsync ");
+    line.append_decimal(blanks_);
+    line.append(" blanks in ");
+    line.append_decimal(static_cast<uint32_t>(now - window_start_));
+    line.append(" ticks, ");
+    line.append_decimal(missed_);
+    line.append(" folded, ");
+    line.append_decimal(reported_);
+    line.append(" reported, enabled ");
+    line.append_decimal(enables_);
+    line.append(" times");
+    platform_.log(line.text());
+    blanks_ = 0u;
+    missed_ = 0u;
+    reported_ = 0u;
+    enables_ = 0u;
+}
+
+uint32_t DeviceVblank::scan_line(const DisplayMode &mode, uint64_t now) const
+{
+    AV_SCOPE("DeviceVblank::scan_line");
+    if (!phase_.known()) return mode.scan_line(now);
+    return mode.scan_line_within(phase_.since_blank(now), phase_.period());
+}
+
+uint32_t DeviceVblank::reported() const
+{
+    AV_SCOPE("DeviceVblank::reported");
+    return reported_;
+}
+
+uint32_t DeviceVblank::enabled_count() const
+{
+    AV_SCOPE("DeviceVblank::enabled_count");
+    return enables_;
+}
+
+bool DeviceVblank::invariants_hold() const
+{
+    AV_SCOPE("DeviceVblank::invariants_hold");
+    return page_.invariants_hold() && phase_.invariants_hold() && (!suspended_ || !reporting_) && missed_ <= blanks_;
+}
+
+}  // namespace av

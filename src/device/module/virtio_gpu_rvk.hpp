@@ -8,6 +8,7 @@
 #include "device/capset/device_capset.hpp"
 #include "device/context/local_context_plane.hpp"
 #include "device/isolation/renderer_context_plane.hpp"
+#include "device/display/display_clock.hpp"
 #include "device/display/display_heads.hpp"
 #include "device/display/display_modes.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -66,6 +67,14 @@ public:
      * is published under. */
     bool                 export_image(uint64_t key, RvkExportedImage &image);
     bool                 read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
+    /* Main loop. SCANOUT_IMAGE's frame `frame` of `head`, published under
+     * `key`: true when the display clock shows it at the head's next blank;
+     * false for frame 0, with no clock page registered, or on a head whose
+     * console cannot show an image, and the caller shows it at once. */
+    bool                 post_frame(uint32_t head, uint32_t frame, uint64_t key);
+    /* Main loop, queued by the display clock after a blank latched a frame:
+     * every head's latched frame, exported and shown. */
+    void                 show_latched_frames();
     /* Main loop. The bound host GPU's PCI identity, which the PCI function
      * presents as its own: false, leaving `identity` untouched, before realize
      * and for a GPU with none the host could read. */
@@ -106,6 +115,8 @@ private:
     DisplayHeads       heads_;
     DisplayModes       display_modes_;
     FenceInterrupts    interrupts_;
+    /* After the interrupts it raises, so it stops before they go. */
+    DisplayClock       clock_;
     DriverStatus       status_;
     /* Where the contexts run: here, or in the renderer realize started. */
     LocalContextPlane    local_;

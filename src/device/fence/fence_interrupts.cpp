@@ -4,7 +4,6 @@
 #include "device/probe/interrupt_stress_probe.hpp"
 
 #include "device/host/host.hpp"
-#include "device/threading/doorbell.hpp"
 
 namespace av {
 
@@ -55,7 +54,7 @@ void FenceInterrupts::disconnect()
 void FenceInterrupts::raise(uint32_t line)
 {
     AV_SCOPE("FenceInterrupts::raise");
-    if (lock_ == nullptr || line >= Doorbell::pages) return;
+    if (lock_ == nullptr || line >= lines) return;
     host_.lock_mutex(lock_);
     const bool injected = connected_;
     if (injected) host_.raise_fence_interrupt(line);

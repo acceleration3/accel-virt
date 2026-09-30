@@ -161,10 +161,13 @@ TEST(fence_interrupts_report_to, counts_only_what_reached_the_guest)
   CHECK_STATUS(interrupts.connect(), Status::ok);
   interrupts.raise(0u);
   interrupts.raise(1u);
-  interrupts.raise(Doorbell::pages);          /* no such line */
+  interrupts.raise(FenceInterrupts::display_line);   /* the display's, after the fence queues' */
+  interrupts.raise(FenceInterrupts::lines);          /* no such line */
   interrupts.disconnect();
   interrupts.raise(0u);
-  stress.acknowledged(2u, 700u);
+  CHECK_EQ(host.raised(FenceInterrupts::display_line), 1u);
+  CHECK_EQ(host.raised(Doorbell::pages), 1u);        /* the display line is the one after the doorbells' */
+  stress.acknowledged(3u, 700u);
   stress.finish();
   CHECK(stress.verdict().passed());
   CHECK_EQ(stress.verdict().measured(), 700u); }

@@ -87,8 +87,9 @@ struct VirtIOGPURvk {
     /* One page per context; a store to a page is an ioeventfd the core
      * connects to the context's worker. The PCI wrapper maps it as BAR 0. */
     MemoryRegion doorbells;
-    /* Queue FIRST + n carries doorbell n's fence interrupts on its vector. */
-    VirtQueue *fence_queues[RVK_DEVICE_DOORBELLS];
+    /* Queue FIRST + n carries doorbell n's fence interrupts on its vector,
+     * and queue FIRST + DISPLAY_LINE the display clock's. */
+    VirtQueue *fence_queues[RVK_DEVICE_INTERRUPT_LINES];
     /* The dma-buf each head is showing, which QEMU's display holds an import
      * of until it is told otherwise; NULL for a head showing nothing. */
     QemuDmaBuf *scanouts[VIRTIO_GPU_MAX_SCANOUTS];

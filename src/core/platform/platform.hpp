@@ -4,7 +4,7 @@
  * KernelPlatform (src/km), which translates each call into one kernel call, and
  * MockPlatform (tests/harness), which enforces the rules below in every unit
  * test. Every system class takes a Platform& at construction; nothing reaches
- * for a global. The contract is specs/002-platform-abstraction-and-mock/contracts/platform.md. */
+ * for a global. */
 #ifndef AV_PLATFORM_HPP
 #define AV_PLATFORM_HPP
 
@@ -21,10 +21,6 @@ class GuestPageList;
 
 class DdiTable;
 
-
-/* What a platform timer calls at DISPATCH: the timer, and the context it was
- * created with. The signature is the kernel's EXT_CALLBACK. */
-using TimerCallback = void (*)(void *timer, void *context);
 
 /* What the kernel calls while it bugchecks: the buffer registered with it and
  * that buffer's size. The signature is KBUGCHECK_CALLBACK_ROUTINE's. */
@@ -128,22 +124,6 @@ public:
     virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
     /* Busy-waits; legal at any IRQL, so keep it short. */
     virtual void     stall(uint32_t microseconds) = 0;
-
-    /* A periodic high-resolution timer, not yet running; null when out of
-     * memory. Never at DISPATCH.
-     *
-     * While one exists the system clock is asked to tick finely: a virtual
-     * machine's default 15.6 ms tick rounds a 60 Hz period up to twice it, and
-     * the display's vertical blank is what DWM paces frames against (feature
-     * 038, US3 - measured at 31.2 Hz on a real guest before this). */
-    virtual void *create_timer(TimerCallback callback, void *context) = 0;
-    /* Fires every `period` (100 ns, non-zero) from one period after the call,
-     * replacing any earlier schedule. At most DISPATCH. */
-    virtual void  start_timer(void *timer, uint64_t period) = 0;
-    /* No new callback starts; one already running may finish. At most DISPATCH. */
-    virtual void  stop_timer(void *timer) = 0;
-    /* Stops, waits for a running callback, and frees. PASSIVE; never of null. */
-    virtual void  destroy_timer(void *timer) = 0;
 
     /* Registers of a device BAR mapped with DxgkCbMapMemory; legal at any
      * IRQL. The caller keeps each access inside the mapping. */

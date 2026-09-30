@@ -14,17 +14,12 @@ namespace av {
 ScanoutResource::ScanoutResource(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device,
                                  uint32_t source)
     : platform_(platform), budget_(budget), device_(device), source_(source), width_(0u), height_(0u),
-      attached_address_(0u), attached_pages_(0u), key_(0u), reported_address_(0u), reported_(false), backing_request_(nullptr),
-      backing_request_bytes_(0u), created_(false), scanning_out_(false), backed_(false)
+      attached_address_(0u), attached_pages_(0u), key_(0u), posted_frame_(0u), reported_address_(0u), reported_(false),
+      backing_request_(platform, GpuRequestWriter::backing_header_size, GpuRequestWriter::memory_entry_size),
+      created_(false), scanning_out_(false), backed_(false)
       {
           AV_SCOPE("ScanoutResource::ScanoutResource");
       }
-
-ScanoutResource::~ScanoutResource()
-{
-    AV_SCOPE("ScanoutResource::~ScanoutResource");
-    if (backing_request_ != nullptr) platform_.release(backing_request_);
-}
 
 bool ScanoutResource::needs_pages(uint64_t address) const
 {
@@ -39,6 +34,13 @@ bool ScanoutResource::keyed() const
     return key_ != 0u;
 }
 
+bool ScanoutResource::posts_frames() const
+{
+    AV_SCOPE("ScanoutResource::posts_frames");
+    platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::posts_frames");
+    return key_ != 0u && scanning_out_;
+}
+
 bool ScanoutResource::scanning_out() const
 {
     AV_SCOPE("ScanoutResource::scanning_out");
@@ -49,20 +51,7 @@ uint32_t ScanoutResource::page_count() const
 {
     AV_SCOPE("ScanoutResource::page_count");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::page_count");
-    const uint64_t bytes = uint64_t{width_} * height_ * bytes_per_pixel;
-    return static_cast<uint32_t>((bytes + GuestPageList::page_bytes - 1u) / GuestPageList::page_bytes);
-}
-
-Status ScanoutResource::reserve()
-{
-    AV_SCOPE("ScanoutResource::reserve");
-    const size_t needed = GpuRequestWriter::backing_header_size +
-                          size_t{page_count()} * GpuRequestWriter::memory_entry_size;
-    if (needed <= backing_request_bytes_) return Status::ok;
-    if (backing_request_ != nullptr) platform_.release(backing_request_);
-    backing_request_ = static_cast<uint8_t *>(platform_.allocate(needed, Pool::non_paged));
-    backing_request_bytes_ = backing_request_ != nullptr ? needed : 0u;
-    return backing_request_ != nullptr ? Status::ok : Status::no_memory;
+    return DisplayMode(width_, height_).frame_pages();
 }
 
 /* Every request below fits a max_request_size buffer, so the writer cannot
@@ -83,10 +72,10 @@ Status ScanoutResource::create(VirtioGpuDevice &device)
 Status ScanoutResource::attach(VirtioGpuDevice &device, const GuestPageList &pages)
 {
     AV_SCOPE("ScanoutResource::attach");
-    GpuRequestWriter writer(backing_request_, backing_request_bytes_);
+    GpuRequestWriter writer(backing_request_.start(), backing_request_.size());
     const Status     written = writer.attach_backing_pages(first_resource_id + source_, pages);
     if (written != Status::ok) return written;
-    const Status attached = device.send_control(backing_request_, writer.length());
+    const Status attached = device.send_control(backing_request_.start(), writer.length());
     backed_ = attached == Status::ok;
     return attached;
 }
@@ -116,12 +105,12 @@ Status ScanoutResource::show(VirtioGpuDevice &device, uint32_t resource)
 
 /* TRANSFER_TO_HOST_2D carries the guest's pixels to the host's copy of the
  * resource; RESOURCE_FLUSH is what puts them on the screen. */
-Status ScanoutResource::flush(VirtioGpuDevice &device)
+Status ScanoutResource::flush(VirtioGpuDevice &device, uint32_t frame)
 {
     AV_SCOPE("ScanoutResource::flush");
     uint8_t          bytes[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(bytes, sizeof bytes);
-    if (key_ != 0u) static_cast<void>(writer.scanout_image(first_resource_id + source_, key_));
+    if (key_ != 0u) static_cast<void>(writer.scanout_image(first_resource_id + source_, key_, frame));
     else static_cast<void>(writer.transfer_to_host_2d(first_resource_id + source_, width_, height_));
     const Status transferred = device.send_control(bytes, writer.length());
     if (transferred != Status::ok) return transferred;
@@ -160,23 +149,26 @@ void ScanoutResource::release()
     if (created_) static_cast<void>(unref());
 }
 
+Status ScanoutResource::prepare(const DisplayMode &mode)
+{
+    AV_SCOPE("ScanoutResource::prepare");
+    platform_.require_irql_at_most(Irql::passive, "ScanoutResource::prepare");
+    return backing_request_.prepare(mode.frame_pages());
+}
+
 Status ScanoutResource::configure(const DisplayMode &mode)
 {
     AV_SCOPE("ScanoutResource::configure");
-    platform_.require_irql_at_most(Irql::passive, "ScanoutResource::configure");
+    platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::configure");
     InvariantScope<ScanoutResource> guard(platform_, *this, "configure");
     if (!device_.constructed()) return Status::invalid_state;
     if (created_ && width_ == mode.width() && height_ == mode.height()) return Status::ok;
     const Status freed = created_ ? unref() : Status::ok;
     if (freed != Status::ok) return freed;
+    const Status room = backing_request_.take(mode.frame_pages());
+    if (room != Status::ok) return room;
     width_ = mode.width();
     height_ = mode.height();
-    const Status room = reserve();
-    if (room != Status::ok) {
-        width_ = 0u;
-        height_ = 0u;
-        return room;
-    }
     const Status made = create(device_.object());
     created_ = made == Status::ok;
     if (!created_) {
@@ -190,7 +182,7 @@ Status ScanoutResource::configure(const DisplayMode &mode)
 Status ScanoutResource::disable()
 {
     AV_SCOPE("ScanoutResource::disable");
-    platform_.require_irql_at_most(Irql::passive, "ScanoutResource::disable");
+    platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::disable");
     InvariantScope<ScanoutResource> guard(platform_, *this, "disable");
     if (!scanning_out_) return Status::ok;
     const Status hidden = show(device_.object(), 0u);
@@ -244,7 +236,8 @@ void ScanoutResource::forget_device()
     height_ = 0u;
 }
 
-Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bool presented, uint64_t key)
+Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bool presented, uint64_t key,
+                                uint32_t frame)
 {
     AV_SCOPE("ScanoutResource::refresh");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::refresh");
@@ -262,7 +255,11 @@ Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bo
      * detach and attach of a thousand pages on QEMU's main loop. */
     if (key != 0u && scanning_out_) {
         attached_address_ = address;
-        return flush(device);
+        if (frame != posted_frame_) {
+            posted_frame_ = frame;
+            return flush(device, frame);
+        }
+        return presented ? flush(device, 0u) : Status::ok;
     }
     const uint64_t   fingerprint = pages.fingerprint();
     const bool       moved = pages.count() != 0u && fingerprint != attached_pages_;
@@ -277,9 +274,10 @@ Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bo
         attached_address_ = address;
         attached_pages_ = fingerprint;
         scanning_out_ = true;
-        return flush(device);
+        posted_frame_ = key != 0u ? frame : 0u;
+        return flush(device, posted_frame_);
     }
-    return presented ? flush(device) : Status::ok;
+    return presented ? flush(device, 0u) : Status::ok;
 }
 
 }  // namespace av

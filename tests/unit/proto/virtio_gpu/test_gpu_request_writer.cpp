@@ -142,22 +142,24 @@ TEST(gpu_request_writer_detach_backing, names_the_resource_that_lets_go_of_its_p
   GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);
   CHECK_STATUS(header_only.detach_backing(9u), Status::too_large); }
 
-/* rvk's own request: the resource, padding, and the key the host image was
- * published under, which the host copies into the resource in place of a
- * transfer from the guest's pages. */
-TEST(gpu_request_writer_scanout_image, names_the_resource_and_the_host_image_key)
+/* rvk's own request: the resource, the frame the display clock shows it as
+ * (0: at once), and the key the host image was published under, which the
+ * host shows in place of a transfer from the guest's pages. */
+TEST(gpu_request_writer_scanout_image, names_the_resource_the_frame_and_the_host_image_key)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
-  CHECK_STATUS(writer.scanout_image(9u, 0x1122334455667788ull), Status::ok);
+  CHECK_STATUS(writer.scanout_image(9u, 0x1122334455667788ull, 0xA1B2C3D4u), Status::ok);
   CHECK_EQ(writer.length(), 40u);
   CHECK(plain_header(buffer.bytes, 0x02F0u));
   CHECK_EQ(u32(buffer.bytes, 24u), 9u);
-  CHECK_EQ(u32(buffer.bytes, 28u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 28u), 0xA1B2C3D4u);
   CHECK_EQ(u32(buffer.bytes, 32u), 0x55667788u);
   CHECK_EQ(u32(buffer.bytes, 36u), 0x11223344u);
   CHECK_EQ(buffer.bytes[40], 0xEEu);
+  CHECK_STATUS(writer.scanout_image(9u, 1u, 0u), Status::ok);
+  CHECK_EQ(u32(buffer.bytes, 28u), 0u);
   GpuRequestWriter short_of_the_key(buffer.bytes, 39u);
-  CHECK_STATUS(short_of_the_key.scanout_image(9u, 1u), Status::too_large); }
+  CHECK_STATUS(short_of_the_key.scanout_image(9u, 1u, 1u), Status::too_large); }
 
 TEST(gpu_request_writer_set_scanout, names_the_scanout_the_resource_and_the_rectangle)
 { Buffer buffer;

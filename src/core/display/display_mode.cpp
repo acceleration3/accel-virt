@@ -3,6 +3,7 @@
 #include "core/ddi/d3dkmdt_video_signal_info_record.hpp"
 #include "core/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/guest_page_list.hpp"
 
 namespace av {
 
@@ -14,6 +15,13 @@ DisplayMode::DisplayMode(uint32_t width, uint32_t height) : width_(width), heigh
 DisplayMode::DisplayMode() : DisplayMode(smallest_width, smallest_height)
 {
     AV_SCOPE("DisplayMode::DisplayMode");
+}
+
+uint32_t DisplayMode::frame_pages() const
+{
+    AV_SCOPE("DisplayMode::frame_pages");
+    const uint64_t bytes = uint64_t{width_} * height_ * bytes_per_pixel;
+    return static_cast<uint32_t>((bytes + GuestPageList::page_bytes - 1u) / GuestPageList::page_bytes);
 }
 
 bool DisplayMode::offerable() const
@@ -93,6 +101,14 @@ bool DisplayMode::matches(const D3dkmdtVideoSignalInfoRecord &signal) const
 {
     AV_SCOPE("DisplayMode::matches");
     return signal.ActiveSizeCx == width_ && signal.ActiveSizeCy == height_;
+}
+
+uint32_t DisplayMode::scan_line_within(uint64_t since, uint64_t period) const
+{
+    AV_SCOPE("DisplayMode::scan_line_within");
+    if (period == 0u) return height_;
+    const uint64_t into = since % period * total_height() / period;
+    return static_cast<uint32_t>((height_ + into) % total_height());
 }
 
 /* Reduced modulo one second first, so no interrupt time overflows. */

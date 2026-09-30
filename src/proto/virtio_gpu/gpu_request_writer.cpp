@@ -109,13 +109,13 @@ Status GpuRequestWriter::detach_backing(uint32_t resource_id)
     return Status::ok;
 }
 
-Status GpuRequestWriter::scanout_image(uint32_t resource_id, uint64_t key)
+Status GpuRequestWriter::scanout_image(uint32_t resource_id, uint64_t key, uint32_t frame)
 {
     AV_SCOPE("GpuRequestWriter::scanout_image");
     WireWriter writer(bytes_, capacity_);
     if (!begin(writer, rvk_scanout_image, resource_unref_size + 8u)) return Status::too_large;
     writer.write_u32(resource_id);
-    writer.write_zeros(4u);
+    writer.write_u32(frame);
     writer.write_u64(key);
     return Status::ok;
 }

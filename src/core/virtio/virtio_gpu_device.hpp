@@ -83,6 +83,9 @@ public:
 private:
     enum : uint16_t { config_source = 0u, control_source = 1u, cursor_source = 2u, source_count = 3u };
     enum : uint16_t { control_queue = 0u, cursor_queue = 1u, first_fence_queue = 2u };
+    /* One fence queue per doorbell page; the queue after them is the display
+     * clock's line, no context's (docs/protocol.md). */
+    static constexpr uint32_t doorbells = 64u;
     static constexpr uint16_t no_vector = 0xFFFFu;
     static constexpr uint64_t num_scanouts_offset = 8u;   /* struct virtio_gpu_config */
     static constexpr uint64_t events_clear_offset = 4u;

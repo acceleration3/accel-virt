@@ -2,16 +2,19 @@
  * each, the mode committed to each, the primary each scans out and whether it
  * is visible, and whether dxgkrnl wants vsync interrupts. dxgkrnl serializes
  * the display DDIs that change them. The scanout address is stored atomically:
- * with FlipOnVSyncMmIo dxgkrnl sets it at device IRQL, and the vsync tick reads
- * it at DISPATCH. So is how the source was last flipped, which decides what
- * that vsync reports: dxgmms2 retires a multiplane flip only on a
- * CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY, and a single-plane one only on a
- * CRTC_VSYNC naming its address (VidSchiIsExpectedVSyncCookie, dxgmms2.sys
- * @14003a0d4). */
+ * with FlipOnVSyncMmIo dxgkrnl sets it at device IRQL, and the DPC reads it at
+ * DISPATCH. So is how the source was last flipped, which decides what a vsync
+ * reports (FlipView).
+ *
+ * Each flip is numbered as it comes - the frame the device's display clock is
+ * told to show it as (docs/protocol.md, "Display clock") - and the last few
+ * are remembered, so the vsync for a blank can name the flip the device
+ * actually latched rather than whichever came last. */
 #ifndef AV_DISPLAY_SOURCES_HPP
 #define AV_DISPLAY_SOURCES_HPP
 
 #include "core/ddi/dxgk_multiplane_overlay_plane_record.hpp"
+#include "core/display/flip_view.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
 
@@ -22,7 +25,6 @@ namespace av {
 class StateWriter;
 
 class DisplayMode;
-struct DxgkMultiplaneOverlayVsyncInfoRecord;
 struct DisplaySourcesProbe;
 
 class DisplaySources {
@@ -32,11 +34,9 @@ public:
     static constexpr uint32_t max_sources = 4u;
 
     /* How a source was last flipped. */
-    enum class Flip : uint32_t {
-        address = 0u,          /* SetVidPnSourceAddress */
-        planes_disabled = 1u,  /* a multiplane flip with no enabled base plane: dxgmms2's disable-planes flip */
-        base_plane = 2u,       /* a multiplane flip showing its base plane */
-    };
+    using Flip = FlipView::Kind;
+    /* Flips remembered per source: a blank latches one of the last few. */
+    static constexpr uint32_t remembered_flips = 8u;
 
     explicit DisplaySources(Platform &platform);
     DisplaySources(const DisplaySources &) = delete;
@@ -69,9 +69,13 @@ public:
     [[nodiscard]] Status set_multiplane_scanout(uint32_t source, const DxgkMultiplaneOverlayPlaneRecord *base);
     /* Device IRQL at most. */
     Flip                 flip(uint32_t source);
-    /* The layer a vsync reports for a base_plane flip: layer 0, enabled, at
-     * the flipped address with the flip's attributes. */
-    void                 base_layer(uint32_t source, DxgkMultiplaneOverlayVsyncInfoRecord &layer);
+    /* Device IRQL at most: the number of the source's newest flip, 1 onwards
+     * and skipping 0 when it wraps; 0 before its first. */
+    uint32_t             frame(uint32_t source);
+    /* Dispatch at most: flip `frame` of `source` as it was made, or - for 0,
+     * a frame no longer remembered, or one being overwritten as it is read -
+     * the source's flip as it is now. */
+    FlipView             shown(uint32_t source, uint32_t frame);
     /* The allocation handle the driver gave dxgkrnl for the primary, which is
      * what knows where its pages are; null when the source shows none.
      * Dispatch at most: the DPC asks before it carries the frame. */
@@ -103,6 +107,15 @@ private:
     uint64_t           visible_[max_sources];
     /* A Flip, atomically. */
     uint64_t           flips_[max_sources];
+    /* A flip made at device IRQL: numbered, and remembered. dxgkrnl
+     * serializes a source's flips, so each source has one writer. */
+    void               number(uint32_t source, const FlipView &flip);
+    uint64_t           frames_[max_sources];
+    /* The flips remembered, each beside its number. A number is 0 while its
+     * flip is written, so a reader that finds the same number before and after
+     * its copy copied the flip whole. */
+    uint64_t           numbered_frames_[max_sources][remembered_flips];
+    FlipView           numbered_flips_[max_sources][remembered_flips];
     /* The base plane's DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES, written before the
      * flip kind that makes them read. */
     uint32_t           base_attributes_[max_sources][multiplane_overlay_attribute_words];

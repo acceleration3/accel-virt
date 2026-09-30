@@ -1,7 +1,9 @@
 #include "device/abi/entry_points.hpp"
 
 #include "device/module/device_instance.hpp"
+#include "device/display/display_clock.hpp"
 #include "device/module/device_module.hpp"
+#include "device/module/virtio_gpu_rvk.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/shim/device_trace.hpp"
 #include "device/threading/worker.hpp"
@@ -58,6 +60,10 @@ void rvk_device_status(RvkDevice *device, uint8_t status)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().status(status); }
 
 __attribute__((visibility("default")))
+int rvk_device_post_frame(RvkDevice *device, uint32_t head, uint32_t frame, uint64_t key)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().post_frame(head, frame, key) ? 1 : 0; }
+
+__attribute__((visibility("default")))
 void rvk_device_reset(RvkDevice *device)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().reset(); }
 
@@ -74,5 +80,11 @@ void RvkWorkerRun(void *worker)
 
 void RvkRingAttach(void *ring)
 { static_cast<av::RingConsumer *>(ring)->attach(); }
+
+void RvkDisplayClockRun(void *clock)
+{ static_cast<av::DisplayClock *>(clock)->run(); }
+
+void RvkDisplayFramesShow(void *device)
+{ static_cast<av::VirtioGpuRvk *>(device)->show_latched_frames(); }
 
 }

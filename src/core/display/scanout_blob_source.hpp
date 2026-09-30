@@ -20,6 +20,7 @@
 #include "core/display/hardware_cursor.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/object_storage.hpp"
+#include "core/support/request_room.hpp"
 #include "core/support/status.hpp"
 
 #include <stddef.h>
@@ -42,16 +43,20 @@ public:
 
     ScanoutBlobSource(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device,
                       uint32_t source);
-    ~ScanoutBlobSource();
     ScanoutBlobSource(const ScanoutBlobSource &) = delete;
     ScanoutBlobSource &operator=(const ScanoutBlobSource &) = delete;
 
+    /* PASSIVE, before configure(): room for the create-blob request `mode`
+     * needs, made where memory can be had - configure() runs under the lock
+     * the DPC refreshes under (DisplayScanout). */
+    [[nodiscard]] Status prepare(const DisplayMode &mode);
     /* The mode this source now shows. Nothing is sent: a blob is made over the
-     * primary's pages and no primary is known yet. */
+     * primary's pages and no primary is known yet. Up to DISPATCH; no_memory
+     * unless prepare() made room for `mode`. */
     [[nodiscard]] Status configure(const DisplayMode &mode);
     /* The host stops showing this source, and the blob it was shown out of is
      * released: a blob nothing scans out is one the guest may reuse the pages
-     * of. */
+     * of. Up to DISPATCH. */
     [[nodiscard]] Status disable();
     /* Tells the host to forget the blob. */
     void                 release();
@@ -73,9 +78,6 @@ public:
 private:
     friend struct ScanoutBlobSourceProbe;
 
-    /* Room for a create-blob request covering the mode, at worst one memory
-     * entry per page; grown as the mode grows, never shrunk. */
-    [[nodiscard]] Status reserve();
     [[nodiscard]] Status create(VirtioGpuDevice &device, const GuestPageList &pages);
     [[nodiscard]] Status show(VirtioGpuDevice &device, uint32_t resource);
     [[nodiscard]] Status flush(VirtioGpuDevice &device);
@@ -99,8 +101,9 @@ private:
     uint64_t                        blob_pages_;
     uint64_t                        reported_address_;
     bool                            reported_;
-    uint8_t                        *create_request_;
-    size_t                          create_request_bytes_;
+    /* A create-blob request covering the mode, at worst one memory entry a
+     * page; grown as the mode grows, never shrunk. */
+    RequestRoom                     create_request_;
     bool                            created_;
     bool                            scanning_out_;
 };

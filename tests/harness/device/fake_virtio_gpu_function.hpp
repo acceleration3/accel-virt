@@ -47,7 +47,8 @@ public:
                                   std::uint64_t length, std::uint64_t bar_address);
 
     /* virtio-gpu-rvk-pci's doorbell pages: BAR 0, located by shared memory
-     * capability 0x72, with the 66 virtqueues the device has. */
+     * capability 0x72, with the 67 virtqueues the device has: control, cursor,
+     * a fence queue per doorbell, and the display line. */
     void add_doorbell_region();
     /* The subsystem ID in configuration space: virtio-gpu-rvk-pci's is 0x5256,
      * the captured virtio-gpu-pci's 0x1100. */

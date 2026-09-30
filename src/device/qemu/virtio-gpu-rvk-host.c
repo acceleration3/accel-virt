@@ -19,6 +19,7 @@
 #include <linux/udmabuf.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <poll.h>
 #include "qemu/rcu.h"
 #include "qemu/event_notifier.h"
 #include "qapi/error.h"
@@ -122,6 +123,29 @@ static void rvk_wait_event(void *opaque, void *event)
     event_notifier_test_and_clear(event);
 }
 
+static uint64_t rvk_monotonic_nanoseconds(void *opaque);
+
+/* The display clock's sleep toward its next blank: CLOCK_MONOTONIC, the clock
+ * rvk_monotonic_nanoseconds reads, so the deadline and the wake agree. */
+static int rvk_wait_event_until(void *opaque, void *event, uint64_t deadline)
+{
+    struct pollfd wake = { .fd = event_notifier_get_fd(event), .events = POLLIN };
+    int ready;
+
+    do {
+        const uint64_t now = rvk_monotonic_nanoseconds(opaque);
+        const uint64_t left = deadline > now ? deadline - now : 0;
+        const struct timespec timeout = { .tv_sec = (time_t)(left / 1000000000u),
+                                          .tv_nsec = (long)(left % 1000000000u) };
+        ready = ppoll(&wake, 1, &timeout, NULL);
+    } while (ready < 0 && errno == EINTR);
+    if (ready <= 0) {
+        return 0;
+    }
+    event_notifier_test_and_clear(event);
+    return 1;
+}
+
 static void *rvk_create_mutex(void *opaque)
 {
     QemuMutex *mutex = g_new0(QemuMutex, 1);
@@ -172,7 +196,10 @@ static void rvk_gpu_properties(void *opaque, uint32_t index, RvkGpuProperties *p
 
 static uint64_t rvk_monotonic_nanoseconds(void *opaque)
 {
-    return (uint64_t)g_get_monotonic_time() * 1000u;
+    struct timespec now;
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (uint64_t)now.tv_sec * 1000000000u + (uint64_t)now.tv_nsec;
 }
 
 static void *rvk_allocate(void *opaque, size_t size)
@@ -675,7 +702,7 @@ static int rvk_connect_fence_interrupts(void *opaque)
     if (!k->set_guest_notifiers) {
         return 1;
     }
-    return k->set_guest_notifiers(bus->parent, RVK_DEVICE_FENCE_QUEUE_FIRST + RVK_DEVICE_DOORBELLS, true) < 0;
+    return k->set_guest_notifiers(bus->parent, RVK_DEVICE_FENCE_QUEUE_FIRST + RVK_DEVICE_INTERRUPT_LINES, true) < 0;
 }
 
 static void rvk_disconnect_fence_interrupts(void *opaque)
@@ -683,7 +710,7 @@ static void rvk_disconnect_fence_interrupts(void *opaque)
     BusState *bus = qdev_get_parent_bus(DEVICE(opaque));
     VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(bus);
 
-    k->set_guest_notifiers(bus->parent, RVK_DEVICE_FENCE_QUEUE_FIRST + RVK_DEVICE_DOORBELLS, false);
+    k->set_guest_notifiers(bus->parent, RVK_DEVICE_FENCE_QUEUE_FIRST + RVK_DEVICE_INTERRUPT_LINES, false);
 }
 
 /* virtio-pci stops assigning notifiers at the first queue without a size, so
@@ -710,7 +737,7 @@ static int rvk_fence_interrupt_descriptor(void *opaque, uint32_t line)
     VirtIOGPURvk *r = opaque;
     EventNotifier *notifier;
 
-    if (line >= RVK_DEVICE_DOORBELLS || !r->fence_queues[line]) {
+    if (line >= RVK_DEVICE_INTERRUPT_LINES || !r->fence_queues[line]) {
         return -1;
     }
     notifier = virtio_queue_get_guest_notifier(r->fence_queues[line]);
@@ -718,6 +745,11 @@ static int rvk_fence_interrupt_descriptor(void *opaque, uint32_t line)
         return -1;
     }
     return fcntl(event_notifier_get_fd(notifier), F_DUPFD_CLOEXEC, 0);
+}
+
+static int rvk_show_image(void *opaque, uint32_t head, const RvkExportedImage *image)
+{
+    return virtio_gpu_rvk_show_image(opaque, head, image) ? 0 : 1;
 }
 
 static int rvk_host_memory_descriptor(void *opaque, void *memory)
@@ -1288,6 +1320,8 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .host_memory_descriptor = rvk_host_memory_descriptor,
         .close_descriptor = rvk_close_descriptor,
         .dmabuf_over_host_memory = rvk_dmabuf_over_host_memory,
+        .wait_event_until = rvk_wait_event_until,
+        .show_image = rvk_show_image,
     };
     virtio_gpu_rvk_renderer_ops(&r->host);
     rvk_read_gpus(r);

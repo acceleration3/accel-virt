@@ -31,6 +31,8 @@ enum class LockRank : uint16_t {
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
     hw_queue_contexts = 205u,  /* spin lock: what each hardware queue runs on, read at DISPATCH (feature 049) */
     hw_queue_submissions = 210u, /* spin lock: SubmitCommandToHwQueue, DestroyHwQueue, ResetHwEngine and the DPC */
+    scanout = 215u,            /* spin lock: DisplayScanout, between a VidPn commit's configure and the DPC's
+                                  refresh, which sends under it */
     control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
     cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
     rvk_context = 240u,        /* spin lock: an rvk context's submission, answers and the DPC's serve */

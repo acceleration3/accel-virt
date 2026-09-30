@@ -66,6 +66,10 @@ public:
      * waiting on many fences reads. Null stops it. */
     using InterruptSink = void (*)(void *context, const DxgkargcbNotifyInterruptDataRecord &data);
     void                                    on_interrupt(InterruptSink sink, void *context);
+    /* Every DxgkCbNotifyDpc from now: the moment dxgkrnl reads what the DPC
+     * reported. Null stops it. */
+    using DpcSink = void (*)(void *context);
+    void                                    on_notify_dpc(DpcSink sink, void *context);
     void                                    refuse_synchronize(std::uint32_t status);
 
     std::int32_t get_device_information(DxgkDeviceInfoRecord *info);
@@ -120,6 +124,8 @@ private:
     bool                   child_status_connected_[max_child_statuses] = {};
     InterruptSink          sink_;
     void                  *sink_context_;
+    DpcSink                dpc_sink_;
+    void                  *dpc_sink_context_;
     std::uint32_t          synchronize_status_;
     bool                   synchronized_;
 };

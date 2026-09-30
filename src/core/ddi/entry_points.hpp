@@ -67,7 +67,7 @@
 #include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "core/ddi/dxgkrnl_interface_record.hpp"
 #include "core/ddi/linked_device_record.hpp"
-#include "core/display/synthetic_vsync.hpp"
+#include "core/display/device_vblank.hpp"
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/miniport/miniport_binding.hpp"
 #include "core/scheduling/context.hpp"
@@ -197,8 +197,6 @@ int32_t AvDdiFlipOverlay(void *overlay, const void *request);
 int32_t AvDdiDestroyOverlay(void *overlay);
 /* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
 uint8_t AvSynchronizedNotify(void *notification);
-/* The platform timer's EXT_CALLBACK, at DISPATCH. */
-void AvVsyncTick(void *timer, void *vsync);
 
 }
 

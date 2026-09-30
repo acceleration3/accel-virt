@@ -50,7 +50,7 @@ MockHost::MockHost()
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
       fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u), host_dmabufs_(0u), last_host_dmabuf_{},
       recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
-      fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{},
+      fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{}, images_shown_{}, last_images_{},
       update_rects_{}, renderer_regions_{}, renderer_region_count_(0u), renderer_peer_(nullptr),
       renderer_running_(false), fail_renderer_start_(0u), renderer_starts_(0u), renderer_kills_(0u),
       renderer_datagrams_(0u), receive_timeout_(0u), forward_requests_(false), fail_event_descriptor_(0u), started_renderer_{}
@@ -220,6 +220,8 @@ Status MockHost::create_event(void *&event)
         candidate.live = true;
         candidate.descriptor = -1;
         candidate.sleepers = 0u;
+        candidate.deadline = 0u;
+        candidate.timed = false;
         event = &candidate;
         return Status::ok;
     }
@@ -274,6 +276,93 @@ void MockHost::wait_event(void *event)
     pthread_mutex_unlock(&slot->lock);
 }
 
+bool MockHost::wait_event_until(void *event, std::uint64_t deadline)
+{
+    Event *const slot = event_of(event);
+    if (slot == nullptr) {
+        record(HostViolation::unknown_handle, "MockHost::wait_event_until");
+        return false;
+    }
+    pthread_mutex_lock(&slot->lock);
+    const bool sleeps = !slot->set && clock_.load() < deadline;
+    if (sleeps) slot->sleepers++;
+    slot->deadline = deadline;
+    slot->timed = sleeps;
+    while (!slot->set && clock_.load() < deadline) pthread_cond_wait(&slot->signalled, &slot->lock);
+    slot->timed = false;
+    if (sleeps) slot->sleepers--;
+    const bool signalled = slot->set;
+    slot->set = false;
+    pthread_mutex_unlock(&slot->lock);
+    return signalled;
+}
+
+/* Under the state lock and then each event's, the order wait_for_sleepers
+ * takes them in: a waiter reads the clock under its event's lock alone, so
+ * none can look between the store and the broadcast and sleep through it. */
+void MockHost::set_clock(std::uint64_t now)
+{
+    StateLock lock(state_);
+    clock_.store(now);
+    for (Event &slot : events_) {
+        if (!slot.live) continue;
+        pthread_mutex_lock(&slot.lock);
+        pthread_cond_broadcast(&slot.signalled);
+        pthread_mutex_unlock(&slot.lock);
+    }
+}
+
+bool MockHost::next_deadline(std::uint64_t &deadline)
+{
+    StateLock lock(state_);
+    bool found = false;
+    for (Event &slot : events_) {
+        if (!slot.live) continue;
+        pthread_mutex_lock(&slot.lock);
+        if (slot.timed && (!found || slot.deadline < deadline)) {
+            deadline = slot.deadline;
+            found = true;
+        }
+        pthread_mutex_unlock(&slot.lock);
+    }
+    return found;
+}
+
+bool MockHost::wait_for_deadline_after(std::uint64_t after, std::uint32_t milliseconds)
+{
+    const timespec pause = {0, 100000};
+    for (std::uint32_t waited = 0u; waited <= milliseconds * 10u; waited++) {
+        std::uint64_t deadline = 0u;
+        if (next_deadline(deadline) && deadline > after) return true;
+        nanosleep(&pause, nullptr);
+    }
+    return false;
+}
+
+Status MockHost::show_image(std::uint32_t head, const RvkExportedImage &image)
+{
+    require_main_loop("MockHost::show_image");
+    StateLock lock(state_);
+    if (head >= max_scanout_heads) {
+        record(HostViolation::scanout_misuse, "MockHost::show_image");
+        return Status::invalid_parameter;
+    }
+    if (head >= display_heads_) return Status::not_supported;
+    images_shown_[head]++;
+    last_images_[head] = image;
+    return Status::ok;
+}
+
+std::uint32_t MockHost::images_shown(std::uint32_t head) const
+{
+    return head < max_scanout_heads ? images_shown_[head] : 0u;
+}
+
+RvkExportedImage MockHost::last_image(std::uint32_t head) const
+{
+    return head < max_scanout_heads ? last_images_[head] : RvkExportedImage{};
+}
+
 std::uint32_t MockHost::doorbell_of(void *event)
 {
     StateLock lock(state_);
@@ -285,8 +374,8 @@ std::uint32_t MockHost::doorbell_of(void *event)
 std::uint64_t MockHost::monotonic_nanoseconds()
 {
     StateLock lock(state_);
-    const std::uint64_t now = clock_;
-    clock_ += clock_step_;
+    const std::uint64_t now = clock_.load();
+    clock_.store(now + clock_step_);
     return now;
 }
 
@@ -463,7 +552,7 @@ void MockHost::raise_fence_interrupt(std::uint32_t line)
     bool raised = false;
     {
         StateLock lock(state_);
-        raised = fence_connected_ && line < max_doorbells;
+        raised = fence_connected_ && line < interrupt_lines;
         if (raised) raised_[line]++;
     }
     if (!raised) record(HostViolation::fence_misuse, "MockHost::raise_fence_interrupt");
@@ -476,7 +565,7 @@ bool MockHost::fence_interrupts_connected() { StateLock lock(state_); return fen
 std::uint32_t MockHost::raised(std::uint32_t line)
 {
     StateLock lock(state_);
-    return line < max_doorbells ? raised_[line] : 0u;
+    return line < interrupt_lines ? raised_[line] : 0u;
 }
 
 bool MockHost::ring_doorbell(std::uint32_t index)
@@ -1568,7 +1657,7 @@ int MockHost::fence_interrupt_descriptor(std::uint32_t line)
     require_main_loop("MockHost::fence_interrupt_descriptor");
     {
         StateLock lock(state_);
-        if (!fence_connected_ || line >= max_doorbells) return -1;
+        if (!fence_connected_ || line >= interrupt_lines) return -1;
     }
     return open_descriptor();
 }

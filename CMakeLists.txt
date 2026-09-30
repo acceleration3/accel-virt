@@ -225,7 +225,7 @@ file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto
 list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
-list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
+list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp src/core/support/byte_range.cpp)
 # The Direct3D translation runs in the executor library, never in the device:
 # it loads DXVK through the environment the freestanding device cannot read.
 list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim|executor)/(d3d|dxbc)[^/]*\\.cpp$")

@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "device/control/display_clock_commands.hpp"
 #include "device/control/display_mode_commands.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
@@ -9,6 +10,7 @@
 #include "device/control/present_commands.hpp"
 #include "device/control/shared_commands.hpp"
 #include "device/control/control_request.hpp"
+#include "device/abi/entry_points.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/host/host.hpp"
 #include "core/support/text_buffer.hpp"
@@ -21,7 +23,8 @@ constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
-      heads_(host, blobs_), display_modes_(host), interrupts_(host), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
+      heads_(host, blobs_), display_modes_(host), interrupts_(host),
+      clock_(host, interrupts_, &RvkDisplayFramesShow, this), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
       remote_(host, blobs_, interrupts_), contexts_(&local_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
@@ -95,6 +98,11 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     if (capset_.described() &&
         contexts_->import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
         capset_.withdraw_guest_import();
+    if (clock_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex or event for the display clock");
+        host_.log(message.text());
+        return Status::no_memory;
+    }
     return start_recording(recording, message);
 }
 
@@ -117,6 +125,7 @@ void VirtioGpuRvk::reset()
 {
     AV_SCOPE("VirtioGpuRvk::reset");
     host_.require_main_loop("VirtioGpuRvk::reset");
+    clock_.detach();
     contexts_->destroy_all();
     /* The guest's shared-object ids start again, so what the executor still
      * shares under the old ones goes - on this device's GPU, which the device
@@ -170,7 +179,8 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
            ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||
            SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type) ||
            PresentCommands(host_).answer(control, type) ||
-           DisplayModeCommands(host_, display_modes_).answer(control, type);
+           DisplayModeCommands(host_, display_modes_).answer(control, type) ||
+           DisplayClockCommands(host_, clock_).answer(control, type);
 }
 
 Status VirtioGpuRvk::set_modes(const char *text, uint32_t &width, uint32_t &height)
@@ -258,6 +268,30 @@ bool VirtioGpuRvk::export_image(uint64_t key, RvkExportedImage &image)
     AV_SCOPE("VirtioGpuRvk::export_image");
     if (!realized()) return false;
     return contexts_->export_image(capset_.info().gpu().uuid(), key, image);
+}
+
+bool VirtioGpuRvk::post_frame(uint32_t head, uint32_t frame, uint64_t key)
+{
+    AV_SCOPE("VirtioGpuRvk::post_frame");
+    host_.require_main_loop("VirtioGpuRvk::post_frame");
+    if (frame == 0u || !clock_.latches(head) || !host_.display_takes_dmabuf(head)) return false;
+    clock_.post(head, frame, key);
+    return true;
+}
+
+/* An image gone since its blank - its swapchain destroyed - is one the head
+ * can no longer show; the head keeps the frame it had. */
+void VirtioGpuRvk::show_latched_frames()
+{
+    AV_SCOPE("VirtioGpuRvk::show_latched_frames");
+    host_.require_main_loop("VirtioGpuRvk::show_latched_frames");
+    clock_.showing();
+    for (uint32_t head = 0u; head < DisplayClock::heads; head++) {
+        uint64_t         key = 0u;
+        RvkExportedImage image = {};
+        if (!clock_.take_unshown(head, key) || !export_image(key, image)) continue;
+        static_cast<void>(host_.show_image(head, image));
+    }
 }
 
 bool VirtioGpuRvk::read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)

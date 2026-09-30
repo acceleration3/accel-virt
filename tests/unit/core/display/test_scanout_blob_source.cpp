@@ -111,7 +111,8 @@ public:
     {
         width_ = mode.width();
         height_ = mode.height();
-        return scanout_.configure(mode);
+        const Status room = scanout_.prepare(mode);
+        return room != Status::ok ? room : scanout_.configure(mode);
     }
 
     Status refresh(std::uint64_t address, bool presented, std::uint32_t stride = 1u)

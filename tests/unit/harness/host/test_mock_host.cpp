@@ -331,10 +331,12 @@ TEST(mock_host_fence_interrupts, counts_raises_while_connected_and_catches_misus
   CHECK_STATUS(mock.connect_fence_interrupts(), Status::ok);   /* twice */
   mock.raise_fence_interrupt(3u);
   mock.raise_fence_interrupt(3u);
-  mock.raise_fence_interrupt(MockHost::max_doorbells);           /* no such queue */
+  mock.raise_fence_interrupt(MockHost::max_doorbells);           /* the display line */
+  mock.raise_fence_interrupt(MockHost::interrupt_lines);         /* no such queue */
   CHECK_EQ(mock.raised(3u), 2u);
   CHECK_EQ(mock.raised(4u), 0u);
-  CHECK_EQ(mock.raised(MockHost::max_doorbells), 0u);
+  CHECK_EQ(mock.raised(MockHost::max_doorbells), 1u);
+  CHECK_EQ(mock.raised(MockHost::interrupt_lines), 0u);
   mock.disconnect_fence_interrupts();
   mock.disconnect_fence_interrupts();                            /* not connected */
   for (int count = 0; count < 4; count++) CHECK(mock.claim(HostViolation::fence_misuse));

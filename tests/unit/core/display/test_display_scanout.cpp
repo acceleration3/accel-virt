@@ -119,23 +119,24 @@ public:
 
     /* A source dxgkrnl committed, made visible, and gave a primary whose
      * aperture pages the driver recorded when VidMm mapped it. */
-    void live(std::uint32_t source, const DisplayMode &mode)
+    void live(std::uint32_t source, const DisplayMode &mode, std::uint64_t host_key = 0u)
     {
-        Allocation *const primary = map_primary(mode);
+        Allocation *const primary = map_primary(mode, host_key);
         CHECK_STATUS(sources_.commit(source, &mode), Status::ok);
         CHECK_STATUS(sources_.set_visible(source, true), Status::ok);
         CHECK_STATUS(sources_.set_scanout(source, ApertureSegment::base_address, primary), Status::ok);
         CHECK_STATUS(scanout_.configure(source, mode), Status::ok);
     }
 
-    Allocation *map_primary(const DisplayMode &mode)
+    /* `host_key`, when not 0, is the host image the primary shows. */
+    Allocation *map_primary(const DisplayMode &mode, std::uint64_t host_key = 0u)
     {
         const std::uint64_t bytes = std::uint64_t{mode.width()} * mode.height() * 4u;
         const auto          pages = static_cast<std::uint32_t>((bytes + page - 1u) / page);
         for (std::uint32_t index = 0u; index < pages; index++) frames_[index] = first_frame + index * page;
         const AllocationDescriptor descriptor(AllocationKind::shared_primary, true,
                                               SurfaceLayout(mode.width(), mode.height(), 21u, mode.width() * 4u),
-                                              bytes, ScanoutTarget(0u, 60u, 1u));
+                                              bytes, ScanoutTarget(0u, 60u, 1u), host_key);
         std::uint8_t               encoded[AllocationDescriptor::encoded_size] = {};
         CHECK_STATUS(descriptor.encode(encoded, sizeof encoded), Status::ok);
         DxgkAllocationInfoRecord info = {};
@@ -174,6 +175,56 @@ const DisplayMode mode(1280u, 800u);
 
 }  // namespace
 
+/* A VidPn commit's configure and the DPC's refresh send under one lock: dxgkrnl
+ * goes on with a mode change the moment the DPC retires the last flip, while
+ * that DPC may still be refreshing, and a refresh that read a resource the
+ * commit had half remade failed the driver's invariant check (bugcheck 0x139
+ * at a resolution change). Every request either sends is sent holding it. */
+TEST(display_scanout, the_commit_and_the_refresh_send_under_one_lock)
+{ Fixture fixture;
+  struct Watch {
+      av::MockPlatform *platform;
+      std::uint32_t     under_scanout;
+  } watch = {&fixture.platform(), 0u};
+  fixture.platform().on_acquire(+[](void *context) {
+      auto *const seen = static_cast<Watch *>(context);
+      if (seen->platform->holds(av::LockRank::scanout)) seen->under_scanout++;
+  }, &watch);
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  fixture.live(0u, mode);
+  const std::uint32_t configured = watch.under_scanout;
+  CHECK(configured >= 1u);   /* RESOURCE_CREATE_2D */
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+  CHECK(watch.under_scanout - configured >= 4u);   /* attach, set_scanout, transfer, flush */
+  CHECK(fixture.scanout().posts_frames(0u) == false);
+  fixture.platform().on_acquire(nullptr, nullptr);
+  CHECK_EQ(control.respond_all(ok_nodata), 5u);
+  CHECK_EQ(fixture.platform().locks_held(), 0u); }
+
+/* The room a bigger mode needs is made before the lock, where memory can be
+ * had: made under it, the mock records an allocation at DISPATCH and the test
+ * fails when the platform goes. With none to be had, nothing is sent. */
+TEST(display_scanout, a_mode_that_grows_is_given_its_room_before_the_lock)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  CHECK_STATUS(fixture.scanout().configure(0u, DisplayMode(640u, 480u)), Status::ok);
+  CHECK_STATUS(fixture.scanout().configure(0u, DisplayMode(2560u, 1440u)), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 3u);   /* create, unref, create */
+  fixture.platform().fail_allocation_at(1u);
+  CHECK_STATUS(fixture.scanout().configure(0u, DisplayMode(3840u, 2160u)), Status::no_memory);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);
+  CHECK(fixture.scanout().invariants_hold());
+
+  Fixture blobs;
+  av::CapsetInfo capset;
+  capset.announce(av::CapsetInfo::feature_dmabuf_scanout);
+  blobs.scanout().offer(capset);
+  CHECK_STATUS(blobs.scanout().configure(0u, DisplayMode(640u, 480u)), Status::ok);
+  CHECK_STATUS(blobs.scanout().configure(0u, DisplayMode(2560u, 1440u)), Status::ok);
+  blobs.platform().fail_allocation_at(1u);
+  CHECK_STATUS(blobs.scanout().configure(0u, DisplayMode(3840u, 2160u)), Status::no_memory);
+  CHECK(blobs.scanout().invariants_hold()); }
+
 /* The capset decides which of the two backings every source uses, once, and a
  * device that says nothing keeps the 2D path: that is what feature 038's green
  * scenarios rest on. With the bit, the same desktop is carried as a blob over
@@ -185,7 +236,7 @@ TEST(display_scanout, the_capset_bit_chooses_the_backing_and_the_default_is_the_
     fixture.scanout().offer(av::CapsetInfo());
     CHECK(!fixture.scanout().scans_out_blobs());
     fixture.live(0u, mode);
-    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
     CHECK_EQ(control.respond_all(ok_nodata), 5u);
     CHECK_EQ(control.request_type(0u), create_2d);
     CHECK_EQ(control.request_type(3u), transfer); }
@@ -197,13 +248,13 @@ TEST(display_scanout, the_capset_bit_chooses_the_backing_and_the_default_is_the_
     fixture.scanout().offer(capset);
     CHECK(fixture.scanout().scans_out_blobs());
     fixture.live(0u, mode);
-    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
     CHECK_EQ(control.respond_all(ok_nodata), 3u);
     CHECK_EQ(control.request_type(0u), create_blob);
     CHECK_EQ(control.request_type(1u), set_scanout_blob);
     CHECK_EQ(control.request_type(2u), flush);
     /* Every frame after it is one flush, and never a transfer. */
-    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true), Status::ok);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true, true), Status::ok);
     CHECK_EQ(control.respond_all(ok_nodata), 1u);
     CHECK_EQ(control.request_type(3u), flush);
     CHECK(fixture.scanout().invariants_hold());
@@ -229,7 +280,7 @@ TEST(display_scanout, the_blob_path_answers_a_source_with_no_primary_and_one_tak
   CHECK_STATUS(fixture.sources().set_visible(0u, true), Status::ok);
   CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address, nullptr), Status::ok);
   CHECK_STATUS(fixture.scanout().configure(0u, mode), Status::ok);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true), Status::invalid_parameter);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true, true), Status::invalid_parameter);
   CHECK_EQ(control.respond_all(ok_nodata), 0u);
   CHECK(fixture.scanout().invariants_hold());
 
@@ -250,7 +301,7 @@ TEST(display_scanout_refresh, carries_a_visible_source_to_the_host)
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
   CHECK(fixture.scanout().invariants_hold());
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u);
   CHECK_EQ(control.request_type(0u), create_2d);
   CHECK_EQ(u32(control.request(0u), 24u), ScanoutResource::first_resource_id);
@@ -265,7 +316,7 @@ TEST(display_scanout_refresh, leaves_a_hidden_source_alone)
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
   CHECK_STATUS(fixture.sources().set_visible(0u, false), Status::ok);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 1u);   /* only the configure's create */
   CHECK(fixture.scanout().invariants_hold()); }
 
@@ -279,7 +330,7 @@ TEST(display_scanout_disable, takes_the_source_off_the_host)
 { Fixture fixture;
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u);
   CHECK_STATUS(fixture.scanout().disable(0u), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 1u);
@@ -291,7 +342,7 @@ TEST(display_scanout_release, gives_every_resource_back)
 { Fixture fixture;
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u);
   fixture.scanout().release();
   CHECK_EQ(control.respond_all(ok_nodata), 2u);
@@ -301,12 +352,12 @@ TEST(display_scanout_forget_device, asks_a_new_device_for_everything_again)
 { Fixture fixture;
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u);
   fixture.scanout().forget_device();
   CHECK(fixture.scanout().invariants_hold());
   CHECK_STATUS(fixture.scanout().configure(0u, mode), Status::ok);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u); }
 
 /* The first failure is the answer, and the rest of the sources are still
@@ -315,7 +366,7 @@ TEST(display_scanout_refresh, answers_the_first_failure)
 { Fixture fixture;
   fixture.live(0u, mode);
   fixture.scanout().forget_device();
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true, true), Status::ok);
   CHECK(fixture.scanout().invariants_hold()); }
 
 TEST(display_scanout, names_its_irql_ceilings)
@@ -326,7 +377,7 @@ TEST(display_scanout, names_its_irql_ceilings)
   fixture.scanout().release();
   fixture.scanout().forget_device();
   fixture.platform().set_irql(Irql::isr);
-  static_cast<void>(fixture.scanout().refresh(fixture.sources(), false));
+  static_cast<void>(fixture.scanout().refresh(fixture.sources(), false, true));
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
@@ -345,7 +396,7 @@ TEST(display_scanout_invariants, an_attached_backing_with_no_scanout_is_detected
 { Fixture fixture;
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
-  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u);
   CHECK(fixture.scanout().invariants_hold());
   av::ScanoutResourceProbe::forget_the_screen(av::DisplayScanoutProbe::resource(fixture.scanout(), 0u));
@@ -358,6 +409,44 @@ TEST(display_scanout_refresh, carries_nothing_for_an_address_with_no_allocation)
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   fixture.live(0u, mode);
   CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address + 0x4000, nullptr), Status::ok);
-  CHECK(fixture.scanout().refresh(fixture.sources(), false) != Status::ok);
+  CHECK(fixture.scanout().refresh(fixture.sources(), false, true) != Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 1u);   /* only the configure's create */
+  CHECK(fixture.scanout().invariants_hold()); }
+
+/* A keyed source's flips reach the host as numbered frames, on every call and
+ * not only when the pace allows, since the device's clock shows only what it
+ * has before its blank; each flip is posted once. A source the host reads back
+ * waits for its pace. */
+TEST(display_scanout_refresh, a_keyed_source_posts_each_flip_at_once_and_the_rest_wait_for_their_pace)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  constexpr std::uint32_t scanout_image = 0x02F0u;
+  CHECK_STATUS(fixture.sources().set_count(2u), Status::ok);
+  fixture.live(0u, mode, 0x77u);
+  CHECK_EQ(control.respond_all(ok_nodata), 1u);   /* the mode's resource */
+  CHECK(!fixture.scanout().posts_frames(0u));
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);   /* not shown yet, and not due */
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 4u);   /* attach, set_scanout, the image, flush */
+  CHECK_EQ(control.request_type(3u), scanout_image);
+  CHECK_EQ(u32(control.request(3u), 28u), 1u);    /* the first flip */
+  CHECK(fixture.scanout().posts_frames(0u));
+  CHECK(!fixture.scanout().posts_frames(1u));
+  CHECK(!fixture.scanout().posts_frames(DisplaySources::max_sources));
+  Allocation *const next = fixture.map_primary(mode, 0x88u);
+  CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address + 0x1000000, next), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 2u);
+  CHECK_EQ(control.request_type(5u), scanout_image);
+  CHECK_EQ(u32(control.request(5u), 28u), 2u);
+  CHECK_EQ(u32(control.request(5u), 32u), 0x88u);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);   /* posted already */
+  fixture.live(1u, mode);   /* read back from its pages */
+  CHECK_EQ(control.respond_all(ok_nodata), 1u);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 4u);   /* source 1 carried, once its pace allows */
   CHECK(fixture.scanout().invariants_hold()); }

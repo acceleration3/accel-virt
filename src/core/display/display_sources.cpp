@@ -10,7 +10,7 @@ namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), count_(1u), private_formats_{}, committed_{}, vsync_enabled_(false),
-      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, base_attributes_{}
+      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, frames_{}, numbered_frames_{}, numbered_flips_{}, base_attributes_{}
 {
     AV_SCOPE("DisplaySources::DisplaySources");
 }
@@ -85,6 +85,7 @@ Status DisplaySources::set_scanout(uint32_t source, int64_t address, void *prima
     platform_.store_atomic(primaries_[source], reinterpret_cast<uintptr_t>(primary));
     platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(address));
     platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::address));
+    number(source, FlipView(Flip::address, static_cast<uint64_t>(address), nullptr));
     return Status::ok;
 }
 
@@ -97,12 +98,14 @@ Status DisplaySources::set_multiplane_scanout(uint32_t source, const DxgkMultipl
         platform_.store_atomic(primaries_[source], 0u);
         platform_.store_atomic(scanout_addresses_[source], 0u);
         platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::planes_disabled));
+        number(source, FlipView(Flip::planes_disabled, 0u, nullptr));
         return Status::ok;
     }
     for (uint32_t word = 0u; word < multiplane_overlay_attribute_words; word++) base_attributes_[source][word] = base->PlaneAttributes[word];
     platform_.store_atomic(primaries_[source], reinterpret_cast<uintptr_t>(base->hAllocation));
     platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(base->AllocationAddress));
     platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::base_plane));
+    number(source, FlipView(Flip::base_plane, static_cast<uint64_t>(base->AllocationAddress), base->PlaneAttributes));
     return Status::ok;
 }
 
@@ -114,15 +117,38 @@ DisplaySources::Flip DisplaySources::flip(uint32_t source)
     return static_cast<Flip>(platform_.load_atomic(flips_[source]));
 }
 
-void DisplaySources::base_layer(uint32_t source, DxgkMultiplaneOverlayVsyncInfoRecord &layer)
+/* Frames are u32 on the wire and 0 is none, so the count wraps past it. */
+void DisplaySources::number(uint32_t source, const FlipView &flip)
 {
-    AV_SCOPE("DisplaySources::base_layer");
-    platform_.require_irql_at_most(Irql::isr, "DisplaySources::base_layer");
-    layer = DxgkMultiplaneOverlayVsyncInfoRecord{};
-    if (source >= count_) return;
-    layer.Enabled = 1u;
-    layer.PhysicalAddress = static_cast<int64_t>(platform_.load_atomic(scanout_addresses_[source]));
-    for (uint32_t word = 0u; word < multiplane_overlay_attribute_words; word++) layer.PlaneAttributes[word] = base_attributes_[source][word];
+    AV_SCOPE("DisplaySources::number");
+    const uint64_t frame = platform_.load_atomic(frames_[source]) % 0xFFFFFFFFu + 1u;
+    const uint32_t slot = static_cast<uint32_t>(frame % remembered_flips);
+    platform_.store_atomic(numbered_frames_[source][slot], 0u);
+    numbered_flips_[source][slot] = flip;
+    platform_.store_atomic(numbered_frames_[source][slot], frame);
+    platform_.store_atomic(frames_[source], frame);
+}
+
+uint32_t DisplaySources::frame(uint32_t source)
+{
+    AV_SCOPE("DisplaySources::frame");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::frame");
+    return source < count_ ? static_cast<uint32_t>(platform_.load_atomic(frames_[source])) : 0u;
+}
+
+FlipView DisplaySources::shown(uint32_t source, uint32_t frame)
+{
+    AV_SCOPE("DisplaySources::shown");
+    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::shown");
+    if (source >= count_) return FlipView();
+    const uint32_t slot = frame % remembered_flips;
+    if (frame != 0u && platform_.load_atomic(numbered_frames_[source][slot]) == frame) {
+        const FlipView copy = numbered_flips_[source][slot];
+        if (platform_.load_atomic(numbered_frames_[source][slot]) == frame) return copy;
+    }
+    const Flip kind = static_cast<Flip>(platform_.load_atomic(flips_[source]));
+    return FlipView(kind, platform_.load_atomic(scanout_addresses_[source]),
+                    kind == Flip::base_plane ? base_attributes_[source] : nullptr);
 }
 
 void *DisplaySources::primary(uint32_t source)

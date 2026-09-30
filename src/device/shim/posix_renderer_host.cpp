@@ -298,6 +298,25 @@ void PosixRendererHost::wait_event(void *event)
     if (count == 2u && (watched[1].revents & POLLIN) != 0) drain(waited->doorbell);
 }
 
+/* The renderer runs no display clock - the device in QEMU keeps it - but the
+ * contract is the Host's, so the wait is the same poll bounded by the time left. */
+bool PosixRendererHost::wait_event_until(void *event, uint64_t deadline)
+{
+    AV_SCOPE("PosixRendererHost::wait_event_until");
+    constexpr uint64_t   nanoseconds_per_second = 1000000000u;
+    RendererEvent *const waited = static_cast<RendererEvent *>(event);
+    const uint64_t       now = monotonic_nanoseconds();
+    const uint64_t       left = deadline > now ? deadline - now : 0u;
+    const timespec       timeout = {static_cast<time_t>(left / nanoseconds_per_second),
+                                    static_cast<long>(left % nanoseconds_per_second)};
+    pollfd watched = {waited->own, POLLIN, 0};
+    int    ready = ppoll(&watched, 1u, &timeout, nullptr);
+    while (ready < 0 && errno == EINTR) ready = ppoll(&watched, 1u, &timeout, nullptr);
+    if (ready <= 0 || (watched.revents & POLLIN) == 0) return false;
+    drain(waited->own);
+    return true;
+}
+
 Status PosixRendererHost::create_mutex(void *&mutex)
 {
     AV_SCOPE("PosixRendererHost::create_mutex");
@@ -723,6 +742,12 @@ bool PosixRendererHost::display_takes_dmabuf(uint32_t)
 Status PosixRendererHost::show_scanout(uint32_t, int, const ScanoutFramebuffer &)
 {
     AV_SCOPE("PosixRendererHost::show_scanout");
+    return Status::not_supported;
+}
+
+Status PosixRendererHost::show_image(uint32_t, const RvkExportedImage &)
+{
+    AV_SCOPE("PosixRendererHost::show_image");
     return Status::not_supported;
 }
 

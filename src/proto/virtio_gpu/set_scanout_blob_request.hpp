@@ -6,8 +6,7 @@
  * padding word is zero, and planes 1 to 3 carry no stride and no offset,
  * because the display shows one plane and a second would be dropped in
  * silence. Every other rule needs the blob's size, which the record does not
- * know; specs/058-host-composition-scanout/contracts/scanout_blob.md holds
- * them and ScanoutFramebuffer applies them. */
+ * know; ScanoutFramebuffer applies them. */
 #ifndef AV_SET_SCANOUT_BLOB_REQUEST_HPP
 #define AV_SET_SCANOUT_BLOB_REQUEST_HPP
 

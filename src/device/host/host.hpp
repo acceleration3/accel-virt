@@ -19,6 +19,11 @@ namespace av {
 class GpuIdentity;
 class PciAddress;
 class ScanoutFramebuffer;
+}  // namespace av
+
+struct RvkExportedImage;
+
+namespace av {
 
 using HostRoutine = void (*)(void *context);
 
@@ -38,6 +43,10 @@ public:
     virtual void destroy_event(void *event) = 0;
     virtual void signal_event(void *event) = 0;
     virtual void wait_event(void *event) = 0;
+    /* Any thread. Waits for `event` until monotonic_nanoseconds reaches
+     * `deadline`: true when it was signalled first, false at the deadline. A
+     * deadline already past answers at once, taking a signal that is there. */
+    [[nodiscard]] virtual bool wait_event_until(void *event, uint64_t deadline) = 0;
 
     [[nodiscard]] virtual Status create_mutex(void *&mutex) = 0;
     virtual void destroy_mutex(void *mutex) = 0;
@@ -186,6 +195,10 @@ public:
     virtual void   update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) = 0;
     /* Main loop. Head `head` shows nothing. Safe on a head showing nothing. */
     virtual void   hide_scanout(uint32_t head) = 0;
+    /* Main loop. Head `head` shows `image`, as export_image gave it:
+     * not_supported where the head's console cannot show one, having changed
+     * nothing. */
+    [[nodiscard]] virtual Status show_image(uint32_t head, const RvkExportedImage &image) = 0;
 
     /* The renderer process (docs/renderer.md). Main loop, all of them. A
      * descriptor handed out is a duplicate, the caller's to close; one handed

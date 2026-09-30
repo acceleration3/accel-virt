@@ -60,7 +60,7 @@ public:
      * framebuffer at the start of `resource_id`'s blob, one plane, B8G8R8A8.
      * A resource of 0 turns the head off, as SET_SCANOUT's does, and then the
      * geometry is zero too - which is what the device's own record demands of
-     * a disable (specs/058, contracts/scanout_blob.md). */
+     * a disable. */
     [[nodiscard]] Status set_scanout_blob(uint32_t scanout, uint32_t resource_id, uint32_t width,
                                           uint32_t height, uint32_t stride);
     /* The host reads the resource's pixels again, over that rectangle. */
@@ -71,8 +71,11 @@ public:
      * backing to a resource that already has some. */
     [[nodiscard]] Status detach_backing(uint32_t resource_id);
     /* rvk's own: the host fills `resource_id` from the host image published
-     * under `key`, in place of a TRANSFER_TO_HOST_2D from the guest's pages. */
-    [[nodiscard]] Status scanout_image(uint32_t resource_id, uint64_t key);
+     * under `key`, in place of a TRANSFER_TO_HOST_2D from the guest's pages.
+     * A nonzero `frame` is shown at the head's next vertical blank, and named
+     * by the blank that shows it; 0 is shown at once (docs/protocol.md,
+     * "Display clock"). */
+    [[nodiscard]] Status scanout_image(uint32_t resource_id, uint64_t key, uint32_t frame);
     /* Asks for every scanout's rectangle; the answer is a DisplayInfoResponse. */
     [[nodiscard]] Status get_display_info();
     /* Resource 0 hides the cursor. */

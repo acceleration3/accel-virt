@@ -323,7 +323,4 @@ int32_t AvDdiDestroyOverlay(void *)
 uint8_t AvSynchronizedNotify(void *notification)
 { return static_cast<av::InterruptNotification *>(notification)->notify(); }
 
-void AvVsyncTick(void *, void *vsync)
-{ static_cast<av::SyntheticVsync *>(vsync)->tick(); }
-
 }

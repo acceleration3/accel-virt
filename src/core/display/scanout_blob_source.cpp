@@ -15,17 +15,12 @@ namespace av {
 ScanoutBlobSource::ScanoutBlobSource(Platform &platform, LogBudget &budget,
                                      ObjectStorage<VirtioGpuDevice> &device, uint32_t source)
     : platform_(platform), budget_(budget), device_(device), source_(source), width_(0u), height_(0u),
-      blob_address_(0u), blob_pages_(0u), reported_address_(0u), reported_(false), create_request_(nullptr),
-      create_request_bytes_(0u), created_(false), scanning_out_(false)
+      blob_address_(0u), blob_pages_(0u), reported_address_(0u), reported_(false),
+      create_request_(platform, RvkRequestWriter::guest_blob_fixed_size, RvkRequestWriter::guest_blob_entry_size),
+      created_(false), scanning_out_(false)
       {
           AV_SCOPE("ScanoutBlobSource::ScanoutBlobSource");
       }
-
-ScanoutBlobSource::~ScanoutBlobSource()
-{
-    AV_SCOPE("ScanoutBlobSource::~ScanoutBlobSource");
-    if (create_request_ != nullptr) platform_.release(create_request_);
-}
 
 bool ScanoutBlobSource::needs_pages(uint64_t address) const
 {
@@ -38,20 +33,7 @@ uint32_t ScanoutBlobSource::page_count() const
 {
     AV_SCOPE("ScanoutBlobSource::page_count");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutBlobSource::page_count");
-    const uint64_t bytes = uint64_t{width_} * height_ * bytes_per_pixel;
-    return static_cast<uint32_t>((bytes + GuestPageList::page_bytes - 1u) / GuestPageList::page_bytes);
-}
-
-Status ScanoutBlobSource::reserve()
-{
-    AV_SCOPE("ScanoutBlobSource::reserve");
-    const size_t needed = RvkRequestWriter::guest_blob_fixed_size +
-                          size_t{page_count()} * RvkRequestWriter::guest_blob_entry_size;
-    if (needed <= create_request_bytes_) return Status::ok;
-    if (create_request_ != nullptr) platform_.release(create_request_);
-    create_request_ = static_cast<uint8_t *>(platform_.allocate(needed, Pool::non_paged));
-    create_request_bytes_ = create_request_ != nullptr ? needed : 0u;
-    return create_request_ != nullptr ? Status::ok : Status::no_memory;
+    return DisplayMode(width_, height_).frame_pages();
 }
 
 /* The one request whose writer answer is not voided: a page list the driver
@@ -59,10 +41,10 @@ Status ScanoutBlobSource::reserve()
 Status ScanoutBlobSource::create(VirtioGpuDevice &device, const GuestPageList &pages)
 {
     AV_SCOPE("ScanoutBlobSource::create");
-    RvkRequestWriter writer(create_request_, create_request_bytes_);
+    RvkRequestWriter writer(create_request_.start(), create_request_.size());
     const Status     written = writer.guest_blob_pages(first_resource_id + source_, pages);
     if (written != Status::ok) return written;
-    return device.send_control(create_request_, writer.length());
+    return device.send_control(create_request_.start(), writer.length());
 }
 
 Status ScanoutBlobSource::show(VirtioGpuDevice &device, uint32_t resource)
@@ -121,29 +103,32 @@ void ScanoutBlobSource::release()
 /* Nothing is sent here. A blob is made over the primary's pages and the mode
  * commit knows no primary; what the mode settles is how big the blob will be,
  * which is what the request buffer is sized from. */
+Status ScanoutBlobSource::prepare(const DisplayMode &mode)
+{
+    AV_SCOPE("ScanoutBlobSource::prepare");
+    platform_.require_irql_at_most(Irql::passive, "ScanoutBlobSource::prepare");
+    return create_request_.prepare(mode.frame_pages());
+}
+
 Status ScanoutBlobSource::configure(const DisplayMode &mode)
 {
     AV_SCOPE("ScanoutBlobSource::configure");
-    platform_.require_irql_at_most(Irql::passive, "ScanoutBlobSource::configure");
+    platform_.require_irql_at_most(Irql::dispatch, "ScanoutBlobSource::configure");
     InvariantScope<ScanoutBlobSource> guard(platform_, *this, "configure");
     if (!device_.constructed()) return Status::invalid_state;
     if (width_ == mode.width() && height_ == mode.height()) return Status::ok;
     const Status freed = created_ ? unref() : Status::ok;
     if (freed != Status::ok) return freed;
-    width_ = mode.width();
-    height_ = mode.height();
-    const Status room = reserve();
-    if (room != Status::ok) {
-        width_ = 0u;
-        height_ = 0u;
-    }
+    const Status room = create_request_.take(mode.frame_pages());
+    width_ = room == Status::ok ? mode.width() : 0u;
+    height_ = room == Status::ok ? mode.height() : 0u;
     return room;
 }
 
 Status ScanoutBlobSource::disable()
 {
     AV_SCOPE("ScanoutBlobSource::disable");
-    platform_.require_irql_at_most(Irql::passive, "ScanoutBlobSource::disable");
+    platform_.require_irql_at_most(Irql::dispatch, "ScanoutBlobSource::disable");
     InvariantScope<ScanoutBlobSource> guard(platform_, *this, "disable");
     if (!created_) return Status::ok;
     return unref();

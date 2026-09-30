@@ -21,6 +21,7 @@ public:
     void     destroy_event(void *event) override;
     void     signal_event(void *event) override;
     void     wait_event(void *event) override;
+    bool     wait_event_until(void *event, uint64_t deadline) override;
     Status   create_mutex(void *&mutex) override;
     void     destroy_mutex(void *mutex) override;
     void     lock_mutex(void *mutex) override;
@@ -71,6 +72,7 @@ public:
     Status   show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
     void     update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
     void     hide_scanout(uint32_t head) override;
+    Status   show_image(uint32_t head, const RvkExportedImage &image) override;
     int      event_descriptor(void *event) override;
     int      fence_interrupt_descriptor(uint32_t line) override;
     uint32_t guest_region_count() override;

@@ -72,10 +72,13 @@ constexpr std::uint32_t root_entries = 512u;
 constexpr std::int32_t  crtc_vsync = 3;              /* DXGK_INTERRUPT_CRTC_VSYNC */
 constexpr std::int32_t  vsync_enable = 0;            /* DXGK_CRTC_VSYNC_STATE */
 constexpr std::int32_t  vsync_disable_no_phase = 2;
-/* The mock clock's tick is 100 ns; a blank at 60 Hz is 166 666 of them, and a
- * step of a tenth of a millisecond measures it within a fraction of a percent. */
-constexpr std::uint64_t timer_step = 1000u;
+/* A second of the guest's clock, 100 ns a tick, without a blank is a device
+ * with no clock running. */
 constexpr std::uint64_t blank_patience = 10000000u;
+/* The guest's clock counts 100 ns; the host's, nanoseconds. */
+constexpr std::uint64_t ns_per_tick = 100u;
+/* Real time the device's clock thread is given to publish a blank. */
+constexpr std::uint32_t clock_patience_ms = 2000u;
 constexpr std::uint16_t subsystem_vendor_offset = 0x2Cu;
 constexpr std::uint16_t subsystem_offset = 0x2Eu;
 
@@ -107,10 +110,12 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
       allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
       fabric_(platform), hardware_scheduling_(false), refuse_tail_publishing_(false), watching_(false), kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
-      next_chunk_address_(chunk_ram_address), last_code_(0u), started_ns_(now_ns())
+      next_chunk_address_(chunk_ram_address), last_code_(0u), started_ns_(now_ns()), guest_origin_(0u)
 {
     host_.add_guest_ram(chunk_ram_address, chunk_ram_bytes);
     platform_.back_pages_with(&lend_chunk_ram, this);
+    std::uint64_t frequency = 0u;
+    guest_origin_ = performance_counter(frequency);
     /* A doorbell and its queue are the adapter's, and dxgkrnl gives them back
      * before the adapter stops. */
     fdo_.on_stopping(
@@ -741,23 +746,40 @@ bool DdiKmt::waiting_on(const Doorbell &doorbell, std::uint32_t context)
     return on != nullptr && on->context == context;
 }
 
-/* dxgkrnl turns the blank on for a waiter and off once it is woken; the
- * driver's timer keeps its phase between, and the mock clock only moves here. */
+/* dxgkrnl turns the blank on for a waiter and off once it is woken. The blanks
+ * are the device's (docs/protocol.md, "Display clock"): its clock thread
+ * sleeps toward the next on the mock host's clock, which is the guest's own
+ * since the rig began - the time the process spends between waits passes for
+ * the device too. The wait moves both clocks to the deadline, lets the thread
+ * publish the blank and raise the display line - it is asleep toward a later
+ * one once it has - and delivers the interrupt. */
 Status DdiKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source)
 {
     if (adapter != adapter_handle || find_device(device) == nullptr || source != 0u)
         return refuse(Status::invalid_parameter);
     const auto control = routine<std::int32_t (*)(void *, DxgkargControlInterrupt2Record)>(
         DdiSlot::DxgkDdiControlInterrupt2);
+    /* The device's clock ran while nobody waited: what came due by now is on
+     * the page before the waiter asks, as it would be. */
+    catch_up();
     const Status enabled = answer(control(fdo_.context(), DxgkargControlInterrupt2Record{crtc_vsync, vsync_enable}));
     if (enabled != Status::ok) return enabled;
     const std::uint32_t before = fences_.vertical_blanks();
     /* The steps are the time the wait took; the real time the rig spent taking
      * them is not the guest's, or a slower build would catch fewer blanks. */
     const std::uint64_t entered_ns = now_ns();
-    for (std::uint64_t waited = 0u; fences_.vertical_blanks() == before && waited < blank_patience;
-         waited += timer_step)
-        platform_.run_timers(timer_step);
+    for (std::uint64_t waited = 0u; fences_.vertical_blanks() == before && waited < blank_patience;) {
+        std::uint64_t deadline = 0u;
+        if (!host_.next_deadline(deadline)) break;
+        const std::uint64_t now = guest_ns();
+        const std::uint64_t step = deadline > now ? (deadline - now + ns_per_tick - 1u) / ns_per_tick : 0u;
+        platform_.advance_time(step);
+        waited += step;
+        const std::uint64_t reached = deadline > now ? deadline : now;
+        host_.set_clock(reached);
+        if (!host_.wait_for_deadline_after(reached, clock_patience_ms)) break;
+        pump_.deliver();
+    }
     started_ns_ += now_ns() - entered_ns;
     platform_.set_irql(Irql::passive);
     const Status disabled =
@@ -806,6 +828,25 @@ std::uint64_t DdiKmt::performance_counter(std::uint64_t &frequency) const
     const std::uint64_t base = platform_.performance_counter(frequency);
     const std::uint64_t elapsed_ns = now_ns() - started_ns_;
     return base + elapsed_ns / (1000000000u / frequency);
+}
+
+void DdiKmt::catch_up()
+{
+    std::uint64_t deadline = 0u;
+    const std::uint64_t now = guest_ns();
+    if (!host_.next_deadline(deadline) || deadline > now) return;
+    host_.set_clock(now);
+    static_cast<void>(host_.wait_for_deadline_after(now, clock_patience_ms));
+    pump_.deliver();
+}
+
+/* The guest's clock since the rig began, in nanoseconds: what the mock host's
+ * clock reads, so the device's blanks keep the time the guest keeps. */
+std::uint64_t DdiKmt::guest_ns() const
+{
+    std::uint64_t       frequency = 0u;
+    const std::uint64_t ticks = performance_counter(frequency);
+    return (ticks - guest_origin_) * (1000000000u / frequency);
 }
 
 std::uint32_t DdiKmt::last_code() const { return last_code_; }

@@ -24,6 +24,8 @@ public:
     uint32_t total_width() const;
     uint32_t total_height() const;
     uint64_t pixel_rate() const;
+    /* Guest pages one frame of it fills, four bytes a pixel. */
+    uint32_t frame_pages() const;
     /* Whether Windows can be offered it: dxgkrnl refuses a source or signal
      * mode under 100 pixels on an edge (DMMVIDPNSOURCEMODE::_ValidateDdiGraphicsRenderingFormat,
      * DMMVIDEOSIGNALMODE::_ValidateDdiVideoSignalModeInfo, whose 1 MHz clock
@@ -39,8 +41,13 @@ public:
     bool matches(const D3dkmdtVideoSignalInfoRecord &signal) const;
 
     /* The line being scanned at `interrupt_time`; at or past height() it is in
-     * vertical blank. */
+     * vertical blank. What a display with no clock of its own is taken to show. */
     uint32_t scan_line(uint64_t interrupt_time) const;
+    /* The line being scanned `since` after a vertical blank began, of a
+     * refresh `period` long, both in one unit: a blank starts where the active
+     * lines end, at height(), and the next frame's line 0 follows the blank
+     * lines. A period of 0 is always in the blank. */
+    uint32_t scan_line_within(uint64_t since, uint64_t period) const;
 
 private:
     static constexpr uint32_t horizontal_blank = 160u;

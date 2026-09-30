@@ -1,5 +1,6 @@
-/* The device's fence interrupts: workers raise them, and they reach the guest
- * only while the guest notifiers that carry them exist. The main loop connects
+/* The device's fence interrupts, and the display line after them: workers and
+ * the display clock raise them, and they reach the guest only while the guest
+ * notifiers that carry them exist. The main loop connects
  * the notifiers when the driver starts and releases them in reset once every
  * context is gone; one mutex holds every connect, release and raise apart, so a
  * worker never touches a notifier being set up or torn down. */
@@ -18,6 +19,10 @@ struct FenceInterruptsProbe;
 
 class FenceInterrupts {
 public:
+    /* The line after the fence queues' (docs/protocol.md, "Display clock"). */
+    static constexpr uint32_t display_line = 64u;
+    static constexpr uint32_t lines = display_line + 1u;
+
     explicit FenceInterrupts(Host &host);
     ~FenceInterrupts();
     FenceInterrupts(const FenceInterrupts &) = delete;
@@ -30,7 +35,7 @@ public:
     [[nodiscard]] Status connect();
     /* Main loop. */
     void                 disconnect();
-    /* Any thread. Nothing while disconnected, or for a line past the fence queues. */
+    /* Any thread. Nothing while disconnected, or for a line past the display's. */
     void                 raise(uint32_t line);
     /* Main loop. Every interrupt injected from here on is also counted by
      * `stress`, which must outlive this; feature 039's US3. */

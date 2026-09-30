@@ -4,6 +4,7 @@
 
 #include "core/display/display_mode.hpp"
 #include "core/memory/allocation.hpp"
+#include "core/platform/spin_lock_guard.hpp"
 #include "proto/context/capset_info.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
@@ -19,7 +20,7 @@ static_assert(DisplaySources::max_sources == 4u, "give each source its resource 
 }  // namespace
 
 DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device)
-    : platform_(platform), resources_{ScanoutResource(platform, budget, device, 0u),
+    : platform_(platform), lock_(platform, LockRank::scanout), resources_{ScanoutResource(platform, budget, device, 0u),
                                       ScanoutResource(platform, budget, device, 1u),
                                       ScanoutResource(platform, budget, device, 2u),
                                       ScanoutResource(platform, budget, device, 3u)},
@@ -48,12 +49,17 @@ bool DisplayScanout::scans_out_blobs() const
     return blob_scanout_;
 }
 
+/* The room the mode needs is made before the lock, where memory can be had;
+ * the source takes it under the lock. */
 Status DisplayScanout::configure(uint32_t source, const DisplayMode &mode)
 {
     AV_SCOPE("DisplayScanout::configure");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::configure");
-    InvariantScope<DisplayScanout> guard(platform_, *this, "configure");
     if (source >= DisplaySources::max_sources) return Status::invalid_parameter;
+    const Status room = blob_scanout_ ? blobs_[source].prepare(mode) : resources_[source].prepare(mode);
+    if (room != Status::ok) return room;
+    SpinLockGuard                  held(lock_);
+    InvariantScope<DisplayScanout> guard(platform_, *this, "configure");
     if (blob_scanout_) return blobs_[source].configure(mode);
     return resources_[source].configure(mode);
 }
@@ -62,8 +68,9 @@ Status DisplayScanout::disable(uint32_t source)
 {
     AV_SCOPE("DisplayScanout::disable");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::disable");
-    InvariantScope<DisplayScanout> guard(platform_, *this, "disable");
     if (source >= DisplaySources::max_sources) return Status::invalid_parameter;
+    SpinLockGuard                  held(lock_);
+    InvariantScope<DisplayScanout> guard(platform_, *this, "disable");
     if (blob_scanout_) return blobs_[source].disable();
     return resources_[source].disable();
 }
@@ -76,14 +83,19 @@ Status DisplayScanout::disable(uint32_t source)
  * is reached under a mutex, which this path may not take, and
  * DisplaySources::forget_primary clears the handle before the allocation is
  * destroyed. */
-Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
+Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due)
 {
     AV_SCOPE("DisplayScanout::refresh");
     platform_.require_irql_at_most(Irql::dispatch, "DisplayScanout::refresh");
+    SpinLockGuard                  held(lock_);
     InvariantScope<DisplayScanout> guard(platform_, *this, "refresh");
-    Status carried = Status::ok;
+    Status                         carried = Status::ok;
     for (uint32_t source = 0u; source < sources.count(); source++) {
-        if (!sources.visible(source)) continue;
+        if (!sources.visible(source) || (!due && !numbered(source))) continue;
+        /* The number before the address: a flip in between then posts the new
+         * address under the older number, and the next DPC posts it again
+         * under its own, rather than the old address under the new one. */
+        const uint32_t frame = sources.frame(source);
         const uint64_t address = sources.scanout_address(source);
         GuestPageList  pages;
         if (blob_scanout_) {
@@ -115,9 +127,23 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
             if (primary != nullptr && (key == 0u || !resources_[source].scanning_out()))
                 pages = primary->pages_at(address, resources_[source].page_count());
         }
-        carried = resources_[source].refresh(address, pages, presented, key);
+        carried = resources_[source].refresh(address, pages, presented, key, frame);
     }
     return carried;
+}
+
+bool DisplayScanout::posts_frames(uint32_t source)
+{
+    AV_SCOPE("DisplayScanout::posts_frames");
+    platform_.require_irql_at_most(Irql::dispatch, "DisplayScanout::posts_frames");
+    SpinLockGuard held(lock_);
+    return numbered(source);
+}
+
+bool DisplayScanout::numbered(uint32_t source) const
+{
+    AV_SCOPE("DisplayScanout::numbered");
+    return !blob_scanout_ && source < DisplaySources::max_sources && resources_[source].posts_frames();
 }
 
 void DisplayScanout::release()

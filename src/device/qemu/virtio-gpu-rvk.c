@@ -208,7 +208,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     if (!r->display) {
         b->enabled_output_bitmask = 0;
     }
-    for (uint32_t i = 0; i < RVK_DEVICE_DOORBELLS; i++) {
+    for (uint32_t i = 0; i < RVK_DEVICE_INTERRUPT_LINES; i++) {
         r->fence_queues[i] = virtio_add_queue(VIRTIO_DEVICE(qdev), 2, virtio_gpu_rvk_fence_kick);
     }
 }
@@ -219,7 +219,7 @@ static void virtio_gpu_rvk_unrealize(DeviceState *qdev)
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(qdev);
 
     rvk_device_reset(r->core);
-    for (uint32_t i = 0; i < RVK_DEVICE_DOORBELLS; i++) {
+    for (uint32_t i = 0; i < RVK_DEVICE_INTERRUPT_LINES; i++) {
         virtio_del_queue(VIRTIO_DEVICE(qdev), RVK_DEVICE_FENCE_QUEUE_FIRST + i);
     }
     virtio_gpu_rvk_parent_unrealize(qdev);
@@ -240,13 +240,15 @@ static int virtio_gpu_rvk_set_status(VirtIODevice *vdev, uint8_t status)
 
 /* A 2D scanout resource filled from the host image a guest primary shows,
  * named by its key (docs/d3d-desktop.md §3.3): the guest's pages are not read,
- * and RESOURCE_FLUSH then shows it as it would a TRANSFER_TO_HOST_2D. */
+ * and RESOURCE_FLUSH then shows it as it would a TRANSFER_TO_HOST_2D. A frame
+ * other than 0 is the display clock's to show, at the head's next vertical
+ * blank (docs/protocol.md, "Display clock"). */
 #define VIRTIO_GPU_RVK_CMD_SCANOUT_IMAGE 0x02F0
 
 struct virtio_gpu_rvk_scanout_image {
     struct virtio_gpu_ctrl_hdr hdr;
     uint32_t resource_id;
-    uint32_t padding;
+    uint32_t frame;
     uint64_t key;
 };
 
@@ -276,6 +278,9 @@ static void virtio_gpu_rvk_scanout_image(VirtIOGPU *g, VirtIOGPURvk *r, struct v
 
     if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &request, sizeof(request)) != sizeof(request)) {
         answer = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+    } else if (rvk_device_post_frame(r->core, virtio_gpu_rvk_head_of(g, le32_to_cpu(request.resource_id)),
+                                     le32_to_cpu(request.frame), le64_to_cpu(request.key))) {
+        answer = VIRTIO_GPU_RESP_OK_NODATA;
     } else if (rvk_device_export_image(r->core, le64_to_cpu(request.key), &exported) &&
                virtio_gpu_rvk_show_image(r, virtio_gpu_rvk_head_of(g, le32_to_cpu(request.resource_id)), &exported)) {
         /* A GL display composes the host's image as it is: nothing is read back. */

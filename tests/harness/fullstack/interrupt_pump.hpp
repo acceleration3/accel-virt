@@ -24,7 +24,8 @@ class VirtioBridge;
 
 class InterruptPump {
 public:
-    static constexpr std::uint32_t fence_lines = LoopbackDoorbells::pages;
+    /* The fence queues' lines, and the display clock's after them. */
+    static constexpr std::uint32_t interrupt_lines = LoopbackDoorbells::pages + 1u;
 
     InterruptPump(FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl, const FakeCommonConfig &common, MockHost &host,
                   VirtioBridge &bridge);
@@ -51,7 +52,7 @@ private:
     const FakeCommonConfig &common_;
     MockHost               &host_;
     VirtioBridge           &bridge_;
-    std::uint32_t           seen_[fence_lines];
+    std::uint32_t           seen_[interrupt_lines];
     std::uint32_t           dpcs_seen_;
     std::uint32_t           delivered_;
 };

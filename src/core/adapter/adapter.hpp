@@ -13,7 +13,7 @@
 #include "core/display/display_sources.hpp"
 #include "core/display/edid.hpp"
 #include "core/display/hardware_cursor.hpp"
-#include "core/display/synthetic_vsync.hpp"
+#include "core/display/device_vblank.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
 #include "core/memory/aperture_segment.hpp"
@@ -314,6 +314,8 @@ private:
     enum : int32_t { vsync_enable = 0, vsync_disable_no_phase = 2 };      /* DXGK_CRTC_VSYNC_STATE */
     enum : int32_t { engine_type_3d = 1 };                                /* DXGK_ENGINE_TYPE_3D */
     enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
+    /* The source the vertical blanks report: target 0 shows it. */
+    static constexpr uint32_t vsync_source = 0u;
     static constexpr uint32_t engine_responsive = 1u;   /* DXGK_ENGINESTATUS.Responsive */
     static constexpr uint32_t system_memory_driver_segment = 0u;
     /* VIRTIO_PCI_ISR_CONFIG, and the message the device's configuration vector
@@ -363,6 +365,8 @@ private:
     void                 judge_device();
     [[nodiscard]] Status power_up();
     void                 start_copier();
+    /* A device just started: the display clock's page registered with it. */
+    void                 attach_clock();
     /* Which sources have a committed mode: what a power transition puts back. */
     uint32_t             scanning_out() const;
     /* Configures each source the transition held, logging any it cannot: a
@@ -387,11 +391,18 @@ private:
     void                 log_offered_modes(uint32_t offered);
     /* DPC: a display event taken, and Windows told to read each monitor again. */
     void                 announce_display_change(bool running);
+    /* DPC, after dxgkrnl has been told what it completed: the primaries sent
+     * to the host. */
+    void                 refresh_scanout(uint64_t now);
     /* The same, but only once for each configuration change the device
      * signalled: the interrupt notices, and the next DDI that describes the
      * monitor asks, because asking waits and the DPC may not. */
     void                 follow_display_change();
     void                 log_status(const char *step, int32_t status);
+    /* The same line for a failure only: a DDI dxgkrnl calls on every frame.
+     * Each line is a port write per byte, every one an exit that waits for
+     * QEMU's main loop, and the thread that waits is the one presenting. */
+    void                 log_failure(const char *step, int32_t status);
     void                 log_allocation(const DxgkargCreateAllocationRecord &request, int32_t status);
     /* Which source dxgkrnl showed or hid. */
     void                 log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status);
@@ -402,6 +413,8 @@ private:
     /* A primary shown on `source`: what SetVidPnSourceAddress and a multiplane
      * flip's base plane both come to. */
     int32_t              show_primary(uint32_t source, uint32_t segment, int64_t address, void *allocation);
+    /* The flip's answer to dxgkrnl, and the DPC that carries it asked for. */
+    int32_t              flipped(Status set);
     void                 log_scanout(uint32_t source, uint32_t segment, int64_t address);
     /* A step whose answer is only meaningful next to the handle it was given -
      * DxgkDdiCreateDevice receives the runtime's handle and answers with the
@@ -464,7 +477,7 @@ private:
     /* Held across the DPC: notification_'s record and presented_fence_ are
      * one per adapter, and fences are reported in the order they were taken. */
     SpinLock                       dpc_lock_;
-    SyntheticVsync                 vsync_;
+    DeviceVblank                   vsync_;
     HardwareCursor                 cursor_;
     DisplayScanout                 scanout_;
     /* The node fence the host was last shown a frame for. */

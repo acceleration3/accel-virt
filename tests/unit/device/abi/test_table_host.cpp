@@ -567,7 +567,7 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   const int line = host.fence_interrupt_descriptor(63u);
   CHECK(mock.descriptor_open(line));
   CHECK_EQ(mock.live_dmabufs(), 1u);
-  CHECK_EQ(host.fence_interrupt_descriptor(64u), -1);  /* past the fence queues */
+  CHECK_EQ(host.fence_interrupt_descriptor(65u), -1);  /* past the fence queues and the display line */
   host.close_descriptor(line);
   CHECK(!mock.descriptor_open(line));
   CHECK_EQ(mock.live_dmabufs(), 0u);
@@ -783,3 +783,44 @@ TEST(table_host, a_directory_is_listed_through_the_glue_or_not_at_all)
   TableHost overlong(table);
   CHECK_STATUS(overlong.list_directory("/sys/class/drm", names, sizeof names, length), Status::not_found);
   CHECK_EQ(length, 0u); }
+
+/* The display clock's wait: a signal wakes it with true, the deadline with
+ * false, a deadline already past answers at once - and takes a signal that was
+ * already there. */
+TEST(table_host, wait_event_until_answers_whether_the_signal_or_the_deadline_came_first)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *event = nullptr;
+  CHECK_STATUS(host.create_event(event), Status::ok);
+  mock.set_clock(100u);
+  CHECK(!host.wait_event_until(event, 50u));   /* already past */
+  host.signal_event(event);
+  CHECK(host.wait_event_until(event, 50u));    /* past, and signalled */
+  host.signal_event(event);
+  CHECK(host.wait_event_until(event, 1000u));
+  void *thread = nullptr;
+  CHECK_STATUS(host.start_thread([](void *context) { static_cast<MockHost *>(context)->set_clock(2000u); }, &mock,
+                                 thread),
+               Status::ok);
+  CHECK(!host.wait_event_until(event, 2000u));  /* the clock reached it */
+  host.join_thread(thread);
+  host.destroy_event(event); }
+
+/* An image a head is to show goes through the glue, which says whether the
+ * head's console could; a table from before the display clock has no glue
+ * for it, and no head can. */
+TEST(table_host_scanout, show_image_goes_through_the_table_or_is_not_supported)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_display_heads(1u);
+  RvkExportedImage image = {};
+  image.fd = 7;
+  image.width = 320u;
+  CHECK_STATUS(host.show_image(0u, image), Status::ok);
+  CHECK_EQ(mock.images_shown(0u), 1u);
+  CHECK_EQ(mock.last_image(0u).fd, 7);
+  CHECK_EQ(mock.last_image(0u).width, 320u);
+  CHECK_STATUS(host.show_image(1u, image), Status::not_supported);
+  RvkHostOps older = ops.table();
+  older.show_image = nullptr;
+  TableHost old_host(older);
+  CHECK_STATUS(old_host.show_image(0u, image), Status::not_supported);
+  CHECK_EQ(mock.images_shown(0u), 1u); }

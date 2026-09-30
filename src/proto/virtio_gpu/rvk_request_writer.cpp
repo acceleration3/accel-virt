@@ -5,7 +5,9 @@
 
 #include "proto/context/context_setup.hpp"
 #include "proto/wire/wire_writer.hpp"
+#include "proto/virtio_gpu/display_clock_request.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
+#include "proto/virtio_gpu/display_timing_request.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 
 namespace av {
@@ -163,6 +165,25 @@ Status RvkRequestWriter::display_modes()
     AV_SCOPE("RvkRequestWriter::display_modes");
     WireWriter writer(bytes_, capacity_);
     if (!begin(writer, DisplayModeSet::request_type, 0u, DisplayModeSet::header_size)) return Status::too_large;
+    return Status::ok;
+}
+
+Status RvkRequestWriter::display_clock(uint64_t address)
+{
+    AV_SCOPE("RvkRequestWriter::display_clock");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, DisplayClockRequest::type, 0u, DisplayClockRequest::encoded_size)) return Status::too_large;
+    writer.write_u64(address);
+    return Status::ok;
+}
+
+Status RvkRequestWriter::display_timing(uint32_t head, uint32_t refresh_millihz)
+{
+    AV_SCOPE("RvkRequestWriter::display_timing");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, DisplayTimingRequest::type, 0u, DisplayTimingRequest::encoded_size)) return Status::too_large;
+    writer.write_u32(head);
+    writer.write_u32(refresh_millihz);
     return Status::ok;
 }
 

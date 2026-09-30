@@ -32,6 +32,12 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.destroy_event = [](void *opaque, void *event) { host_of(opaque).destroy_event(event); };
     table_.signal_event = [](void *opaque, void *event) { host_of(opaque).signal_event(event); };
     table_.wait_event = [](void *opaque, void *event) { host_of(opaque).wait_event(event); };
+    table_.wait_event_until = [](void *opaque, void *event, std::uint64_t deadline) {
+        return host_of(opaque).wait_event_until(event, deadline) ? 1 : 0;
+    };
+    table_.show_image = [](void *opaque, std::uint32_t head, const RvkExportedImage *image) {
+        return host_of(opaque).show_image(head, *image) == Status::ok ? 0 : 1;
+    };
     table_.create_mutex = [](void *opaque) {
         void *mutex = nullptr;
         return created(host_of(opaque).create_mutex(mutex), mutex);

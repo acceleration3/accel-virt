@@ -94,12 +94,13 @@ TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
   CHECK_EQ(failed, 0u);
   /* A blank after every sixty-four fences, until the second is up. The
    * process's counter is the mock clock plus the real time the run took
-   * (the transport's spins need a clock that moves), so the second holds at
-   * most sixty blanks, fewer on a loaded machine, and the run may stop
-   * between two blanks. */
+   * (the transport's spins need a clock that moves), so the second holds
+   * sixty blanks, fewer on a loaded machine - and one more when the device's
+   * clock, whose phase is its own, puts a blank just after the second began:
+   * the wait that straddles its end then counts one past it. */
   const std::uint64_t blanks = measured(report, "stress.blanks");
   const std::uint64_t fences = measured(report, "stress.fences");
-  CHECK(blanks >= 40u && blanks <= 60u);
+  CHECK(blanks >= 40u && blanks <= 61u);
   CHECK(fences >= blanks * 64u && fences < (blanks + 1u) * 64u); }
 
 /* The timeout run cannot pass on this rig, and this says exactly where. The

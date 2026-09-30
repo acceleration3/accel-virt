@@ -89,9 +89,9 @@ class VirtioGpuFences(unittest.TestCase):
         gpu = virtio_qtest.VirtioGpu(qtest, WANTED, configure)
         return gpu, msix["table"]
 
-    def test_the_device_has_a_fence_queue_per_doorbell(self):
+    def test_the_device_has_a_fence_queue_per_doorbell_and_the_display_line_after_them(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
-        self.assertEqual(gpu.device.queue_count(), FENCE_QUEUE_FIRST + DOORBELLS)
+        self.assertEqual(gpu.device.queue_count(), FENCE_QUEUE_FIRST + DOORBELLS + 1)
         stock = virtio_qtest.VirtioGpu(self.qtest("virtio-gpu-pci"))
         self.assertEqual(stock.device.queue_count(), 2)
 

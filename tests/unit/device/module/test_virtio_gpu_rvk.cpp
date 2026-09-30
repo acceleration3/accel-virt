@@ -491,10 +491,10 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   /* realize, its fence interrupts, its blob table, its context table and its
-   * binding, reset, every table, the status and the interrupts under it,
-   * create, destroy and its table, and control, which an unrealized device
-   * answers no further */
-  for (int violation = 0; violation < 15; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+   * binding, reset, its display clock, every table, the status and the
+   * interrupts under it, create, destroy and its table, and control, which an
+   * unrealized device answers no further */
+  for (int violation = 0; violation < 16; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
@@ -1046,3 +1046,93 @@ TEST(virtio_gpu_rvk_modes, told_modes_are_answered_and_a_bad_text_changes_nothin
   CHECK_STATUS(headless.set_modes("", none, none), Status::not_found);
   CHECK_EQ(none, 0u);
   CHECK(device.invariants_hold()); }
+
+namespace {
+
+std::uint32_t export_key_51(void *, const std::uint8_t *, std::uint64_t key, RvkExportedImage *image)
+{
+    if (key != 0x51u) return RVK_UNKNOWN;
+    image->fd = 12;
+    image->slot = 1u;
+    image->width = 640u;
+    image->height = 480u;
+    image->stride = 2560u;
+    return RVK_EXECUTED;
+}
+
+/* A device showing images on head 0 and its clock's page registered. */
+struct ClockedDevice {
+    MockHost             host;
+    av::MockExecutorOps  executor;
+    VirtioGpuRvk         device;
+
+    ClockedDevice() : host(), executor(RVK_EXECUTOR_SUB_API_D3D), device(host)
+    {
+        host.add_gpu(first);
+        host.add_guest_ram(0x400000u, 0x10000u);
+        host.add_display_heads(2u);
+        host.set_clock(1000u);
+        executor.editable().export_image = export_key_51;
+        char       bytes[96];
+        TextBuffer message(bytes, sizeof bytes);
+        static_cast<void>(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message));
+    }
+    ~ClockedDevice() { device.reset(); }
+
+    std::uint32_t register_page(std::uint64_t address)
+    {
+        GpuRequestBuilder request(0x02F4u);
+        request.u64(address);
+        MockRequest mock(request.bytes(), request.size());
+        return device.control(&mock, 0x02F4u) ? mock.response_type() : 0u;
+    }
+};
+
+}  // namespace
+
+TEST(virtio_gpu_rvk_display_clock, a_frame_is_shown_at_once_until_a_page_is_registered)
+{ ClockedDevice rig;
+  CHECK(!rig.device.post_frame(0u, 5u, 0x51u));   /* no page: the glue shows it */
+  CHECK_EQ(rig.register_page(0x401000u), 0x1100u);
+  CHECK(!rig.device.post_frame(0u, 0u, 0x51u));   /* frame 0: at once, as before the clock */
+  CHECK(!rig.device.post_frame(av::DisplayClock::heads, 5u, 0x51u));
+  CHECK(!rig.device.post_frame(2u, 5u, 0x51u));   /* a console with no GL shows it at once */
+  CHECK(rig.device.post_frame(0u, 5u, 0x51u));
+  CHECK_EQ(rig.host.images_shown(0u), 0u);
+  CHECK(rig.device.invariants_hold()); }
+
+TEST(virtio_gpu_rvk_display_clock, the_frame_latched_at_a_blank_is_exported_and_shown_on_its_head)
+{ ClockedDevice rig;
+  CHECK_EQ(rig.register_page(0x401000u), 0x1100u);
+  CHECK(rig.device.post_frame(0u, 5u, 0x51u));
+  CHECK(rig.device.post_frame(1u, 6u, 0x52u));   /* published under no key the host knows */
+  rig.host.set_clock(1000u + 16666667u);
+  CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
+  CHECK_EQ(rig.host.run_main_loop(), 1u);
+  CHECK_EQ(rig.host.images_shown(0u), 1u);
+  CHECK_EQ(rig.host.last_image(0u).fd, 12);
+  CHECK_EQ(rig.host.last_image(0u).width, 640u);
+  CHECK_EQ(rig.host.images_shown(1u), 0u);   /* the head keeps what it had */
+  rig.device.show_latched_frames();   /* run again: nothing new was latched */
+  CHECK_EQ(rig.host.images_shown(0u), 1u);
+  rig.device.reset();
+  CHECK(!rig.device.post_frame(0u, 7u, 0x51u));   /* a reset forgets the page */
+  CHECK(rig.device.invariants_hold()); }
+
+TEST(virtio_gpu_rvk_display_clock, a_host_with_no_lock_for_the_clock_is_not_realized)
+{ MockHost host;
+  host.add_gpu(first);
+  std::uint32_t mutexes = 0u;
+  {
+      VirtioGpuRvk counted(host);
+      char       bytes[96];
+      TextBuffer message(bytes, sizeof bytes);
+      CHECK_STATUS(counted.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+      mutexes = host.live_mutexes();
+  }
+  VirtioGpuRvk device(host);
+  host.fail_mutex_at(mutexes);   /* the clock's is the last lock a realize makes */
+  char       bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
+  CHECK(std::strstr(message.text(), "display clock") != nullptr); }

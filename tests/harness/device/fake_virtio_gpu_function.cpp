@@ -64,7 +64,7 @@ void FakeVirtioGpuFunction::add_doorbell_region()
     /* A 32-bit BAR, unlike the regions the helper assumes. */
     const std::uint32_t low = static_cast<std::uint32_t>(doorbell_bar_address);
     std::memcpy(config_ + 0x10u, &low, 4u);
-    common_.set_queues(66u, 256u);
+    common_.set_queues(67u, 256u);
     doorbell_region_ = true;
 }
 

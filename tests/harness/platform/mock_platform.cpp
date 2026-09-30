@@ -20,7 +20,7 @@ namespace {
 const char *const violation_names[] = {
     "irql_ceiling", "allocation_at_dispatch", "blocking_at_dispatch", "lock_order",
     "release_order", "lock_stack_overflow", "null_release", "broken_invariant",
-    "time_overflow", "unmapped_register", "timer_misuse", "frame_misuse",
+    "time_overflow", "unmapped_register", "frame_misuse",
 };
 
 }  // namespace
@@ -31,7 +31,7 @@ MockPlatform::MockPlatform()
       irql_(Irql::passive), held_{}, held_count_(0u), violations_{}, now_(0u),
       verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr), logged_(0u), registration_status_(0u),
       registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr),
-      timers_{}, page_frames_{}, page_frame_count_(0u), register_windows_{},
+      page_frames_{}, page_frame_count_(0u), register_windows_{},
       register_window_count_(0u) {}
 
 MockPlatform::MockPlatform(std::uint32_t registration_status, LogRecord &record)
@@ -71,8 +71,6 @@ MockPlatform::~MockPlatform()
         registry.record_failure(__FILE__, __LINE__, "%u process view(s) left mapped", process_mappings());
     if (bugcheck_routine_ != nullptr)
         registry.record_failure(__FILE__, __LINE__, "a bugcheck callback was never deregistered");
-    for (const Timer &timer : timers_)
-        if (timer.live) registry.record_failure(__FILE__, __LINE__, "a timer was never destroyed");
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
     for (std::uint32_t i = 0u; i < contiguous_count_; i++)
         if (!contiguous_[i].borrowed) std::free(contiguous_[i].block);
@@ -149,6 +147,14 @@ void *MockPlatform::allocate_contiguous(std::size_t bytes)
     next_physical_address_ += ((bytes + 0xFFFu) & ~std::uint64_t{0xFFF}) + 0x1000u;
     contiguous_[contiguous_count_++] = ContiguousBlock{block, address, bytes};
     return block;
+}
+
+std::uint64_t MockPlatform::last_contiguous_address() const
+{
+    std::uint64_t newest = 0u;
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++)
+        if (contiguous_[i].physical_address > newest) newest = contiguous_[i].physical_address;
+    return newest;
 }
 
 void MockPlatform::release_contiguous(void *block, std::size_t bytes)
@@ -641,84 +647,6 @@ void MockPlatform::stall(std::uint32_t microseconds)
     if (stall_callback_ != nullptr) stall_callback_(stall_context_);
 }
 
-void *MockPlatform::create_timer(TimerCallback callback, void *context)
-{
-    if (irql_ >= Irql::dispatch) {
-        record(Violation::allocation_at_dispatch, "timer created at IRQL %u", static_cast<unsigned>(irql_));
-        return nullptr;
-    }
-    allocation_sequence_++;
-    if (fail_at_ != 0u && allocation_sequence_ == fail_at_) return nullptr;
-    for (Timer &timer : timers_) {
-        if (timer.live) continue;
-        timer = Timer{callback, context, 0u, 0u, true, false};
-        return &timer;
-    }
-    return nullptr;
-}
-
-MockPlatform::Timer *MockPlatform::find_timer(void *timer)
-{
-    for (Timer &candidate : timers_)
-        if (&candidate == timer && candidate.live) return &candidate;
-    record(Violation::timer_misuse, "%p is not a live timer", timer);
-    return nullptr;
-}
-
-void MockPlatform::start_timer(void *timer, std::uint64_t period)
-{
-    if (irql_ > Irql::dispatch)
-        record(Violation::irql_ceiling, "start_timer at IRQL %u", static_cast<unsigned>(irql_));
-    Timer *found = find_timer(timer);
-    if (found == nullptr) return;
-    if (period == 0u) {
-        record(Violation::timer_misuse, "a zero period");
-        return;
-    }
-    found->period = period;
-    found->due = now_ + period;
-    found->running = true;
-}
-
-void MockPlatform::stop_timer(void *timer)
-{
-    if (irql_ > Irql::dispatch)
-        record(Violation::irql_ceiling, "stop_timer at IRQL %u", static_cast<unsigned>(irql_));
-    Timer *found = find_timer(timer);
-    if (found != nullptr) found->running = false;
-}
-
-void MockPlatform::destroy_timer(void *timer)
-{
-    if (timer == nullptr) {
-        record(Violation::null_release, "destroy_timer of null");
-        return;
-    }
-    if (irql_ >= Irql::dispatch)
-        record(Violation::blocking_at_dispatch, "destroy_timer waits, at IRQL %u", static_cast<unsigned>(irql_));
-    Timer *found = find_timer(timer);
-    if (found != nullptr) *found = Timer{};
-}
-
-void MockPlatform::run_timers(std::uint64_t ticks)
-{
-    const std::uint64_t end = now_ + ticks;
-    for (;;) {
-        Timer *next = nullptr;
-        for (Timer &timer : timers_)
-            if (timer.live && timer.running && timer.due <= end && (next == nullptr || timer.due < next->due))
-                next = &timer;
-        if (next == nullptr) break;
-        now_ = next->due;
-        next->due += next->period;
-        const Irql previous = irql_;
-        irql_ = Irql::dispatch;
-        next->callback(next, next->context);
-        irql_ = previous;
-    }
-    now_ = end;
-}
-
 void MockPlatform::advance_time(std::uint64_t ticks)
 {
     if (ticks > ~std::uint64_t{0} - now_) {
@@ -970,6 +898,13 @@ std::uint32_t MockPlatform::unclaimed_violations() const
 std::uint32_t MockPlatform::live_allocations() const { return live_count_ + contiguous_count_; }
 std::uint32_t MockPlatform::allocations_made() const { return allocation_sequence_; }
 std::uint32_t MockPlatform::locks_held() const       { return held_count_; }
+
+bool MockPlatform::holds(LockRank rank) const
+{
+    for (std::uint32_t held = 0u; held < held_count_; held++)
+        if (held_[held].rank == rank) return true;
+    return false;
+}
 std::uint32_t MockPlatform::logged() const           { return logged_; }
 const char   *MockPlatform::last_log() const         { return last_log_; }
 

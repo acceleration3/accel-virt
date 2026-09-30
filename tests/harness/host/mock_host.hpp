@@ -7,10 +7,12 @@
 #ifndef AV_MOCK_HOST_HPP
 #define AV_MOCK_HOST_HPP
 
+#include "device/abi/rvk_executor.h"
 #include "device/host/host.hpp"
 #include "harness/host/host_violation.hpp"
 #include "proto/context/gpu_identity.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <pthread.h>
@@ -28,6 +30,8 @@ public:
     static constexpr std::uint32_t max_gpus = 8u;
     static constexpr std::uint32_t max_main_loop_work = 1024u;
     static constexpr std::uint32_t max_doorbells = 64u;
+    /* The fence queues' interrupt lines and the display's, after them. */
+    static constexpr std::uint32_t interrupt_lines = max_doorbells + 1u;
     /* VIRTIO_GPU_MAX_SCANOUTS. */
     static constexpr std::uint32_t max_scanout_heads = 16u;
 
@@ -45,6 +49,9 @@ public:
     void     destroy_event(void *event) override;
     void     signal_event(void *event) override;
     void     wait_event(void *event) override;
+    /* Waits until signalled or until the scripted clock - moved by set_clock,
+     * or by reads under advance_clock_per_read - reaches `deadline`. */
+    bool     wait_event_until(void *event, std::uint64_t deadline) override;
     Status   create_mutex(void *&mutex) override;
     void     destroy_mutex(void *mutex) override;
     void     lock_mutex(void *mutex) override;
@@ -98,6 +105,8 @@ public:
     void     update_scanout(std::uint32_t head, std::uint32_t x, std::uint32_t y, std::uint32_t width,
                             std::uint32_t height) override;
     void     hide_scanout(std::uint32_t head) override;
+    /* Heads under add_display_heads show it; the rest answer not_supported. */
+    Status   show_image(std::uint32_t head, const RvkExportedImage &image) override;
     int      event_descriptor(void *event) override;
     int      fence_interrupt_descriptor(std::uint32_t line) override;
     std::uint32_t guest_region_count() override;
@@ -185,6 +194,19 @@ public:
     /* The scripted clock moves this many nanoseconds per reading, so a test
      * decides how long the work it measures took. */
     void advance_clock_per_read(std::uint64_t nanoseconds);
+    /* The scripted clock reads `now` from here on, and every thread in
+     * wait_event_until whose deadline that reaches wakes. */
+    void set_clock(std::uint64_t now);
+    /* The earliest deadline a thread in wait_event_until sleeps toward:
+     * false when none does. */
+    bool          next_deadline(std::uint64_t &deadline);
+    /* Waits up to `milliseconds` for a thread to sleep in wait_event_until
+     * toward a deadline past `after`: one woken at `after` that has done its
+     * work and gone back to sleep. */
+    bool          wait_for_deadline_after(std::uint64_t after, std::uint32_t milliseconds);
+    /* Images show_image put on head `head`, and the last one. */
+    std::uint32_t    images_shown(std::uint32_t head) const;
+    RvkExportedImage last_image(std::uint32_t head) const;
     void refuse_export_at(std::uint32_t nth, std::int32_t host_error);
     void refuse_import_at(std::uint32_t nth, std::int32_t host_error);
     /* The Nth read through an import from now answers bytes the device never
@@ -359,6 +381,8 @@ private:
         bool            live;
         int             descriptor;   /* made on the first event_descriptor, -1 before */
         std::uint32_t   sleepers;     /* threads blocked in wait_event on it */
+        std::uint64_t   deadline;     /* what a thread in wait_event_until sleeps toward */
+        bool            timed;        /* whether one does */
     };
     struct Mutex {
         pthread_mutex_t lock;
@@ -506,12 +530,12 @@ private:
     void           *translate_context_;
     bool            fence_connected_;
     std::uint32_t   fail_fence_connect_;
-    std::uint32_t   raised_[max_doorbells];
+    std::uint32_t   raised_[interrupt_lines];
     std::uint32_t   refuse_import_read_;
     std::uint32_t   empty_export_;
     std::uint32_t   empty_host_memory_;
     std::uint32_t   refuse_hostmem_read_;
-    std::uint64_t   clock_;
+    std::atomic<std::uint64_t> clock_;
     std::uint64_t   clock_step_;
     std::uint32_t   corrupt_hostmem_read_;
     std::uint32_t   fail_bind_gpu_;
@@ -537,6 +561,8 @@ private:
     std::uint32_t   display_heads_;
     std::uint32_t   refuse_scanout_;
     Scanout         scanouts_[max_scanout_heads];
+    std::uint32_t   images_shown_[max_scanout_heads];
+    RvkExportedImage last_images_[max_scanout_heads];
     std::uint32_t   update_rects_[max_scanout_heads][4];
     RendererRegion  renderer_regions_[max_renderer_regions];
     std::uint32_t   renderer_region_count_;

@@ -252,6 +252,11 @@ private:
     Routine routine(DdiSlot slot) const;
     /* Records a DDI's NTSTATUS as the last code and answers it as a Status. */
     Status  answer(std::int32_t code);
+    /* The guest's clock since the rig began, in nanoseconds. */
+    std::uint64_t guest_ns() const;
+    /* The mock host's clock brought up to the guest's, and whatever the
+     * device's clock thread made of that delivered. */
+    void          catch_up();
     Status  refuse(Status status);
 
     Device     *find_device(std::uint32_t handle);
@@ -319,6 +324,9 @@ private:
     /* When the rig began, on the real clock the guest's counter runs on, moved
      * on by the real time spent simulating blank waits. */
     std::uint64_t                started_ns_;
+    /* The guest's counter when the rig began: the mock host's clock is the
+     * guest's since then. */
+    std::uint64_t                guest_origin_;
 };
 
 }  // namespace av

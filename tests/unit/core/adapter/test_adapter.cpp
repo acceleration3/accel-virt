@@ -76,6 +76,8 @@
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "core/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
+#include "harness/device/fake_display_clock.hpp"
+#include "proto/virtio_gpu/display_clock_request.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
@@ -313,6 +315,17 @@ public:
     std::uint32_t          blob_unmaps() const { return blob_unmaps_; }
     /* A device that stops answering what it is. */
     void                   ignore_capset() { ignore_capset_ = true; }
+    /* The device's display clock, which answers DISPLAY_CLOCK. */
+    av::FakeDisplayClock  &clock() { return clock_; }
+    std::uint64_t          clock_page() const { return clock_.page(); }
+    std::uint32_t          interrupt_every() const { return clock_.interrupt_every(); }
+    /* The device's clock reaching head 0's next blank, latching `latched`,
+     * then the DPC the display line's interrupt queues. */
+    void                   blank(std::uint32_t latched = 0u)
+    {
+        clock_.blank(latched);
+        adapter_.dpc_routine();
+    }
     /* CTX_CREATE, CTX_DESTROY, SUBMIT_3D and RESOURCE_UNREF the device answered. */
     std::uint32_t          context_requests() const { return context_requests_; }
 
@@ -349,6 +362,10 @@ private:
             }
             static_cast<void>(fixture->control().respond_all(answer.bytes(),
                                                              static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
+        if (asked == av::DisplayClockRequest::type) {
+            fixture->clock_.answer(fixture->control());
             return;
         }
         if ((asked == get_capset_info || asked == get_capset) && fixture->ignore_capset_) return;
@@ -420,6 +437,7 @@ private:
     std::uint32_t         blob_unmaps_ = 0u;
     std::uint32_t         context_requests_ = 0u;
     bool                  ignore_capset_ = false;
+    av::FakeDisplayClock  clock_{platform_};
     av::DisplayModeSet    offered_modes_;
     Answer                answer_ = Answer::display_info;
     std::optional<av::FakeVirtqueueDevice> control_;
@@ -804,7 +822,7 @@ TEST(adapter_set_power_state, a_device_that_will_not_come_back_is_reported)
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.function().common().set_queues(1u, 256u);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), not_found);
-  CHECK_EQ(fixture.platform().live_allocations(), 1u);   /* the cursor's backing, held while started */ }
+  CHECK_EQ(fixture.platform().live_allocations(), 2u);   /* the cursor's backing and the clock's page, held while started */ }
 
 /* ---- ResetDevice ----------------------------------------------------------- */
 
@@ -1080,9 +1098,11 @@ TEST(adapter_set_power_state, what_was_scanning_out_before_d3_is_scanning_out_af
   av::FakeVirtqueueDevice &resumed = fixture.control();
   /* The host lost every resource with the device, so the source that was
    * scanning out has its resource created again; the pages follow with the
-   * guest's next address, which is what dxgkrnl sends after a resume. */
-  CHECK_EQ(resumed.respond_all(0x1100u), 2u);   /* the scanout, and the capset the resume asks for */
-  CHECK_EQ(resumed.request_type(0u), 0x0101u);
+   * guest's next address, which is what dxgkrnl sends after a resume. The
+   * clock's page is registered again first, and nothing answers that here. */
+  CHECK_EQ(resumed.respond_all(0x1100u), 3u);   /* the clock's page, the scanout, and the capset the resume asks for */
+  CHECK_EQ(resumed.request_type(0u), 0x02F4u);
+  CHECK_EQ(resumed.request_type(1u), 0x0101u);
   CHECK(fixture.adapter().invariants_hold()); }
 
 /* A resume that never had a scanout asks the host for none. */
@@ -1094,10 +1114,11 @@ TEST(adapter_set_power_state, a_source_that_was_dark_stays_dark_across_power)
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.forget_control();
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
-  /* Nothing was scanning out: the only request the resume made is the one that
-   * asks the device what it is. */
-  CHECK_EQ(fixture.control().respond_all(0x1100u), 1u);
-  CHECK_EQ(fixture.control().request_type(0u), 0x0108u);
+  /* Nothing was scanning out: the resume registered the clock's page again
+   * and asked the device what it is, and made no other request. */
+  CHECK_EQ(fixture.control().respond_all(0x1100u), 2u);
+  CHECK_EQ(fixture.control().request_type(0u), 0x02F4u);
+  CHECK_EQ(fixture.control().request_type(1u), 0x0108u);
   CHECK(fixture.adapter().invariants_hold()); }
 
 TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
@@ -1120,19 +1141,65 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   fixture.platform().set_irql(Irql::passive);
   const std::uint32_t after_commit = control.respond_all(0x1100u);
   CHECK_EQ(after_commit, 5u);                         /* create, attach, set_scanout, transfer, flush */
-  /* Requests 0 to 3 were StartDevice's: the display info, its modes, and the
-   * two the capset query takes (feature 040, FR-005). */
-  CHECK_EQ(control.request_type(4u), 0x0101u);
-  CHECK_EQ(control.request_type(5u), 0x0106u);
-  CHECK_EQ(control.request_type(6u), 0x0103u);
-  CHECK_EQ(control.request_type(7u), 0x0105u);
-  CHECK_EQ(control.request_type(8u), 0x0104u);
+  /* Requests 0 to 4 were StartDevice's: the display clock's page, the display
+   * info, its modes, and the two the capset query takes (feature 040, FR-005). */
+  CHECK_EQ(control.request_type(0u), 0x02F4u);
+  CHECK_EQ(control.request_type(5u), 0x0101u);
+  CHECK_EQ(control.request_type(6u), 0x0106u);
+  CHECK_EQ(control.request_type(7u), 0x0103u);
+  CHECK_EQ(control.request_type(8u), 0x0105u);
+  CHECK_EQ(control.request_type(9u), 0x0104u);
   /* Nothing presented since: the host is not asked to read again. */
   fixture.platform().advance_time(display_period);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(control.respond_all(0x1100u), 0u); }
+
+/* dxgkrnl hears of the blank before the DPC refreshes the scanout: a refresh
+ * kicks the device, QEMU can hold a kick for milliseconds, and a vsync behind
+ * one reached dxgkrnl that long after the blank. */
+TEST(adapter_dpc_routine, tells_dxgkrnl_of_the_blank_before_it_refreshes_the_scanout)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  const Primary primary(fixture, 1280u, 800u);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = primary.address();
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = primary.handle();
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  struct Seen {
+      av::FakeVirtqueueDevice *control;
+      std::int32_t             reported;
+      std::uint16_t            sent_at_vsync;
+      std::uint16_t            sent_at_notify;
+  } seen = {&fixture.control(), -1, 0xFFFFu, 0xFFFFu};
+  fixture.dxgkrnl().on_interrupt(+[](void *context, const av::DxgkargcbNotifyInterruptDataRecord &data) {
+      auto *const watch = static_cast<Seen *>(context);
+      watch->reported = data.InterruptType;
+      watch->sent_at_vsync = watch->control->available_index();
+  }, &seen);
+  fixture.dxgkrnl().on_notify_dpc(+[](void *context) {
+      auto *const watch = static_cast<Seen *>(context);
+      watch->sent_at_notify = watch->control->available_index();
+  }, &seen);
+  const std::uint16_t before = fixture.control().available_index();
+  fixture.platform().advance_time(display_period);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.blank();
+  fixture.platform().set_irql(Irql::passive);
+  fixture.dxgkrnl().on_interrupt(nullptr, nullptr);
+  fixture.dxgkrnl().on_notify_dpc(nullptr, nullptr);
+  CHECK_EQ(seen.reported, interrupt_crtc_vsync);
+  CHECK_EQ(seen.sent_at_vsync, before);
+  CHECK_EQ(seen.sent_at_notify, before);
+  CHECK(fixture.control().available_index() != before); }   /* and the refresh went after */
 
 /* A host that answers nothing fills the control queue, and the DPC says once
  * that a refresh was refused rather than silently dropping the frame. */
@@ -1279,20 +1346,37 @@ TEST(adapter, recommend_functional_vidpn_and_recommend_vidpn_topology_decline)
   CHECK_EQ(nt(fixture.adapter().recommend_functional_vidpn(&functional)), no_recommended_functional_vidpn);
   CHECK_EQ(nt(fixture.adapter().recommend_vidpn_topology(&topology)), no_recommended_vidpn_topology); }
 
+/* The blanks are the device's (docs/protocol.md, "Display clock"): the start
+ * registers the page, enabling asks the device for every blank and disabling
+ * for one in DeviceVblank::sweep_every, and a vsync is reported for each blank
+ * the page shows while enabled - once, however many DPCs look at it. */
 TEST(adapter_control_interrupt, vsync_runs_between_enable_and_disable)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  /* The blank runs on an absolute schedule, the Nth at N * 10^7 / 60 rounded
-   * down: a window of whole 166666-tick frames ends a tick before the second. */
-  const std::uint64_t frame = 10000000u / 60u + 1u;
+  CHECK(fixture.clock_page() != 0u);
+  CHECK_EQ(fixture.interrupt_every(), av::DeviceVblank::sweep_every);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
-  fixture.platform().run_timers(frame * 2u);
+  CHECK_EQ(fixture.interrupt_every(), 1u);
+  fixture.blank();
+  fixture.blank();
+  fixture.adapter().dpc_routine();   /* a DPC for something else: the blank was reported */
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).InterruptType, interrupt_crtc_vsync);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 0u)), success);
-  fixture.platform().run_timers(frame * 2u);
+  CHECK_EQ(fixture.interrupt_every(), av::DeviceVblank::sweep_every);
+  fixture.blank();
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_dpc_log, 1u)), not_supported); }
+
+/* A device with no display clock leaves dxgkrnl no vsync from it: the start
+ * carries on, and says why. */
+TEST(adapter_control_interrupt, a_device_that_refuses_the_clock_is_said_to_and_still_starts)
+{ Fixture fixture;
+  fixture.clock().refuse();
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: the device refused the display clock, status 0xC00000BB"));
+  CHECK_EQ(fixture.clock_page(), 0u); }
 
 TEST(adapter_control_interrupt, before_start_there_is_no_vsync)
 { Fixture fixture;
@@ -1304,7 +1388,7 @@ TEST(adapter_stop_device, stops_the_vsync)
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
   CHECK_EQ(nt(fixture.adapter().stop_device()), success);
-  fixture.platform().run_timers(10000000u);
+  fixture.adapter().dpc_routine();
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u); }
 
 TEST(adapter_set_vidpn_source_address, the_vsync_reports_the_primary_it_names)
@@ -1319,12 +1403,12 @@ TEST(adapter_set_vidpn_source_address, the_vsync_reports_the_primary_it_names)
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0x70u);
   request.hAllocation = nullptr;
   request.PrimarySegment = 9u;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument3, 0u); }
 
 TEST(adapter_set_vidpn_source_address, an_immediate_flip_is_not_reported_and_shows_at_the_next_vsync)
@@ -1341,7 +1425,7 @@ TEST(adapter_set_vidpn_source_address, an_immediate_flip_is_not_reported_and_sho
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0x50u); }
 
 TEST(adapter_set_vidpn_source_address, a_primary_in_system_memory_names_segment_zero)
@@ -1354,7 +1438,7 @@ TEST(adapter_set_vidpn_source_address, a_primary_in_system_memory_names_segment_
   fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
   fixture.platform().set_irql(Irql::passive);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0u); }
 
@@ -1382,9 +1466,6 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
-  /* One blank a window: the schedule's Nth is at N * 10^7 / 60 rounded down,
-   * so whole 166666-tick windows fall behind it. */
-  constexpr std::uint64_t blank = 10000000u / 60u + 1u;
   int primary = 0, overlay = 0;
   av::DxgkMultiplaneOverlayPlaneRecord planes[2] = {};
   planes[0].LayerIndex = 1u;
@@ -1405,7 +1486,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
   fixture.platform().set_irql(Irql::passive);
-  fixture.platform().run_timers(blank);
+  fixture.blank();
   const av::DxgkargcbNotifyInterruptDataRecord base = fixture.dxgkrnl().interrupt(0u);
   CHECK_EQ(base.InterruptType, 7);
   CHECK_EQ(base.Argument1, 1u);   /* physical adapter mask */
@@ -1423,7 +1504,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   }
   request.PlaneCount = 1u;   /* the overlay alone: no base plane */
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
-  fixture.platform().run_timers(blank);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).InterruptType, 7);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument2, 0u);
   request.PlaneCount = 0u;   /* dxgmms2's disable-planes flip */
@@ -1431,7 +1512,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   request.PlaneCount = 2u;
   planes[1].Enabled = 0u;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
-  fixture.platform().run_timers(blank);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(2u).InterruptType, 7);
   CHECK_EQ(fixture.dxgkrnl().interrupt(2u).Argument2, 0u);
   av::DxgkargSetVidPnSourceAddressRecord plain = {};
@@ -1439,7 +1520,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   plain.PrimaryAddress = 0x5000000000ll;
   plain.hAllocation = &primary;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&plain)), success);
-  fixture.platform().run_timers(blank);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).InterruptType, 3);
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).Argument3, 0x50u);
   planes[1].Enabled = 1u;
@@ -1992,15 +2073,15 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
   CHECK_EQ(metadata.Flags, 0u);
   CHECK(refused.platform().logged_line("rvkgpu: hardware scheduling status 0x00000000")); }
 
-TEST(adapter_control_interrupt2, enables_and_disables_the_synthetic_vsync)
+TEST(adapter_control_interrupt2, enables_and_disables_the_vsync_reports)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  const std::uint64_t frame = 10000000u / 60u;
   CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 0})), success);
-  fixture.platform().run_timers(frame);
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 1})), success);
-  fixture.platform().run_timers(frame * 3u);
+  fixture.blank();
+  fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 2})), success);
   CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 3})), invalid_parameter);
@@ -2338,11 +2419,13 @@ TEST(adapter_set_pointer_shape, a_power_cycle_creates_the_cursor_resource_again)
   /* The power cycle built new rings, so the device side is new too. */
   const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
   av::FakeVirtqueueDevice device(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
-  /* The resume asks the device what it is as well (feature 040, FR-005), and
-   * nothing answers that here, so it is still published. */
-  CHECK_EQ(device.respond_all(0x1100u), 4u);
-  CHECK_EQ(device.request_type(0u), 0x0108u);   /* what the resume asked the device it is */
-  CHECK_EQ(device.request_type(1u), 0x0101u); }
+  /* The resume registers the clock's page and asks the device what it is as
+   * well (feature 040, FR-005), and nothing answers either here, so both are
+   * still published. */
+  CHECK_EQ(device.respond_all(0x1100u), 5u);
+  CHECK_EQ(device.request_type(0u), 0x02F4u);   /* the clock's page */
+  CHECK_EQ(device.request_type(1u), 0x0108u);   /* what the resume asked the device it is */
+  CHECK_EQ(device.request_type(2u), 0x0101u); }
 
 TEST(adapter, the_legacy_surface_answers_not_supported)
 { Fixture fixture;
@@ -2936,8 +3019,14 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
   CHECK(std::strncmp(fixture.platform().last_log() + 31, "0000000000000000", 16u) == 0);
   av::DxgkargDescribeAllocationRecord describe = {};
   describe.hAllocation = shadow.handle();
+  char before_describe[128] = {};
+  std::strncpy(before_describe, fixture.platform().last_log(), sizeof before_describe - 1u);
   CHECK_EQ(nt(fixture.adapter().describe_allocation(&describe)), success);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: DescribeAllocation status 0x00000000") == 0);
+  CHECK(std::strcmp(before_describe, fixture.platform().last_log()) == 0);   /* every frame describes: a success says nothing */
+  av::DxgkargDescribeAllocationRecord unknown = {};
+  unknown.hAllocation = &unknown;
+  CHECK(fixture.adapter().describe_allocation(&unknown) < 0);
+  CHECK(std::strncmp(fixture.platform().last_log(), "rvkgpu: DescribeAllocation status 0xC", 36u) == 0);
   av::DxgkargSetDisplayPrivateDriverFormatRecord format = {};
   format.PrimaryAllocation = shadow.handle();
   CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&format)), success);
@@ -3467,7 +3556,7 @@ TEST(adapter_restart_from_timeout, a_device_that_will_not_come_back_is_reported_
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_device_state);
   fixture.platform().set_irql(Irql::passive);
-  CHECK_EQ(fixture.platform().live_allocations(), 1u);   /* the cursor's backing, held while started */ }
+  CHECK_EQ(fixture.platform().live_allocations(), 2u);   /* the cursor's backing and the clock's page, held while started */ }
 
 /* An empty list destroys nothing and leaves every source's primary alone. */
 TEST(adapter_destroy_allocation, an_empty_list_is_accepted)
@@ -3655,14 +3744,14 @@ TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Requests 0 to 3 were StartDevice's display info, modes and capset query;
-   * the resource and the scanout are the second source's. */
-  CHECK_EQ(control.request_type(4u), 0x0101u);
-  CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id + 1u);
-  CHECK_EQ(u32(control.request(4u), 32u), 1024u);
-  CHECK_EQ(control.request_type(6u), 0x0103u);
-  CHECK_EQ(u32(control.request(6u), 40u), 1u);   /* scanout 1 */
-  CHECK_EQ(u32(control.request(6u), 44u), av::ScanoutResource::first_resource_id + 1u); }
+  /* Requests 0 to 4 were StartDevice's clock page, display info, modes and
+   * capset query; the resource and the scanout are the second source's. */
+  CHECK_EQ(control.request_type(5u), 0x0101u);
+  CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(u32(control.request(5u), 32u), 1024u);
+  CHECK_EQ(control.request_type(7u), 0x0103u);
+  CHECK_EQ(u32(control.request(7u), 40u), 1u);   /* scanout 1 */
+  CHECK_EQ(u32(control.request(7u), 44u), av::ScanoutResource::first_resource_id + 1u); }
 
 /* One mode list cannot describe displays of different sizes, so the driver says
  * when the device gives it some. */

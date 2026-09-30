@@ -1070,8 +1070,9 @@ the device core by the loopback suite (`tests/loopback/`):
 
 ## Fence queues and interrupts (device -> guest)
 
-`virtio-gpu-rvk-pci` has 66 virtqueues: control (0), cursor (1), and a fence
-queue per doorbell page, queue `2 + n` for doorbell `n`. A fence queue carries
+`virtio-gpu-rvk-pci` has 67 virtqueues: control (0), cursor (1), a fence
+queue per doorbell page, queue `2 + n` for doorbell `n`, and the display line
+(66, see "Display clock"). A fence queue carries
 no requests - a kick is ignored - and exists so the driver can give each
 context's interrupts a vector with `queue_msix_vector`; queues may share a
 vector, and one left at `VIRTIO_MSI_NO_VECTOR` raises nothing. The PCI
@@ -1096,6 +1097,94 @@ writes the same value again when a context is set up. Feature 044 found this
 live: each packet after a context's first completed only when an unrelated DPC
 served it, 2-3 s later, past TdrDelay under load; qtest has no irqfd and could
 not show it.
+
+## Display clock (device -> guest)
+
+The display's vertical blank is the device's. A guest timer cannot be one: a
+DPC that runs late restarts its schedule and the blanks it missed are gone, and
+whatever the guest reports, the frame the host shows is decided by when the
+host's window draws. So the device keeps one clock per head, at the head's
+refresh rate, on the host's `CLOCK_MONOTONIC` and against absolute deadlines:
+a late wake-up still counts every blank that passed. At each blank it latches
+the newest frame the guest has posted for the head, shows exactly that frame,
+and tells the guest which one it was. Everything in the guest that paces to
+the display - dxgkrnl's vsync, the scan line, the user-mode drivers' pacers -
+reads this one timeline.
+
+### The display line
+
+Queue 66, after the fence queues, carries no requests and exists for its
+interrupt, as they do: the driver gives it a vector with `queue_msix_vector`
+before `DRIVER_OK` (`rvkgpu.sys` treats it as fence queue 64, so it shares a
+fence vector). The device raises it on the blanks the guest asked for (the
+page's `interrupt_every`), after the page says what the blank was. One
+interrupt may stand for several blanks - the guest reads the count, never
+counts interrupts.
+
+### Registering the page (control queue)
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F4`, context 0, no fence |
+| 24 | 8 | address | guest physical address of a 4 KiB page, 4 KiB aligned; 0 stops publishing |
+
+The device answers `OK_NODATA` and from then on writes the page below, or
+`ERR_INVALID_PARAMETER` for an address that is not aligned or not guest RAM it
+can map, leaving the page it had. A virtio reset forgets the page; the driver
+registers it again at each start.
+
+### A head's rate (control queue)
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F5`, context 0, no fence |
+| 24 | 4 | head | below the device's `num_scanouts` |
+| 28 | 4 | refresh | millihertz, 1000 to 1000000 (1 Hz to 1 kHz) |
+
+`OK_NODATA`, or `ERR_INVALID_PARAMETER` for a head or a rate out of range. The
+head's next blank comes one new period after the blank before it, and the
+sequence carries on: a rate change is never a lost or repeated blank. A head
+runs at 60 Hz until told otherwise.
+
+### Posting a frame
+
+`SCANOUT_IMAGE` (`0x02F0`, resource id, then a u32, then the u64 key) names
+the head's next frame. Its u32 is the frame: nonzero, the device shows the key
+at the head's next blank, and a later post before that blank replaces it; 0,
+at once, as a device from before this section did. Frame numbers are the
+guest's, counted per head from 1, skipping 0 when they wrap; the device only
+compares them for equality.
+
+### The page, 4 KiB, little-endian
+
+| Offset | Size | Writer | Field | |
+|--:|--:|---|---|---|
+| 0 | 4 | device | magic | `0x434B5652` (`"RVKC"`) |
+| 4 | 4 | device | version | 1 |
+| 8 | 4 | device | heads | head records that follow, 1 to 16 |
+| 12 | 20 | | reserved | 0 |
+| 32 + 64 h | 64 | | head `h` | below |
+
+Each head's record:
+
+| Offset | Size | Writer | Field | |
+|--:|--:|---|---|---|
+| 0 | 4 | device | generation | odd while the device writes the record, even once it is whole |
+| 4 | 4 | device | latched | the frame the blank at `sequence` put on screen; 0 before the first |
+| 8 | 8 | device | sequence | blanks since the head's clock started, the first 1 |
+| 16 | 8 | device | vblank | the host's `CLOCK_MONOTONIC` of that blank, in ns |
+| 24 | 4 | device | period | ns between blanks now: 10^12 / `refresh`, rounded down |
+| 28 | 4 | device | refresh | millihertz now |
+| 32 | 4 | guest | interrupt_every | raise the display line on each blank whose sequence is a multiple of this; 0 raises nothing |
+| 36 | 28 | | reserved | 0 |
+
+A reader takes `generation`, the fields, then `generation` again, and trusts
+them only when both were the same even number; it tries again otherwise, a
+bounded number of times. The device writes nothing else in the page, and the
+guest writes only `interrupt_every`; the device reads it at each blank and
+treats it as hostile (any value is a divisor or none). The guest never trusts
+the device either: a wrong magic, version or head count is a page it ignores,
+and a sequence that goes backwards is a blank it does not report.
 
 ## Wire recordings (device -> a file on the host)
 

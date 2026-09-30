@@ -60,6 +60,7 @@ public:
     void                 destroy_event(void *event) override;
     void                 signal_event(void *event) override;
     void                 wait_event(void *event) override;
+    [[nodiscard]] bool   wait_event_until(void *event, uint64_t deadline) override;
 
     [[nodiscard]] Status create_mutex(void *&mutex) override;
     void                 destroy_mutex(void *mutex) override;
@@ -123,6 +124,7 @@ public:
 
     bool                 display_takes_dmabuf(uint32_t head) override;
     [[nodiscard]] Status show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
+    [[nodiscard]] Status show_image(uint32_t head, const RvkExportedImage &image) override;
     void                 update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width,
                                         uint32_t height) override;
     void                 hide_scanout(uint32_t head) override;

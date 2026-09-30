@@ -206,7 +206,7 @@ Status VirtioGpuDevice::connect_fence_queue(uint32_t doorbell, uint32_t &message
     platform_.require_irql_at_most(Irql::passive, "VirtioGpuDevice::connect_fence_queue");
     message = 0u;
     if (!running_) return Status::invalid_state;
-    if (doorbell > uint32_t{0xFFFFu} - first_fence_queue) return Status::not_found;
+    if (doorbell >= doorbells) return Status::not_found;
     const auto queue = static_cast<uint16_t>(first_fence_queue + doorbell);
     if (message_interrupts_ == 0u) return queue < transport_.queue_count() ? Status::ok : Status::not_found;
     message = fence_vector_for(doorbell, message_interrupts_);

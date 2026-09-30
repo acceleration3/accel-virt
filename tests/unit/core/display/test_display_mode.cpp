@@ -112,3 +112,27 @@ TEST(display_mode, what_windows_can_be_offered)
   /* A slot's default is the smallest standard mode. */
   CHECK_EQ(av::DisplayMode().width(), 640u);
   CHECK_EQ(av::DisplayMode().height(), 480u); }
+
+/* A vertical blank starts where the active lines end: the line at the blank
+ * is height(), the blank lines follow it, and the next frame's line 0 comes
+ * a blank's worth of the period later. */
+TEST(display_mode_scan_line_within, the_blank_begins_the_period_and_line_zero_follows_it)
+{ const DisplayMode mode(1920u, 1080u);   /* 1125 lines, 45 of them blank */
+  const std::uint64_t period = 1125u * 100u;
+  CHECK_EQ(mode.scan_line_within(0u, period), 1080u);
+  CHECK_EQ(mode.scan_line_within(44u * 100u, period), 1124u);
+  CHECK_EQ(mode.scan_line_within(45u * 100u, period), 0u);
+  CHECK_EQ(mode.scan_line_within(45u * 100u + 99u, period), 0u);
+  CHECK_EQ(mode.scan_line_within(period - 1u, period), 1079u);
+  CHECK_EQ(mode.scan_line_within(period, period), 1080u);            /* a whole period on: the next blank */
+  CHECK_EQ(mode.scan_line_within(period + 45u * 100u, period), 0u);
+  CHECK_EQ(mode.scan_line_within(12345u, 0u), 1080u); }               /* no period: always in the blank */
+
+/* Four bytes a pixel, a part page counting whole: what a scanout's request
+ * is sized from, and what the primary's allocation is asked for. */
+TEST(display_mode, frame_pages_count_a_part_page_whole)
+{ CHECK_EQ(DisplayMode(640u, 480u).frame_pages(), 300u);      /* exactly 300 pages */
+  CHECK_EQ(DisplayMode(2560u, 1440u).frame_pages(), 3600u);
+  CHECK_EQ(DisplayMode(1366u, 768u).frame_pages(), 1025u);    /* 1024.5 */
+  CHECK_EQ(DisplayMode(1u, 1u).frame_pages(), 1u);
+  CHECK_EQ(DisplayMode(0u, 0u).frame_pages(), 0u); }

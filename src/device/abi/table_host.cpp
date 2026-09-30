@@ -89,6 +89,12 @@ void TableHost::wait_event(void *event)
     ops_.wait_event(ops_.opaque, event);
 }
 
+bool TableHost::wait_event_until(void *event, uint64_t deadline)
+{
+    AV_SCOPE("TableHost::wait_event_until");
+    return ops_.wait_event_until(ops_.opaque, event, deadline) != 0;
+}
+
 Status TableHost::create_mutex(void *&mutex)
 {
     AV_SCOPE("TableHost::create_mutex");
@@ -439,6 +445,13 @@ void TableHost::hide_scanout(uint32_t head)
 {
     AV_SCOPE("TableHost::hide_scanout");
     if (ops_.hide_scanout != nullptr) ops_.hide_scanout(ops_.opaque, head);
+}
+
+Status TableHost::show_image(uint32_t head, const RvkExportedImage &image)
+{
+    AV_SCOPE("TableHost::show_image");
+    if (ops_.show_image == nullptr) return Status::not_supported;
+    return ops_.show_image(ops_.opaque, head, &image) == 0 ? Status::ok : Status::not_supported;
 }
 
 /* A table from before renderer mode has none of these, which is a host that

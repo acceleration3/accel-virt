@@ -23,7 +23,6 @@ class MockPlatform final : public Platform {
 public:
     static constexpr std::uint32_t lock_stack_depth = 16u;
     static constexpr std::uint32_t max_register_windows = 16u;
-    static constexpr std::uint32_t max_timers = 8u;
 
     MockPlatform();
     /* The NTSTATUS register_miniport answers, as dxgkrnl would. */
@@ -95,10 +94,6 @@ public:
     /* One thread: a plain store and load. */
     void          store_atomic(std::uint64_t &target, std::uint64_t value) override;
     std::uint64_t load_atomic(std::uint64_t &source) override;
-    void    *create_timer(TimerCallback callback, void *context) override;
-    void     start_timer(void *timer, std::uint64_t period) override;
-    void     stop_timer(void *timer) override;
-    void     destroy_timer(void *timer) override;
     void     stall(std::uint32_t microseconds) override;
     std::uint8_t  read_register_u8(void *address) override;
     std::uint16_t read_register_u16(void *address) override;
@@ -147,9 +142,6 @@ public:
     void set_irql(Irql irql);
 
     void advance_time(std::uint64_t ticks);
-    /* Advances the clock by `ticks`, stopping at each running timer's due time
-     * to call it at DISPATCH, earliest first. The only way a timer fires. */
-    void run_timers(std::uint64_t ticks);
 
     /* Register accesses from `base` to base + window.length() reach `window`,
      * the way a mapped BAR reaches the device. Anything else is unmapped. */
@@ -174,6 +166,8 @@ public:
     /* What a device sees at a fake physical address: the host pointer, if the
      * whole range lies inside one contiguous block. */
     void *translate_physical(std::uint64_t physical_address, std::size_t bytes) const;
+    /* The physical address of the newest contiguous block still held; 0 for none. */
+    std::uint64_t last_contiguous_address() const;
 
     /* Every try_acquire of a lock of `rank` fails, as if another thread held
      * it, until released_elsewhere. */
@@ -231,6 +225,8 @@ public:
     void          resolve_process_views(ProcessViewResolver resolver, void *context);
     std::uint32_t allocations_made() const;
     std::uint32_t locks_held() const;
+    /* Whether a lock of `rank` is held right now. */
+    bool          holds(LockRank rank) const;
     std::uint32_t logged() const;
     /* The last message logged, empty before the first, cut at its capacity. */
     const char   *last_log() const;
@@ -294,17 +290,6 @@ private:
         RegisterWindow *window;
     };
 
-    struct Timer {
-        TimerCallback callback;
-        void         *context;
-        std::uint64_t period;
-        std::uint64_t due;
-        bool          live;
-        bool          running;
-    };
-
-    /* The live timer `timer` names, or null. */
-    Timer *find_timer(void *timer);
 
     struct HeldLock {
         LockRank rank;
@@ -377,7 +362,6 @@ private:
     void         *registered_driver_object_;
     void         *registered_registry_path_;
     const DdiTable *registered_table_;
-    Timer          timers_[max_timers];
     StallCallback  stall_callback_ = nullptr;
     void          *stall_context_ = nullptr;
     PageFrames     page_frames_[max_page_frames];

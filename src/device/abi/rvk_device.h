@@ -23,6 +23,11 @@ typedef void (*RvkHostRoutine)(void *context);
 #define RVK_DEVICE_DOORBELL_SHM_ID 0x72u
 /* Fence queue n, the interrupt line of doorbell page n, is virtqueue FIRST + n. */
 #define RVK_DEVICE_FENCE_QUEUE_FIRST 2u
+/* The display line, raised at the vertical blanks the guest asked for, is the
+ * interrupt line after the fence queues' (docs/protocol.md, "Display clock"):
+ * line DISPLAY_LINE, virtqueue FIRST + DISPLAY_LINE. INTERRUPT_LINES counts them all. */
+#define RVK_DEVICE_DISPLAY_LINE 64u
+#define RVK_DEVICE_INTERRUPT_LINES 65u
 
 /* One host Vulkan physical device, as the glue read it at realize. */
 typedef struct RvkGpuProperties {
@@ -240,6 +245,13 @@ typedef struct RvkHostOps {
      * it cannot be listed. NULL: the host lists nothing, and the device knows
      * no host monitor's modes. */
     int (*list_directory)(void *opaque, const char *path, char *buffer, size_t size, size_t *length);
+
+    /* Any thread. Waits for `event` until CLOCK_MONOTONIC reaches `deadline`
+     * ns: nonzero when it was signalled first, 0 at the deadline. */
+    int (*wait_event_until)(void *opaque, void *event, uint64_t deadline);
+    /* Main loop. Head `head` shows `image`, as rvk_device_export_image gave
+     * it: 0 when it does, nonzero where its console cannot. NULL: no head can. */
+    int (*show_image)(void *opaque, uint32_t head, const RvkExportedImage *image);
 } RvkHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from
@@ -286,6 +298,11 @@ int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
 int rvk_device_export_image(RvkDevice *device, uint64_t key, RvkExportedImage *image);
 int rvk_device_read_image(RvkDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                           uint32_t height);
+/* SCANOUT_IMAGE's frame `frame` of head `head`, the image published under
+ * `key`: 1 when the core shows it at the head's next vertical blank, and the
+ * glue answers the request and shows nothing now; 0 when the glue shows it at
+ * once, as it did before the display clock. Main loop. */
+int rvk_device_post_frame(RvkDevice *device, uint32_t head, uint32_t frame, uint64_t key);
 /* How many capsets the device offers; the glue offers VIRTIO_GPU_F_CONTEXT_INIT
  * when there is one. Main loop. */
 uint32_t rvk_device_capsets(RvkDevice *device);

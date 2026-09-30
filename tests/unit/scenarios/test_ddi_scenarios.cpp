@@ -41,10 +41,12 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
+#include "proto/virtio_gpu/display_clock_request.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/display/display_mode.hpp"
+#include "harness/device/fake_display_clock.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl.hpp"
@@ -225,6 +227,15 @@ public:
     bool created_blob() const { return created_blob_; }
     bool mapped_region() const { return mapped_region_; }
 
+    /* The device's clock reaching head 0's next blank, latching `latched`,
+     * then the DPC the display line's interrupt queues. */
+    void blank(std::uint32_t latched = 0u)
+    {
+        clock_.blank(latched);
+        fdo_.dpc();
+    }
+    av::FakeDisplayClock &clock() { return clock_; }
+
     /* The device side of the control queue, shared with that answer. */
     av::FakeVirtqueueDevice &control()
     {
@@ -274,6 +285,10 @@ private:
                                                             static_cast<std::uint32_t>(answer.length())));
             return;
         }
+        if (asked == av::DisplayClockRequest::type) {
+            device->clock_.answer(device->control());
+            return;
+        }
         if (asked == av::SharedReleaseRequest::type) {
             std::uint8_t request[av::FakeVirtqueueDevice::request_bytes] = {};
             static_cast<void>(device->control().answer_all(request, sizeof request, &Device::answer_release, device));
@@ -304,6 +319,7 @@ private:
     std::uint64_t         last_released_ = 0u;
     bool                  refusing_releases_ = false;
     bool                  mapped_region_ = false;
+    av::FakeDisplayClock  clock_{platform_};
     std::optional<av::FakeVirtqueueDevice> control_;
 };
 
@@ -761,18 +777,19 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   driver.platform().set_irql(av::Irql::passive);
   av::FakeVirtqueueDevice &control = device.control();
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Requests 0 to 3 were StartDevice's GET_DISPLAY_INFO, GET_DISPLAY_MODES and
-   * its capset query. */
-  CHECK_EQ(control.request_type(4u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(control.request_type(5u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
-  CHECK_EQ(control.request_type(6u), 0x0103u);        /* SET_SCANOUT */
-  CHECK_EQ(control.request_type(7u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
-  CHECK_EQ(control.request_type(8u), 0x0104u);        /* RESOURCE_FLUSH */
+  /* Requests 0 to 4 were StartDevice's DISPLAY_CLOCK, GET_DISPLAY_INFO,
+   * GET_DISPLAY_MODES and its capset query. */
+  CHECK_EQ(control.request_type(0u), 0x02F4u);        /* DISPLAY_CLOCK */
+  CHECK_EQ(control.request_type(5u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(control.request_type(6u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
+  CHECK_EQ(control.request_type(7u), 0x0103u);        /* SET_SCANOUT */
+  CHECK_EQ(control.request_type(8u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
+  CHECK_EQ(control.request_type(9u), 0x0104u);        /* RESOURCE_FLUSH */
   /* One memory entry, because the pages VidMm gave are adjacent, and it is the
    * guest physical address of the first one - not the aperture address. */
-  CHECK_EQ(u32(control.request(5u), 28u), 1u);
-  CHECK_EQ(u32(control.request(5u), 32u), 0x40000000u);
-  CHECK_EQ(u32(control.request(5u), 40u), 1280u * 800u * 4u);
+  CHECK_EQ(u32(control.request(6u), 28u), 1u);
+  CHECK_EQ(u32(control.request(6u), 32u), 0x40000000u);
+  CHECK_EQ(u32(control.request(6u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 /* Suspend and resume as dxgkrnl drives it (feature 040, US1): the whole table,
@@ -825,11 +842,13 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   CHECK_EQ(device.function().common().status(), driver_ok_status);
   device.forget_control();
   av::FakeVirtqueueDevice &resumed = device.control();
-  /* The resume's own work: the resource for the source that was scanning out,
-   * and the question of what device this is, which nothing answers here. */
-  CHECK_EQ(resumed.respond_all(0x1100u), 2u);
-  CHECK_EQ(resumed.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(resumed.request_type(1u), 0x0108u);        /* GET_CAPSET_INFO */
+  /* The resume's own work: the clock's page registered again, the resource
+   * for the source that was scanning out, and the question of what device
+   * this is - nothing answers the asks here. */
+  CHECK_EQ(resumed.respond_all(0x1100u), 3u);
+  CHECK_EQ(resumed.request_type(0u), 0x02F4u);        /* DISPLAY_CLOCK */
+  CHECK_EQ(resumed.request_type(1u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(resumed.request_type(2u), 0x0108u);        /* GET_CAPSET_INFO */
 
   /* What dxgkrnl sends after a resume is the address it already had, and that
    * is what puts the pages and the scanout back. */
@@ -1534,13 +1553,11 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
     CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
   Runtime runtime(driver.table(), device.fdo().context(), 1280u, 800u);
   CHECK_EQ(runtime.create_primary(), 0);
-  /* The blanks keep an absolute schedule, the nth at n * 10^7 / 60: a period
-   * rounded down would fall a tick short of the second. */
-  const std::uint64_t frame = (10000000u + 59u) / 60u;
   CHECK_EQ(dmm.show_primary(runtime.primary(), 0x0000000200000000ll), 0);
   CHECK_EQ(dmm.set_visible(true), 0);
   CHECK_EQ(dmm.control_vsync(true), 0);
-  driver.platform().run_timers(frame * 2u);
+  device.blank();
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupts(), 2u);
   CHECK_EQ(device.dxgkrnl().interrupt(1u).InterruptType, 3);
   CHECK_EQ(device.dxgkrnl().interrupt(1u).Argument3, 2u);
@@ -1554,15 +1571,16 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
     vidsch.run_dpc();
     CHECK_EQ(vidsch.completed(), 1u); }
   CHECK_EQ(dmm.show_primary(nullptr, 0), 0);
-  driver.platform().run_timers(frame);
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupt(device.dxgkrnl().interrupts() - 1u).Argument3, 0u);
   CHECK_EQ(dmm.control_vsync(false), 0);
   const std::uint32_t reported = device.dxgkrnl().interrupts();
-  driver.platform().run_timers(frame * 4u);
+  device.blank();
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupts(), reported);
   CHECK_EQ(dmm.control_vsync(true), 0);
   CHECK_EQ(device.fdo().stop_device(), 0);
-  driver.platform().run_timers(frame * 4u);
+  device.fdo().dpc();   /* a stopped device's page is gone, and nothing reads it */
   CHECK_EQ(device.dxgkrnl().interrupts(), reported);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
@@ -1709,10 +1727,11 @@ TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_t
   const auto control = reinterpret_cast<std::int32_t (*)(void *, av::DxgkargControlInterrupt2Record)>(
       table.routine(DdiSlot::DxgkDdiControlInterrupt2));
   CHECK_EQ(control(adapter, {3, 0}), 0);
-  driver.platform().run_timers(10000000u / 60u);
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(control(adapter, {3, 1}), 0);
-  driver.platform().run_timers(10000000u);
+  device.blank();
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
@@ -1786,7 +1805,7 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   CHECK_EQ(dmm.show_primary(&primary, 0x0000000400000000ll), 0);
   driver.platform().set_irql(av::Irql::passive);
   const std::uint32_t reported = device.dxgkrnl().interrupts();
-  driver.platform().run_timers(10000000u / 60u);
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupts(), reported + 1u);
   CHECK_EQ(device.dxgkrnl().interrupt(reported).Argument3, 4u);
   CHECK_EQ(device.fdo().remove_device(), 0);
@@ -1890,7 +1909,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(dmm.show_primary(&primary, 0x0000000200000000ll), 0);
   CHECK_EQ(dmm.set_visible(true), 0);
   CHECK_EQ(dmm.control_vsync(true), 0);
-  driver.platform().run_timers(10000000u / 60u);
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupt(device.dxgkrnl().interrupts() - 1u).Argument3, 2u);
   CHECK_EQ(dmm.set_visible(false), 0);
   CHECK_EQ(dmm.show_primary(nullptr, 0), 0);
@@ -1928,7 +1947,7 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   const std::uint32_t before = device.dxgkrnl().interrupts();
   CHECK_EQ(dmm.flip(&second, 0u, 0, 0x2u), 0);   /* FlipImmediate: completed on return */
   CHECK_EQ(device.dxgkrnl().interrupts(), before);
-  driver.platform().run_timers(10000000u / 60u);
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 3);
   CHECK_EQ(device.dxgkrnl().interrupt(before).Argument2, 0u);
   CHECK_EQ(device.dxgkrnl().interrupt(before).Argument3, 0u);
@@ -1975,7 +1994,7 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   int primary = 0;
   CHECK_EQ(dmm.flip(&primary, 0u, 0, 0x2u), 0);
   const std::uint32_t before = device.dxgkrnl().interrupts();
-  driver.platform().run_timers(10000000u / 60u);
+  device.blank();
   CHECK_EQ(device.dxgkrnl().interrupts(), before + 1u);
   CHECK_EQ(dmm.control_vsync(false), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
@@ -2171,13 +2190,13 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
                    table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
                0);
   }
-  /* Two creates, one per source, each with its own resource id, after the four
+  /* Two creates, one per source, each with its own resource id, after the five
    * StartDevice made. */
   CHECK_EQ(control.respond_all(0x1100u), 2u);
-  CHECK_EQ(control.request_type(4u), 0x0101u);
-  CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id);
   CHECK_EQ(control.request_type(5u), 0x0101u);
-  CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id);
+  CHECK_EQ(control.request_type(6u), 0x0101u);
+  CHECK_EQ(u32(control.request(6u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 /* Through the real table: the device's host-visible region is the driver's

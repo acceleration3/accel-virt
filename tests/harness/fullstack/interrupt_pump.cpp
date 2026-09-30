@@ -36,7 +36,7 @@ std::uint32_t InterruptPump::pass()
     }
     for (std::uint16_t queue = VirtioBridge::control_queue; queue < VirtioBridge::served_queues; queue++)
         if (bridge_.take_completion(queue) && interrupt(queue)) delivered++;
-    for (std::uint32_t line = 0u; line < fence_lines; line++) {
+    for (std::uint32_t line = 0u; line < interrupt_lines; line++) {
         const std::uint32_t raised = host_.raised(line);
         if (raised == seen_[line]) continue;
         seen_[line] = raised;

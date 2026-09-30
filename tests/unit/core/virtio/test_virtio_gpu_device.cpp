@@ -362,7 +362,7 @@ TEST(virtio_gpu_device_connect_fence_queue, gives_each_doorbell_a_message_past_t
       CHECK_EQ(message, expected[doorbell]);
       CHECK_EQ(mapped.common().queue(static_cast<std::uint16_t>(2u + doorbell)).vector, expected[doorbell]);
   }
-  CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);   /* queue 66 */
+  CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);   /* queue 66: the display line */
   CHECK_STATUS(device.connect_fence_queue(0xFFFFu, message), Status::not_found);
   CHECK(device.invariants_hold()); }
 

@@ -54,6 +54,11 @@ public:
     [[nodiscard]] Status release_shared(uint64_t object_id);
     /* GET_DISPLAY_MODES: the modes the host's display offers (DisplayModeSet). */
     [[nodiscard]] Status display_modes();
+    /* DISPLAY_CLOCK: the page the device publishes vertical blanks in, 0 for
+     * none (DisplayClockRequest). */
+    [[nodiscard]] Status display_clock(uint64_t address);
+    /* DISPLAY_TIMING: head `head` blanks at `refresh_millihz` (DisplayTimingRequest). */
+    [[nodiscard]] Status display_timing(uint32_t head, uint32_t refresh_millihz);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
     /* Bytes of the last request written; zero after one that did not fit. */
     size_t               length() const;

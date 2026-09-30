@@ -5,8 +5,8 @@ That is not an accident of the harness, it is the case that must never regress.
 A console with no display backend has no GL context - it is the backend that
 calls qemu_console_set_display_gl_ctx, not the device - so this device offers no
 dma-buf scanout, says so in its capset, and refuses every SET_SCANOUT_BLOB with
-ERR_UNSPEC while answering every malformed one exactly as the contract says
-(specs/058-host-composition-scanout/contracts/scanout_blob.md). The guest then
+ERR_UNSPEC while answering every malformed one exactly as ScanoutFramebuffer
+says. The guest then
 keeps the 2D path of feature 038.
 
 What a GL display does with the same commands needs one, and the guest suite is

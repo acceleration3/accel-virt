@@ -272,6 +272,7 @@ Status Adapter::power_up()
     const Status status = device_.object().start(resources_.message_interrupts());
     if (status != Status::ok) device_.destroy();
     if (status == Status::ok) start_copier();
+    if (status == Status::ok) attach_clock();
     cursor_.forget_device();
     scanout_.forget_device();
     return status;
@@ -289,6 +290,21 @@ Status Adapter::power_down()
     const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
     return status;
+}
+
+/* A device that will not keep the display's clock leaves dxgkrnl with no
+ * vertical blank from it, which stalls every flip; the start carries on, and
+ * the line is the only trace of why. */
+void Adapter::attach_clock()
+{
+    AV_SCOPE("Adapter::attach_clock");
+    const Status attached = vsync_.attach(device_.object());
+    if (attached == Status::ok) return;
+    char       bytes[80];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: the device refused the display clock, status 0x");
+    message.append_hex(static_cast<uint32_t>(NtStatus(attached).value()), 8u);
+    platform_.log(message.text());
 }
 
 /* Without contiguous memory for its payload the host cannot be handed a
@@ -358,8 +374,9 @@ int32_t Adapter::stop_device()
     AV_SCOPE("Adapter::stop_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device");
     InvariantScope<Adapter> guard(platform_, *this, "stop_device");
-    vsync_.destroy();
+    /* The device first: its clock writes the page until it is reset. */
     const Status status = power_down();
+    vsync_.destroy();
     scanout_.release();
     cursor_.release();
     doorbell_table_.destroy();
@@ -409,9 +426,15 @@ void Adapter::dpc_routine()
 {
     AV_SCOPE("Adapter::dpc_routine");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
-    SpinLockGuard serialized(dpc_lock_);
-    uint32_t completed = 0u;
-    const bool harvest = device_.constructed() && present_ && device_.object().running();
+    SpinLockGuard  serialized(dpc_lock_);
+    const uint64_t now = platform_.interrupt_time();
+    uint32_t       completed = 0u;
+    const bool     harvest = device_.constructed() && present_ && device_.object().running();
+    /* The blank first, and dxgkrnl told before the scanout is refreshed: a
+     * refresh kicks the device, and a kick QEMU handles on the vCPU waits for
+     * its main loop - a vsync reported behind one reached dxgkrnl milliseconds
+     * after the blank. */
+    if (harvest) vsync_.tick(now, scanout_.posts_frames(vsync_source));
     announce_display_change(harvest);
     /* A device that fails every harvest would otherwise log on every DPC, so
      * each of these lines is spent from the budget (feature 037, FR-003). */
@@ -420,7 +443,7 @@ void Adapter::dpc_routine()
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
     rvk_contexts_.serve(node_, hw_submissions_);
-    const uint32_t overdue = node_.release_overdue(platform_.interrupt_time());
+    const uint32_t overdue = node_.release_overdue(now);
     if (overdue != 0u && budget_.allows()) platform_.log("rvkgpu: a held packet passed its deadline and was let go");
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a completion was refused in the DPC");
@@ -430,8 +453,8 @@ void Adapter::dpc_routine()
      * because the control queue answered: our own scanout requests complete
      * there, and taking those for presents would flush forever. */
     constexpr uint32_t refreshes_per_present = 2u;
-    const uint32_t fence = node_.current_fence();
-    const bool     completed_any = fence != presented_fence_;
+    const uint32_t     fence = node_.current_fence();
+    const bool         completed_any = fence != presented_fence_;
     presented_fence_ = fence;
     const uint64_t made = platform_.load_atomic(presents_made_);
     if (made != presents_shown_) {
@@ -440,20 +463,25 @@ void Adapter::dpc_routine()
     }
     const bool presented = completed_any && refreshes_owed_ != 0u;
     if (presented) refreshes_owed_--;
-    /* Once a display period at most: an application flipping thousands of
-     * times a second would otherwise have the host read every frame back.
-     * What arrives between is shown at the next vsync tick's DPC. */
-    constexpr uint64_t refresh_period = 10000000u / DisplayMode::refresh_hz - 10000u;   /* 100 ns, a ms early */
-    const uint64_t     now = platform_.interrupt_time();
     refresh_waiting_ = refresh_waiting_ || presented;
-    if (harvest && now - refreshed_at_ >= refresh_period) {
-        refreshed_at_ = now;
-        const bool shown = refresh_waiting_;
-        refresh_waiting_ = false;
-        if (scanout_.refresh(sources_, shown) != Status::ok && budget_.allows())
-            platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
-    }
     dxgkrnl_.notify_dpc();
+    if (harvest) refresh_scanout(now);
+}
+
+/* A primary the host reads back is carried once a display period at most: an
+ * application flipping thousands of times a second would otherwise have the
+ * host read every frame. A numbered flip goes on every DPC, since the device's
+ * clock shows only what it has before its blank. */
+void Adapter::refresh_scanout(uint64_t now)
+{
+    AV_SCOPE("Adapter::refresh_scanout");
+    constexpr uint64_t refresh_period = 10000000u / DisplayMode::refresh_hz - 10000u;   /* 100 ns, a ms early */
+    const bool         due = now - refreshed_at_ >= refresh_period;
+    const bool         shown = due && refresh_waiting_;
+    if (due) refreshed_at_ = now;
+    if (due) refresh_waiting_ = false;
+    if (scanout_.refresh(sources_, shown, due) != Status::ok && budget_.allows())
+        platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
 }
 
 /* One video output per display the device has. dxgkrnl's array holds one
@@ -847,7 +875,7 @@ int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::describe_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t described = NtStatus(allocations_.describe(*request, sources_)).value();
-    log_status("rvkgpu: DescribeAllocation", described);
+    log_failure("rvkgpu: DescribeAllocation", described);
     return described;
 }
 
@@ -1210,6 +1238,13 @@ void Adapter::log_allocation(const DxgkargCreateAllocationRecord &request, int32
     platform_.log(message.text());
 }
 
+void Adapter::log_failure(const char *step, int32_t status)
+{
+    AV_SCOPE("Adapter::log_failure");
+    if (status >= 0) return;
+    log_status(step, status);
+}
+
 void Adapter::log_status(const char *step, int32_t status)
 {
     AV_SCOPE("Adapter::log_status");
@@ -1313,7 +1348,7 @@ int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
         return NtStatus(Status::invalid_parameter).value();
     const DisplayMode *mode = sources_.committed_mode(request->VidPnTargetId);
     if (mode == nullptr) return NtStatus(Status::invalid_state).value();
-    const uint32_t line = mode->scan_line(platform_.interrupt_time());
+    const uint32_t line = vsync_.scan_line(*mode, platform_.interrupt_time());
     request->InVerticalBlank = line >= mode->height() ? 1u : 0u;
     request->ScanLine = line;
     return NtStatus(Status::ok).value();
@@ -1341,8 +1376,7 @@ int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressReco
     AV_SCOPE("Adapter::set_vidpn_source_address");
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    if (request->hAllocation == nullptr)
-        return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0, nullptr)).value();
+    if (request->hAllocation == nullptr) return flipped(sources_.set_scanout(request->VidPnSourceId, 0, nullptr));
     return show_primary(request->VidPnSourceId, request->PrimarySegment, request->PrimaryAddress, request->hAllocation);
 }
 
@@ -1352,7 +1386,17 @@ int32_t Adapter::show_primary(uint32_t source, uint32_t segment, int64_t address
     if (segment != ApertureSegment::segment_id && segment != system_memory_driver_segment)
         return NtStatus(Status::invalid_parameter).value();
     log_scanout(source, segment, address);
-    return NtStatus(sources_.set_scanout(source, address, allocation)).value();
+    return flipped(sources_.set_scanout(source, address, allocation));
+}
+
+/* A flip reaches the host from the DPC, and the device's clock shows only
+ * what it has before its blank: the DPC is asked for now rather than left to
+ * whatever interrupt comes next. */
+int32_t Adapter::flipped(Status set)
+{
+    AV_SCOPE("Adapter::flipped");
+    if (set == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
+    return NtStatus(set).value();
 }
 
 /* Which source dxgkrnl showed or hid, and not only that it asked: a display the
@@ -1421,7 +1465,7 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
         static_cast<void>(writing.operation(kind));
         move_presented_pixels(*request, kind, first);
     }
-    log_status("rvkgpu: Present", presented);
+    log_failure("rvkgpu: Present", presented);
     return presented;
 }
 
@@ -1748,7 +1792,7 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const Dxgkarg
         base->AllocationSegment != system_memory_driver_segment)
         return NtStatus(Status::invalid_parameter).value();
     if (base != nullptr) log_scanout(request->VidPnSourceId, base->AllocationSegment, base->AllocationAddress);
-    return NtStatus(sources_.set_multiplane_scanout(request->VidPnSourceId, base)).value();
+    return flipped(sources_.set_multiplane_scanout(request->VidPnSourceId, base));
 }
 
 int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata)
