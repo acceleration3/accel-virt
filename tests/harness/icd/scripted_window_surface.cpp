@@ -8,7 +8,7 @@ namespace av {
 
 ScriptedWindowSurface::ScriptedWindowSurface()
     : dcs_{}, dc_count_(0u), refuse_blit_(false), blits_(0u), blit_dc_(nullptr), blit_width_(0u), blit_height_(0u),
-      blit_bytes_{} {}
+      blit_bytes_{}, top_down_(false) {}
 
 void ScriptedWindowSurface::add_dc(void *dc, void *window, std::uint32_t width, std::uint32_t height)
 {
@@ -74,6 +74,7 @@ bool ScriptedWindowSurface::blit(void *dc, std::uint32_t width, std::uint32_t he
     blit_dc_ = dc;
     blit_width_ = width;
     blit_height_ = height;
+    top_down_ = false;
     const std::uint64_t bytes = std::uint64_t{width} * height * 4u;
     std::memcpy(blit_bytes_, bgra_bottom_up, bytes < kept_bytes ? bytes : kept_bytes);
     return true;
@@ -96,5 +97,14 @@ void               *ScriptedWindowSurface::last_blit_dc() const { return blit_dc
 std::uint32_t       ScriptedWindowSurface::last_blit_width() const { return blit_width_; }
 std::uint32_t       ScriptedWindowSurface::last_blit_height() const { return blit_height_; }
 const std::uint8_t *ScriptedWindowSurface::last_blit_bytes() const { return blit_bytes_; }
+bool                ScriptedWindowSurface::last_blit_top_down() const { return top_down_; }
+
+bool ScriptedWindowSurface::blit_window_top_down(void *window, std::uint32_t width, std::uint32_t height,
+                                                 const std::uint8_t *bgra_top_down)
+{
+    const bool drawn = blit_window(window, width, height, bgra_top_down);
+    if (drawn) top_down_ = true;
+    return drawn;
+}
 
 }  // namespace av

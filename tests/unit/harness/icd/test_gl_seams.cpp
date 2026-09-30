@@ -100,9 +100,28 @@ TEST(scripted_window_surface, a_window_blit_draws_on_its_first_dc)
   CHECK_EQ(scripted.last_blit_bytes()[3], 10u);
   CHECK(!surface.blit_window(&unknown, 8u, 4u, frame));
   CHECK(!surface.blit_window(nullptr, 8u, 4u, frame));
+  CHECK(!scripted.last_blit_top_down());
   scripted.close_window(&window);
   CHECK(!surface.blit_window(&window, 8u, 4u, frame));
   CHECK_EQ(scripted.blits(), 1u); }
+
+/* A top-down window blit is kept as the same blit, marked top-down; a later
+ * bottom-up one clears the mark, and a refused one leaves it as it was. */
+TEST(scripted_window_surface, a_top_down_window_blit_is_marked_so)
+{ ScriptedWindowSurface scripted;
+  av::icd::WindowSurface &surface = scripted;
+  int window = 0, dc = 0, unknown = 0;
+  scripted.add_dc(&dc, &window, 8u, 4u);
+  const std::uint8_t frame[8 * 4 * 4] = {7u, 8u, 9u, 10u};
+  CHECK(surface.blit_window_top_down(&window, 8u, 4u, frame));
+  CHECK_EQ(scripted.blits(), 1u);
+  CHECK(scripted.last_blit_top_down());
+  CHECK_EQ(scripted.last_blit_bytes()[2], 9u);
+  CHECK(!surface.blit_window_top_down(&unknown, 8u, 4u, frame));
+  CHECK(scripted.last_blit_top_down());
+  CHECK(surface.blit_window(&window, 8u, 4u, frame));
+  CHECK(!scripted.last_blit_top_down());
+  CHECK_EQ(scripted.blits(), 2u); }
 
 TEST(scripted_thread_slot, each_thread_keeps_its_own_value_and_error)
 { ScriptedThreadSlot slot;

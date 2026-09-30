@@ -38,9 +38,14 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     if (count_ != 0u) return VK_ERROR_INITIALIZATION_FAILED;
     const VkResult judged = judge(info, surface);
     if (judged != VK_SUCCESS) return judged;
+    format_ = foreign_enum(info.imageFormat);
     const uint64_t bytes = uint64_t{info.imageExtent.width} * info.imageExtent.height * pixel_bytes;
-    frame_ = static_cast<uint8_t *>(memory_.allocate(static_cast<size_t>(bytes), Pool::paged));
-    if (frame_ == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    /* A BGRA image is a DIB's own order, so its read-back is drawn as it is;
+     * only an RGBA one needs its red and blue traded somewhere first. */
+    if (!shows_bgra()) {
+        frame_ = static_cast<uint8_t *>(memory_.allocate(static_cast<size_t>(bytes), Pool::paged));
+        if (frame_ == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     VkResult made = device_.make_readback(bytes);
     /* judge() has held the format to one this driver presents, so the
      * application's value is a format the host knows. */
@@ -56,7 +61,6 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     }
     window_ = window;
     extent_ = info.imageExtent;
-    format_ = foreign_enum(info.imageFormat);
     mode_ = foreign_enum(info.presentMode);
     count_ = info.minImageCount;
     return VK_SUCCESS;
@@ -127,8 +131,12 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
         return device_.skip(queue, wait_count, waits);
     const VkResult copied = device_.copy(queue, device_.made(index).image_, extent_, wait_count, waits);
     if (copied != VK_SUCCESS) return copied;
-    to_window_order(device_.readback());
-    if (!windows_.blit_window(window_, extent_.width, extent_.height, frame_)) {
+    const uint8_t *rows = device_.readback();
+    if (frame_ != nullptr) {
+        to_bgra(rows);
+        rows = frame_;
+    }
+    if (!windows_.blit_window_top_down(window_, extent_.width, extent_.height, rows)) {
         log_.write("rvkvk: a presented frame was refused by its window");
         return window_state();
     }
@@ -148,24 +156,27 @@ VkResult Swapchain::window_state() const
     return VK_SUCCESS;
 }
 
-/* The copy's top row first becomes the window's bottom row first, and an RGBA
- * image's red and blue trade places, since a DIB is BGRA. */
-void Swapchain::to_window_order(const uint8_t *rows) const
+/* An RGBA image's red and blue trade places, since a DIB is BGRA; the rows
+ * keep their order, which a top-down DIB draws as they are. A pixel at a
+ * time: a byte at a time over 14 MB a frame was a fifth of a game's render
+ * thread. */
+void Swapchain::to_bgra(const uint8_t *rows) const
 {
-    AV_SCOPE("Swapchain::to_window_order");
-    const bool rgba = format_ == static_cast<int32_t>(VK_FORMAT_R8G8B8A8_UNORM) ||
-                      format_ == static_cast<int32_t>(VK_FORMAT_R8G8B8A8_SRGB);
-    const size_t row_bytes = size_t{extent_.width} * pixel_bytes;
-    for (uint32_t row = 0u; row < extent_.height; row++) {
-        const uint8_t *const from = rows + size_t{extent_.height - 1u - row} * row_bytes;
-        uint8_t *const       to = frame_ + size_t{row} * row_bytes;
-        for (size_t at = 0u; at < row_bytes; at += pixel_bytes) {
-            to[at] = from[at + (rgba ? 2u : 0u)];
-            to[at + 1u] = from[at + 1u];
-            to[at + 2u] = from[at + (rgba ? 0u : 2u)];
-            to[at + 3u] = from[at + 3u];
-        }
+    AV_SCOPE("Swapchain::to_bgra");
+    const size_t pixels = size_t{extent_.width} * extent_.height;
+    for (size_t at = 0u; at < pixels; at++) {
+        uint32_t pixel = 0u;
+        __builtin_memcpy(&pixel, rows + at * pixel_bytes, pixel_bytes);
+        pixel = (pixel & 0xFF00FF00u) | ((pixel >> 16u) & 0xFFu) | ((pixel & 0xFFu) << 16u);
+        __builtin_memcpy(frame_ + at * pixel_bytes, &pixel, pixel_bytes);
     }
+}
+
+bool Swapchain::shows_bgra() const
+{
+    AV_SCOPE("Swapchain::shows_bgra");
+    return format_ == static_cast<int32_t>(VK_FORMAT_B8G8R8A8_UNORM) ||
+           format_ == static_cast<int32_t>(VK_FORMAT_B8G8R8A8_SRGB);
 }
 
 void Swapchain::retire()
@@ -202,14 +213,15 @@ void Swapchain::release()
     for (bool &held : held_) held = false;
 }
 
-/* A made swapchain has its frame buffer, its images and the device's, and
- * holds only images it has; an unmade one holds nothing. */
+/* A made swapchain has its images and the device's, and a frame buffer
+ * exactly when its format is not BGRA; it holds only images it has; an unmade
+ * one holds nothing. */
 bool Swapchain::invariants_hold() const
 {
     AV_SCOPE("Swapchain::invariants_hold");
     if (!device_.invariants_hold() || !pacer_.invariants_hold()) return false;
     if (count_ > PresentDevice::max_images) return false;
-    if (count_ != 0u && (frame_ == nullptr || device_.images() != count_)) return false;
+    if (count_ != 0u && ((frame_ == nullptr) != shows_bgra() || device_.images() != count_)) return false;
     /* Every counted image is the device's own invariant; what is this one's is
      * that nothing past the count is held. */
     for (uint32_t index = count_; index < PresentDevice::max_images; index++)

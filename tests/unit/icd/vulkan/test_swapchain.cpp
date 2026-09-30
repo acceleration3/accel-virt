@@ -1,6 +1,6 @@
 /* One swapchain (feature 046, contracts/wsi.md): what its creation refuses,
  * the images it hands out in turn, and what a present puts on the window - the
- * frame's own bytes, bottom-up and in the window's channel order, paced for
+ * frame's own bytes, top row first and in the window's channel order, paced for
  * FIFO and not for IMMEDIATE. The window changes under it: resized, minimized,
  * gone. */
 #include "harness/framework/test_registry.hpp"
@@ -192,10 +192,10 @@ TEST(swapchain, images_are_acquired_in_turn_and_a_present_frees_the_one_it_was_h
   CHECK_EQ(chain.presented(), 2u);
   CHECK(chain.invariants_hold()); }
 
-/* The frame on the window is the image's own bytes: a Vulkan image's first row
- * is the top one and a DIB's is the bottom one, and an RGBA image's red and
- * blue trade places on the way to a BGRA window. */
-TEST(swapchain, a_present_puts_the_frame_on_the_window_bottom_up_in_the_window_s_channel_order)
+/* The frame on the window is the image's own bytes, the top row first as the
+ * image holds them - the window draws them top-down - and an RGBA image's red
+ * and blue trade places on the way to a BGRA window. */
+TEST(swapchain, a_present_puts_the_frame_on_the_window_top_down_in_the_window_s_channel_order)
 { const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB,
                               VK_FORMAT_R8G8B8A8_SRGB};
   for (const VkFormat format : formats) {
@@ -210,19 +210,24 @@ TEST(swapchain, a_present_puts_the_frame_on_the_window_bottom_up_in_the_window_s
       std::uint32_t count = images;
       CHECK_EQ(chain.images(count, made), VK_SUCCESS);
       rig.host().paint(made[index], 0x10u, 0x20u, 0x30u, 0x40u);
+      rig.host().paint_row(made[index], 0u, width * 4u, 0x11u, 0x22u, 0x33u, 0x44u);
       CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
       CHECK_EQ(rig.windows().blits(), 1u);
+      CHECK(rig.windows().last_blit_top_down());
       CHECK_EQ(rig.windows().last_blit_width(), width);
       CHECK_EQ(rig.windows().last_blit_height(), height);
       CHECK(rig.windows().last_blit_dc() == as_window(0x20u));
       const bool rgba = format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
       const std::uint8_t *const bytes = rig.windows().last_blit_bytes();
       for (std::uint32_t at = 0u; at < frame_bytes; at += 4u) {
-          CHECK_EQ(bytes[at], rgba ? 0x30u : 0x10u);
-          CHECK_EQ(bytes[at + 1u], 0x20u);
-          CHECK_EQ(bytes[at + 2u], rgba ? 0x10u : 0x30u);
-          CHECK_EQ(bytes[at + 3u], 0x40u);
+          const bool top = at < width * 4u;
+          CHECK_EQ(bytes[at], rgba ? (top ? 0x33u : 0x30u) : (top ? 0x11u : 0x10u));
+          CHECK_EQ(bytes[at + 1u], top ? 0x22u : 0x20u);
+          CHECK_EQ(bytes[at + 2u], rgba ? (top ? 0x11u : 0x10u) : (top ? 0x33u : 0x30u));
+          CHECK_EQ(bytes[at + 3u], top ? 0x44u : 0x40u);
       }
+      /* Only an RGBA swapchain keeps a frame buffer to trade channels in. */
+      CHECK_EQ(rig.memory().live_allocations() != 0u, rgba);
   } }
 
 /* FIFO holds the frame to the adapter's vertical blank; IMMEDIATE does not. */
@@ -329,11 +334,13 @@ TEST(swapchain, a_swapchain_whose_host_objects_cannot_be_made_leaves_nothing_beh
   CHECK_EQ(rig.initialize(chain, create_info()), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.host().images(), 0u);
   CHECK(chain.invariants_hold());
-  /* No guest memory for the frame at all. */
+  /* No guest memory for an RGBA frame at all; a BGRA one needs none. */
   SwapchainRig starved;
   Swapchain &none = starved.chain();
   starved.memory().fail_allocation_at(1u);
-  CHECK_EQ(starved.initialize(none, create_info()), VK_ERROR_OUT_OF_HOST_MEMORY);
+  VkSwapchainCreateInfoKHR rgba = create_info();
+  rgba.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+  CHECK_EQ(starved.initialize(none, rgba), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK_EQ(starved.host().images(), 0u);
   CHECK(none.invariants_hold()); }
 
@@ -349,8 +356,8 @@ TEST(swapchain, a_window_of_another_height_is_out_of_date_too)
   CHECK_EQ(index, 9u); }
 
 /* Every invariant a swapchain keeps, broken in turn: an image held past the
- * count, a count past the images, no frame buffer, an image the device lost,
- * and a blank counted with no adapter to have counted it. */
+ * count, a count past the images, an RGBA one with no frame buffer, an image
+ * the device lost, and a blank counted with no adapter to have counted it. */
 TEST(swapchain, its_invariants_refuse_a_hold_past_the_count_a_miscount_and_a_lost_image)
 { SwapchainRig rig;
   Swapchain &chain = rig.chain();
@@ -365,10 +372,15 @@ TEST(swapchain, its_invariants_refuse_a_hold_past_the_count_a_miscount_and_a_los
   CHECK(!miscounted.chain().invariants_hold());
 
   SwapchainRig frameless;
-  CHECK_EQ(frameless.initialize(frameless.chain(), create_info()), VK_SUCCESS);
+  VkSwapchainCreateInfoKHR rgba = create_info();
+  rgba.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+  CHECK_EQ(frameless.initialize(frameless.chain(), rgba), VK_SUCCESS);
   std::uint8_t *const frame = SwapchainProbe::take_frame(frameless.chain());
+  CHECK(frame != nullptr);
   CHECK(!frameless.chain().invariants_hold());
   SwapchainProbe::put_frame(frameless.chain(), frame);
+  CHECK(frameless.chain().invariants_hold());
+
 
   SwapchainRig lost;
   CHECK_EQ(lost.initialize(lost.chain(), create_info()), VK_SUCCESS);
@@ -384,6 +396,16 @@ TEST(swapchain, its_invariants_refuse_a_hold_past_the_count_a_miscount_and_a_los
   CHECK_EQ(unpaced.initialize(unpaced.chain(), create_info()), VK_SUCCESS);
   SwapchainProbe::pace_without_an_adapter(unpaced.chain());
   CHECK(!unpaced.chain().invariants_hold()); }
+
+/* A BGRA swapchain draws the read-back as it is, so one holding a frame
+ * buffer breaks its invariant. */
+TEST(swapchain, a_bgra_swapchain_holds_no_frame_buffer)
+{ SwapchainRig framed;
+  CHECK_EQ(framed.initialize(framed.chain(), create_info()), VK_SUCCESS);
+  CHECK(framed.chain().invariants_hold());
+  CHECK(SwapchainProbe::take_frame(framed.chain()) == nullptr);
+  SwapchainProbe::put_frame(framed.chain(), static_cast<std::uint8_t *>(framed.memory().allocate(4u, av::Pool::paged)));
+  CHECK(!framed.chain().invariants_hold()); }
 
 /* The window changed size under the swapchain: everything it hands out is out
  * of date until the application makes another (US2). */

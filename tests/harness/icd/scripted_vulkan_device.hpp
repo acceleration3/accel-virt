@@ -57,6 +57,9 @@ public:
 
     /* Every byte of `image` set to one RGBA pixel repeated. */
     void paint(VkImage image, std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha);
+    /* Row `row` alone, of an image `row_bytes` a row, one colour. */
+    void paint_row(VkImage image, std::uint32_t row, std::uint32_t row_bytes, std::uint8_t red, std::uint8_t green,
+                   std::uint8_t blue, std::uint8_t alpha);
 
     std::uint32_t       images() const;
     std::uint32_t       memories() const;

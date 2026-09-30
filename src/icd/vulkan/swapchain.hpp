@@ -61,7 +61,9 @@ public:
 private:
     [[nodiscard]] VkResult judge(const VkSwapchainCreateInfoKHR &info, SurfaceProperties &surface) const;
     VkResult               window_state() const;
-    void                   to_window_order(const uint8_t *rows) const;
+    void                   to_bgra(const uint8_t *rows) const;
+    /* Whether the images are BGRA, a DIB's own channel order. */
+    bool                   shows_bgra() const;
     void                   release();
 
     BlockSource   &memory_;

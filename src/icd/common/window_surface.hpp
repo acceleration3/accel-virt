@@ -23,8 +23,11 @@ public:
      * origin; false when the DC refused them. */
     virtual bool  blit(void *dc, uint32_t width, uint32_t height, const uint8_t *bgra_bottom_up) = 0;
     /* The same on `window`'s own client area, for a caller that holds no DC:
-     * a Vulkan swapchain. false for a window that no longer exists. */
+     * OpenGL's present thread. false for a window that no longer exists. */
     virtual bool  blit_window(void *window, uint32_t width, uint32_t height, const uint8_t *bgra_bottom_up) = 0;
+    /* The same with the top row first, as a Vulkan image holds its rows: a
+     * swapchain's read-back, drawn as it is. */
+    virtual bool  blit_window_top_down(void *window, uint32_t width, uint32_t height, const uint8_t *bgra_top_down) = 0;
 
 protected:
     WindowSurface() = default;

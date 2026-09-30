@@ -30,6 +30,9 @@ public:
     /* Kept as a blit on the window's first DC; last_blit_dc() is that DC. */
     bool  blit_window(void *window, std::uint32_t width, std::uint32_t height,
                       const std::uint8_t *bgra_bottom_up) override;
+    /* The same, recorded as a top-down blit. */
+    bool  blit_window_top_down(void *window, std::uint32_t width, std::uint32_t height,
+                               const std::uint8_t *bgra_top_down) override;
 
     std::uint32_t       blits() const;
     void               *last_blit_dc() const;
@@ -37,6 +40,8 @@ public:
     std::uint32_t       last_blit_height() const;
     /* The last blit's first kept_bytes bytes. */
     const std::uint8_t *last_blit_bytes() const;
+    /* Whether the last blit's rows came top row first. */
+    bool                last_blit_top_down() const;
 
 private:
     struct Dc {
@@ -57,6 +62,7 @@ private:
     std::uint32_t blit_width_;
     std::uint32_t blit_height_;
     std::uint8_t  blit_bytes_[kept_bytes];
+    bool          top_down_;
 };
 
 }  // namespace av

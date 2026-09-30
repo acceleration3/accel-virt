@@ -411,6 +411,17 @@ void ScriptedVulkanDevice::paint(VkImage image, std::uint8_t red, std::uint8_t g
     for (std::uint32_t at = 0u; at + 4u <= max_image_bytes; at += 4u) std::memcpy(&slot->bytes[at], pixel, 4u);
 }
 
+void ScriptedVulkanDevice::paint_row(VkImage image, std::uint32_t row, std::uint32_t row_bytes, std::uint8_t red,
+                                     std::uint8_t green, std::uint8_t blue, std::uint8_t alpha)
+{
+    Image *const slot = image_of(image);
+    if (slot == nullptr) return;
+    const std::uint8_t pixel[4] = {red, green, blue, alpha};
+    const std::uint32_t first = row * row_bytes;
+    for (std::uint32_t at = first; at + 4u <= first + row_bytes && at + 4u <= max_image_bytes; at += 4u)
+        std::memcpy(&slot->bytes[at], pixel, 4u);
+}
+
 std::uint32_t ScriptedVulkanDevice::images() const { return image_count_; }
 std::uint32_t ScriptedVulkanDevice::memories() const { return memory_count_; }
 std::uint32_t ScriptedVulkanDevice::submits() const { return submits_; }
