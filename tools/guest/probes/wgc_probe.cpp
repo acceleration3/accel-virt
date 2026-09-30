@@ -74,6 +74,7 @@ struct Options {
     UINT swap_buffers = 2;
     UINT sync_interval = 1;   // 0 presents uncapped, as a game with vsync off
     int pool_buffers = 3;
+    double min_update_ms = -1.0;   // GraphicsCaptureSession.MinUpdateInterval; below 0, DWM's 16 ms
 };
 
 // A marker on the ETW timeline: dxgkrnl's profiler keyword logs each
@@ -434,6 +435,19 @@ bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options,
     CHECK(pools->CreateFreeThreaded(device.winrt, dx::DirectXPixelFormat_B8G8R8A8UIntNormalized, options.pool_buffers,
                                     size, &pool));
     CHECK(pool->CreateCaptureSession(item, &session));
+    if (options.min_update_ms >= 0) {
+        // IGraphicsCaptureSession5 (Windows 11 24H2), which the MinGW headers do not declare yet.
+        struct Session5 : IInspectable {
+            virtual HRESULT STDMETHODCALLTYPE get_MinUpdateInterval(INT64 *hundred_ns) = 0;
+            virtual HRESULT STDMETHODCALLTYPE put_MinUpdateInterval(INT64 hundred_ns) = 0;
+        };
+        const IID session5 = {0x67c0ea62, 0x1f85, 0x5061, {0x92, 0x5a, 0x23, 0x9b, 0xe0, 0xac, 0x09, 0xcb}};
+        Session5 *interval = nullptr;
+        HRESULT set = session->QueryInterface(session5, (void **)&interval);
+        if (SUCCEEDED(set)) set = interval->put_MinUpdateInterval((INT64)(options.min_update_ms * 10000.0));
+        release(interval);
+        LOG("min_update_ms %.3f hr 0x%08lx\n", options.min_update_ms, (unsigned long)set);
+    }
     LOG("item width %d height %d pool_buffers %d thread %lu process %lu\n", size.Width, size.Height,
         options.pool_buffers, GetCurrentThreadId(), GetCurrentProcessId());
     FrameReader reader(device.d3d, device.context);
@@ -505,6 +519,9 @@ bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options,
     if (track_steps)
         LOG("steps painted %ld next %u repeated %u never_captured %u\n", window->painted() - painted_at_start, next_step,
             repeated, skipped);
+    else if (window)
+        LOG("presents %ld rate %.1f\n", window->painted() - painted_at_start,
+            (window->painted() - painted_at_start) / options.seconds);
     LOG("pixels checked %u held %u\n", checked, held);
     IClosable *closable = nullptr;
     if (SUCCEEDED(session->QueryInterface(__uuidof(IClosable), (void **)&closable))) closable->Close();
@@ -613,6 +630,7 @@ bool parse(int argc, wchar_t **argv, Options &options, const wchar_t *&path)
         else if (!wcscmp(argument, L"--swap-buffers") && valued) options.swap_buffers = (UINT)_wtoi(argv[++i]);
         else if (!wcscmp(argument, L"--pool-buffers") && valued) options.pool_buffers = _wtoi(argv[++i]);
         else if (!wcscmp(argument, L"--sync-interval") && valued) options.sync_interval = (UINT)_wtoi(argv[++i]);
+        else if (!wcscmp(argument, L"--min-update-ms") && valued) options.min_update_ms = _wtof(argv[++i]);
         else if (!wcscmp(argument, L"--out") && valued) path = argv[++i];
         else if (argument[0] != L'-') options.mode = argument;
         else return false;
@@ -628,7 +646,7 @@ int wmain(int argc, wchar_t **argv)
     const wchar_t *path = nullptr;
     if (!parse(argc, argv, options, path)) {
         std::fprintf(stderr, "usage: wgc_probe <window|monitor|window-d3d|monitor-d3d|title:TEXT> [--seconds S] "
-                             "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--sync-interval N] [--out FILE]\n");
+                             "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--sync-interval N] [--min-update-ms M] [--out FILE]\n");
         return 2;
     }
     if (path) {
