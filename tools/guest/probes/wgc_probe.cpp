@@ -9,7 +9,8 @@
 //                            DWM frame, captured as a window or as the monitor
 //   window-d3d, monitor-d3d  the same window drawn by a D3D11 swapchain
 //                            presenting at sync interval 1, as a game does;
-//                            --swap-buffers 1 makes it a blt-model swapchain
+//                            --swap-buffers 1 makes it a blt-model swapchain,
+//                            --sync-interval 0 presents uncapped
 //   title:TEXT               the first visible window whose title holds TEXT
 //
 // Every line is `key value...`: `frame` once per captured frame (its
@@ -71,6 +72,7 @@ struct Options {
     double seconds = 8.0;
     double render_ms = 0.0;   // busy time before each present, as a game renders
     UINT swap_buffers = 2;
+    UINT sync_interval = 1;   // 0 presents uncapped, as a game with vsync off
     int pool_buffers = 3;
 };
 
@@ -248,7 +250,7 @@ private:
                 do QueryPerformanceCounter(&now);
                 while (1000.0 * (now.QuadPart - start.QuadPart) / frequency.QuadPart < options_.render_ms);
             }
-            chain->Present(1, 0);
+            chain->Present(options_.sync_interval, 0);
             marker->mark();
             InterlockedIncrement(&painted_);
         }
@@ -590,8 +592,8 @@ bool run(const Options &options)
             CHECK(interop->CreateForWindow(probe.hwnd(), __uuidof(IGraphicsCaptureItem), (void **)&item));
         }
     }
-    LOG("mode %ls seconds %.3f render_ms %.3f swap_buffers %u\n", target, options.seconds, options.render_ms,
-        options.swap_buffers);
+    LOG("mode %ls seconds %.3f render_ms %.3f swap_buffers %u sync_interval %u\n", target, options.seconds,
+        options.render_ms, options.swap_buffers, options.sync_interval);
     const bool passed = capture(item, device, options, window, track_steps);
     release(item);
     if (window) window->close();
@@ -610,6 +612,7 @@ bool parse(int argc, wchar_t **argv, Options &options, const wchar_t *&path)
         else if (!wcscmp(argument, L"--render-ms") && valued) options.render_ms = _wtof(argv[++i]);
         else if (!wcscmp(argument, L"--swap-buffers") && valued) options.swap_buffers = (UINT)_wtoi(argv[++i]);
         else if (!wcscmp(argument, L"--pool-buffers") && valued) options.pool_buffers = _wtoi(argv[++i]);
+        else if (!wcscmp(argument, L"--sync-interval") && valued) options.sync_interval = (UINT)_wtoi(argv[++i]);
         else if (!wcscmp(argument, L"--out") && valued) path = argv[++i];
         else if (argument[0] != L'-') options.mode = argument;
         else return false;
@@ -625,7 +628,7 @@ int wmain(int argc, wchar_t **argv)
     const wchar_t *path = nullptr;
     if (!parse(argc, argv, options, path)) {
         std::fprintf(stderr, "usage: wgc_probe <window|monitor|window-d3d|monitor-d3d|title:TEXT> [--seconds S] "
-                             "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--out FILE]\n");
+                             "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--sync-interval N] [--out FILE]\n");
         return 2;
     }
     if (path) {
