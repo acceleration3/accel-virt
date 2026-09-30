@@ -26,6 +26,7 @@ passed and the report counts no failure.
 """
 import argparse
 import collections
+import hashlib
 import os
 import pathlib
 import re
@@ -58,6 +59,8 @@ import list_gpus  # noqa: E402
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GUEST_DIRECTORY = "C:\\rvk"
 PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
+# The package's files and their SHA-256, as provision.ps1 reads them.
+PACKAGE_MANIFEST = "package.sha256"
 # The 32-bit drivers rvkgpu.inf's *Wow values name, from --drivers32.
 DRIVERS32 = ("rvkvk32.dll", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll")
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
@@ -1131,8 +1134,17 @@ class GuestRun:
             code, _, error = self.agent.run(POWERSHELL, ["-NoProfile", "-Command", make], self.args.step_timeout)
             if code != 0:
                 raise AgentError(f"cannot create {PACKAGE_DIRECTORY}: {error.decode(errors='replace')}")
+            manifest = []
             for local, remote in files:
-                self.agent.push(pathlib.Path(local).read_bytes(), remote)
+                data = pathlib.Path(local).read_bytes()
+                self.agent.push(data, remote)
+                if remote.startswith(PACKAGE_DIRECTORY + "\\"):
+                    manifest.append(f"{hashlib.sha256(data).hexdigest()}  {remote[len(PACKAGE_DIRECTORY) + 1:]}\n")
+            # What was built, file by file: provision.ps1 refuses a package
+            # whose files differ from it before signing, and checks the driver
+            # store's copies after installing (PACKAGE_MANIFEST).
+            if manifest:
+                self.agent.push("".join(manifest).encode(), PACKAGE_DIRECTORY + "\\" + PACKAGE_MANIFEST)
 
         self.step("push", send)
 

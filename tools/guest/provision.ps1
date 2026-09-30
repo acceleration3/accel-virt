@@ -64,6 +64,9 @@ $AdapterNames = 'C:\rvk\adapters.txt'
 # The end of every INF line WriteModels wrote, so signing again replaces them.
 $GeneratedMark = '; provision.ps1: a host GPU'
 $Diagnostics = 'C:\rvk\diag'
+# The package's files and their SHA-256, as the runner built and pushed them
+# (run_guest_suite.py's PACKAGE_MANIFEST), in sha256sum's form.
+$Manifest = 'package.sha256'
 $KernelMemoryDump = 2
 $VerboseDeviceInstallLog = 0x2000FFFF
 
@@ -182,6 +185,55 @@ function WriteModels($Inf) {
     # UTF-16 with a byte order mark: an INF may be ANSI or Unicode, and a
     # host GPU's name need not be ANSI.
     Set-Content -Path $Inf -Value $lines -Encoding Unicode
+}
+
+# Each file the manifest names, as the host built it. A guest that bugchecked
+# mid-push kept rvkumd.dll's size and lost its bytes, and three upgrades
+# installed it: every Direct3D 11 device failed and DWM restarted in a loop.
+# Before sign changes rvkgpu.sys and the INF, every byte is still the host's.
+# Both checks write with Write-Host: what a function outputs is what it returns.
+function PackageMatchesManifest {
+    $path = Join-Path $Package $Manifest
+    if (-not (Test-Path $path)) { Write-Host 'package: no manifest, so no file is checked'; return $true }
+    $bad = 0
+    foreach ($line in Get-Content $path) {
+        if ($line -notmatch '^([0-9a-fA-F]{64})\s+\*?(\S.*)$') { continue }
+        $file = Join-Path $Package $Matches[2]
+        $hash = if (Test-Path $file) { (Get-FileHash $file -Algorithm SHA256).Hash } else { 'missing' }
+        if ($hash -ne $Matches[1].ToUpperInvariant()) {
+            Write-Host "package: $($Matches[2]) is $hash, not the $($Matches[1]) the host built"
+            $bad++
+        }
+    }
+    if ($bad -eq 0) { Write-Host 'package: every file is the one the host built' }
+    return $bad -eq 0
+}
+
+# The driver store's copy of each file the manifest names, against the
+# package's as signing left it: the store's is what Windows loads, and pnputil
+# copies without comparing. The store is the one the adapter's own driver key
+# names its user-mode drivers from.
+function StoreMatchesPackage {
+    $path = Join-Path $Package $Manifest
+    if (-not (Test-Path $path)) { return $true }
+    $device = RvkDevice
+    if (-not $device) { Write-Host 'installed: the adapter is absent'; return $false }
+    $key = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_Driver).Data
+    $names = @((Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$key").UserModeDriverName |
+        Where-Object { $_ -and $_ -ne '<>' })
+    if ($names.Count -eq 0) { Write-Host "installed: $key names no user-mode driver"; return $false }
+    $store = Split-Path $names[0]
+    $bad = 0
+    foreach ($line in Get-Content $path) {
+        if ($line -notmatch '^[0-9a-fA-F]{64}\s+\*?(\S.*)$') { continue }
+        $name = $Matches[1]
+        $installed = Join-Path $store $name
+        $want = (Get-FileHash (Join-Path $Package $name) -Algorithm SHA256).Hash
+        $got = if (Test-Path $installed) { (Get-FileHash $installed -Algorithm SHA256).Hash } else { 'missing' }
+        if ($got -ne $want) { Write-Host "installed: $name in $store is $got, not the package's $want"; $bad++ }
+    }
+    if ($bad -eq 0) { Write-Host "installed: every packaged file in $store is the package's" }
+    return $bad -eq 0
 }
 
 function SaveEvents($Log, $Count, $Name) {
@@ -364,6 +416,7 @@ switch ($Stage) {
         exit 0
     }
     'sign' {
+        if (-not (PackageMatchesManifest)) { exit 1 }
         WriteModels "$Package\rvkgpu.inf"
         $certificate = SigningCertificate
         Sign "$Package\rvkgpu.sys" $certificate
@@ -389,6 +442,7 @@ switch ($Stage) {
         }
         pnputil /add-driver "$Package\rvkgpu.inf" /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
+        if (-not (StoreMatchesPackage)) { exit 1 }
         if ($NoVerifier) {
             # Driver Verifier interposes on every DDI call, so a run that is
             # trying to find out whether the verifier is the thing refusing a
@@ -487,6 +541,7 @@ switch ($Stage) {
         $problem = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_ProblemCode).Data
         Write-Output "upgrade: installed $version running $running problem $problem"
         if ($running -ne $version -or $problem -ne 0) { exit 1 }
+        if (-not (StoreMatchesPackage)) { exit 1 }
         exit 0
     }
 
