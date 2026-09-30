@@ -11,10 +11,12 @@ namespace av {
 class ControlRequest;
 class Host;
 class PresentEngine;
+class PresentSnapshots;
 
 class PresentEngineCommands {
 public:
-    PresentEngineCommands(Host &host, PresentEngine &engine);
+    /* The engine reads image sources from `snapshots`, from the page on. */
+    PresentEngineCommands(Host &host, PresentEngine &engine, const PresentSnapshots &snapshots);
     PresentEngineCommands(const PresentEngineCommands &) = delete;
     PresentEngineCommands &operator=(const PresentEngineCommands &) = delete;
 
@@ -24,8 +26,9 @@ public:
 private:
     void register_page(ControlRequest &request);
 
-    Host          &host_;
-    PresentEngine &engine_;
+    Host                   &host_;
+    PresentEngine          &engine_;
+    const PresentSnapshots &snapshots_;
 };
 
 }  // namespace av

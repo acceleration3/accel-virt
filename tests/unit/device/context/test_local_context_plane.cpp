@@ -90,6 +90,24 @@ TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
   CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER));
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_state); }
 
+/* Snapshots are the library's: read through the plane from any thread, and
+ * none from a plane with no library. */
+TEST(local_context_plane, reads_present_snapshots_through_its_library)
+{ Fixture fixture;
+  CHECK(!fixture.plane().reads_snapshots());
+  RvkSnapshotView view = {};
+  CHECK(!fixture.plane().map_snapshot(uuid, 3u, 1u, view));
+  static const std::uint8_t pixels[16] = {};
+  fixture.ops().serve_snapshot(3u, RvkSnapshotView{pixels, 16u, 4u, 1u, 0u});
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK(fixture.plane().reads_snapshots());
+  CHECK(fixture.plane().map_snapshot(uuid, 3u, 1u, view));
+  CHECK(view.pixels == pixels);
+  CHECK_EQ(view.width, 4u);
+  fixture.plane().unmap_snapshot(uuid, 3u);
+  CHECK_EQ(fixture.ops().snapshot_unmaps(), 1u);
+  CHECK(!fixture.plane().map_snapshot(uuid, 3u, 1u, view)); }
+
 /* Either lock missing is no_memory; a second initialize after both were made
  * is not a failure. */
 TEST(local_context_plane, initialize_fails_only_when_a_lock_cannot_be_made)

@@ -22,6 +22,7 @@
 #include "core/support/nt_status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/context/tail_publish_record.hpp"
+#include "proto/context/umd_adapter_info.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -233,6 +234,16 @@ Status DdiKmt::query_driver_version(std::uint32_t adapter, std::uint32_t &versio
     const auto wddm = static_cast<std::uint32_t>(fdo_.dxgadapter().driver_caps().WDDMVersion);
     version = (wddm >> 12u & 0xFu) * 1000u + (wddm >> 8u & 0xFu) * 100u;
     return refuse(Status::ok);
+}
+
+/* The miniport's own answer, through DXGADAPTER::DdiQueryAdapterInfo. */
+Status DdiKmt::query_adapter_features(std::uint32_t adapter, UmdAdapterInfo &info)
+{
+    if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
+    std::uint8_t       bytes[UmdAdapterInfo::encoded_size] = {};
+    const std::int32_t queried = fdo_.dxgadapter().query(fdo_.context(), 0, nullptr, 0u, bytes, sizeof bytes);
+    if (queried < 0) return refuse(Status::not_supported);
+    return refuse(info.decode(bytes, sizeof bytes));
 }
 
 Status DdiKmt::close_adapter(std::uint32_t adapter)

@@ -503,6 +503,15 @@ block row), depth_pitch bytes a slice. Everything sent before it has run when it
 params = ["u32 resource", "u32 subresource"]
 reply = ["u32 hresult", "u32 row_pitch", "u32 depth_pitch", "out_bytes data"]
 
+[[command]]
+name = "PresentSnapshot"
+id = 0x040d
+doc = """A blt-model present's pixels: the subresource as the commands before this one left it, copied on the host
+GPU into a staging image the host keeps under `key` until the present engine reads it (docs/protocol.md,
+"Present engine"). Nothing is answered; a key of 0 or one already kept, or a resource that is not a 2D texture
+of four-byte pixels, keeps nothing, and the present that names the key is refused."""
+params = ["u32 resource", "u32 subresource", "u64 key"]
+
 # ---------------------------------------------------------------- queries
 
 [[command]]

@@ -58,6 +58,10 @@ public:
     void     release_shared(const uint8_t *gpu_uuid, uint64_t object_id);
     bool     read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                         uint32_t height);
+    /* The present snapshot under `key` on `gpu_uuid`, mapped and let go
+     * (D3d11HostDevice::map_snapshot). Any thread. */
+    bool     map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view);
+    void     unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key);
 
     /* A session for one context of `sub_api` on the GPU `gpu_uuid` names, or
      * null: for a sub-API that GPU does not run, for a GPU nobody has, and

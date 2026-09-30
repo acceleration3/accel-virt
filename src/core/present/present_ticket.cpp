@@ -10,8 +10,9 @@
 
 namespace av {
 
-PresentTicket::PresentTicket(Platform &platform, LogBudget &budget, PresentQueue *queue, PixelMover &fallback)
-    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), ticket_(0u)
+PresentTicket::PresentTicket(Platform &platform, LogBudget &budget, PresentQueue *queue, PixelMover &fallback,
+                             uint64_t snapshot)
+    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), snapshot_(snapshot), ticket_(0u)
 {
     AV_SCOPE("PresentTicket::PresentTicket");
 }
@@ -41,19 +42,27 @@ bool PresentTicket::queued(const PresentCopyRequest &request, const PresentSurfa
     AV_SCOPE("PresentTicket::queued");
     if (queue_ == nullptr) return false;
     uint64_t     ticket = 0u;
-    const Status status = queue_->queue(request, source, destination, regions, ticket);
+    const bool   image = snapshot_ != 0u && source != nullptr;
+    const Status status = image ? queue_->queue_image(snapshot_, request, destination, regions, ticket)
+                                : queue_->queue(request, source, destination, regions, ticket);
     if (status == Status::ok) {
         ticket_ = ticket;
         return true;
     }
-    if (!budget_.allows()) return false;
+    log_refusal(status);
+    return false;
+}
+
+void PresentTicket::log_refusal(Status status)
+{
+    AV_SCOPE("PresentTicket::log_refusal");
+    if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
     message.append("rvkgpu: the present engine did not take a present, status ");
     message.append_decimal(static_cast<uint32_t>(status));
     message.append("; it moves now");
     platform_.log(message.text());
-    return false;
 }
 
 uint64_t PresentTicket::ticket() const

@@ -13,6 +13,8 @@
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
+#include "device/present/present_snapshots.hpp"
+#include "harness/context/recording_context_plane.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/device/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -56,6 +58,7 @@ constexpr std::uint32_t pitch = side * PresentSurface::pixel_bytes;
 constexpr std::uint32_t blue_first = 21u;   /* D3DDDIFMT_A8R8G8B8 */
 constexpr std::uint32_t red_first = 32u;    /* D3DDDIFMT_A8B8G8R8 */
 constexpr std::uint32_t epoch = 3u;
+constexpr std::uint8_t  gpu[av::PresentSnapshots::uuid_bytes] = {4};
 
 /* The device's side: its present engine and the commands that feed it,
  * serving the control queue when the test says or when the driver stalls. */
@@ -63,7 +66,7 @@ class EngineSide {
 public:
     explicit EngineSide(MappedVirtioFunction &mapped)
         : platform_(mapped.platform()), queue_(mapped.queue_device(0u)), host_(), interrupts_(host_),
-          engine_(host_, interrupts_)
+          engine_(host_, interrupts_), plane_(), snapshots_(plane_, gpu)
     {
         host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
             return static_cast<MockPlatform *>(context)->translate_physical(address, static_cast<std::size_t>(length));
@@ -85,6 +88,8 @@ public:
     void          refuse_page() { refuse_page_ = true; }
     void          serve() { static_cast<void>(queue_.answer_all(request_, sizeof request_, &EngineSide::answer, this)); }
     std::uint32_t presents() const { return presents_; }
+    /* The host's snapshot of an application's buffer, under `key`. */
+    void          snapshot(std::uint64_t key, const RvkSnapshotView &view) { plane_.serve_snapshot(key, view); }
 
 private:
     static void stall(void *context)
@@ -108,7 +113,8 @@ private:
         MockRequest    mock(request, length);
         ControlRequest control(self->host_, &mock);
         const bool     refused = type == 0x02F6u && self->refuse_page_;
-        const bool     answered = !refused && PresentEngineCommands(self->host_, self->engine_).answer(control, type);
+        const bool     answered =
+            !refused && PresentEngineCommands(self->host_, self->engine_, self->snapshots_).answer(control, type);
         const std::uint8_t *bytes = answered ? mock.response_bytes() : refusal.bytes();
         const std::size_t   size = answered ? mock.response_size() : refusal.length();
         const std::size_t   given = size < room ? size : room;
@@ -121,6 +127,8 @@ private:
     MockHost            host_;
     FenceInterrupts     interrupts_;
     PresentEngine       engine_;
+    av::RecordingContextPlane plane_;
+    av::PresentSnapshots      snapshots_;
     bool                held_ = false;
     bool                refuse_page_ = false;
     std::uint32_t       presents_ = 0u;
@@ -341,3 +349,29 @@ TEST(present_queue, a_present_with_no_control_slot_waits_for_one)
   device.serve();
   CHECK(finishes(queue, ticket));
   CHECK_EQ(destination.at(0u, 0u), 5u); }
+
+/* A blt from a present snapshot names no source pages: the device moves the
+ * snapshot's pixels, swapped where the source's order is not the
+ * destination's. */
+TEST(present_queue, a_blt_from_a_snapshot_is_moved_out_of_it_by_the_device)
+{ Fixture      fixture;
+  EngineSide   device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  CHECK_STATUS(queue.start(), Status::ok);
+  static std::uint32_t pixels[side * side];
+  for (std::uint32_t at = 0u; at < side * side; at++) pixels[at] = 0x80000000u | at;
+  device.snapshot(0x4242u, RvkSnapshotView{reinterpret_cast<const std::uint8_t *>(pixels), pitch, side, side, 0u});
+  Surface              source(fixture.platform());
+  Surface              destination(fixture.platform());
+  const PresentSurface from = source.present(red_first);
+  const PresentSurface into = destination.present(blue_first);
+  const PresentRegion  region(2u, 3u, 0u, 0u, 4u, 1u);
+  std::uint64_t        ticket = 0u;
+  CHECK_STATUS(queue.queue_image(0x4242u, from.blt_into(into, 1u), into, &region, ticket), Status::ok);
+  CHECK_EQ(ticket, 1u);
+  device.serve();
+  CHECK(finishes(queue, 1u));
+  CHECK_EQ(destination.at(0u, 0u), swapped(pixels[3u * side + 2u]));
+  CHECK_EQ(destination.at(3u, 0u), swapped(pixels[3u * side + 5u]));
+  CHECK_EQ(destination.at(4u, 0u), 0u);
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }

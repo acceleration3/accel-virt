@@ -909,6 +909,17 @@ TEST(renderer_context_plane, reads_no_image)
   std::uint32_t pixels[4] = {};
   CHECK(!fixture.plane().read_image(uuid, 9u, pixels, 8u, 2u, 2u)); }
 
+/* A snapshot a renderer's session takes is in the renderer's memory: none is
+ * read here, and letting one go does nothing. */
+TEST(renderer_context_plane, reads_no_present_snapshot)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK(!fixture.plane().reads_snapshots());
+  RvkSnapshotView view = {};
+  CHECK(!fixture.plane().map_snapshot(uuid, 9u, 1u, view));
+  CHECK(view.pixels == nullptr);
+  fixture.plane().unmap_snapshot(uuid, 9u); }
+
 TEST(renderer_context_plane, reports_its_renderer_and_what_it_holds)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);

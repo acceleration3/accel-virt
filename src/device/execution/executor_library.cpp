@@ -123,6 +123,26 @@ void ExecutorLibrary::release_shared(const uint8_t *gpu_uuid, uint64_t object_id
     ops_->release_shared(ops_->opaque, gpu_uuid, object_id);
 }
 
+bool ExecutorLibrary::reads_snapshots() const
+{
+    AV_SCOPE("ExecutorLibrary::reads_snapshots");
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_SNAPSHOTS &&
+           ops_->map_snapshot != nullptr && ops_->unmap_snapshot != nullptr;
+}
+
+bool ExecutorLibrary::map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view) const
+{
+    AV_SCOPE("ExecutorLibrary::map_snapshot");
+    if (!reads_snapshots()) return false;
+    return ops_->map_snapshot(ops_->opaque, gpu_uuid, key, wait_ms, &view) == RVK_EXECUTED;
+}
+
+void ExecutorLibrary::unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key) const
+{
+    AV_SCOPE("ExecutorLibrary::unmap_snapshot");
+    if (reads_snapshots()) ops_->unmap_snapshot(ops_->opaque, gpu_uuid, key);
+}
+
 bool ExecutorLibrary::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
                                  uint32_t width, uint32_t height) const
 {

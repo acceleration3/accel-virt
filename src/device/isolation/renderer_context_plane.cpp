@@ -488,6 +488,25 @@ bool RendererContextPlane::read_image(const uint8_t *, uint64_t, void *, uint32_
     return false;
 }
 
+/* The renderer's snapshots are in its own process's memory, which the
+ * engine here cannot read: presents keep their read-back. */
+bool RendererContextPlane::reads_snapshots() const
+{
+    AV_SCOPE("RendererContextPlane::reads_snapshots");
+    return false;
+}
+
+bool RendererContextPlane::map_snapshot(const uint8_t *, uint64_t, uint32_t, RvkSnapshotView &)
+{
+    AV_SCOPE("RendererContextPlane::map_snapshot");
+    return false;
+}
+
+void RendererContextPlane::unmap_snapshot(const uint8_t *, uint64_t)
+{
+    AV_SCOPE("RendererContextPlane::unmap_snapshot");
+}
+
 bool RendererContextPlane::alive() const
 {
     AV_SCOPE("RendererContextPlane::alive");

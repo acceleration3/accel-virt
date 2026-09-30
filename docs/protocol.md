@@ -1255,12 +1255,22 @@ and never skips one. Without a page the request is refused and not counted.
 The device holds at most 16 presents it has not moved; one past that is
 refused, so a miniport keeps no more than 16 outstanding.
 
-An image source is the host's image as the host has it once the work every
-context published before this request has run: subresource 0 of a 2D image of
-four-byte pixels, read as its format lays them (a red-first image arrives
-red-first, as its guest pages would hold it; the swap flag says whether the
-destination wants the other order). A region with a row outside the image or
-the destination is refused where it goes wrong, as in the present copy.
+An image source is a present snapshot: what the Direct3D command
+`PresentSnapshot` (`0x040d`) copied of an application's buffer on the host GPU,
+in the order of that application's own commands, and kept under the key the
+application chose - `source_key`. A snapshot is taken where the buffer is
+drawn, so what the application draws into it after the present never reaches
+the destination; the key is 64 random bits, which is what keeps one process
+from naming another's. The device reads a snapshot once its session has
+reached the command and the GPU has copied it, waiting up to half a second -
+past that the present is refused - and lets it go once read, or refused. It
+arrives in the buffer's own byte order (a red-first buffer arrives red-first,
+as its guest pages would hold it; the swap flag says whether the destination
+wants the other order); `x` and `y` of a region are the buffer's pixels, and a
+region with a row outside the snapshot or the destination is refused where it
+goes wrong, as in the present copy. A device offers image sources only where
+it reads the snapshots itself: one whose contexts run in a renderer process
+does not set bit 5.
 
 ### The page, 4 KiB, little-endian
 

@@ -107,6 +107,11 @@ namespace av::d3dproto {
 // One subresource's contents, tightly packed: rows of row_pitch bytes (the format's bytes per row, or
 // block row), depth_pitch bytes a slice. Everything sent before it has run when it answers.
 [[nodiscard]] bool rvk_d3d_ReadSubresource(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t* hresult, uint32_t* row_pitch, uint32_t* depth_pitch, void* data, uint64_t data_capacity, uint64_t* data_size);
+// A blt-model present's pixels: the subresource as the commands before this one left it, copied on the host
+// GPU into a staging image the host keeps under `key` until the present engine reads it (docs/protocol.md,
+// "Present engine"). Nothing is answered; a key of 0 or one already kept, or a resource that is not a 2D texture
+// of four-byte pixels, keeps nothing, and the present that names the key is refused.
+[[nodiscard]] bool rvk_d3d_PresentSnapshot(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint64_t key);
 [[nodiscard]] bool rvk_d3d_BeginQuery(::av::ClientTransport& t, uint32_t query);
 [[nodiscard]] bool rvk_d3d_EndQuery(::av::ClientTransport& t, uint32_t query);
 // The host writes each query's result, once DXVK has it, into slot (query % slots) of `slots` 128-byte slots at arena offset `offset`: the data from byte 16, its size at 8, and last the count of that query's ends at 0 - so GetData reads memory instead of asking.

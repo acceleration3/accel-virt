@@ -5,6 +5,8 @@
 #include "device/control/region_mover.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/present/present_snapshots.hpp"
+#include "core/support/scope_exit.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
@@ -19,10 +21,11 @@ QueuedPresent::QueuedPresent(Host &host)
     AV_SCOPE("QueuedPresent::QueuedPresent");
 }
 
-Status QueuedPresent::accept(ControlRequest &request, const QueuedPresentRequest &present)
+Status QueuedPresent::accept(ControlRequest &request, const QueuedPresentRequest &present,
+                             const PresentSnapshots &snapshots)
 {
     AV_SCOPE("QueuedPresent::accept");
-    if (present.source() == QueuedPresentRequest::Source::image) return Status::not_supported;
+    if (present.source() == QueuedPresentRequest::Source::image && !snapshots.readable()) return Status::not_supported;
     present_ = present;
     Status status = map(request);
     if (status == Status::ok) status = read_regions(request);
@@ -34,7 +37,7 @@ Status QueuedPresent::map(ControlRequest &request)
 {
     AV_SCOPE("QueuedPresent::map");
     const PresentCopyRequest &copy = present_.copy();
-    if (copy.operation() == PresentOperation::blt) {
+    if (copy.operation() == PresentOperation::blt && present_.source() == QueuedPresentRequest::Source::pages) {
         const Status mapped = source_.map(request, QueuedPresentRequest::encoded_size, copy.source_entries());
         if (mapped != Status::ok) return mapped;
     }
@@ -53,13 +56,40 @@ Status QueuedPresent::read_regions(ControlRequest &request)
     return Status::ok;
 }
 
-Status QueuedPresent::move()
+Status QueuedPresent::move(const PresentSnapshots &snapshots)
 {
     AV_SCOPE("QueuedPresent::move");
+    if (present_.source() == QueuedPresentRequest::Source::image) return move_snapshot(snapshots);
     RegionMover mover(source_.window(), destination_.window(), present_.copy());
+    return move_regions(mover);
+}
+
+Status QueuedPresent::move_regions(RegionMover &mover)
+{
+    AV_SCOPE("QueuedPresent::move_regions");
     for (uint32_t index = 0u; index < present_.copy().regions(); index++)
         if (mover.move(regions_[index]) != Status::ok) return Status::invalid_parameter;
     return Status::ok;
+}
+
+/* The snapshot is one extent of the executor's memory, rows `row_pitch`
+ * apart: the regions move out of it as out of a surface of that pitch. */
+Status QueuedPresent::move_snapshot(const PresentSnapshots &snapshots)
+{
+    AV_SCOPE("QueuedPresent::move_snapshot");
+    RvkSnapshotView view = {};
+    if (!snapshots.map(present_.key(), view)) return Status::not_found;
+    ScopeExit       unmap([this, &snapshots] { snapshots.unmap(present_.key()); });
+    void *const     pixels = const_cast<uint8_t *>(view.pixels);
+    const uint64_t  length = uint64_t{view.row_pitch} * view.height;
+    const BlobWindow source(&pixels, &length, 1u, length);
+    const PresentCopyRequest &copy = present_.copy();
+    const PresentCopyRequest  shape(PresentOperation::blt,
+                                    copy.swaps_red_and_blue() ? PresentCopyRequest::flag_swap_red_blue : 0u, 0u,
+                                    copy.regions(), 1u, view.row_pitch, copy.destination_entries(),
+                                    copy.destination_pitch());
+    RegionMover mover(source, destination_.window(), shape);
+    return move_regions(mover);
 }
 
 void QueuedPresent::release()

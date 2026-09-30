@@ -45,6 +45,12 @@ Status AdapterInfoQuery::read_output(void *destination, uint32_t count) const
     return Status::ok;
 }
 
+uint32_t AdapterInfoQuery::output_size() const
+{
+    AV_SCOPE("AdapterInfoQuery::output_size");
+    return record_.pOutputData != nullptr ? record_.OutputDataSize : 0u;
+}
+
 Status AdapterInfoQuery::write_output(const void *bytes, uint32_t count) const
 {
     AV_SCOPE("AdapterInfoQuery::write_output");

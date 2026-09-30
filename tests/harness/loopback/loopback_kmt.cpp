@@ -6,6 +6,7 @@
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/context_views_record.hpp"
 #include "proto/context/rvk_context_record.hpp"
+#include "proto/context/umd_adapter_info.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/context/sub_api.hpp"
@@ -76,6 +77,14 @@ Status LoopbackKmt::query_driver_version(std::uint32_t, std::uint32_t &version)
 }
 
 Status LoopbackKmt::close_adapter(std::uint32_t) { return Status::ok; }
+
+/* No miniport stands between the loopback's guest and its device: nothing
+ * beyond the capset is offered. */
+Status LoopbackKmt::query_adapter_features(std::uint32_t, UmdAdapterInfo &info)
+{
+    info = UmdAdapterInfo(luid, 0u);
+    return Status::ok;
+}
 
 Status LoopbackKmt::adapter_luid(std::uint32_t, std::uint64_t &answered)
 {

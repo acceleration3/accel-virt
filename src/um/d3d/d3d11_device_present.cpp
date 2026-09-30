@@ -15,7 +15,9 @@
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
+#include "proto/submission/present_snapshot_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/d3d11_host_caps.hpp"
 
 namespace av::d3d11 {
 
@@ -135,7 +137,7 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
         if (destination == nullptr) return present_pages(source, subresource, destination, dxgi_context);
         break;
     }
-    return present_to_kernel(source, destination, dxgi_context);
+    return present_to_kernel(source, destination, dxgi_context, 0u);
 }
 
 /* A present the kernel copies from the buffer's own pages - into the window's
@@ -145,6 +147,7 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
                                    void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_pages");
+    if (caps_.present_snapshots()) return present_snapshot(source, subresource, destination, dxgi_context);
     const HRESULT published = publish(source, subresource);
     if (FAILED(published) && removed_on_host()) {
         set_error(D3DDDIERR_DEVICEREMOVED);
@@ -154,19 +157,40 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
         log_.write("rvkumd: a present whose surface could not be read back");
         return published;
     }
-    return present_to_kernel(source, destination, dxgi_context);
+    return present_to_kernel(source, destination, dxgi_context, 0u);
 }
 
-HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context)
+/* The snapshot is taken where the buffer is drawn, so what the application
+ * draws into it after this returns never reaches the window; the present
+ * follows the batch that carries it, as every present does. */
+HRESULT D3d11Device::present_snapshot(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
+                                      void *dxgi_context)
+{
+    AV_SCOPE("D3d11Device::present_snapshot");
+    if (source.allocation == 0u) return E_INVALIDARG;
+    const uint64_t key = snapshot_keys_.next();
+    if (!d3dproto::rvk_d3d_PresentSnapshot(wire(), source.id, subresource, key) || wire().flush() != Status::ok) {
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return DXGI_ERROR_DEVICE_REMOVED;
+    }
+    return present_to_kernel(source, destination, dxgi_context, key);
+}
+
+HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context,
+                                       uint64_t snapshot)
 {
     AV_SCOPE("D3d11Device::present_to_kernel");
     const HRESULT followed = follow_host();
     if (FAILED(followed)) return followed;
+    uint8_t record[PresentSnapshotRecord::encoded_size] = {};
+    const bool named = snapshot != 0u && PresentSnapshotRecord(snapshot).encode(record, sizeof record) == Status::ok;
     DXGIDDICB_PRESENT present = {};
     present.hSrcAllocation = source.allocation;
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
     present.pDXGIContext = dxgi_context;
     present.hContext = context_;
+    present.PrivateDriverDataSize = named ? static_cast<UINT>(sizeof record) : 0u;
+    present.pPrivateDriverData = named ? record : nullptr;
     const HRESULT presented = dxgi_->pfnPresentCb(runtime_.handle, &present);
     /* The runtime turns a refused present into a removed device without
      * saying why; the answer is only ever seen here. */

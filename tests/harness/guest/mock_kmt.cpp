@@ -4,6 +4,7 @@
 
 #include "core/support/nt_status.hpp"
 #include "proto/context/rvk_context_record.hpp"
+#include "proto/context/umd_adapter_info.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/submission/batch_header.hpp"
@@ -1365,6 +1366,14 @@ std::uint64_t MockKmt::allocation_pages(std::uint32_t allocation)
 
 const std::uint8_t *MockKmt::last_private() const { return private_; }
 std::uint32_t       MockKmt::last_private_size() const { return private_size_; }
+
+Status MockKmt::query_adapter_features(std::uint32_t, UmdAdapterInfo &info)
+{
+    info = UmdAdapterInfo(0u, adapter_features_);
+    return Status::ok;
+}
+
+void MockKmt::set_adapter_features(std::uint64_t features) { adapter_features_ = features; }
 
 Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 {

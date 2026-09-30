@@ -14,6 +14,8 @@
 
 namespace av {
 
+class UmdAdapterInfo;
+
 class PciIdentity;
 
 class Kmt {
@@ -26,6 +28,10 @@ public:
     /* KMTQAITYPE_WDDM_3_1_CAPS: whether the OS let the adapter report native
      * GPU fences, without which no hardware queue is given a doorbell. */
     virtual Status   query_native_gpu_fences(uint32_t adapter, bool &supported) = 0;
+    /* UMDRIVERPRIVATE: what rvkgpu.sys says the device under the adapter
+     * offers a user-mode driver (UmdAdapterInfo); none from a miniport that
+     * does not say. */
+    virtual Status   query_adapter_features(uint32_t adapter, UmdAdapterInfo &info) = 0;
     virtual Status   close_adapter(uint32_t adapter) = 0;
     /* The adapter's LUID as enumeration reports it, LowPart in the low 32 bits
      * and HighPart in the high: what the Vulkan loader matches an ICD's

@@ -1,12 +1,15 @@
 /* One queued present, taken on the main loop and moved later: accepting maps
  * both surfaces and reads the regions out of the request, so the move needs
- * nothing of the request and lands the rows a present copy would; release
+ * nothing of the request and lands the rows a present copy would; an image
+ * source maps only its destination and moves out of its snapshot. Release
  * lets every mapping go and forgets the refusals that followed. A request
  * whose lists or regions do not hold, a host with no memory for the mapping
- * and an image source are refused holding nothing; a region outside a surface
- * is refused where the move reaches it. */
+ * and an image source where nothing reads snapshots are refused holding
+ * nothing; a region outside a surface is refused where the move reaches it. */
 #include "device/control/control_request.hpp"
+#include "device/present/present_snapshots.hpp"
 #include "device/present/queued_present.hpp"
+#include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
@@ -28,15 +31,18 @@ using av::WireReader;
 
 namespace {
 
+const av::PresentSnapshots none;
+
 /* `builder`'s request accepted into `present`, as the engine hands it over. */
-Status accept(MockHost &host, QueuedPresent &present, const GpuRequestBuilder &builder)
+Status accept(MockHost &host, QueuedPresent &present, const GpuRequestBuilder &builder,
+              const av::PresentSnapshots &snapshots = none)
 {
     MockRequest          mock(builder.bytes(), builder.size());
     ControlRequest       request(host, &mock);
     WireReader           reader(builder.bytes(), builder.size());
     QueuedPresentRequest decoded;
     const Status         status = decoded.decode(reader);
-    return status == Status::ok ? present.accept(request, decoded) : status;
+    return status == Status::ok ? present.accept(request, decoded, snapshots) : status;
 }
 
 }  // namespace
@@ -51,7 +57,7 @@ TEST(queued_present, a_blt_is_moved_from_the_mappings_alone_after_the_request_is
   CHECK_EQ(host.live_guest_mappings(), 3u);
   CHECK(present.invariants_hold());
   CHECK(!scene.copied(60u, 8u));
-  CHECK_STATUS(present.move(), Status::ok);
+  CHECK_STATUS(present.move(none), Status::ok);
   CHECK(scene.copied(60u, 8u));   /* rows 60 to 67 cross the source's pages */
   CHECK_EQ(scene.destination_pixel(0u, 59u), 0u);
   CHECK_EQ(scene.destination_pixel(0u, 68u), 0u);
@@ -66,7 +72,7 @@ TEST(queued_present, a_fill_maps_only_its_destination_and_writes_its_colour)
   QueuedPresent present(host);
   CHECK_STATUS(accept(host, present, scene.fill(2u, 0xFF112233u, 3u, 2u)), Status::ok);
   CHECK_EQ(host.live_guest_mappings(), 1u);
-  CHECK_STATUS(present.move(), Status::ok);
+  CHECK_STATUS(present.move(none), Status::ok);
   CHECK_EQ(scene.destination_pixel(0u, 3u), 0xFF112233u);
   CHECK_EQ(scene.destination_pixel(PresentScene::width - 1u, 4u), 0xFF112233u);
   CHECK_EQ(scene.destination_pixel(0u, 5u), 0u);
@@ -111,7 +117,34 @@ TEST(queued_present, a_region_outside_a_surface_is_refused_when_the_move_reaches
   PresentScene  scene(host);
   QueuedPresent present(host);
   CHECK_STATUS(accept(host, present, scene.blt(3u, PresentScene::height - 1u, 2u)), Status::ok);
-  CHECK_STATUS(present.move(), Status::invalid_parameter);
+  CHECK_STATUS(present.move(none), Status::invalid_parameter);
   CHECK(scene.copied(PresentScene::height - 1u, 1u));   /* the row inside moved first */
   present.release();
+  CHECK_EQ(host.live_guest_mappings(), 0u); }
+
+TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_snapshot)
+{ MockHost                  host;
+  PresentScene              scene(host);
+  av::RecordingContextPlane plane;
+  constexpr std::uint8_t    gpu[av::PresentSnapshots::uuid_bytes] = {9};
+  const av::PresentSnapshots snapshots(plane, gpu);
+  static std::uint32_t      pixels[PresentScene::width];
+  for (std::uint32_t x = 0u; x < PresentScene::width; x++) pixels[x] = 0x0000FF00u | x;
+  plane.serve_snapshot(0x61u, RvkSnapshotView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
+                                              PresentScene::width, 1u, 0u});
+  QueuedPresent present(host);
+  CHECK_STATUS(accept(host, present, scene.image(4u, 0x61u), snapshots), Status::ok);
+  CHECK_EQ(host.live_guest_mappings(), 1u);   /* the destination only */
+  CHECK_STATUS(present.move(snapshots), Status::ok);
+  CHECK_EQ(scene.destination_pixel(3u, 0u), 0x0000FF03u);
+  CHECK_EQ(plane.unmaps(), 1u);
+  CHECK_STATUS(present.move(snapshots), Status::not_found);   /* the snapshot was let go */
+  present.release();
+  QueuedPresent outside(host);
+  static std::uint32_t row[4];   /* a snapshot narrower than the region */
+  plane.serve_snapshot(0x62u, RvkSnapshotView{reinterpret_cast<const std::uint8_t *>(row), sizeof row, 4u, 1u, 0u});
+  CHECK_STATUS(accept(host, outside, scene.image(5u, 0x62u), snapshots), Status::ok);
+  CHECK_STATUS(outside.move(snapshots), Status::invalid_parameter);
+  CHECK_EQ(plane.unmaps(), 2u);
+  outside.release();
   CHECK_EQ(host.live_guest_mappings(), 0u); }

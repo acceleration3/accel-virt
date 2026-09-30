@@ -70,6 +70,25 @@ Status PresentQueue::queue(const PresentCopyRequest &request, const PresentSurfa
 {
     AV_SCOPE("PresentQueue::queue");
     platform_.require_irql_at_most(Irql::passive, "PresentQueue::queue");
+    return enqueue(0u, request, source, destination, regions, ticket);
+}
+
+Status PresentQueue::queue_image(uint64_t key, const PresentCopyRequest &request, const PresentSurface &destination,
+                                 const PresentRegion *regions, uint64_t &ticket)
+{
+    AV_SCOPE("PresentQueue::queue_image");
+    platform_.require_irql_at_most(Irql::passive, "PresentQueue::queue_image");
+    const PresentCopyRequest image(PresentOperation::blt,
+                                   request.swaps_red_and_blue() ? PresentCopyRequest::flag_swap_red_blue : 0u, 0u,
+                                   request.regions(), 0u, 0u, request.destination_entries(),
+                                   request.destination_pitch());
+    return enqueue(key, image, nullptr, destination, regions, ticket);
+}
+
+Status PresentQueue::enqueue(uint64_t key, const PresentCopyRequest &request, const PresentSurface *source,
+                             const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket)
+{
+    AV_SCOPE("PresentQueue::enqueue");
     ticket = 0u;
     if (!started_) return Status::invalid_state;
     WaitMutexGuard one(sending_);
@@ -78,7 +97,9 @@ Status PresentQueue::queue(const PresentCopyRequest &request, const PresentSurfa
     Status         status = wait_for_payload(next);
     if (status == Status::ok)
         status = write_payload(slot_of(next), source, destination, regions, request.regions(), length);
-    if (status == Status::ok) status = send(request, next, slot_of(next), length);
+    const QueuedPresentRequest present = key != 0u ? QueuedPresentRequest(next, key, request)
+                                                   : QueuedPresentRequest(next, request);
+    if (status == Status::ok) status = send(present, slot_of(next), length);
     if (status != Status::ok) return status;
     platform_.store_atomic(queued_, next);
     ticket = next;
@@ -117,12 +138,12 @@ Status PresentQueue::write_payload(uint32_t slot, const PresentSurface *source, 
 
 /* The DPC harvests the control queue as its answers come; a present that
  * finds every slot taken harvests too, since the answers are already there. */
-Status PresentQueue::send(const PresentCopyRequest &request, uint64_t ticket, uint32_t slot, size_t length)
+Status PresentQueue::send(const QueuedPresentRequest &present, uint32_t slot, size_t length)
 {
     AV_SCOPE("PresentQueue::send");
     uint8_t    fixed[QueuedPresentRequest::encoded_size] = {};
     WireWriter writer(fixed, sizeof fixed);
-    QueuedPresentRequest(ticket, request).write(writer);
+    present.write(writer);
     const VirtqSegment payload(platform_.physical_address(payloads_[slot]), static_cast<uint32_t>(length),
                                SegmentDirection::device_reads);
     for (uint32_t waited = 0u;; waited += poll_microseconds) {

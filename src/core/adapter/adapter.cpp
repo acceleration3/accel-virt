@@ -22,7 +22,9 @@
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/umd_adapter_info.hpp"
 #include "proto/submission/follow_record.hpp"
+#include "proto/submission/present_snapshot_record.hpp"
 #include "proto/submission/present_ticket_record.hpp"
 #include "proto/context/context_views_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
@@ -683,6 +685,22 @@ int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request
     return NtStatus(Status::ok).value();
 }
 
+/* Present snapshots are offered while the engine runs on a device that reads
+ * them: a user-mode driver that saw the bit stops reading blt presents back. */
+Status Adapter::answer_umd_private(const AdapterInfoQuery &request)
+{
+    AV_SCOPE("Adapter::answer_umd_private");
+    const bool     snapshots = presents_.constructed() && identity_.offers(CapsetInfo::feature_present_from_image);
+    const uint64_t features = snapshots ? UmdAdapterInfo::feature_present_snapshots : 0u;
+    uint8_t        bytes[UmdAdapterInfo::encoded_size] = {};
+    size_t         written = 0u;
+    const uint32_t room = request.output_size();
+    const Status   encoded = UmdAdapterInfo(luid_, features).encode(bytes, room < sizeof bytes ? room : sizeof bytes,
+                                                                    written);
+    if (encoded != Status::ok) return Status::invalid_parameter;
+    return request.write_output(bytes, static_cast<uint32_t>(written));
+}
+
 int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
 {
     AV_SCOPE("Adapter::query_adapter_info");
@@ -691,11 +709,9 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     const AdapterInfoQuery request(platform_, *query);
     int32_t                answered = NtStatus(NtStatus::not_implemented).value();
     switch (request.type()) {
-    case query_umd_private: {
-        const uint64_t words[2] = {umd_private_tag, luid_};
-        answered = NtStatus(request.write_output(words, sizeof(words))).value();
+    case query_umd_private:
+        answered = NtStatus(answer_umd_private(request)).value();
         break;
-    }
     case query_driver_caps:
         answered = NtStatus(capabilities_.report_driver_caps(request)).value();
         break;
@@ -1529,7 +1545,7 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
     PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
-                         immediate_mover());
+                         immediate_mover(), snapshot_of(request));
     PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
     const uint32_t  count = end - first;
@@ -1545,6 +1561,20 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     }
     present_rows_ += blit.rows();
     return ticket.ticket();
+}
+
+/* The user-mode driver names a snapshot only where the answer to its
+ * UMDRIVERPRIVATE said it may; one named anyway on a device that reads none
+ * is a present from its pages, which is all such a device has. */
+uint64_t Adapter::snapshot_of(const DxgkargPresentRecord &request)
+{
+    AV_SCOPE("Adapter::snapshot_of");
+    PresentSnapshotRecord record;
+    if (!identity_.offers(CapsetInfo::feature_present_from_image) ||
+        record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) !=
+            Status::ok)
+        return 0u;
+    return record.key();
 }
 
 PixelMover &Adapter::immediate_mover()

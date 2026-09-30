@@ -61,7 +61,7 @@ TEST(present_ticket, without_a_queue_the_fallback_moves_the_pixels_and_nothing_i
 { MockPlatform  platform;
   LogBudget     budget(platform);
   CountingMover fallback;
-  PresentTicket ticket(platform, budget, nullptr, fallback);
+  PresentTicket ticket(platform, budget, nullptr, fallback, 0u);
   CHECK_STATUS(ticket.copy(surface, surface, &region, 1u), Status::ok);
   CHECK_STATUS(ticket.fill(surface, 7u, &region, 1u), Status::ok);
   CHECK_EQ(fallback.copies, 1u);
@@ -79,10 +79,28 @@ TEST(present_ticket, a_present_the_queue_refuses_moves_at_once_and_is_logged)
   PresentQueue  queue(mapped.platform(), *device, 1u);
   LogBudget     budget(mapped.platform());
   CountingMover fallback;
-  PresentTicket ticket(mapped.platform(), budget, &queue, fallback);
+  PresentTicket ticket(mapped.platform(), budget, &queue, fallback, 0u);
   CHECK_STATUS(ticket.copy(surface, surface, &region, 1u), Status::ok);
   CHECK_STATUS(ticket.fill(surface, 7u, &region, 1u), Status::ok);
   CHECK_EQ(fallback.copies, 1u);
   CHECK_EQ(fallback.fills, 1u);
   CHECK_EQ(ticket.ticket(), 0u);
   CHECK(mapped.platform().logged_line("present engine did not take a present, status 7")); }
+
+/* A blt from a snapshot the queue will not take still moves through the
+ * fallback - from the pages, which is all there is - and a fill never comes
+ * from a snapshot. */
+TEST(present_ticket, a_snapshot_the_queue_refuses_falls_back_to_the_pages)
+{ MappedVirtioFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  std::optional<VirtioGpuDevice> device;
+  device.emplace(mapped.platform(), mapped.mappings(), mapped.layout());
+  PresentQueue  queue(mapped.platform(), *device, 1u);
+  LogBudget     budget(mapped.platform());
+  CountingMover fallback;
+  PresentTicket ticket(mapped.platform(), budget, &queue, fallback, 0x99u);
+  CHECK_STATUS(ticket.copy(surface, surface, &region, 1u), Status::ok);
+  CHECK_STATUS(ticket.fill(surface, 7u, &region, 1u), Status::ok);
+  CHECK_EQ(fallback.copies, 1u);
+  CHECK_EQ(fallback.fills, 1u);
+  CHECK_EQ(ticket.ticket(), 0u); }

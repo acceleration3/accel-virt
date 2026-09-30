@@ -70,6 +70,7 @@ const char* command_name(uint32_t id) {
         case kCmd_CopyStructureCount: return "CopyStructureCount";
         case kCmd_UpdateSubresource: return "UpdateSubresource";
         case kCmd_ReadSubresource: return "ReadSubresource";
+        case kCmd_PresentSnapshot: return "PresentSnapshot";
         case kCmd_BeginQuery: return "BeginQuery";
         case kCmd_EndQuery: return "EndQuery";
         case kCmd_GetQueryData: return "GetQueryData";

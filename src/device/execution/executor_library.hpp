@@ -63,6 +63,13 @@ public:
     void                 release_shared(const uint8_t *gpu_uuid, uint64_t object_id) const;
     bool                 read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
                                     uint32_t width, uint32_t height) const;
+    /* Whether the library keeps present snapshots (version 13, both calls
+     * given), and the one under `key` mapped and let go; false, and nothing,
+     * for one that does not. Any thread. */
+    bool                 reads_snapshots() const;
+    bool                 map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms,
+                                      RvkSnapshotView &view) const;
+    void                 unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key) const;
     /* Whether the library answers the wire handle an import made (version 3),
      * without which a guest has nothing to name an import by. */
     bool                 names_imports() const;

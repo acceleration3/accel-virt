@@ -90,6 +90,7 @@ public:
     virtual bool on_CopyStructureCount(uint32_t destination, uint32_t offset, uint32_t source_view) = 0;
     virtual bool on_UpdateSubresource(uint32_t resource, uint32_t subresource, uint32_t has_box, const Box& box, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags, const uint8_t* data, uint64_t data_size) = 0;
     virtual bool on_ReadSubresource(uint32_t resource, uint32_t subresource, uint32_t& hresult, uint32_t& row_pitch, uint32_t& depth_pitch, uint8_t* data, uint64_t data_capacity, uint64_t& data_size) = 0;
+    virtual bool on_PresentSnapshot(uint32_t resource, uint32_t subresource, uint64_t key) = 0;
     virtual bool on_BeginQuery(uint32_t query) = 0;
     virtual bool on_EndQuery(uint32_t query) = 0;
     virtual bool on_BindQueryResults(uint64_t offset, uint32_t slots) = 0;

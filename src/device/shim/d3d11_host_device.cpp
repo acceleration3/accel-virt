@@ -12,7 +12,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), imports_(vulkan_), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
+    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), imports_(vulkan_), snapshots_(), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -66,6 +66,7 @@ void D3d11HostDevice::close()
     AV_SCOPE("D3d11HostDevice::close");
     exports_.release();
     shared_.clear();
+    if (context_ != nullptr) snapshots_.clear(context_);
     imports_.release();
     vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
@@ -125,6 +126,41 @@ bool D3d11HostDevice::export_image(uint64_t key, RvkExportedImage &image)
     return true;
 }
 
+bool D3d11HostDevice::snapshot(uint64_t key, ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
+                               uint32_t height, uint32_t format)
+{
+    AV_SCOPE("D3d11HostDevice::snapshot");
+    return device_ != nullptr && snapshots_.take(device_, context_, key, source, subresource, width, height, format);
+}
+
+/* The engine can reach a present before the session reaches its snapshot: a
+ * snapshot not there yet is waited for, as one the GPU is still copying is. */
+bool D3d11HostDevice::map_snapshot(uint64_t key, uint32_t wait_ms, RvkSnapshotView &view)
+{
+    AV_SCOPE("D3d11HostDevice::map_snapshot");
+    constexpr long     poll_nanoseconds = 100000;
+    constexpr uint32_t polls_per_ms = 10u;
+    if (device_ == nullptr) return false;
+    for (uint32_t poll = 0u; poll <= wait_ms * polls_per_ms; poll++) {
+        lock(nullptr);
+        const SnapshotPool::Reading reading = snapshots_.read(context_, key, view);
+        unlock();
+        if (reading == SnapshotPool::Reading::mapped) return true;
+        const timespec pause = {0, poll_nanoseconds};
+        nanosleep(&pause, nullptr);
+    }
+    return false;
+}
+
+void D3d11HostDevice::unmap_snapshot(uint64_t key)
+{
+    AV_SCOPE("D3d11HostDevice::unmap_snapshot");
+    if (device_ == nullptr) return;
+    lock(nullptr);
+    snapshots_.release(context_, key);
+    unlock();
+}
+
 void D3d11HostDevice::release_shared(uint64_t object_id)
 {
     AV_SCOPE("D3d11HostDevice::release_shared");
@@ -134,6 +170,7 @@ void D3d11HostDevice::release_shared(uint64_t object_id)
     if (object_id == 0u) {
         fprintf(stderr, "virtio-gpu-rvk: d3d11: the guest's shared ids start again; %u released\n", shared_.count());
         shared_.clear();
+        snapshots_.clear(context_);
     } else {
         shared_.release(object_id);
     }

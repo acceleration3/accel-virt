@@ -11,6 +11,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "device/present/present_page_window.hpp"
+#include "device/present/present_snapshots.hpp"
 #include "device/present/queued_present.hpp"
 
 #include <stdint.h>
@@ -36,10 +37,11 @@ public:
      * once done. */
     [[nodiscard]] Status initialize();
     /* Main loop. The guest's page from now on, counting from ticket 1, and
-     * every present taken before forgotten: 0 lets the page go. invalid_state
-     * before initialize; the page's refusal (PresentPageWindow::map), which
-     * leaves no page; no_memory when no thread starts. */
-    [[nodiscard]] Status attach(uint64_t address);
+     * every present taken before forgotten: 0 lets the page go. Image sources
+     * are read from `snapshots`. invalid_state before initialize; the page's
+     * refusal (PresentPageWindow::map), which leaves no page; no_memory when
+     * no thread starts. */
+    [[nodiscard]] Status attach(uint64_t address, const PresentSnapshots &snapshots);
     /* Main loop. A virtio reset: the thread stopped, the page let go, and every
      * present not yet moved forgotten. */
     void                 detach();
@@ -75,6 +77,8 @@ private:
     void                        *thread_;
     bool                         stopping_;
     PresentPageWindow            page_;
+    /* Set while the thread is stopped, read by it after. */
+    PresentSnapshots             snapshots_;
     ObjectStorage<QueuedPresent> slots_[depth];
     /* The ring: `held_` slots from `first_`, the first `moved_` of them moved
      * and waiting for the main loop to let them go. */

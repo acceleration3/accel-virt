@@ -14,7 +14,7 @@ namespace av {
 
 PresentEngine::PresentEngine(Host &host, FenceInterrupts &interrupts)
     : host_(host), interrupts_(interrupts), lock_(nullptr), wake_(nullptr), thread_(nullptr), stopping_(false),
-      page_(host), slots_(), first_(0u), moved_(0u), held_(0u), counted_(0u), completed_(0u), refused_(0u)
+      page_(host), snapshots_(), slots_(), first_(0u), moved_(0u), held_(0u), counted_(0u), completed_(0u), refused_(0u)
 {
     AV_SCOPE("PresentEngine::PresentEngine");
     for (ObjectStorage<QueuedPresent> &storage : slots_) static_cast<void>(storage.construct(host));
@@ -48,13 +48,14 @@ QueuedPresent &PresentEngine::slot(uint32_t index)
     return slots_[index % depth].object();
 }
 
-Status PresentEngine::attach(uint64_t address)
+Status PresentEngine::attach(uint64_t address, const PresentSnapshots &snapshots)
 {
     AV_SCOPE("PresentEngine::attach");
     host_.require_main_loop("PresentEngine::attach");
     if (lock_ == nullptr || wake_ == nullptr) return Status::invalid_state;
     detach();
     if (address == 0u) return Status::ok;
+    snapshots_ = snapshots;
     const Status mapped = page_.map(address);
     if (mapped != Status::ok) return mapped;
     stopping_ = false;
@@ -120,7 +121,7 @@ uint32_t PresentEngine::take(ControlRequest &request, uint64_t ticket)
     QueuedPresentRequest present;
     Status               status = present.decode(reader);
     if (status == Status::ok && (present.ticket() != ticket || held_ == depth)) status = Status::invalid_parameter;
-    if (status == Status::ok) status = slot(first_ + held_).accept(request, present);
+    if (status == Status::ok) status = slot(first_ + held_).accept(request, present, snapshots_);
     host_.lock_mutex(lock_);
     const bool completed_now = status != Status::ok && refuse();
     if (status == Status::ok) held_++;
@@ -147,7 +148,8 @@ bool PresentEngine::refuse()
 void PresentEngine::run()
 {
     AV_SCOPE("PresentEngine::run");
-    for (QueuedPresent *present = next(); present != nullptr; present = next()) complete(*present, present->move());
+    for (QueuedPresent *present = next(); present != nullptr; present = next())
+        complete(*present, present->move(snapshots_));
 }
 
 QueuedPresent *PresentEngine::next()

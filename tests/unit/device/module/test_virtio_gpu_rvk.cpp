@@ -949,6 +949,9 @@ TEST(virtio_gpu_rvk_realize, with_a_renderer_the_capset_is_what_the_renderer_off
   importing.device().status(DriverStatus::driver_ok);
   CHECK_EQ(importing.device().capsets(), 1u);
   CHECK((features_of(importing.device()) & 4u) != 0u);
+  /* The renderer's snapshots are in its memory, which the engine here cannot read. */
+  CHECK_EQ(features_of(importing.device()) & av::CapsetInfo::feature_present_from_image, 0u);
+  CHECK((features_of(importing.device()) & av::CapsetInfo::feature_present_engine) != 0u);
   CHECK_EQ(importing.peer().resources().interrupt_lines(), 64u);   /* DRIVER_OK reached the renderer */
   CHECK_STATUS(importing.device().create_context(1u), Status::ok);
   CHECK_EQ(importing.device().contexts(), 1u);
@@ -1147,7 +1150,8 @@ TEST(virtio_gpu_rvk_display_clock, a_host_with_no_lock_for_the_clock_is_not_real
 TEST(virtio_gpu_rvk_present_engine, the_engine_is_offered_takes_presents_and_stops_at_a_reset)
 { ClockedDevice rig;
   CHECK((features_of(rig.device) & av::CapsetInfo::feature_present_engine) != 0u);
-  CHECK_EQ(features_of(rig.device) & av::CapsetInfo::feature_present_from_image, 0u);
+  /* Its contexts run here, on a library that keeps snapshots. */
+  CHECK((features_of(rig.device) & av::CapsetInfo::feature_present_from_image) != 0u);
   GpuRequestBuilder page(0x02F6u);
   page.u64(0x402000u);
   MockRequest registered(page.bytes(), page.size());

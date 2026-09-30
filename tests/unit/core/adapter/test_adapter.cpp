@@ -57,6 +57,7 @@
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
+#include "device/present/present_snapshots.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
@@ -101,6 +102,8 @@
 #include "harness/framework/test_registry.hpp"
 #include "proto/commands/present_command.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/umd_adapter_info.hpp"
+#include "proto/submission/present_snapshot_record.hpp"
 #include "proto/submission/present_ticket_record.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -320,8 +323,22 @@ public:
         capset_ = host_capset(first_gpu, 1u,
                               av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine);
     }
+    /* A device whose engine reads present snapshots as well. */
+    void                   offer_present_snapshots()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine |
+                                  av::CapsetInfo::feature_present_from_image);
+    }
     /* The device takes what the driver sent without waiting for an answer. */
     void                   serve() { answer_display_info(this); }
+    /* The fixed part of the last queued present the device took, and how
+     * many it took. */
+    const std::uint8_t    *last_queued() const { return queued_; }
+    std::uint32_t          queued_presents() const { return queued_count_; }
+    /* The engine's thread stopped, so nothing moves into a test's surfaces
+     * once they are gone. */
+    void                   stop_presents() { present_engine_.detach(); }
     /* The modes the host offers from the next ask on (GET_DISPLAY_MODES); a
      * fixture offering none answers that ask as a device from before it would. */
     void                   offer_modes(const av::DisplayModeSet &modes) { offered_modes_ = modes; }
@@ -451,9 +468,14 @@ private:
         auto *const        fixture = static_cast<Fixture *>(context);
         std::uint32_t      type = 0u;
         std::memcpy(&type, request, sizeof type);
+        if (type == av::QueuedPresentRequest::type) {
+            const std::size_t kept = length < sizeof fixture->queued_ ? length : sizeof fixture->queued_;
+            std::memcpy(fixture->queued_, request, kept);
+            fixture->queued_count_++;
+        }
         av::MockRequest    mock(request, length);
         av::ControlRequest control(fixture->host_, &mock);
-        static_cast<void>(av::PresentEngineCommands(fixture->host_, fixture->present_engine_).answer(control, type));
+        static_cast<void>(av::PresentEngineCommands(fixture->host_, fixture->present_engine_, av::PresentSnapshots()).answer(control, type));
         const std::size_t given = mock.response_size() < room ? mock.response_size() : room;
         std::memcpy(answer, mock.response_bytes(), given);
         return static_cast<std::uint32_t>(given);
@@ -464,6 +486,8 @@ private:
     av::PresentCommands   present_commands_{host_};
     av::FenceInterrupts   present_interrupts_{host_};
     av::PresentEngine     present_engine_{host_, present_interrupts_};
+    std::uint8_t          queued_[av::QueuedPresentRequest::encoded_size] = {};
+    std::uint32_t         queued_count_ = 0u;
     std::uint8_t          present_request_[0x9000] = {};
     std::uint32_t         present_copies_ = 0u;
     FakeVirtioGpuFunction function_;
@@ -2818,7 +2842,81 @@ TEST(adapter_query_adapter_info, umd_private_names_the_luid_the_adapter_was_star
   query.pOutputData = short_output;
   query.OutputDataSize = sizeof short_output;
   CHECK(nt(fixture.adapter().query_adapter_info(&query)) != success);
-  CHECK_EQ(short_output[0], 0xEEu); }
+  CHECK_EQ(short_output[0], 0xEEu);
+  /* A user-mode driver that asks for the third word reads no feature from a
+   * device without the engine's snapshots. */
+  std::uint64_t three[3] = {0u, 0u, 0xEEu};
+  query.pOutputData = three;
+  query.OutputDataSize = sizeof three;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(three[1], 0x0000000500001234ull);
+  CHECK_EQ(three[2], 0u); }
+
+/* Where the engine runs on a device that reads snapshots, the third word
+ * offers them, and a blt whose private driver data names one is queued from
+ * it - no source pages, and the snapshot's key - while one naming none is
+ * queued from its pages. */
+TEST(adapter_present, a_blt_naming_a_snapshot_is_queued_from_it_where_snapshots_are_offered)
+{ Fixture fixture;
+  fixture.offer_present_snapshots();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  std::uint64_t                 words[3] = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = query_umd_private;
+  query.pOutputData = words;
+  query.OutputDataSize = sizeof words;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(words[2], av::UmdAdapterInfo::feature_present_snapshots);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t dma[512] = {};
+  std::uint8_t snapshot[av::PresentSnapshotRecord::encoded_size] = {};
+  CHECK_STATUS(av::PresentSnapshotRecord(0xABCDu).encode(snapshot, sizeof snapshot), av::Status::ok);
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPrivateDriverData = snapshot;
+  present.PrivateDriverDataSize = sizeof snapshot;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  std::uint32_t kind = 0u, source_entries = 1u;
+  std::uint64_t key = 0u;
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&key, fixture.last_queued() + 40u, sizeof key);
+  std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
+  CHECK_EQ(kind, 1u);   /* an image */
+  CHECK(key == 0xABCDu);
+  CHECK_EQ(source_entries, 0u);
+  av::DxgkargPresentRecord pages = present;
+  pages.pDmaBuffer = dma;
+  pages.pPrivateDriverData = nullptr;
+  pages.PrivateDriverDataSize = 0u;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &pages)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 2u);
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
+  CHECK_EQ(kind, 0u);
+  CHECK_EQ(source_entries, 1u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_either_buffer)
 { Fixture fixture;

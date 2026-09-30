@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 12u
+#define RVK_EXECUTOR_ABI_VERSION 13u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -61,6 +61,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_POLL 10u
 #define RVK_EXECUTOR_ABI_VERSION_PROGRESS 11u
 #define RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE 12u
+#define RVK_EXECUTOR_ABI_VERSION_SNAPSHOTS 13u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -149,6 +150,17 @@ typedef struct RvkExportedImage {
     uint32_t reserved;
     uint64_t modifier;
 } RvkExportedImage;
+
+/* A present snapshot mapped for reading (map_snapshot): `height` rows of
+ * `width` four-byte pixels, `row_pitch` bytes apart, in the snapshot's own
+ * byte order. Valid until unmap_snapshot. */
+typedef struct RvkSnapshotView {
+    const uint8_t *pixels;
+    uint32_t row_pitch;
+    uint32_t width;
+    uint32_t height;
+    uint32_t reserved;
+} RvkSnapshotView;
 
 typedef struct RvkExecutorOps {
     uint32_t abi_version;
@@ -293,6 +305,16 @@ typedef struct RvkExecutorOps {
      * session holds it. Until this, what was shared stays whatever became of
      * the session that shared it. Main loop. */
     void (*release_shared)(void *opaque, const uint8_t *gpu_uuid, uint64_t object_id);
+
+    /* ABI 13: the present snapshot a session on the GPU `gpu_uuid` took under
+     * `key` (the Direct3D command PresentSnapshot), mapped once the GPU has
+     * copied it: RVK_EXECUTED, or RVK_UNKNOWN when no snapshot is there within
+     * `wait_ms` - the session has not reached the command, or never took it.
+     * Any thread; one map per snapshot. */
+    uint32_t (*map_snapshot)(void *opaque, const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms,
+                             RvkSnapshotView *view);
+    /* ABI 13: the snapshot under `key` let go, mapped or not. Any thread. */
+    void (*unmap_snapshot)(void *opaque, const uint8_t *gpu_uuid, uint64_t key);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

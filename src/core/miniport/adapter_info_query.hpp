@@ -29,6 +29,8 @@ public:
     /* Copies exactly `count` bytes to the start of the output; a null output
      * or a declared size below `count` is invalid_parameter and writes nothing. */
     [[nodiscard]] Status write_output(const void *bytes, uint32_t count) const;
+    /* The output the caller declared; 0 with none. */
+    uint32_t             output_size() const;
 
 private:
     Platform                            &platform_;

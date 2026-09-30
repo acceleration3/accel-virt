@@ -56,6 +56,8 @@
 
 namespace av {
 
+class AdapterInfoQuery;
+
 class PresentSurface;
 class Rectangle;
 
@@ -294,9 +296,15 @@ private:
     /* The present's private data names `ticket`, so its packet waits for the
      * pixels (PresentTicketRecord); nothing for 0 or no room. */
     void     mark_present(DxgkargPresentRecord &request, uint64_t ticket);
+    /* UMDRIVERPRIVATE: which adapter this is, and the features the user-mode
+     * driver may use (UmdAdapterInfo), in as many words as the caller asked. */
+    [[nodiscard]] Status answer_umd_private(const AdapterInfoQuery &request);
     /* What moves a present's pixels when neither the engine nor the device's
      * present copy is there. */
     PixelMover &immediate_mover();
+    /* The present snapshot a blt's private driver data names
+     * (PresentSnapshotRecord); 0 for none. */
+    uint64_t    snapshot_of(const DxgkargPresentRecord &request);
     void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);
@@ -305,7 +313,6 @@ private:
 
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
-    static constexpr uint64_t umd_private_tag = 0x44494C554B5652ull;   /* "RVKULID" */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
     enum : int32_t {   /* DXGKQAITYPE_* */
         query_umd_private = 0,

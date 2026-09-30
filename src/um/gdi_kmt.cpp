@@ -1,8 +1,10 @@
 #include "um/gdi_kmt.hpp"
 
+
 #include "core/support/nt_status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "proto/context/umd_adapter_info.hpp"
 
 #include <windows.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
@@ -242,6 +244,20 @@ Status GdiKmt::query_driver_version(uint32_t adapter, uint32_t &version)
     const Status status = answer(D3DKMTQueryAdapterInfo(&query));
     version = static_cast<uint32_t>(reported);
     return status;
+}
+
+Status GdiKmt::query_adapter_features(uint32_t adapter, UmdAdapterInfo &info)
+{
+    AV_SCOPE("GdiKmt::query_adapter_features");
+    uint8_t                 bytes[UmdAdapterInfo::encoded_size] = {};
+    D3DKMT_QUERYADAPTERINFO query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_UMDRIVERPRIVATE;
+    query.pPrivateDriverData = bytes;
+    query.PrivateDriverDataSize = sizeof bytes;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    if (status != Status::ok) return status;
+    return info.decode(bytes, sizeof bytes);
 }
 
 Status GdiKmt::query_native_gpu_fences(uint32_t adapter, bool &supported)

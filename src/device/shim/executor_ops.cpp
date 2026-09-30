@@ -220,6 +220,18 @@ uint32_t export_image(void *, const uint8_t *gpu_uuid, uint64_t key, RvkExported
     return image != nullptr && library.root().export_image(gpu_uuid, key, *image) ? RVK_EXECUTED : RVK_UNKNOWN;
 }
 
+uint32_t map_snapshot(void *, const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView *view)
+{
+    AV_SCOPE("map_snapshot");
+    return view != nullptr && library.root().map_snapshot(gpu_uuid, key, wait_ms, *view) ? RVK_EXECUTED : RVK_UNKNOWN;
+}
+
+void unmap_snapshot(void *, const uint8_t *gpu_uuid, uint64_t key)
+{
+    AV_SCOPE("unmap_snapshot");
+    library.root().unmap_snapshot(gpu_uuid, key);
+}
+
 void release_shared(void *, const uint8_t *gpu_uuid, uint64_t object_id)
 {
     AV_SCOPE("release_shared");
@@ -271,7 +283,9 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               export_image,
                               poll,
                               gpu_progress,
-                              release_shared};
+                              release_shared,
+                              map_snapshot,
+                              unmap_snapshot};
 
 }  // namespace
 

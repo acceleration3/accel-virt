@@ -39,6 +39,32 @@ public:
     bool export_image(const std::uint8_t *, std::uint64_t, RvkExportedImage &) override { return false; }
     bool read_image(const std::uint8_t *, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t) override
     { return false; }
+    /* One present snapshot served under `key` from the test's own pixels, as
+     * an executor maps one; mapped once, and every unmap counted. */
+    bool reads_snapshots() const override { return served_; }
+    bool map_snapshot(const std::uint8_t *, std::uint64_t key, std::uint32_t, RvkSnapshotView &view) override
+    {
+        if (key == 0u || key != snapshot_key_ || snapshot_mapped_) return false;
+        snapshot_mapped_ = true;
+        view = snapshot_;
+        return true;
+    }
+    /* Let go, as an executor lets a snapshot go: it is not there to map again. */
+    void unmap_snapshot(const std::uint8_t *, std::uint64_t key) override
+    {
+        if (key == snapshot_key_) snapshot_key_ = 0u;
+        snapshot_mapped_ = false;
+        unmaps_++;
+    }
+    void serve_snapshot(std::uint64_t key, const RvkSnapshotView &view)
+    {
+        snapshot_key_ = key;
+        snapshot_ = view;
+        snapshot_mapped_ = false;
+        served_ = true;
+    }
+    bool          snapshot_mapped() const { return snapshot_mapped_; }
+    std::uint32_t unmaps() const { return unmaps_; }
     void report(StateWriter &) override {}
     bool invariants_hold() const override { return true; }
 
@@ -54,6 +80,11 @@ public:
     std::uint32_t losses() const { return losses_; }
 
 private:
+    std::uint64_t   snapshot_key_ = 0u;
+    RvkSnapshotView snapshot_ = {};
+    bool            snapshot_mapped_ = false;
+    bool            served_ = false;
+    std::uint32_t   unmaps_ = 0u;
     std::uint32_t created_[capacity] = {};
     std::uint32_t created_count_ = 0u;
     std::uint32_t released_[capacity] = {};

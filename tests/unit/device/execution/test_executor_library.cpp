@@ -123,7 +123,7 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 12u);
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 13u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_OPTIONS, 4u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EVENTS, 5u);
@@ -134,6 +134,7 @@ TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_POLL, 10u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_PROGRESS, 11u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE, 12u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_SNAPSHOTS, 13u);
   MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
   ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().imported_handle = nullptr;
@@ -556,3 +557,39 @@ TEST(executor_library_release_shared, tells_a_library_that_knows_the_call_and_no
   ExecutorLibrary none;
   none.release_shared(some_gpu, 7u);
   CHECK(released_object == 0u); }
+
+/* Version 13 keeps present snapshots only with both calls given: a table that
+ * claims the version and leaves them out reads none, and one older reads none
+ * whatever it carries. */
+TEST(executor_library_snapshots, are_read_through_a_version_13_table_with_both_calls)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_D3D);
+  const std::uint8_t gpu[16] = {1};
+  static const std::uint8_t pixels[8] = {};
+  ops.serve_snapshot(0x77u, RvkSnapshotView{pixels, 8u, 2u, 1u, 0u});
+  {
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+      CHECK(library.reads_snapshots());
+      RvkSnapshotView view = {};
+      CHECK(!library.map_snapshot(gpu, 0x78u, 5u, view));
+      CHECK(library.map_snapshot(gpu, 0x77u, 5u, view));
+      CHECK(view.pixels == pixels);
+      CHECK_EQ(view.row_pitch, 8u);
+      library.unmap_snapshot(gpu, 0x77u);
+      CHECK_EQ(ops.snapshot_unmaps(), 1u);
+  }
+  RvkExecutorOps &table = ops.editable();
+  table.unmap_snapshot = nullptr;
+  {
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&table), Status::ok);
+      CHECK(!library.reads_snapshots());
+      RvkSnapshotView view = {};
+      CHECK(!library.map_snapshot(gpu, 0x77u, 5u, view));
+      library.unmap_snapshot(gpu, 0x77u);
+      CHECK_EQ(ops.snapshot_unmaps(), 1u);
+  }
+  table.abi_version = RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE;
+  ExecutorLibrary old;
+  CHECK_STATUS(old.accept(&table), Status::ok);
+  CHECK(!old.reads_snapshots()); }

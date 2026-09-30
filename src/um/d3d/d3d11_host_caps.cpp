@@ -3,8 +3,10 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "guest/kmt/kmt.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/context/umd_adapter_info.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
 namespace av::d3d11 {
@@ -20,7 +22,7 @@ constexpr uint32_t level_11_0 = 0xb000u;
 
 }  // namespace
 
-D3d11HostCaps::D3d11HostCaps() : caps_{}, formats_{}, learned_(false)
+D3d11HostCaps::D3d11HostCaps() : caps_{}, formats_{}, snapshots_(false), learned_(false)
 {
     AV_SCOPE("D3d11HostCaps::D3d11HostCaps");
 }
@@ -47,8 +49,19 @@ bool D3d11HostCaps::learn(Kmt &kmt, uint32_t adapter)
                 formats_.record_samples(format, 1u << step, rows[format].quality_levels);
     }
     formats_.settle();
+    /* A miniport that does not answer offers nothing past the capset: its
+     * presents keep their read-back. */
+    UmdAdapterInfo info;
+    snapshots_ = kmt.query_adapter_features(adapter, info) == Status::ok &&
+                 info.offers(UmdAdapterInfo::feature_present_snapshots);
     learned_ = true;
     return true;
+}
+
+bool D3d11HostCaps::present_snapshots() const
+{
+    AV_SCOPE("D3d11HostCaps::present_snapshots");
+    return snapshots_;
 }
 
 bool D3d11HostCaps::learned() const

@@ -153,6 +153,7 @@ public:
     bool on_ReadSubresource(uint32_t resource, uint32_t subresource, uint32_t &hresult, uint32_t &row_pitch,
                             uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity,
                             uint64_t &data_size) override;
+    bool on_PresentSnapshot(uint32_t resource, uint32_t subresource, uint64_t key) override;
     bool on_BeginQuery(uint32_t query) override;
     bool on_EndQuery(uint32_t query) override;
     bool on_BindQueryResults(uint64_t offset, uint32_t slots) override;

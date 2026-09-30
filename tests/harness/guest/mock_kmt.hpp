@@ -159,6 +159,7 @@ public:
     Status        query_identity(std::uint32_t adapter, PciIdentity &identity) override;
     Status        query_driver_version(std::uint32_t adapter, std::uint32_t &version) override;
     Status        query_native_gpu_fences(std::uint32_t adapter, bool &supported) override;
+    Status        query_adapter_features(std::uint32_t adapter, UmdAdapterInfo &info) override;
     void          sleep_briefly() override;
     Status        close_adapter(std::uint32_t adapter) override;
     Status        adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
@@ -253,6 +254,8 @@ public:
     /* The LUID of the adapter added `index`th (0-based); past the adapters
      * kept, nothing. */
     void          set_adapter_luid(std::uint32_t index, std::uint64_t luid);
+    /* What UMDRIVERPRIVATE says every adapter's device offers (UmdAdapterInfo). */
+    void          set_adapter_features(std::uint64_t features);
     /* What a video memory query of `group` answers for every adapter; a group
      * D3DKMT does not define is not kept. */
     void          set_video_memory(MemorySegmentGroup group, std::uint64_t budget, std::uint64_t usage);
@@ -627,6 +630,7 @@ private:
     std::uint32_t journal_sizes_[max_journal];
     std::uint8_t  journal_bytes_[max_journal][journal_bytes];
     std::uint32_t journal_count_;
+    std::uint64_t adapter_features_ = 0u;
 };
 
 }  // namespace av

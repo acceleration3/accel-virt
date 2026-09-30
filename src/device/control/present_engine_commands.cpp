@@ -12,7 +12,8 @@
 
 namespace av {
 
-PresentEngineCommands::PresentEngineCommands(Host &host, PresentEngine &engine) : host_(host), engine_(engine)
+PresentEngineCommands::PresentEngineCommands(Host &host, PresentEngine &engine, const PresentSnapshots &snapshots)
+    : host_(host), engine_(engine), snapshots_(snapshots)
 {
     AV_SCOPE("PresentEngineCommands::PresentEngineCommands");
 }
@@ -41,7 +42,7 @@ void PresentEngineCommands::register_page(ControlRequest &request)
     WireReader   reader(bytes, request.read(0u, bytes, sizeof bytes));
     PageRequest  page;
     GpuResponse  response;
-    const Status attached = page.decode(reader) == Status::ok ? engine_.attach(page.address()) : Status::malformed;
+    const Status attached = page.decode(reader) == Status::ok ? engine_.attach(page.address(), snapshots_) : Status::malformed;
     if (attached == Status::no_memory) response.set(GpuResponse::err_out_of_memory);
     else response.set(attached == Status::ok ? GpuResponse::ok_nodata : GpuResponse::err_invalid_parameter);
     if (attached != Status::ok) {

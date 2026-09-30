@@ -22,6 +22,7 @@
 #include "device/shim/dxvk_vulkan_device.hpp"
 #include "device/shim/host_image_export.hpp"
 #include "device/shim/imported_textures.hpp"
+#include "device/shim/snapshot_pool.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -70,6 +71,17 @@ public:
     [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     /* The image published under `key` as a dma-buf (HostImageExport). */
     [[nodiscard]] bool export_image(uint64_t key, RvkExportedImage &image);
+    /* Under the lock a session's command already holds: subresource
+     * `subresource` of `source` kept under `key` for the present engine
+     * (SnapshotPool::take). */
+    [[nodiscard]] bool snapshot(uint64_t key, ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
+                                uint32_t height, uint32_t format);
+    /* Any thread: the snapshot under `key` mapped into `view`, waiting up to
+     * `wait_ms` for a session to take it and the GPU to copy it. False when
+     * it does not come. Takes the lock for each look. */
+    [[nodiscard]] bool map_snapshot(uint64_t key, uint32_t wait_ms, RvkSnapshotView &view);
+    /* Any thread: the snapshot under `key` let go. Takes the lock. */
+    void               unmap_snapshot(uint64_t key);
     /* The guest let go of the surface shared under `object_id` everywhere, or
      * of every one for 0 - the device was reset and its ids start again. Takes
      * the lock itself. */
@@ -102,6 +114,7 @@ private:
     DxvkVulkanDevice        vulkan_;
     HostImageExport         exports_;
     ImportedTextures        imports_;
+    SnapshotPool            snapshots_;
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */
     ID3D11Texture2D        *staging_;

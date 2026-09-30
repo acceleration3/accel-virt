@@ -70,6 +70,7 @@ inline constexpr uint32_t kCmd_GenerateMips = 0x00040409;
 inline constexpr uint32_t kCmd_CopyStructureCount = 0x0004040a;
 inline constexpr uint32_t kCmd_UpdateSubresource = 0x0004040b;
 inline constexpr uint32_t kCmd_ReadSubresource = 0x0004040c;
+inline constexpr uint32_t kCmd_PresentSnapshot = 0x0004040d;
 inline constexpr uint32_t kCmd_BeginQuery = 0x00040500;
 inline constexpr uint32_t kCmd_EndQuery = 0x00040501;
 inline constexpr uint32_t kCmd_GetQueryData = 0x00040502;

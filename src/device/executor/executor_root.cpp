@@ -74,6 +74,22 @@ bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixel
     return device != nullptr && device->read_image(key, pixels, stride, width, height);
 }
 
+bool ExecutorRoot::map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view)
+{
+    AV_SCOPE("ExecutorRoot::map_snapshot");
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->map_snapshot(key, wait_ms, view);
+}
+
+void ExecutorRoot::unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key)
+{
+    AV_SCOPE("ExecutorRoot::unmap_snapshot");
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    if (device != nullptr) device->unmap_snapshot(key);
+}
+
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
                                    ContextSession *share)
 {

@@ -27,6 +27,7 @@
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/paging_queue.hpp"
+#include "icd/d3d/present_snapshot_keys.hpp"
 
 #include <stdint.h>
 
@@ -168,7 +169,14 @@ private:
                             void *dxgi_context);
     HRESULT present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                           void *dxgi_context);
-    HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context);
+    /* A blt-model present the host snapshots in the buffer's command order
+     * instead of the buffer being read back: the kernel is handed the key. */
+    HRESULT present_snapshot(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
+                             void *dxgi_context);
+    /* `snapshot` the key of the present snapshot the kernel moves the pixels
+     * from; 0 for the source's pages. */
+    HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context,
+                              uint64_t snapshot);
     /* The kernel context's next packet - a present, a fence the runtime
      * signals - waits for the batches the ring carried: the kernel's refusal
      * otherwise, logged the first time. */
@@ -218,6 +226,7 @@ private:
     bool            guest_lock_refused_;
     bool            present_refused_;
     bool            follow_refused_;
+    d3d::PresentSnapshotKeys snapshot_keys_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
 };

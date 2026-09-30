@@ -147,6 +147,24 @@ bool LocalContextPlane::read_image(const uint8_t *gpu_uuid, uint64_t key, void *
     return library_.read_image(gpu_uuid, key, pixels, stride, width, height);
 }
 
+bool LocalContextPlane::reads_snapshots() const
+{
+    AV_SCOPE("LocalContextPlane::reads_snapshots");
+    return library_.reads_snapshots();
+}
+
+bool LocalContextPlane::map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view)
+{
+    AV_SCOPE("LocalContextPlane::map_snapshot");
+    return library_.map_snapshot(gpu_uuid, key, wait_ms, view);
+}
+
+void LocalContextPlane::unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key)
+{
+    AV_SCOPE("LocalContextPlane::unmap_snapshot");
+    library_.unmap_snapshot(gpu_uuid, key);
+}
+
 void LocalContextPlane::report(StateWriter &writer)
 {
     AV_SCOPE("LocalContextPlane::report");

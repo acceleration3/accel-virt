@@ -330,3 +330,40 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     backend.shut_down();
     CHECK(backend.invariants_hold());
 }
+
+/* A present snapshot is the target as the commands before it left it: a
+ * clear after it never reaches it. It is mapped once the GPU has copied it
+ * and gone once let go; a key of 0, or a resource that is no texture, keeps
+ * nothing and removes no device. */
+TEST(d3d_backend_device, a_present_snapshot_keeps_the_frame_the_commands_before_it_drew)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    av::D3dBackend backend;
+    CHECK(backend.initialize(device));
+    av::D3dLoopback wire(backend);
+    std::uint32_t hresult = 1u, level = 0u, removed = 1u;
+    CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    bind_triangle(wire);
+    CHECK(rvk_d3d_Draw(wire, 3u, 0u));
+    CHECK(rvk_d3d_PresentSnapshot(wire, 1u, 0u, 0x5150u));
+    CHECK(rvk_d3d_ClearRenderTargetView(wire, 2u, Float4{{1.0f, 0.0f, 0.0f, 1.0f}}));
+    RvkSnapshotView view = {};
+    CHECK(device->map_snapshot(0x5150u, 1000u, view));
+    CHECK_EQ(view.width, size);
+    CHECK_EQ(view.height, size);
+    CHECK(view.row_pitch >= size * 4u);
+    std::uint32_t edge = 0u;
+    std::memcpy(&edge, view.pixels + (size / 2u) * view.row_pitch + (size - 4u) * 4u, sizeof edge);
+    CHECK_EQ(edge, 0xff0000ffu);   /* the blue the draw left, not the red cleared after */
+    device->unmap_snapshot(0x5150u);
+    CHECK(!device->map_snapshot(0x5150u, 0u, view));
+    CHECK(rvk_d3d_PresentSnapshot(wire, 1u, 0u, 0u));
+    CHECK(rvk_d3d_PresentSnapshot(wire, 3u, 0u, 0x77u));   /* the vertex buffer */
+    CHECK(!device->map_snapshot(0x77u, 0u, view));
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+}

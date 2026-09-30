@@ -63,6 +63,12 @@ public:
     virtual bool export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) = 0;
     virtual bool read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                             uint32_t height) = 0;
+    /* Any thread: whether a present snapshot a Direct3D session took can be
+     * read here, and the one under `key` mapped and let go
+     * (ExecutorLibrary::map_snapshot). */
+    virtual bool reads_snapshots() const = 0;
+    virtual bool map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view) = 0;
+    virtual void unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key) = 0;
 
     virtual void report(StateWriter &writer) = 0;
     virtual bool invariants_hold() const = 0;

@@ -7,6 +7,7 @@
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
+#include "device/present/present_snapshots.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -38,8 +39,9 @@ struct Rig {
     FenceInterrupts interrupts;
     PresentScene    scene;
     PresentEngine   engine;
+    av::PresentSnapshots snapshots;
 
-    Rig() : host(), interrupts(host), scene(host), engine(host, interrupts)
+    Rig() : host(), interrupts(host), scene(host), engine(host, interrupts), snapshots()
     {
         static_cast<void>(engine.initialize());
     }
@@ -50,7 +52,7 @@ struct Rig {
     {
         MockRequest    mock(built.bytes(), built.size());
         ControlRequest request(host, &mock);
-        return PresentEngineCommands(host, engine).answer(request, type) ? mock.response_type() : 0u;
+        return PresentEngineCommands(host, engine, snapshots).answer(request, type) ? mock.response_type() : 0u;
     }
     std::uint32_t attach(std::uint64_t address)
     {

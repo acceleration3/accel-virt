@@ -24,6 +24,7 @@ class PresentCopyRequest;
 class PresentRegion;
 class PresentSurface;
 class PresentTicketRecord;
+class QueuedPresentRequest;
 class VirtioGpuDevice;
 
 class PresentQueue {
@@ -55,6 +56,12 @@ public:
      * back; the send's refusal otherwise. Nothing is queued unless ok. */
     [[nodiscard]] Status queue(const PresentCopyRequest &request, const PresentSurface *source,
                                const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket);
+    /* PASSIVE. The blt `request` states, out of the present snapshot kept
+     * under `key` rather than its source's pages: as queue, which names no
+     * source pages. */
+    [[nodiscard]] Status queue_image(uint64_t key, const PresentCopyRequest &request,
+                                     const PresentSurface &destination, const PresentRegion *regions,
+                                     uint64_t &ticket);
     /* Dispatch at most: the last ticket the device finished with; 0 before the
      * first and while the page says nothing this driver accepts. */
     uint64_t             completed() const;
@@ -66,15 +73,19 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* The present under the next ticket: from `source`'s pages, or for a
+     * snapshot `key` from the snapshot, with no source in `request`. */
+    [[nodiscard]] Status enqueue(uint64_t key, const PresentCopyRequest &request, const PresentSurface *source,
+                                 const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket);
     /* Waits for the payload `ticket` is written into to be done with. */
     [[nodiscard]] Status wait_for_payload(uint64_t ticket);
     /* The payload `ticket` is written into. */
     uint32_t             slot_of(uint64_t ticket) const;
     [[nodiscard]] Status write_payload(uint32_t slot, const PresentSurface *source, const PresentSurface &destination,
                                        const PresentRegion *regions, uint32_t count, size_t &length);
-    /* The fixed part under `ticket`, continued by `length` bytes of payload
-     * `slot`: sent, harvesting and waiting while every control slot is busy. */
-    [[nodiscard]] Status send(const PresentCopyRequest &request, uint64_t ticket, uint32_t slot, size_t length);
+    /* `present`'s fixed part, continued by `length` bytes of payload `slot`:
+     * sent, harvesting and waiting while every control slot is busy. */
+    [[nodiscard]] Status send(const QueuedPresentRequest &present, uint32_t slot, size_t length);
 
     Platform        &platform_;
     VirtioGpuDevice &device_;

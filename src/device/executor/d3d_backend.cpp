@@ -1590,6 +1590,26 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     return true;
 }
 
+/* A snapshot the host cannot keep - not a 2D texture of four-byte pixels, a
+ * key already kept - is a present the engine refuses: the session goes on,
+ * and the application sees at most a frame not shown. */
+bool D3dBackend::on_PresentSnapshot(uint32_t resource, uint32_t subresource, uint64_t key)
+{
+    AV_SCOPE("D3dBackend::on_PresentSnapshot");
+    ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
+    if (!ready() || found == nullptr) return false;
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    found->GetType(&dimension);
+    uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
+    if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !extent_of(found, subresource, width, height, depth, format))
+        return true;
+    const DxgiFormatLayout layout(format);
+    if (layout.element_bytes() != 4u || layout.element_width() != 1u) return true;
+    static_cast<void>(device11_->snapshot(key, static_cast<ID3D11Texture2D *>(found), subresource, width, height,
+                                          format));
+    return true;
+}
+
 bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uint32_t &hresult, uint32_t &row_pitch,
                                     uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity, uint64_t &data_size)
 {

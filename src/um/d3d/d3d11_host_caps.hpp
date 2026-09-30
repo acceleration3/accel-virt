@@ -39,6 +39,9 @@ public:
     HRESULT answer(const D3D10_2DDIARG_GETCAPS &args) const;
     /* D3D_FEATURE_LEVEL the host device runs at. */
     uint32_t feature_level() const;
+    /* Whether a blt-model present may name a present snapshot rather than its
+     * buffer read back: what the miniport's UMDRIVERPRIVATE said. */
+    bool     present_snapshots() const;
     UINT     format_support(DXGI_FORMAT format) const;
     UINT     quality_levels(DXGI_FORMAT format, UINT samples) const;
 
@@ -48,6 +51,7 @@ private:
 
     d3dproto::Caps11     caps_;
     d3d::DxgiFormatTable formats_;
+    bool                 snapshots_;
     bool                 learned_;
 };
 
