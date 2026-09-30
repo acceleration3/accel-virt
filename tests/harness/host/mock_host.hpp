@@ -30,8 +30,9 @@ public:
     static constexpr std::uint32_t max_gpus = 8u;
     static constexpr std::uint32_t max_main_loop_work = 1024u;
     static constexpr std::uint32_t max_doorbells = 64u;
-    /* The fence queues' interrupt lines and the display's, after them. */
-    static constexpr std::uint32_t interrupt_lines = max_doorbells + 1u;
+    /* The fence queues' interrupt lines, then the display's and the present
+     * engine's. */
+    static constexpr std::uint32_t interrupt_lines = max_doorbells + 2u;
     /* VIRTIO_GPU_MAX_SCANOUTS. */
     static constexpr std::uint32_t max_scanout_heads = 16u;
 

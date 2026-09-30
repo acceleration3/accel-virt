@@ -8,12 +8,14 @@
 #include "device/control/context_commands.hpp"
 #include "device/control/scanout_commands.hpp"
 #include "device/control/present_commands.hpp"
+#include "device/control/present_engine_commands.hpp"
 #include "device/control/shared_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/host/host.hpp"
 #include "core/support/text_buffer.hpp"
+#include "proto/context/capset_info.hpp"
 
 namespace av {
 
@@ -24,7 +26,7 @@ constexpr uint64_t guest_probe_address = 0x100000u;
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
       heads_(host, blobs_), display_modes_(host), interrupts_(host),
-      clock_(host, interrupts_, &RvkDisplayFramesShow, this), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
+      clock_(host, interrupts_, &RvkDisplayFramesShow, this), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
       remote_(host, blobs_, interrupts_), contexts_(&local_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
@@ -81,8 +83,9 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
      * started with a capset: one offering every sub-API, which QEMU narrows
      * to the answer before any guest reads it. QEMU checks each context's
      * setup against the narrowed one before the renderer sees it. */
+    const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine;
     if (isolated) {
-        capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, feasibility_.features());
+        capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, features);
         const Status started = contexts_->start(capset_.info().gpu().uuid(), capset_.info());
         if (started != Status::ok) {
             message.append("virtio-gpu-rvk: the renderer did not start, or did not answer: status ");
@@ -91,15 +94,15 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
             return started;
         }
     }
-    capset_.describe(binding_.index(), contexts_->sub_apis(), feasibility_.features());
+    capset_.describe(binding_.index(), contexts_->sub_apis(), features);
     /* The probe proved this device can hand a guest blob to a host API; only
      * the library knows whether the API will take one. Both have to be true
      * before the guest is told its memory arrives without a copy. */
     if (capset_.described() &&
         contexts_->import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
         capset_.withdraw_guest_import();
-    if (clock_.initialize() == Status::no_memory) {
-        message.append("virtio-gpu-rvk: the host has no mutex or event for the display clock");
+    if (clock_.initialize() == Status::no_memory || presents_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex or event for the display clock or the present engine");
         host_.log(message.text());
         return Status::no_memory;
     }
@@ -126,6 +129,7 @@ void VirtioGpuRvk::reset()
     AV_SCOPE("VirtioGpuRvk::reset");
     host_.require_main_loop("VirtioGpuRvk::reset");
     clock_.detach();
+    presents_.detach();
     contexts_->destroy_all();
     /* The guest's shared-object ids start again, so what the executor still
      * shares under the old ones goes - on this device's GPU, which the device
@@ -180,7 +184,8 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
            SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type) ||
            PresentCommands(host_).answer(control, type) ||
            DisplayModeCommands(host_, display_modes_).answer(control, type) ||
-           DisplayClockCommands(host_, clock_).answer(control, type);
+           DisplayClockCommands(host_, clock_).answer(control, type) ||
+           PresentEngineCommands(host_, presents_).answer(control, type);
 }
 
 Status VirtioGpuRvk::set_modes(const char *text, uint32_t &width, uint32_t &height)
@@ -328,7 +333,7 @@ bool VirtioGpuRvk::invariants_hold() const
 {
     AV_SCOPE("VirtioGpuRvk::invariants_hold");
     return contexts_->invariants_hold() && blobs_.invariants_hold() &&
-           heads_.invariants_hold() && interrupts_.invariants_hold() &&
+           heads_.invariants_hold() && interrupts_.invariants_hold() && presents_.invariants_hold() &&
            status_.invariants_hold() && (binding_.bound() || contexts_->live() == 0u);
 }
 

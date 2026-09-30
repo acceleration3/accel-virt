@@ -21,6 +21,7 @@ void RvkWorkerRun(void *worker);
 void RvkRingAttach(void *ring);
 void RvkDisplayClockRun(void *clock);
 void RvkDisplayFramesShow(void *device);
+void RvkPresentEngineRun(void *engine);
 
 }
 

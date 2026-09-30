@@ -25,9 +25,12 @@ typedef void (*RvkHostRoutine)(void *context);
 #define RVK_DEVICE_FENCE_QUEUE_FIRST 2u
 /* The display line, raised at the vertical blanks the guest asked for, is the
  * interrupt line after the fence queues' (docs/protocol.md, "Display clock"):
- * line DISPLAY_LINE, virtqueue FIRST + DISPLAY_LINE. INTERRUPT_LINES counts them all. */
+ * line DISPLAY_LINE, virtqueue FIRST + DISPLAY_LINE. The present line, raised
+ * as queued presents complete, is the one after it ("Present engine").
+ * INTERRUPT_LINES counts them all. */
 #define RVK_DEVICE_DISPLAY_LINE 64u
-#define RVK_DEVICE_INTERRUPT_LINES 65u
+#define RVK_DEVICE_PRESENT_LINE 65u
+#define RVK_DEVICE_INTERRUPT_LINES 66u
 
 /* One host Vulkan physical device, as the glue read it at realize. */
 typedef struct RvkGpuProperties {

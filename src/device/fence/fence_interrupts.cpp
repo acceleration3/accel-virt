@@ -3,9 +3,15 @@
 #include "core/trace/function_scope.hpp"
 #include "device/probe/interrupt_stress_probe.hpp"
 
+#include "device/abi/rvk_device.h"
 #include "device/host/host.hpp"
 
 namespace av {
+
+static_assert(FenceInterrupts::display_line == RVK_DEVICE_DISPLAY_LINE &&
+                  FenceInterrupts::present_line == RVK_DEVICE_PRESENT_LINE &&
+                  FenceInterrupts::lines == RVK_DEVICE_INTERRUPT_LINES,
+              "the glue makes a virtqueue for every line the core raises");
 
 FenceInterrupts::FenceInterrupts(Host &host) : host_(host), lock_(nullptr), connected_(false), stress_(nullptr)
 {

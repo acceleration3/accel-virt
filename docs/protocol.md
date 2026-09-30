@@ -1273,7 +1273,8 @@ the destination is refused where it goes wrong, as in the present copy.
 | 24 | 4072 | | reserved | 0 |
 
 `completed` and `refused` are each written as one aligned eight-byte store, and
-`refused` before `completed`. The guest trusts nothing: a wrong magic or
+`completed` before `refused`: a guest that reads `refused` and then `completed`
+never reads more refused than completed. The guest trusts nothing: a wrong magic or
 version is a page it ignores, and a `completed` that goes backwards or past the
 last ticket it sent is one it does not act on.
 

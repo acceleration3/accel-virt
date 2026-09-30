@@ -491,10 +491,10 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   /* realize, its fence interrupts, its blob table, its context table and its
-   * binding, reset, its display clock, every table, the status and the
-   * interrupts under it, create, destroy and its table, and control, which an
-   * unrealized device answers no further */
-  for (int violation = 0; violation < 16; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+   * binding, reset, its display clock, its present engine, every table, the
+   * status and the interrupts under it, create, destroy and its table, and
+   * control, which an unrealized device answers no further */
+  for (int violation = 0; violation < 17; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
@@ -1131,8 +1131,46 @@ TEST(virtio_gpu_rvk_display_clock, a_host_with_no_lock_for_the_clock_is_not_real
       mutexes = host.live_mutexes();
   }
   VirtioGpuRvk device(host);
-  host.fail_mutex_at(mutexes);   /* the clock's is the last lock a realize makes */
-  char       bytes[96];
+  host.fail_mutex_at(mutexes - 1u);   /* the clock's, before the present engine's, the last a realize makes */
+  char       bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
-  CHECK(std::strstr(message.text(), "display clock") != nullptr); }
+  CHECK(std::strstr(message.text(), "display clock") != nullptr);
+  VirtioGpuRvk engineless(host);
+  host.fail_mutex_at(mutexes);
+  TextBuffer other(bytes, sizeof bytes);
+  CHECK_STATUS(engineless.realize("auto", false, nullptr, nullptr, nullptr, nullptr, other), Status::no_memory);
+  CHECK(std::strstr(other.text(), "present engine") != nullptr); }
+
+/* The present engine is offered in the capset, takes its page and presents
+ * through the control queue, and stops at a reset, forgetting the page. */
+TEST(virtio_gpu_rvk_present_engine, the_engine_is_offered_takes_presents_and_stops_at_a_reset)
+{ ClockedDevice rig;
+  CHECK((features_of(rig.device) & av::CapsetInfo::feature_present_engine) != 0u);
+  CHECK_EQ(features_of(rig.device) & av::CapsetInfo::feature_present_from_image, 0u);
+  GpuRequestBuilder page(0x02F6u);
+  page.u64(0x402000u);
+  MockRequest registered(page.bytes(), page.size());
+  CHECK(rig.device.control(&registered, 0x02F6u));
+  CHECK_EQ(registered.response_type(), 0x1100u);
+  std::uint32_t magic = 0u;
+  std::memcpy(&magic, rig.host.guest_ram(0x402000u), sizeof magic);
+  CHECK_EQ(magic, 0x504B5652u);
+  const std::uint32_t threads = rig.host.live_threads();
+  CHECK(threads >= 1u);
+  GpuRequestBuilder present(0x02F7u);
+  present.u64(2u);   /* not the first ticket: refused, and completed at once */
+  MockRequest queued(present.bytes(), present.size());
+  CHECK(rig.device.control(&queued, 0x02F7u));
+  CHECK_EQ(queued.response_type(), 0x1205u);
+  std::uint64_t completed = 0u;
+  std::memcpy(&completed, rig.host.guest_ram(0x402000u + 8u), sizeof completed);
+  CHECK_EQ(completed, 1u);
+  CHECK(rig.device.invariants_hold());
+  rig.device.reset();
+  CHECK_EQ(rig.host.live_threads(), threads - 1u);
+  MockRequest after(present.bytes(), present.size());
+  CHECK(rig.device.control(&after, 0x02F7u));
+  CHECK_EQ(after.response_type(), 0x1205u);   /* no page: nothing counted */
+  std::memcpy(&completed, rig.host.guest_ram(0x402000u + 8u), sizeof completed);
+  CHECK_EQ(completed, 1u); }

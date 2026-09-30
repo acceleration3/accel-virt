@@ -16,6 +16,7 @@
 #include "device/gpu/gpu_binding.hpp"
 #include "device/gpu/host_pci_identity.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/present/present_engine.hpp"
 #include "device/probe/host_feasibility.hpp"
 #include "device/recording/wire_recorder.hpp"
 
@@ -115,8 +116,9 @@ private:
     DisplayHeads       heads_;
     DisplayModes       display_modes_;
     FenceInterrupts    interrupts_;
-    /* After the interrupts it raises, so it stops before they go. */
+    /* After the interrupts they raise, so they stop before those go. */
     DisplayClock       clock_;
+    PresentEngine      presents_;
     DriverStatus       status_;
     /* Where the contexts run: here, or in the renderer realize started. */
     LocalContextPlane    local_;

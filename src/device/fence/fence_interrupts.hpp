@@ -19,9 +19,11 @@ struct FenceInterruptsProbe;
 
 class FenceInterrupts {
 public:
-    /* The line after the fence queues' (docs/protocol.md, "Display clock"). */
+    /* The lines after the fence queues' (docs/protocol.md, "Display clock"
+     * and "Present engine"). */
     static constexpr uint32_t display_line = 64u;
-    static constexpr uint32_t lines = display_line + 1u;
+    static constexpr uint32_t present_line = display_line + 1u;
+    static constexpr uint32_t lines = present_line + 1u;
 
     explicit FenceInterrupts(Host &host);
     ~FenceInterrupts();

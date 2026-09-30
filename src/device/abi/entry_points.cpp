@@ -2,6 +2,7 @@
 
 #include "device/module/device_instance.hpp"
 #include "device/display/display_clock.hpp"
+#include "device/present/present_engine.hpp"
 #include "device/module/device_module.hpp"
 #include "device/module/virtio_gpu_rvk.hpp"
 #include "device/ring/ring_consumer.hpp"
@@ -86,5 +87,8 @@ void RvkDisplayClockRun(void *clock)
 
 void RvkDisplayFramesShow(void *device)
 { static_cast<av::VirtioGpuRvk *>(device)->show_latched_frames(); }
+
+void RvkPresentEngineRun(void *engine)
+{ static_cast<av::PresentEngine *>(engine)->run(); }
 
 }
