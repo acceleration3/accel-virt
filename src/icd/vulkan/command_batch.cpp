@@ -11,7 +11,6 @@ namespace av::icd {
 
 namespace {
 
-constexpr size_t header_bytes = CommandHeader::encoded_size;
 constexpr size_t doublings = Connection::command_bytes / CommandBatch::first_block;
 
 /* Doubling from the first block lands on the command limit exactly, so a block
@@ -21,7 +20,7 @@ static_assert(Connection::command_bytes % CommandBatch::first_block == 0u && (do
 }  // namespace
 
 CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
-    : memory_(memory), connection_(connection), block_(nullptr), capacity_(0u), used_(0u), last_(0u), failure_(Status::ok),
+    : memory_(memory), connection_(connection), framed_(nullptr, 0u), last_(0u), failure_(Status::ok),
       refused_(0u), decode_arena_(nullptr, 0u), blobs_()
       {
           AV_SCOPE("CommandBatch::CommandBatch");
@@ -30,13 +29,13 @@ CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
 CommandBatch::~CommandBatch()
 {
     AV_SCOPE("CommandBatch::~CommandBatch");
-    if (block_ != nullptr) memory_.release(block_);
+    if (framed_.bytes() != nullptr) memory_.release(framed_.bytes());
 }
 
 void CommandBatch::discard()
 {
     AV_SCOPE("CommandBatch::discard");
-    used_ = 0u;
+    framed_.clear();
     last_ = 0u;
     failure_ = Status::ok;
 }
@@ -46,7 +45,8 @@ Status CommandBatch::end()
     AV_SCOPE("CommandBatch::end");
     ScopeExit dropped([&] { discard(); });
     if (failure_ != Status::ok) return failure_;
-    return connection_.send_batch(block_, used_) == TransportResult::ok ? Status::ok : Status::invalid_state;
+    return connection_.send_batch(framed_.bytes(), framed_.used()) == TransportResult::ok ? Status::ok
+                                                                                          : Status::invalid_state;
 }
 
 /* Room for the next command's header and its lent room: a bigger block below
@@ -54,8 +54,8 @@ Status CommandBatch::end()
 bool CommandBatch::make_room()
 {
     AV_SCOPE("CommandBatch::make_room");
-    if (capacity_ - used_ >= header_bytes + command_room) return true;
-    if (capacity_ == Connection::command_bytes) return flush();
+    if (framed_.fits(FramedBlock::header_bytes + command_room)) return true;
+    if (framed_.capacity() == Connection::command_bytes) return flush();
     return grow();
 }
 
@@ -68,8 +68,8 @@ uint32_t CommandBatch::refused() const
 bool CommandBatch::flush()
 {
     AV_SCOPE("CommandBatch::flush");
-    if (connection_.send_batch(block_, used_) != TransportResult::ok) return false;
-    used_ = 0u;
+    if (connection_.send_batch(framed_.bytes(), framed_.used()) != TransportResult::ok) return false;
+    framed_.clear();
     last_ = 0u;
     return true;
 }
@@ -79,15 +79,15 @@ bool CommandBatch::flush()
 bool CommandBatch::grow()
 {
     AV_SCOPE("CommandBatch::grow");
-    const size_t wanted = capacity_ == 0u ? first_block : capacity_ * 2u;
+    const size_t wanted = framed_.capacity() == 0u ? first_block : framed_.capacity() * 2u;
     auto *const grown = static_cast<uint8_t *>(memory_.allocate(wanted, Pool::paged));
     if (grown == nullptr) return false;
-    if (block_ != nullptr) {
-        __builtin_memcpy(grown, block_, used_);
-        memory_.release(block_);
+    uint8_t *const old = framed_.bytes();
+    if (old != nullptr) {
+        __builtin_memcpy(grown, old, framed_.used());
+        memory_.release(old);
     }
-    block_ = grown;
-    capacity_ = wanted;
+    framed_.adopt(grown, wanted);
     return true;
 }
 
@@ -100,25 +100,22 @@ WireWriter CommandBatch::request_writer()
         refused_ = 0u;
         return WireWriter(nullptr, 0u);
     }
-    const size_t left = capacity_ - used_ - header_bytes;
-    return WireWriter(block_ + used_ + header_bytes, left < command_room ? left : command_room);
+    return framed_.lend(command_room);
 }
 
 TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("CommandBatch::send_async");
     if (failure_ != Status::ok) return TransportResult::failed;
-    if (writer.status() != Status::ok) {
+    const size_t before = framed_.used();
+    /* The writer was lent at most the block's room, so only one that failed
+     * is not framed. */
+    if (!framed_.frame(command_id, writer, 0u)) {
         failure_ = Status::no_memory;
         refused_ = command_id;
         return TransportResult::failed;
     }
-    const size_t size = header_bytes + writer.offset();
-    /* The header has its own room before the body, and the command limit is
-     * far below the largest size a header carries. */
-    static_cast<void>(CommandHeader(command_id, static_cast<uint32_t>(size), 0u).encode(block_ + used_, header_bytes));
-    last_ = used_;
-    used_ += size;
+    last_ = before;
     return TransportResult::ok;
 }
 
@@ -147,8 +144,8 @@ ClientBlobArena &CommandBatch::blobs()
 void CommandBatch::report(StateWriter &writer) const
 {
     AV_SCOPE("CommandBatch::report");
-    writer.number("recorded", used_);
-    writer.number("capacity", capacity_);
+    writer.number("recorded", framed_.used());
+    writer.number("capacity", framed_.capacity());
     writer.flag("failed", failure_ != Status::ok);
 }
 
@@ -156,12 +153,12 @@ bool CommandBatch::invariants_hold() const
 {
     AV_SCOPE("CommandBatch::invariants_hold");
     if (failure_ != Status::ok && failure_ != Status::no_memory) return false;
-    if (used_ > capacity_ || capacity_ > Connection::command_bytes || (block_ == nullptr) != (capacity_ == 0u))
-        return false;
-    if (used_ == 0u) return last_ == 0u;
+    if (!framed_.invariants_hold() || framed_.capacity() > Connection::command_bytes) return false;
+    const size_t used = framed_.used();
+    if (used == 0u) return last_ == 0u;
     CommandHeader last;
-    if (last_ >= used_ || last.decode(block_ + last_, used_ - last_) != Status::ok) return false;
-    return last_ + last.size() == used_;
+    if (last_ >= used || last.decode(framed_.bytes() + last_, used - last_) != Status::ok) return false;
+    return last_ + last.size() == used;
 }
 
 }  // namespace av::icd

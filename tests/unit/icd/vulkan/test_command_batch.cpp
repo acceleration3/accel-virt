@@ -8,6 +8,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
@@ -52,15 +53,15 @@ struct ConnectionProbe {
 };
 
 struct CommandBatchProbe {
-    static std::uint8_t *block(CommandBatch &b) { return b.block_; }
-    static std::size_t  &used(CommandBatch &b) { return b.used_; }
-    static std::size_t  &capacity(CommandBatch &b) { return b.capacity_; }
+    static std::uint8_t *block(CommandBatch &b) { return b.framed_.bytes(); }
+    static std::size_t  &used(CommandBatch &b) { return FramedBlockProbe(b.framed_).used(); }
+    static std::size_t  &capacity(CommandBatch &b) { return FramedBlockProbe(b.framed_).capacity(); }
     static std::size_t  &last(CommandBatch &b) { return b.last_; }
     static Status       &failure(CommandBatch &b) { return b.failure_; }
     static std::uint8_t *swap_block(CommandBatch &b, std::uint8_t *block)
     {
-        std::uint8_t *const kept = b.block_;
-        b.block_ = block;
+        std::uint8_t *const kept = b.framed_.bytes();
+        FramedBlockProbe(b.framed_).block() = block;
         return kept;
     }
 };

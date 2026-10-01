@@ -340,6 +340,10 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
   av::StateWriter writer(bytes, sizeof bytes);
   context->report(writer, 9u);
   CHECK(std::strstr(writer.dump(), " arena=false ") != nullptr);
+  /* Without an arena there is no error word for the host to have written. */
+  std::uint32_t error = 7u;
+  CHECK(!context->take_host_error(error));
+  CHECK_EQ(error, 0u);
   CHECK(context->invariants_hold()); }
 
 /* The host makes its context when the first command runs: a context it

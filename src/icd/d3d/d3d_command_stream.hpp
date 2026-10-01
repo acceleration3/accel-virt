@@ -21,6 +21,7 @@
 #define AV_D3D_COMMAND_STREAM_HPP
 
 #include "core/support/status.hpp"
+#include "icd/common/framed_block.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 
@@ -130,10 +131,8 @@ private:
      * that fits the block: 0 when not even the first does or is one. */
     size_t                        whole_commands(const uint8_t *bytes, size_t length) const;
 
-    KmtTransport &transport_;
-    uint8_t      *block_;
-    size_t        capacity_;
-    size_t        used_;
+    KmtTransport     &transport_;
+    icd::FramedBlock  framed_;
     uint64_t      batches_;
     uint64_t      recorded_;
     /* recorded_ just after the last application flush was recorded. */

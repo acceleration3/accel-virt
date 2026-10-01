@@ -176,7 +176,18 @@ TEST(batched_transport, a_batch_that_could_not_be_sent_fails_everything_after_it
   WireWriter asking = answered.request_writer();
   asking.write_u8(1u);
   CHECK(answered.send_sync(first_id, asking, reply) == TransportResult::failed);
-  CHECK(second.send(answered, first_id, 1u) == TransportResult::failed); }
+  CHECK(second.send(answered, first_id, 1u) == TransportResult::failed);
+
+  /* A full block the kernel will not take lends the next command nothing. */
+  Rig full;
+  BatchedTransport held(full.inner(), full.block(), 2u * framed, largest);
+  CHECK(full.send(held, first_id, largest) == TransportResult::ok);
+  CHECK(full.send(held, first_id + 1u, largest) == TransportResult::ok);
+  full.kmt().fail_at(MockKmt::Call::submit, 1u, refused);
+  WireWriter refused_room = held.request_writer();
+  refused_room.write_u8(1u);
+  CHECK(refused_room.status() != Status::ok);
+  CHECK_EQ(full.kmt().commands(), 0u); }
 
 TEST(batched_transport, the_arenas_are_the_transports_under_it)
 { Rig rig;

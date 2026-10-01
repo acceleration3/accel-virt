@@ -180,7 +180,7 @@ BatchMark GuestGlContext::mark() const
 void GuestGlContext::flush()
 {
     AV_SCOPE("GuestGlContext::flush");
-    if (state_ != State::made || !channel_.opened()) return;
+    if (state_ != State::made) return;
     send_lock_.acquire();
     const TransportResult sent = channel_.batched().flush();
     send_lock_.release();

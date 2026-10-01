@@ -8,6 +8,7 @@
 #ifndef AV_ICD_BATCHED_TRANSPORT_HPP
 #define AV_ICD_BATCHED_TRANSPORT_HPP
 
+#include "icd/common/framed_block.hpp"
 #include "proto/client_transport.hpp"
 
 #include <stddef.h>
@@ -43,10 +44,8 @@ private:
     TransportResult append(uint32_t command_id, WireWriter &writer, uint8_t flags);
 
     KmtTransport &inner_;
-    uint8_t      *block_;
-    size_t        capacity_;
+    FramedBlock   framed_;
     size_t        largest_;
-    size_t        used_;
     bool          failed_;
 };
 

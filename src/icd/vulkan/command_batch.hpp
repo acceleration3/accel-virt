@@ -18,6 +18,7 @@
 #define AV_ICD_COMMAND_BATCH_HPP
 
 #include "core/support/status.hpp"
+#include "icd/common/framed_block.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/wire/wire_arena.hpp"
@@ -82,9 +83,7 @@ private:
 
     BlockSource    &memory_;
     Connection     &connection_;
-    uint8_t        *block_;
-    size_t          capacity_;
-    size_t          used_;
+    FramedBlock     framed_;
     /* Where the last command recorded starts; 0 with none. */
     size_t          last_;
     Status          failure_;

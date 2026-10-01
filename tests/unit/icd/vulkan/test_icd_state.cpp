@@ -37,7 +37,7 @@ using av::icd::Connection;
 namespace av::icd {
 
 struct CommandBatchProbe {
-    static const std::uint8_t *block(const CommandBatch &batch) { return batch.block_; }
+    static const std::uint8_t *block(const CommandBatch &batch) { return batch.framed_.bytes(); }
 };
 
 struct ConnectionProbe {

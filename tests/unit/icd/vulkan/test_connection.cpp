@@ -115,6 +115,7 @@ public:
         CHECK_EQ(connection_.adapter(), 0u);
         /* The D3DKMT device a swapchain's pacing waits on: none while closed. */
         CHECK_EQ(connection_.device(), 0u);
+        CHECK_EQ(connection_.submissions(), 0u);
         CHECK_EQ(kmt_.open_objects(), 0u);
         CHECK_EQ(kmt_.misuses(), 0u);
         CHECK_EQ(platform_.live_allocations(), 0u);
