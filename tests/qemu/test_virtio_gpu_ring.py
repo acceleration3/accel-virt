@@ -13,10 +13,10 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (BATCH_HEADER, DOORBELL_SHM_ID, DOORBELLS, FEATURE_CONTEXT_INIT, PAGE,
+from av_context import (BATCH_HEADER, DOORBELL_SHM_ID, DOORBELLS, FEATURE_CONTEXT_INIT, PAGE,
                          RESP_ERR_INVALID_PARAMETER, RESP_OK_MAP_INFO, RESP_OK_NODATA, GuestRing, batch_header,
                          create_context, destroy_context, guest_blob, host_blob, map_blob, response_type, ring_header,
-                         rvk_device, setup, submit, unref)
+                         av_device, setup, submit, unref)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 HOSTMEM = 64 << 20
@@ -28,7 +28,7 @@ SETTLE = 0.01
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuRing(unittest.TestCase):
-    def open(self, device=rvk_device(f",hostmem={HOSTMEM}")):
+    def open(self, device=av_device(f",hostmem={HOSTMEM}")):
         qtest = virtio_qtest.Qtest(BUILD, device)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID |

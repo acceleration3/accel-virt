@@ -12,7 +12,7 @@
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 
 #include <cstdint>
 
@@ -52,7 +52,7 @@ GuestGlContext *current_on(GlIcdRig &rig, void *context)
 
 std::uint32_t last_record_share(GlIcdRig &rig)
 {
-    av::RvkContextRecord record;
+    av::AvContextRecord record;
     CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
     return record.options().share_context();
 }
@@ -185,7 +185,7 @@ TEST(gl_share_lists, a_context_made_with_attributes_and_never_current_is_made_ag
   CHECK(borrower != nullptr);
   if (borrower == nullptr) return;
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 1u);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().share_context(), lender->share_name());
   /* The version it asked for is the one it is made again with. */

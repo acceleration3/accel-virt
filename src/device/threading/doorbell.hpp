@@ -6,7 +6,7 @@
 #define AV_DOORBELL_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 
 #include <stdint.h>
 
@@ -17,7 +17,7 @@ struct DoorbellProbe;
 
 class Doorbell {
 public:
-    static constexpr uint32_t pages = RVK_DEVICE_DOORBELLS;
+    static constexpr uint32_t pages = AV_DEVICE_DOORBELLS;
 
     explicit Doorbell(Host &host);
     ~Doorbell();

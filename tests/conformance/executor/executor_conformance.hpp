@@ -1,4 +1,4 @@
-/* Holds an executor library to src/device/abi/rvk_executor.h.
+/* Holds an executor library to src/device/abi/av_executor.h.
  *
  * The device must not care which library it loaded, and until now nothing
  * checked that: the whole contract was validated against the echo library's own
@@ -11,7 +11,7 @@
 #ifndef AV_EXECUTOR_CONFORMANCE_HPP
 #define AV_EXECUTOR_CONFORMANCE_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -61,17 +61,17 @@ private:
     void check_table();
     void check_sub_apis();
     void check_create_and_destroy();
-    void check_execute(RvkExecutor *executor, std::uint32_t api);
-    void check_reply_capacity(RvkExecutor *executor, std::uint32_t api);
-    void check_memory_channel(RvkExecutor *executor);
+    void check_execute(AvExecutor *executor, std::uint32_t api);
+    void check_reply_capacity(AvExecutor *executor, std::uint32_t api);
+    void check_memory_channel(AvExecutor *executor);
     /* Version 3: an import of real memory answers a handle the executor's own
      * commands accept back. Needs a Vulkan device, so a real GPU. */
-    void check_imported_handle(RvkExecutor *executor);
+    void check_imported_handle(AvExecutor *executor);
     void check_create_with_options();
     /* SC-002: something each API can actually be asked to do, rather than only
      * commands it refuses. A library that answers every malformed frame
      * correctly and runs nothing is not one the device can use. */
-    void check_workload(RvkExecutor *executor, uint32_t sub_api);
+    void check_workload(AvExecutor *executor, uint32_t sub_api);
 
     /* A host page, the size every import is a whole number of, and the id the
      * version 3 check imports one under. */
@@ -79,21 +79,21 @@ private:
     static constexpr std::uint64_t imported_blob = 0x45u;
 
     /* Runs the `length` bytes in frame_ as `command`, answering into reply_. */
-    std::uint32_t send(RvkExecutor *executor, std::uint32_t command, std::size_t length);
+    std::uint32_t send(AvExecutor *executor, std::uint32_t command, std::size_t length);
     /* The VkResult an answer in reply_ starts with, and the handle after it -
      * 0 unless the result was success. */
     std::int32_t  answered_result() const;
     std::uint64_t answered_handle() const;
     /* An instance, its first physical device and a device on it, as a guest
      * makes them. False when the executor made no device. */
-    bool make_device(RvkExecutor *executor, std::uint64_t &instance, std::uint64_t &device);
+    bool make_device(AvExecutor *executor, std::uint64_t &instance, std::uint64_t &device);
     /* A buffer a host allocation may back, and the memory types it accepts. */
-    std::uint64_t make_buffer(RvkExecutor *executor, std::uint64_t device);
-    std::uint32_t buffer_types(RvkExecutor *executor, std::uint64_t device, std::uint64_t buffer);
+    std::uint64_t make_buffer(AvExecutor *executor, std::uint64_t device);
+    std::uint32_t buffer_types(AvExecutor *executor, std::uint64_t device, std::uint64_t buffer);
     /* Imports `page` as the first of `types` the executor takes, answering
      * the handle it names that memory by, or 0. */
-    std::uint64_t import_page(RvkExecutor *executor, void *page, std::uint32_t types);
-    void          destroy_handle(RvkExecutor *executor, std::uint32_t command, std::uint64_t parent,
+    std::uint64_t import_page(AvExecutor *executor, void *page, std::uint32_t types);
+    void          destroy_handle(AvExecutor *executor, std::uint32_t command, std::uint64_t parent,
                                  std::uint64_t handle);
 
     /* Whether `result` is one of the four the ABI defines. */
@@ -106,7 +106,7 @@ private:
     std::uint8_t          gpu_[16];
     bool                  real_gpu_;
     void                 *library_;
-    const RvkExecutorOps *ops_;
+    const AvExecutorOps *ops_;
     const char           *findings_[max_findings];
     const char           *skip_reasons_[max_findings];
     std::uint32_t         found_;

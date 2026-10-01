@@ -164,7 +164,7 @@ if (b94 && !c01 && !pfnMPO1 && !pfnMPO2) b94 = 0;
 `GetMultiPlaneOverlayCaps` reports MaxPlanes=1 unless `IsMultiPlaneOverlaySupported()` (b94) and the caps DDI both
 hold. **Inferred:** VIDSCH_GLOBAL[0x9c] (MPO3 in dxgmms2) mirrors adapter[0xc01].
 
-**Consequence for rvkgpu.** The driver registers only MPO1 (slot 81, `src/core/miniport/miniport.cpp:91`). The MPO1
+**Consequence for avgpu.** The driver registers only MPO1 (slot 81, `src/core/miniport/miniport.cpp:91`). The MPO1
 DDI must:
 - always return STATUS_SUCCESS;
 - treat a disabled plane (or PlaneCount 0) as "turn the plane off / keep the last frame";
@@ -188,7 +188,7 @@ DDI must:
   iFlip path stays off. **Inferred** from the gate: I did not trace the functions it enables
   (`VidSchEnterIndependentFlip`, `CheckIndependentFlipAttributes`).
 - **DWM's own flip needs:**
-  - FlipCaps.FlipOnVSyncMmIo. basicrender sets FlipCaps |= 2; it is also what rvkgpu reports.
+  - FlipCaps.FlipOnVSyncMmIo. basicrender sets FlipCaps |= 2; it is also what avgpu reports.
   - A primary (SharedPrimary / DWM swapchain buffer) that is flippable.
   - SetVidPnSourceAddress, plus the vsync completion in section 5.
 
@@ -242,7 +242,7 @@ DDI must:
 - **dxgkrnl does not CPU-copy on behalf of a full WDDM driver.** PresentDisplayOnly is used only for KMDOD adapters.
   The CDD primary path (`PresentFromCdd`, `PresentCddPrimary`, `DxgkCddPresent`) sends GDI/CDD blts to the
   primary through the driver's own DxgkDdiPresent.
-- **What this means for rvkgpu.**
+- **What this means for avgpu.**
   - DWM's presents arrive as flips of its own swapchain buffers: DxgkDdiPresent with Flags=Flip, then
     SetVidPnSourceAddress with that allocation's segment address.
   - Nobody copies pixels for the driver. The picture the host shows has to follow `SetVidPnSourceAddress`'s
@@ -288,7 +288,7 @@ DDI must:
   - Its resource private data is whatever that DDI returned for `pResourcePrivateDriverData` (possibly size 0).
 
   WARP handles this by using one blob format for both producers (0x60 bytes, the same struct its UMD writes).
-  **Consequence:** rvkumd's OpenResource must accept the KMD's standard-allocation blob (format, size, pitch,
+  **Consequence:** avumd's OpenResource must accept the KMD's standard-allocation blob (format, size, pitch,
   standard type, GDI surface type) and map it to a host resource. Otherwise GDI windows never reach DWM.
   **Not established:** which GDI surface types cdd.dll actually requests for a given caps set (cdd.dll is not in
   `re/bin`), and the exact D3D10DDIARG_OPENRESOURCE contents for these opens (d3d11's

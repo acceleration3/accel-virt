@@ -13,7 +13,7 @@ constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 }  // namespace
 
 MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, std::uint8_t order)
-    : ops_(RVK_EXECUTOR_SUB_API_VULKAN), recorder_(host), library_(), shares_(host, library_),
+    : ops_(AV_EXECUTOR_SUB_API_VULKAN), recorder_(host), library_(), shares_(host, library_),
       executor_(host, library_, shares_, 1u), blobs_(host), shared_objects_(host),
       imports_(host, blobs_, executor_, recorder_, 1u), shared_(shared_objects_, executor_), staging_(host),
       batches_(host, executor_, imports_, shared_, staging_, fences, recorder_, 1u)

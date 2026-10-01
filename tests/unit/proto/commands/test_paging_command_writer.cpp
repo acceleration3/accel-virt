@@ -11,7 +11,7 @@ using av::Status;
 namespace {
 
 constexpr std::uint8_t poison = 0xEEu;
-constexpr std::uint32_t magic = 0x4D4B5652u;   /* "RVKM" */
+constexpr std::uint32_t magic = 0x004D5641u;   /* "AVM" */
 
 std::uint64_t u64(const std::uint8_t *bytes, std::size_t offset)
 {

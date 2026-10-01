@@ -111,12 +111,12 @@ TEST(umd_root_open, an_older_interface_of_the_same_major_opens)
       CHECK(rig.root().invariants_hold());
   } }
 
-TEST(umd_root_open, no_rvkgpu_adapter_is_a_failure_and_a_log_line)
+TEST(umd_root_open, no_avgpu_adapter_is_a_failure_and_a_log_line)
 { UmdRig rig;
   rig.kmt().claim_adapters(0u);
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
   CHECK_EQ(runtime.open(), hr_fail);
-  CHECK_EQ(rig.log().holding("no rvkgpu adapter"), 1u);
+  CHECK_EQ(rig.log().holding("no avgpu adapter"), 1u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 

@@ -47,7 +47,7 @@ Hresult DeviceRemoval::check(icd::LogSink &log, const char *entry)
         reported_ = true;
         char       line[line_bytes] = {};
         TextBuffer text(line, sizeof line);
-        text.append("rvkumd: device removed, ");
+        text.append("avumd: device removed, ");
         text.append(entry);
         text.append(" answers 0x");
         text.append_hex(static_cast<uint64_t>(static_cast<uint32_t>(reason_)), 8u);

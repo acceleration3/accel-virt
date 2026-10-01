@@ -7,7 +7,7 @@
 #ifndef AV_HOST_IMAGE_EXPORT_HPP
 #define AV_HOST_IMAGE_EXPORT_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <stdint.h>
 #include <vulkan/vulkan.h>
@@ -39,7 +39,7 @@ public:
                              uint32_t &slot);
     /* Under the device's lock: whether the GPU has finished the slot's copy. */
     bool copied(ID3D11DeviceContext4 *context, uint32_t slot) const;
-    void describe(uint32_t slot, RvkExportedImage &image) const;
+    void describe(uint32_t slot, AvExportedImage &image) const;
     void release();
 
 private:

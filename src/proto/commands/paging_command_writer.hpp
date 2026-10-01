@@ -39,7 +39,7 @@ public:
     size_t               length() const;
 
 private:
-    static constexpr uint32_t magic = 0x4D4B5652u;   /* "RVKM" */
+    static constexpr uint32_t magic = 0x004D5641u;   /* "AVM" */
     static constexpr size_t   header_size = 8u;
     static constexpr size_t   range_count_offset = 8u;
     enum : uint32_t { op_flush_tlb = 1u, op_fill = 2u, op_transfer = 3u, op_copy_page_table_entries = 4u };

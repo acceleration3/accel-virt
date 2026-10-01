@@ -62,14 +62,14 @@ struct Bound {
 
     Bound()
     {
-        CHECK_STATUS(table.initialize(bytes, sizeof bytes, "rvkgpu", 0u), Status::ok);
+        CHECK_STATUS(table.initialize(bytes, sizeof bytes, "avgpu", 0u), Status::ok);
         for (std::size_t byte = 96u; byte < sizeof bytes; byte++) bytes[byte] = static_cast<std::uint8_t>(byte * 7u);
         av::scope_binding.bind(table);
     }
     ~Bound() { av::scope_binding.unbind(); }
 };
 
-/* Every window of `kind` from offset 0, as rvkinspect.exe pages it, joined. */
+/* Every window of `kind` from offset 0, as avinspect.exe pages it, joined. */
 std::size_t read_all(TraceEscape &escape, Kind kind, std::uint8_t *out, std::size_t capacity, std::uint64_t &clock)
 {
     std::uint64_t offset = 0u;

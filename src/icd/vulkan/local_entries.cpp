@@ -198,15 +198,15 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device)
     return icd_binding.root().device_wait_idle(device);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL local_vkRvkForceContextFault(VkPhysicalDevice physicalDevice)
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAvForceContextFault(VkPhysicalDevice physicalDevice)
 {
-    AV_SCOPE("local_vkRvkForceContextFault");
+    AV_SCOPE("local_vkAvForceContextFault");
     return icd_binding.root().force_context_fault(physicalDevice);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL local_vkRvkLastKernelStatus(VkPhysicalDevice physicalDevice, uint32_t *status)
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAvLastKernelStatus(VkPhysicalDevice physicalDevice, uint32_t *status)
 {
-    AV_SCOPE("local_vkRvkLastKernelStatus");
+    AV_SCOPE("local_vkAvLastKernelStatus");
     return icd_binding.root().last_kernel_status(physicalDevice, status);
 }
 

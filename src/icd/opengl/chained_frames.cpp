@@ -43,13 +43,13 @@ bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void 
         }
         memories_[slot] = static_cast<uint32_t>(memory);
     }
-    glproto::rvk_glCreateTextures(wire, gl_texture_2d, static_cast<GLsizei>(slot_count), textures_);
+    glproto::av_glCreateTextures(wire, gl_texture_2d, static_cast<GLsizei>(slot_count), textures_);
     for (uint32_t slot = 0u; slot < slot_count; slot++) {
         if (textures_[slot] == 0u) {
             close(&wire, chains);
             return false;
         }
-        glproto::rvk_glTextureStorageMem2DEXT(wire, textures_[slot], 1, srgb ? gl_srgb8_alpha8 : gl_rgba8,
+        glproto::av_glTextureStorageMem2DEXT(wire, textures_[slot], 1, srgb ? gl_srgb8_alpha8 : gl_rgba8,
                                               static_cast<GLsizei>(width), static_cast<GLsizei>(height),
                                               memories_[slot], 0u);
     }
@@ -75,7 +75,7 @@ void ChainedFrames::draw(ClientTransport &wire, uint32_t source, uint32_t slot)
 {
     AV_SCOPE("ChainedFrames::draw");
     if (!opened_ || slot >= slot_count) return;
-    glproto::rvk_glCopyImageSubData(wire, source, gl_texture_2d, 0, 0, 0, 0, textures_[slot], gl_texture_2d, 0, 0, 0, 0,
+    glproto::av_glCopyImageSubData(wire, source, gl_texture_2d, 0, 0, 0, 0, textures_[slot], gl_texture_2d, 0, 0, 0, 0,
                                     static_cast<GLsizei>(width_), static_cast<GLsizei>(height_), 1);
     WireWriter finish = wire.request_writer();
     static_cast<void>(wire.send_async(glproto::kCmd_glFinish, finish));
@@ -109,7 +109,7 @@ void ChainedFrames::delete_slots(ClientTransport &wire)
     for (uint32_t slot = 0u; slot < slot_count; slot++)
         held = held || memories_[slot] != 0u || textures_[slot] != 0u;
     if (!held) return;
-    glproto::rvk_glDeleteTextures(wire, static_cast<GLsizei>(slot_count), textures_);
+    glproto::av_glDeleteTextures(wire, static_cast<GLsizei>(slot_count), textures_);
     for (uint32_t slot = 0u; slot < slot_count; slot++) {
         if (memories_[slot] == 0u) continue;
         SharedObjectCall call(wire);

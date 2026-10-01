@@ -1,7 +1,7 @@
 /* The probe's Vulkan through a loader entry point, here the ICD's own over
  * MockKmt with the host played by ScriptedHost: vkCreateInstance comes from
  * the null instance, everything else from the instance made, and a loader
- * that names no vkRvkForceContextFault is answered for. The full-stack test
+ * that names no vkAvForceContextFault is answered for. The full-stack test
  * runs every other call against a real GPU. */
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
@@ -51,7 +51,7 @@ namespace {
 /* A loader that knows every Vulkan command and nothing of the ICD's own. */
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_fault(VkInstance instance, const char *name)
 {
-    if (std::strcmp(name, "vkRvkForceContextFault") == 0) return nullptr;
+    if (std::strcmp(name, "vkAvForceContextFault") == 0) return nullptr;
     return av::bound_icd_instance_proc_addr(instance, name);
 }
 
@@ -101,7 +101,7 @@ VKAPI_ATTR VkResult VKAPI_CALL stub_memory_handle(VkDevice, const av::MemoryGetW
 /* A loader that has every one of them. */
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL with_sharing(VkInstance instance, const char *name)
 {
-    if (std::strcmp(name, "vkRvkLastKernelStatus") == 0)
+    if (std::strcmp(name, "vkAvLastKernelStatus") == 0)
         return reinterpret_cast<PFN_vkVoidFunction>(&refusing_status);
     if (std::strcmp(name, "vkEnumerateDeviceExtensionProperties") == 0)
         return reinterpret_cast<PFN_vkVoidFunction>(&stub_enumerate);
@@ -113,7 +113,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL with_sharing(VkInstance instance, const
 /* And one that has none of them. */
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_sharing(VkInstance instance, const char *name)
 {
-    if (std::strcmp(name, "vkRvkLastKernelStatus") == 0) return nullptr;
+    if (std::strcmp(name, "vkAvLastKernelStatus") == 0) return nullptr;
     return av::bound_icd_instance_proc_addr(instance, name);
 }
 

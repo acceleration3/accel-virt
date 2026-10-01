@@ -271,10 +271,10 @@ void GlProbe::resized_step()
 uint64_t GlProbe::blank_ticks()
 {
     AV_SCOPE("GlProbe::blank_ticks");
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
     AdapterSearch     search(kmt_);
-    if (search.find(rvkgpu) != Status::ok) return 0u;
+    if (search.find(avgpu) != Status::ok) return 0u;
     uint32_t device = 0u;
     uint64_t ticks = 0u;
     if (kmt_.create_device(search.adapter(), device) == Status::ok) {

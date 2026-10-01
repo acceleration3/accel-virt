@@ -26,7 +26,7 @@ void QueryResults::bind(ClientTransport &wire)
 {
     AV_SCOPE("QueryResults::bind");
     if (bound_ || region_ == nullptr) return;
-    bound_ = d3dproto::rvk_d3d_BindQueryResults(wire, offset_, slots);
+    bound_ = d3dproto::av_d3d_BindQueryResults(wire, offset_, slots);
 }
 
 uint64_t QueryResults::ended()

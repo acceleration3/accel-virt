@@ -348,9 +348,9 @@ void *GlIcdRoot::get_proc_address(const char *name)
     /* A lost context answers its reset status without the host. */
     for (const char *const spelling : reset_status_names)
         if (__builtin_strcmp(name, spelling) == 0) return reinterpret_cast<void *>(&entry::get_graphics_reset_status);
-    if (__builtin_strcmp(name, "rvkForceContextFault") == 0)
-        return reinterpret_cast<void *>(&entry::rvkForceContextFault);
-    if (__builtin_strcmp(name, "rvkGetShareName") == 0) return reinterpret_cast<void *>(&entry::rvkGetShareName);
+    if (__builtin_strcmp(name, "avForceContextFault") == 0)
+        return reinterpret_cast<void *>(&entry::avForceContextFault);
+    if (__builtin_strcmp(name, "avGetShareName") == 0) return reinterpret_cast<void *>(&entry::avGetShareName);
     /* Before the generated table on purpose: four of these the generator never
      * emitted, and the other four it did - and those must substitute the
      * host's name for the one the application holds, so this ICD's answer has
@@ -575,7 +575,7 @@ uint32_t GlIcdRoot::get_error()
      * already, having run it. */
     uint32_t published = 0u;
     if (context->take_host_error(published)) return published;
-    return transport != nullptr ? glproto::rvk_glGetError(*transport) : 0u;
+    return transport != nullptr ? glproto::av_glGetError(*transport) : 0u;
 }
 
 uint32_t GlIcdRoot::reset_status()
@@ -584,7 +584,7 @@ uint32_t GlIcdRoot::reset_status()
     GuestGlContext *const context = currents_.current();
     if (context == nullptr) return 0u;
     ClientTransport *const transport = context->wire();
-    return transport != nullptr ? glproto::rvk_glGetGraphicsResetStatus(*transport) : context->lost_reset_status();
+    return transport != nullptr ? glproto::av_glGetGraphicsResetStatus(*transport) : context->lost_reset_status();
 }
 
 uint32_t GlIcdRoot::current_share_name()
@@ -608,7 +608,7 @@ int32_t GlIcdRoot::force_context_fault()
      * OpenGL context only skips the Vulkan command 045's fault sends. */
     static_cast<void>(ContextFault(*transport, glproto::kCmd_glGetString).send());
     if (context->wire() == nullptr) return 1;
-    log_.write("rvkgl: the host answered the forced fault; the context goes on");
+    log_.write("avgl: the host answered the forced fault; the context goes on");
     return 0;
 }
 
@@ -630,7 +630,7 @@ void GlIcdRoot::note_profile(const GuestGlContext &context)
     const GrantedProfile &profile = context.profile();
     char                  line[line_bytes];
     TextBuffer            text(line, sizeof line);
-    text.append("rvkgl: the host granted a ");
+    text.append("avgl: the host granted a ");
     if (profile.mask() == GrantedProfile::compatibility_bit)
         text.append("compatibility");
     else if (profile.mask() == GrantedProfile::core_bit)
@@ -651,7 +651,7 @@ void GlIcdRoot::note_dropped(const char *api, const char *command, size_t writte
     AV_SCOPE("GlIcdRoot::note_dropped");
     char       line[line_bytes];
     TextBuffer text(line, sizeof line);
-    text.append("rvkgl: ");
+    text.append("avgl: ");
     text.append(api);
     text.append(" ");
     text.append(command);

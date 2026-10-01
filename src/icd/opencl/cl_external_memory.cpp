@@ -92,7 +92,7 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
     bool     taken = false;
     if (!names_handle(list, named, taken)) return CL_INVALID_VALUE;
     if (!taken) {
-        log_.write("rvkcl: an external memory handle type this driver does not take, or two at once");
+        log_.write("avcl: an external memory handle type this driver does not take, or two at once");
         return CL_INVALID_PROPERTY;
     }
     if (named == 0u) return CL_INVALID_VALUE;
@@ -109,12 +109,12 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
          * sent from a number an application invented. */
         const Status adopted = handles_.adopt(device, named, object_id);
         if (adopted != Status::ok) {
-            log_.write("rvkcl: a Win32 handle this process may not open");
+            log_.write("avcl: a Win32 handle this process may not open");
             return CL_INVALID_VALUE;
         }
     }
     if (holds(object_id)) {
-        log_.write("rvkcl: an object this context already imported");
+        log_.write("avcl: an object this context already imported");
         return CL_INVALID_VALUE;
     }
     SharedObjectCall call(wire);
@@ -123,7 +123,7 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
      * ok carrying nothing is an answer no guest could use - so there is
      * nothing left here to check for. */
     if (call.open(object_id, SharedObjectKind::memory, asked, opened) != Status::ok) {
-        log_.write("rvkcl: the device would not open a shared object for this context");
+        log_.write("avcl: the device would not open a shared object for this context");
         return CL_OUT_OF_RESOURCES;
     }
     rows_[live_] = ClImportedMemoryRow{object_id, opened, asked};

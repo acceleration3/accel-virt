@@ -42,7 +42,7 @@ bool write_file(const char *path, const void *data, size_t size)
 void *cl_entry(const char *name)
 {
     if (loader == nullptr) {
-        const char *path = getenv("RVK_OPENCL_LIBRARY");
+        const char *path = getenv("AV_OPENCL_LIBRARY");
         loader = dlopen(path != nullptr ? path : "libOpenCL.so.1", RTLD_NOW | RTLD_LOCAL);
         if (loader == nullptr) {
             fprintf(stderr, "%s\n", dlerror());

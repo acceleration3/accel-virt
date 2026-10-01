@@ -7,7 +7,7 @@
 namespace av {
 
 GlIcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), log(L"rvkgl"), kmt(), surface(), slot(), opengl32(), chains_lock(),
+    : heap(), lock(), send_lock(), log(L"avgl"), kmt(), surface(), slot(), opengl32(), chains_lock(),
       chains(kmt, chains_lock, log), present_lock(), present_kmt(), present_thread(), present_handed(),
       present_shown(),
       presents(present_thread, present_handed, present_shown, present_lock, present_kmt, surface, chains, log),
@@ -22,7 +22,7 @@ bool GlIcdLibrary::ready()
     AV_SCOPE("GlIcdLibrary::ready");
     if (!seams_.constructed() && !refused_ && seams_.construct() == Status::ok &&
         seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("rvkgl: no D3DKMT wait event, refusing opengl32");
+        seams_.object().log.write("avgl: no D3DKMT wait event, refusing opengl32");
         seams_.destroy();
         refused_ = true;
         return false;
@@ -32,15 +32,15 @@ bool GlIcdLibrary::ready()
         Seams &seams = seams_.object();
         if (seams.present_kmt.initialize() != Status::ok || seams.present_handed.initialize() != Status::ok ||
             seams.present_shown.initialize() != Status::ok) {
-            seams.log.write("rvkgl: no present thread: its D3DKMT event or wake events could not be made");
+            seams.log.write("avgl: no present thread: its D3DKMT event or wake events could not be made");
             seams.presents.refuse();
         }
     }
     if (seams_.constructed() && !started_trace_) {
         started_trace_ = true;
         Seams &seams = seams_.object();
-        const Status traced = seams.trace.start("rvkgl", seams.root, crashed_);
-        if (traced != Status::ok) seams.log.write("rvkgl: tracing is off: its section, pin or service failed");
+        const Status traced = seams.trace.start("avgl", seams.root, crashed_);
+        if (traced != Status::ok) seams.log.write("avgl: tracing is off: its section, pin or service failed");
     }
     return seams_.constructed();
 }

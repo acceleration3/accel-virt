@@ -19,13 +19,13 @@ namespace av::vkproto {
 // are 4-byte pointers. They are widened on the way out and narrowed
 // on the way back, so both ends see the same bytes either way.
 static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,
-              "RVK assumes 32- or 64-bit pointers");
+              "AV assumes 32- or 64-bit pointers");
 
 // Hook for translating dispatchable handles to their wire form.
 // The default implementations (linked from vk_handle_default.cpp,
 // weakly bound) are identity — correct for the server replay path
 // and for loopback tests. The ICD links a strong override that
-// unwraps its loader-magic-marked RvkWrappedHandle to the server's
+// unwraps its loader-magic-marked AvWrappedHandle to the server's
 // real driver handle.
 // How many bytes VkMemoryToImageCopy::pHostPointer covers.
 // Only the client can answer: the size depends on the destination
@@ -5473,14 +5473,14 @@ inline void serialize_VkDescriptorUpdateTemplateEntry(::av::WireWriter& buf, con
     if (!r.read_pod(out->descriptorCount)) { return false; }
     if (!r.read_pod(out->descriptorType)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->offset = static_cast<decltype(out->offset)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->offset = static_cast<decltype(out->offset)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->stride = static_cast<decltype(out->stride)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->stride = static_cast<decltype(out->stride)>(av_wide);
     }
     return true;
 }
@@ -6746,9 +6746,9 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     }
     if (!r.read_pod(out->tagName)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->tagSize = static_cast<decltype(out->tagSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->tagSize = static_cast<decltype(out->tagSize)>(av_wide);
     }
     {
         uint8_t present = 0;
@@ -9807,9 +9807,9 @@ inline void serialize_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(::
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->combinedImageSamplerDensityMapDescriptorSize = static_cast<decltype(out->combinedImageSamplerDensityMapDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->combinedImageSamplerDensityMapDescriptorSize = static_cast<decltype(out->combinedImageSamplerDensityMapDescriptorSize)>(av_wide);
     }
     return true;
 }
@@ -9886,99 +9886,99 @@ inline void serialize_VkPhysicalDeviceDescriptorBufferPropertiesEXT(::av::WireWr
     if (!r.read_pod(out->maxEmbeddedImmutableSamplerBindings)) { return false; }
     if (!r.read_pod(out->maxEmbeddedImmutableSamplers)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->bufferCaptureReplayDescriptorDataSize = static_cast<decltype(out->bufferCaptureReplayDescriptorDataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->bufferCaptureReplayDescriptorDataSize = static_cast<decltype(out->bufferCaptureReplayDescriptorDataSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->imageCaptureReplayDescriptorDataSize = static_cast<decltype(out->imageCaptureReplayDescriptorDataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->imageCaptureReplayDescriptorDataSize = static_cast<decltype(out->imageCaptureReplayDescriptorDataSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->imageViewCaptureReplayDescriptorDataSize = static_cast<decltype(out->imageViewCaptureReplayDescriptorDataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->imageViewCaptureReplayDescriptorDataSize = static_cast<decltype(out->imageViewCaptureReplayDescriptorDataSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->samplerCaptureReplayDescriptorDataSize = static_cast<decltype(out->samplerCaptureReplayDescriptorDataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->samplerCaptureReplayDescriptorDataSize = static_cast<decltype(out->samplerCaptureReplayDescriptorDataSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->accelerationStructureCaptureReplayDescriptorDataSize = static_cast<decltype(out->accelerationStructureCaptureReplayDescriptorDataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->accelerationStructureCaptureReplayDescriptorDataSize = static_cast<decltype(out->accelerationStructureCaptureReplayDescriptorDataSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->samplerDescriptorSize = static_cast<decltype(out->samplerDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->samplerDescriptorSize = static_cast<decltype(out->samplerDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->combinedImageSamplerDescriptorSize = static_cast<decltype(out->combinedImageSamplerDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->combinedImageSamplerDescriptorSize = static_cast<decltype(out->combinedImageSamplerDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->sampledImageDescriptorSize = static_cast<decltype(out->sampledImageDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->sampledImageDescriptorSize = static_cast<decltype(out->sampledImageDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->storageImageDescriptorSize = static_cast<decltype(out->storageImageDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->storageImageDescriptorSize = static_cast<decltype(out->storageImageDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->uniformTexelBufferDescriptorSize = static_cast<decltype(out->uniformTexelBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->uniformTexelBufferDescriptorSize = static_cast<decltype(out->uniformTexelBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->robustUniformTexelBufferDescriptorSize = static_cast<decltype(out->robustUniformTexelBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->robustUniformTexelBufferDescriptorSize = static_cast<decltype(out->robustUniformTexelBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->storageTexelBufferDescriptorSize = static_cast<decltype(out->storageTexelBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->storageTexelBufferDescriptorSize = static_cast<decltype(out->storageTexelBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->robustStorageTexelBufferDescriptorSize = static_cast<decltype(out->robustStorageTexelBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->robustStorageTexelBufferDescriptorSize = static_cast<decltype(out->robustStorageTexelBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->uniformBufferDescriptorSize = static_cast<decltype(out->uniformBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->uniformBufferDescriptorSize = static_cast<decltype(out->uniformBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->robustUniformBufferDescriptorSize = static_cast<decltype(out->robustUniformBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->robustUniformBufferDescriptorSize = static_cast<decltype(out->robustUniformBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->storageBufferDescriptorSize = static_cast<decltype(out->storageBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->storageBufferDescriptorSize = static_cast<decltype(out->storageBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->robustStorageBufferDescriptorSize = static_cast<decltype(out->robustStorageBufferDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->robustStorageBufferDescriptorSize = static_cast<decltype(out->robustStorageBufferDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->inputAttachmentDescriptorSize = static_cast<decltype(out->inputAttachmentDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->inputAttachmentDescriptorSize = static_cast<decltype(out->inputAttachmentDescriptorSize)>(av_wide);
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->accelerationStructureDescriptorSize = static_cast<decltype(out->accelerationStructureDescriptorSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->accelerationStructureDescriptorSize = static_cast<decltype(out->accelerationStructureDescriptorSize)>(av_wide);
     }
     if (!r.read_pod(out->maxSamplerDescriptorBufferRange)) { return false; }
     if (!r.read_pod(out->maxResourceDescriptorBufferRange)) { return false; }
@@ -11898,9 +11898,9 @@ inline void serialize_VkPhysicalDeviceLimits(::av::WireWriter& buf, const VkPhys
     if (!r.read(&out->viewportBoundsRange[0], sizeof(out->viewportBoundsRange))) { return false; }
     if (!r.read_pod(out->viewportSubPixelBits)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->minMemoryMapAlignment = static_cast<decltype(out->minMemoryMapAlignment)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->minMemoryMapAlignment = static_cast<decltype(out->minMemoryMapAlignment)>(av_wide);
     }
     if (!r.read_pod(out->minTexelBufferOffsetAlignment)) { return false; }
     if (!r.read_pod(out->minUniformBufferOffsetAlignment)) { return false; }
@@ -15549,9 +15549,9 @@ inline void serialize_VkPipelineBinaryDataKHR(::av::WireWriter& buf, const VkPip
 [[nodiscard]] inline bool deserialize_VkPipelineBinaryDataKHR(::av::WireReader& r, VkPipelineBinaryDataKHR* out, ::av::WireArena& arena) {
     (void)arena;
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->dataSize = static_cast<decltype(out->dataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->dataSize = static_cast<decltype(out->dataSize)>(av_wide);
     }
     {
         uint8_t present = 0;
@@ -15743,9 +15743,9 @@ inline void serialize_VkPipelineCacheCreateInfo(::av::WireWriter& buf, const VkP
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->initialDataSize = static_cast<decltype(out->initialDataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->initialDataSize = static_cast<decltype(out->initialDataSize)>(av_wide);
     }
     {
         uint8_t present = 0;
@@ -17251,9 +17251,9 @@ inline void serialize_VkPushDescriptorSetWithTemplateInfo(::av::WireWriter& buf,
     serialize_VkPipelineLayout(buf, v.layout);
     buf.write_pod(v.set);
     {
-        const uint64_t rvk_blob = v.pData != nullptr ? descriptor_template_bytes(v.descriptorUpdateTemplate) : 0;
-        buf.write_varint(rvk_blob);
-        if (rvk_blob != 0) { buf.write(v.pData, static_cast<size_t>(rvk_blob)); }
+        const uint64_t av_blob = v.pData != nullptr ? descriptor_template_bytes(v.descriptorUpdateTemplate) : 0;
+        buf.write_varint(av_blob);
+        if (av_blob != 0) { buf.write(v.pData, static_cast<size_t>(av_blob)); }
     }
 }
 
@@ -17265,14 +17265,14 @@ inline void serialize_VkPushDescriptorSetWithTemplateInfo(::av::WireWriter& buf,
     if (!deserialize_VkPipelineLayout(r, out->layout)) { return false; }
     if (!r.read_pod(out->set)) { return false; }
     {
-        uint64_t rvk_blob = 0;
-        if (!r.read_varint(rvk_blob)) { return false; }
-        if (rvk_blob == 0) {
+        uint64_t av_blob = 0;
+        if (!r.read_varint(av_blob)) { return false; }
+        if (av_blob == 0) {
             out->pData = nullptr;
         } else {
-            if (rvk_blob > r.remaining()) { return false; }
-            char* blob = arena.allocate_chars(static_cast<size_t>(rvk_blob));
-            if (blob == nullptr || !r.read(blob, static_cast<size_t>(rvk_blob))) { return false; }
+            if (av_blob > r.remaining()) { return false; }
+            char* blob = arena.allocate_chars(static_cast<size_t>(av_blob));
+            if (blob == nullptr || !r.read(blob, static_cast<size_t>(av_blob))) { return false; }
             out->pData = blob;
         }
     }
@@ -19182,9 +19182,9 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     if (!r.read_pod(out->nextStage)) { return false; }
     if (!r.read_pod(out->codeType)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->codeSize = static_cast<decltype(out->codeSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->codeSize = static_cast<decltype(out->codeSize)>(av_wide);
     }
     {
         uint8_t present = 0;
@@ -19282,9 +19282,9 @@ inline void serialize_VkShaderModuleCreateInfo(::av::WireWriter& buf, const VkSh
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->codeSize = static_cast<decltype(out->codeSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->codeSize = static_cast<decltype(out->codeSize)>(av_wide);
     }
     {
         uint8_t present = 0;
@@ -19613,9 +19613,9 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
         }
     }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->dataSize = static_cast<decltype(out->dataSize)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->dataSize = static_cast<decltype(out->dataSize)>(av_wide);
     }
     {
         uint8_t present = 0;
@@ -19643,9 +19643,9 @@ inline void serialize_VkSpecializationMapEntry(::av::WireWriter& buf, const VkSp
     if (!r.read_pod(out->constantID)) { return false; }
     if (!r.read_pod(out->offset)) { return false; }
     {
-        uint64_t rvk_wide = 0;
-        if (!r.read_pod(rvk_wide)) { return false; }
-        out->size = static_cast<decltype(out->size)>(rvk_wide);
+        uint64_t av_wide = 0;
+        if (!r.read_pod(av_wide)) { return false; }
+        out->size = static_cast<decltype(out->size)>(av_wide);
     }
     return true;
 }

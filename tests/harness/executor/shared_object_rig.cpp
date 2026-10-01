@@ -69,7 +69,7 @@ void SharedObjectContext::serve()
 }
 
 SharedObjectRig::SharedObjectRig(bool second_executor)
-    : host_(), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_), objects_(host_),
+    : host_(), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_), objects_(host_),
       first_(host_, library_, shares_, objects_, 1u), second_(host_, library_, shares_, objects_, 2u)
 {
     ops_.descriptors_from(host_);

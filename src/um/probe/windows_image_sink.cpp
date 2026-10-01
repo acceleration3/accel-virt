@@ -8,7 +8,7 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t directory[] = L"C:\\rvk\\";
+constexpr wchar_t directory[] = L"C:\\av\\";
 constexpr wchar_t extension[] = L".bmp";
 constexpr size_t  path_chars = sizeof directory / sizeof directory[0] + ImageSink::max_name +
                               sizeof extension / sizeof extension[0];

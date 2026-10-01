@@ -21,7 +21,7 @@ public:
     /* dxgkrnl hands a private escape this short to no driver; the size of
      * the other escape records does get through. */
     static constexpr size_t   encoded_size = 32u;
-    static constexpr uint32_t magic        = 0x574B5652u;  /* "RVKW" */
+    static constexpr uint32_t magic        = 0x00575641u;  /* "AVW" */
 
     enum class Operation : uint16_t { open = 1u, close = 2u };
 

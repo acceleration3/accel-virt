@@ -10,7 +10,7 @@
 #define AV_REPLAY_CONTEXT_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "proto/context/sub_api.hpp"
 
 #include <stddef.h>
@@ -62,7 +62,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    RvkExecutor *executor_;
+    AvExecutor *executor_;
     uint32_t     context_;
     SubApi       api_;
     bool         answered_;

@@ -5,7 +5,7 @@
 1. **Host is QEMU/KVM on Linux.** No Hyper-V, no Windows host.
 2. **No ivshmem.** The transport is a virtio-gpu device.
 3. **The host side lives inside QEMU.** A new in-process device,
-   `virtio-gpu-rvk-pci`, owns transport, memory mapping, fences, scanout and
+   `virtio-gpu-av-pci`, owns transport, memory mapping, fences, scanout and
    host execution. No separate backend process, no vhost-user.
 4. **Serialization is generated, and generated here.** `render-server`
    contributed its Khronos-registry generators and nothing else; they are
@@ -35,21 +35,21 @@ scanout, and move serialized command streams to the device.
  GUEST (Windows 11 24H2)                           HOST (Linux)
  ┌──────────────────────────────────────────┐     ┌─────────────────────────────────────────────┐
  │ app                                      │     │ qemu-system-x86_64  (patched package)       │
- │  ├ d3d12.dll   = vkd3d-proton  prebuilt  │     │  └ virtio-gpu-rvk-pci           NEW         │
+ │  ├ d3d12.dll   = vkd3d-proton  prebuilt  │     │  └ virtio-gpu-av-pci           NEW         │
  │  ├ d3d11/dxgi  = DXVK          prebuilt  │     │     ├ VirtIOGPU base: 2D, scanout, EDID,    │
  │  ├ vulkan-1.dll (Khronos loader)         │     │     │  cursor, control queue   (stock QEMU) │
- │  │  └ rvk Vulkan ICD   ─┐                │     │     ├ capset + 3D commands                  │
- │  ├ opengl32 → rvk GL ICD ├ generated     │     │     ├ hostmem BAR  (mappable host memory)   │
- │  └ OpenCL   → rvk CL ICD ┘ encoders      │     │     ├ doorbell BAR (ioeventfd per context)  │
+ │  │  └ av Vulkan ICD   ─┐                │     │     ├ capset + 3D commands                  │
+ │  ├ opengl32 → av GL ICD ├ generated     │     │     ├ hostmem BAR  (mappable host memory)   │
+ │  └ OpenCL   → av CL ICD ┘ encoders      │     │     ├ doorbell BAR (ioeventfd per context)  │
  │        │ D3DKMT (gdi32)                  │     │     ├ fence pages + irqfd MSI-X             │
  │        ▼                                 │     │     ├ worker thread per context             │
  │ dxgkrnl.sys / dxgmms2.sys                │     │     ├ generated decoders                    │
  │        │ DDI (187 slots)                 │     │     └ executor: host libvulkan / GL / CL    │
  │        ▼                                 │     │                                             │
- │ rvkgpu.sys   WDDM 3.2 KMD       NEW      │◄───►│   PCI: virtio-gpu, MSI-X                    │
+ │ avgpu.sys   WDDM 3.2 KMD       NEW      │◄───►│   PCI: virtio-gpu, MSI-X                    │
  │  └ virtio-pci modern transport           │     └─────────────────────────────────────────────┘
  │ DWM / D2D / MF → D3D12Core               │
- │  └ rvkumd.dll  (last milestone)  NEW     │
+ │  └ avumd.dll  (last milestone)  NEW     │
  └──────────────────────────────────────────┘
 ```
 
@@ -57,12 +57,12 @@ Four things get built:
 
 | Component | Language | Lives in |
 |---|---|---|
-| `rvkgpu.sys` — WDDM 3.2 miniport speaking virtio-gpu | C (kernel) | new driver project |
-| `virtio-gpu-rvk-pci` — QEMU device | C (QEMU style) | a patch on the QEMU package |
+| `avgpu.sys` — WDDM 3.2 miniport speaking virtio-gpu | C (kernel) | new driver project |
+| `virtio-gpu-av-pci` — QEMU device | C (QEMU style) | a patch on the QEMU package |
 | the serialization — encoders + decoders | C++23, generated | this repository, `src/proto/generated/` |
-| Guest ICDs moved onto D3DKMT, later `rvkumd.dll` | C++23 | guest driver project |
+| Guest ICDs moved onto D3DKMT, later `avumd.dll` | C++23 | guest driver project |
 
-## The QEMU device: `virtio-gpu-rvk-pci`
+## The QEMU device: `virtio-gpu-av-pci`
 
 ### Shape
 
@@ -72,12 +72,12 @@ the loadable module `hw-display-virtio-gpu-rutabaga.so`: a subclass of
 3D command set. New files, and nothing else in QEMU changes:
 
 ```
-hw/display/virtio-gpu-rvk.c          the device (virtio-gpu-rvk-device)
-hw/display/virtio-gpu-rvk-host.c     the host operations the device core runs on
-hw/display/virtio-gpu-pci-rvk.c      the PCI wrapper (virtio-gpu-rvk-pci)
-include/hw/virtio/virtio-gpu-rvk.h   the instance struct the PCI wrapper embeds
-hw/display/meson.build               + modules 'virtio-gpu-rvk', 'virtio-gpu-pci-rvk'
-meson_options.txt / meson.build      + option 'rvk' (feature), deps rvk_device, vulkan
+hw/display/virtio-gpu-av.c          the device (virtio-gpu-av-device)
+hw/display/virtio-gpu-av-host.c     the host operations the device core runs on
+hw/display/virtio-gpu-pci-av.c      the PCI wrapper (virtio-gpu-av-pci)
+include/hw/virtio/virtio-gpu-av.h   the instance struct the PCI wrapper embeds
+hw/display/meson.build               + modules 'virtio-gpu-av', 'virtio-gpu-pci-av'
+meson_options.txt / meson.build      + option 'av' (feature), deps av_device, vulkan
 ```
 
 The C files live in `src/device/qemu/` with the meson patch
@@ -91,13 +91,13 @@ rebuilt (about a minute for `x86_64-softmmu`). Rebase the patch on each QEMU
 update; keeping it to new files makes that trivial.
 
 QEMU's meson builds no C++ in modules and its modinfo collector reads only `.c`,
-so the device core is `librvk_device.a` from this repository's CMake, behind the
-C ABI in `rvk_device.h`, found through `pkg-config` - as is the host executor
+so the device core is `libav_device.a` from this repository's CMake, behind the
+C ABI in `av_device.h`, found through `pkg-config` - as is the host executor
 later. No C++ enters the QEMU tree.
 
 ### Protocol
 
-Stock virtio-gpu is the envelope; the rvk wire format is the payload.
+Stock virtio-gpu is the envelope; the av wire format is the payload.
 
 | Mechanism | virtio-gpu feature | Used for |
 |---|---|---|
@@ -111,7 +111,7 @@ Stock virtio-gpu is the envelope; the rvk wire format is the payload.
 and 1–6 are assigned (VIRGL, VIRGL2, GFXSTREAM_VULKAN, VENUS, CROSS_DOMAIN,
 DRM). The spec reserves no private range. Pick a high id (e.g. `0x72`), define
 it in exactly one header shared by device and driver, and let the capset
-payload carry an rvk protocol version and a sub-API (Vulkan / GL / CL).
+payload carry an av protocol version and a sub-API (Vulkan / GL / CL).
 
 **The hot path is deliberately outside the virtio spec.** The control queue is
 serviced on QEMU's main loop under the BQL; high-rate submission must not go
@@ -207,8 +207,8 @@ malformed frames belongs in the codec's test suite.
 
 ### One adapter per host GPU
 
-Every host GPU becomes its own guest adapter: one `virtio-gpu-rvk-pci` instance
-per host physical device, each loaded by its own `rvkgpu.sys` instance. That is
+Every host GPU becomes its own guest adapter: one `virtio-gpu-av-pci` instance
+per host physical device, each loaded by its own `avgpu.sys` instance. That is
 the only shape Windows understands as "several GPUs" - DXGI and D3D12 adapter
 enumeration, D3D12 multi-adapter, per-GPU memory budgets and Task Manager all
 come from separate WDDM adapters. A single adapter fronting several GPUs would
@@ -221,7 +221,7 @@ Making that work on any machine is a host-side job, done at launch:
   - UUID, vendor, device, type, name, memory. With no GPU, `llvmpipe` appears as
   a CPU device, so there is always at least one.
 - **Generated configuration.** The same tool emits one
-  `-device virtio-gpu-rvk-pci,host-gpu=<uuid>` per GPU (or libvirt XML), so a
+  `-device virtio-gpu-av-pci,host-gpu=<uuid>` per GPU (or libvirt XML), so a
   machine's configuration is produced, not hand-written.
 - **Binding by UUID.** The device opens the host physical device whose
   `VkPhysicalDeviceIDProperties::deviceUUID` matches, and fails to realize with
@@ -232,7 +232,7 @@ Making that work on any machine is a host-side job, done at launch:
   (for example host-visible memory mapping). The guest driver and ICD branch on
   those bits, so a new vendor or a missing extension needs no guest change.
 - **Vendor-neutral guest.** Commands cross at the API level and run on the
-  host's own driver, so one `rvkgpu.sys` serves NVIDIA, AMD, Intel or llvmpipe.
+  host's own driver, so one `avgpu.sys` serves NVIDIA, AMD, Intel or llvmpipe.
 
 ### Launching
 
@@ -245,17 +245,17 @@ GPU, as generated by `tools/host/list_gpus`:
   <devices><video><model type='none'/></video></devices>
   <qemu:commandline>
     <qemu:arg value='-device'/>
-    <qemu:arg value='virtio-gpu-rvk-pci,host-gpu=5f3c...e1,hostmem=8G,max_outputs=1'/>
+    <qemu:arg value='virtio-gpu-av-pci,host-gpu=5f3c...e1,hostmem=8G,max_outputs=1'/>
   </qemu:commandline>
 </domain>
 ```
 
-## The guest driver: `rvkgpu.sys`
+## The guest driver: `avgpu.sys`
 
 ### Binding and interrupts
 
 - Binds to the device's PCI identity. The device sets a **distinct PCI
-  subsystem id** so the INF matches `virtio-gpu-rvk-pci` and not stock
+  subsystem id** so the INF matches `virtio-gpu-av-pci` and not stock
   `virtio-gpu-pci` (and so Red Hat's `viogpudo` never claims ours). During M0–M1
   the INF temporarily matches stock `PCI\VEN_1AF4&DEV_1050`.
 - Message-signaled interrupts via the INF
@@ -329,7 +329,7 @@ From M6 the ICD stores the doorbell itself and the KMD leaves this path.
    swapchain allocation; the KMD flips it via the 2D scanout path. Works with
    DWM on WARP and any host driver.
 2. **Flip via `DxgkDdiSetVidPnSourceAddress`** onto an allocation in segment 2.
-3. **Host-side composition.** Once DWM composites on `rvkgpu` (M8), the final
+3. **Host-side composition.** Once DWM composites on `avgpu` (M8), the final
    desktop is a host VRAM image and scanout is `dpy_gl_scanout_dmabuf`. Nothing
    crosses back into the guest.
 
@@ -351,9 +351,9 @@ and its log lands in a host file.
 split virtqueues, MSI-X ISR, `GET_DISPLAY_INFO`, `GET_EDID`,
 `RESOURCE_CREATE_2D`, `ATTACH_BACKING`, `SET_SCANOUT`, `RESOURCE_FLUSH`;
 VidPn, cofunctional modality, synthetic vsync. **Done when** the guest desktop
-runs at a chosen mode through `rvkgpu`, composited by DWM on WARP.
+runs at a chosen mode through `avgpu`, composited by DWM on WARP.
 
-**M2 — the patched QEMU and a skeleton device.** `virtio-gpu-rvk-pci`
+**M2 — the patched QEMU and a skeleton device.** `virtio-gpu-av-pci`
 subclassing `VirtIOGPU`; M1 works unchanged on it. Add capset, `CTX_CREATE`,
 doorbell BAR with ioeventfd, one worker thread, fence page, irqfd MSI-X.
 **Done when** a ping command posted from a test program round-trips through
@@ -399,14 +399,14 @@ guest desktop.
 the M5 sample runs with the KMD out of the submission path and per-submit cost
 is measured lower.
 
-The guest transport (feature 043) is how a process reaches a host rvk context
+The guest transport (feature 043) is how a process reaches a host av context
 before those DDIs land. A process asks for a context with
-`D3DKMTCreateContextVirtual`, carrying the **context record** (RVKT,
+`D3DKMTCreateContextVirtual`, carrying the **context record** (AVT,
 docs/protocol.md) as private data: it names, by the process's own allocation
 handles, the ring, fence page and reply slot. The miniport decodes it, publishes
 those allocations as GUEST blobs, and sends the context's setup. The process
 then writes a batch into the ring it mapped, leaves the submission descriptor
-(RVKS) in the DMA buffer of `D3DKMTSubmitCommandVirtual`, and the miniport rings
+(AVS) in the DMA buffer of `D3DKMTSubmitCommandVirtual`, and the miniport rings
 the doorbell it owns; the process waits on the D3DKMT submission fence, which the
 miniport completes from the fence-page interrupt. `KmtTransport` (src/guest/
 transport) is the `ClientTransport` the generated client is handed for all this.
@@ -415,9 +415,9 @@ transport) is the `ClientTransport` the generated client is handed for all this.
 capset sub-API and codec. **Done when** each API's existing test suite passes
 in the guest.
 
-**M8 — a UMD for the desktop, and for Direct3D.** `rvkumd.dll` implementing the
+**M8 — a UMD for the desktop, and for Direct3D.** `avumd.dll` implementing the
 D3D10/11 and D3D12 UMD DDIs over the same Vulkan remoting path, so DWM
-composites on `rvkgpu` and applications using the Microsoft runtime - not only
+composites on `avgpu` and applications using the Microsoft runtime - not only
 those shipping vkd3d-proton or DXVK beside them - run on the host GPU; switch
 scanout to dmabuf. **Done when** DWM no longer falls back to WARP, desktop
 frames reach QEMU's display without a guest copy, and the system `d3d11.dll`

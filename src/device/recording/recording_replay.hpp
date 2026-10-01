@@ -1,5 +1,5 @@
 /* Replays a recording into an executor library through the same
- * rvk_executor.h the device drives (FR-006): a context per setup record, every
+ * av_executor.h the device drives (FR-006): a context per setup record, every
  * command of every batch in the recorded order, and each recorded reply
  * compared with the answer the replay produced.
  *

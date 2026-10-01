@@ -1,6 +1,6 @@
 /* executor_conformance <library> ...
  *
- * Every library named is held to src/device/abi/rvk_executor.h. A suite that
+ * Every library named is held to src/device/abi/av_executor.h. A suite that
  * only one library passes has tested nothing, so the build runs it against the
  * echo library as well as this project's. */
 #include "conformance/executor/executor_conformance.hpp"

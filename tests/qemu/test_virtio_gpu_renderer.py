@@ -1,5 +1,5 @@
 """The device with its contexts in a renderer process (docs/renderer.md): the
-echo executor runs in rvk-renderer, not in QEMU. A renderer that crashes - the
+echo executor runs in av-renderer, not in QEMU. A renderer that crashes - the
 executor aborting, or the process killed from outside - takes its contexts
 with it: each bound context's fence page reads faulted with device_lost and its
 fence queue interrupts, QEMU goes on answering, and a new renderer runs the
@@ -15,7 +15,7 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import ECHO, command, rvk_device
+from av_context import ECHO, command, av_device
 from test_virtio_gpu_faults import DEVICE_LOST, FENCE_QUEUE_FIRST, WANTED, Context, wait_for
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
@@ -26,14 +26,14 @@ CRASH = 0x10007
 
 def renderers_of(pid):
     """The renderer processes QEMU `pid` started."""
-    listing = subprocess.run(["pgrep", "-P", str(pid), "-f", "rvk-renderer"], capture_output=True, text=True)
+    listing = subprocess.run(["pgrep", "-P", str(pid), "-f", "av-renderer"], capture_output=True, text=True)
     return [int(line) for line in listing.stdout.split()]
 
 
 @unittest.skipUnless(BUILD and EXECUTOR and RENDERER, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuRenderer(unittest.TestCase):
     def gpu(self, vectors=None):
-        qtest = virtio_qtest.Qtest(BUILD, rvk_device(f",vectors=4,renderer={RENDERER}"), shared_ram=True)
+        qtest = virtio_qtest.Qtest(BUILD, av_device(f",vectors=4,renderer={RENDERER}"), shared_ram=True)
         self.addCleanup(qtest.close)
         msix = {}
 
@@ -46,8 +46,8 @@ class VirtioGpuRenderer(unittest.TestCase):
         return virtio_qtest.VirtioGpu(qtest, WANTED, configure), msix["table"]
 
     def setUp(self):
-        os.environ["RVK_ECHO_ALLOW_CRASH"] = "1"
-        self.addCleanup(os.environ.pop, "RVK_ECHO_ALLOW_CRASH", None)
+        os.environ["AV_ECHO_ALLOW_CRASH"] = "1"
+        self.addCleanup(os.environ.pop, "AV_ECHO_ALLOW_CRASH", None)
 
     def test_a_context_runs_in_the_renderer(self):
         gpu, _ = self.gpu()
@@ -92,7 +92,7 @@ class VirtioGpuRenderer(unittest.TestCase):
         self.lost_and_recovered(gpu, msix, context, kill)
 
     def test_guest_ram_that_is_not_a_shared_memfd_has_no_renderer(self):
-        qtest = virtio_qtest.Qtest(BUILD, rvk_device(f",renderer={RENDERER}"), shared_ram=False)
+        qtest = virtio_qtest.Qtest(BUILD, av_device(f",renderer={RENDERER}"), shared_ram=False)
         deadline = time.monotonic() + 30.0
         while qtest.process.poll() is None and time.monotonic() < deadline:
             time.sleep(0.05)

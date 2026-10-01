@@ -72,7 +72,7 @@ Status GuestClContext::build(uint32_t gl_share)
                                            reply_bytes, staging_, staging_bytes));
     const Status initialized = transport_.object().initialize(GlContextOptions().sharing(gl_share));
     if (initialized != Status::ok) {
-        log_.write("rvkcl: the driver refused the context");
+        log_.write("avcl: the driver refused the context");
         return initialized;
     }
     batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
@@ -87,18 +87,18 @@ Status GuestClContext::build(uint32_t gl_share)
          * has taken the context with it, and carrying on would hand the
          * application a context whose every call is already lost. */
         if (transport_.object().faulted()) {
-            log_.write("rvkcl: the context faulted opening its blob arena");
+            log_.write("avcl: the context faulted opening its blob arena");
             return Status::invalid_state;
         }
-        log_.write("rvkcl: no blob arena for the context; bulk data crosses inline");
-        log_.write("rvkcl: buffers are staged; a map copies in and out");
+        log_.write("avcl: no blob arena for the context; bulk data crosses inline");
+        log_.write("avcl: buffers are staged; a map copies in and out");
         return Status::ok;
     }
     /* The arena is the memory a mappable buffer is made over, on both sides:
      * the device holds it as one import, so an offset names the same bytes
      * here and there and a map costs no copy. */
     blocks_.lend(arena_.object().view(), arena_.object().bytes());
-    log_.write("rvkcl: buffers map through the blob arena; no copy");
+    log_.write("avcl: buffers map through the blob arena; no copy");
     return Status::ok;
 }
 
@@ -171,7 +171,7 @@ ClientTransport *GuestClContext::wire()
     if (transport_.object().faulted()) connection_.lose(link_);
     if (connection_.lost(link_)) {
         state_ = State::lost;
-        log_.write("rvkcl: the context's device faulted; the context is lost");
+        log_.write("avcl: the context's device faulted; the context is lost");
         return nullptr;
     }
     return &locked_.object();

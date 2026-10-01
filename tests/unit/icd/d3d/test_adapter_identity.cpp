@@ -27,14 +27,14 @@ constexpr std::uint64_t some_luid = 0x0000000200001234ull;
 constexpr std::uint64_t local_budget = 512ull * 1024ull * 1024ull;
 constexpr std::uint64_t non_local_budget = 3ull * 1024ull * 1024ull * 1024ull;
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 class Fixture {
 public:
     Fixture()
     {
-        kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+        kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, some_luid);
         kmt_.set_video_memory(av::MemorySegmentGroup::local, local_budget, 0u);
         kmt_.set_video_memory(av::MemorySegmentGroup::non_local, non_local_budget, 0u);
@@ -79,7 +79,7 @@ TEST(adapter_identity, describes_itself_by_name)
 { Fixture fixture;
   AdapterIdentity identity;
   CHECK_STATUS(identity.learn(fixture.kmt(), fixture.adapter(), fixture.log()), Status::ok);
-  CHECK(std::strstr(identity.description(), "rvkgpu") != nullptr);
+  CHECK(std::strstr(identity.description(), "avgpu") != nullptr);
   CHECK(std::strlen(identity.description()) < AdapterIdentity::description_bytes); }
 
 /* The LUID is the adapter's whole identity to DXGI and to the Vulkan loader, so

@@ -2,7 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/context_executor.hpp"
 #include "device/host/host.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -78,7 +78,7 @@ Status BlobImports::import(uint32_t resource, uint64_t offset, uint64_t size, ui
     return Status::ok;
 }
 
-Status BlobImports::offer(const RvkBlobHandle &handle, uint64_t blob_id, uint32_t slot)
+Status BlobImports::offer(const AvBlobHandle &handle, uint64_t blob_id, uint32_t slot)
 {
     AV_SCOPE("BlobImports::offer");
     uint64_t made = 0u;
@@ -101,8 +101,8 @@ Status BlobImports::hand_over_dmabuf(const HeldBlob &held, uint64_t offset, uint
     BlobDmaBuf   shared(host_);
     const Status made = held.share(shared, offset, size);
     if (made != Status::ok) return made;
-    RvkBlobHandle handle = {};
-    handle.kind = RVK_BLOB_DMA_BUF;
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_DMA_BUF;
     handle.reserved = memory_type;
     handle.pointer = nullptr;
     handle.fd = shared.handle();
@@ -118,8 +118,8 @@ Status BlobImports::hand_over_pointer(const HeldBlob &held, uint64_t offset, uin
                                       uint64_t blob_id, uint32_t slot)
 {
     AV_SCOPE("BlobImports::hand_over_pointer");
-    RvkBlobHandle handle = {};
-    handle.kind = RVK_BLOB_HOST_POINTER;
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_HOST_POINTER;
     handle.reserved = memory_type;
     handle.pointer = static_cast<uint8_t *>(held.base()) + offset;
     handle.fd = -1;
@@ -142,7 +142,7 @@ Status BlobImports::hand_over(const HeldBlob &held, uint64_t offset, uint64_t si
      * default) are what usually refused it. */
     if (!pointer_noted_) {
         pointer_noted_ = true;
-        host_.log("virtio-gpu-rvk: a blob could not be a dma-buf (raise udmabuf's size_limit_mb and list_limit?); "
+        host_.log("virtio-gpu-av: a blob could not be a dma-buf (raise udmabuf's size_limit_mb and list_limit?); "
                   "handing over a host pointer");
     }
     return hand_over_pointer(held, offset, size, memory_type, blob_id, slot);

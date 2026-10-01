@@ -41,7 +41,7 @@
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
-#include "core/rvk/rvk_context_binding.hpp"
+#include "core/av/av_context_binding.hpp"
 #include "proto/resources/host_window_record.hpp"
 #include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
@@ -118,7 +118,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/context/context_views_record.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
@@ -421,7 +421,7 @@ private:
                                                              static_cast<std::uint32_t>(answer.length())));
             return;
         }
-        /* An rvk context's setup and teardown (feature 043). */
+        /* An av context's setup and teardown (feature 043). */
         if (asked == ctx_create || asked == ctx_destroy || asked == submit_3d || asked == resource_unref) {
             fixture->context_requests_++;
             static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA */
@@ -670,7 +670,7 @@ private:
     void             *open_handle_;
 };
 
-/* The driver's own state dump, as rvk-inspect reads it: the trace escape's
+/* The driver's own state dump, as av-inspect reads it: the trace escape's
  * state kind, so a test judges what a person debugging the guest would see. */
 class StateDump {
 public:
@@ -710,10 +710,10 @@ TEST(adapter, remembers_its_physical_device_object)
 TEST(adapter_start_device, logs_the_step_it_reached)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: StartDevice") == 0);
+  CHECK(std::strcmp(fixture.platform().last_log(), "avgpu: StartDevice") == 0);
   av::DxgkChildDescriptorRecord relations[2] = {};
   CHECK_EQ(nt(fixture.adapter().query_child_relations(relations, sizeof relations)), success);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: QueryChildRelations") == 0); }
+  CHECK(std::strcmp(fixture.platform().last_log(), "avgpu: QueryChildRelations") == 0); }
 
 TEST(adapter_start_device, brings_the_device_to_driver_ok_and_reports_one_source_and_child)
 { Fixture fixture;
@@ -1306,7 +1306,7 @@ TEST(adapter_dpc_routine, a_refused_scanout_refresh_is_logged)
       refused = fixture.platform().logged() != logged;
   }
   CHECK(refused);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: a scanout refresh was refused in the DPC") == 0);
+  CHECK(std::strcmp(fixture.platform().last_log(), "avgpu: a scanout refresh was refused in the DPC") == 0);
   /* Spent budget: the refusal goes on being refused, and says nothing more. */
   const av::DxgkargRecommendVidPnTopologyRecord topology = {};
   for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
@@ -1455,7 +1455,7 @@ TEST(adapter_control_interrupt, a_device_that_refuses_the_clock_is_said_to_and_s
 { Fixture fixture;
   fixture.clock().refuse();
   CHECK_EQ(fixture.start(), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: the device refused the display clock, status 0xC00000BB"));
+  CHECK(fixture.platform().logged_line("avgpu: the device refused the display clock, status 0xC00000BB"));
   CHECK_EQ(fixture.clock_page(), 0u); }
 
 TEST(adapter_control_interrupt, before_start_there_is_no_vsync)
@@ -1634,11 +1634,11 @@ TEST(adapter_present, needs_a_live_context_then_presents)
   CHECK_EQ(nt(fixture.adapter().present(&fixture, &present)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, nullptr)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK_EQ(dma[0], 0x52u);
+  CHECK_EQ(dma[0], 0x41u);   /* 'A' */
   CHECK_EQ(patches[1].AllocationIndex, 2u);
   /* A present naming no allocations moved no pixels, and says so: what the
    * desktop's own presents look like from the miniport (feature 046). */
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved list flags 0x00000001 sources 0 destinations 0"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved list flags 0x00000001 sources 0 destinations 0"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
@@ -1703,14 +1703,14 @@ TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
    * written - but the pixels stay where they were, and the driver says so. */
   present.DstRect = {0, 0, side, side / 2};
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved surfaces flags 0x00000001 sources 1 destinations 1"));
-  CHECK(fixture.platform().logged_line("rvkgpu: present surfaces reachable source 1 kind 2 destination 1 kind 1 from 8x8 into 8x4"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved surfaces flags 0x00000001 sources 1 destinations 1"));
+  CHECK(fixture.platform().logged_line("avgpu: present surfaces reachable source 1 kind 2 destination 1 kind 1 from 8x8 into 8x4"));
 
   /* An allocation this device never opened is one the miniport cannot reach. */
   present.DstRect = {0, 0, side, side};
   list[1].hDeviceSpecificAllocation = &fixture;
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
 
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
@@ -1746,7 +1746,7 @@ TEST(adapter_present, an_application_s_blt_on_a_virtual_context_moves_its_pixels
   present.DstRect = {0, 0, side, side};
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
-  CHECK(!fixture.platform().logged_line("rvkgpu: present unmoved"));
+  CHECK(!fixture.platform().logged_line("avgpu: present unmoved"));
   CHECK_EQ(fixture.present_copies(), 1u);
   const StateDump dump(fixture);
   CHECK(dump.holds("presents_unmoved=0"));
@@ -1977,11 +1977,11 @@ TEST(adapter_present, a_blt_into_a_surface_with_no_mapped_pages_says_which_side)
   present.SrcRect = {0, 0, side, side};
   present.DstRect = {0, 0, side, side};
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present surfaces reachable source 1 kind 2 destination 0 kind 4 from 8x8 into 8x8"));
+  CHECK(fixture.platform().logged_line("avgpu: present surfaces reachable source 1 kind 2 destination 0 kind 4 from 8x8 into 8x8"));
   /* A fill has no source to name. */
   present.Flags = 2u;   /* ColorFill */
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present surfaces reachable source 0 kind 0 destination 0 kind 4"));
+  CHECK(fixture.platform().logged_line("avgpu: present surfaces reachable source 0 kind 0 destination 0 kind 4"));
   present.Flags = 1u;
   const av::DxgkargRecommendVidPnTopologyRecord topology = {};
   for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
@@ -2031,10 +2031,10 @@ TEST(adapter_present, a_colour_fill_writes_the_present_s_colour_over_its_destina
    * fill naming no destination at all is not a present of anything. */
   list[0].hDeviceSpecificAllocation = &fixture;
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000002 sources 0 destinations 1"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved handles flags 0x00000002 sources 0 destinations 1"));
   present.NumDstAllocations = 0u;
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved list flags 0x00000002 sources 0 destinations 0"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved list flags 0x00000002 sources 0 destinations 0"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
@@ -2069,11 +2069,11 @@ TEST(adapter_present, a_blt_naming_a_source_it_cannot_reach_moves_nothing)
   present.SrcRect = {0, 0, side, side};
   present.DstRect = {0, 0, side, side};
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
   present.NumSrcAllocations = 2u;
   list[2].hDeviceSpecificAllocation = destination.open_handle();
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
-  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved list flags 0x00000001 sources 2 destinations 1"));
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved list flags 0x00000001 sources 2 destinations 1"));
   const StateDump dump(fixture);
   CHECK(dump.holds("present_rows=0"));
   CHECK(dump.holds("presents_unmoved=2"));
@@ -2108,14 +2108,14 @@ TEST(adapter_present, a_flip_with_no_allocation_list_or_dma_buffer_is_accepted_a
   present.pDstSubRects = &nothing;
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK(present.pDmaBuffer == nullptr);
-  CHECK(!fixture.platform().logged_line("rvkgpu: present refused"));
+  CHECK(!fixture.platform().logged_line("avgpu: present refused"));
   present.DmaSize = sizeof dma;
   present.SubRectCnt = 0u;
   present.pDstSubRects = nullptr;
   present.pDmaBuffer = dma;
   present.Flags = 1u;     /* Blt */
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), invalid_parameter);
-  CHECK(fixture.platform().logged_line("rvkgpu: present refused flags 0x00000001 list absent"));
+  CHECK(fixture.platform().logged_line("avgpu: present refused flags 0x00000001 list absent"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
@@ -2151,11 +2151,11 @@ TEST(adapter_present, a_flip_an_unnamed_operation_and_a_refused_present_move_not
   /* Each present said what it answered, and none of them said a pixel stayed
    * where it was: there was nothing to move. */
   CHECK(fixture.platform().logged() > quiet);
-  CHECK(!fixture.platform().logged_line("rvkgpu: present unmoved"));
+  CHECK(!fixture.platform().logged_line("avgpu: present unmoved"));
   /* The refusal is said, since dxgkrnl answers it by hiding the source; a
    * present asking for more DMA buffer is not one. */
-  CHECK(fixture.platform().logged_line("rvkgpu: present names no operation flags 0x00000000 list absent"));
-  CHECK(!fixture.platform().logged_line("rvkgpu: present refused"));
+  CHECK(fixture.platform().logged_line("avgpu: present names no operation flags 0x00000000 list absent"));
+  CHECK(!fixture.platform().logged_line("avgpu: present refused"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
@@ -2248,8 +2248,8 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
    * native fences. User-mode submission is not asked at all where the fences
    * were refused, since a node may not report one without the other. */
   CHECK_EQ(fixture.dxgkrnl().feature_queries(), 2u);
-  CHECK(fixture.platform().logged_line("rvkgpu: hardware scheduling status 0x00000001"));
-  CHECK(fixture.platform().logged_line("rvkgpu: user-mode submission status 0x00000000"));
+  CHECK(fixture.platform().logged_line("avgpu: hardware scheduling status 0x00000001"));
+  CHECK(fixture.platform().logged_line("avgpu: user-mode submission status 0x00000000"));
   av::DxgkNodeMetadataRecord metadata;
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
   CHECK_EQ(metadata.Flags, 0u);
@@ -2264,7 +2264,7 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
   fences.dxgkrnl().allow_feature(av::feature_native_fence);
   CHECK_EQ(fences.start(), success);
   CHECK_EQ(fences.dxgkrnl().feature_queries(), 3u);
-  CHECK(fences.platform().logged_line("rvkgpu: user-mode submission status 0x00000000"));
+  CHECK(fences.platform().logged_line("avgpu: user-mode submission status 0x00000000"));
   CHECK_EQ(nt(fences.adapter().get_node_metadata(1u, &metadata)), success);
   CHECK_EQ(metadata.Flags & 0x8u, 0u);
 
@@ -2275,7 +2275,7 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
   allowed.dxgkrnl().allow_feature(av::feature_user_mode_submission);
   CHECK_EQ(allowed.start(), success);
   CHECK_EQ(allowed.dxgkrnl().feature_queries(), 3u);
-  CHECK(allowed.platform().logged_line("rvkgpu: user-mode submission status 0x00000001"));
+  CHECK(allowed.platform().logged_line("avgpu: user-mode submission status 0x00000001"));
   CHECK_EQ(nt(allowed.adapter().get_node_metadata(1u, &metadata)), success);
   CHECK_EQ(metadata.Flags & 0x9u, 0x9u);
   CHECK_EQ(metadata.Flags >> 16u, av::HwQueueSubmissions::capacity);
@@ -2287,7 +2287,7 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
   CHECK_EQ(refused.start(), success);
   CHECK_EQ(nt(refused.adapter().get_node_metadata(0u, &metadata)), success);
   CHECK_EQ(metadata.Flags, 0u);
-  CHECK(refused.platform().logged_line("rvkgpu: hardware scheduling status 0x00000000")); }
+  CHECK(refused.platform().logged_line("avgpu: hardware scheduling status 0x00000000")); }
 
 TEST(adapter_control_interrupt2, enables_and_disables_the_vsync_reports)
 { Fixture fixture;
@@ -2722,12 +2722,12 @@ TEST(adapter_query_adapter_info, logs_each_type_with_the_status_it_answered)
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: QueryAdapterInfo type 1 status 0x00000000") == 0);
+                    "avgpu: QueryAdapterInfo type 1 status 0x00000000") == 0);
   DxgkargQueryAdapterInfoRecord declined = {};
   declined.Type = 999;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&declined)), not_implemented);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: QueryAdapterInfo type 999 status 0xC0000002") == 0); }
+                    "avgpu: QueryAdapterInfo type 999 status 0xC0000002") == 0); }
 
 TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
 { Fixture fixture;
@@ -2853,7 +2853,7 @@ TEST(adapter_query_adapter_info, umd_private_names_the_luid_the_adapter_was_star
   query.pOutputData = words;
   query.OutputDataSize = sizeof words;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(words[0], 0x44494C554B5652ull);   /* "RVKULID" */
+  CHECK_EQ(words[0], 0x0044494C555641ull);   /* "AVULID" */
   CHECK_EQ(words[1], 0x0000000500001234ull);
   std::uint64_t short_output[1] = {0xEEu};
   query.pOutputData = short_output;
@@ -3026,7 +3026,7 @@ TEST(adapter_escape, an_escape_of_no_record_the_driver_knows_is_not_supported)
       CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
   } }
 
-/* rvkinspect.exe names only the adapter: the trace escape needs no context,
+/* avinspect.exe names only the adapter: the trace escape needs no context,
  * and its state dump is this adapter and what it holds. */
 TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a_context)
 { Fixture fixture;
@@ -3056,7 +3056,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
       "adapter/0/hw_queue_table/0 busy=false live=0\n"
       "adapter/0/execution_node/0 busy=false pending=0 last_submitted=0 last_completed=0"
       " preemption_requested=false preemption_fence=0 stopped=false progress_time=0\n"
-      "adapter/0/rvk_context_table/0 busy=false bound=0\n"
+      "adapter/0/av_context_table/0 busy=false bound=0\n"
       "adapter/0/display_sources/0 count=1 vsync=false\n"
       "adapter/0/display_sources/0/source/0 format=0 width=0 height=0 scanout=0x0000000000000000"
       " primary=0x0000000000000000 flip=0 visible=false";
@@ -3120,7 +3120,7 @@ TEST(adapter_collect_dbg_info, writes_the_started_and_powered_state)
 { Fixture fixture; GuardedBuffer buffer(av::DebugReport::report_bytes);
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(collect(fixture.adapter(), buffer.data(), av::DebugReport::report_bytes, nullptr), success);
-  CHECK_EQ(buffer.data()[0], 0x52u);   /* 'R' */
+  CHECK_EQ(buffer.data()[0], 0x41u);   /* 'A' */
   CHECK_EQ(buffer.data()[6], 1u);      /* started */
   CHECK_EQ(buffer.data()[7], 1u);      /* powered */
   CHECK(buffer.data()[8] != 0u || buffer.data()[12] != 0u);   /* VERSION_1 negotiated */
@@ -3293,7 +3293,7 @@ TEST(adapter_create_allocation, the_log_line_names_the_private_data_length)
   request.NumAllocations = 1u;
   CHECK_EQ(nt(fixture.adapter().create_allocation(&request)), invalid_parameter);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: CreateAllocation bytes 0 status 0xC000000D") == 0); }
+                    "avgpu: CreateAllocation bytes 0 status 0xC000000D") == 0); }
 
 TEST(adapter_create_allocation, before_start_there_is_no_segment_to_place_it_in)
 { Fixture fixture;
@@ -3308,21 +3308,21 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
   CHECK_EQ(fixture.start(), success);
   ShadowSurface shadow(fixture.adapter());
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: GetStandardAllocationDriverData status 0x00000000") == 0);
+                    "avgpu: GetStandardAllocationDriverData status 0x00000000") == 0);
   CHECK_EQ(shadow.create(), success);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: CreateAllocation bytes 56 status 0x00000000") == 0);
+                    "avgpu: CreateAllocation bytes 56 status 0x00000000") == 0);
   static_assert(av::AllocationDescriptor::encoded_size == 56u, "the line above names the descriptor's size");
   av::DxgkargCreateDeviceRecord device = {};
   device.hDevice = &fixture;   /* the runtime's handle, which the driver replaces with its own */
   CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
   const char *line = fixture.platform().last_log();
-  CHECK(std::strncmp(line, "rvkgpu: CreateDevice runtime 0x", 31u) == 0);
-  CHECK(std::strcmp(line + 47, " status 0x00000000") == 0);
-  CHECK(std::strncmp(line + 31, "0000000000000000", 16u) != 0);   /* the handle it was given */
+  CHECK(std::strncmp(line, "avgpu: CreateDevice runtime 0x", 30u) == 0);
+  CHECK(std::strcmp(line + 46, " status 0x00000000") == 0);
+  CHECK(std::strncmp(line + 30, "0000000000000000", 16u) != 0);   /* the handle it was given */
   av::DxgkargCreateDeviceRecord second = {};
   CHECK_EQ(nt(fixture.adapter().create_device(&second)), success);
-  CHECK(std::strncmp(fixture.platform().last_log() + 31, "0000000000000000", 16u) == 0);
+  CHECK(std::strncmp(fixture.platform().last_log() + 30, "0000000000000000", 16u) == 0);
   av::DxgkargDescribeAllocationRecord describe = {};
   describe.hAllocation = shadow.handle();
   char before_describe[128] = {};
@@ -3332,20 +3332,20 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
   av::DxgkargDescribeAllocationRecord unknown = {};
   unknown.hAllocation = &unknown;
   CHECK(fixture.adapter().describe_allocation(&unknown) < 0);
-  CHECK(std::strncmp(fixture.platform().last_log(), "rvkgpu: DescribeAllocation status 0xC", 36u) == 0);
+  CHECK(std::strncmp(fixture.platform().last_log(), "avgpu: DescribeAllocation status 0xC", 36u) == 0);
   av::DxgkargSetDisplayPrivateDriverFormatRecord format = {};
   format.PrimaryAllocation = shadow.handle();
   CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&format)), success);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: SetDisplayPrivateDriverFormat status 0x00000000") == 0);
+                    "avgpu: SetDisplayPrivateDriverFormat status 0x00000000") == 0);
   av::DxgkargSetVidPnSourceVisibilityRecord visibility = {};
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visibility)), success);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: SetVidPnSourceVisibility source 0 hidden status 0x00000000") == 0);
+                    "avgpu: SetVidPnSourceVisibility source 0 hidden status 0x00000000") == 0);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
   CHECK_EQ(shadow.destroy(), success);
   CHECK_EQ(nt(fixture.adapter().stop_device()), success);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: StopDevice status 0x00000000") == 0); }
+  CHECK(std::strcmp(fixture.platform().last_log(), "avgpu: StopDevice status 0x00000000") == 0); }
 
 TEST(adapter_set_display_private_driver_format, takes_no_primary_or_one_of_ours)
 { Fixture fixture;
@@ -4171,7 +4171,7 @@ TEST(adapter_set_power_state, a_device_that_changed_refuses_its_contexts_and_kee
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
   fixture.platform().on_stall(nullptr, nullptr);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
-  CHECK(fixture.platform().logged_line("rvkgpu: the device under this adapter is not the one it started on"));
+  CHECK(fixture.platform().logged_line("avgpu: the device under this adapter is not the one it started on"));
 
   /* Nothing new runs on it: a context is refused, and so is a submission on
    * the context that survived, rather than being taken for a completion nobody
@@ -4257,7 +4257,7 @@ TEST(adapter_set_power_state, a_device_that_changed_with_no_work_queued_tells_no
   CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &refused)), not_supported);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
-/* ---- rvk contexts (feature 043) ------------------------------------------------- */
+/* ---- av contexts (feature 043) ------------------------------------------------- */
 
 namespace {
 
@@ -4339,26 +4339,26 @@ private:
     std::uint32_t kmt_handle_;
 };
 
-/* A page of reply, as the rvk suite's transport asks. */
+/* A page of reply, as the av suite's transport asks. */
 constexpr std::uint32_t reply_bytes = 4096u;
 
-/* One process's rvk transport as the adapter sees it: its device, the page
+/* One process's av transport as the adapter sees it: its device, the page
  * that names its context, and the record. The ring, fence page and reply slot
  * are the driver's own pages, made with the context. */
-class RvkProcess {
+class AvProcess {
 public:
-    RvkProcess(Fixture &fixture, av::FakeHandleTable &handles)
+    AvProcess(Fixture &fixture, av::FakeHandleTable &handles)
         : fixture_((fixture.answer_asks(), fixture)), device_{},
           ring_(fixture, handles, av::AllocationKind::context_ring, 0x1000u, 10u), record_bytes_{},
           fence_block_(0u)
     {
         CHECK_EQ(nt(fixture.adapter().create_device(&device_)), success);
-        const av::RvkContextRecord record(av::SubApi::vulkan, 12u, ring_.kmt_handle(), reply_bytes);
+        const av::AvContextRecord record(av::SubApi::vulkan, 12u, ring_.kmt_handle(), reply_bytes);
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
     }
 
     /* A context a hardware queue may run on, which is what a doorbell hangs off
-     * (feature 049): the same rvk record, with the flag dxgkrnl sets for a
+     * (feature 049): the same av record, with the flag dxgkrnl sets for a
      * process that asked for one. */
     std::uint32_t create_hw_queue_context(av::DxgkargCreateContextRecord &request)
     {
@@ -4369,7 +4369,7 @@ public:
     /* The record asks for an OpenGL context made with `options` instead. */
     void ask_for_gl(const av::GlContextOptions &options)
     {
-        const av::RvkContextRecord record(av::SubApi::opengl, 12u, ring_.kmt_handle(), reply_bytes, options);
+        const av::AvContextRecord record(av::SubApi::opengl, 12u, ring_.kmt_handle(), reply_bytes, options);
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
     }
     std::uint32_t create_context(av::DxgkargCreateContextRecord &request)
@@ -4424,7 +4424,7 @@ private:
     Fixture                      &fixture_;
     av::DxgkargCreateDeviceRecord device_;
     TransportAllocation           ring_;
-    std::uint8_t                  record_bytes_[av::RvkContextRecord::encoded_size];
+    std::uint8_t                  record_bytes_[av::AvContextRecord::encoded_size];
     std::uint8_t                  descriptor_bytes_[av::SubmissionDescriptor::encoded_size] = {};
     std::uint32_t                 fence_block_;
 };
@@ -4434,12 +4434,12 @@ private:
 /* Feature 050: an OpenGL context created through the DDI with options asks
  * the host for them in its setup; options the record may not carry fail the
  * create before anything reaches the host. */
-TEST(adapter_rvk_context, a_gl_context_created_with_options_asks_the_host_for_them)
+TEST(adapter_av_context, a_gl_context_created_with_options_asks_the_host_for_them)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   fixture.offer_opengl();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   process.ask_for_gl(av::GlContextOptions(3u, 3u, av::GlContextOptions::Profile::core,
                                           av::GlContextOptions::forward_compatible, 0u));
   av::DxgkargCreateContextRecord context = {};
@@ -4467,16 +4467,16 @@ TEST(adapter_rvk_context, a_gl_context_created_with_options_asks_the_host_for_th
 /* SC-001's driver half: a process's context is set up on the host over its own
  * memory, a batch it describes rings the doorbell, and the submission fence
  * dxgkrnl waits on completes only when the host's fence page says so. */
-TEST(adapter_rvk_context, a_process_s_batch_completes_when_the_host_says_it_did)
+TEST(adapter_av_context, a_process_s_batch_completes_when_the_host_says_it_did)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   CHECK(context.hContext != nullptr);
   CHECK_EQ(context.ContextInfoDmaBufferPrivateDataSize, 32u);
-  CHECK(fixture.platform().logged_line("rvk context on doorbell 0 message 0 status 0x00000000"));
+  CHECK(fixture.platform().logged_line("av context on doorbell 0 message 0 status 0x00000000"));
   CHECK_EQ(fixture.context_requests(), 2u);   /* CTX_CREATE and the setup */
   CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
   CHECK_EQ(fixture.function().doorbells().rings(0u), 1u);
@@ -4504,11 +4504,11 @@ TEST(adapter_rvk_context, a_process_s_batch_completes_when_the_host_says_it_did)
 /* Freeing the page that names a context ends it first - the process is done
  * with the context - so the device writes nothing more into memory the
  * process no longer reaches. */
-TEST(adapter_rvk_context, freeing_the_page_that_names_a_context_destroys_the_host_context_first)
+TEST(adapter_av_context, freeing_the_page_that_names_a_context_destroys_the_host_context_first)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   const std::uint32_t requests = fixture.context_requests();
@@ -4522,7 +4522,7 @@ TEST(adapter_rvk_context, freeing_the_page_that_names_a_context_destroys_the_hos
    * destroy has nothing left to unbind - which is the order a process exit
    * uses, and a line claiming a failed destroy for it would be a failure
    * logged where there is none (constitution IX). */
-  CHECK(!fixture.platform().logged_line("rvk context destroyed"));
+  CHECK(!fixture.platform().logged_line("av context destroyed"));
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
 /* VidMm evicts the allocations of a process it suspends - a UWP app in the
@@ -4530,11 +4530,11 @@ TEST(adapter_rvk_context, freeing_the_page_that_names_a_context_destroys_the_hos
  * context runs on the driver's own pages, not the process's allocations, so an
  * eviction ends nothing: the host is not told, the context still submits, and
  * the process's views are the same memory as before. */
-TEST(adapter_rvk_context, an_aperture_unmap_ends_no_context)
+TEST(adapter_av_context, an_aperture_unmap_ends_no_context)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   const std::uint32_t requests = fixture.context_requests();
@@ -4554,34 +4554,34 @@ TEST(adapter_rvk_context, an_aperture_unmap_ends_no_context)
 /* A record is honoured only where it can run: a device with no doorbell pages,
  * or a record naming memory the process does not have, fails the creation and
  * leaves no context behind. */
-TEST(adapter_rvk_context, a_record_that_cannot_run_fails_the_creation_and_leaves_nothing)
+TEST(adapter_av_context, a_record_that_cannot_run_fails_the_creation_and_leaves_nothing)
 { Fixture stock; av::FakeHandleTable handles;
   CHECK_EQ(stock.start(), success);
-  { RvkProcess process(stock, handles);
+  { AvProcess process(stock, handles);
     av::DxgkargCreateContextRecord context = {};
     CHECK_EQ(process.create_context(context), invalid_parameter);
     CHECK(context.hContext == nullptr);
     CHECK_EQ(stock.context_requests(), 0u);
     CHECK_EQ(nt(stock.adapter().destroy_device(process.device())), success); }
 
-  Fixture rvk;
-  rvk.function().add_doorbell_region();
-  CHECK_EQ(rvk.start(), success);
-  RvkProcess process(rvk, handles);
+  Fixture av_fixture;
+  av_fixture.function().add_doorbell_region();
+  CHECK_EQ(av_fixture.start(), success);
+  AvProcess process(av_fixture, handles);
   const std::uint32_t nobody = 0x7777u;
   std::memcpy(process.record_bytes() + 12u, &nobody, sizeof nobody);   /* the ring's handle */
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), invalid_parameter);
   CHECK(context.hContext == nullptr);
-  CHECK_EQ(nt(rvk.adapter().destroy_device(process.device())), success); }
+  CHECK_EQ(nt(av_fixture.adapter().destroy_device(process.device())), success); }
 
 /* A device that goes through D3 destroys every host context: the process's
  * context submits nothing more, and destroying it asks the device nothing. */
-TEST(adapter_rvk_context, a_power_transition_abandons_the_host_contexts)
+TEST(adapter_av_context, a_power_transition_abandons_the_host_contexts)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
@@ -4594,11 +4594,11 @@ TEST(adapter_rvk_context, a_power_transition_abandons_the_host_contexts)
 
 /* Everything that stops a record from running fails the creation, as a context
  * this adapter cannot create at all always did. */
-TEST(adapter_rvk_context, a_device_that_is_gone_or_silent_runs_no_record)
+TEST(adapter_av_context, a_device_that_is_gone_or_silent_runs_no_record)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord bad_node = {};
   bad_node.NodeOrdinal = 1u;
   CHECK_EQ(process.create_context(bad_node), invalid_parameter);
@@ -4615,13 +4615,13 @@ TEST(adapter_rvk_context, a_device_that_is_gone_or_silent_runs_no_record)
 
 /* Feature 049: every doorbell the driver refuses. A doorbell names a hardware
  * queue, and its page is the one its context was bound to - so a queue on a
- * context with no rvk binding has no page to give out, and there is no
+ * context with no av binding has no page to give out, and there is no
  * doorbell to be had. */
 TEST(adapter_doorbell, refuses_every_doorbell_nobody_could_have)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_hw_queue_context(context), success);
   std::uint64_t                  progress = 0u;
@@ -4673,7 +4673,7 @@ TEST(adapter_doorbell, refuses_every_doorbell_nobody_could_have)
   const av::DxgkargNotifyWorkSubmissionRecord asked = {queue.hHwQueue, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().notify_work_submission(&asked)), success);
 
-  /* And a hardware queue on a context that runs no rvk ring: its context was
+  /* And a hardware queue on a context that runs no av ring: its context was
    * bound to no doorbell page, so there is none to hand out. */
   av::DxgkargCreateContextRecord plain = {};
   plain.Flags = 0x14u;
@@ -4872,11 +4872,11 @@ TEST(adapter_start_device, doorbell_pages_that_cannot_be_mapped_fail_the_start)
  * process waiting on it wakes (to no reply), and every later submission on it
  * is refused; a plain context beside it keeps completing. dxgkrnl is never
  * told DMA_FAULTED, which bugchecks a GPU MMU adapter (0x119/0xD). */
-TEST(adapter_rvk_context, a_host_fault_completes_the_waiting_submission_and_refuses_the_next)
+TEST(adapter_av_context, a_host_fault_completes_the_waiting_submission_and_refuses_the_next)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   av::DxgkargCreateContextRecord neighbour = {};
@@ -4915,11 +4915,11 @@ TEST(adapter_rvk_context, a_host_fault_completes_the_waiting_submission_and_refu
 /* A TDR resets the device: the host contexts are gone, a process's submissions
  * are refused rather than queued for a fence nobody will write, and after the
  * restart the process creates its context again from scratch. */
-TEST(adapter_rvk_context, a_timeout_reset_loses_the_host_context_and_a_new_one_sets_up_after_restart)
+TEST(adapter_av_context, a_timeout_reset_loses_the_host_context_and_a_new_one_sets_up_after_restart)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
@@ -4937,7 +4937,7 @@ TEST(adapter_rvk_context, a_timeout_reset_loses_the_host_context_and_a_new_one_s
   CHECK_EQ(nt(fixture.adapter().destroy_context(again.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* A process asks where its rvk context's ring and reply slot are, and reads
+/* A process asks where its av context's ring and reply slot are, and reads
  * the answer back from the same bytes: views of the driver's own pages,
  * mapped when the context was made, the ring's header already written.
  * Anything else about the escape is refused. */
@@ -4945,7 +4945,7 @@ TEST(adapter_escape, a_context_s_views_are_answered_in_the_private_data)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   CHECK_EQ(fixture.platform().process_mappings(), 2u);
@@ -5024,7 +5024,7 @@ std::uint32_t window_escape(Fixture &fixture, void *context, const av::HostWindo
 using WindowOperation = av::HostWindowRecord::Operation;
 
 constexpr std::uint32_t first_chunk_resource =
-    av::RvkContextBinding::first_resource_id + av::RvkContextBinding::transport_resources;
+    av::AvContextBinding::first_resource_id + av::AvContextBinding::transport_resources;
 
 }  // namespace
 
@@ -5035,7 +5035,7 @@ TEST(adapter_start_device, offers_a_host_window_and_reports_only_the_aperture)
   fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
   CHECK_EQ(fixture.start(), success);
   CHECK(AdapterProbe(fixture.adapter()).window_offered());
-  CHECK(fixture.platform().logged_line("rvkgpu: host window status 0x00000000"));
+  CHECK(fixture.platform().logged_line("avgpu: host window status 0x00000000"));
   CHECK_EQ(reported_segments(fixture), 1u);
   CHECK_EQ(fixture.blob_maps(), 0u); }
 
@@ -5044,10 +5044,10 @@ TEST(adapter_start_device, a_device_with_no_region_has_no_window)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   CHECK(!AdapterProbe(fixture.adapter()).window_offered());
-  CHECK(!fixture.platform().logged_line("rvkgpu: host window"));
+  CHECK(!fixture.platform().logged_line("avgpu: host window"));
   CHECK_EQ(reported_segments(fixture), 1u); }
 
-/* A process takes a chunk of the window on its rvk context by escape, and
+/* A process takes a chunk of the window on its av context by escape, and
  * reads back the resource, the bytes granted and its address from the same
  * bytes; it gives the chunk back by resource. Anything else about the escape
  * is refused before the table is asked. */
@@ -5056,7 +5056,7 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   fixture.function().add_doorbell_region();
   fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
@@ -5102,7 +5102,7 @@ TEST(adapter_escape, a_chunk_with_no_window_is_guest_ram)
 { Fixture bare; av::FakeHandleTable handles;
   bare.function().add_doorbell_region();
   CHECK_EQ(bare.start(), success);
-  RvkProcess process(bare, handles);
+  AvProcess process(bare, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   const std::uint32_t block = bare.platform().page_blocks_made();
@@ -5150,7 +5150,7 @@ TEST(adapter_escape, a_chunk_the_device_will_back_nowhere_is_not_supported)
   refusing.function().add_doorbell_region();
   refusing.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
   CHECK_EQ(refusing.start(), success);
-  RvkProcess process(refusing, refusing_handles);
+  AvProcess process(refusing, refusing_handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   refusing.refuse_the_blob();
@@ -5177,7 +5177,7 @@ TEST(adapter_escape, destroying_a_context_closes_its_window_chunks)
   fixture.function().add_doorbell_region();
   fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
@@ -5197,7 +5197,7 @@ TEST(adapter_set_power_state, the_same_device_at_d0_keeps_the_window_and_frees_w
   fixture.function().add_doorbell_region();
   fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
@@ -5291,7 +5291,7 @@ TEST(adapter_escape, a_tail_publish_names_the_ring_of_the_context_it_is_sent_on)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   av::DxgkargCreateContextRecord plain = {};
@@ -5317,14 +5317,14 @@ TEST(adapter_escape, a_tail_publish_names_the_ring_of_the_context_it_is_sent_on)
 
 /* An execute goes through the ring; the application's fence is signalled on
  * the queue's own context once its packet completes. That packet carries a
- * FollowRecord and is held until the rvk context's host has completed the
- * batch - and it kicks the rvk context's doorbell, because the process may
+ * FollowRecord and is held until the av context's host has completed the
+ * batch - and it kicks the av context's doorbell, because the process may
  * have published the batch alone while the host's worker slept. */
 TEST(adapter_submit_command_virtual, a_follow_record_holds_the_packet_until_the_host_completes_the_batch)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   av::DxgkargCreateContextRecord queue = {};
@@ -5362,13 +5362,13 @@ TEST(adapter_submit_command_virtual, a_follow_record_holds_the_packet_until_the_
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* A record naming a ring this process has no rvk context on follows nothing
+/* A record naming a ring this process has no av context on follows nothing
  * and is refused; private data that is no record is an ordinary packet. */
 TEST(adapter_submit_command_virtual, a_follow_record_of_no_ring_is_refused_and_other_data_is_ordinary)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   av::DxgkargCreateContextRecord queue = {};
@@ -5402,7 +5402,7 @@ TEST(adapter_dpc_routine, lets_a_follower_go_once_it_has_waited_the_deadline)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
+  AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   av::DxgkargCreateContextRecord queue = {};
@@ -5421,7 +5421,7 @@ TEST(adapter_dpc_routine, lets_a_follower_go_once_it_has_waited_the_deadline)
   run_dpc(fixture);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(before + 1u).FenceId, 8u);
-  CHECK(fixture.platform().logged_line("rvkgpu: a held packet passed its deadline and was let go"));
+  CHECK(fixture.platform().logged_line("avgpu: a held packet passed its deadline and was let go"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }

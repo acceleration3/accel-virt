@@ -63,7 +63,7 @@ sequencing.
 
 ### The Vulkan ICD
 
-`rvkvk.dll`'s decisions live in `src/icd/vulkan/` and are tested the same way
+`avvk.dll`'s decisions live in `src/icd/vulkan/` and are tested the same way
 (feature 045): the ICD is portable C++ over injected seams, and `src/um/vulkan/`
 holds only their Windows implementations - `ProcessHeap` (a `BlockSource`),
 `SrwLock` (a `ThreadLock`), `FileLog` (a `LogSink`), `GdiKmt` - and the two
@@ -100,7 +100,7 @@ as the integer it is (`foreign_enum.hpp`).
 ### The trace tracker in user mode
 
 What decides in the tracker's Windows side is portable and tested like the
-ICD (docs/trace.md): `InspectProgram` - `rvkinspect.exe`'s commands, the
+ICD (docs/trace.md): `InspectProgram` - `avinspect.exe`'s commands, the
 names it tries, the snapshot files it writes - over `MockInspectHost`, which
 scripts processes, named sections and state services and keeps every file
 written; `EscapeReader`, the driver's table and dump read a window at a time,
@@ -123,7 +123,7 @@ bugcheck. The lock marks are read back from a bound table while the lock is
 being acquired (`MockPlatform::on_acquire`), and every `try_acquire` is
 refused by `MockPlatform::hold_elsewhere(rank)`, which is also how each
 table's report is shown writing only `busy=true`. `TraceEscape` is paged the
-way `rvkinspect.exe` pages it and reassembled; `Adapter::escape` answers the
+way `avinspect.exe` pages it and reassembled; `Adapter::escape` answers the
 whole dump of a started adapter byte for byte; `fuzz_adapter_info` can give an
 escape the trace magic.
 
@@ -133,7 +133,7 @@ share the process, and so the driver's bound table - from racing its slots.
 
 ### The trace tracker in the device
 
-`Worker`, `DeviceContext`, `DeviceContextTable`, `VirtioGpuRvk` and
+`Worker`, `DeviceContext`, `DeviceContextTable`, `VirtioGpuAv` and
 `DeviceModule` report over `MockHost`, each checked against the exact dump.
 A worker's mutex held elsewhere (`MockHost::hold_mutex_elsewhere`) reports
 `busy=true`, and `TableHost` is shown marking a bound table as its mutexes
@@ -166,13 +166,13 @@ exact dump.
 
 Live, `qemu_smoke` and `qemu_virtio_gpu` still pass with tracing started in
 realize. A qtest QEMU answers `host_threads` and `host_state` through
-`tools/mcp/rvk_inspect.py`. A `kill -SEGV` leaves a crash file whose native
+`tools/mcp/av_inspect.py`. A `kill -SEGV` leaves a crash file whose native
 stack runs from the handler through libc into `qemu-system-x86_64`, and the
 process ends.
 
 ### The OpenGL ICD
 
-`rvkgl.dll`'s decisions live in `src/icd/opengl/` (feature 050), tested the way
+`avgl.dll`'s decisions live in `src/icd/opengl/` (feature 050), tested the way
 the Vulkan ICD's are: `GlIcdRoot` over the seams (`WindowSurface`,
 `ThreadSlot`, the system opengl32 it creates HGLRCs through) with
 `ScriptedWindowSurface`, `ScriptedThreadSlot` and `FakeOpengl32`, which loads
@@ -184,7 +184,7 @@ over MockKmt and a scripted host; `GlProbe` runs its nine steps
 (`pixel_format`, `context`, `version`, `draw`, `share`, `busy`, `attribs`,
 `lost`, `recreated`) over `ScriptedGl` in unit tests, over `FakeOpengl32` on
 `FullStackRig` and the host GPU in `test_fullstack_opengl_icd.cpp`, and over the
-system `opengl32.dll` in the guest as `rvkglprobe.exe`, which
+system `opengl32.dll` in the guest as `avglprobe.exe`, which
 `run_guest_suite.py --opengl` runs in the gate's real-executor boot. The GL and WGL
 parsers that read application bytes have hostile tables and fuzz targets
 (`fuzz_context_attributes`, `fuzz_pixel_format_query`).
@@ -197,7 +197,7 @@ Every render check keeps a picture of what it judged, as a 24-bit BMP
 `vulkan-resized` (the same window after it grew to 96x96), and the OpenGL
 probe's `opengl-draw`, `opengl-share` (the 2x2 shared texture) and
 `opengl-recreated`. In the guest the probes write them beside themselves in
-`C:\rvk`, and `run_guest_suite.py --vulkan` / `--opengl` pull them into
+`C:\av`, and `run_guest_suite.py --vulkan` / `--opengl` pull them into
 `<work>/images/` (a passing probe without its pictures fails the run). The
 full-stack tests on the host GPU write them to `build/images/`. Both scenes are
 a full-viewport triangle in solid.frag's colour, so a correct picture is one
@@ -260,7 +260,7 @@ the worker tests run under ASan and UBSan:
 - **Failing creation.** Any thread, event or mutex creation can be failed, and
   a thread, event, mutex or main-loop routine left over when the mock is
   destroyed fails the test. `MockHostOps` exposes the mock as the C table, so
-  `TableHost` and the `rvk_device.h` entry points run against it too.
+  `TableHost` and the `av_device.h` entry points run against it too.
 
 The glue itself is exercised by the `qemu` gate configuration: the patched
 QEMU is built and `tests/qemu/qemu_smoke.py` reads the PCI function over qtest.
@@ -271,8 +271,8 @@ QEMU is built and `tests/qemu/qemu_smoke.py` reads the PCI function over qtest.
 qtest it assigns the function's BARs, walks the virtio capabilities, negotiates
 features, lays split virtqueues out in guest RAM and polls their used rings.
 The `qemu_virtio_gpu` ctest runs `tests/qemu/test_*.py` with it against the
-patched QEMU's stock `virtio-gpu-pci` and `virtio-gpu-rvk-pci` side by side, so
-a behaviour the rvk device changes shows up as a difference from stock. Where
+patched QEMU's stock `virtio-gpu-pci` and `virtio-gpu-av-pci` side by side, so
+a behaviour the av device changes shows up as a difference from stock. Where
 the driver already sends a request, the test sends the driver's own bytes:
 `gpu_request_bytes` prints what `GpuRequestWriter` writes. Device features past
 the base class extend this suite: `test_virtio_gpu_blobs.py` finds the
@@ -281,7 +281,7 @@ mapped blobs through BAR 4 with qtest's memory commands, and
 `test_virtio_gpu_contexts.py` reads the capset, checking its GPU identity
 against `vulkaninfo` through `tools/host/list_gpus.py`, and creates, sets up and
 destroys contexts. `test_virtio_gpu_ring.py` writes rings as the guest does
-(`rvk_context.py`), stores to the doorbell pages in BAR 0 and waits for head -
+(`av_context.py`), stores to the doorbell pages in BAR 0 and waits for head -
 QEMU dispatches the ioeventfd itself under qtest - and checks that a hostile
 ring stops only its own context. `test_virtio_gpu_fences.py` reads fence pages
 and the MSI-X pending bits of masked vectors, and the ISR with MSI-X off, to see
@@ -291,7 +291,7 @@ driver that stops by clearing `DRIVER_OK` without a reset and is replaced by one
 that toggles MSI-X, MSI-X enabled only after `DRIVER_OK`, and a sweep of toggles
 that must leak no descriptor - because that sequence aborted QEMU on 035's first
 live run. `test_virtio_gpu_execution.py` runs
-batches through `rvk_echo_executor` (`tests/qemu/echo_executor.cpp`), an executor
+batches through `av_echo_executor` (`tests/qemu/echo_executor.cpp`), an executor
 library the qemu configuration builds so the execution path runs on the real
 device without render-server, and reads answers from reply slots.
 `test_virtio_gpu_faults.py` faults contexts for every reason the echo executor
@@ -444,7 +444,7 @@ device" gets caught in a second instead of in a VM.
 Every parser gets a libFuzzer target in `tests/fuzz/`, built with ASan+UBSan,
 with a committed seed corpus in `tests/corpus/<target>/`.
 
-Targets, at minimum: the rvk command decoder, the submission descriptor, the
+Targets, at minimum: the av command decoder, the submission descriptor, the
 capset payload, virtqueue descriptor chains, the virtio PCI capability walk,
 device configuration space, EDID input, VidPn structures arriving from
 `dxgkrnl`, and every DDI argument struct the driver dereferences.
@@ -469,7 +469,7 @@ binary and connects them with an in-memory transport that mimics the real one.
 `LoopbackRig` (`tests/harness/loopback/`) holds both sides:
 
 - the guest's `MockPlatform`, whose contiguous blocks are the guest memory;
-- the device core (`VirtioGpuRvk`) over a `MockHost` whose `map_guest` returns
+- the device core (`VirtioGpuAv`) over a `MockHost` whose `map_guest` returns
   those blocks directly, running commands through a `MockExecutorOps` on real
   worker threads;
 - control requests passed as bytes by `LoopbackDriver`, which can cut an answer
@@ -483,7 +483,7 @@ The thread that builds the rig is both the guest and the device's main loop.
 The executor can be held, so a test keeps a worker busy for as long as it
 needs a full ring.
 
-What it covers today (M2's rvk contexts):
+What it covers today (M2's av contexts):
 
 - capset read and judged; a version mismatch refused on both sides
 - setup → submit → doorbell → execute → fence → complete, with a reply
@@ -505,13 +505,13 @@ The device can write down what crossed the wire (`docs/protocol.md`, feature
 065), and that turns a loopback run into two more tests, both in
 `tests/loopback/test_loopback_recording.cpp`:
 
-- `LoopbackRig(gpu, "loopback.rvk")` records into the `MockHost`'s memory, and
+- `LoopbackRig(gpu, "loopback.av")` records into the `MockHost`'s memory, and
   the recording read back holds the blobs, the setup, every batch with the
   bytes the executor received, the replies and the fences, in order. That is
   the only place where what the device wrote down is compared against what the
   real guest core actually sent.
 - the same recording replays into an executor library through
-  `rvk_executor.h`, and every recorded reply is the answer the replay
+  `av_executor.h`, and every recorded reply is the answer the replay
   produced - a round trip with the wire in the middle.
 
 A recording read back is bytes this side did not write, so `RecordingReader`
@@ -535,7 +535,7 @@ src/guest (GuestSuite, GuestConnection, KmtTransport)   unchanged
   -> DdiKmt : Kmt            dxgkrnl's D3DKMT layer over the registered DDI table
   -> Adapter (src/core)      DriverEntry, AddDevice, StartDevice by FakeDxgkrnlFdo
   -> VirtioBridge            virtio-pci's device side: status, notify, split rings
-  -> LoopbackDevice          VirtioGpuRvk over MockHost, MockExecutorOps, doorbells
+  -> LoopbackDevice          VirtioGpuAv over MockHost, MockExecutorOps, doorbells
   <- InterruptPump           fence raises and queue completions as ISR + DPC
 ```
 
@@ -551,7 +551,7 @@ src/guest (GuestSuite, GuestConnection, KmtTransport)   unchanged
 - `VirtioBridge` follows the driver's status into the device core as
   virtio-pci does (`set_status`, and a reset on 0), and on each notify takes
   every chain from the driver's ring in guest memory (`FakeVirtqueueDevice::
-  answer_all`): a control request goes to `VirtioGpuRvk::control` first and to
+  answer_all`): a control request goes to `VirtioGpuAv::control` first and to
   `BaseVirtioGpu` - what QEMU's base device answers for the 2D protocol, display
   info among it - when the core leaves it; a cursor request completes with
   nothing written. Answers are written at once, and the queue is left pending
@@ -595,7 +595,7 @@ What it runs (`tests/loopback/test_fullstack_*.cpp`):
 
 - the adapter starting on the real device core: capset, host-visible region
   blob, doorbell pages
-- the 043 transport round trip through the real driver - `RvkContextTable`
+- the 043 transport round trip through the real driver - `AvContextTable`
   binding on doorbell 0, the echo `0x10001` and its reply - with the completion
   proven to arrive only through the fence interrupt
 - a context the executor faults, whose wait completes with no reply and whose
@@ -636,18 +636,18 @@ What it cannot see, and L5 still must:
 - Driver Verifier's checks, the kernel's IRQL, pool and DMA rules beyond what
   `MockPlatform` models, and real interrupt concurrency - an ISR here never
   preempts a DDI
-- clang-cl's codegen for the driver and `rvktest.exe` (feature 037 found an
+- clang-cl's codegen for the driver and `avtest.exe` (feature 037 found an
   argument-order bug only that compiler showed), and QEMU's glue itself
 
-- the rvk scenarios on this machine's GPU (`test_fullstack_rvk.cpp`, 044):
+- the av scenarios on this machine's GPU (`test_fullstack_av.cpp`, 044):
   `FullStackRig(executor table, host GPU)` realizes the device core on the
   executor library's own root - `src/device/shim/executor_ops.cpp` linked into
-  the test and `rvk_executor_ops()` handed over, not a dlopen - bound to the
+  the test and `av_executor_ops()` handed over, not a dlopen - bound to the
   GPU the host's loaders say runs the most sub-APIs (`WidestHostGpu`). The
   generated clients encode in the guest code, the generated server decodes on
   a device worker, and the host's Vulkan, OpenCL and EGL run it: the Vulkan
   chain, vector add read back exact, fault isolation and the whole
-  `rvktest.exe rvk` run pass, and the guest is shown one physical device and one
+  `avtest.exe av` run pass, and the guest is shown one physical device and one
   OpenCL platform - the bound GPU's - on a host that has two GPUs and three
   platforms. A host without a scenario's sub-API returns without judging it
 - the Vulkan probe through the ICD (`test_fullstack_vulkan_icd.cpp`, 045):
@@ -676,7 +676,7 @@ What it cannot see, and L5 still must:
   `VkImportMemoryFdInfoKHR` naming a fresh fd of it. A host whose driver cannot
   share by fd makes no such device, and the test names which condition failed
   and returns
-- one shared object named by two rvk contexts of one adapter
+- one shared object named by two av contexts of one adapter
   (`test_fullstack_shared_objects.cpp`, 053): the miniport mints an identity
   into a carrier's private driver data, the creating context publishes it, an
   NT handle carries those bytes to the other context, and the device opens one
@@ -703,9 +703,9 @@ protocol change before writing either side of it.
 
 The smallest layer, and the only one that needs Windows.
 
-- **Driver Verifier**, always on for `rvkgpu.sys` during development: special
+- **Driver Verifier**, always on for `avgpu.sys` during development: special
   pool, IRQL checking, DMA verification, low-resource simulation. Not optional.
-- **D3DKMT integration tests**: `rvktest.exe`, a user-mode program calling
+- **D3DKMT integration tests**: `avtest.exe`, a user-mode program calling
   `D3DKMTCreateAllocation2`, `MakeResident`, `MapGpuVirtualAddress`,
   `SubmitCommand` and `WaitForSynchronizationObjectFromCpu` against the real
   driver. These mirror the L4 loopback tests, so a divergence points at the
@@ -722,16 +722,16 @@ can leave the guest with no display.
 
 ### Every host GPU, named as the host names it
 
-`run_guest_suite.py --all-gpus` starts one `virtio-gpu-rvk-pci` per host GPU
+`run_guest_suite.py --all-gpus` starts one `virtio-gpu-av-pci` per host GPU
 that is not a CPU device (`tools/host/list_gpus.py`; `--vulkaninfo FILE` reads
 a capture instead of running `vulkaninfo`). Each device presents its GPU's PCI
 vendor, device and revision (sysfs, through `VK_EXT_pci_bus_info`) with the
 subsystem `1af4:5256` it always keeps, and names it in the capset: the Vulkan
 `deviceName` without the driver's parenthesised suffix (docs/protocol.md). The
-runner pushes `C:\rvk\adapters.txt` - vendor, device and name per GPU - and
+runner pushes `C:\av\adapters.txt` - vendor, device and name per GPU - and
 the sign stage writes one INF model line per present
 `PCI\VEN_xxxx&DEV_yyyy&SUBSYS_52561AF4`, named from that file, before the
-catalog is made; rvkgpu.sys writes the same name to the device's DeviceDesc
+catalog is made; avgpu.sys writes the same name to the device's DeviceDesc
 and the `HardwareInformation` values at every StartDevice. After the check
 stage (which now wants `outputs` monitors per device and every device
 started), the `adapters` stage lists `Win32_VideoController` and DXGI's
@@ -755,7 +755,7 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   `KmtTransport` and sends the transport `NOP`, which the device answers itself
   with an empty reply whichever executor is loaded, and reports the round trip
   as `transport.latency`) - over the `Kmt` contract.
-- **The rvk scenarios** (feature 044) are `rvktest.exe rvk`, `GuestSuite::run_rvk`:
+- **The av scenarios** (feature 044) are `avtest.exe av`, `GuestSuite::run_av`:
   the transport no-op on Vulkan and on OpenGL (whose setup is the host making
   an EGL context on the display it found for the GPU at realize and kept, so the
   no-op waits for a context and never for a driver start-up), `VulkanScenario` (instance, physical device, device, buffer,
@@ -763,8 +763,8 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   add of 64 floats read back and compared exactly) and `IsolationScenario` (a
   context whose malformed `vkCreateInstance` the host faults fails its sends
   while a healthy one keeps working and a new one sets up). They need the real
-  executor library and a host GPU, so the runner asks for them with `--rvk
-  --executor build-qemu/librvk_executor.so`, records the executor and the
+  executor library and a host GPU, so the runner asks for them with `--av
+  --executor build-qemu/libav_executor.so`, records the executor and the
   no-op's latency in the verdict and fails a no-op past 50 ms (SC-002; the first
   live runs measured 0.87 ms idle and 4.4 ms under load). The generated Vulkan
   and OpenCL clients build freestanding into the program for them. It is portable and held to the same gates as `src/core`: on Linux,
@@ -773,16 +773,16 @@ driver reports, which is the hostmem region, not the host GPU's memory.
 - **The Vulkan run** (feature 045) is `--vulkan`, a third boot on the real
   executor: the pinned Khronos loader and `vulkaninfo` from
   `third_party/vulkan-runtime/` (refused unless `tools/fetch_vulkan_runtime.py`
-  put the pinned files there) and `rvkvkprobe.exe` beside them in `C:\rvk`. The
+  put the pinned files there) and `avvkprobe.exe` beside them in `C:\av`. The
   runner fails a global `HKLM\SOFTWARE\Khronos\Vulkan\Drivers` value naming
-  rvk, reads `vulkaninfo`'s full output (`--summary` prints no LUID) and requires
+  av, reads `vulkaninfo`'s full output (`--summary` prints no LUID) and requires
   exactly one `GPUn:` section whose `deviceLUID` LowPart is the one the probe
   printed as `vulkan.adapter_luid`, requires every probe step (`instance`,
   `adapter_luid`, `physical_device`, `device`, `compute`, `draw`, `lost`,
   `recreated`, and feature 046's `surface`, `present`, `pacing` and `resized`)
-  and `rvkvkprobe: N passed, 0 failed`, and requires
+  and `avvkprobe: N passed, 0 failed`, and requires
   `vulkan.physical_device` to equal `vulkan.adapter_luid`. The collect stage
-  copies the ICD's `C:\ProgramData\rvk\*.log` into `diag/` on every run.
+  copies the ICD's `C:\ProgramData\av\*.log` into `diag/` on every run.
 
   The probe runs in the **console session**, not in the agent's
   (`ConsoleProgram`): the guest agent is a service, so what it starts lives on
@@ -794,18 +794,18 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   which a scheduled task created with `/it` runs in; the runner writes a
   one-line `console.cmd` for the redirection (schtasks parses `/tr` itself and
   refuses a `>` in it), runs the task, waits for it to leave `Running`, takes
-  the program's exit code from `Last Result`, pulls `C:\rvk\vulkan.txt` and
+  the program's exit code from `Last Result`, pulls `C:\av\vulkan.txt` and
   deletes the task. A machine no one is logged into fails the run.
 - **The D3D run** (feature 047) is `--d3d`, a boot on the real executor with
   the two translation layers beside the probes: DXVK's `d3d9.dll`, `d3d11.dll`
   and `dxgi.dll` and vkd3d-proton's `d3d12.dll` and `d3d12core.dll` from
   `third_party/dxvk/` and `third_party/vkd3d-proton/`, the pinned Khronos
-  loader with them, and `rvkd3d9probe.exe`, `rvkd3d11probe.exe` and
-  `rvkd3d12probe.exe` in `C:\rvk`. Windows searches a program's own directory
+  loader with them, and `avd3d9probe.exe`, `avd3d11probe.exe` and
+  `avd3d12probe.exe` in `C:\av`. Windows searches a program's own directory
   first, so that placement is what makes the run the layer's rather than the
   system's. Each probe makes a device, clears a frame to one colour, reads it
   back, judges every pixel and - where the API has one - presents; the runner
-  requires every step of that API's list and `rvkd3dNprobe: N passed, 0
+  requires every step of that API's list and `avd3dNprobe: N passed, 0
   failed`, and pulls the three bitmaps into `images/`. The D3D9 and D3D11
   probes make a window, so all three run in the console session through
   `ConsoleProgram`, as the Vulkan probe does.
@@ -835,7 +835,7 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   none says so.
 - **The conformance run** (feature 048) is `--cts`, a boot of its own on the
   real executor: the pinned Vulkan CTS from `third_party/vulkan-cts/` and the
-  Khronos loader beside it in `C:\rvk\cts`. The run asks the guest's own build
+  Khronos loader beside it in `C:\av\cts`. The run asks the guest's own build
   what cases there are (`--deqp-runmode=stdout-caselist`), keeps the ones
   `tools/cts_subset.txt`'s patterns name, and runs them a shard at a time - a
   shard is one step, so a shard that runs past `--step-timeout` fails the run
@@ -880,22 +880,22 @@ driver reports, which is the hostmem region, not the host GPU's memory.
 
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
   functions with every wait bounded by an event and a timeout, and
-  `GuestProgram` writes one line per step, then `rvktest: P passed, F failed`,
+  `GuestProgram` writes one line per step, then `avtest: P passed, F failed`,
   and exits with the failure count. `cmake/windows_user_toolchain.cmake` builds
   it with no C runtime; `guest_image` checks it imports only gdi32, kernel32
   and ntdll.
-- **The package** is `src/km/rvkgpu.inf`, test-signed in the guest by
+- **The package** is `src/km/avgpu.inf`, test-signed in the guest by
   `tools/guest/provision.ps1` with PowerShell's own certificate, catalog and
-  Authenticode cmdlets. It carries the Vulkan ICD (`rvkvk.dll`, `rvkvk.json`)
+  Authenticode cmdlets. It carries the Vulkan ICD (`avvk.dll`, `avvk.json`)
   for every run, because the INF names them and pnputil refuses a package
   without a file it names.
 - **The runner** is `tools/guest/run_guest_suite.py`. The snapshot is a qcow2
   overlay of the prepared image, created before QEMU starts and deleted after
   it stops; the image is only ever a backing file. It boots the overlay with
-  `virtio-gpu-rvk-pci`, the agent channel, QMP and `isa-debugcon`; pushes the
-  package, `rvktest.exe` and the script; signs, installs with Driver Verifier's
-  standard checks on `rvkgpu.sys`, waits through each reboot on QMP's `RESET`;
-  checks the adapter started on `rvkgpu`; runs the display scenarios below;
+  `virtio-gpu-av-pci`, the agent channel, QMP and `isa-debugcon`; pushes the
+  package, `avtest.exe` and the script; signs, installs with Driver Verifier's
+  standard checks on `avgpu.sys`, waits through each reboot on QMP's `RESET`;
+  checks the adapter started on `avgpu`; runs the display scenarios below;
   runs the suite; collects the guest's diagnostics whatever happened; and
   powers off. Every wait names its step when
   it times out. Its tests run it against a fake QEMU with a scripted guest
@@ -963,8 +963,8 @@ driver reports, which is the hostmem region, not the host GPU's memory.
 - **The recovery scenario** is `tdr`, and a run asks for it by telling the host
   to misbehave: `--stall-ms N` holds every command of one context that long and
   `--fault-after N` loses the device on its Nth, both aimed at one executor with
-  `--stall-context` (`RVK_ECHO_ONLY_NTH`), so the other contexts keep
-  completing. The guest is then asked for `rvktest.exe tdr` - `TimeoutScenario`,
+  `--stall-context` (`AV_ECHO_ONLY_NTH`), so the other contexts keep
+  completing. The guest is then asked for `avtest.exe tdr` - `TimeoutScenario`,
   two devices with a context each - and nothing else, because every other
   scenario would be measuring the injection. The run wants the guest's verdict,
   dxgkrnl's own event 4101 (the `timeouts` stage), and the live kernel report
@@ -982,7 +982,7 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   and gets none.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
   image, then boots the guest a second time on the real executor with
-  `--rvk --vulkan --opengl` (the suite's timeout scenario needs the echo
+  `--av --vulkan --opengl` (the suite's timeout scenario needs the echo
   library's stall, the others a host GPU); the three run in turn in that one
   boot, each whatever an earlier one answered, since each is a process of its
   own. It says it skipped the guest otherwise. `AV_GATE_JOBS` sets the gate's
@@ -1015,7 +1015,7 @@ Windows:
    signing (one reboot), kernel memory dumps with automatic reboot, verbose
    `setupapi.dev.log`, and nothing that interrupts a run - no fast startup,
    hibernation, sleep, automatic updates, automatic maintenance or boot
-   recovery environment, and a Defender exclusion for `C:\rvk`. It is
+   recovery environment, and a Defender exclusion for `C:\av`. It is
    idempotent; run it again after the image's Windows changes.
 4. `AV_GUEST_IMAGE=/path/to/windows.qcow2 tools/guest/run_guest_suite.py`.
 
@@ -1030,13 +1030,13 @@ Everything a run leaves is in its work directory (`build-guest/` by default):
 | File | What it holds |
 |---|---|
 | `verdict.txt` | every step, `ok` or why it failed; bugchecks by name |
-| `rvkgpu.log` | the driver's `KernelPlatform::log` lines from `isa-debugcon`, across every reboot of the run |
+| `avgpu.log` | the driver's `KernelPlatform::log` lines from `isa-debugcon`, across every reboot of the run |
 | `qemu.log` | QEMU and the device's own warnings, timestamped (`-msg timestamp=on`), guest errors, and any `--trace` events |
-| `report.txt`, `device.txt` | `rvktest.exe`'s report; the device's status, problem code and verifier settings |
+| `report.txt`, `device.txt` | `avtest.exe`'s report; the device's status, problem code and verifier settings |
 | `panic.txt` | each bugcheck: code, name, and its four parameters |
 | `diag/` | pulled from the guest after the run: `system.txt`, `dxgkrnl-admin.txt`, `dxgkrnl-operational.txt`, `kernel-pnp.txt` (the last events of each log), `setupapi.dev.log`, `device.txt` (every device property), `verifier.txt` (`verifier /query`) |
 | `diag/dumps/` | minidumps and `LiveKernelReports` (TDR live dumps); `MEMORY.DMP` only with `--memory-dump`, because a kernel dump copied through the agent outlasts the step timeout and its failure takes the minidumps with it |
-| `symbols/` | the `rvkgpu.sys` and `rvkgpu.pdb` the run installed, to open the dumps with |
+| `symbols/` | the `avgpu.sys` and `avgpu.pdb` the run installed, to open the dumps with |
 
 **Bugchecks.** QEMU runs Windows with `hv-crash`, so Windows reports its
 bugcheck code and parameters through the Hyper-V crash MSRs and QEMU emits
@@ -1044,8 +1044,8 @@ bugcheck code and parameters through the Hyper-V crash MSRs and QEMU emits
 guest is left running (`-action panic=none`) to write its kernel dump and
 reboot; the runner then collects `MEMORY.DMP`. A driver that bugchecks on every
 boot never lets the agent answer: the runner notices the second panic, kills
-QEMU and boots the same overlay again without `virtio-gpu-rvk-pci`, so
-`rvkgpu.sys` never loads, and pulls the dumps from that. Open them with WinDbg
+QEMU and boots the same overlay again without `virtio-gpu-av-pci`, so
+`avgpu.sys` never loads, and pulls the dumps from that. Open them with WinDbg
 and `symbols/` on any Windows machine: `!analyze -v`.
 
 **Options for a debugging run:**
@@ -1082,8 +1082,8 @@ socket the runner lets go of:
 
 ```bash
 tools/guest/guest_shell.py ps 'Get-PnpDevice -Class Display | Format-List *'
-tools/guest/guest_shell.py exec 'C:\rvk\rvktest.exe'
-tools/guest/guest_shell.py push build/driver/rvkgpu.sys 'C:\rvk\package\rvkgpu.sys'
+tools/guest/guest_shell.py exec 'C:\av\avtest.exe'
+tools/guest/guest_shell.py push build/driver/avgpu.sys 'C:\av\package\avgpu.sys'
 tools/guest/guest_shell.py pull 'C:\Windows\INF\setupapi.dev.log' setupapi.dev.log
 socat - UNIX-CONNECT:build-guest/qmp.sock    # QMP: {"execute":"qmp_capabilities"} then e.g. cont
 ```
@@ -1170,7 +1170,7 @@ clang -O0 -D_GNU_SOURCE -I third_party/khronos/include \
 It imports anonymous memory at four sizes and memfd-backed shared memory at
 one. If the anonymous imports succeed and the memfd one answers
 -1000072003, the host kernel is refusing file-backed userptr and the four
-import tests cannot pass on it — `test_fullstack_rvk`,
+import tests cannot pass on it — `test_fullstack_av`,
 `test_fullstack_vulkan_icd`, `test_fullstack_external_objects` and
 `test_opengl_backend_device`. Nothing in the driver is wrong; the capability
 the feature is built on is not there.

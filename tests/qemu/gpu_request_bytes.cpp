@@ -1,5 +1,5 @@
 /* Prints, as hex, the bytes the driver's GpuRequestWriter writes for one
- * request, so the tests in tests/qemu send QEMU exactly what rvkgpu.sys sends.
+ * request, so the tests in tests/qemu send QEMU exactly what avgpu.sys sends.
  *
  *   gpu_request_bytes create_2d <resource> <format> <width> <height>
  *   gpu_request_bytes attach_backing <resource> <address> <length>

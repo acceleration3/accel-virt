@@ -30,7 +30,7 @@ using av::WireRecorder;
 
 namespace {
 
-constexpr const char *path = "read.rvk";
+constexpr const char *path = "read.av";
 constexpr std::size_t widest = 4096u;
 
 /* A recording of one of each kind, as the device writes one. */

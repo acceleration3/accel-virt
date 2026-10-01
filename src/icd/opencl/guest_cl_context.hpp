@@ -1,7 +1,7 @@
-/* One cl_context, and the rvk context that carries it.
+/* One cl_context, and the av context that carries it.
  *
  * A cl_context is where an OpenCL application's world lives, so it is what a
- * transport belongs to: one rvk OpenCL context, its ring and reply slot, the
+ * transport belongs to: one av OpenCL context, its ring and reply slot, the
  * lock that lets several application threads share them, a blob arena for bulk
  * data, and the shared allocations made on it.
  *
@@ -10,7 +10,7 @@
  * where a faulted transport becomes a lost context - so loss is noticed on
  * every call rather than only where somebody remembered to look.
  *
- * It carries no creation options. RvkContextRecord's reserved tail is
+ * It carries no creation options. AvContextRecord's reserved tail is
  * OpenGL's, and KmtTransport refuses a non-default one on any other sub-API
  * without asking the driver; anything OpenCL needs at creation travels as a
  * command once the context exists. */
@@ -79,7 +79,7 @@ public:
     GuestClContext &operator=(const GuestClContext &) = delete;
 
     /* Opens the device, the transport and the arena. invalid_state unless
-     * created; not_supported with no rvkgpu device; no_memory when the
+     * created; not_supported with no avgpu device; no_memory when the
      * staging cannot be had; the driver's own refusal otherwise - and
      * nothing is held after any of them. An arena the device cannot give is
      * logged once, and bulk data then crosses inline.

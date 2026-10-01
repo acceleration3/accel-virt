@@ -1,5 +1,5 @@
 // THIS FILE IS GENERATED. DO NOT EDIT.
-// Regenerate with: python -m rvk_codegen.d3d --xml tools/codegen/registry/d3d12.toml --out ...
+// Regenerate with: python -m av_codegen.d3d --xml tools/codegen/registry/d3d12.toml --out ...
 
 #include "proto/generated/d3d12/d3d12_command_names.h"
 

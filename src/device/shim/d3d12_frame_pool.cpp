@@ -254,7 +254,7 @@ void D3d12FramePool::Frame::drop()
     value_ = 0u;
 }
 
-StagedFrame::Reading D3d12FramePool::Frame::read(RvkFrameView &view)
+StagedFrame::Reading D3d12FramePool::Frame::read(AvFrameView &view)
 {
     AV_SCOPE("D3d12FramePool::Frame::read");
     if (mapped_ == nullptr) return Reading::failed;

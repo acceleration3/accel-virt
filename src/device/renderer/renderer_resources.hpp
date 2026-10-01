@@ -6,7 +6,7 @@
 #define AV_RENDERER_RESOURCES_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <stdint.h>
 
@@ -28,7 +28,7 @@ public:
     /* The table the library at `path` (`length` bytes, not terminated)
      * answers: not_found when it does not open, not_supported when it answers
      * none. */
-    [[nodiscard]] virtual Status load_executor(const char *path, uint32_t length, const RvkExecutorOps *&ops) = 0;
+    [[nodiscard]] virtual Status load_executor(const char *path, uint32_t length, const AvExecutorOps *&ops) = 0;
 
 protected:
     RendererResources() = default;

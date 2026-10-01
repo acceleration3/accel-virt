@@ -12,7 +12,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/submission/command_header.hpp"
@@ -36,8 +36,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 constexpr std::int32_t vk_error_initialization_failed = -3;
 constexpr std::int32_t vk_error_device_lost = -4;
 constexpr std::int32_t vk_error_out_of_device_memory = -2;
@@ -53,8 +53,8 @@ class Rig {
 public:
     Rig() : search_(kmt_), host_(kmt_)
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }
@@ -135,7 +135,7 @@ TEST(vulkan_scenario, the_chain_passes_on_the_host_and_is_destroyed_in_reverse)
   CHECK(same_ids(ids, count, expected, sizeof expected / sizeof expected[0]));
   CHECK(report.invariants_hold());
   /* The context the chain ran on asked the host for Vulkan. */
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::vulkan);
   rig.check_nothing_left_but_the_adapter(); }

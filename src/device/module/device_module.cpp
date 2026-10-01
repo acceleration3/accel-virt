@@ -6,15 +6,15 @@
 
 namespace av {
 
-DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                                     bool base_blobs, const RvkRecordingOptions *recording,
+DeviceInstance *DeviceModule::create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
+                                     bool base_blobs, const AvRecordingOptions *recording,
                                      const char *renderer, const char *executor_path, char *error,
                                      size_t error_size)
 {
     AV_SCOPE("DeviceModule::create");
     TextBuffer message(error, error_size);
     if (ops == nullptr) {
-        message.append("virtio-gpu-rvk: no host operations");
+        message.append("virtio-gpu-av: no host operations");
         return nullptr;
     }
     for (ObjectStorage<DeviceInstance> &slot : slots_) {
@@ -25,7 +25,7 @@ DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const RvkExecutorOps
         slot.destroy();
         return nullptr;
     }
-    message.append("virtio-gpu-rvk: every device slot is in use");
+    message.append("virtio-gpu-av: every device slot is in use");
     return nullptr;
 }
 

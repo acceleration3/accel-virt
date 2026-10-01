@@ -49,7 +49,7 @@ from etw.trace import Trace  # noqa: E402
 
 OUTPUT = ROOT / "build-perfetto" / "frame-pacing"
 PROBES = ROOT / "build" / "guest-probes"
-GUEST_DIR = "C:\\rvk\\frame-pacing"
+GUEST_DIR = "C:\\av\\frame-pacing"
 PROFILE_NAME = "FramePacing"
 # (provider, keywords, level, logs from raised IRQL): what the analysis reads.
 PROVIDERS = [
@@ -82,7 +82,7 @@ def profile_xml():
       <BufferSize Value="1024"/>
       <Buffers Value="512"/>
     </SystemCollector>
-    <EventCollector Id="Events" Name="rvk frame pacing">
+    <EventCollector Id="Events" Name="av frame pacing">
       <BufferSize Value="1024"/>
       <Buffers Value="256"/>
     </EventCollector>
@@ -178,12 +178,12 @@ def record(args):
         # logged-on user, interactively.
         workload = f"""
 $user = (Get-CimInstance Win32_ComputerSystem).UserName
-schtasks /create /tn rvkframepacing /tr '{command}' /sc once /st 23:59 /ru $user /it /f | Out-Null
-schtasks /run /tn rvkframepacing | Out-Null
+schtasks /create /tn avframepacing /tr '{command}' /sc once /st 23:59 /ru $user /it /f | Out-Null
+schtasks /run /tn avframepacing | Out-Null
 $waited = 0
 do {{ Start-Sleep -Milliseconds 250; $waited++ }} while (-not ((Test-Path {GUEST_DIR}\\probe.txt) -and
     (Select-String -Path {GUEST_DIR}\\probe.txt -Pattern '^WGC ' -Quiet)) -and $waited -lt {int(args.seconds * 4) + 120})
-schtasks /delete /tn rvkframepacing /f | Out-Null"""
+schtasks /delete /tn avframepacing /f | Out-Null"""
     started = time.time()
     output = guest.ps(f"""
 wpr -cancel 2>&1 | Out-Null

@@ -1,6 +1,6 @@
 /* One guest context, running on one host API.
  *
- * What the device holds as an opaque `RvkExecutor *`. It owns the block one
+ * What the device holds as an opaque `AvExecutor *`. It owns the block one
  * command decodes into and, later, the blobs that context imported; it does
  * not own the backend, which outlives a single session no more than it
  * outlives the GPU. */
@@ -14,7 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct RvkBlobHandle;
+struct AvBlobHandle;
 
 namespace av {
 
@@ -47,10 +47,10 @@ public:
     uint32_t execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                      size_t reply_capacity, size_t &answer);
 
-    /* Makes `blob_id` usable by this session's commands. RVK_EXECUTED, or
-     * RVK_UNDECODABLE for a handle the ABI refuses, an id already imported, a
+    /* Makes `blob_id` usable by this session's commands. AV_EXECUTED, or
+     * AV_UNDECODABLE for a handle the ABI refuses, an id already imported, a
      * table that is full, or an API that cannot take this kind. */
-    uint32_t import_blob(uint64_t blob_id, const RvkBlobHandle &handle);
+    uint32_t import_blob(uint64_t blob_id, const AvBlobHandle &handle);
     /* Drops one. Nothing for an id that was never imported, because the device
      * may release one whose import failed. */
     void     release_blob(uint64_t blob_id);

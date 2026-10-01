@@ -91,7 +91,7 @@ void PresentCopier::log_refusal()
     AV_SCOPE("PresentCopier::log_refusal");
     if (refusal_logged_) return;
     refusal_logged_ = true;
-    platform_.log("rvkgpu: the host would not move a present's pixels; the miniport moves them itself");
+    platform_.log("avgpu: the host would not move a present's pixels; the miniport moves them itself");
 }
 
 }  // namespace av

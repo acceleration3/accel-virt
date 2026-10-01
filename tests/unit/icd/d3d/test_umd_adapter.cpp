@@ -31,8 +31,8 @@ namespace {
 
 constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
@@ -153,7 +153,7 @@ TEST(adapter_table, reports_every_adapter_it_holds)
  * it goes with the last. */
 TEST(umd_connection, holds_one_kernel_adapter_for_every_open)
 { MockKmt kmt;
-  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
   UmdConnection connection(kmt);
   CHECK(connection.invariants_hold());
   CHECK(!connection.open());
@@ -183,7 +183,7 @@ TEST(umd_connection, holds_one_kernel_adapter_for_every_open)
   CHECK_STATUS(connection.release(), Status::invalid_state);
   CHECK(connection.invariants_hold()); }
 
-TEST(umd_connection, no_rvkgpu_adapter_is_not_supported_and_holds_nothing)
+TEST(umd_connection, no_avgpu_adapter_is_not_supported_and_holds_nothing)
 { MockKmt kmt;
   UmdConnection connection(kmt);
   CHECK_STATUS(connection.acquire(0u), Status::not_supported);
@@ -192,13 +192,13 @@ TEST(umd_connection, no_rvkgpu_adapter_is_not_supported_and_holds_nothing)
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
 
-/* The runtime opens a UMD on one adapter: with two rvkgpu adapters the
+/* The runtime opens a UMD on one adapter: with two avgpu adapters the
  * connection holds the one whose LUID it was given, not the first enumerated,
  * and a LUID no adapter has finds nothing. */
 TEST(umd_connection, holds_the_adapter_with_the_luid_it_was_given)
 { MockKmt kmt;
-  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
-  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
   UmdConnection second(kmt);
   CHECK_STATUS(second.acquire(MockKmt::first_luid + 1u), Status::ok);
   std::uint64_t luid = 0u;
@@ -213,7 +213,7 @@ TEST(umd_connection, holds_the_adapter_with_the_luid_it_was_given)
 
 TEST(umd_connection, reports_what_it_holds)
 { MockKmt kmt;
-  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
   UmdConnection connection(kmt);
   CHECK_STATUS(connection.acquire(0u), Status::ok);
   char bytes[256] = {};
@@ -266,7 +266,7 @@ TEST(umd_binding, answers_the_root_it_is_bound_to_and_nothing_once_unbound)
   CHECK(!binding.bound());
   MockPlatform platform;
   MockKmt      kmt;
-  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
   av::LockTrace           trace;
   av::RecordingThreadLock lock(trace, 'U');
   RecordingLog            log;

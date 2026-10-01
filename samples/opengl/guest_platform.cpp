@@ -1,5 +1,5 @@
 // The guest build's platform: Windows, no C runtime, WGL through the system
-// opengl32.dll - which loads whichever ICD the display driver names, rvkgl.dll
+// opengl32.dll - which loads whichever ICD the display driver names, avgl.dll
 // on the paravirtual adapter.
 #include "framework.h"
 
@@ -47,7 +47,7 @@ namespace samples {
 
 namespace {
 
-constexpr wchar_t window_class[] = L"rvkglsamples";
+constexpr wchar_t window_class[] = L"avglsamples";
 // WGL_ARB_create_context and WGL_ARB_create_context_profile.
 constexpr int wgl_context_major_version = 0x2091, wgl_context_minor_version = 0x2092,
               wgl_context_profile_mask = 0x9126, wgl_context_core_profile_bit = 0x0001;
@@ -136,7 +136,7 @@ bool create_context(const char *)
     description.hInstance = instance;
     description.lpszClassName = window_class;
     if (RegisterClassExW(&description) == 0) return false;
-    const HWND window = CreateWindowExW(0u, window_class, L"rvkglsamples", WS_POPUP, 0, 0, 64, 64, nullptr, nullptr,
+    const HWND window = CreateWindowExW(0u, window_class, L"avglsamples", WS_POPUP, 0, 0, 64, 64, nullptr, nullptr,
                                         instance, nullptr);
     const HDC dc = window != nullptr ? GetDC(window) : nullptr;
     if (dc == nullptr) return false;
@@ -180,7 +180,7 @@ void *gl_proc(const char *name)
 
 }  // namespace samples
 
-extern "C" void rvkglsamples_entry()
+extern "C" void avglsamples_entry()
 {
     // The command line split on spaces outside double quotes, as ASCII:
     // shell32's CommandLineToArgvW would be one more import for this.
@@ -199,6 +199,6 @@ extern "C" void rvkglsamples_entry()
         }
         argv[argc++] = arg;
     }
-    CreateDirectoryA("C:\\rvk\\glsamples", nullptr);
+    CreateDirectoryA("C:\\av\\glsamples", nullptr);
     ExitProcess(static_cast<UINT>(samples::run(argc, argv)));
 }

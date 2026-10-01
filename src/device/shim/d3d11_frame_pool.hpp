@@ -57,7 +57,7 @@ private:
                      uint32_t format);
         /* Under the device's lock: the texture let go. */
         void    drop();
-        Reading read(RvkFrameView &view) override;
+        Reading read(AvFrameView &view) override;
         void    release() override;
 
     private:

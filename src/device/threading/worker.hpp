@@ -52,7 +52,7 @@ public:
     bool                 running() const;
     uint32_t             pending();
     bool                 stopping();
-    /* The thread's body, entered through RvkWorkerRun. */
+    /* The thread's body, entered through AvWorkerRun. */
     void                 run();
     /* Its line under the open one; a lock another thread holds is busy, never
      * waited on. Any thread. */

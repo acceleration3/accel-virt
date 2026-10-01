@@ -3,8 +3,8 @@
 running: programs, PowerShell and files over its guest agent socket.
 
   guest_shell.py [--work build-guest] ps 'Get-PnpDevice -Class Display'
-  guest_shell.py [--work build-guest] exec 'C:\\rvk\\rvktest.exe' [ARGUMENT ...]
-  guest_shell.py [--work build-guest] push rvkgpu.sys 'C:\\rvk\\package\\rvkgpu.sys'
+  guest_shell.py [--work build-guest] exec 'C:\\av\\avtest.exe' [ARGUMENT ...]
+  guest_shell.py [--work build-guest] push avgpu.sys 'C:\\av\\package\\avgpu.sys'
   guest_shell.py [--work build-guest] pull 'C:\\Windows\\MEMORY.DMP' MEMORY.DMP
 
 exec and ps print the program's output and exit with its exit code.

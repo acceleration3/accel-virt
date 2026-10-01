@@ -33,8 +33,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 /* What D3DKMT answers a wait on a device that was removed. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 /* The healthy context's three waits, then the faulted command's. */
@@ -49,8 +49,8 @@ class Rig {
 public:
     Rig() : search_(kmt_), host_(kmt_)
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }

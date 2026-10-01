@@ -109,22 +109,22 @@ endif()
 # Whatever the glob picked up from generated/, the list above is what builds.
 # The executor library's C entry points define the symbol QEMU dlopens. They
 # belong to that shared object and to nothing else: linked into av_core or
-# rvk_device they would export rvk_executor_ops from a library nobody loads by
+# av_device they would export av_executor_ops from a library nobody loads by
 # that name (feature 042).
 set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/executor_ops.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
-# rvkrecord's own entry point, for the same reason: a main() in a library is a
+# avrecord's own entry point, for the same reason: a main() in a library is a
 # second main wherever that library is linked (feature 065).
 set(AV_RECORD_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/recording_tool.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_RECORD_ENTRY})
-# rvk-renderer's entry point, likewise (docs/renderer.md).
+# av-renderer's entry point, likewise (docs/renderer.md).
 set(AV_RENDERER_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/renderer_main.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_RENDERER_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
 list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_NAMES})
-# The guest's encoders join the core too, and nothing of the device's: the rvk
+# The guest's encoders join the core too, and nothing of the device's: the av
 # scenarios in src/guest send real Vulkan and OpenCL streams (044), and the
 # device core for QEMU below never encodes one.
 set(AV_GENERATED_CLIENT_SOURCES
@@ -139,10 +139,10 @@ add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
 # The executor library is a shared object built from these same objects, and it
 # must carry whatever sanitizers the configuration asked for - so av_core is
-# position-independent rather than the .so linking the unsanitized rvk_device.
+# position-independent rather than the .so linking the unsanitized av_device.
 set_target_properties(av_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # The executor's backends run commands on the host's own Vulkan, the way the
-# QEMU device already does (src/device/qemu/virtio-gpu-rvk-host.c). A host with
+# QEMU device already does (src/device/qemu/virtio-gpu-av-host.c). A host with
 # the loader but no GPU still links and enumerates nothing.
 find_library(AV_VULKAN_LIBRARY NAMES vulkan)
 if(AV_VULKAN_LIBRARY)
@@ -177,20 +177,20 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 # (tools/d3d11_report.py).
 file(GLOB AV_D3D11_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/d3d11/*.cpp)
 list(FILTER AV_D3D11_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
-add_executable(rvkd3d11samples_host ${AV_D3D11_SAMPLES_SOURCES})
-target_include_directories(rvkd3d11samples_host PRIVATE ${AV_DXVK_INCLUDE})
-target_compile_options(rvkd3d11samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
-target_link_libraries(rvkd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
+add_executable(avd3d11samples_host ${AV_D3D11_SAMPLES_SOURCES})
+target_include_directories(avd3d11samples_host PRIVATE ${AV_DXVK_INCLUDE})
+target_compile_options(avd3d11samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(avd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
 
 # The OpenCL samples' host side (samples/opencl): the host's own OpenCL, loaded
 # at run time as the guest loads OpenCL.dll - the report's baseline
 # (tools/opencl_report.py).
 file(GLOB AV_OPENCL_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/opencl/*.cpp)
 list(FILTER AV_OPENCL_SAMPLES_SOURCES EXCLUDE REGEX "(guest|loopback)_platform\\.cpp$")
-add_executable(rvkclsamples_host ${AV_OPENCL_SAMPLES_SOURCES})
-target_include_directories(rvkclsamples_host SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
-target_compile_options(rvkclsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
-target_link_libraries(rvkclsamples_host PRIVATE ${CMAKE_DL_LIBS})
+add_executable(avclsamples_host ${AV_OPENCL_SAMPLES_SOURCES})
+target_include_directories(avclsamples_host SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
+target_compile_options(avclsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(avclsamples_host PRIVATE ${CMAKE_DL_LIBS})
 
 find_package(Threads REQUIRED)
 # The OpenGL samples' host side (samples/opengl): the host's own driver through
@@ -199,25 +199,25 @@ find_package(Threads REQUIRED)
 if(AV_EGL_LIBRARY)
   file(GLOB AV_OPENGL_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/opengl/*.cpp)
   list(FILTER AV_OPENGL_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
-  add_executable(rvkglsamples_host ${AV_OPENGL_SAMPLES_SOURCES})
-  target_compile_options(rvkglsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
-  target_link_libraries(rvkglsamples_host PRIVATE ${AV_EGL_LIBRARY} Threads::Threads)
+  add_executable(avglsamples_host ${AV_OPENGL_SAMPLES_SOURCES})
+  target_compile_options(avglsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+  target_link_libraries(avglsamples_host PRIVATE ${AV_EGL_LIBRARY} Threads::Threads)
 endif()
 
 # The D3D12 samples' host side (samples/d3d12): vkd3d-proton native, the
 # guest's DXIL, the same frames the guest renders (tools/d3d12_report.py).
 file(GLOB AV_D3D12_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/d3d12/*.cpp)
 list(FILTER AV_D3D12_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
-add_executable(rvkd3d12samples_host ${AV_D3D12_SAMPLES_SOURCES})
-target_include_directories(rvkd3d12samples_host PRIVATE ${AV_DXVK_INCLUDE})
-target_compile_options(rvkd3d12samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
-target_link_libraries(rvkd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+add_executable(avd3d12samples_host ${AV_D3D12_SAMPLES_SOURCES})
+target_include_directories(avd3d12samples_host PRIVATE ${AV_DXVK_INCLUDE})
+target_compile_options(avd3d12samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(avd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
 # No sanitizer or profile flags and hidden visibility: the archive exports only
-# rvk_device.h, and tools/build_qemu.sh links it into the virtio-gpu-rvk module
-# through the generated rvk_device.pc.
+# av_device.h, and tools/build_qemu.sh links it into the virtio-gpu-av module
+# through the generated av_device.pc.
 # TextBuffer is the one core/support class with a body the device core uses;
 # the trace table is core/trace's, every function opens a scope on it, and every
 # device lock marks it (LockMarks).
@@ -229,7 +229,7 @@ list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp src/core/support/
 # The Direct3D translation runs in the executor library, never in the device:
 # it loads DXVK through the environment the freestanding device cannot read.
 list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim|executor)/(d3d|dxbc)[^/]*\\.cpp$")
-# The renderer's own process code: it is linked into rvk-renderer, never into
+# The renderer's own process code: it is linked into av-renderer, never into
 # the freestanding module QEMU loads.
 list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim/(posix_renderer|renderer_main)|renderer/)[^/]*\\.cpp$")
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
@@ -237,95 +237,95 @@ list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_NAMES})
 if(AV_GENERATED)
   list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_SOURCES})
 endif()
-add_library(rvk_device STATIC ${AV_DEVICE_SOURCES})
-target_include_directories(rvk_device PRIVATE src)
+add_library(av_device STATIC ${AV_DEVICE_SOURCES})
+target_include_directories(av_device PRIVATE src)
 if(AV_GENERATED)
-  target_include_directories(rvk_device PRIVATE ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
+  target_include_directories(av_device PRIVATE ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
 # Unwind tables, which -ffreestanding with -fno-exceptions leaves out: the crash
 # file walks the faulting thread's stack through them (docs/trace.md).
-target_include_directories(rvk_device SYSTEM PRIVATE ${AV_DXVK_INCLUDE})
-target_compile_options(rvk_device PRIVATE -O2 -ffreestanding -fasynchronous-unwind-tables)
-set_target_properties(rvk_device PROPERTIES
+target_include_directories(av_device SYSTEM PRIVATE ${AV_DXVK_INCLUDE})
+target_compile_options(av_device PRIVATE -O2 -ffreestanding -fasynchronous-unwind-tables)
+set_target_properties(av_device PROPERTIES
   POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-configure_file(cmake/rvk_device.pc.in ${CMAKE_BINARY_DIR}/rvk_device.pc.in @ONLY)
-file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/pkgconfig/rvk_device.pc INPUT ${CMAKE_BINARY_DIR}/rvk_device.pc.in)
+configure_file(cmake/av_device.pc.in ${CMAKE_BINARY_DIR}/av_device.pc.in @ONLY)
+file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/pkgconfig/av_device.pc INPUT ${CMAKE_BINARY_DIR}/av_device.pc.in)
 
 # ---- the patched QEMU: its own configuration, since it needs nothing else ----
-# ---- the executor library: the other end of src/device/abi/rvk_executor.h ---
+# ---- the executor library: the other end of src/device/abi/av_executor.h ---
 # Built in every configuration, which is why it is defined before AV_QEMU's
 # return rather than after it: the conformance suite runs it under ASan and
 # UBSan in the default configuration, and the qemu configuration points a real
 # device at the same object through its executor= property (feature 042).
-add_library(rvk_executor SHARED ${AV_EXECUTOR_ENTRY})
+add_library(av_executor SHARED ${AV_EXECUTOR_ENTRY})
 # The host's own Vulkan, the way the QEMU device already takes it
-# (src/device/qemu/virtio-gpu-rvk-host.c calls vkCreateInstance directly). A
+# (src/device/qemu/virtio-gpu-av-host.c calls vkCreateInstance directly). A
 # host with the loader but no GPU still loads this and enumerates nothing.
 if(NOT AV_VULKAN_LIBRARY)
   message(FATAL_ERROR "libvulkan not found; the executor library runs commands on it")
 endif()
-target_link_libraries(rvk_executor PRIVATE av_core)
-target_include_directories(rvk_executor PRIVATE src)
-set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
+target_link_libraries(av_executor PRIVATE av_core)
+target_include_directories(av_executor PRIVATE src)
+set_target_properties(av_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
                                               VISIBILITY_INLINES_HIDDEN ON)
 # The archive it links carries the whole core with default visibility, and this
 # object has exactly one thing to say: the symbol QEMU looks up. Anything else
 # reaching the dynamic table is surface nobody asked for.
-target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
+target_link_options(av_executor PRIVATE -Wl,--exclude-libs,ALL)
 # A command crosses a few dozen small functions of the core on its way to the
 # host API, most in other translation units: link-time inlining takes a large
-# share of the executor's per-command cost. Only here - rvk_device is an
+# share of the executor's per-command cost. Only here - av_device is an
 # archive QEMU's own link reads, and it cannot read LTO objects.
 if(AV_QEMU)
-  set_target_properties(av_core rvk_executor PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
+  set_target_properties(av_core av_executor PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
   # Whatever links the core's LTO objects needs a linker that reads them.
   target_link_options(av_core INTERFACE -fuse-ld=lld)
 endif()
 
-# ---- rvkrecord: a recording printed, and replayed into a library (065) -----
+# ---- avrecord: a recording printed, and replayed into a library (065) -----
 # Built in every configuration, before AV_QEMU's return: it reads what a device
-# wrote and drives the same rvk_executor.h a device drives, so it belongs
+# wrote and drives the same av_executor.h a device drives, so it belongs
 # wherever either of those is built.
-add_executable(rvkrecord ${AV_RECORD_ENTRY})
-target_link_libraries(rvkrecord PRIVATE av_core ${CMAKE_DL_LIBS})
-target_include_directories(rvkrecord PRIVATE src)
+add_executable(avrecord ${AV_RECORD_ENTRY})
+target_link_libraries(avrecord PRIVATE av_core ${CMAKE_DL_LIBS})
+target_include_directories(avrecord PRIVATE src)
 
-# ---- rvk-renderer: the host GPU stack in a process of its own ----------------
-# Built wherever rvkrecord is: it drives the same rvk_executor.h a device does,
+# ---- av-renderer: the host GPU stack in a process of its own ----------------
+# Built wherever avrecord is: it drives the same av_executor.h a device does,
 # for a device that runs its contexts outside QEMU (docs/renderer.md).
-add_executable(rvk-renderer ${AV_RENDERER_ENTRY})
-target_link_libraries(rvk-renderer PRIVATE av_core ${CMAKE_DL_LIBS} pthread)
-target_include_directories(rvk-renderer PRIVATE src)
+add_executable(av-renderer ${AV_RENDERER_ENTRY})
+target_link_libraries(av-renderer PRIVATE av_core ${CMAKE_DL_LIBS} pthread)
+target_include_directories(av-renderer PRIVATE src)
 
 # ---- two libraries that exist to be held to the ABI ------------------------
 # Built in every configuration, before AV_QEMU's return: the qemu smoke and
 # virtio-gpu suites load them, and so does the conformance suite, which is only
 # worth running against more than this project's newest library.
-add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
-target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
+add_library(av_echo_executor SHARED tests/qemu/echo_executor.cpp)
+target_include_directories(av_echo_executor PRIVATE src/device/abi)
 # A library that loads and answers no table, so the smoke test can prove realize
 # fails rather than a capset-less device coming up (feature 042).
-add_library(rvk_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
-target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
+add_library(av_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
+target_include_directories(av_null_ops_executor PRIVATE src/device/abi)
 
 if(AV_QEMU)
   enable_testing()
   add_custom_target(qemu ALL
     COMMAND ${CMAKE_SOURCE_DIR}/tools/build_qemu.sh ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/pkgconfig
-    DEPENDS rvk_device
+    DEPENDS av_device
     USES_TERMINAL
-    COMMENT "QEMU with virtio-gpu-rvk")
+    COMMENT "QEMU with virtio-gpu-av")
   add_test(NAME qemu_smoke
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu
-                   $<TARGET_FILE:rvk_echo_executor> $<TARGET_FILE:rvk_null_ops_executor>
-                   $<TARGET_FILE:rvk_executor>)
+                   $<TARGET_FILE:av_echo_executor> $<TARGET_FILE:av_null_ops_executor>
+                   $<TARGET_FILE:av_executor>)
   # The driver's own request bytes, sent to the real device by tests/qemu.
   add_executable(gpu_request_bytes tests/qemu/gpu_request_bytes.cpp)
   target_link_libraries(gpu_request_bytes PRIVATE av_core)
   add_test(NAME qemu_virtio_gpu
            COMMAND python3 -B -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests/qemu -p "test_*.py")
   set_tests_properties(qemu_virtio_gpu PROPERTIES
-    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:rvk_echo_executor>;AV_RENDERER=$<TARGET_FILE:rvk-renderer>;AV_REAL_EXECUTOR=$<TARGET_FILE:rvk_executor>")
+    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:av_echo_executor>;AV_RENDERER=$<TARGET_FILE:av-renderer>;AV_REAL_EXECUTOR=$<TARGET_FILE:av_executor>")
   return()
 endif()
 
@@ -477,8 +477,8 @@ foreach(src ${AV_UNIT_TESTS})
     ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw;MESA_SHADER_CACHE_DISABLE=true")
   # Two tests name the generated clients' headers by the names the generator
   # includes them by; the clients themselves are in av_core.
-  # The full-stack rig's rvk run links the executor library's own entry point:
-  # its device core runs the table rvk_executor_ops() answers, in process, on
+  # The full-stack rig's av run links the executor library's own entry point:
+  # its device core runs the table av_executor_ops() answers, in process, on
   # this machine's GPU (feature 044, T028).
   # DXVK's driver threads allocate from modules they unload before exit, which
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
@@ -486,18 +486,18 @@ foreach(src ${AV_UNIT_TESTS})
      name STREQUAL "test_d3d12_session_features_device" OR name STREQUAL "test_d3d_gl_interop_device" OR
      name STREQUAL "test_d3d_vulkan_interop_device")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
-      "ASAN_OPTIONS=detect_leaks=0;RVK_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
+      "ASAN_OPTIONS=detect_leaks=0;AV_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
   endif()
-  if(name STREQUAL "test_fullstack_rvk")
+  if(name STREQUAL "test_fullstack_av")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
   endif()
   # The renderer's process code, for real (docs/renderer.md): its host loads
-  # the echo executor, and the process test spawns the built rvk-renderer.
+  # the echo executor, and the process test spawns the built av-renderer.
   if(name STREQUAL "test_posix_renderer_host" OR name STREQUAL "test_renderer_process")
     target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS})
-    add_dependencies(${name} rvk_echo_executor rvk-renderer)
-    target_compile_definitions(${name} PRIVATE AV_ECHO_EXECUTOR="$<TARGET_FILE:rvk_echo_executor>"
-                                               AV_RENDERER_BINARY="$<TARGET_FILE:rvk-renderer>")
+    add_dependencies(${name} av_echo_executor av-renderer)
+    target_compile_definitions(${name} PRIVATE AV_ECHO_EXECUTOR="$<TARGET_FILE:av_echo_executor>"
+                                               AV_RENDERER_BINARY="$<TARGET_FILE:av-renderer>")
   endif()
   # The ICD's tests link its core, which no other test may: its hooks replace
   # the generated defaults every other binary relies on. The probe's loader
@@ -516,8 +516,8 @@ foreach(src ${AV_UNIT_TESTS})
   # the library file QEMU loads, its symbols its own.
   if(name STREQUAL "test_fullstack_opengl_icd")
     target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS})
-    add_dependencies(${name} rvk_executor)
-    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    add_dependencies(${name} av_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>")
     # The probe's renders, as bitmaps a person can open (docs/testing.md).
     target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
   endif()
@@ -529,8 +529,8 @@ foreach(src ${AV_UNIT_TESTS})
   if(name STREQUAL "test_fullstack_opencl_icd")
     find_package(Threads REQUIRED)
     target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
-    add_dependencies(${name} rvk_executor)
-    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    add_dependencies(${name} av_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>")
     # The executor library opens every host API when it loads, Vulkan among
     # them, so this test carries the Vulkan loader whether or not it asks
     # anything of it - and a loader that unloads a driver reports its leaks
@@ -544,8 +544,8 @@ foreach(src ${AV_UNIT_TESTS})
   # together can show.
   if(name STREQUAL "test_fullstack_templates")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
-    add_dependencies(${name} rvk_executor)
-    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    add_dependencies(${name} av_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
   # Two devices in one process sharing memory and a semaphore through the Win32
@@ -554,14 +554,14 @@ foreach(src ${AV_UNIT_TESTS})
   # between two host devices.
   if(name STREQUAL "test_fullstack_external_objects")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
-    add_dependencies(${name} rvk_executor)
-    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    add_dependencies(${name} av_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
   if(name STREQUAL "test_fullstack_vulkan_icd")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
-    add_dependencies(${name} rvk_executor)
-    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    add_dependencies(${name} av_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>")
     # The probe's renders, as bitmaps a person can open (docs/testing.md).
     target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
     # The Vulkan loader unloads a driver when its last instance goes, and a
@@ -588,12 +588,12 @@ if(AV_GENERATED AND AV_EGL_LIBRARY)
   file(GLOB AV_GL_LOOPBACK_SOURCES CONFIGURE_DEPENDS samples/opengl/*.cpp)
   list(FILTER AV_GL_LOOPBACK_SOURCES EXCLUDE REGEX "(host|guest)_platform\\.cpp$")
   set_source_files_properties(${AV_GL_LOOPBACK_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
-  add_executable(rvkglsamples_loopback tests/loopback/gl_samples_loopback.cpp ${AV_GL_LOOPBACK_SOURCES})
-  target_include_directories(rvkglsamples_loopback PRIVATE ${CMAKE_SOURCE_DIR})
-  target_link_libraries(rvkglsamples_loopback PRIVATE av_harness av_gl_icd ${CMAKE_DL_LIBS})
-  target_compile_options(rvkglsamples_loopback PRIVATE ${AV_TEST_FLAGS})
-  add_dependencies(rvkglsamples_loopback rvk_executor)
-  target_compile_definitions(rvkglsamples_loopback PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>"
+  add_executable(avglsamples_loopback tests/loopback/gl_samples_loopback.cpp ${AV_GL_LOOPBACK_SOURCES})
+  target_include_directories(avglsamples_loopback PRIVATE ${CMAKE_SOURCE_DIR})
+  target_link_libraries(avglsamples_loopback PRIVATE av_harness av_gl_icd ${CMAKE_DL_LIBS})
+  target_compile_options(avglsamples_loopback PRIVATE ${AV_TEST_FLAGS})
+  add_dependencies(avglsamples_loopback av_executor)
+  target_compile_definitions(avglsamples_loopback PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>"
     AV_PROC_TABLE="${CMAKE_SOURCE_DIR}/tools/codegen/profiles/opengl_proc_table.txt")
 endif()
 if(AV_COVERAGE)
@@ -602,18 +602,18 @@ if(AV_COVERAGE)
   set_tests_properties(coverage_gate PROPERTIES FIXTURES_REQUIRED coverage_profiles)
 endif()
 
-# The OpenCL samples through the guest's whole path in one process: rvkcl's core
+# The OpenCL samples through the guest's whole path in one process: avcl's core
 # over the L4 rig and the executor library on this machine's GPU. Not a test -
 # nothing here judges it but tools/opencl_report.py --loopback, which compares
-# its outputs with rvkclsamples_host's the way it compares the VM's.
+# its outputs with avclsamples_host's the way it compares the VM's.
 if(AV_GENERATED)
   file(GLOB AV_OPENCL_LOOPBACK_SOURCES CONFIGURE_DEPENDS samples/opencl/*.cpp)
   list(FILTER AV_OPENCL_LOOPBACK_SOURCES EXCLUDE REGEX "(guest|host)_platform\\.cpp$")
-  add_executable(rvkclsamples_loopback ${AV_OPENCL_LOOPBACK_SOURCES})
-  target_compile_options(rvkclsamples_loopback PRIVATE -O2 -w)
-  target_link_libraries(rvkclsamples_loopback PRIVATE av_harness av_cl_icd ${CMAKE_DL_LIBS})
-  add_dependencies(rvkclsamples_loopback rvk_executor)
-  target_compile_definitions(rvkclsamples_loopback PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+  add_executable(avclsamples_loopback ${AV_OPENCL_LOOPBACK_SOURCES})
+  target_compile_options(avclsamples_loopback PRIVATE -O2 -w)
+  target_link_libraries(avclsamples_loopback PRIVATE av_harness av_cl_icd ${CMAKE_DL_LIBS})
+  add_dependencies(avclsamples_loopback av_executor)
+  target_compile_definitions(avclsamples_loopback PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:av_executor>")
 endif()
 
 # ---- the driver: the same core, compiled for the Windows kernel ------------
@@ -622,7 +622,7 @@ include(ExternalProject)
 # caches the *_INIT variables. Each external project therefore configures again,
 # from an empty cache, whenever its toolchain or flags file changes; otherwise a
 # changed flag silently never reaches an existing tree.
-ExternalProject_Add(rvkgpu
+ExternalProject_Add(avgpu
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/km
   BINARY_DIR ${CMAKE_BINARY_DIR}/driver
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
@@ -632,18 +632,18 @@ ExternalProject_Add(rvkgpu
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
-  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys)
-ExternalProject_Add_StepDependencies(rvkgpu configure
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/driver/avgpu.sys)
+ExternalProject_Add_StepDependencies(avgpu configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_kernel_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_kernel_flags.cmake)
 add_test(NAME driver_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_driver_image.py
-                 ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys
+                 ${CMAKE_BINARY_DIR}/driver/avgpu.sys
                  # displib's DxgkInitialize is linked, not just declared
                  --require-import IoGetDeviceObjectPointer)
 
 # ---- the in-guest suite: src/guest and src/um, for Windows user mode ---------
-ExternalProject_Add(rvktest
+ExternalProject_Add(avtest
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/um
   BINARY_DIR ${CMAKE_BINARY_DIR}/guest
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
@@ -653,25 +653,25 @@ ExternalProject_Add(rvktest
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
-  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
-                   ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkumd.dll ${CMAKE_BINARY_DIR}/guest/rvkclsamples.exe)
-ExternalProject_Add_StepDependencies(rvktest configure
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/avtest.exe ${CMAKE_BINARY_DIR}/guest/avvk.dll
+                   ${CMAKE_BINARY_DIR}/guest/avvkprobe.exe ${CMAKE_BINARY_DIR}/guest/avinspect.exe
+                   ${CMAKE_BINARY_DIR}/guest/avgl.dll ${CMAKE_BINARY_DIR}/guest/avglprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/avcl.dll ${CMAKE_BINARY_DIR}/guest/avclprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/avumd.dll ${CMAKE_BINARY_DIR}/guest/avclsamples.exe)
+ExternalProject_Add_StepDependencies(avtest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags_c.cmake)
 add_test(NAME guest_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvktest.exe
+                 ${CMAKE_BINARY_DIR}/guest/avtest.exe
                  --require-import D3DKMTSubmitCommand)
 
 # ---- the same tree for 32-bit processes: the x86 drivers a WoW64 process
-# loads through rvkgpu.inf's *Wow values, and its programs to prove them with.
-# The drivers are named rvkvk32.dll and so on: both sets install into one
+# loads through avgpu.inf's *Wow values, and its programs to prove them with.
+# The drivers are named avvk32.dll and so on: both sets install into one
 # driver store directory. ----------------------------------------------------
-ExternalProject_Add(rvktest32
+ExternalProject_Add(avtest32
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/um
   BINARY_DIR ${CMAKE_BINARY_DIR}/guest32
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
@@ -681,10 +681,10 @@ ExternalProject_Add(rvktest32
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
-  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest32/rvkvk32.dll ${CMAKE_BINARY_DIR}/guest32/rvkgl32.dll
-                   ${CMAKE_BINARY_DIR}/guest32/rvkcl32.dll ${CMAKE_BINARY_DIR}/guest32/rvkumd32.dll
-                   ${CMAKE_BINARY_DIR}/guest32/rvktest.exe)
-ExternalProject_Add_StepDependencies(rvktest32 configure
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest32/avvk32.dll ${CMAKE_BINARY_DIR}/guest32/avgl32.dll
+                   ${CMAKE_BINARY_DIR}/guest32/avcl32.dll ${CMAKE_BINARY_DIR}/guest32/avumd32.dll
+                   ${CMAKE_BINARY_DIR}/guest32/avtest.exe)
+ExternalProject_Add_StepDependencies(avtest32 configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags_c.cmake)
@@ -694,30 +694,30 @@ ExternalProject_Add_StepDependencies(rvktest32 configure
 # It links OpenCL beside Vulkan from feature 053: the shared-object steps are
 # the one place in the guest where two APIs meet over one allocation, and only
 # a process with both can walk them (T019).
-add_test(NAME rvkvkprobe_image
+add_test(NAME avvkprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe
+                 ${CMAKE_BINARY_DIR}/guest/avvkprobe.exe
                  --allow-import vulkan-1.dll --allow-import user32.dll --allow-import OpenCL.dll
                  --require-import vkGetInstanceProcAddr --require-import clCreateBufferWithProperties)
 
 # The trace reader needs nothing past the three either (docs/trace.md).
-add_test(NAME rvkinspect_image
+add_test(NAME avinspect_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
+                 ${CMAKE_BINARY_DIR}/guest/avinspect.exe
                  --require-import D3DKMTEscape --require-import OpenFileMappingW)
 
 # The Vulkan ICD exports exactly what the loader calls (feature 045).
-add_test(NAME rvkvk_image
+add_test(NAME avvk_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkvk.dll --dll --only-exports --allow-import user32.dll
+                 ${CMAKE_BINARY_DIR}/guest/avvk.dll --dll --only-exports --allow-import user32.dll
                  --require-export vk_icdNegotiateLoaderICDInterfaceVersion
                  --require-export vk_icdGetInstanceProcAddr)
 
 # The OpenGL ICD exports exactly the Drv* entries opengl32 looks up (feature
 # 050, contracts/icd_interface.md); user32 is what its window calls will need.
-add_test(NAME rvkgl_image
+add_test(NAME avgl_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkgl.dll --dll --only-exports --allow-import user32.dll
+                 ${CMAKE_BINARY_DIR}/guest/avgl.dll --dll --only-exports --allow-import user32.dll
                  --require-export DrvValidateVersion --require-export DrvSetCallbackProcs
                  --require-export DrvDescribePixelFormat --require-export DrvSetPixelFormat
                  --require-export DrvCreateContext --require-export DrvCreateLayerContext
@@ -730,31 +730,31 @@ add_test(NAME rvkgl_image
 # The Direct3D user-mode driver exports exactly the two names the runtimes
 # resolve (feature 055, contracts/umd_interface.md). No user32: nothing in it
 # touches a window, and the DXGI seam presents through the KMD, not GDI.
-add_test(NAME rvkumd_image
+add_test(NAME avumd_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkumd.dll --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest/avumd.dll --dll --only-exports
                  --require-export OpenAdapter10_2 --require-export OpenAdapter12)
 
 # The OpenCL ICD exports exactly the two names the Khronos loader may resolve
 # (feature 052, research §1); it presents nothing, so it wants no user32.
-add_test(NAME rvkcl_image
+add_test(NAME avcl_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkcl.dll --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest/avcl.dll --dll --only-exports
                  --require-export clGetExtensionFunctionAddress
                  --require-export clIcdGetPlatformIDsKHR)
 
 # The OpenCL probe binds to the Khronos loader beside it and nothing else
 # (feature 052, T030); it opens no window, so it wants no user32.
-add_test(NAME rvkclprobe_image
+add_test(NAME avclprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
+                 ${CMAKE_BINARY_DIR}/guest/avclprobe.exe
                  --allow-import OpenCL.dll --require-import clGetPlatformIDs)
 
 # The OpenCL samples import nothing past the three: OpenCL.dll is loaded, not
 # linked, so the same program runs whichever loader sits beside it.
-add_test(NAME rvkclsamples_image
+add_test(NAME avclsamples_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkclsamples.exe --require-import LoadLibraryA)
+                 ${CMAKE_BINARY_DIR}/guest/avclsamples.exe --require-import LoadLibraryA)
 
 # The Khronos loader, cross-built beside the probe (feature 052, T005). It is
 # somebody else's source, but it is linked by this build against a kit closure
@@ -774,15 +774,15 @@ endif()
 # The 32-bit drivers, held to what the 64-bit ones are: x86 images, each
 # exporting exactly its loader's names, undecorated although every one of them
 # is __stdcall on x86.
-add_test(NAME rvkvk32_image
+add_test(NAME avvk32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest32/rvkvk32.dll --machine i386 --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest32/avvk32.dll --machine i386 --dll --only-exports
                  --allow-import user32.dll
                  --require-export vk_icdNegotiateLoaderICDInterfaceVersion
                  --require-export vk_icdGetInstanceProcAddr)
-add_test(NAME rvkgl32_image
+add_test(NAME avgl32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest32/rvkgl32.dll --machine i386 --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest32/avgl32.dll --machine i386 --dll --only-exports
                  --allow-import user32.dll
                  --require-export DrvValidateVersion --require-export DrvSetCallbackProcs
                  --require-export DrvDescribePixelFormat --require-export DrvSetPixelFormat
@@ -792,13 +792,13 @@ add_test(NAME rvkgl32_image
                  --require-export DrvShareLists --require-export DrvGetProcAddress
                  --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
                  --require-export DrvSwapBuffers)
-add_test(NAME rvkumd32_image
+add_test(NAME avumd32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest32/rvkumd32.dll --machine i386 --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest32/avumd32.dll --machine i386 --dll --only-exports
                  --require-export OpenAdapter10_2 --require-export OpenAdapter12)
-add_test(NAME rvkcl32_image
+add_test(NAME avcl32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest32/rvkcl32.dll --machine i386 --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest32/avcl32.dll --machine i386 --dll --only-exports
                  --require-export clGetExtensionFunctionAddress
                  --require-export clIcdGetPlatformIDsKHR)
 if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/opencl-loader/loader/icd.c)
@@ -810,9 +810,9 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/opencl-loader/loader/icd.c)
 endif()
 
 # The OpenGL probe calls the system opengl32.dll and makes a window (050).
-add_test(NAME rvkglprobe_image
+add_test(NAME avglprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
+                 ${CMAKE_BINARY_DIR}/guest/avglprobe.exe
                  --allow-import opengl32.dll --allow-import user32.dll
                  --require-import wglCreateContext --require-import D3DKMTOpenAdapterFromHdc)
 
@@ -820,19 +820,19 @@ add_test(NAME rvkglprobe_image
 # 047, T028): DXVK's d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll, and for
 # D3D12 the dxgi.dll its adapter enumeration goes through. A probe that
 # imported anything more would be proving something other than the layer.
-add_test(NAME rvkd3d9probe_image
+add_test(NAME avd3d9probe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkd3d9probe.exe
+                 ${CMAKE_BINARY_DIR}/guest/avd3d9probe.exe
                  --allow-import d3d9.dll --allow-import user32.dll
                  --require-import Direct3DCreate9)
-add_test(NAME rvkd3d11probe_image
+add_test(NAME avd3d11probe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkd3d11probe.exe
+                 ${CMAKE_BINARY_DIR}/guest/avd3d11probe.exe
                  --allow-import d3d11.dll --allow-import user32.dll
                  --require-import D3D11CreateDeviceAndSwapChain)
-add_test(NAME rvkd3d12probe_image
+add_test(NAME avd3d12probe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkd3d12probe.exe
+                 ${CMAKE_BINARY_DIR}/guest/avd3d12probe.exe
                  --allow-import d3d12.dll --allow-import dxgi.dll --allow-import user32.dll
                  --require-import D3D12CreateDevice --require-import CreateDXGIFactory1)
 
@@ -942,7 +942,7 @@ else()
 endif()
 add_test(NAME executor_conformance
          COMMAND executor_conformance ${AV_CONFORMANCE_ARGS}
-                 $<TARGET_FILE:rvk_executor> $<TARGET_FILE:rvk_echo_executor>)
+                 $<TARGET_FILE:av_executor> $<TARGET_FILE:av_echo_executor>)
 
 # ---- principle IX: a clean clone of this repository is all it takes ----------
 add_test(NAME self_contained

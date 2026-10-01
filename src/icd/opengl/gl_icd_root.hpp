@@ -1,4 +1,4 @@
-/* rvkgl.dll's decisions (research.md §1-§4, contracts/icd_interface.md): what
+/* avgl.dll's decisions (research.md §1-§4, contracts/icd_interface.md): what
  * each Drv* entry, each WGL extension function and each generated entry's
  * hook answers. One per process - in the exports' storage in the DLL, the one
  * under test in a test - bound to GlIcdBinding for its life.
@@ -131,7 +131,7 @@ public:
     /* glGetGraphicsResetStatus: the host's answer, or a lost context's own
      * (GuestGlContext::lost_reset_status); 0 with nothing current. */
     uint32_t         reset_status();
-    /* The probe's rvkForceContextFault (T040): the calling thread's context
+    /* The probe's avForceContextFault (T040): the calling thread's context
      * sent a call its host cannot decode. 1 when the context is lost after
      * it (or was already), 0 when the host answered; 0 with
      * ERROR_INVALID_OPERATION with nothing current. */

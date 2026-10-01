@@ -8,8 +8,8 @@ namespace av {
 
 namespace {
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 }  // namespace
 
@@ -17,7 +17,7 @@ UmdRig::UmdRig(d3d::UmdHostDriver *builder)
     : platform_(), kmt_(), trace_(), lock_(trace_, 'U'), log_(),
       root_(platform_, kmt_, lock_, log_, d3d::umd_binding, builder)
 {
-    kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);
     kmt_.set_video_memory(MemorySegmentGroup::local, local_budget, 0u);
     kmt_.set_video_memory(MemorySegmentGroup::non_local, non_local_budget, 0u);

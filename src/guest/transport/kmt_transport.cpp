@@ -86,8 +86,8 @@ Status KmtTransport::initialize(const GlContextOptions &options)
      * descriptor travels as the submission's private data. */
     const Status dma_ready = setup_allocation(dma_index, AllocationKind::client, dma_bytes, true, dma_address_);
     if (dma_ready != Status::ok) return dma_ready;
-    const RvkContextRecord record(sub_api_, ring_order_, allocations_[name_index], reply_bytes_, options);
-    uint8_t      private_data[RvkContextRecord::encoded_size] = {};
+    const AvContextRecord record(sub_api_, ring_order_, allocations_[name_index], reply_bytes_, options);
+    uint8_t      private_data[AvContextRecord::encoded_size] = {};
     static_cast<void>(record.encode(private_data, sizeof private_data));
     /* A context a hardware queue may run on first: that is what a doorbell
      * hangs off, and a machine whose OS hands out no hardware queue refuses it
@@ -163,10 +163,10 @@ bool KmtTransport::record_carries(const GlContextOptions &options) const
     AV_SCOPE("KmtTransport::record_carries");
     /* A stand-in for the handle the name will have: the record judges the
      * reply slot and the options as the miniport will. */
-    const RvkContextRecord candidate(sub_api_, ring_order_, 1u, reply_bytes_, options);
-    uint8_t                bytes[RvkContextRecord::encoded_size] = {};
+    const AvContextRecord candidate(sub_api_, ring_order_, 1u, reply_bytes_, options);
+    uint8_t                bytes[AvContextRecord::encoded_size] = {};
     static_cast<void>(candidate.encode(bytes, sizeof bytes));
-    RvkContextRecord decoded;
+    AvContextRecord decoded;
     return decoded.decode(bytes, sizeof bytes) == Status::ok;
 }
 

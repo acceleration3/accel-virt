@@ -1,10 +1,10 @@
 # The generators
 
-`rvk_codegen` reads a Khronos registry and writes this project's serialization,
+`av_codegen` reads a Khronos registry and writes this project's serialization,
 dispatch and protocol ids as C++. It is run in place:
 
 ```bash
-PYTHONPATH=tools/codegen python3 -m rvk_codegen \
+PYTHONPATH=tools/codegen python3 -m av_codegen \
     --xml third_party/khronos/vk.xml \
     --profile tools/codegen/profiles/vulkan.toml \
     --ids tools/codegen/profiles/vulkan_ids.toml \
@@ -17,7 +17,7 @@ difference; `tools/check_generated.py` is that, for every API, as a ctest gate.
 
 ## Where it came from, and what that means
 
-It began as render-server's `codegen/rvk_codegen`, taken at revision
+It began as render-server's `codegen/av_codegen`, taken at revision
 `89936e50b6145e75af3553e27d5c8a251787dd62`. **Only the generator was taken.**
 None of render-server's runtime is used here - not its buffers, not its
 logging, not its client or server - and the emitters are changed to emit this

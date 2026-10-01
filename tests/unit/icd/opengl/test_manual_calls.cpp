@@ -339,7 +339,7 @@ TEST(manual_calls, a_uniform_location_learns_its_shape)
 TEST(manual_calls, strings_are_the_hosts_and_no_extension_is_listed)
 { Current current;
   const std::uint32_t sent = current.sent();
-  CHECK(std::strcmp(reinterpret_cast<const char *>(gen::Wrap_glGetString(0x1F00u)), "rvk host vendor") == 0);
+  CHECK(std::strcmp(reinterpret_cast<const char *>(gen::Wrap_glGetString(0x1F00u)), "av host vendor") == 0);
   CHECK(std::strcmp(reinterpret_cast<const char *>(gen::Wrap_glGetString(0x1F03u)), "") == 0);
   CHECK(gen::Wrap_glGetString(0x1234u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);

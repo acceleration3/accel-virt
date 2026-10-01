@@ -9,7 +9,7 @@
  * every wait, or a queue of them, one per wait - with the ring consumed up to
  * the last submission, as a device that finished it would. Every command a
  * transport's submission carried is journalled by id and size. A context made
- * with an RvkContextRecord runs, as the driver's does, on a ring and a reply
+ * with an AvContextRecord runs, as the driver's does, on a ring and a reply
  * slot this mock maps - an escape tells the process where - and an escape opens
  * and closes chunks in a host window a test gives the device, or in memory this
  * mock maps where the window cannot hold one, as the driver falls back to guest
@@ -329,7 +329,7 @@ public:
     void          reads_clock(ClockReader *reader, std::uint64_t step);
     /* Every `nth` blank takes `ticks` longer, as one the waiter missed does. */
     void          slip_every(std::uint32_t nth, std::uint64_t ticks);
-    /* From now on a wait on a context created with an RvkContextRecord finds
+    /* From now on a wait on a context created with an AvContextRecord finds
      * `answer` (up to max_answer bytes) in the record's reply slot, for the
      * fence the last submission named, while the process holds a view of the
      * slot: how a test plays the device behind a transport it cannot reach. */
@@ -352,7 +352,7 @@ public:
      * (cut to the escape's size) written over its data, whatever it asked. */
     void          answer_next_escape(const std::uint8_t *answer, std::uint32_t size);
     /* From now on an escape naming only an adapter - no device, no context, as
-     * rvkinspect.exe's trace escapes are - is answered by `driver`; without
+     * avinspect.exe's trace escapes are - is answered by `driver`; without
      * one such an escape is refused as the driver refuses what it does not
      * know. */
     void          answer_adapter_escapes(AdapterEscapes *driver);

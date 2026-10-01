@@ -9,7 +9,7 @@
 #include "device/control/control_request.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/context/local_context_plane_probe.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "device/memory/blob_table.hpp"
@@ -106,7 +106,7 @@ ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::
 class Fixture {
 public:
     /* A device offering `sub_apis`, over a library of `abi_version`. */
-    explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = RVK_EXECUTOR_ABI_VERSION)
+    explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = AV_EXECUTOR_ABI_VERSION)
         : blobs_(host_), interrupts_(host_), ops_(sub_apis), recorder_(host_), plane_(host_, blobs_, interrupts_, recorder_),
           capset_(host_), commands_(host_, plane_, capset_)
     {
@@ -195,7 +195,7 @@ TEST(context_commands_capset, answers_the_described_capset_for_its_id_and_versio
   CHECK_EQ(fixture.send(capset(0x72u, 2u)), err_invalid_parameter);
   CHECK_EQ(fixture.send(capset(0x72u, 1u).truncate(31u)), err_invalid_parameter); }
 
-TEST(context_commands_create, creates_a_context_on_the_rvk_capset)
+TEST(context_commands_create, creates_a_context_on_the_av_capset)
 { Fixture fixture;
   CHECK_EQ(fixture.send(create(1u)), ok_nodata);
   CHECK_EQ(fixture.send(create(2u, CapsetInfo::capset_id, av::ContextRequest::name_capacity)), ok_nodata);
@@ -392,7 +392,7 @@ TEST(context_commands_submit, a_gl_context_shares_only_another_bound_gl_context)
 /* A library before version 4 makes default contexts: options are refused
  * before anything is bound, and the defaults still bind. */
 TEST(context_commands_submit, options_a_version_three_library_cannot_make_are_refused)
-{ Fixture fixture(vulkan_and_gl, RVK_EXECUTOR_ABI_VERSION_HANDLES);
+{ Fixture fixture(vulkan_and_gl, AV_EXECUTOR_ABI_VERSION_HANDLES);
   CHECK_EQ(fixture.send(create(1u)), ok_nodata);
   CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, core_33))), err_invalid_parameter);
   CHECK(!fixture.contexts().find(1u)->binding().bound());

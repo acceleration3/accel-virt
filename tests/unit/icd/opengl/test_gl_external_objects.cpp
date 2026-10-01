@@ -547,7 +547,7 @@ TEST(gl_external_objects, a_parameter_this_path_cannot_keep_is_refused_at_the_im
            GlExternalObjects::gl_invalid_operation);
   CHECK_EQ(one.wire().sends(), sends);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
-  CHECK_EQ(one.log().holding("rvkgl: a memory object asked for dedicated or protected memory"), 1u);
+  CHECK_EQ(one.log().holding("avgl: a memory object asked for dedicated or protected memory"), 1u);
 
   CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, 0),
            GlExternalObjects::gl_no_error);

@@ -3,7 +3,7 @@
  * including the mock, which is what makes a host with no GPU, a host with two,
  * and a host whose OpenCL cannot import testable on a machine that is none of
  * those. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -23,7 +23,7 @@ constexpr std::uint8_t intel[16] = {0x86, 0x80, 0xa6, 0x46, 0x0c, 0, 0, 0, 0, 0x
  * was given and writes nothing else. */
 TEST(host_apis, gpu_uuid_fills_the_sixteen_bytes_it_was_given)
 { MockHostApis mock;
-  mock.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   HostApis &apis = mock;
   CHECK_EQ(apis.gpu_count(), 1u);
 
@@ -38,7 +38,7 @@ TEST(host_apis, gpu_uuid_fills_the_sixteen_bytes_it_was_given)
  * failure the library can report, so neither may touch anything. */
 TEST(host_apis, an_index_nobody_has_leaves_the_destination_alone)
 { MockHostApis mock;
-  mock.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   HostApis &apis = mock;
 
   std::uint8_t uuid[16];
@@ -48,16 +48,16 @@ TEST(host_apis, an_index_nobody_has_leaves_the_destination_alone)
   apis.gpu_uuid(0u, nullptr);
 
   CHECK_EQ(apis.sub_apis(1u), 0u);
-  CHECK_EQ(apis.import_kinds(1u, RVK_EXECUTOR_SUB_API_VULKAN), 0u); }
+  CHECK_EQ(apis.import_kinds(1u, AV_EXECUTOR_SUB_API_VULKAN), 0u); }
 
 /* A sub-API value that is not one of the three the ABI defines imports
  * nothing, whatever the loader would have said. */
 TEST(host_apis, an_api_the_abi_does_not_define_imports_nothing)
 { MockHostApis mock;
-  mock.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, RVK_BLOB_DMA_BUF,
-               RVK_BLOB_DMA_BUF);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, AV_BLOB_DMA_BUF,
+               AV_BLOB_DMA_BUF);
   HostApis &apis = mock;
-  CHECK_EQ(apis.import_kinds(0u, RVK_EXECUTOR_SUB_API_VULKAN), std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(apis.import_kinds(0u, AV_EXECUTOR_SUB_API_VULKAN), std::uint32_t{AV_BLOB_HOST_POINTER});
   CHECK_EQ(apis.import_kinds(0u, 0u), 0u);
   CHECK_EQ(apis.import_kinds(0u, 8u), 0u); }
 
@@ -74,7 +74,7 @@ TEST(host_apis, a_host_with_no_gpu_answers_none)
  * mock's GPUs never name one, and an index nobody has cannot. */
 TEST(host_apis, a_gpu_whose_driver_names_no_render_node_answers_minus_one)
 { MockHostApis mock;
-  mock.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   HostApis &apis = mock;
   CHECK_EQ(apis.render_minor(0u), -1);
   CHECK_EQ(apis.render_minor(1u), -1);

@@ -225,7 +225,7 @@ def thunks(tables):
             declared = ", ".join(f"{kind} {label}" for kind, label in zip(parameters, names))
             arguments = ", ".join(names[1:])
             keyword = "" if ret == "void" else "return "
-            symbol = f"rvkumd_{prefix}_{name[3:]}"
+            symbol = f"avumd_{prefix}_{name[3:]}"
             lines.append(f"extern \"C\" {ret_type(ret)} APIENTRY {symbol}({declared})")
             owned = parameters[0] == first
             if name in IMPLEMENTED[table]:

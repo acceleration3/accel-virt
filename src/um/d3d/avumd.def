@@ -1,0 +1,4 @@
+LIBRARY avumd.dll
+EXPORTS
+OpenAdapter10_2
+OpenAdapter12

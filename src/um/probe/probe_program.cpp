@@ -11,7 +11,7 @@
 namespace av {
 
 ProbeProgram::ProbeProgram()
-    : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr), cl_(), images_(), window_(),
+    : kmt_(), report_("avvkprobe"), vulkan_(&vkGetInstanceProcAddr), cl_(), images_(), window_(),
       frames_()
 {
     AV_SCOPE("ProbeProgram::ProbeProgram");

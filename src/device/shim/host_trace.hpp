@@ -38,7 +38,7 @@ private:
     PosixTraceHost host_;
     ShmTraceRegion region_;
     TraceTable     table_;
-    /* RVK_PERFETTO=1 in the environment: every scope is also an event. */
+    /* AV_PERFETTO=1 in the environment: every scope is also an event. */
     ShmTraceRegion events_region_;
     EventRing      events_;
     ImageRange     image_;

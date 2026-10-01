@@ -69,23 +69,23 @@ Status HostTrace::start(const char *module)
     if (laid != Status::ok) return laid;
     /* A profiler attaching to a QEMU this shell did not start is refused under
      * Yama's ptrace_scope 1 unless the process names it allowed. */
-    const char *const ptrace = getenv("RVK_PTRACE");
+    const char *const ptrace = getenv("AV_PTRACE");
     if (ptrace != nullptr && ptrace[0] == '1') prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
     /* Every scope costs the call it opens - a batch runs a few hundred - so
      * the table is bound only when a trace is asked for, as the kernel's is. */
-    const char *const scopes = getenv("RVK_TRACE_SCOPES");
-    const char *const perfetto = getenv("RVK_PERFETTO");
+    const char *const scopes = getenv("AV_TRACE_SCOPES");
+    const char *const perfetto = getenv("AV_PERFETTO");
     if ((scopes != nullptr && scopes[0] == '1') || (perfetto != nullptr && perfetto[0] == '1'))
         scope_binding.bind(table_);
     /* A timeline for Perfetto keeps the outer calls only, unless told
      * otherwise: every scope reads the clock twice, and the hottest leaves
      * ran ten million a second. The device's batch loop is kept (its idle
      * spin is below it); the executor down to each command's handler and
-     * what it calls. RVK_TRACE_DEPTH sets both; 0 records everything. */
+     * what it calls. AV_TRACE_DEPTH sets both; 0 records everything. */
     constexpr uint32_t device_depth = 2u;
     constexpr uint32_t executor_depth = 6u;
     const bool         device = module[0] == 'd';
-    const char *const  depth = getenv("RVK_TRACE_DEPTH");
+    const char *const  depth = getenv("AV_TRACE_DEPTH");
     uint32_t           limit = perfetto == nullptr || perfetto[0] != '1' ? 0u : device ? device_depth : executor_depth;
     if (depth != nullptr) {
         limit = 0u;
@@ -93,15 +93,15 @@ Status HostTrace::start(const char *module)
             limit = limit * 10u + static_cast<uint32_t>(*digit - '0');
     }
     table_.limit_depth(limit);
-    /* RVK_TRACE_ONLY: a comma-separated list of scope names, the only ones
+    /* AV_TRACE_ONLY: a comma-separated list of scope names, the only ones
      * recorded. */
-    table_.only(getenv("RVK_TRACE_ONLY"));
+    table_.only(getenv("AV_TRACE_ONLY"));
     /* A ring per slot the size of a busy thread's second or so; the file is
      * sparse, so only the slots threads use take memory. */
     constexpr uint32_t events_per_slot = 1u << 22u;
-    const char *const  wanted = getenv("RVK_PERFETTO");
+    const char *const  wanted = getenv("AV_PERFETTO");
     if (wanted != nullptr && wanted[0] == '1' &&
-        events_region_.open("/rvk-events-", module, EventRingLayout(slots, events_per_slot).bytes()) == Status::ok &&
+        events_region_.open("/av-events-", module, EventRingLayout(slots, events_per_slot).bytes()) == Status::ok &&
         events_.initialize(events_region_.region(), events_region_.bytes(), slots, events_per_slot) == Status::ok)
     {
         host_.precise();

@@ -30,76 +30,76 @@ UmdDevice *device_behind(const void *args)
         return device == nullptr ? hr_invalid_arg : device->dxgi().until_later(args, entry);                       \
     }
 
-AV_DXGI_LATER(rvkumd_dxgi_present, "pfnPresent")
-AV_DXGI_LATER(rvkumd_dxgi_set_display_mode, "pfnSetDisplayMode")
-AV_DXGI_LATER(rvkumd_dxgi_query_resource_residency, "pfnQueryResourceResidency")
-AV_DXGI_LATER(rvkumd_dxgi_rotate_resource_identities, "pfnRotateResourceIdentities")
-AV_DXGI_LATER(rvkumd_dxgi_blt, "pfnBlt")
-AV_DXGI_LATER(rvkumd_dxgi_resolve_shared_resource, "pfnResolveSharedResource")
-AV_DXGI_LATER(rvkumd_dxgi_blt1, "pfnBlt1")
-AV_DXGI_LATER(rvkumd_dxgi_reserved1, "pfnReserved1")
-AV_DXGI_LATER(rvkumd_dxgi_present_multiplane_overlay, "pfnPresentMultiplaneOverlay")
-AV_DXGI_LATER(rvkumd_dxgi_reserved2, "pfnReserved2")
-AV_DXGI_LATER(rvkumd_dxgi_present1, "pfnPresent1")
-AV_DXGI_LATER(rvkumd_dxgi_present_multiplane_overlay1, "pfnPresentMultiplaneOverlay1")
+AV_DXGI_LATER(avumd_dxgi_present, "pfnPresent")
+AV_DXGI_LATER(avumd_dxgi_set_display_mode, "pfnSetDisplayMode")
+AV_DXGI_LATER(avumd_dxgi_query_resource_residency, "pfnQueryResourceResidency")
+AV_DXGI_LATER(avumd_dxgi_rotate_resource_identities, "pfnRotateResourceIdentities")
+AV_DXGI_LATER(avumd_dxgi_blt, "pfnBlt")
+AV_DXGI_LATER(avumd_dxgi_resolve_shared_resource, "pfnResolveSharedResource")
+AV_DXGI_LATER(avumd_dxgi_blt1, "pfnBlt1")
+AV_DXGI_LATER(avumd_dxgi_reserved1, "pfnReserved1")
+AV_DXGI_LATER(avumd_dxgi_present_multiplane_overlay, "pfnPresentMultiplaneOverlay")
+AV_DXGI_LATER(avumd_dxgi_reserved2, "pfnReserved2")
+AV_DXGI_LATER(avumd_dxgi_present1, "pfnPresent1")
+AV_DXGI_LATER(avumd_dxgi_present_multiplane_overlay1, "pfnPresentMultiplaneOverlay1")
 
 #undef AV_DXGI_LATER
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_get_gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_get_gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().gamma_caps(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_set_resource_priority(DxgiDdiArgRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_set_resource_priority(DxgiDdiArgRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().resource_priority(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_get_multiplane_overlay_caps(DxgiDdiArgGetMultiplaneOverlayCapsRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_get_multiplane_overlay_caps(DxgiDdiArgGetMultiplaneOverlayCapsRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().overlay_caps(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_get_multiplane_overlay_group_caps(DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_get_multiplane_overlay_group_caps(DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().overlay_group_caps(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_check_present_duration_support(DxgiDdiArgCheckPresentDurationSupportRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_check_present_duration_support(DxgiDdiArgCheckPresentDurationSupportRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().present_duration(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_offer_resources1(DxgiDdiArgRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_offer_resources1(DxgiDdiArgRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().offer_resources(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().reclaim_resources(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().reclaim_resources1(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_trim_residency_set(DxgiDdiArgRecord *args)
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_trim_residency_set(DxgiDdiArgRecord *args)
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().trim_residency(args);
 }
 
-extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_check_multiplane_overlay_color_space_support(
+extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_check_multiplane_overlay_color_space_support(
     DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord *args)
 {
     UmdDevice *const device = device_behind(args);
@@ -111,29 +111,29 @@ extern "C" Hresult AV_RUNTIME_CALL rvkumd_dxgi_check_multiplane_overlay_color_sp
 void fill_dxgi_base_functions(Dxgi161DdiBaseFunctionsRecord &table)
 {
     AV_SCOPE("fill_dxgi_base_functions");
-    table.pfnPresent = reinterpret_cast<void *>(&rvkumd_dxgi_present);
-    table.pfnGetGammaCaps = reinterpret_cast<void *>(&rvkumd_dxgi_get_gamma_caps);
-    table.pfnSetDisplayMode = reinterpret_cast<void *>(&rvkumd_dxgi_set_display_mode);
-    table.pfnSetResourcePriority = reinterpret_cast<void *>(&rvkumd_dxgi_set_resource_priority);
-    table.pfnQueryResourceResidency = reinterpret_cast<void *>(&rvkumd_dxgi_query_resource_residency);
-    table.pfnRotateResourceIdentities = reinterpret_cast<void *>(&rvkumd_dxgi_rotate_resource_identities);
-    table.pfnBlt = reinterpret_cast<void *>(&rvkumd_dxgi_blt);
-    table.pfnResolveSharedResource = reinterpret_cast<void *>(&rvkumd_dxgi_resolve_shared_resource);
-    table.pfnBlt1 = reinterpret_cast<void *>(&rvkumd_dxgi_blt1);
-    table.pfnOfferResources1 = reinterpret_cast<void *>(&rvkumd_dxgi_offer_resources1);
-    table.pfnReclaimResources = reinterpret_cast<void *>(&rvkumd_dxgi_reclaim_resources);
-    table.pfnGetMultiplaneOverlayCaps = reinterpret_cast<void *>(&rvkumd_dxgi_get_multiplane_overlay_caps);
-    table.pfnGetMultiplaneOverlayGroupCaps = reinterpret_cast<void *>(&rvkumd_dxgi_get_multiplane_overlay_group_caps);
-    table.pfnReserved1 = reinterpret_cast<void *>(&rvkumd_dxgi_reserved1);
-    table.pfnPresentMultiplaneOverlay = reinterpret_cast<void *>(&rvkumd_dxgi_present_multiplane_overlay);
-    table.pfnReserved2 = reinterpret_cast<void *>(&rvkumd_dxgi_reserved2);
-    table.pfnPresent1 = reinterpret_cast<void *>(&rvkumd_dxgi_present1);
-    table.pfnCheckPresentDurationSupport = reinterpret_cast<void *>(&rvkumd_dxgi_check_present_duration_support);
-    table.pfnTrimResidencySet = reinterpret_cast<void *>(&rvkumd_dxgi_trim_residency_set);
+    table.pfnPresent = reinterpret_cast<void *>(&avumd_dxgi_present);
+    table.pfnGetGammaCaps = reinterpret_cast<void *>(&avumd_dxgi_get_gamma_caps);
+    table.pfnSetDisplayMode = reinterpret_cast<void *>(&avumd_dxgi_set_display_mode);
+    table.pfnSetResourcePriority = reinterpret_cast<void *>(&avumd_dxgi_set_resource_priority);
+    table.pfnQueryResourceResidency = reinterpret_cast<void *>(&avumd_dxgi_query_resource_residency);
+    table.pfnRotateResourceIdentities = reinterpret_cast<void *>(&avumd_dxgi_rotate_resource_identities);
+    table.pfnBlt = reinterpret_cast<void *>(&avumd_dxgi_blt);
+    table.pfnResolveSharedResource = reinterpret_cast<void *>(&avumd_dxgi_resolve_shared_resource);
+    table.pfnBlt1 = reinterpret_cast<void *>(&avumd_dxgi_blt1);
+    table.pfnOfferResources1 = reinterpret_cast<void *>(&avumd_dxgi_offer_resources1);
+    table.pfnReclaimResources = reinterpret_cast<void *>(&avumd_dxgi_reclaim_resources);
+    table.pfnGetMultiplaneOverlayCaps = reinterpret_cast<void *>(&avumd_dxgi_get_multiplane_overlay_caps);
+    table.pfnGetMultiplaneOverlayGroupCaps = reinterpret_cast<void *>(&avumd_dxgi_get_multiplane_overlay_group_caps);
+    table.pfnReserved1 = reinterpret_cast<void *>(&avumd_dxgi_reserved1);
+    table.pfnPresentMultiplaneOverlay = reinterpret_cast<void *>(&avumd_dxgi_present_multiplane_overlay);
+    table.pfnReserved2 = reinterpret_cast<void *>(&avumd_dxgi_reserved2);
+    table.pfnPresent1 = reinterpret_cast<void *>(&avumd_dxgi_present1);
+    table.pfnCheckPresentDurationSupport = reinterpret_cast<void *>(&avumd_dxgi_check_present_duration_support);
+    table.pfnTrimResidencySet = reinterpret_cast<void *>(&avumd_dxgi_trim_residency_set);
     table.pfnCheckMultiplaneOverlayColorSpaceSupport =
-        reinterpret_cast<void *>(&rvkumd_dxgi_check_multiplane_overlay_color_space_support);
-    table.pfnPresentMultiplaneOverlay1 = reinterpret_cast<void *>(&rvkumd_dxgi_present_multiplane_overlay1);
-    table.pfnReclaimResources1 = reinterpret_cast<void *>(&rvkumd_dxgi_reclaim_resources1);
+        reinterpret_cast<void *>(&avumd_dxgi_check_multiplane_overlay_color_space_support);
+    table.pfnPresentMultiplaneOverlay1 = reinterpret_cast<void *>(&avumd_dxgi_present_multiplane_overlay1);
+    table.pfnReclaimResources1 = reinterpret_cast<void *>(&avumd_dxgi_reclaim_resources1);
 }
 
 }  // namespace av::d3d

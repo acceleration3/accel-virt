@@ -21,7 +21,7 @@ constexpr int receive_timed_out = 1;
 
 }  // namespace
 
-TableHost::TableHost(const RvkHostOps &ops) : ops_(ops)
+TableHost::TableHost(const AvHostOps &ops) : ops_(ops)
 {
     AV_SCOPE("TableHost::TableHost");
 }
@@ -42,13 +42,13 @@ void TableHost::violated(const char *rule, const char *function)
 void TableHost::require_main_loop(const char *function)
 {
     AV_SCOPE("TableHost::require_main_loop");
-    if (ops_.main_loop_held(ops_.opaque) == 0) violated("virtio-gpu-rvk: main loop required by", function);
+    if (ops_.main_loop_held(ops_.opaque) == 0) violated("virtio-gpu-av: main loop required by", function);
 }
 
 void TableHost::require_worker(const char *function)
 {
     AV_SCOPE("TableHost::require_worker");
-    if (ops_.main_loop_held(ops_.opaque) != 0) violated("virtio-gpu-rvk: worker required by", function);
+    if (ops_.main_loop_held(ops_.opaque) != 0) violated("virtio-gpu-av: worker required by", function);
 }
 
 Status TableHost::start_thread(HostRoutine entry, void *context, void *&thread)
@@ -148,7 +148,7 @@ uint32_t TableHost::gpu_count()
 GpuIdentity TableHost::gpu_identity(uint32_t index)
 {
     AV_SCOPE("TableHost::gpu_identity");
-    RvkGpuProperties properties = {};
+    AvGpuProperties properties = {};
     ops_.gpu_properties(ops_.opaque, index, &properties);
     properties.name[sizeof properties.name - 1u] = '\0';
     return GpuIdentity(properties.vendor_id, properties.device_id, properties.device_type, properties.uuid,
@@ -158,7 +158,7 @@ GpuIdentity TableHost::gpu_identity(uint32_t index)
 Status TableHost::gpu_pci_address(uint32_t index, PciAddress &address)
 {
     AV_SCOPE("TableHost::gpu_pci_address");
-    RvkGpuProperties properties = {};
+    AvGpuProperties properties = {};
     ops_.gpu_properties(ops_.opaque, index, &properties);
     if (properties.on_pci == 0u) return Status::not_found;
     address = PciAddress(properties.pci_domain, properties.pci_bus, properties.pci_device, properties.pci_function);
@@ -421,7 +421,7 @@ Status TableHost::show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &
 {
     AV_SCOPE("TableHost::show_scanout");
     if (ops_.show_scanout == nullptr) return Status::not_supported;
-    const RvkScanoutFrame plane = {frame.rect().width(),
+    const AvScanoutFrame plane = {frame.rect().width(),
                                    frame.rect().height(),
                                    frame.rect().x(),
                                    frame.rect().y(),
@@ -447,7 +447,7 @@ void TableHost::hide_scanout(uint32_t head)
     if (ops_.hide_scanout != nullptr) ops_.hide_scanout(ops_.opaque, head);
 }
 
-Status TableHost::show_image(uint32_t head, const RvkExportedImage &image)
+Status TableHost::show_image(uint32_t head, const AvExportedImage &image)
 {
     AV_SCOPE("TableHost::show_image");
     if (ops_.show_image == nullptr) return Status::not_supported;

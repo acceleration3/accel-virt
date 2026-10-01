@@ -110,7 +110,7 @@ inline void release(cl_sampler &object) { release_object(object, cl.ReleaseSampl
 
 // ---- what a sample leaves behind to be compared
 // An image as B8G8R8A8 rows ("BGRA", width, height, texels) - the D3D11 suite's
-// frame format - and a buffer as "RVKB", element type, count, elements.
+// frame format - and a buffer as "AVB", element type, count, elements.
 class Capture {
 public:
     enum Element : uint32_t { u32 = 1, f32 = 2, i32 = 3 };

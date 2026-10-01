@@ -56,10 +56,10 @@ bool D3d12HostCaps::learn(Kmt &kmt, uint32_t adapter)
     if (transport.initialize() != Status::ok) return false;
     ScopeExit torn([&] { transport.teardown(); });
     uint32_t hresult = 1u;
-    if (!d3d12proto::rvk_d3d12_OpenDevice12(transport, 0u, &hresult, &caps_) || hresult != 0u) return false;
+    if (!d3d12proto::av_d3d12_OpenDevice12(transport, 0u, &hresult, &caps_) || hresult != 0u) return false;
     for (uint32_t format = 1u; format < format_count; format++) {
         uint32_t support1 = 0u, support2 = 0u, levels = 0u;
-        if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, 1u, &support1, &support2, &levels)) return false;
+        if (!d3d12proto::av_d3d12_QueryFormat12(transport, format, 1u, &support1, &support2, &levels)) return false;
         formats_.record(format, support1, support2);
     }
     if (!learn_samples(transport)) return false;
@@ -76,7 +76,7 @@ bool D3d12HostCaps::learn_samples(ClientTransport &transport)
         if (!formats_.multisample_candidate(format)) continue;
         for (uint32_t step = 1u; step < d3d::DxgiFormatTable::sample_steps; step++) {
             uint32_t support1 = 0u, support2 = 0u, levels = 0u;
-            if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, 1u << step, &support1, &support2, &levels))
+            if (!d3d12proto::av_d3d12_QueryFormat12(transport, format, 1u << step, &support1, &support2, &levels))
                 return false;
             formats_.record_samples(format, 1u << step, levels);
         }

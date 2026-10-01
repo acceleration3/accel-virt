@@ -1,7 +1,7 @@
 #include "device/executor/imported_blob.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 namespace av {
 
@@ -12,16 +12,16 @@ ImportedBlob::ImportedBlob()
     AV_SCOPE("ImportedBlob::ImportedBlob");
 }
 
-Status ImportedBlob::take(uint64_t blob_id, const RvkBlobHandle &handle)
+Status ImportedBlob::take(uint64_t blob_id, const AvBlobHandle &handle)
 {
     AV_SCOPE("ImportedBlob::take");
     if (live_) return Status::invalid_state;
     if (handle.size == 0u || handle.size % page_bytes != 0u) return Status::invalid_parameter;
     /* Exactly one kind. Two would mean the device could not decide which the
      * API is about to be handed, and none means it decided nothing. */
-    if (handle.kind == RVK_BLOB_HOST_POINTER) {
+    if (handle.kind == AV_BLOB_HOST_POINTER) {
         if (handle.pointer == nullptr || handle.fd != -1) return Status::invalid_parameter;
-    } else if (handle.kind == RVK_BLOB_DMA_BUF) {
+    } else if (handle.kind == AV_BLOB_DMA_BUF) {
         if (handle.fd < 0 || handle.pointer != nullptr) return Status::invalid_parameter;
     } else {
         return Status::invalid_parameter;
@@ -120,8 +120,8 @@ bool ImportedBlob::invariants_hold() const
                object_ == 0u && wire_handle_ == 0u;
     if (size_ == 0u || size_ % page_bytes != 0u) return false;
     if (wire_handle_ != 0u && object_ == 0u) return false;
-    if (kind_ == RVK_BLOB_HOST_POINTER) return pointer_ != nullptr && descriptor_ == -1;
-    if (kind_ == RVK_BLOB_DMA_BUF) return pointer_ == nullptr && descriptor_ >= 0;
+    if (kind_ == AV_BLOB_HOST_POINTER) return pointer_ != nullptr && descriptor_ == -1;
+    if (kind_ == AV_BLOB_DMA_BUF) return pointer_ == nullptr && descriptor_ >= 0;
     return false;
 }
 

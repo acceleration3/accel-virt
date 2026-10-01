@@ -1,8 +1,8 @@
-/* rvkgl.dll's ICD root and what it is constructed over: the process heap, the
+/* avgl.dll's ICD root and what it is constructed over: the process heap, the
  * two thread locks, the log file, D3DKMT through gdi32, the application's
  * windows, thread-local storage, the loaded opengl32.dll, and the present
  * thread with the lock, D3DKMT waits and events of its own. One per process,
- * in the exports' storage (rvkgl_exports.cpp), constructed on opengl32's first
+ * in the exports' storage (avgl_exports.cpp), constructed on opengl32's first
  * call rather than at DLL attach, where the loader lock forbids opening a file
  * or an event. Translation only: what the root decides is in src/icd/opengl,
  * reached through the entry points GlIcdBinding answers. */

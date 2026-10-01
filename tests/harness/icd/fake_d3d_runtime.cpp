@@ -32,12 +32,12 @@ void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
 
 /* The runtime's QueryAdapterInfo callback, which the driver asks for the LUID
  * the kernel driver answers: this fake has no kernel driver, so it refuses,
- * and the driver takes the first rvkgpu adapter. The driver calls it through
+ * and the driver takes the first avgpu adapter. The driver calls it through
  * a pointer to its own function-local argument struct, which no type here can
  * name, so -fsanitize=function would see a mismatch that the ABI does not. */
 __attribute__((no_sanitize("function"))) std::int32_t refuse_adapter_info(void *, void *) { return -1; }
 
-/* UMDRIVERPRIVATE as rvkgpu.sys writes it: its tag, then the adapter's LUID. */
+/* UMDRIVERPRIVATE as avgpu.sys writes it: its tag, then the adapter's LUID. */
 struct AdapterInfoQuery {
     void         *private_data;
     std::uint32_t private_bytes;
@@ -45,7 +45,7 @@ struct AdapterInfoQuery {
 
 __attribute__((no_sanitize("function"))) std::int32_t answer_adapter_info(void *adapter, void *query)
 {
-    constexpr std::uint64_t umd_private_tag = 0x44494C554B5652ull;
+    constexpr std::uint64_t umd_private_tag = 0x0044494C555641ull;
     auto *const asked = static_cast<AdapterInfoQuery *>(query);
     if (asked->private_bytes < 2u * sizeof(std::uint64_t)) return -1;
     const std::uint64_t words[2] = {umd_private_tag, *static_cast<const std::uint64_t *>(adapter)};

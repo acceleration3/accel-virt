@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch the QEMU source the virtio-gpu-rvk device is built into, pinned by hash:
+# Fetch the QEMU source the virtio-gpu-av device is built into, pinned by hash:
 # the 11.1.1 release tarball Arch's qemu 11.1.1-1 package builds. It lands in
 # third_party/qemu/qemu-11.1.1 unmodified; tools/build_qemu.sh copies it before
 # patching, so the pristine tree is reused by every build.

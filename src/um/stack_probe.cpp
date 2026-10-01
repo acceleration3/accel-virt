@@ -1,7 +1,7 @@
 /* __chkstk for binaries with no C runtime: the compiler calls it before a
  * frame larger than a page is used, with the frame's size in rax, so the frame
  * is touched a page at a time from the top and each guard page is met in
- * order. Without it a frame skips the guard page and faults - rvkglprobe.exe's
+ * order. Without it a frame skips the guard page and faults - avglprobe.exe's
  * entry did, with a 45 KiB frame over a 4 KiB commit - and an ICD would do the
  * same on an application's thread.
  *

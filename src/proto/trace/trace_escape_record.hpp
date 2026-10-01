@@ -1,4 +1,4 @@
-/* The escape rvkinspect.exe sends the driver for its trace table or its state
+/* The escape avinspect.exe sends the driver for its trace table or its state
  * dump, one window at a time (docs/trace.md). The request names the kind, the
  * offset and how many payload bytes follow the record; the driver answers in
  * the same bytes with the total size, its clock, and how many bytes of the
@@ -17,7 +17,7 @@ namespace av {
 class TraceEscapeRecord {
 public:
     static constexpr size_t   encoded_size = 40u;
-    static constexpr uint32_t magic = 0x444B5652u; /* "RVKD" */
+    static constexpr uint32_t magic = 0x00445641u; /* "AVD" */
 
     enum class Kind : uint16_t { table = 1u, state = 2u };
 

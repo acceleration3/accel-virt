@@ -38,7 +38,7 @@ namespace {
 
 class D3d12Rig {
 public:
-    D3d12Rig() : report_("rvkd3d12probe"), steps_(kmt_, report_, "d3d12") {}
+    D3d12Rig() : report_("avd3d12probe"), steps_(kmt_, report_, "d3d12") {}
     D3d12Rig(const D3d12Rig &) = delete;
     D3d12Rig &operator=(const D3d12Rig &) = delete;
 
@@ -86,7 +86,7 @@ TEST(d3d12_work, every_step_passes_and_the_target_is_the_colour_the_list_cleared
   CHECK(std::strstr(report, "ok d3d12.fence") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.readback") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.pixels 4096") != nullptr);
-  CHECK(std::strstr(report, "rvkd3d12probe: 9 passed, 0 failed") != nullptr);
+  CHECK(std::strstr(report, "avd3d12probe: 9 passed, 0 failed") != nullptr);
   CHECK_EQ(rig.adapter(), ScriptedD3d12::adapter);
   CHECK_EQ(rig.feature_level(), ScriptedD3d12::feature_level_12_0);
   CHECK_EQ(rig.d3d12().width(), D3d12Work::extent);
@@ -101,7 +101,7 @@ TEST(d3d12_work, a_target_of_the_wrong_colour_fails_with_the_count)
       const char *report = rig.run();
       CHECK(std::strstr(report, "FAIL d3d12.pixels") != nullptr);
       CHECK(std::strstr(report, " 4095\n") != nullptr);
-      CHECK(std::strstr(report, "rvkd3d12probe: 8 passed, 1 failed") != nullptr);
+      CHECK(std::strstr(report, "avd3d12probe: 8 passed, 1 failed") != nullptr);
   }
   D3d12Rig alpha;
   alpha.d3d12().miscolour(3u);
@@ -145,7 +145,7 @@ TEST(d3d12_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
 { { ScriptedD3d12     d3d12;
     ScriptedImageSink images;
     MockKmt           kmt;
-    GuestReport       report("rvkd3d12probe");
+    GuestReport       report("avd3d12probe");
     ScenarioSteps     steps(kmt, report, "d3d12");
     D3d12Work         work(d3d12, images);
     work.run(steps);

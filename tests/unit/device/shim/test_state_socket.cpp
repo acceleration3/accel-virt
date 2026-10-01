@@ -44,7 +44,7 @@ std::size_t ask(const char *module, const char *request, char *answer, std::size
 {
     sockaddr_un address = {};
     address.sun_family = AF_UNIX;
-    std::snprintf(address.sun_path, sizeof address.sun_path, "/dev/shm/rvk-state-%s-%d.sock", module,
+    std::snprintf(address.sun_path, sizeof address.sun_path, "/dev/shm/av-state-%s-%d.sock", module,
                   static_cast<int>(getpid()));
     const int client = socket(AF_UNIX, SOCK_STREAM, 0);
     std::size_t length = 0u;
@@ -83,9 +83,9 @@ TEST(state_socket, answers_a_reporter_s_dump_and_refuses_what_it_does_not_know)
   ask("silent", "state\n", answer, sizeof answer);
   CHECK(std::strcmp(answer, "error nothing to say\n") == 0);
   char path[108];
-  std::snprintf(path, sizeof path, "/dev/shm/rvk-state-executor-%d.sock", static_cast<int>(pid));
+  std::snprintf(path, sizeof path, "/dev/shm/av-state-executor-%d.sock", static_cast<int>(pid));
   unlink(path);
-  std::snprintf(path, sizeof path, "/dev/shm/rvk-state-silent-%d.sock", static_cast<int>(pid));
+  std::snprintf(path, sizeof path, "/dev/shm/av-state-silent-%d.sock", static_cast<int>(pid));
   unlink(path); }
 
 TEST(state_socket, a_name_too_long_for_a_socket_path_is_refused)
@@ -97,6 +97,6 @@ TEST(state_socket, a_name_too_long_for_a_socket_path_is_refused)
   CHECK(shm != nullptr);
   bool left = false;
   for (dirent *entry = readdir(shm); entry != nullptr; entry = readdir(shm))
-    left = left || std::strncmp(entry->d_name, "rvk-state-a-module-name", 23u) == 0;
+    left = left || std::strncmp(entry->d_name, "av-state-a-module-name", 23u) == 0;
   closedir(shm);
   CHECK(!left); }

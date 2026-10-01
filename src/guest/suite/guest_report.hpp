@@ -2,7 +2,7 @@
  * line per step, `ok scenario.step`, `ok scenario.step N` for a step that
  * measured something, or
  * `FAIL scenario.step status=N code=0xXXXXXXXX`, then
- * `<program>: P passed, F failed`, the program rvktest unless named. Text past the capacity is cut; the counts
+ * `<program>: P passed, F failed`, the program avtest unless named. Text past the capacity is cut; the counts
  * are not, and a report without its summary line reads as a failure. */
 #ifndef AV_GUEST_REPORT_HPP
 #define AV_GUEST_REPORT_HPP

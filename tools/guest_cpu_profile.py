@@ -10,8 +10,8 @@ say how long a call took; this says what the CPU did inside it, including the
 parts no scope covers: the runtime, the kernel, interrupts that land on the
 thread.
 
-    tools/guest_cpu_profile.py rvkd3d11samples
-    tools/guest_cpu_profile.py rvkd3d11samples --seconds 3 --threads 2 --top 30
+    tools/guest_cpu_profile.py avd3d11samples
+    tools/guest_cpu_profile.py avd3d11samples --seconds 3 --threads 2 --top 30
 
 The guest must be held (run_guest_suite.py --keep). The process is found in the
 trace by name, so one that exits and is started over during it counts whole.
@@ -35,7 +35,7 @@ from etw.symbols import Symbols  # noqa: E402
 LOCAL_BINARIES = (ROOT / "build" / "guest", ROOT / "build" / "driver")
 CACHE = ROOT / "build-perfetto" / "symbols"
 CALLER_DEPTH = 4
-REMOTE_TRACE = "C:\\rvk\\cpu.etl"
+REMOTE_TRACE = "C:\\av\\cpu.etl"
 
 
 def guest(work, *command, timeout=120):

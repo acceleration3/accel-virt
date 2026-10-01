@@ -84,11 +84,11 @@ TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
   CHECK_EQ(fixture.plane().sub_apis(), 0u);
   fixture.ops().editable().abi_version = 0u;
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_parameter);
-  fixture.ops().editable().abi_version = RVK_EXECUTOR_ABI_VERSION;
-  fixture.ops().set_import_kinds(RVK_BLOB_HOST_POINTER);
+  fixture.ops().editable().abi_version = AV_EXECUTOR_ABI_VERSION;
+  fixture.ops().set_import_kinds(AV_BLOB_HOST_POINTER);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK_EQ(fixture.plane().sub_apis(), vulkan_only);
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER));
+  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_state); }
 
 /* Frames are the library's: read through the plane from any thread, and
@@ -97,10 +97,10 @@ TEST(local_context_plane, reads_staged_frames_through_its_library)
 { Fixture fixture;
   const av::SurfacePoint frame(3u, 9u);
   CHECK(!fixture.plane().reads_frames());
-  RvkFrameView view = {};
+  AvFrameView view = {};
   CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view));
   static const std::uint8_t pixels[16] = {};
-  fixture.ops().serve_frame(3u, 9u, RvkFrameView{pixels, 16u, 4u, 1u, 0u});
+  fixture.ops().serve_frame(3u, 9u, AvFrameView{pixels, 16u, 4u, 1u, 0u});
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK(fixture.plane().reads_frames());
   CHECK(!fixture.plane().map_frame(uuid, av::SurfacePoint(3u, 8u), 1u, view));
@@ -162,7 +162,7 @@ TEST(local_context_plane, destroy_all_takes_the_shared_objects_with_the_contexts
   CHECK_STATUS(fixture.plane().create(2u), Status::ok);
   const int descriptor = fixture.host().open_descriptor();
   CHECK_STATUS(LocalContextPlaneProbe::shared(fixture.plane())
-                   .publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, descriptor),
+                   .publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, descriptor),
                Status::ok);
   CHECK_EQ(LocalContextPlaneProbe::shared(fixture.plane()).live(), 1u);
   fixture.plane().destroy_all();
@@ -178,9 +178,9 @@ TEST(local_context_plane, a_guest_release_closes_the_guest_s_hold_and_tells_the_
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
   av::HostSharedObjects &shared = LocalContextPlaneProbe::shared(fixture.plane());
-  CHECK_STATUS(shared.publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u,
+  CHECK_STATUS(shared.publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u,
                               fixture.host().open_descriptor()), Status::ok);
-  CHECK_STATUS(shared.publish(8u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u,
+  CHECK_STATUS(shared.publish(8u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u,
                               fixture.host().open_descriptor()), Status::ok);
   fixture.plane().shared_released(uuid, 7u);
   CHECK_EQ(shared.live(), 1u);
@@ -197,7 +197,7 @@ TEST(local_context_plane, an_image_nothing_published_is_neither_exported_nor_rea
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
-  RvkExportedImage image = {};
+  AvExportedImage image = {};
   CHECK(!fixture.plane().export_image(uuid, 9u, image));
   std::uint32_t pixels[4] = {};
   CHECK(!fixture.plane().read_image(uuid, 9u, pixels, 8u, 2u, 2u)); }

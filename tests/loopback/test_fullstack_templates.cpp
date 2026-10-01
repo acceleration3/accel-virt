@@ -6,7 +6,7 @@
  * agree. The guest sizes it from the template it remembers; the device refuses
  * a length its own template does not account for. A host without Vulkan has
  * nothing here to judge, and the test returns without checking. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -40,7 +40,7 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libz\n"
            "leak:libLLVM\n"
            "leak:libgallium\n"
-           "leak:librvk_executor\n";
+           "leak:libav_executor\n";
 }
 
 using av::DdiKmt;
@@ -78,7 +78,7 @@ private:
     av::icd::IcdRoot          root_;
 };
 
-/* One device on the rvk adapter, through the ICD's entry points as the Windows
+/* One device on the av adapter, through the ICD's entry points as the Windows
  * loader would call them. */
 class IcdDevice {
 public:
@@ -143,7 +143,7 @@ private:
  * answering afterwards - which is what says the frame was not refused. */
 TEST(fullstack_templates, a_descriptor_set_updated_through_a_template_reaches_the_host)
 { const WidestHostGpu gpu;
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
   const ExecutorLibraryFile library(AV_EXECUTOR_LIBRARY);
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;

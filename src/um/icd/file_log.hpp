@@ -1,4 +1,4 @@
-/* LogSink appending to C:\ProgramData\rvk\<stem>-<pid>.log, which the guest
+/* LogSink appending to C:\ProgramData\av\<stem>-<pid>.log, which the guest
  * runner collects into diag/ (constitution IX). One file per process, so two
  * applications never interleave; each line is one append, which Windows keeps
  * whole between threads. A log that cannot be opened drops its lines: the ICD's
@@ -12,7 +12,7 @@ namespace av {
 
 class FileLog final : public icd::LogSink {
 public:
-    /* `stem` names the ICD (rvkvk, rvkgl) and outlives the log. */
+    /* `stem` names the ICD (avvk, avgl) and outlives the log. */
     explicit FileLog(const wchar_t *stem);
     ~FileLog();
     FileLog(const FileLog &) = delete;

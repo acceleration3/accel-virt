@@ -6,7 +6,7 @@
  * CL_DEVICE_VENDOR_ID and CL_DEVICE_LUID_KHR name an adapter. The host's name
  * the host's own GPU, which the guest has no handle to, cannot share memory
  * with, and cannot match a DXGI adapter against; the guest's adapter is
- * rvkgpu's. CL_DEVICE_UUID_KHR is left to the host, as the Vulkan ICD leaves
+ * avgpu's. CL_DEVICE_UUID_KHR is left to the host, as the Vulkan ICD leaves
  * VkPhysicalDeviceIDProperties::deviceUUID: it identifies the physical GPU
  * doing the work, and there is no second GPU here to confuse it with.
  *
@@ -37,12 +37,12 @@ struct ClDeviceReportProbe;
 
 class ClDeviceReport {
 public:
-    /* Red Hat's PCI vendor, which is the virtio function rvkgpu drives
+    /* Red Hat's PCI vendor, which is the virtio function avgpu drives
      * (1af4:1050). An application matching this device against an adapter it
      * enumerated matches the guest's, so this is the guest's. */
     static constexpr uint32_t vendor_id = 0x1AF4u;
 
-    /* `adapter_luid` is the rvkgpu adapter's, as Kmt::adapter_luid answers it;
+    /* `adapter_luid` is the avgpu adapter's, as Kmt::adapter_luid answers it;
      * zero is what it leaves when there was no adapter, and is reported as a
      * LUID that is not valid. */
     explicit ClDeviceReport(uint64_t adapter_luid);
@@ -80,7 +80,7 @@ public:
 private:
     friend struct ClDeviceReportProbe;
 
-    /* "OpenCL C 3.0 rvkgpu" and its terminator, with room to spare. */
+    /* "OpenCL C 3.0 avgpu" and its terminator, with room to spare. */
     static constexpr size_t version_bytes = 32u;
 
     cl_int answer(const void *from, size_t bytes, size_t value_bytes, void *value,

@@ -3,7 +3,7 @@
  * The root is eight megabytes of fixed-size session tables - sixty-four
  * sessions, each holding every backend it might become - and a test that
  * declares one as a local overflows an eight-megabyte stack before the first
- * assertion runs. The device never does that: `rvk_executor_ops()` builds its
+ * assertion runs. The device never does that: `av_executor_ops()` builds its
  * root in an ObjectStorage in the entry point's translation unit, because a
  * C entry point has nowhere to put a `this`.
  *

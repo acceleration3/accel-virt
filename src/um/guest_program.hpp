@@ -1,4 +1,4 @@
-/* rvktest.exe: the in-guest suite over gdi32, its report written to standard
+/* avtest.exe: the in-guest suite over gdi32, its report written to standard
  * output for the guest agent to carry back, its failures the exit code. */
 #ifndef AV_GUEST_PROGRAM_HPP
 #define AV_GUEST_PROGRAM_HPP
@@ -17,13 +17,13 @@ namespace av {
 class GuestProgram final : public StateReporter {
 public:
     /* What the command line asked the program to run. */
-    enum class Run : uint8_t { suite, timeout, rvk, round_trip };
+    enum class Run : uint8_t { suite, timeout, av, round_trip };
 
     /* The whole suite, with the long fence run only when the command line asks
-     * for it: `rvktest.exe <seconds>` (feature 039, US3). With `timeout_only`
+     * for it: `avtest.exe <seconds>` (feature 039, US3). With `timeout_only`
      * the command line asked for `tdr` instead, and only the timeout scenario
      * runs: the host has been told to hold a context, and every other scenario
-     * would be measuring that (feature 040, US3). With `rvk` only the scenarios
+     * would be measuring that (feature 040, US3). With `av` only the scenarios
      * that send work to the host's executor library run (feature 044). */
     GuestProgram(uint32_t stress_seconds, Run run, ObjectStorage<ProcessTrace> &trace, ProcessTrace::Filter crashed);
     GuestProgram(const GuestProgram &) = delete;
@@ -32,7 +32,7 @@ public:
     /* The process exit code: how many steps failed. */
     uint32_t run();
 
-    /* `program/0 run=<suite|timeout|rvk>`, then the report's progress. */
+    /* `program/0 run=<suite|timeout|av>`, then the report's progress. */
     void report(StateWriter &writer) override;
 
 private:
@@ -42,7 +42,7 @@ private:
     GuestReport report_;
     GuestSuite  suite_;
     Run         run_;
-    /* rvktest's tracing, in the entry's storage (constitution III). */
+    /* avtest's tracing, in the entry's storage (constitution III). */
     ObjectStorage<ProcessTrace> &trace_;
     ProcessTrace::Filter         crashed_;
 };

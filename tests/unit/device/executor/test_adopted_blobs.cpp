@@ -2,7 +2,7 @@
  * caller acts on is which blob a freed handle names - the wrong one, or one
  * already given back, is an import released twice. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/adopted_blobs.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "harness/executor/adopted_blobs_probe.hpp"
@@ -21,8 +21,8 @@ std::uint8_t backing[ImportedBlob::page_bytes];
 
 /* A blob taken and holding `object`, as a backend leaves one it adopted. */
 void adopted(ImportedBlob &blob, std::uint64_t id, std::uint64_t object)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_HOST_POINTER;
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
   handle.pointer = backing;
   handle.fd = -1;
   handle.size = sizeof backing;

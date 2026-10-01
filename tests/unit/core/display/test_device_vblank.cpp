@@ -184,7 +184,7 @@ TEST(device_vblank_tick, a_refused_report_is_said_and_not_counted)
   fixture.dxgkrnl().refuse_synchronize(no_memory);
   fixture.blank(1u);
   fixture.tick(100u);
-  CHECK(fixture.platform().logged_line("rvkgpu: a vsync was refused"));
+  CHECK(fixture.platform().logged_line("avgpu: a vsync was refused"));
   CHECK_EQ(fixture.vsync().reported(), 0u); }
 
 TEST(device_vblank_tick, a_page_the_device_never_took_or_wrote_wrong_reports_nothing)
@@ -255,6 +255,6 @@ TEST(device_vblank_report_rate, every_hundred_and_twenty_blanks_a_line_says_how_
       fixture.tick(1000u + blank * 166667u);
   }
   CHECK(fixture.platform().logged_line(
-      "rvkgpu: vsync 120 blanks in 20000040 ticks, 2 folded, 118 reported, enabled 1 times"));
+      "avgpu: vsync 120 blanks in 20000040 ticks, 2 folded, 118 reported, enabled 1 times"));
   CHECK_EQ(fixture.vsync().reported(), 0u);   /* the window started again */
   CHECK(fixture.vsync().invariants_hold()); }

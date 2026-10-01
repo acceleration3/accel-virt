@@ -74,7 +74,7 @@ public:
      * for a key nothing is published under. Takes the device's lock. */
     [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     /* The image published under `key` as a dma-buf (HostImageExport). */
-    [[nodiscard]] bool export_image(uint64_t key, RvkExportedImage &image);
+    [[nodiscard]] bool export_image(uint64_t key, AvExportedImage &image);
     /* Under the lock a session's command already holds: subresource
      * `subresource` of `source` staged for the present engine
      * (D3d11FramePool::stage); null when no frame is free. */

@@ -130,7 +130,7 @@ diff — that is how you get early warning of DDI changes.
 | `dxgkrnl.sys` — `DXG_HOST_VIRTUALGPU_VMBUS::VmBusCommandTableVgpuToHost` | The literal dispatch table for all 92 GPU-PV messages, with handler addresses. Decompiling it recovers each message's handler and, from the handler, its payload shape. |
 | `dxgkrnl.sys` — doorbell path | `Doorbell`-named functions show how `dxgkrnl` validates and maps a doorbell page. Directly relevant to phase 6. |
 | `d3d12core.dll` | Which UMD DDI entries the runtime actually calls, in what order, at device creation. Answers "what is the minimum UMD" for phase 7. |
-| `vpci.sys` | How a synthetic PCI device gets enumerated in a guest — relevant if `rvkgpu` is to bind to a virtio-pci device rather than a root-enumerated one. |
+| `vpci.sys` | How a synthetic PCI device gets enumerated in a guest — relevant if `avgpu` is to bind to a virtio-pci device rather than a root-enumerated one. |
 | `amdkmdag.sys` | A real, shipping, WDDM 3.2 KMD. No symbols, but the 193-field table makes it navigable. Worth it once a specific question needs a real-hardware answer. |
 
 ## A note on what RE is and is not good for here

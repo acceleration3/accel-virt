@@ -10,7 +10,7 @@
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -73,7 +73,7 @@ struct QueryShapesProbe {
 
 namespace {
 
-constexpr const char *renderer = "rvk host renderer";
+constexpr const char *renderer = "av host renderer";
 
 class Context {
 public:
@@ -114,7 +114,7 @@ TEST(guest_gl_context, make_opens_an_opengl_context_with_its_options_and_learns_
   CHECK(context->wire() != nullptr);
   CHECK(context->share_name() != 0u);
   CHECK_EQ(rig.connection().users(), 1u);
-  CHECK(std::strcmp(context->string(GuestGlContext::gl_vendor), "rvk host vendor") == 0);
+  CHECK(std::strcmp(context->string(GuestGlContext::gl_vendor), "av host vendor") == 0);
   CHECK(std::strcmp(context->string(GuestGlContext::gl_renderer), renderer) == 0);
   CHECK(std::strcmp(context->string(GuestGlContext::gl_version), "4.6.0 NVIDIA 580") == 0);
   CHECK(std::strcmp(context->string(GuestGlContext::gl_shading_language_version), "4.60") == 0);
@@ -123,7 +123,7 @@ TEST(guest_gl_context, make_opens_an_opengl_context_with_its_options_and_learns_
   CHECK_EQ(context->queries().values(0x87FFu), 1u);
   CHECK_EQ(context->queries().values(0x8DF8u), 0u);
   /* The context's record carries the options it was made with. */
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().major(), 4u);
   CHECK_EQ(record.options().minor(), 5u);
@@ -178,7 +178,7 @@ TEST(guest_gl_context, a_legacy_context_asks_for_compatibility_first)
   rig.host().gl_make_profile(renderer, "4.6 (Compatibility Profile) Mesa", 4, 6, 2);
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::compatibility_46);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().major(), 4u);
   CHECK_EQ(record.options().minor(), 6u);
@@ -193,7 +193,7 @@ TEST(guest_gl_context, a_host_with_no_compatibility_profile_gets_the_next_rung)
   rig.host().gl_make_profile(renderer, "1.4 Mesa", 1, 4, 0);
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::host_default);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().major(), 0u);
   CHECK(record.options().profile() == GlContextOptions::Profile::none);
@@ -274,7 +274,7 @@ TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
   CHECK_EQ(rig.platform().live_allocations(), 0u);
   CHECK_EQ(rig.kmt().ram_chunks(), 0u); }
 
-TEST(guest_gl_context, no_rvkgpu_device_is_not_supported)
+TEST(guest_gl_context, no_avgpu_device_is_not_supported)
 { GlContextRig rig;
   rig.kmt().fail_at(MockKmt::Call::create_device, 1u, MockKmt::invalid_parameter);
   Context context(rig);
@@ -375,7 +375,7 @@ TEST(guest_gl_context, a_faulted_transport_makes_the_context_lost)
   rig.kmt().withhold_answer_at(1u);
   av::ClientTransport *const wire = context->wire();
   CHECK(wire != nullptr);
-  CHECK_EQ(av::glproto::rvk_glGetError(*wire), 0u);
+  CHECK_EQ(av::glproto::av_glGetError(*wire), 0u);
   CHECK(context->wire() == nullptr);
   CHECK(context->state() == State::lost);
   CHECK(context->wire() == nullptr);
@@ -403,7 +403,7 @@ TEST(guest_gl_context, a_lost_context_reports_its_loss_by_its_robustness)
     CHECK_EQ(context->take_error(), 0u);
     CHECK_EQ(context->lost_reset_status(), 0u);
     rig.kmt().withhold_answer_at(1u);
-    CHECK_EQ(av::glproto::rvk_glGetError(*context->wire()), 0u);
+    CHECK_EQ(av::glproto::av_glGetError(*context->wire()), 0u);
     CHECK(context->wire() == nullptr);
     CHECK_EQ(context->lost_reset_status(), robust ? GuestGlContext::gl_unknown_context_reset : 0u);
     CHECK_EQ(context->lost_reset_status(), robust ? GuestGlContext::gl_unknown_context_reset : 0u);
@@ -429,7 +429,7 @@ TEST(guest_gl_context, a_fault_on_its_device_loses_it_and_it_goes_without_the_ho
     rig.host().gl_make(renderer, "4.6");
     CHECK_STATUS(second->make(), Status::ok);
     rig.kmt().withhold_answer_at(1u);
-    CHECK_EQ(av::glproto::rvk_glGetError(*first->wire()), 0u);
+    CHECK_EQ(av::glproto::av_glGetError(*first->wire()), 0u);
     CHECK(first->wire() == nullptr);
     CHECK(second->wire() == nullptr);
     CHECK(second->state() == State::lost);
@@ -502,7 +502,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   av::StateWriter made(bytes, sizeof bytes);
   context->report(made, 1u);
   CHECK(std::strcmp(made.dump(), "context/1 state=made owner=2 pixel_format=7 major=3 minor=3 profile=2 flags=0 "
-                                 "share=0 share_target=0 error=1282 link=0 arena=true renderer=rvk host renderer extensions=0\n"
+                                 "share=0 share_target=0 error=1282 link=0 arena=true renderer=av host renderer extensions=0\n"
                                  "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/1/mappings/0 held=0 persistent_writers=0\n"
                      "context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
@@ -599,7 +599,7 @@ TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
   CHECK(!context->mark().waitable());
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
-  av::glproto::rvk_glFlush(*context->wire());
+  av::glproto::av_glFlush(*context->wire());
   context->flush();
   const av::BatchMark mark = context->mark();
   CHECK(mark.waitable());

@@ -158,7 +158,7 @@ void PosixRendererHost::close_descriptor(int descriptor)
     if (descriptor >= 0) close(descriptor);
 }
 
-Status PosixRendererHost::load_executor(const char *path, uint32_t length, const RvkExecutorOps *&ops)
+Status PosixRendererHost::load_executor(const char *path, uint32_t length, const AvExecutorOps *&ops)
 {
     AV_SCOPE("PosixRendererHost::load_executor");
     ops = nullptr;
@@ -207,7 +207,7 @@ void PosixRendererHost::drop_interrupt_lines()
 void PosixRendererHost::log(const char *message)
 {
     AV_SCOPE("PosixRendererHost::log");
-    fprintf(stderr, "rvk-renderer: %s\n", message);
+    fprintf(stderr, "av-renderer: %s\n", message);
 }
 
 bool PosixRendererHost::on_main_loop() const
@@ -219,13 +219,13 @@ bool PosixRendererHost::on_main_loop() const
 void PosixRendererHost::require_main_loop(const char *function)
 {
     AV_SCOPE("PosixRendererHost::require_main_loop");
-    if (!on_main_loop()) fprintf(stderr, "rvk-renderer: %s called off the control thread\n", function);
+    if (!on_main_loop()) fprintf(stderr, "av-renderer: %s called off the control thread\n", function);
 }
 
 void PosixRendererHost::require_worker(const char *function)
 {
     AV_SCOPE("PosixRendererHost::require_worker");
-    if (on_main_loop()) fprintf(stderr, "rvk-renderer: %s called on the control thread\n", function);
+    if (on_main_loop()) fprintf(stderr, "av-renderer: %s called on the control thread\n", function);
 }
 
 Status PosixRendererHost::start_thread(HostRoutine entry, void *context, void *&thread)
@@ -745,7 +745,7 @@ Status PosixRendererHost::show_scanout(uint32_t, int, const ScanoutFramebuffer &
     return Status::not_supported;
 }
 
-Status PosixRendererHost::show_image(uint32_t, const RvkExportedImage &)
+Status PosixRendererHost::show_image(uint32_t, const AvExportedImage &)
 {
     AV_SCOPE("PosixRendererHost::show_image");
     return Status::not_supported;

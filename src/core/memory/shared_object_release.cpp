@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 namespace av {
 
@@ -16,7 +16,7 @@ Status SharedObjectRelease::send(VirtioGpuDevice &device, uint64_t object_id)
 {
     AV_SCOPE("SharedObjectRelease::send");
     platform_.require_irql_at_most(Irql::passive, "SharedObjectRelease::send");
-    RvkRequestWriter writer(request_, sizeof request_);
+    AvRequestWriter writer(request_, sizeof request_);
     static_cast<void>(writer.release_shared(object_id));
     uint32_t     answered = 0u;
     const Status asked = device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered);

@@ -23,18 +23,18 @@ std::uint64_t now_ms()
 }  // namespace
 
 LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu, const char *record)
-    : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
+    : guest_(guest), host_(), executor_(AV_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
 {
     realize(executor_.table(), gpu, record);
 }
 
-LoopbackDevice::LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &executor, const std::uint8_t *gpu)
-    : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
+LoopbackDevice::LoopbackDevice(MockPlatform &guest, const AvExecutorOps &executor, const std::uint8_t *gpu)
+    : guest_(guest), host_(), executor_(AV_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
 {
     realize(executor, gpu, nullptr);
 }
 
-void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t *gpu, const char *record)
+void LoopbackDevice::realize(const AvExecutorOps &executor, const std::uint8_t *gpu, const char *record)
 {
     /* The device's workers watch the ring for a while before they sleep, by
      * the host's clock: one that stood still would have them watch forever,
@@ -49,7 +49,7 @@ void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t 
     }, &guest_);
     char       bytes[128];
     TextBuffer message(bytes, sizeof bytes);
-    const RvkRecordingOptions recording = {record, 0u, "all", 0};
+    const AvRecordingOptions recording = {record, 0u, "all", 0};
     static_cast<void>(
         device_.realize("auto", false, &executor, record != nullptr ? &recording : nullptr, nullptr,
                         nullptr, message));
@@ -64,7 +64,7 @@ LoopbackDevice::~LoopbackDevice()
 
 MockHost          &LoopbackDevice::host() { return host_; }
 MockExecutorOps   &LoopbackDevice::executor() { return executor_; }
-VirtioGpuRvk      &LoopbackDevice::device() { return device_; }
+VirtioGpuAv      &LoopbackDevice::device() { return device_; }
 LoopbackDoorbells &LoopbackDevice::doorbells() { return doorbells_; }
 
 std::size_t LoopbackDevice::exchange(const std::uint8_t *request, std::size_t length, std::uint8_t *answer,

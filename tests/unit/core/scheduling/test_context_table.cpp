@@ -8,7 +8,7 @@
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/scheduling/context.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/follow_record.hpp"
 #include "core/scheduling/context_table.hpp"
@@ -49,7 +49,7 @@ using av::DxgkrnlInterface;
 using av::GpuMmuGeometry;
 using av::Irql;
 using av::MockPlatform;
-using av::RvkContextRecord;
+using av::AvContextRecord;
 using av::Status;
 using av::SubApi;
 using av::Violation;
@@ -171,40 +171,40 @@ TEST(context_table_invariants, a_broken_pool_is_detected)
 
 namespace {
 
-/* The private data a process sends to ask for an rvk context, encoded. */
-std::size_t rvk_private_data(std::uint8_t *bytes, std::size_t capacity)
-{ RvkContextRecord record(SubApi::vulkan, 16u, 2u, 4096u);
+/* The private data a process sends to ask for an av context, encoded. */
+std::size_t av_private_data(std::uint8_t *bytes, std::size_t capacity)
+{ AvContextRecord record(SubApi::vulkan, 16u, 2u, 4096u);
   if (record.encode(bytes, capacity) != Status::ok) return 0u;
-  return RvkContextRecord::encoded_size; }
+  return AvContextRecord::encoded_size; }
 
 }  // namespace
 
-/* A CreateContext carrying a valid record builds an rvk context that remembers
+/* A CreateContext carrying a valid record builds an av context that remembers
  * what it asked for; one carrying no private data is a plain context as before. */
-TEST(context_table_create, a_valid_record_makes_an_rvk_context)
+TEST(context_table_create, a_valid_record_makes_an_av_context)
 { Fixture fixture;
-  std::uint8_t data[RvkContextRecord::encoded_size] = {};
+  std::uint8_t data[AvContextRecord::encoded_size] = {};
   DxgkargCreateContextRecord request = {};
   request.Flags = 0x4u;   /* VirtualAddressing */
   request.pPrivateDriverData = data;
-  request.PrivateDriverDataSize = static_cast<std::uint32_t>(rvk_private_data(data, sizeof data));
+  request.PrivateDriverDataSize = static_cast<std::uint32_t>(av_private_data(data, sizeof data));
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
   Context *context = fixture.contexts().find(request.hContext);
   CHECK(context != nullptr);
-  CHECK(context->is_rvk());
-  CHECK_EQ(context->rvk_record().sub_api(), SubApi::vulkan);
-  CHECK_EQ(context->rvk_record().ring(), 2u);
+  CHECK(context->is_av());
+  CHECK_EQ(context->av_record().sub_api(), SubApi::vulkan);
+  CHECK_EQ(context->av_record().ring(), 2u);
   /* Its submissions carry their descriptor as private data, which VidSch
    * refuses past the size the context reports (DXGCONTEXT::SubmitCommand,
    * dxgkrnl.sys @1402d7720). */
   CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 32u);
   CHECK(fixture.contexts().invariants_hold()); }
 
-TEST(context_table_create, a_context_with_no_private_data_is_not_rvk)
+TEST(context_table_create, a_context_with_no_private_data_is_not_av)
 { Fixture fixture;
   DxgkargCreateContextRecord request = {};
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
-  CHECK(!fixture.contexts().find(request.hContext)->is_rvk());
+  CHECK(!fixture.contexts().find(request.hContext)->is_av());
   /* Room for a FollowRecord, so dxgkrnl hands every packet's private data on
    * (Adapter::submit_command_virtual). */
   CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size); }
@@ -213,13 +213,13 @@ TEST(context_table_create, a_context_with_no_private_data_is_not_rvk)
  * context is left behind. */
 TEST(context_table_create, a_record_sized_private_data_that_does_not_decode_is_refused)
 { Fixture fixture;
-  std::uint8_t data[RvkContextRecord::encoded_size] = {};
-  rvk_private_data(data, sizeof data);
+  std::uint8_t data[AvContextRecord::encoded_size] = {};
+  av_private_data(data, sizeof data);
   data[0] ^= 0xFFu;   /* the magic */
   DxgkargCreateContextRecord request = {};
   request.Flags = 0x4u;
   request.pPrivateDriverData = data;
-  request.PrivateDriverDataSize = RvkContextRecord::encoded_size;
+  request.PrivateDriverDataSize = AvContextRecord::encoded_size;
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::invalid_parameter);
   CHECK_EQ(fixture.contexts().live(), 0u);
   CHECK(request.hContext == nullptr); }
@@ -242,8 +242,8 @@ TEST(context_table_report, writes_each_context_and_its_device)
   char expected[512];
   std::snprintf(expected, sizeof expected,
                 "context_table/0 busy=false live=2\n"
-                "context_table/0/context/0 handle=0x%016llX device=0x%016llX node=0 flags=0x0000000000000001 rvk=false\n"
-                "context_table/0/context/1 handle=0x%016llX device=0x%016llX node=0 flags=0x0000000000000000 rvk=false",
+                "context_table/0/context/0 handle=0x%016llX device=0x%016llX node=0 flags=0x0000000000000001 av=false\n"
+                "context_table/0/context/1 handle=0x%016llX device=0x%016llX node=0 flags=0x0000000000000000 av=false",
                 hex_of(first.hContext), hex_of(fixture.device()), hex_of(second.hContext), hex_of(fixture.device()));
   CHECK(std::strcmp(writer.dump(), expected) == 0);
   fixture.platform().hold_elsewhere(av::LockRank::context_table);
@@ -258,14 +258,14 @@ TEST(context_table_report, writes_each_context_and_its_device)
 
 namespace {
 
-/* A context on `device`: an rvk one whose ring is allocation 2 when `rvk`. */
-void *context_on(Fixture &fixture, void *device, bool rvk)
-{ std::uint8_t data[RvkContextRecord::encoded_size] = {};
+/* A context on `device`: an av one whose ring is allocation 2 when `av`. */
+void *context_on(Fixture &fixture, void *device, bool av_context)
+{ std::uint8_t data[AvContextRecord::encoded_size] = {};
   DxgkargCreateContextRecord request = {};
   request.Flags = 0x4u;
-  if (rvk) {
+  if (av_context) {
       request.pPrivateDriverData = data;
-      request.PrivateDriverDataSize = static_cast<std::uint32_t>(rvk_private_data(data, sizeof data));
+      request.PrivateDriverDataSize = static_cast<std::uint32_t>(av_private_data(data, sizeof data));
   }
   CHECK_STATUS(fixture.contexts().create(device, request), Status::ok);
   return request.hContext; }
@@ -279,13 +279,13 @@ void *device_in(Fixture &fixture, void *process)
 }  // namespace
 
 /* A packet on an ordinary context that carries a FollowRecord waits for the
- * rvk context whose ring the record names - its process's own, since a handle
+ * av context whose ring the record names - its process's own, since a handle
  * names an allocation only in the process that made it. */
-TEST(context_table_followed, finds_the_rvk_context_of_the_same_process_by_its_ring)
+TEST(context_table_followed, finds_the_av_context_of_the_same_process_by_its_ring)
 { Fixture fixture;
-  void *const rvk = context_on(fixture, fixture.device(), true);
+  void *const av_context = context_on(fixture, fixture.device(), true);
   const Context &follower = *fixture.contexts().find(context_on(fixture, fixture.device(), false));
-  CHECK(fixture.contexts().followed(follower, 2u) == fixture.contexts().find(rvk));
+  CHECK(fixture.contexts().followed(follower, 2u) == fixture.contexts().find(av_context));
   CHECK(fixture.contexts().followed(follower, 3u) == nullptr);
   CHECK(fixture.contexts().invariants_hold()); }
 
@@ -305,4 +305,4 @@ TEST(context_table_followed, an_ordinary_context_is_never_followed)
 { Fixture fixture;
   const Context &follower = *fixture.contexts().find(context_on(fixture, fixture.device(), false));
   static_cast<void>(context_on(fixture, fixture.device(), false));
-  CHECK(fixture.contexts().followed(follower, follower.rvk_record().ring()) == nullptr); }
+  CHECK(fixture.contexts().followed(follower, follower.av_record().ring()) == nullptr); }

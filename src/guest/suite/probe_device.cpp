@@ -38,7 +38,7 @@ VkResult ProbeDevice::make_instance()
     AV_SCOPE("ProbeDevice::make_instance");
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    application.pApplicationName = "rvkvkprobe";
+    application.pApplicationName = "avvkprobe";
     application.apiVersion = api_version_1_3;
     VkInstanceCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;

@@ -1,4 +1,0 @@
-LIBRARY rvkvk.dll
-EXPORTS
-vk_icdNegotiateLoaderICDInterfaceVersion
-vk_icdGetInstanceProcAddr

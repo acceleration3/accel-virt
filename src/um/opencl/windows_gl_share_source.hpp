@@ -1,6 +1,6 @@
 /* GlShareSource over opengl32: the current context is opengl32's to say, and
  * its share name our OpenGL ICD's, asked through wglGetProcAddress as
- * rvkGetShareName - a name only this repository's ICD answers, so a context
+ * avGetShareName - a name only this repository's ICD answers, so a context
  * another vendor's ICD made is named by nobody. opengl32 is looked for, not
  * loaded: a process that never loaded it has no GL context to share. */
 #ifndef AV_WINDOWS_GL_SHARE_SOURCE_HPP

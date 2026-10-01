@@ -38,7 +38,7 @@ void *const window = reinterpret_cast<void *>(0x9002u);
 
 class D3d9Rig {
 public:
-    D3d9Rig() : report_("rvkd3d9probe"), steps_(kmt_, report_, "d3d9") {}
+    D3d9Rig() : report_("avd3d9probe"), steps_(kmt_, report_, "d3d9") {}
     D3d9Rig(const D3d9Rig &) = delete;
     D3d9Rig &operator=(const D3d9Rig &) = delete;
 
@@ -80,7 +80,7 @@ TEST(d3d9_work, every_step_passes_and_the_frame_is_the_colour_it_was_cleared_to)
   CHECK(std::strstr(report, "ok d3d9.readback") != nullptr);
   CHECK(std::strstr(report, "ok d3d9.pixels 4096") != nullptr);
   CHECK(std::strstr(report, "ok d3d9.present") != nullptr);
-  CHECK(std::strstr(report, "rvkd3d9probe: 6 passed, 0 failed") != nullptr);
+  CHECK(std::strstr(report, "avd3d9probe: 6 passed, 0 failed") != nullptr);
   /* The vendor in the high half, the device in the low. */
   CHECK_EQ(rig.adapter(), (static_cast<std::uint64_t>(ScriptedD3d9::vendor) << 32) | ScriptedD3d9::device);
   CHECK(rig.d3d9().window() == window);
@@ -96,7 +96,7 @@ TEST(d3d9_work, a_frame_of_the_wrong_colour_fails_with_the_count)
       CHECK(std::strstr(report, "FAIL d3d9.pixels") != nullptr);
       CHECK(std::strstr(report, " 4095\n") != nullptr);
       CHECK(std::strstr(report, "ok d3d9.present") != nullptr);
-      CHECK(std::strstr(report, "rvkd3d9probe: 5 passed, 1 failed") != nullptr);
+      CHECK(std::strstr(report, "avd3d9probe: 5 passed, 1 failed") != nullptr);
   }
   /* X8R8G8B8: the fourth byte is not a channel at all. */
   D3d9Rig unused;
@@ -135,7 +135,7 @@ TEST(d3d9_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
 { { ScriptedD3d9      d3d9;
     ScriptedImageSink images;
     MockKmt           kmt;
-    GuestReport       report("rvkd3d9probe");
+    GuestReport       report("avd3d9probe");
     ScenarioSteps     steps(kmt, report, "d3d9");
     D3d9Work          work(d3d9, images);
     work.run(steps, window);

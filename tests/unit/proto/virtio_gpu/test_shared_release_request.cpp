@@ -3,21 +3,21 @@
  * decodes to nothing. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 #include <cstdint>
 #include <cstring>
 
-using av::RvkRequestWriter;
+using av::AvRequestWriter;
 using av::SharedReleaseRequest;
 using av::Status;
 using av::WireReader;
 
 TEST(shared_release_request, the_writer_s_request_decodes_to_its_id)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.release_shared(0x1234567890ABCDEFu), Status::ok);
   CHECK_EQ(writer.length(), SharedReleaseRequest::encoded_size);
   std::uint32_t type = 0u;
@@ -49,8 +49,8 @@ TEST(shared_release_request, a_short_request_or_an_id_of_zero_is_malformed)
 
 TEST(shared_release_request, a_writer_too_small_writes_nothing)
 { std::uint8_t bytes[SharedReleaseRequest::encoded_size - 1u] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.release_shared(1u), Status::too_large);
   CHECK_EQ(writer.length(), 0u);
-  RvkRequestWriter none(nullptr, 64u);
+  AvRequestWriter none(nullptr, 64u);
   CHECK_STATUS(none.release_shared(1u), Status::too_large); }

@@ -9,7 +9,7 @@
  * Names are invented where the DDI has none. A system value gets its SV_ name
  * and the semantic index Direct3D numbers it with - the tessellation factors
  * the DDI spells as one name per edge are one name here with the edge as the
- * index. Everything else is RVK with the register and first component as its
+ * index. Everything else is AV with the register and first component as its
  * index, which is unique within a signature and is what the input layouts the
  * executor writes name too (DxbcContainer::add_layout_signature): stages link
  * by register, not by name, so no two sides ever have to agree on more. */

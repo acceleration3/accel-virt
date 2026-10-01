@@ -1,4 +1,4 @@
-/* The probe's forced fault (feature 045, T037): vkRvkForceContextFault is a
+/* The probe's forced fault (feature 045, T037): vkAvForceContextFault is a
  * physical-device-level entry point, so the Windows loader reaches it through
  * vk_icdGetPhysicalDeviceProcAddr and calls it with the ICD's own physical
  * device. It sends a vkCreateInstance cut after its structure type on the
@@ -32,7 +32,7 @@ using CreateDevice = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, 
                                   VkDevice *);
 using DeviceWaitIdle = VkResult (*)(VkDevice);
 
-constexpr const char *entry_name = "vkRvkForceContextFault";
+constexpr const char *entry_name = "vkAvForceContextFault";
 
 std::uint32_t kmt_calls(const MockKmt &kmt)
 {
@@ -114,7 +114,7 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
   CHECK_EQ(rig.rig().entry<DeviceWaitIdle>(rig.instance(), "vkDeviceWaitIdle")(device), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.force()(rig.physical()), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  CHECK(rig.rig().log().holding("vkRvkForceContextFault on a lost device") == 1u); }
+  CHECK(rig.rig().log().holding("vkAvForceContextFault on a lost device") == 1u); }
 
 /* A second instance opens a connection of its own, which the first one's
  * fault leaves working. */
@@ -139,7 +139,7 @@ TEST(icd_forced_fault, an_answered_frame_is_refused_as_not_faulting)
   CHECK_EQ(rig.force()(rig.physical()), VK_ERROR_INITIALIZATION_FAILED);
   CHECK(rig.rig().root().invariants_hold());
   CHECK(!rig.connection()->faulted());
-  CHECK_EQ(rig.rig().log().holding("rvkvk: the host answered a truncated vkCreateInstance"), 1u);
+  CHECK_EQ(rig.rig().log().holding("avvk: the host answered a truncated vkCreateInstance"), 1u);
   CHECK(rig.device() != VK_NULL_HANDLE); }
 
 /* A physical device this ICD did not make is not dispatched on: nothing is
@@ -152,5 +152,5 @@ TEST(icd_forced_fault, a_foreign_physical_device_is_refused)
   CHECK_EQ(rig.force()(foreign), VK_ERROR_INITIALIZATION_FAILED);
   CHECK_EQ(rig.force()(reinterpret_cast<VkPhysicalDevice>(rig.instance())), VK_ERROR_INITIALIZATION_FAILED);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  CHECK_EQ(rig.rig().log().holding("rvkvk: vkRvkForceContextFault on a physical device this driver did not make"),
+  CHECK_EQ(rig.rig().log().holding("avvk: vkAvForceContextFault on a physical device this driver did not make"),
            2u); }

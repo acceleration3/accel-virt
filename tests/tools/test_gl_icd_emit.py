@@ -1,5 +1,5 @@
 """The generated OpenGL ICD entries and their proc table, from a registry small
-enough to read (tools/codegen/rvk_codegen/opengl/emit.py, feature 050).
+enough to read (tools/codegen/av_codegen/opengl/emit.py, feature 050).
 
 What opengl32.dll relies on: the table DrvSetContext answers is Microsoft's
 GLCLTPROCTABLE, in the order tools/codegen/profiles/opengl_proc_table.txt
@@ -19,12 +19,12 @@ from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "codegen"))
 
-from rvk_codegen.ir import CType  # noqa: E402
-from rvk_codegen.opengl import emit  # noqa: E402
-from rvk_codegen.opengl.model import Command, Length, LengthKind, Param, Registry, Role  # noqa: E402
-from rvk_codegen.opengl.parse import _ctype_from  # noqa: E402
+from av_codegen.ir import CType  # noqa: E402
+from av_codegen.opengl import emit  # noqa: E402
+from av_codegen.opengl.model import Command, Length, LengthKind, Param, Registry, Role  # noqa: E402
+from av_codegen.opengl.parse import _ctype_from  # noqa: E402
 
-SCOPE = "const ::av::SyncCallScope rvk_call{rvk_t};"
+SCOPE = "const ::av::SyncCallScope av_call{av_t};"
 
 ORDER = """# opengl32.dll sha256 0000
 0 glNewList
@@ -135,39 +135,39 @@ class GeneratedGlIcd(unittest.TestCase):
         begin = body_of(self.source, "Wrap_glBegin")
         self.assertIn("if (!::av::glicd::legacy_calls_live()) {", begin)
         self.assertIn("::av::glicd::refuse_legacy();", begin)
-        self.assertIn("::av::glproto::rvk_glBegin(*rvk_t, mode);", begin)
+        self.assertIn("::av::glproto::av_glBegin(*av_t, mode);", begin)
         # A core-tier command asks nothing.
         self.assertNotIn("legacy_calls_live", body_of(self.source, "Wrap_glEnable"))
 
     def test_forwarding_entries_are_defined_and_handwritten_ones_are_left_to_the_icd(self):
         self.assertIn("void APIENTRY Wrap_glEnable(GLenum cap) {", self.source)
-        self.assertIn("::av::glproto::rvk_glEnable(*rvk_t, cap);", body_of(self.source, "Wrap_glEnable"))
+        self.assertIn("::av::glproto::av_glEnable(*av_t, cap);", body_of(self.source, "Wrap_glEnable"))
         self.assertIn("const GLubyte* APIENTRY Wrap_glGetString(GLenum name);", self.header)
         self.assertNotIn("Wrap_glGetString(GLenum name) {", self.source)
         self.assertNotIn("Wrap_glDrawArrays(GLenum mode, GLint first, GLsizei count) {", self.source)
 
     def test_a_sync_call_ends_on_every_path_from_the_writer(self):
-        body = body_of(self.client, "rvk_glIsEnabled")
+        body = body_of(self.client, "av_glIsEnabled")
         self.assertEqual(body.count(SCOPE), 1)
         scope = body.index(SCOPE)
-        self.assertEqual(body.index("\n", body.index("rvk_t.request_writer()")) + 1,
+        self.assertEqual(body.index("\n", body.index("av_t.request_writer()")) + 1,
                          body.rindex("\n", 0, scope) + 1)
         self.assertNotIn("return", body[:scope])
-        self.assertLess(scope, body.index("rvk_t.send_sync("))
+        self.assertLess(scope, body.index("av_t.send_sync("))
         self.assertNotIn("end_call", body)
         self.assertIn('#include "proto/sync_call_scope.hpp"', self.client)
 
     def test_a_one_way_call_ends_only_when_its_payload_is_dropped(self):
-        for name in ("rvk_glEnable", "rvk_glUniform1iv"):
+        for name in ("av_glEnable", "av_glUniform1iv"):
             body = body_of(self.client, name)
             self.assertNotIn("SyncCallScope", body, name)
-            self.assertEqual(body.count("rvk_t.end_call();"), 1, name)
-            dropped = body[body.index("if (rvk_b.status()"):body.index("rvk_t.send_async(")]
-            self.assertIn("rvk_t.end_call();", dropped, name)
-            self.assertLess(dropped.index("rvk_t.end_call();"), dropped.index("return;"), name)
+            self.assertEqual(body.count("av_t.end_call();"), 1, name)
+            dropped = body[body.index("if (av_b.status()"):body.index("av_t.send_async(")]
+            self.assertIn("av_t.end_call();", dropped, name)
+            self.assertLess(dropped.index("av_t.end_call();"), dropped.index("return;"), name)
 
     def test_the_client_leases_as_the_arena_class_names_it(self):
-        body = body_of(self.client, "rvk_glUniform1iv")
+        body = body_of(self.client, "av_glUniform1iv")
         self.assertIn("::av::ClientBlobLease data_lease{};", body)
         self.assertIn("data_lease.taken()", body)
         self.assertIn("data_lease.data()", body)
@@ -177,11 +177,11 @@ class GeneratedGlIcd(unittest.TestCase):
             self.assertNotIn(gone, self.client)
 
     def test_a_one_way_call_keeps_its_leases_until_an_answer_retires_them(self):
-        body = body_of(self.client, "rvk_glUniform1iv")
-        after_send = body[body.index("rvk_t.send_async("):]
+        body = body_of(self.client, "av_glUniform1iv")
+        after_send = body[body.index("av_t.send_async("):]
         self.assertNotIn("give_back", after_send)
-        dropped = body[body.index("if (rvk_b.status()"):body.index("rvk_t.send_async(")]
-        self.assertIn("rvk_t.blobs()", dropped)
+        dropped = body[body.index("if (av_b.status()"):body.index("av_t.send_async(")]
+        self.assertIn("av_t.blobs()", dropped)
         self.assertIn(".give_back(data_lease)", dropped)
 
 

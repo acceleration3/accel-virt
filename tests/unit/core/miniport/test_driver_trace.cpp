@@ -50,10 +50,10 @@ TEST(driver_trace_start, binds_a_64_slot_table_and_registers_it_for_the_dump)
   CHECK(traced.platform.bugcheck_registered());
   CHECK(traced.platform.bugcheck_buffer() == static_cast<const void *>(table->region()));
   CHECK_EQ(traced.platform.bugcheck_bytes(), table_bytes);
-  CHECK(std::memcmp(table->region(), "RVKTRACE", 8u) == 0);
-  CHECK(std::memcmp(table->region() + 32u, "rvkgpu\0", 7u) == 0);
+  CHECK(std::memcmp(table->region(), "AVTRACE", 8u) == 0);
+  CHECK(std::memcmp(table->region() + 32u, "avgpu\0", 7u) == 0);
   CHECK_EQ(traced.platform.logged(), 1u);
-  CHECK(std::strcmp(traced.platform.last_log(), "rvkgpu: trace table at physical 0x0000000100000000 bytes 52832") == 0);
+  CHECK(std::strcmp(traced.platform.last_log(), "avgpu: trace table at physical 0x0000000100000000 bytes 52832") == 0);
   /* A second start changes nothing. */
   traced.trace.start(&no_bugcheck);
   CHECK_EQ(traced.platform.logged(), 1u);
@@ -73,7 +73,7 @@ TEST(driver_trace_start, without_memory_leaves_tracing_off_and_the_driver_going)
   CHECK(traced.trace.invariants_hold());
   CHECK(av::scope_binding.table() == nullptr);
   CHECK(!traced.platform.bugcheck_registered());
-  CHECK(std::strcmp(traced.platform.last_log(), "rvkgpu: trace table not allocated; tracing is off") == 0);
+  CHECK(std::strcmp(traced.platform.last_log(), "avgpu: trace table not allocated; tracing is off") == 0);
   traced.trace.bugcheck();
   CHECK_EQ(traced.platform.bugcheck_lines(), 0u);
   traced.trace.stop();
@@ -86,8 +86,8 @@ TEST(driver_trace_start, a_refused_registration_is_logged_and_the_table_still_bo
   CHECK(traced.trace.invariants_hold());
   CHECK(av::scope_binding.table() != nullptr);
   CHECK(!traced.platform.bugcheck_registered());
-  CHECK(std::strcmp(traced.platform.last_log(), "rvkgpu: trace table bugcheck callback refused") == 0);
-  CHECK(traced.platform.logged_line("rvkgpu: trace table at physical 0x"));
+  CHECK(std::strcmp(traced.platform.last_log(), "avgpu: trace table bugcheck callback refused") == 0);
+  CHECK(traced.platform.logged_line("avgpu: trace table at physical 0x"));
   traced.trace.stop();
   CHECK(av::scope_binding.table() == nullptr); }
 
@@ -127,17 +127,17 @@ TEST(driver_trace_bugcheck, a_table_overwritten_before_the_bugcheck_is_said_to_b
   const_cast<std::uint8_t *>(av::scope_binding.table()->region())[0] ^= 0xFFu;
   traced.trace.bugcheck();
   CHECK_EQ(traced.platform.bugcheck_lines(), 1u);
-  CHECK(traced.platform.bugcheck_line("rvkgpu: trace table unreadable at the bugcheck\n")); }
+  CHECK(traced.platform.bugcheck_line("avgpu: trace table unreadable at the bugcheck\n")); }
 
 TEST(driver_trace_bugcheck, writes_every_line_of_the_table)
 { Traced traced;
   traced.trace.start(&no_bugcheck);
   traced.trace.bugcheck();
-  CHECK(traced.platform.bugcheck_line("rvkgpu: trace module=rvkgpu pid=0 slots=64\n"));
+  CHECK(traced.platform.bugcheck_line("avgpu: trace module=avgpu pid=0 slots=64\n"));
   /* The formatter's own scopes are gone: only its caller, whose name is
    * outside the empty image, is on the stack. */
-  CHECK(traced.platform.bugcheck_line("rvkgpu: thread 100 active depth=1 "));
-  CHECK(traced.platform.bugcheck_line("rvkgpu:   #0 #"));
+  CHECK(traced.platform.bugcheck_line("avgpu: thread 100 active depth=1 "));
+  CHECK(traced.platform.bugcheck_line("avgpu:   #0 #"));
   CHECK_EQ(traced.platform.bugcheck_lines(), 3u); }
 
 TEST(driver_trace_invariants, fail_for_a_registration_without_a_table_or_a_table_of_another_size)

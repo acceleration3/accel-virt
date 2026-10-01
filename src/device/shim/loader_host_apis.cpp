@@ -1,7 +1,7 @@
 #include "device/shim/loader_host_apis.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <string.h>
 #include <vulkan/vulkan.h>
@@ -35,7 +35,7 @@ void LoaderHostApis::enumerate()
     AV_SCOPE("LoaderHostApis::enumerate");
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    application.pApplicationName = "rvk-executor";
+    application.pApplicationName = "av-executor";
     /* Spelled out rather than VK_API_VERSION_1_1, which is a macro full of
      * C casts this build refuses. 1.1 is what VkPhysicalDeviceIDProperties
      * needs, and nothing here needs more. */
@@ -69,27 +69,27 @@ void LoaderHostApis::enumerate()
 
         memcpy(uuids_[i], identity.deviceUUID, uuid_bytes);
         render_minors_[i] = node.hasRender ? static_cast<int32_t>(node.renderMinor) : -1;
-        sub_apis_[i] = RVK_EXECUTOR_SUB_API_VULKAN;
+        sub_apis_[i] = AV_EXECUTOR_SUB_API_VULKAN;
         vulkan_kinds_[i] = kinds_of(devices[i]);
         opencl_kinds_[i] = 0u;
         if (opencl_devices_[i].find(uuids_[i])) {
-            sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENCL;
+            sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
             /* A host pointer, on every device that runs OpenCL at all:
              * CL_MEM_USE_HOST_PTR is core rather than an extension, so a
              * buffer can always be made over the context's blob arena
              * (feature 052, T033). A dma-buf is still not offered - that
              * would be clCreateBufferWithProperties with an fd, which each
              * platform answers differently. */
-            opencl_kinds_[i] = RVK_BLOB_HOST_POINTER;
+            opencl_kinds_[i] = AV_BLOB_HOST_POINTER;
         }
-        if (gl_displays_[i].open(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENGL;
+        if (gl_displays_[i].open(uuids_[i])) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENGL;
     }
     /* After the loop: DXVK makes a Vulkan instance of its own, and asking it
      * about each GPU in turn is one factory and one enumeration. */
     if (d3d_runtime_.open()) {
         for (uint32_t i = 0u; i < found; i++)
             if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i])) {
-                sub_apis_[i] |= RVK_EXECUTOR_SUB_API_D3D;
+                sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
                 if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i])) d3d11_devices_[i].pair(&d3d12_devices_[i]);
@@ -116,14 +116,14 @@ uint32_t LoaderHostApis::kinds_of(void *device)
     uint32_t kinds = 0u;
     for (uint32_t n = 0u; n < available; n++) {
         if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0)
-            kinds |= RVK_BLOB_HOST_POINTER;
+            kinds |= AV_BLOB_HOST_POINTER;
         /* Both are offered where both are there, because which one works is
          * not a property of the extension list: a driver may advertise the
          * host-pointer import and still refuse every userptr whose pages are
          * file-backed, which guest RAM always is. The device tries the
          * dma-buf first and falls back (docs/testing.md). */
         if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) == 0)
-            kinds |= RVK_BLOB_DMA_BUF;
+            kinds |= AV_BLOB_DMA_BUF;
     }
     return kinds;
 }
@@ -172,13 +172,13 @@ uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
 {
     AV_SCOPE("LoaderHostApis::import_kinds");
     if (index >= count_) return 0u;
-    if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) return vulkan_kinds_[index];
-    if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) return opencl_kinds_[index];
+    if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) return vulkan_kinds_[index];
+    if (sub_api == AV_EXECUTOR_SUB_API_OPENCL) return opencl_kinds_[index];
     /* OpenGL takes a host pointer as its context's region, not as a GL object
      * (feature 050), so any GPU it runs on takes one. */
-    if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL && gl_displays_[index].open()) return RVK_BLOB_HOST_POINTER;
+    if (sub_api == AV_EXECUTOR_SUB_API_OPENGL && gl_displays_[index].open()) return AV_BLOB_HOST_POINTER;
     /* Direct3D takes its blob arena as a region, as OpenGL does. */
-    if (sub_api == RVK_EXECUTOR_SUB_API_D3D && d3d11_devices_[index].opened()) return RVK_BLOB_HOST_POINTER;
+    if (sub_api == AV_EXECUTOR_SUB_API_D3D && d3d11_devices_[index].opened()) return AV_BLOB_HOST_POINTER;
     return 0u;
 }
 

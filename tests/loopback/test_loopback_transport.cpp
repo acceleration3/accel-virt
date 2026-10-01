@@ -23,7 +23,7 @@ using av::SubApi;
 
 namespace {
 
-/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
@@ -46,7 +46,7 @@ TEST(loopback_transport, a_vulkan_command_crosses_the_transport_and_comes_back)
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  const VkResult result = av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance);
+  const VkResult result = av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance);
 
   /* The round trip completed - the device ran the command and answered - rather
    * than faulting the transport. */

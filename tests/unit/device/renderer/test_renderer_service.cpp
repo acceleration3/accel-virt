@@ -4,7 +4,7 @@
  * that does not decode - or comes before the hello, or brings descriptors it
  * has no use for - refused with each of its descriptors closed. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/context/local_context_plane.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
@@ -61,8 +61,8 @@ using av::RendererServiceProbe;
 
 namespace {
 
-constexpr std::uint32_t both = RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENGL;
-constexpr char          library[] = "/opt/rvk/librvk_executor.so";
+constexpr std::uint32_t both = AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENGL;
+constexpr char          library[] = "/opt/av/libav_executor.so";
 constexpr std::uint8_t  uuid[av::HelloMessage::uuid_bytes] = {0x42u, 7u};
 constexpr std::uint32_t region_number = 3u;
 constexpr std::uint64_t region_size = 0x8000u;
@@ -73,23 +73,23 @@ constexpr std::size_t   capacity = av::RendererMessageHeader::encoded_size + 409
  * the wrong sub-API shows. */
 std::uint32_t kinds_by_api(void *, std::uint32_t sub_api, const std::uint8_t *)
 {
-    if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) return RVK_BLOB_HOST_POINTER;
-    if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL) return RVK_BLOB_DMA_BUF;
+    if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) return AV_BLOB_HOST_POINTER;
+    if (sub_api == AV_EXECUTOR_SUB_API_OPENGL) return AV_BLOB_DMA_BUF;
     return 0u;
 }
 
 /* What the executor has published, which a test sets. */
 struct Published {
     bool             found;
-    RvkExportedImage image;
+    AvExportedImage image;
 };
 Published published = {};
 
-std::uint32_t export_published(void *, const std::uint8_t *, std::uint64_t key, RvkExportedImage *image)
+std::uint32_t export_published(void *, const std::uint8_t *, std::uint64_t key, AvExportedImage *image)
 {
-    if (!published.found || key != 0x77u) return RVK_UNKNOWN;
+    if (!published.found || key != 0x77u) return AV_UNKNOWN;
     *image = published.image;
-    return RVK_EXECUTED;
+    return AV_EXECUTED;
 }
 
 av::CapsetInfo capset()
@@ -266,10 +266,10 @@ TEST(renderer_service_hello, answers_ready_with_each_sub_apis_import_kinds_in_it
   av::ReadyMessage ready;
   CHECK_STATUS(ready.decode(rig.answer() + RendererMessageHeader::encoded_size, header.body_length(), 0u), Status::ok);
   CHECK_EQ(ready.version(), RendererService::protocol_version);
-  CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(RVK_EXECUTOR_ABI_VERSION));
+  CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(AV_EXECUTOR_ABI_VERSION));
   CHECK_EQ(ready.sub_apis(), both);
-  CHECK_EQ(ready.import_kinds(0u), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER));   /* Vulkan, bit 0 */
-  CHECK_EQ(ready.import_kinds(1u), static_cast<std::uint32_t>(RVK_BLOB_DMA_BUF));        /* OpenGL, bit 1 */
+  CHECK_EQ(ready.import_kinds(0u), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));   /* Vulkan, bit 0 */
+  CHECK_EQ(ready.import_kinds(1u), static_cast<std::uint32_t>(AV_BLOB_DMA_BUF));        /* OpenGL, bit 1 */
   CHECK_EQ(ready.import_kinds(2u), 0u);
   CHECK_EQ(rig.answer_descriptor(), -1);
   CHECK(rig.service().invariants_hold());
@@ -720,7 +720,7 @@ TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_ch
   rig.ops().editable().export_image = &export_published;
   CHECK_STATUS(rig.hello(), Status::ok);
   const int image_fd = fresh_descriptor();
-  published = Published{true, RvkExportedImage{image_fd, 1u, 64u, 32u, 256u, 0u, 0x34325258u, 0u, 7u}};
+  published = Published{true, AvExportedImage{image_fd, 1u, 64u, 32u, 256u, 0u, 0x34325258u, 0u, 7u}};
   std::uint8_t body[av::ExportImageMessage::encoded_size] = {};
   CHECK_STATUS(av::ExportImageMessage(0x77u).encode(body, sizeof body), Status::ok);
   const auto exported = [&rig](av::ExportedImageMessage &message, std::uint64_t &sequence) {
@@ -760,18 +760,18 @@ TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_ch
   CHECK_EQ(message.height(), 48u);
   CHECK_EQ(rig.answer_descriptor(), image_fd);
   /* Any field of the layout changed is another image. */
-  const auto changed = [&](void (*change)(RvkExportedImage &)) {
+  const auto changed = [&](void (*change)(AvExportedImage &)) {
       change(published.image);
       std::uint64_t at = 0u;
       av::ExportedImageMessage again;
       return rig.send(Kind::export_image, 70u, body, sizeof body) == Status::ok && exported(again, at) &&
              again.fresh() && rig.answer_descriptor() == image_fd;
   };
-  CHECK(changed([](RvkExportedImage &image) { image.width = 65u; }));
-  CHECK(changed([](RvkExportedImage &image) { image.stride = 512u; }));
-  CHECK(changed([](RvkExportedImage &image) { image.offset = 32u; }));
-  CHECK(changed([](RvkExportedImage &image) { image.fourcc = 0x34324241u; }));
-  CHECK(changed([](RvkExportedImage &image) { image.modifier = 9u; }));
+  CHECK(changed([](AvExportedImage &image) { image.width = 65u; }));
+  CHECK(changed([](AvExportedImage &image) { image.stride = 512u; }));
+  CHECK(changed([](AvExportedImage &image) { image.offset = 32u; }));
+  CHECK(changed([](AvExportedImage &image) { image.fourcc = 0x34324241u; }));
+  CHECK(changed([](AvExportedImage &image) { image.modifier = 9u; }));
   CHECK_STATUS(rig.send(Kind::export_image, 71u, body, sizeof body), Status::ok);
   CHECK(exported(message, sequence));
   CHECK(!message.fresh());

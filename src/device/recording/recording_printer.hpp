@@ -1,4 +1,4 @@
-/* A recording as lines a person reads (contracts/rvkrecord.md). One line per
+/* A recording as lines a person reads (contracts/avrecord.md). One line per
  * record and one indented line per command of a batch, answered one at a time
  * so a recording of any size costs one line's worth of memory; the damage the
  * reader found, if any, is the last line.

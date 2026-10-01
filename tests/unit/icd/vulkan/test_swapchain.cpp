@@ -91,7 +91,7 @@ VkSwapchainCreateInfoKHR create_info()
 
 /* A swapchain on a scripted host device, a window of its own, the window's
  * chains - which refuse to open until a test accepts them - and the guest
- * context on the rvkgpu adapter its FIFO pacing waits on and a chain's slot is
+ * context on the avgpu adapter its FIFO pacing waits on and a chain's slot is
  * opened through. A swapchain is neither copied nor moved, so the rig holds
  * the one it makes, and the second for a recreation. */
 class SwapchainRig {

@@ -339,7 +339,7 @@ bool MockHost::wait_for_deadline_after(std::uint64_t after, std::uint32_t millis
     return false;
 }
 
-Status MockHost::show_image(std::uint32_t head, const RvkExportedImage &image)
+Status MockHost::show_image(std::uint32_t head, const AvExportedImage &image)
 {
     require_main_loop("MockHost::show_image");
     StateLock lock(state_);
@@ -358,9 +358,9 @@ std::uint32_t MockHost::images_shown(std::uint32_t head) const
     return head < max_scanout_heads ? images_shown_[head] : 0u;
 }
 
-RvkExportedImage MockHost::last_image(std::uint32_t head) const
+AvExportedImage MockHost::last_image(std::uint32_t head) const
 {
-    return head < max_scanout_heads ? last_images_[head] : RvkExportedImage{};
+    return head < max_scanout_heads ? last_images_[head] : AvExportedImage{};
 }
 
 std::uint32_t MockHost::doorbell_of(void *event)

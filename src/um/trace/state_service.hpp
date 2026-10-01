@@ -1,7 +1,7 @@
 /* A process's state dump on request (docs/trace.md): a thread waits on
- * `rvk-dump-<module>-<pid>`, writes the reporter's dump into the section
- * `rvk-state-<module>-<pid>` - a u32 length, then the text - and signals
- * `rvk-done-<module>-<pid>`. The thread is the one thing here that runs on its
+ * `av-dump-<module>-<pid>`, writes the reporter's dump into the section
+ * `av-state-<module>-<pid>` - a u32 length, then the text - and signals
+ * `av-done-<module>-<pid>`. The thread is the one thing here that runs on its
  * own: whatever the process's other threads are stuck on, a dump is written
  * (the reporter never waits for a lock). Translation only. */
 #ifndef AV_UM_STATE_SERVICE_HPP

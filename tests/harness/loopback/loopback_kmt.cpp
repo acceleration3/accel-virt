@@ -6,20 +6,20 @@
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/context_views_record.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
 namespace {
-constexpr std::uint32_t rvk_capset = 0x72u;   /* the init capset (docs/protocol.md) */
+constexpr std::uint32_t av_capset = 0x72u;   /* the init capset (docs/protocol.md) */
 }  // namespace
 
 LoopbackKmt::LoopbackKmt(MockPlatform &platform, LoopbackDevice &device)
@@ -50,8 +50,8 @@ bool LoopbackKmt::control(const std::uint8_t *request, std::size_t length)
 
 bool LoopbackKmt::publish(std::uint32_t resource_id, const Allocation &allocation)
 {
-    std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
-    RvkRequestWriter writer(request, sizeof request);
+    std::uint8_t     request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter writer(request, sizeof request);
     if (writer.guest_blob(resource_id, allocation.physical, static_cast<std::uint32_t>(allocation.bytes)) !=
         Status::ok)
         return false;
@@ -183,7 +183,7 @@ Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *pr
 {
     context = 0u;
     if (context_count_ >= max_contexts) return Status::no_space;
-    RvkContextRecord record;
+    AvContextRecord record;
     if (private_data == nullptr || record.decode(private_data, size) != Status::ok) return Status::invalid_parameter;
     if (find_allocation(record.ring()) == nullptr) return Status::invalid_parameter;
     const std::uint64_t ring_bytes =
@@ -206,12 +206,12 @@ Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *pr
     }
     const std::uint32_t handle = next_handle_++;
     const std::uint32_t doorbell = next_doorbell_++;
-    std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
-    RvkRequestWriter created(request, sizeof request);
+    std::uint8_t     request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter created(request, sizeof request);
     const ContextSetup setup(ProtocolVersion(1u, 0u), record.sub_api(), ring_id, record.ring_order(), fence_id,
                              doorbell, reply_id);
-    RvkRequestWriter set(request, sizeof request);
-    if (created.create_context(handle, rvk_capset) != Status::ok || !control(request, created.length()) ||
+    AvRequestWriter set(request, sizeof request);
+    if (created.create_context(handle, av_capset) != Status::ok || !control(request, created.length()) ||
         set.setup(handle, setup) != Status::ok || !control(request, set.length())) {
         free_context_memory(made);
         return Status::not_supported;
@@ -252,11 +252,11 @@ Status LoopbackKmt::destroy_context(std::uint32_t context)
 {
     Context *const found = find_context(context);
     if (found == nullptr) return Status::invalid_parameter;
-    std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
-    RvkRequestWriter destroyed(request, sizeof request);
+    std::uint8_t     request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter destroyed(request, sizeof request);
     if (destroyed.destroy_context(context) == Status::ok) static_cast<void>(control(request, destroyed.length()));
     for (std::uint32_t i = 0u; i < 3u; i++) {
-        RvkRequestWriter unref(request, sizeof request);
+        AvRequestWriter unref(request, sizeof request);
         if (unref.unref(found->blobs[i]) == Status::ok) static_cast<void>(control(request, unref.length()));
     }
     free_context_memory(*found);

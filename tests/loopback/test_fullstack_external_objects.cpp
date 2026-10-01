@@ -10,7 +10,7 @@
  * the semaphore the first signalled. A host without Vulkan, or one whose
  * driver cannot share by fd, has nothing here to judge and the test says so
  * and returns. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -46,7 +46,7 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libz\n"
            "leak:libLLVM\n"
            "leak:libgallium\n"
-           "leak:librvk_executor\n";
+           "leak:libav_executor\n";
 }
 
 using av::DdiKmt;
@@ -84,7 +84,7 @@ private:
     av::icd::IcdRoot          root_;
 };
 
-/* Two devices on the rvk adapter's one physical device, through the ICD's
+/* Two devices on the av adapter's one physical device, through the ICD's
  * entry points as the Windows loader would call them: what a DXGI-shared
  * resource lives between. */
 class IcdDevice {
@@ -267,7 +267,7 @@ constexpr std::uint32_t written = 0xABCDEF01u;
  * exported, and everything the host saw was an fd. */
 TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into_shared_memory)
 { const WidestHostGpu gpu;
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
   const ExecutorLibraryFile library(AV_EXECUTOR_LIBRARY);
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -476,6 +476,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
   /* Nothing in it was refused along the way, and it got to the end: the four
    * returns above are the host saying it cannot share, and each says so. */
   CHECK_EQ(process.log().holding("fullstack: the second device read what the first wrote"), 1u);
-  CHECK_EQ(process.log().holding("rvkvk: vkAllocateMemory names a handle this driver did not export"), 0u);
-  CHECK_EQ(process.log().holding("rvkvk: vkImportSemaphoreWin32HandleKHR names a handle"), 0u);
+  CHECK_EQ(process.log().holding("avvk: vkAllocateMemory names a handle this driver did not export"), 0u);
+  CHECK_EQ(process.log().holding("avvk: vkImportSemaphoreWin32HandleKHR names a handle"), 0u);
 }

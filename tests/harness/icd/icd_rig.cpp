@@ -7,8 +7,8 @@ namespace av {
 
 namespace {
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 }  // namespace
 
@@ -17,7 +17,7 @@ IcdRig::IcdRig()
       log_(), windows_(), chains_(),
       root_(platform_, kmt_, lock_, send_lock_, memory_lock_, log_, icd::icd_binding, windows_, chains_)
 {
-    kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);
 }
 

@@ -1,9 +1,9 @@
-/* One VkInstance's way to the host: the rvkgpu adapter, a device and paging
- * queue on it, and one Vulkan rvk context whose transport every object under the
+/* One VkInstance's way to the host: the avgpu adapter, a device and paging
+ * queue on it, and one Vulkan av context whose transport every object under the
  * instance sends through (research.md §3). The host's handles are per context,
  * so nothing made through an instance can cross another's connection.
  *
- * Opening is all or nothing, and any reason it cannot open - no rvkgpu adapter,
+ * Opening is all or nothing, and any reason it cannot open - no avgpu adapter,
  * no LUID for it, a device the driver refuses, a context whose capset offers no
  * Vulkan - is the same answer to the loader: this driver does not serve here.
  * The transport stages its largest command, 256 KiB (research.md §4), in memory
@@ -56,7 +56,7 @@ public:
     void                 close();
     bool                 opened() const;
     bool                 faulted() const;
-    /* The rvkgpu adapter's handle, 0 until open. */
+    /* The avgpu adapter's handle, 0 until open. */
     uint32_t             adapter() const;
     /* The D3DKMT device the connection made; 0 unless open. */
     uint32_t             device() const;

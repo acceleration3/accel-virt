@@ -11,7 +11,7 @@
 #include "guest/suite/transport_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -27,9 +27,9 @@ using av::TransportScenario;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-/* Microsoft Basic Render, enumerated before rvk as it is in a real guest. */
+const PciIdentity av_gpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+/* Microsoft Basic Render, enumerated before av as it is in a real guest. */
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 constexpr std::uint32_t unsuccessful = 0xC0000001u;
 
@@ -44,8 +44,8 @@ public:
     Rig() : search_(kmt_)
     {
         kmt_.add_adapter(basic_render, 3100u);
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av_gpu), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }
@@ -232,7 +232,7 @@ TEST(transport_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
 { MockKmt kmt;
   kmt.add_adapter(basic_render, 3100u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::not_found);
+  CHECK_STATUS(search.find(av_gpu), Status::not_found);
   GuestReport report;
   TransportScenario scenario(kmt, report, search, av::SubApi::vulkan, "transport");
   scenario.run();
@@ -253,7 +253,7 @@ TEST(transport_scenario, an_opengl_context_is_asked_for_by_its_record_and_named_
   CHECK(has_line(report, "ok opengl.initialize\n"));
   CHECK(has_line(report, "ok opengl.nop 0\n"));
   CHECK_EQ(report.failed(), 0u);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::opengl);
   rig.check_nothing_left_but_the_adapter(); }

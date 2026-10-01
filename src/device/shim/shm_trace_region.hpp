@@ -1,4 +1,4 @@
-/* The memory a host process's trace table lives in: /dev/shm/rvk-trace-<module>-<pid>,
+/* The memory a host process's trace table lives in: /dev/shm/av-trace-<module>-<pid>,
  * which a reader maps directly and which is deliberately left behind when the
  * process ends, so a crashed QEMU's table can still be read (docs/trace.md).
  * Opening one first removes what processes no longer alive left there. */
@@ -24,7 +24,7 @@ public:
     /* `bytes` of zeroed shared memory named for `module` and this process.
      * invalid_state when open; the system's refusal as no_memory otherwise. */
     [[nodiscard]] Status open(const char *module, size_t bytes);
-    /* The same under /dev/shm/<prefix><module>-<pid>: rvk-events- is the
+    /* The same under /dev/shm/<prefix><module>-<pid>: av-events- is the
      * timeline tools/perfetto_trace.py reads. */
     [[nodiscard]] Status open(const char *prefix, const char *module, size_t bytes);
     uint8_t             *region() const;
@@ -32,7 +32,7 @@ public:
     uint32_t             process() const;
 
 private:
-    /* Files of dead processes: rvk-trace-*-<pid>, rvk-state-*-<pid>.sock and
+    /* Files of dead processes: av-trace-*-<pid>, av-state-*-<pid>.sock and
      * crash-*-<pid>.txt stay (a crash file is what is left to read). */
     void sweep() const;
 

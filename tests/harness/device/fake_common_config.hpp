@@ -12,7 +12,7 @@ namespace av {
 
 class FakeCommonConfig final : public RegisterWindow {
 public:
-    static constexpr std::uint16_t max_queues = 66u;   /* virtio-gpu-rvk-pci's */
+    static constexpr std::uint16_t max_queues = 66u;   /* virtio-gpu-av-pci's */
     static constexpr std::uint32_t history_capacity = 16u;
 
     struct Queue {

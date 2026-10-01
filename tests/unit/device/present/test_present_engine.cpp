@@ -30,7 +30,7 @@ struct PresentEngineProbe {
     static Status resume(PresentEngine &engine, Host &host)
     {
         engine.stopping_ = false;
-        return host.start_thread(&RvkPresentEngineRun, &engine, engine.thread_);
+        return host.start_thread(&AvPresentEngineRun, &engine, engine.thread_);
     }
 };
 
@@ -255,7 +255,7 @@ TEST(present_engine, an_image_source_is_moved_out_of_its_snapshot_and_the_snapsh
   constexpr std::uint32_t pitch = 20u * 4u;   /* 16 pixels and 4 of padding a row */
   static std::uint32_t    pixels[20u * 2u];
   for (std::uint32_t at = 0u; at < 40u; at++) pixels[at] = 0xA0000000u | at;
-  const RvkFrameView view = {reinterpret_cast<const std::uint8_t *>(pixels), pitch, 16u, 2u, 0u};
+  const AvFrameView view = {reinterpret_cast<const std::uint8_t *>(pixels), pitch, 16u, 2u, 0u};
   CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.image(1u, 0x51u)), 0x1205u);   /* nothing reads snapshots yet */
   rig.plane.serve_frame(av::SurfacePoint(0x52u, 1u), view);

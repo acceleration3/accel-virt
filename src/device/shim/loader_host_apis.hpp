@@ -53,7 +53,7 @@ private:
     static constexpr uint32_t max_extensions = 512u;
 
     void enumerate();
-    /* Which RVK_BLOB_* kinds `device` can import, asked of its extensions
+    /* Which AV_BLOB_* kinds `device` can import, asked of its extensions
      * rather than assumed: a device without the host-pointer extension imports
      * nothing and the guest is told to copy. */
     uint32_t kinds_of(void *device);

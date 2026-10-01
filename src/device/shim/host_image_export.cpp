@@ -139,7 +139,7 @@ bool HostImageExport::copied(ID3D11DeviceContext4 *context, uint32_t slot) const
     return context->GetData(images_[slot].done_, &done, sizeof done, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done;
 }
 
-void HostImageExport::describe(uint32_t slot, RvkExportedImage &image) const
+void HostImageExport::describe(uint32_t slot, AvExportedImage &image) const
 {
     AV_SCOPE("HostImageExport::describe");
     const Image &shown = images_[slot];

@@ -14,7 +14,7 @@ WideName::WideName(const char *scope, const char *kind, const char *module, uint
 {
     AV_SCOPE("WideName::WideName");
     append(scope);
-    append("\\rvk-");
+    append("\\av-");
     append(kind);
     append("-");
     append(module);

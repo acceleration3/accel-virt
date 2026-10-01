@@ -38,7 +38,7 @@ public:
 
 private:
     static constexpr uint64_t page_bytes = 0x1000u;
-    static constexpr uint32_t magic = 0x414B5652u;   /* "RVKA" */
+    static constexpr uint32_t magic = 0x00415641u;   /* "AVA" */
     static constexpr uint16_t flag_cpu_visible = 0x1u;
 
     bool is_valid() const;

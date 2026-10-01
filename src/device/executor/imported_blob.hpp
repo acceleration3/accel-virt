@@ -11,7 +11,7 @@
 
 #include <stdint.h>
 
-struct RvkBlobHandle;
+struct AvBlobHandle;
 
 namespace av {
 
@@ -32,7 +32,7 @@ public:
      * invalid_state for a slot already holding one. The reserved field is the
      * memory type it asks to be imported into, which only the backend can
      * judge. */
-    [[nodiscard]] Status take(uint64_t blob_id, const RvkBlobHandle &handle);
+    [[nodiscard]] Status take(uint64_t blob_id, const AvBlobHandle &handle);
     /* Gives the slot back. Safe on one that holds nothing. */
     void                 give_back();
 

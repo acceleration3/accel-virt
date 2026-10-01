@@ -12,7 +12,7 @@
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <CL/cl_gl.h>
@@ -86,7 +86,7 @@ TEST(cl_gl_sharing, a_context_made_from_the_current_gl_context_names_its_objects
   CHECK(context != nullptr);
   /* The miniport is asked for an OpenCL context sharing the GL context's
    * objects, by the name the OpenGL ICD gave. */
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), av::Status::ok);
   CHECK(record.sub_api() == av::SubApi::opencl);
   CHECK_EQ(record.options().share_context(), gl_share_name);

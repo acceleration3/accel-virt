@@ -2,7 +2,7 @@
 """The Vulkan samples (samples/vulkan) on the host and in the guest, side by side.
 
 Runs the same examples twice - natively on the host through its Vulkan driver,
-and in the running guest through the Khronos loader, rvkvk.dll, the device and
+and in the running guest through the Khronos loader, avvk.dll, the device and
 the executor - and writes an HTML report like tools/d3d11_report.py's: each
 sample's frame from both, the difference between them, and how fast each
 rendered.
@@ -30,11 +30,11 @@ from d3d11_report import STYLE, compare, guest_shell, png, read_frame, verdict, 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA = ROOT / "third_party" / "vulkan-samples" / "Vulkan-Samples" / "data"
-HOST_EXE = ROOT / "build-vulkan-samples" / "host" / "rvkvksamples"
-GUEST_BUILD = ROOT / "build-vulkan-samples" / "guest" / "rvkvksamples.exe"
+HOST_EXE = ROOT / "build-vulkan-samples" / "host" / "avvksamples"
+GUEST_BUILD = ROOT / "build-vulkan-samples" / "guest" / "avvksamples.exe"
 LOADER = ROOT / "third_party" / "vulkan-runtime" / "vulkan-1.dll"
-GUEST_DIR = "C:\\rvk\\vksamples"
-GUEST_EXE = GUEST_DIR + "\\rvkvksamples.exe"
+GUEST_DIR = "C:\\av\\vksamples"
+GUEST_EXE = GUEST_DIR + "\\avvksamples.exe"
 # The runner's own watchdog ends a stuck sample first; this is for one that
 # cannot even do that.
 SAMPLE_TIMEOUT = 600
@@ -152,15 +152,15 @@ def run_guest(args, out, names):
     print("guest: rendering", flush=True)
     # The user's interactive session, where the loader finds the display adapter's ICD.
     output = guest_shell(work, "ps", f"""
-Unregister-ScheduledTask -TaskName rvkvksamples -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName avvksamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c {GUEST_DIR}\\run.cmd'
 $p = New-ScheduledTaskPrincipal -UserId '{args.guest_user}' -LogonType Interactive -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2)
-Register-ScheduledTask -TaskName rvkvksamples -Action $a -Principal $p -Settings $s | Out-Null
-Start-ScheduledTask -TaskName rvkvksamples
+Register-ScheduledTask -TaskName avvksamples -Action $a -Principal $p -Settings $s | Out-Null
+Start-ScheduledTask -TaskName avvksamples
 Start-Sleep 2
-while ((Get-ScheduledTask rvkvksamples).State -eq 'Running') {{ Start-Sleep 1 }}
-'exit: ' + (Get-ScheduledTaskInfo rvkvksamples).LastTaskResult
+while ((Get-ScheduledTask avvksamples).State -eq 'Running') {{ Start-Sleep 1 }}
+'exit: ' + (Get-ScheduledTaskInfo avvksamples).LastTaskResult
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=7200)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
@@ -248,7 +248,7 @@ def write_html(args, out, rows, ratios):
 <div class="muted">{html.escape(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))} &middot; {args.width}&times;{args.height}
 &middot; warm-up &ge;1 s ({args.warmup} frames at least), then blocks of {args.frames} frames each finished with vkQueueWaitIdle until 1 s, off-screen
 &middot; host: native Vulkan on {html.escape(args.gpu_name)}
-&middot; VM: vulkan-1.dll &rarr; rvkvk.dll &rarr; virtio-gpu-rvk &rarr; the same GPU &middot; Sascha Willems' examples (Voultapher/Vulkan-Samples), one process per sample</div>
+&middot; VM: vulkan-1.dll &rarr; avvk.dll &rarr; virtio-gpu-av &rarr; the same GPU &middot; Sascha Willems' examples (Voultapher/Vulkan-Samples), one process per sample</div>
 <div class="summary">
 <div class="stat"><span class="muted">samples</span><b>{len(rows)}</b></div>
 <div class="stat"><span class="muted">ran on the host</span><b>{host_ok} / {len(rows)}</b></div>
@@ -265,7 +265,7 @@ def write_html(args, out, rows, ratios):
 {f'<p class="muted">{html.escape(NOTES[name])}</p>' if name in NOTES else ""}
 <div class="images">
 <figure><img src="img/{name}-host.png" alt="host"><figcaption>host (native Vulkan)</figcaption></figure>
-<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>VM (rvkvk over virtio-gpu-rvk)</figcaption></figure>
+<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>VM (avvk over virtio-gpu-av)</figcaption></figure>
 <figure><img src="img/{name}-diff.png" alt="difference"><figcaption>difference, largest channel &times;8</figcaption></figure>
 </div><div class="wrap"><table>
 <tr><th></th><th>fps</th><th>ms / frame</th><th>setup ms</th><th>status</th></tr>

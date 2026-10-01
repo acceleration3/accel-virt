@@ -9,7 +9,7 @@ ImportTable::ImportTable() : blobs_{}, count_(0u)
     AV_SCOPE("ImportTable::ImportTable");
 }
 
-Status ImportTable::take(uint64_t blob_id, const RvkBlobHandle &handle, ImportedBlob *&taken)
+Status ImportTable::take(uint64_t blob_id, const AvBlobHandle &handle, ImportedBlob *&taken)
 {
     AV_SCOPE("ImportTable::take");
     taken = nullptr;

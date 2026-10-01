@@ -42,7 +42,7 @@ TEST(ring_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[RingHeader::encoded_size] = {};
   CHECK_STATUS(RingHeader(16u, 0x1234u, 0x1000u).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x524B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00525641u);
   CHECK(layout.at(4u, 1u) == 16u);
   CHECK(layout.at(5u, 3u) == 0u);
   CHECK(layout.at(8u, 8u) == 0x1234u);

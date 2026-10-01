@@ -48,8 +48,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 constexpr std::int32_t vk_error_incompatible_driver = -9;
 
 class Rig {
@@ -58,8 +58,8 @@ public:
         : search_(kmt_), host_(kmt_), steps_(kmt_, report_, "chain"), link_(kmt_, search_, steps_, SubApi::vulkan),
           chain_(steps_, link_.transport())
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av), Status::ok);
         CHECK_STATUS(link_.open(), Status::ok);
     }
 

@@ -18,7 +18,7 @@ AdapterSearch::~AdapterSearch()
     static_cast<void>(close());
 }
 
-/* With more than one rvkgpu adapter, the first the kernel enumerates may be
+/* With more than one avgpu adapter, the first the kernel enumerates may be
  * a lesser GPU - an integrated one beside the discrete GPU driving the
  * display - so the one the primary display is on is looked for first, as
  * DXGI lists it first and a D3D application gets it by default. */

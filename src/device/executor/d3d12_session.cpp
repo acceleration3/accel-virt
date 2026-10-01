@@ -157,7 +157,7 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
         return ran;
     /* The first refusal is the one that says why: every later one follows from it. */
     if (removed_ == 0u)
-        fprintf(stderr, "virtio-gpu-rvk: d3d12: %s refused; the device is removed\n", d3d12proto::command_name(command_id));
+        fprintf(stderr, "virtio-gpu-av: d3d12: %s refused; the device is removed\n", d3d12proto::command_name(command_id));
     removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
     return true;
 }
@@ -268,7 +268,7 @@ void D3d12Session::drain()
     if (device_ == nullptr) return;
     if (!progress_.mark_all()) {
         if (removed_ == 0u)
-            fprintf(stderr, "virtio-gpu-rvk: d3d12: a queue refused the drain's signal; the device is removed\n");
+            fprintf(stderr, "virtio-gpu-av: d3d12: a queue refused the drain's signal; the device is removed\n");
         removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
         return;
     }
@@ -289,7 +289,7 @@ void D3d12Session::drain()
                                static_cast<uint64_t>(now.tv_nsec) - static_cast<uint64_t>(began.tv_nsec);
         if (spent >= hung_ns) {
             if (removed_ == 0u) {
-                fprintf(stderr, "virtio-gpu-rvk: d3d12: the GPU did not finish in 5 s; the device is removed\n");
+                fprintf(stderr, "virtio-gpu-av: d3d12: the GPU did not finish in 5 s; the device is removed\n");
                 progress_.log_stuck();
             }
             removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
@@ -379,7 +379,7 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
          * guest's heap fails: the removal that follows says nothing more. */
         if (pages == nullptr || arena_offset % heap_alignment != 0u ||
             reinterpret_cast<uintptr_t>(pages) % heap_alignment != 0u) {
-            fprintf(stderr, "virtio-gpu-rvk: d3d12: a heap of %llu bytes at %llu is not inside the arena of %llu bytes\n",
+            fprintf(stderr, "virtio-gpu-av: d3d12: a heap of %llu bytes at %llu is not inside the arena of %llu bytes\n",
                     static_cast<unsigned long long>(size), static_cast<unsigned long long>(arena_offset),
                     static_cast<unsigned long long>(region_.length()));
             return false;
@@ -388,7 +388,7 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
         const bool made = shared ? arena_heaps_.add(*device_, region_, heap, arena_offset, size)
                                  : keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
         if (!made)
-            fprintf(stderr, "virtio-gpu-rvk: d3d12: the host did not import the arena of %llu bytes as %s\n",
+            fprintf(stderr, "virtio-gpu-av: d3d12: the host did not import the arena of %llu bytes as %s\n",
                     static_cast<unsigned long long>(region_.length()), shared ? "a dma-buf" : "host memory");
         return made;
     }

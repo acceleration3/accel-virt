@@ -3,7 +3,7 @@
 Windows guest has - gdi32 for D3DKMT, kernel32, ntdll - so it runs in a guest
 with nothing installed beside it.
 
-rvktest.exe is a console program. A DLL (--dll) may be either Windows
+avtest.exe is a console program. A DLL (--dll) may be either Windows
 subsystem, and what it exports is judged too: the Vulkan loader calls an ICD by
 exactly the names --require-export gives, and --only-exports refuses any other.
 

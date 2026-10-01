@@ -20,7 +20,7 @@ namespace {
 /* argv as a shell gives it, argv[0] included. */
 class Arguments {
 public:
-    Arguments() : count_(1), values_{"rvkrecord"} {}
+    Arguments() : count_(1), values_{"avrecord"} {}
 
     Arguments &add(const char *value)
     {
@@ -61,10 +61,10 @@ struct RecordingToolRequestProbe {
 TEST(recording_tool_request_parse, reads_a_print_of_a_recording)
 { RecordingFilter      filter;
   RecordingToolRequest request;
-  const Arguments      arguments = Arguments().add("print").add("run.rvk");
+  const Arguments      arguments = Arguments().add("print").add("run.av");
   CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::ok);
   CHECK(request.action() == RecordingToolRequest::Action::print);
-  CHECK_EQ(std::strcmp(request.recording(), "run.rvk"), 0);
+  CHECK_EQ(std::strcmp(request.recording(), "run.av"), 0);
   CHECK(request.executor() == nullptr);
   CHECK(request.gpu() == nullptr);
   CHECK_EQ(request.payload_bytes(), 0u);
@@ -74,14 +74,14 @@ TEST(recording_tool_request_parse, reads_a_print_of_a_recording)
 TEST(recording_tool_request_parse, a_replay_needs_a_library_and_takes_a_gpu)
 { RecordingFilter      filter;
   RecordingToolRequest without;
-  const Arguments      bare = Arguments().add("replay").add("run.rvk");
+  const Arguments      bare = Arguments().add("replay").add("run.av");
   CHECK_STATUS(without.parse(bare.count(), bare.values(), filter), Status::invalid_parameter);
   CHECK(std::strstr(without.reason(), "--executor") != nullptr);
   CHECK(without.action() == RecordingToolRequest::Action::none);
   CHECK(without.invariants_hold());
 
   RecordingToolRequest request;
-  const Arguments      full = Arguments().add("replay").add("run.rvk").add("--executor").add("lib.so")
+  const Arguments      full = Arguments().add("replay").add("run.av").add("--executor").add("lib.so")
                                   .add("--gpu").add("0123456789abcdefFEDCBA9876543210");
   CHECK_STATUS(request.parse(full.count(), full.values(), filter), Status::ok);
   CHECK(request.action() == RecordingToolRequest::Action::replay);
@@ -100,7 +100,7 @@ TEST(recording_tool_request_parse, refuses_a_gpu_that_is_not_thirty_two_hexadeci
       RecordingFilter      filter;
       RecordingToolRequest request;
       const Arguments      arguments =
-          Arguments().add("replay").add("run.rvk").add("--executor").add("lib.so").add("--gpu").add(value);
+          Arguments().add("replay").add("run.av").add("--executor").add("lib.so").add("--gpu").add(value);
       CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
       CHECK(std::strstr(request.reason(), "--gpu") != nullptr);
       CHECK(request.gpu() == nullptr);
@@ -110,7 +110,7 @@ TEST(recording_tool_request_parse, refuses_a_gpu_that_is_not_thirty_two_hexadeci
 TEST(recording_tool_request_parse, the_filter_flags_narrow_the_filter_they_are_given)
 { RecordingFilter      filter;
   RecordingToolRequest request;
-  const Arguments      arguments = Arguments().add("print").add("run.rvk").add("--context").add("7")
+  const Arguments      arguments = Arguments().add("print").add("run.av").add("--context").add("7")
                                        .add("--api").add("vulkan").add("--fence").add("3:9")
                                        .add("--command").add("Create").add("--bytes").add("16");
   CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::ok);
@@ -128,7 +128,7 @@ TEST(recording_tool_request_parse, the_filter_flags_narrow_the_filter_they_are_g
 TEST(recording_tool_request_parse, a_single_fence_is_a_range_of_one)
 { RecordingFilter      filter;
   RecordingToolRequest request;
-  const Arguments      arguments = Arguments().add("print").add("run.rvk").add("--fence").add("12");
+  const Arguments      arguments = Arguments().add("print").add("run.av").add("--fence").add("12");
   CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::ok);
   CHECK(filter.keeps(a_batch(1u, 12u)));
   CHECK(!filter.keeps(a_batch(1u, 11u)));
@@ -149,7 +149,7 @@ TEST(recording_tool_request_parse, refuses_a_fence_that_is_no_range)
   for (const Case &c : refused) {
       RecordingFilter      filter;
       RecordingToolRequest request;
-      const Arguments      arguments = Arguments().add("print").add("run.rvk").add("--fence").add(c.value);
+      const Arguments      arguments = Arguments().add("print").add("run.av").add("--fence").add(c.value);
       CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
       CHECK(std::strstr(request.reason(), "--fence") != nullptr);
       CHECK(std::strstr(request.reason(), c.reason) != nullptr);
@@ -165,7 +165,7 @@ TEST(recording_tool_request_parse, takes_the_largest_fence_and_refuses_the_first
 { RecordingFilter      filter;
   RecordingToolRequest request;
   const Arguments      largest =
-      Arguments().add("print").add("run.rvk").add("--fence").add("18446744073709551615");
+      Arguments().add("print").add("run.av").add("--fence").add("18446744073709551615");
   CHECK_STATUS(request.parse(largest.count(), largest.values(), filter), Status::ok);
   CHECK(filter.keeps(a_batch(1u, ~std::uint64_t{0})));
   CHECK(!filter.keeps(a_batch(1u, ~std::uint64_t{0} - 1u)));
@@ -173,7 +173,7 @@ TEST(recording_tool_request_parse, takes_the_largest_fence_and_refuses_the_first
   RecordingFilter      wider;
   RecordingToolRequest past;
   const Arguments      one_more =
-      Arguments().add("print").add("run.rvk").add("--fence").add("18446744073709551616");
+      Arguments().add("print").add("run.av").add("--fence").add("18446744073709551616");
   CHECK_STATUS(past.parse(one_more.count(), one_more.values(), wider), Status::invalid_parameter);
   CHECK(std::strstr(past.reason(), "--fence") != nullptr);
   CHECK(wider.keeps(a_batch(1u, 1u))); }
@@ -183,14 +183,14 @@ TEST(recording_tool_request_parse, refuses_what_it_does_not_understand)
   const Case cases[] = {
       {Arguments(), "usage"},
       {Arguments().add("print"), "usage"},
-      {Arguments().add("show").add("run.rvk"), "print or replay"},
-      {Arguments().add("print").add("run.rvk").add("--context"), "no value"},
-      {Arguments().add("print").add("run.rvk").add("--nonsense").add("1"), "does not know"},
-      {Arguments().add("print").add("run.rvk").add("--context").add("x"), "--context"},
-      {Arguments().add("print").add("run.rvk").add("--context").add("4294967296"), "--context"},
-      {Arguments().add("print").add("run.rvk").add("--bytes").add("-1"), "--bytes"},
-      {Arguments().add("print").add("run.rvk").add("--bytes").add("4294967296"), "--bytes"},
-      {Arguments().add("print").add("run.rvk").add("--api").add("d3d"), "--api"},
+      {Arguments().add("show").add("run.av"), "print or replay"},
+      {Arguments().add("print").add("run.av").add("--context"), "no value"},
+      {Arguments().add("print").add("run.av").add("--nonsense").add("1"), "does not know"},
+      {Arguments().add("print").add("run.av").add("--context").add("x"), "--context"},
+      {Arguments().add("print").add("run.av").add("--context").add("4294967296"), "--context"},
+      {Arguments().add("print").add("run.av").add("--bytes").add("-1"), "--bytes"},
+      {Arguments().add("print").add("run.av").add("--bytes").add("4294967296"), "--bytes"},
+      {Arguments().add("print").add("run.av").add("--api").add("d3d"), "--api"},
   };
   for (const Case &c : cases) {
       RecordingFilter      filter;
@@ -213,7 +213,7 @@ TEST(recording_tool_request_parse, refuses_a_command_fragment_longer_than_any_na
   longest[sizeof longest - 1u] = '\0';
   RecordingFilter      filter;
   RecordingToolRequest request;
-  const Arguments      arguments = Arguments().add("print").add("run.rvk").add("--command").add(longest);
+  const Arguments      arguments = Arguments().add("print").add("run.av").add("--command").add(longest);
   CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
   CHECK(std::strstr(request.reason(), "--command") != nullptr);
   CHECK(request.invariants_hold()); }
@@ -230,7 +230,7 @@ TEST(recording_tool_request_parse, refuses_a_number_larger_than_sixty_four_bits_
 { RecordingFilter      filter;
   RecordingToolRequest request;
   const Arguments      arguments =
-      Arguments().add("print").add("run.rvk").add("--bytes").add("99999999999999999999");
+      Arguments().add("print").add("run.av").add("--bytes").add("99999999999999999999");
   CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
   CHECK(std::strstr(request.reason(), "--bytes") != nullptr);
   CHECK_EQ(request.payload_bytes(), 0u); }
@@ -249,7 +249,7 @@ TEST(recording_tool_request_parse, reads_a_gpu_in_either_case_and_refuses_anythi
       RecordingFilter      filter;
       RecordingToolRequest request;
       const Arguments      arguments =
-          Arguments().add("replay").add("run.rvk").add("--executor").add("lib.so").add("--gpu").add(c.hex);
+          Arguments().add("replay").add("run.av").add("--executor").add("lib.so").add("--gpu").add(c.hex);
       CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter),
                    c.taken ? Status::ok : Status::invalid_parameter);
       CHECK((request.gpu() != nullptr) == c.taken);
@@ -268,7 +268,7 @@ TEST(recording_tool_request_invariants, catch_a_request_that_does_not_say_what_i
   RecordingToolRequest refused;
   /* A refusal that got as far as naming the recording, so both halves of
    * "it refused, or it never started" are judged. */
-  const Arguments      bad = Arguments().add("print").add("run.rvk").add("--nonsense").add("1");
+  const Arguments      bad = Arguments().add("print").add("run.av").add("--nonsense").add("1");
   CHECK_STATUS(refused.parse(bad.count(), bad.values(), filter), Status::invalid_parameter);
   CHECK(refused.invariants_hold());
   av::RecordingToolRequestProbe::refuse_silently(refused);
@@ -277,7 +277,7 @@ TEST(recording_tool_request_invariants, catch_a_request_that_does_not_say_what_i
   CHECK(refused.invariants_hold());
 
   RecordingToolRequest taken;
-  const Arguments      good = Arguments().add("print").add("run.rvk");
+  const Arguments      good = Arguments().add("print").add("run.av");
   CHECK_STATUS(taken.parse(good.count(), good.values(), filter), Status::ok);
   CHECK(taken.invariants_hold());
   av::RecordingToolRequestProbe::forget_the_recording(taken);
@@ -290,7 +290,7 @@ TEST(recording_tool_request_invariants, catch_a_request_that_does_not_say_what_i
 
   RecordingToolRequest replaying;
   const Arguments      library =
-      Arguments().add("replay").add("run.rvk").add("--executor").add("lib.so");
+      Arguments().add("replay").add("run.av").add("--executor").add("lib.so");
   CHECK_STATUS(replaying.parse(library.count(), library.values(), filter), Status::ok);
   CHECK(replaying.invariants_hold());
   av::RecordingToolRequestProbe::forget_the_library(replaying);

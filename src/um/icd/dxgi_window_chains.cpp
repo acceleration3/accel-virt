@@ -450,7 +450,7 @@ void DxgiWindowChains::note(const char *what, uint64_t value)
     AV_SCOPE("DxgiWindowChains::note");
     char       line[160] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvk: ");
+    text.append("av: ");
     text.append(what);
     text.append(" 0x");
     text.append_hex(value, 16u);
@@ -462,7 +462,7 @@ void DxgiWindowChains::refuse(const char *why)
     AV_SCOPE("DxgiWindowChains::refuse");
     char       line[160] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvk: no DXGI chain for a window: ");
+    text.append("av: no DXGI chain for a window: ");
     text.append(why);
     log_.write(text.text());
 }

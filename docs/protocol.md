@@ -1,4 +1,4 @@
-# The rvk wire protocol
+# The av wire protocol
 
 Normative layout of every structure the guest driver and the QEMU device
 exchange outside the stock virtio-gpu protocol. `src/proto` implements it; both
@@ -44,7 +44,7 @@ virtio-gpu capset id **0x72**, capset version 1, returned by
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVK1` = `0x314B5652` |
+| 0 | u32 | magic | `AV1` = `0x00315641` |
 | 4 | u16 | major | compatible with the guest |
 | 6 | u16 | minor | |
 | 8 | u32 | sub_apis | bit 0 Vulkan, 1 OpenGL, 2 OpenCL; at least one; no other bit |
@@ -73,7 +73,7 @@ The PCI database's name is not used: pci.ids names the silicon ("Navi 48
 
 The PCI function carries the rest of the host GPU's identity. When the bound
 GPU reports `VK_EXT_pci_bus_info` and sysfs describes its function,
-virtio-gpu-rvk-pci presents that function's vendor, device and revision as its
+virtio-gpu-av-pci presents that function's vendor, device and revision as its
 own (`src/device/gpu/host_pci_identity.hpp`); the subsystem stays `1af4:5256`,
 which is how the driver package and the guest's programs recognise the device.
 A GPU with no PCI function (llvmpipe) leaves virtio-gpu's `1af4:1050`.
@@ -108,14 +108,14 @@ may advertise a capability an older guest does not use.
 
 ## Context setup (guest -> device)
 
-Sent in an rvk control command after `VIRTIO_GPU_CMD_CTX_CREATE` with context
+Sent in an av control command after `VIRTIO_GPU_CMD_CTX_CREATE` with context
 init capset id 0x72. It binds the context to its ring, fence page and doorbell.
 32 bytes at minor 0; 48 at minor 1 and later, and a setup whose length is not
 its minor's is malformed.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKC` = `0x434B5652` |
+| 0 | u32 | magic | `AVC` = `0x00435641` |
 | 4 | u16 | major | the negotiated version |
 | 6 | u16 | minor | |
 | 8 | u32 | sub_api | exactly one bit, one of the capset's `sub_apis` |
@@ -180,7 +180,7 @@ A device reset destroys every context, then releases every blob.
 
 ## Doorbells (guest -> device)
 
-PCI BAR 0 of `virtio-gpu-rvk-pci` is a 32-bit memory BAR of `max_contexts`
+PCI BAR 0 of `virtio-gpu-av-pci` is a 32-bit memory BAR of `max_contexts`
 pages of 4096 bytes (64 pages, 256 KiB), located by a virtio shared memory
 capability (`VIRTIO_PCI_CAP_SHARED_MEMORY_CFG`) with id **0x72**. Page *n* is
 the doorbell of the context whose setup named *n*.
@@ -199,7 +199,7 @@ and occupies the header and its payload rounded up to a multiple of 8 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKB` = `0x424B5652` |
+| 0 | u32 | magic | `AVB` = `0x00425641` |
 | 4 | u32 | length | payload bytes following the header; header and payload fit in `2^order` |
 | 8 | u64 | fence_id | >= 1, greater than the previous batch's on this context |
 
@@ -485,7 +485,7 @@ Offset 0 of the reply resource; the answer follows at offset 32. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKY` = `0x594B5652` |
+| 0 | u32 | magic | `AVY` = `0x00595641` |
 | 4 | u32 | status | 0 ok: `size` bytes follow; 1 too large: nothing follows |
 | 8 | u64 | fence_id | the batch the answer belongs to, >= 1 |
 | 16 | u32 | size | ok: equal to `required`; too large: 0 |
@@ -501,17 +501,17 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/rvk_executor.h`, now version 12, is what runs a context's commands on
+`src/device/abi/av_executor.h`, now version 12, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
-`executor` property names and calls `rvk_executor_ops` for the table; a library
+`executor` property names and calls `av_executor_ops` for the table; a library
 that does not load, lacks the symbol, or has another ABI version fails realize.
 Each context's executor is created and destroyed on the context's worker, and
 only that thread calls it. The executor that answers for real is this
 project's own, built on the generated server dispatch in
 `src/proto/generated/*/` over host API backends (feature 042); the qemu
-configuration builds `rvk_echo_executor` for the tests.
+configuration builds `av_echo_executor` for the tests.
 
 **Version 2 adds a memory channel**, because version 1 had none: the only bytes
 an executor could see were one command's payload, so a command naming a blob had
@@ -524,7 +524,7 @@ later on a worker.
 **Version 3 adds `imported_handle(executor, blob_id)`**, because `import_blob`
 answers only whether it imported and IMPORT_BLOB's guest needs the handle the
 import became. The device chooses every `blob_id` - a per-context count, never
-reused - calls `import_blob` with an `RVK_BLOB_HOST_POINTER` handle whose
+reused - calls `import_blob` with an `AV_BLOB_HOST_POINTER` handle whose
 `reserved` field carries the memory type the guest asked for, then asks
 `imported_handle` for the wire handle; 0 means the import made nothing a guest
 can name, and the device releases it and answers status 5. Two imports
@@ -535,14 +535,14 @@ claiming version 3 without `imported_handle` fails realize.
 
 **Version 4 adds `create_with_options(sub_api, gpu_uuid, options, share)`**
 (feature 050): `create` with an OpenGL context's version, profile and flags
-(`RvkContextOptions`, null for the defaults) and the executor of the context it
+(`AvContextOptions`, null for the defaults) and the executor of the context it
 shares objects with (null for none), which the device resolves from the setup's
 `share_context` among the executors its contexts published, on the same GPU, and
 keeps alive until the create returns. Other sub-APIs refuse options and shares;
 a version the host refuses is a null executor, which the guest sees as the
 context's fault. A version 3 library is only handed the defaults; a table
 claiming version 4 without `create_with_options` fails realize. On OpenGL,
-`import_kinds` answers `RVK_BLOB_HOST_POINTER` and `import_blob` takes the
+`import_kinds` answers `AV_BLOB_HOST_POINTER` and `import_blob` takes the
 pointer as the context's bulk-data region - one at a time, its handle the
 pointer's address - rather than as a GL object.
 
@@ -600,7 +600,7 @@ holds `2^order` bytes. 32 bytes.
 
 | Offset | Type | Field | Writer | Rule |
 |--:|---|---|---|---|
-| 0 | u32 | magic | guest, once | `RVKR` = `0x524B5652` |
+| 0 | u32 | magic | guest, once | `AVR` = `0x00525641` |
 | 4 | u8 | order | guest, once | 12..24 |
 | 5 | u8[3] | reserved | | 0 |
 | 8 | u64 | tail | guest driver, at submission | total bytes produced and submitted |
@@ -624,7 +624,7 @@ buffer of a submission. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKS` = `0x534B5652` |
+| 0 | u32 | magic | `AVS` = `0x00535641` |
 | 4 | u32 | flags | 0 |
 | 8 | u64 | fence_id | >= 1 |
 | 16 | u64 | begin | ring tail counter before the batch |
@@ -641,7 +641,7 @@ for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKA` = `0x414B5652` |
+| 0 | u32 | magic | `AVA` = `0x00415641` |
 | 4 | u16 | kind | 1 shared primary, 2 shadow, 3 staging, 4 GDI surface (the `D3DKMDT_STANDARDALLOCATION_TYPE` values), 5 user-mode surface, 16 client, 17 context name |
 | 6 | u16 | flags | bit 0 CPU visible; others 0 |
 | 8 | u32 | width | pixels |
@@ -656,12 +656,12 @@ for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
 
 Every kind but client and context name is a surface: width, height and pitch
 are non-zero. A context name is exactly one page and no surface: the handle an
-rvk context is known by (see Context record), which no device reads.
+av context is known by (see Context record), which no device reads.
 
 ## Context record (user mode -> guest driver)
 
 The private driver data of one `D3DKMTCreateContextVirtual`. A process that
-wants a host rvk context writes it; the miniport decodes it at `PASSIVE` inside
+wants a host av context writes it; the miniport decodes it at `PASSIVE` inside
 `DxgkDdiCreateContext` and, like the allocation descriptor, treats every byte as
 hostile. It never reaches the device. It names the sub-API, the ring's order,
 the reply slot's size, and one allocation of the process's: the page the
@@ -672,7 +672,7 @@ doorbell - the miniport owns the doorbell page and rings it itself. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKK` = `0x4B4B5652` |
+| 0 | u32 | magic | `AVK` = `0x004B5641` |
 | 4 | u32 | sub_api | exactly one of `SubApi` {1 Vulkan, 2 OpenGL, 4 OpenCL, 8 Direct3D} |
 | 8 | u8 | ring_order | within the capset's [min, max] |
 | 9 | u8[3] | reserved | 0 |
@@ -683,7 +683,7 @@ doorbell - the miniport owns the doorbell page and rings it itself. 32 bytes.
 | 25 | u8 | gl_minor | |
 | 26 | u8 | gl_profile | |
 | 27 | u8 | gl_flags | |
-| 28 | u32 | share_context | the name of another rvk OpenGL context of this process and device, or 0; the one option an OpenCL record may carry (cl_khr_gl_sharing) |
+| 28 | u32 | share_context | the name of another av OpenGL context of this process and device, or 0; the one option an OpenCL record may carry (cl_khr_gl_sharing) |
 
 The bytes alone prove magic, one known sub-API, a non-zero name, a reply size
 in range, an order in 12..24 and options only the sub-API may carry. The
@@ -694,7 +694,7 @@ the calling process whose name the same device holds, and puts that context's
 device id in the setup. Membership in the device's `sub_apis` and the capset's
 order range are a second validation against the decoded capset. The record is
 unchanged unless the decode returns ok. A record of the kind that named three
-allocations under the magic `RVKT` is refused whole.
+allocations under the magic `AVT` is refused whole.
 
 Freeing the name ends the context first: the process is done with it.
 
@@ -722,14 +722,14 @@ that is refused and the context with it.
 
 ### Context views record (user mode -> guest driver, escape)
 
-The private data of one `D3DKMTEscape` whose `hContext` names a live rvk
+The private data of one `D3DKMTEscape` whose `hContext` names a live av
 context: how the process learns where the miniport mapped its context's ring
 and reply slot. The miniport decodes it at `PASSIVE`, treats every byte as
 hostile, and writes its answer back into the same bytes. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKV` = `0x564B5652` |
+| 0 | u32 | magic | `AVV` = `0x00565641` |
 | 4 | u16 | version | 1 |
 | 6 | u16 | reserved | 0 |
 | 8 | u64 | ring | 0 in; the ring's address in the process out |
@@ -740,12 +740,12 @@ An answer has both addresses non-zero and different; a process takes nothing
 else as one. An escape whose data is no record the miniport knows answers
 `STATUS_NOT_SUPPORTED`; every refusal of this one - a wrong length, version or
 reserved field, addresses already filled in, no context named or one that is
-not a live rvk context - is `STATUS_INVALID_PARAMETER` and writes nothing back.
+not a live av context - is `STATUS_INVALID_PARAMETER` and writes nothing back.
 
 ### The submission path
 
 With a context set up, a process submits by writing a batch into the ring the
-miniport mapped into it (see Batches), leaving a submission descriptor (RVKS) in
+miniport mapped into it (see Batches), leaving a submission descriptor (AVS) in
 the DMA buffer of a `D3DKMTSubmitCommandVirtual`, and letting the miniport ring
 the doorbell; the miniport completes the D3DKMT submission fence the process
 waits on from the fence-page interrupt (see Fence page). A reply-generating
@@ -767,7 +767,7 @@ buffer is submitted. 72 bytes, then 16 per sub-rectangle. A rectangle is
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKP` = `0x504B5652` |
+| 0 | u32 | magic | `AVP` = `0x00505641` |
 | 4 | u32 | operation | 1 blt (source to destination), 2 colour fill (destination), 3 flip (source becomes the scanout) |
 | 8 | u32 | color | X8R8G8B8, colour fill only, else 0 |
 | 12 | u32 | sub_rect_count | rectangles following the header |
@@ -816,7 +816,7 @@ starting with an 8-byte header, all fields little-endian, reserved fields 0.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKM` = `0x4D4B5652` |
+| 0 | u32 | magic | `AVM` = `0x004D5641` |
 | 4 | u32 | operation | 1 flush TLB, 2 fill, 3 transfer, 4 copy page table entries |
 
 **Flush TLB** (40 bytes): forget cached translations for one address space.
@@ -874,7 +874,7 @@ fit and VidMm calls again with a fresh buffer for the rest.
 
 ## The driver's own virtio-gpu resources
 
-Besides rvk commands, the driver sends standard virtio-gpu requests (virtio 1.2
+Besides av commands, the driver sends standard virtio-gpu requests (virtio 1.2
 §5.7.6) for resources it owns. Resource ids 1 to 15 are reserved for them;
 nothing else may create one.
 
@@ -970,7 +970,7 @@ the guest reads it from its interrupt path. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKF` = `0x464B5652` |
+| 0 | u32 | magic | `AVF` = `0x00465641` |
 | 4 | u32 | flags | bit 0 `faulted`; no other bit |
 | 8 | u64 | completed_fence | highest fence id whose work finished |
 | 16 | u64 | progress | increments whenever the device makes progress (TDR heartbeat) |
@@ -1025,7 +1025,7 @@ A faulted context's executor is destroyed at once, on its worker; the context,
 its doorbell and its blobs stay until `CTX_DESTROY` or a reset.
 
 A guest can fault its own context on purpose, and the Vulkan ICD does so for
-its probe: `vkRvkForceContextFault(VkPhysicalDevice)`, an ICD-local
+its probe: `vkAvForceContextFault(VkPhysicalDevice)`, an ICD-local
 physical-device-level entry and not an extension, sends a `vkCreateInstance`
 frame cut after its structure type on the instance's own transport, which the
 executor cannot decode (fault 6). No other context is touched.
@@ -1039,7 +1039,7 @@ driver starts from nothing. A context the guest wants to stop without a fault
 
 ## The driver's sequence
 
-The order a guest driver follows (`src/core/rvk/`), checked end to end against
+The order a guest driver follows (`src/core/av/`), checked end to end against
 the device core by the loopback suite (`tests/loopback/`):
 
 1. **Capset.** `GET_CAPSET_INFO` for index 0, then `GET_CAPSET` for the id and
@@ -1072,7 +1072,7 @@ the device core by the loopback suite (`tests/loopback/`):
 
 ## Fence queues and interrupts (device -> guest)
 
-`virtio-gpu-rvk-pci` has 68 virtqueues: control (0), cursor (1), a fence
+`virtio-gpu-av-pci` has 68 virtqueues: control (0), cursor (1), a fence
 queue per doorbell page, queue `2 + n` for doorbell `n`, the display line
 (66, see "Display clock") and the present line (67, see "Present engine"). A fence queue carries
 no requests - a kick is ignored - and exists so the driver can give each
@@ -1094,7 +1094,7 @@ The device has no `guest_notifier_mask`, so QEMU attaches a queue's irqfd only
 when its vector is set before `DRIVER_OK` or when that MSI-X entry is unmasked; a
 vector written later, to an entry the guest already unmasked, gets a route and
 no irqfd, and every interrupt on it is lost (`hw/virtio/virtio-pci.c`,
-`kvm_virtio_pci_vector_use_one`). `rvkgpu.sys` assigns them all at start and
+`kvm_virtio_pci_vector_use_one`). `avgpu.sys` assigns them all at start and
 writes the same value again when a context is set up. Feature 044 found this
 live: each packet after a context's first completed only when an unrelated DPC
 served it, 2-3 s later, past TdrDelay under load; qtest has no irqfd and could
@@ -1117,7 +1117,7 @@ reads this one timeline.
 
 Queue 66, after the fence queues, carries no requests and exists for its
 interrupt, as they do: the driver gives it a vector with `queue_msix_vector`
-before `DRIVER_OK` (`rvkgpu.sys` treats it as fence queue 64, so it shares a
+before `DRIVER_OK` (`avgpu.sys` treats it as fence queue 64, so it shares a
 fence vector). The device raises it on the blanks the guest asked for (the
 page's `interrupt_every`), after the page says what the blank was. One
 interrupt may stand for several blanks - the guest reads the count, never
@@ -1161,7 +1161,7 @@ compares them for equality.
 
 | Offset | Size | Writer | Field | |
 |--:|--:|---|---|---|
-| 0 | 4 | device | magic | `0x434B5652` (`"RVKC"`) |
+| 0 | 4 | device | magic | `0x00435641` (`"AVC"`) |
 | 4 | 4 | device | version | 1 |
 | 8 | 4 | device | heads | head records that follow, 1 to 16 |
 | 12 | 20 | | reserved | 0 |
@@ -1208,7 +1208,7 @@ the miniport uses the present copy above on a device without them.
 ### The present line
 
 Queue 67, after the display line, carries no requests and exists for its
-interrupt, as the fence queues do (`rvkgpu.sys` treats it as fence queue 65).
+interrupt, as the fence queues do (`avgpu.sys` treats it as fence queue 65).
 The device raises it after writing `completed` whenever tickets complete; one
 interrupt may stand for several.
 
@@ -1261,7 +1261,7 @@ time, in the order of the writer's own commands. The Direct3D drivers number
 each present of a shared surface - `PresentPoint` (`0x040d`) for Direct3D 11,
 the `point` of `PresentResource12` for Direct3D 12 - and hand the point to the
 kernel in the present's private driver data (`PresentPointRecord`, 16 bytes:
-u32 magic `0x504B5652`, u32 point, u64 reserved 0); the miniport adds the
+u32 magic `0x00505641`, u32 point, u64 reserved 0); the miniport adds the
 source allocation's shared id, which it minted, so no process names a surface
 it was not given. The device stages a surface's frames only once a blt has
 asked for one of them - a flip-model buffer the compositor reads itself costs
@@ -1282,7 +1282,7 @@ not set bit 5.
 
 | Offset | Size | Writer | Field | |
 |--:|--:|---|---|---|
-| 0 | 4 | device | magic | `0x504B5652` (`"RVKP"`) |
+| 0 | 4 | device | magic | `0x00505641` (`"AVP"`) |
 | 4 | 4 | device | version | 1 |
 | 8 | 8 | device | completed | the last ticket whose pixels have moved, or that was refused; 0 before the first |
 | 16 | 8 | device | refused | tickets refused so far |
@@ -1312,7 +1312,7 @@ trusts nothing it did not write.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKR` = `0x524B5652` |
+| 0 | u32 | magic | `AVR` = `0x00525641` |
 | 4 | u16 | major | 1; a reader refuses another |
 | 6 | u16 | minor | 0; a higher one is read as far as the reader knows |
 | 8 | u16 | wire_major | the protocol version the recorded device spoke |
@@ -1335,7 +1335,7 @@ device log says so once.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKD` = `0x444B5652` |
+| 0 | u32 | magic | `AVD` = `0x00445641` |
 | 4 | u16 | kind | 1..7 below; a reader stops at any other |
 | 6 | u16 | reserved | 0 |
 | 8 | u32 | context | the device's context id, 0 when the record names none |

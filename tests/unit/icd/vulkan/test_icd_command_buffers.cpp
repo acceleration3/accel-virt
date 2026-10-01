@@ -429,7 +429,7 @@ TEST(icd_command_buffers, ending_on_a_lost_connection_answers_device_lost)
   CHECK_EQ(rig.entry<GetFenceStatus>("vkGetFenceStatus")(rig.device(), VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   CHECK_EQ(rig.end(command_buffer), VK_ERROR_DEVICE_LOST);
-  CHECK_EQ(rig.rig().log().holding("rvkvk: vkEndCommandBuffer on a lost device"), 1u);
+  CHECK_EQ(rig.rig().log().holding("avvk: vkEndCommandBuffer on a lost device"), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted); }
 
 /* A submission the kernel refuses while the batch is published loses the

@@ -10,7 +10,7 @@
 #ifndef AV_STAGED_FRAME_HPP
 #define AV_STAGED_FRAME_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 namespace av {
 
@@ -24,7 +24,7 @@ public:
     /* Mapped into `view` once the GPU has copied it, and copying until then;
      * failed when it never will be. Any thread, never two at once, and never
      * with the lock of SharedSurfaces held: it may take its API's own. */
-    virtual Reading read(RvkFrameView &view) = 0;
+    virtual Reading read(AvFrameView &view) = 0;
     /* Unmapped if it was, and back in its pool for another frame. Any thread,
      * never with the lock of SharedSurfaces held. */
     virtual void    release() = 0;

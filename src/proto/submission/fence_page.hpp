@@ -30,7 +30,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic        = 0x464B5652u;  /* "RVKF" */
+    static constexpr uint32_t magic        = 0x00465641u;  /* "AVF" */
     static constexpr uint32_t faulted_flag = 1u;
 
     uint32_t flags_;

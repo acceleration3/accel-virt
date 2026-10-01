@@ -108,7 +108,7 @@ TEST(cl_icd_root, the_device_answers_the_adapters_identity_and_the_hosts_everyth
   cl_device_id device = opened_device(rig);
   CHECK(device != nullptr);
 
-  /* Decided here: the LUID is the rvkgpu adapter's, not the host GPU's - the
+  /* Decided here: the LUID is the avgpu adapter's, not the host GPU's - the
    * root tells the report which adapter it opened (observe_luid), because a
    * report built before there was an adapter has nothing to name. */
   cl_uint vendor = 0u;
@@ -1798,13 +1798,13 @@ TEST(cl_icd_root, a_program_that_does_not_build_leaves_its_options_and_the_hosts
   CHECK_EQ(rig.root().dispatch().clBuildProgram(program, 0u, nullptr, "-cl-fast-relaxed-math", nullptr, nullptr),
            CL_BUILD_PROGRAM_FAILURE);
   CHECK_EQ(rig.log().lines() - before, 4u);
-  CHECK(std::strcmp(rig.log().line(before), "rvkcl: a program did not build; its options: -cl-fast-relaxed-math") ==
+  CHECK(std::strcmp(rig.log().line(before), "avcl: a program did not build; its options: -cl-fast-relaxed-math") ==
         0);
   CHECK(std::strcmp(rig.log().line(before + 1u),
-                    "rvkcl: build: k.cl:1:24: error: use of undeclared identifier 'nope'") == 0);
+                    "avcl: build: k.cl:1:24: error: use of undeclared identifier 'nope'") == 0);
   /* The empty line is skipped. */
-  CHECK(std::strcmp(rig.log().line(before + 2u), "rvkcl: build: 1 error generated.") == 0);
-  CHECK(std::strcmp(rig.log().line(before + 3u), "rvkcl: clBuildProgram answered -11") == 0);
+  CHECK(std::strcmp(rig.log().line(before + 2u), "avcl: build: 1 error generated.") == 0);
+  CHECK(std::strcmp(rig.log().line(before + 3u), "avcl: clBuildProgram answered -11") == 0);
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 TEST(cl_icd_root, a_creation_that_fails_is_named_even_with_nowhere_to_put_its_error)
@@ -1824,8 +1824,8 @@ TEST(cl_icd_root, a_creation_that_fails_is_named_even_with_nowhere_to_put_its_er
   CHECK_EQ(table.clGetContextInfo(context, 0x1234u, sizeof count, &count, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(table.clGetContextInfo(context, 0x1234u, sizeof count, &count, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(rig.log().lines() - before, 2u);
-  CHECK(std::strcmp(rig.log().line(before), "rvkcl: clCreateKernel answered -44") == 0);
-  CHECK(std::strcmp(rig.log().line(before + 1u), "rvkcl: clGetContextInfo answered -30") == 0);
+  CHECK(std::strcmp(rig.log().line(before), "avcl: clCreateKernel answered -44") == 0);
+  CHECK(std::strcmp(rig.log().line(before + 1u), "avcl: clGetContextInfo answered -30") == 0);
   /* A success writes nothing, and still reaches the application. */
   error = CL_INVALID_VALUE;
   CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_NUM_DEVICES, sizeof count, &count, nullptr), CL_SUCCESS);

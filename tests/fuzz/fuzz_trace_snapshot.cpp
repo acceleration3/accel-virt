@@ -1,4 +1,4 @@
-/* Hostile trace tables, as rvkinspect.exe reads them from another process's
+/* Hostile trace tables, as avinspect.exe reads them from another process's
  * section or the driver's escape: whatever the bytes, a read answers, and every
  * slot and frame a read table offers stays inside the bytes. */
 #include "core/trace/trace_slot_view.hpp"

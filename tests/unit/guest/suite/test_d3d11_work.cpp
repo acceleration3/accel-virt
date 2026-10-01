@@ -42,7 +42,7 @@ void *const window = reinterpret_cast<void *>(0x9001u);
 /* The work run once over its own scripted D3D11, and the report it left. */
 class D3d11Rig {
 public:
-    D3d11Rig() : report_("rvkd3d11probe"), steps_(kmt_, report_, "d3d11") {}
+    D3d11Rig() : report_("avd3d11probe"), steps_(kmt_, report_, "d3d11") {}
     D3d11Rig(const D3d11Rig &) = delete;
     D3d11Rig &operator=(const D3d11Rig &) = delete;
 
@@ -89,7 +89,7 @@ TEST(d3d11_work, every_step_passes_and_the_frame_is_the_colour_it_was_cleared_to
   CHECK(std::strstr(report, "ok d3d11.readback") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.pixels 4096") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.present") != nullptr);
-  CHECK(std::strstr(report, "rvkd3d11probe: 7 passed, 0 failed") != nullptr);
+  CHECK(std::strstr(report, "avd3d11probe: 7 passed, 0 failed") != nullptr);
   CHECK_EQ(rig.adapter(), ScriptedD3d11::adapter);
   CHECK_EQ(rig.feature_level(), ScriptedD3d11::feature_level_11_0);
   /* The device was made on the probe's window, at the frame's size, and the
@@ -115,7 +115,7 @@ TEST(d3d11_work, a_frame_of_the_wrong_colour_fails_with_the_count)
       /* The present still runs: what the frame held is the step's verdict,
        * not the run's. */
       CHECK(std::strstr(report, "ok d3d11.present") != nullptr);
-      CHECK(std::strstr(report, "rvkd3d11probe: 6 passed, 1 failed") != nullptr);
+      CHECK(std::strstr(report, "avd3d11probe: 6 passed, 1 failed") != nullptr);
   }
   /* The alpha byte is not judged: a D3D11 back buffer's is the swap chain's
    * to set, and nothing here reads it. */
@@ -162,7 +162,7 @@ TEST(d3d11_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
     ScriptedD3d11    &d3d11 = rig.d3d11();
     ScriptedImageSink images;
     MockKmt           kmt;
-    GuestReport       report("rvkd3d11probe");
+    GuestReport       report("avd3d11probe");
     ScenarioSteps     steps(kmt, report, "d3d11");
     D3d11Work         work(d3d11, images);
     work.run(steps, window);

@@ -9,8 +9,8 @@ namespace av {
 
 namespace {
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 }  // namespace
 
@@ -23,7 +23,7 @@ GlIcdRig::GlIcdRig(bool present_thread)
       dc_(0), other_dc_(0), memory_dc_(0), window_(0), other_window_(0)
 {
     if (!present_thread) presents_.refuse();
-    kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     surface_.add_dc(&dc_, &window_, window_width, window_height);
     surface_.add_dc(&other_dc_, &other_window_, window_width, window_height);
     surface_.add_dc(&memory_dc_, nullptr, 0u, 0u);

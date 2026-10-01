@@ -236,7 +236,7 @@ TEST(cl_external_memory, a_handle_this_process_opened_reaches_the_object_behind_
                                  second),
            CL_SUCCESS);
   CHECK_EQ(second, host_buffer + 1u);
-  CHECK_EQ(process.log().holding("rvkcl: a Win32 handle this process may not open"), 0u);
+  CHECK_EQ(process.log().holding("avcl: a Win32 handle this process may not open"), 0u);
 
   /* And what the acquire and release of cl_khr_external_memory are judged by:
    * the cl_mem this table answered is one of its own, and nothing else is -
@@ -261,7 +261,7 @@ TEST(cl_external_memory, each_way_an_open_is_refused_leaves_no_row)
     CHECK_EQ(made, 0u);
     CHECK_EQ(process.memory().live(), 0u);
     CHECK_EQ(process.wire().sends(), 0u);
-    CHECK_EQ(process.log().holding("rvkcl: a Win32 handle this process may not open"), 1u); }
+    CHECK_EQ(process.log().holding("avcl: a Win32 handle this process may not open"), 1u); }
 
   { /* A handle of 0, which is no handle at all. */
     Process          process;
@@ -354,7 +354,7 @@ TEST(cl_external_memory, each_way_an_open_is_refused_leaves_no_row)
     CHECK_EQ(made, 0u);
     CHECK_EQ(process.memory().live(), 0u);
     CHECK(process.memory().invariants_hold());
-    CHECK_EQ(process.log().holding("rvkcl: the device would not open a shared object for this context"),
+    CHECK_EQ(process.log().holding("avcl: the device would not open a shared object for this context"),
              1u); } }
 
 /* The size the application asked for is rounded to whole pages before it is
@@ -435,7 +435,7 @@ TEST(cl_external_memory, an_object_this_context_already_holds_is_not_opened_agai
   CHECK_EQ(process.wire().sends(), sends);
   CHECK_EQ(process.memory().live(), 1u);
   CHECK(process.memory().invariants_hold());
-  CHECK_EQ(process.log().holding("rvkcl: an object this context already imported"), 1u); }
+  CHECK_EQ(process.log().holding("avcl: an object this context already imported"), 1u); }
 
 /* A table with no room refuses before the device is asked: an object opened
  * into a table with nowhere to put it would be one nothing ever gave back.

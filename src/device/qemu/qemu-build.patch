@@ -7,12 +7,12 @@ index ffecedb..74a6884 100644
      hw_display_modules += {'virtio-gpu-rutabaga': virtio_gpu_rutabaga_ss}
    endif
 +
-+  if rvk_device.found() and rvk_vulkan.found()
-+    virtio_gpu_rvk_ss = ss.source_set()
-+    virtio_gpu_rvk_ss.add(when: ['CONFIG_VIRTIO_GPU', rvk_device, rvk_vulkan],
-+                          if_true: [files('virtio-gpu-rvk.c', 'virtio-gpu-rvk-host.c',
-+                                          'virtio-gpu-rvk-renderer.c'), pixman])
-+    hw_display_modules += {'virtio-gpu-rvk': virtio_gpu_rvk_ss}
++  if av_device.found() and av_vulkan.found()
++    virtio_gpu_av_ss = ss.source_set()
++    virtio_gpu_av_ss.add(when: ['CONFIG_VIRTIO_GPU', av_device, av_vulkan],
++                          if_true: [files('virtio-gpu-av.c', 'virtio-gpu-av-host.c',
++                                          'virtio-gpu-av-renderer.c'), pixman])
++    hw_display_modules += {'virtio-gpu-av': virtio_gpu_av_ss}
 +  endif
  endif
  
@@ -21,11 +21,11 @@ index ffecedb..74a6884 100644
                                     if_true: [files('virtio-gpu-pci-rutabaga.c'), pixman])
      hw_display_modules += {'virtio-gpu-pci-rutabaga': virtio_gpu_pci_rutabaga_ss}
    endif
-+  if rvk_device.found() and rvk_vulkan.found()
-+    virtio_gpu_pci_rvk_ss = ss.source_set()
-+    virtio_gpu_pci_rvk_ss.add(when: ['CONFIG_VIRTIO_GPU', 'CONFIG_VIRTIO_PCI', rvk_device],
-+                              if_true: [files('virtio-gpu-pci-rvk.c'), pixman])
-+    hw_display_modules += {'virtio-gpu-pci-rvk': virtio_gpu_pci_rvk_ss}
++  if av_device.found() and av_vulkan.found()
++    virtio_gpu_pci_av_ss = ss.source_set()
++    virtio_gpu_pci_av_ss.add(when: ['CONFIG_VIRTIO_GPU', 'CONFIG_VIRTIO_PCI', av_device],
++                              if_true: [files('virtio-gpu-pci-av.c'), pixman])
++    hw_display_modules += {'virtio-gpu-pci-av': virtio_gpu_pci_av_ss}
 +  endif
  endif
  
@@ -38,13 +38,13 @@ index 40e3f4e..3195913 100644
                           method: 'pkg-config',
                           required: get_option('rutabaga_gfx'))
  endif
-+rvk_device = not_found
-+rvk_vulkan = not_found
-+if not get_option('rvk').auto() or have_system
-+  rvk_device = dependency('rvk_device', method: 'pkg-config',
-+                          required: get_option('rvk'))
-+  rvk_vulkan = dependency('vulkan', method: 'pkg-config',
-+                          required: get_option('rvk'))
++av_device = not_found
++av_vulkan = not_found
++if not get_option('av').auto() or have_system
++  av_device = dependency('av_device', method: 'pkg-config',
++                          required: get_option('av'))
++  av_vulkan = dependency('vulkan', method: 'pkg-config',
++                          required: get_option('av'))
 +endif
  blkio = not_found
  if not get_option('blkio').auto() or have_block
@@ -53,7 +53,7 @@ index 40e3f4e..3195913 100644
  summary_info = {}
  summary_info += {'VirGL support':     virgl}
  summary_info += {'Rutabaga support':  rutabaga}
-+summary_info += {'rvk support':       rvk_device.found() and rvk_vulkan.found()}
++summary_info += {'av support':       av_device.found() and av_vulkan.found()}
  summary(summary_info, bool_yn: true, section: 'Graphics backends')
  
  # Audio backends
@@ -65,8 +65,8 @@ index a07cb47..d2efd43 100644
         description: 'virgl rendering support')
  option('rutabaga_gfx', type : 'feature', value : 'auto',
         description: 'rutabaga_gfx support')
-+option('rvk', type : 'feature', value : 'auto',
-+       description: 'accel-virt virtio-gpu-rvk device')
++option('av', type : 'feature', value : 'auto',
++       description: 'accel-virt virtio-gpu-av device')
  option('png', type : 'feature', value : 'auto',
         description: 'PNG support with libpng')
  option('vnc', type : 'feature', value : 'auto',

@@ -2,7 +2,7 @@
 """The D3D11 samples (samples/d3d11) on the host and in the guest, side by side.
 
 Runs the same program twice - natively on the host through DXVK, and in the
-running guest through rvkumd.dll, the device and the executor - and writes an
+running guest through avumd.dll, the device and the executor - and writes an
 HTML report: each sample's frame from both, the difference between them, and
 how fast each rendered.
 
@@ -27,8 +27,8 @@ import sys
 import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GUEST_DIR = "C:\\rvk\\samples"
-GUEST_EXE = GUEST_DIR + "\\rvkd3d11samples.exe"
+GUEST_DIR = "C:\\av\\samples"
+GUEST_EXE = GUEST_DIR + "\\avd3d11samples.exe"
 
 
 def guest_shell(work, *arguments, timeout=900):
@@ -39,7 +39,7 @@ def guest_shell(work, *arguments, timeout=900):
 
 
 def build():
-    for target in ("rvktest", "rvkd3d11samples_host"):
+    for target in ("avtest", "avd3d11samples_host"):
         subprocess.run(["cmake", "--build", str(ROOT / "build"), "--target", target], check=True,
                        stdout=subprocess.DEVNULL)
 
@@ -49,21 +49,21 @@ def run_guest(args, out):
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out, {GUEST_DIR}\\shaders | Out-Null")
-    guest_shell(work, "push", str(ROOT / "build" / "guest" / "rvkd3d11samples.exe"), GUEST_EXE)
+    guest_shell(work, "push", str(ROOT / "build" / "guest" / "avd3d11samples.exe"), GUEST_EXE)
     print("guest: rendering", flush=True)
     # The user's interactive session, where the D3D runtime loads the user-mode driver.
     command = (f"/c {GUEST_EXE} --out {GUEST_DIR}\\out --shaders {GUEST_DIR}\\shaders --frames {args.frames} "
                f"--warmup {args.warmup} --width {args.width} --height {args.height} > {GUEST_DIR}\\run.txt 2>&1")
     output = guest_shell(work, "ps", f"""
-Unregister-ScheduledTask -TaskName rvksamples -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName avsamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '{command}'
 $p = New-ScheduledTaskPrincipal -UserId '{args.guest_user}' -LogonType Interactive -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-Register-ScheduledTask -TaskName rvksamples -Action $a -Principal $p -Settings $s | Out-Null
-Start-ScheduledTask -TaskName rvksamples
+Register-ScheduledTask -TaskName avsamples -Action $a -Principal $p -Settings $s | Out-Null
+Start-ScheduledTask -TaskName avsamples
 Start-Sleep 2
-while ((Get-ScheduledTask rvksamples).State -eq 'Running') {{ Start-Sleep 1 }}
-'exit: ' + (Get-ScheduledTaskInfo rvksamples).LastTaskResult
+while ((Get-ScheduledTask avsamples).State -eq 'Running') {{ Start-Sleep 1 }}
+'exit: ' + (Get-ScheduledTaskInfo avsamples).LastTaskResult
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
@@ -107,8 +107,8 @@ def run_host(args, out):
     print("host: rendering", flush=True)
     shutil.rmtree(out / "host", ignore_errors=True)
     (out / "host").mkdir(parents=True)
-    environment = dict(os.environ, RVK_D3D_PATH=str(ROOT / "build-d3d" / "lib"))
-    done = subprocess.run([str(ROOT / "build" / "rvkd3d11samples_host"), "--out", str(out / "host"),
+    environment = dict(os.environ, AV_D3D_PATH=str(ROOT / "build-d3d" / "lib"))
+    done = subprocess.run([str(ROOT / "build" / "avd3d11samples_host"), "--out", str(out / "host"),
                            "--shaders", str(out / "shaders"), "--frames", str(args.frames),
                            "--warmup", str(args.warmup), "--width", str(args.width), "--height", str(args.height)],
                           capture_output=True, text=True, env=environment, timeout=1800)
@@ -280,7 +280,7 @@ def write_html(args, out, rows, ratios):
 <h1>D3D11 samples: host vs VM</h1>
 <div class="muted">{html.escape(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))} &middot; {args.width}&times;{args.height}
 &middot; {args.warmup} warm-up + {args.frames} timed frames, off-screen &middot; host: DXVK native on {html.escape(gpu)}
-&middot; VM: rvkumd &rarr; virtio-gpu-rvk &rarr; DXVK on the same GPU &middot; shaders compiled once by d3dcompiler_47 in the guest</div>
+&middot; VM: avumd &rarr; virtio-gpu-av &rarr; DXVK on the same GPU &middot; shaders compiled once by d3dcompiler_47 in the guest</div>
 <div class="summary">
 <div class="stat"><span class="muted">samples</span><b>{len(rows)}</b></div>
 <div class="stat"><span class="muted">pictures matching</span><b>{matched} / {len(rows)}</b></div>
@@ -297,7 +297,7 @@ def write_html(args, out, rows, ratios):
 <span class="muted" style="font-size:13px">VM at {cell(ratio * 100 if ratio else None, "%", 1)} of host speed</span></h2>
 <div class="images">
 <figure><img src="img/{name}-host.png" alt="host"><figcaption>host (DXVK native)</figcaption></figure>
-<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>VM (rvkumd over virtio-gpu-rvk)</figcaption></figure>
+<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>VM (avumd over virtio-gpu-av)</figcaption></figure>
 <figure><img src="img/{name}-diff.png" alt="difference"><figcaption>difference, largest channel &times;8</figcaption></figure>
 </div><div class="wrap"><table>
 <tr><th></th><th>fps</th><th>ms / frame</th><th>setup ms</th><th>status</th></tr>

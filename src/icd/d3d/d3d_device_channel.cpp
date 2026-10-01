@@ -26,7 +26,7 @@ bool D3dDeviceChannel::open(uint32_t feature_level, uint32_t &hresult, uint32_t 
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
     hresult = 1u;
-    if (!d3dproto::rvk_d3d_CreateDevice11(stream_, device_, feature_level, 0u, &hresult, &level)) return false;
+    if (!d3dproto::av_d3d_CreateDevice11(stream_, device_, feature_level, 0u, &hresult, &level)) return false;
     if (hresult == 0u) stream_.selected(device_);
     return true;
 }
@@ -69,10 +69,10 @@ Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
     if (!stream_.speak_as(device_)) return Status::invalid_state;
-    if (stream_.recorded_total() != cleared_at_ && !d3dproto::rvk_d3d_ClearState11(stream_)) return Status::invalid_state;
+    if (stream_.recorded_total() != cleared_at_ && !d3dproto::av_d3d_ClearState11(stream_)) return Status::invalid_state;
     const Status appended = stream_.append_recorded(commands, length);
     if (appended != Status::ok) return appended;
-    if (!d3dproto::rvk_d3d_ClearState11(stream_)) return Status::invalid_state;
+    if (!d3dproto::av_d3d_ClearState11(stream_)) return Status::invalid_state;
     cleared_at_ = stream_.recorded_total();
     return Status::ok;
 }
@@ -90,7 +90,7 @@ bool D3dDeviceChannel::close()
     AV_SCOPE("D3dDeviceChannel::close");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    const bool sent = d3dproto::rvk_d3d_DestroyDevice11(stream_, device_);
+    const bool sent = d3dproto::av_d3d_DestroyDevice11(stream_, device_);
     stream_.forget(device_);
     return sent;
 }

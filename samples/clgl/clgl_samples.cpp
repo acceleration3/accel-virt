@@ -344,9 +344,9 @@ private:
         description.style = CS_OWNDC;
         description.lpfnWndProc = &DefWindowProcW;
         description.hInstance = instance;
-        description.lpszClassName = L"rvkclglsamples";
+        description.lpszClassName = L"avclglsamples";
         if (RegisterClassExW(&description) == 0) return false;
-        const HWND window = CreateWindowExW(0u, L"rvkclglsamples", L"rvkclglsamples", WS_POPUP, 0, 0, 64, 64, nullptr,
+        const HWND window = CreateWindowExW(0u, L"avclglsamples", L"avclglsamples", WS_POPUP, 0, 0, 64, 64, nullptr,
                                             nullptr, instance, nullptr);
         dc_ = window != nullptr ? GetDC(window) : nullptr;
         if (dc_ == nullptr) return false;
@@ -810,7 +810,7 @@ private:
 
 }  // namespace
 
-extern "C" void rvkclglsamples_entry()
+extern "C" void avclglsamples_entry()
 {
     Suite suite;
     ExitProcess(suite.open() ? static_cast<UINT>(suite.run()) : 100u);

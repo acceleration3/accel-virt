@@ -1,5 +1,5 @@
 /* How long the GPU spends inside each guest submission, and idle between one
- * and the next, logged once a second: RVK_VK_SUBMIT_TIMING=1 in QEMU's
+ * and the next, logged once a second: AV_VK_SUBMIT_TIMING=1 in QEMU's
  * environment. A timestamp is written before a submission's first command
  * buffer and after its last, from command buffers of this class's own; the
  * results are read back without waiting, submissions later. What a frame the

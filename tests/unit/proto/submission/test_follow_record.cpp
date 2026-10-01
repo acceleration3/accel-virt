@@ -34,7 +34,7 @@ TEST(follow_record_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[FollowRecord::encoded_size] = {};
   CHECK_STATUS(FollowRecord(0x11223344u, 0x5566778899AABBCCull).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x464B5652u);   /* "RVKF" */
+  CHECK(layout.at(0u, 4u) == 0x00465641u);   /* "AVF" */
   CHECK(layout.at(4u, 4u) == 0x11223344u);
   CHECK(layout.at(8u, 8u) == 0x5566778899AABBCCull); }
 

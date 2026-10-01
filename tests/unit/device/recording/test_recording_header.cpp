@@ -65,7 +65,7 @@ TEST(recording_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[RecordingHeader::encoded_size] = {};
   CHECK_STATUS(a_header().encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x524B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00525641u);
   CHECK(layout.at(4u, 2u) == RecordingHeader::current_major);
   CHECK(layout.at(6u, 2u) == RecordingHeader::current_minor);
   CHECK(layout.at(8u, 2u) == 1u);

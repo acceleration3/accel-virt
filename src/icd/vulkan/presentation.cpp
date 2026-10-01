@@ -99,12 +99,12 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     Connection      *connection = nullptr;
     if (info == nullptr || !root_.present_context(device, physical, connection)) {
-        log_.write("rvkvk: a swapchain is refused: its device has no adapter to present on");
+        log_.write("avvk: a swapchain is refused: its device has no adapter to present on");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     void *const window = surfaces_.window_of(info->surface);
     if (window == nullptr) {
-        log_.write("rvkvk: a swapchain is refused: its surface names no window");
+        log_.write("avvk: a swapchain is refused: its surface names no window");
         return VK_ERROR_SURFACE_LOST_KHR;
     }
     /* Retired first, whether or not the new one is made, as Vulkan has it:

@@ -127,9 +127,9 @@ bool IcdConnection::held(uint32_t link) const
 Status IcdConnection::open_link(uint32_t link)
 {
     AV_SCOPE("IcdConnection::open_link");
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-    if (!search_.found() && search_.find(rvkgpu) != Status::ok) return Status::not_supported;
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+    if (!search_.found() && search_.find(avgpu) != Status::ok) return Status::not_supported;
     /* The link is not held, so its storage is empty. */
     static_cast<void>(devices_[link].construct(kmt_));
     if (devices_[link].object().open(search_.adapter()) != Status::ok) {

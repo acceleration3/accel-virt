@@ -1,5 +1,5 @@
 """The bytes docs/trace.md defines, read on the host: a trace table, the
-snapshot file rvkinspect.exe writes around one, and a state dump's text.
+snapshot file avinspect.exe writes around one, and a state dump's text.
 
 Everything here reads bytes another machine wrote, so a table is refused on
 the same terms src/core/trace/trace_snapshot.cpp refuses it, field by field,
@@ -8,7 +8,7 @@ before a slot is looked at. A refusal is a ValueError naming the field.
 import re
 import struct
 
-MAGIC = b"RVKTRACE"
+MAGIC = b"AVTRACE\0"
 VERSION = 1
 HEADER_BYTES = 96
 SLOT_HEADER_BYTES = 56
@@ -22,7 +22,7 @@ TICKS_PER_MS = 10_000
 FNV_OFFSET = 2166136261
 FNV_PRIME = 16777619
 
-SNAPSHOT_MAGIC = b"RVKSNAP1"
+SNAPSHOT_MAGIC = b"AVSNAP1\0"
 SNAPSHOT_HEADER = struct.Struct("<8sQII")
 SNAPSHOT_TABLE = 1
 SNAPSHOT_STATE = 2
@@ -86,7 +86,7 @@ def parse_table(data):
 
 
 def parse_snapshot(data):
-    """rvkinspect.exe's file: (kind name, clock at the copy, payload bytes)."""
+    """avinspect.exe's file: (kind name, clock at the copy, payload bytes)."""
     data = bytes(data)
     if len(data) < SNAPSHOT_HEADER.size:
         raise ValueError(f"snapshot: {len(data)} bytes, shorter than its header")

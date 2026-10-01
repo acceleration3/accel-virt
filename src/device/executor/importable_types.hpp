@@ -30,7 +30,7 @@ public:
      * neither. */
     void learn(uint64_t physical, uint32_t by_dmabuf, uint32_t by_pointer);
     bool known_for(uint64_t physical) const;
-    /* The RVK_BLOB_* kind decided, or 0 before anything was learnt. */
+    /* The AV_BLOB_* kind decided, or 0 before anything was learnt. */
     uint32_t kind() const;
     bool includes(uint32_t type) const;
     /* Clears HOST_VISIBLE, and HOST_COHERENT and HOST_CACHED, which are valid

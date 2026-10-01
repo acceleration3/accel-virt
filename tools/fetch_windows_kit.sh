@@ -14,7 +14,7 @@ SDK_SHA256=475269434dcd808a67853773272f972c3229c0e10c3ddc821290e70cc0f6904d
 KIT_INCLUDE=c/Include/10.0.26100.0
 KIT_LIB=c/Lib/10.0.26100.0/km/x64
 LIBRARIES=(ntoskrnl.lib hal.lib displib.lib BufferOverflowK.lib)
-# The user-mode headers rvktest.exe reaches through a lean windows.h and
+# The user-mode headers avtest.exe reaches through a lean windows.h and
 # d3dkmthk.h (src/guest/win32), and nothing else: the um directory is 120 MB.
 UM_HEADERS=(apiquery2.h consoleapi.h consoleapi2.h consoleapi3.h datetimeapi.h debugapi.h enclaveapi.h
             errhandlingapi.h fibersapi.h fileapi.h fileapifromapp.h handleapi.h heapapi.h ime_cmodes.h imm.h
@@ -36,10 +36,10 @@ UM_HEADERS=(apiquery2.h consoleapi.h consoleapi2.h consoleapi3.h datetimeapi.h d
 # (feature 052): its own closure - cfg.h, devpropdef.h, guiddef.h - is in
 # shared/, which is taken whole.
             cfgmgr32.h
-# The DXGI DDI rvkumd.dll fills at CreateDevice (feature 055). dxgitype.h and
+# The DXGI DDI avumd.dll fills at CreateDevice (feature 055). dxgitype.h and
 # dxgiformat.h, which it names, are in shared/, which is taken whole.
             dxgiddi.h dxmini.h)
-# What rvkumd.dll is written against (feature 055): the Direct3D user-mode
+# What avumd.dll is written against (feature 055): the Direct3D user-mode
 # driver DDI. These are the WDK's um/ directory, not the SDK's, and are named
 # one by one for the same reason - that directory is 120 MB and these are 1.6.
 WDK_UM_HEADERS=(d3d10umddi.h d3d12umddi.h d3dumddi.h d3d10TokenizedProgramFormat.hpp

@@ -131,7 +131,7 @@ TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_s
   const av::PresentFrames snapshots(plane, gpu);
   static std::uint32_t      pixels[PresentScene::width];
   for (std::uint32_t x = 0u; x < PresentScene::width; x++) pixels[x] = 0x0000FF00u | x;
-  plane.serve_frame(av::SurfacePoint(0x61u, 1u), RvkFrameView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
+  plane.serve_frame(av::SurfacePoint(0x61u, 1u), AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
                                               PresentScene::width, 1u, 0u});
   QueuedPresent present(host);
   CHECK_STATUS(accept(host, present, scene.image(4u, 0x61u), snapshots), Status::ok);
@@ -143,7 +143,7 @@ TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_s
   present.release();
   QueuedPresent outside(host);
   static std::uint32_t row[4];   /* a snapshot narrower than the region */
-  plane.serve_frame(av::SurfacePoint(0x62u, 1u), RvkFrameView{reinterpret_cast<const std::uint8_t *>(row), sizeof row, 4u, 1u, 0u});
+  plane.serve_frame(av::SurfacePoint(0x62u, 1u), AvFrameView{reinterpret_cast<const std::uint8_t *>(row), sizeof row, 4u, 1u, 0u});
   CHECK_STATUS(accept(host, outside, scene.image(5u, 0x62u), snapshots), Status::ok);
   CHECK_STATUS(outside.move(snapshots), Status::invalid_parameter);
   CHECK_EQ(plane.unmaps(), 2u);

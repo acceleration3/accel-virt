@@ -6,7 +6,7 @@
 #ifndef AV_MOCK_EXECUTOR_OPS_HPP
 #define AV_MOCK_EXECUTOR_OPS_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <atomic>
 #include <cstddef>
@@ -32,8 +32,8 @@ public:
     MockExecutorOps(const MockExecutorOps &) = delete;
     MockExecutorOps &operator=(const MockExecutorOps &) = delete;
 
-    const RvkExecutorOps &table() const;
-    RvkExecutorOps       &editable();
+    const AvExecutorOps &table() const;
+    AvExecutorOps       &editable();
 
     /* While held, every command waits at the start of execute, so a test can
      * keep a worker busy; release lets them all go. */
@@ -57,10 +57,10 @@ public:
     /* Calls it, as a host API's own thread would. False when nothing is
      * bound. */
     bool              fire_signal();
-    RvkContextOptions last_options();
-    RvkExecutor      *last_share();
+    AvContextOptions last_options();
+    AvExecutor      *last_share();
     bool              last_share_live();
-    bool              is_live(RvkExecutor *executor);
+    bool              is_live(AvExecutor *executor);
     /* The Nth create from now answers NULL (either spelling). */
     void          fail_create_at(std::uint32_t nth);
     std::uint32_t created();
@@ -82,7 +82,7 @@ public:
      * the guest never did. */
     std::uint32_t imported();
     std::uint32_t released();
-    /* The Nth import_blob from now answers RVK_UNDECODABLE and records nothing. */
+    /* The Nth import_blob from now answers AV_UNDECODABLE and records nothing. */
     void          refuse_import_at(std::uint32_t nth);
     /* The Nth imported_handle from now answers 0, a library that imported and
      * cannot say what it made. */
@@ -92,7 +92,7 @@ public:
     void          answer_handle(std::uint64_t handle);
     /* What a live import was handed, by the id the device chose: false when
      * there is none. */
-    bool          import_of(std::uint64_t blob_id, RvkBlobHandle &handle);
+    bool          import_of(std::uint64_t blob_id, AvBlobHandle &handle);
     std::uint32_t live_imports();
     /* The handle imported_handle answers for a live import of `blob_id`, unless
      * a test scripted another. */
@@ -104,9 +104,9 @@ public:
      * what a library that exports nothing looks like. */
     void          descriptors_from(MockHost &host);
     /* The abi_version the table reports, so a test can present a library from
-     * before a version it needs. Back to RVK_EXECUTOR_ABI_VERSION with 0. */
+     * before a version it needs. Back to AV_EXECUTOR_ABI_VERSION with 0. */
     void          set_abi_version(std::uint32_t version);
-    /* The RVK_BLOB_* kind an export says its descriptor is. */
+    /* The AV_BLOB_* kind an export says its descriptor is. */
     void          export_handle_kind(std::uint32_t kind);
     /* The Nth export from now answers success with nothing behind it - no
      * descriptor and no kind - which is a library the device must not
@@ -115,7 +115,7 @@ public:
     /* The Nth export, or import, of an object from now is refused. */
     void          refuse_export_at(std::uint32_t nth);
     void          refuse_object_import_at(std::uint32_t nth);
-    /* The Nth object import from now answers RVK_EXECUTED naming nothing, a
+    /* The Nth object import from now answers AV_EXECUTED naming nothing, a
      * library that imported and cannot say what it made. */
     void          withhold_object_handle_at(std::uint32_t nth);
     std::uint32_t exported_objects();
@@ -125,7 +125,7 @@ public:
     /* The guest's shared releases the library was told of (ABI 12): how many,
      * and the last one's id and GPU. */
     /* map_frame answers `view` for `surface` at `point` until it is unmapped. */
-    void                 serve_frame(std::uint64_t surface, std::uint32_t point, const RvkFrameView &view);
+    void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
     std::uint32_t        shared_releases();
     std::uint64_t        last_shared_release();
@@ -143,7 +143,7 @@ private:
     };
     struct Import {
         std::uint64_t blob_id;
-        RvkBlobHandle handle;
+        AvBlobHandle handle;
         bool          live;
     };
     struct SharedObject {
@@ -157,10 +157,10 @@ private:
     static constexpr std::uint32_t max_imports = 512u;
     static constexpr std::uint32_t max_objects = 64u;
 
-    Executor *executor_of(RvkExecutor *executor);
-    bool      alive(RvkExecutor *executor);
+    Executor *executor_of(AvExecutor *executor);
+    bool      alive(AvExecutor *executor);
 
-    RvkExecutorOps             table_;
+    AvExecutorOps             table_;
     std::uint32_t              sub_apis_;
     std::uint32_t              import_kinds_;
     std::uint32_t              imported_;
@@ -187,8 +187,8 @@ private:
     std::uint32_t              signals_set_;
     void                     (*signal_)(void *context);
     void                      *signal_context_;
-    RvkContextOptions          last_options_;
-    RvkExecutor               *last_share_;
+    AvContextOptions          last_options_;
+    AvExecutor               *last_share_;
     bool                       last_share_live_;
     bool                       creates_held_;
     std::uint32_t              creates_waiting_;
@@ -204,7 +204,7 @@ private:
     std::uint32_t              shared_releases_ = 0u;
     std::uint64_t              frame_surface_ = 0u;
     std::uint32_t              frame_point_ = 0u;
-    RvkFrameView               frame_ = {};
+    AvFrameView               frame_ = {};
     std::uint32_t              frame_unmaps_ = 0u;
     std::uint64_t              last_shared_release_ = 0u;
     const std::uint8_t        *last_shared_gpu_ = nullptr;

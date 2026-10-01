@@ -1,4 +1,4 @@
-/* One instance's connection over MockKmt: it opens on the rvkgpu adapter among
+/* One instance's connection over MockKmt: it opens on the avgpu adapter among
  * others with that adapter's LUID and a Vulkan context whose ring is order 20,
  * staging its commands in 256 KiB it takes when it opens, sends one command at a
  * time under its lock, answers not_supported for every reason it cannot open
@@ -19,7 +19,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/connection.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -94,11 +94,11 @@ using av::icd::ConnectionProbe;
 
 namespace {
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
-/* The rvkgpu adapter is the second one added. */
-constexpr std::uint32_t rvkgpu_index = 1u;
+/* The avgpu adapter is the second one added. */
+constexpr std::uint32_t avgpu_index = 1u;
 /* What an open connection holds: the adapter, a device, its paging queue, the
  * transport's two allocations, its DMA mapping and its context. */
 constexpr std::uint32_t open_objects = 7u;
@@ -108,7 +108,7 @@ public:
     Rig() : lock_(trace_, 'S'), connection_(kmt_, platform_, lock_)
     {
         kmt_.add_adapter(basic_render, 3100u);
-        kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+        kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     }
 
     MockKmt             &kmt() { return kmt_; }
@@ -145,7 +145,7 @@ VkResult create_instance(Connection &connection, std::uint64_t &instance)
 {
     VkInstanceCreateInfo create = {};
     create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    return av::vkproto::rvk_vkCreateInstance(connection.transport(), &create, nullptr, &instance);
+    return av::vkproto::av_vkCreateInstance(connection.transport(), &create, nullptr, &instance);
 }
 
 }  // namespace
@@ -154,10 +154,10 @@ TEST(connection, is_closed_until_opened)
 { Rig rig;
   rig.check_nothing_open(); }
 
-TEST(connection, opens_a_vulkan_context_on_the_rvkgpu_adapter_with_its_luid)
+TEST(connection, opens_a_vulkan_context_on_the_avgpu_adapter_with_its_luid)
 { Rig rig;
   rig.kmt().set_adapter_luid(0u, 0x0000000500000011ull);
-  rig.kmt().set_adapter_luid(rvkgpu_index, 0x0000000700000042ull);
+  rig.kmt().set_adapter_luid(avgpu_index, 0x0000000700000042ull);
   CHECK_STATUS(rig.connection().open(), Status::ok);
   CHECK(rig.connection().invariants_hold());
   CHECK(rig.connection().opened());
@@ -169,7 +169,7 @@ TEST(connection, opens_a_vulkan_context_on_the_rvkgpu_adapter_with_its_luid)
   CHECK(rig.connection().device() != 0u);
   CHECK_EQ(rig.kmt().open_objects(), open_objects);
   CHECK_EQ(rig.platform().live_allocations(), 1u);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::vulkan);
   CHECK_EQ(record.ring_order(), 20u);
@@ -208,10 +208,10 @@ TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leave
 { struct Refusal {
       const char   *why;
       MockKmt::Call call;      /* the call that fails; Call::count for none */
-      bool          no_rvkgpu;
+      bool          no_avgpu;
   };
   const Refusal refusals[] = {
-      {"no rvkgpu adapter", MockKmt::Call::count, true},
+      {"no avgpu adapter", MockKmt::Call::count, true},
       {"adapters cannot be enumerated", MockKmt::Call::enumerate_adapters, false},
       {"no LUID for the adapter", MockKmt::Call::adapter_luid, false},
       {"no device", MockKmt::Call::create_device, false},
@@ -226,7 +226,7 @@ TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leave
       RecordingThreadLock lock(trace, 'S');
       Connection          connection(kmt, platform, lock);
       kmt.add_adapter(basic_render, 3100u);
-      if (!refusal.no_rvkgpu) kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+      if (!refusal.no_avgpu) kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
       if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, 1u, MockKmt::invalid_parameter);
       const Status status = connection.open();
       if (status != Status::not_supported)
@@ -301,7 +301,7 @@ TEST(connection, invariants_see_a_half_open_connection)
   CHECK(!connection.invariants_hold());
   ConnectionProbe::drop_transport(connection);
   CHECK(connection.invariants_hold());
-  CHECK_STATUS(search.find(rvkgpu), Status::ok);
+  CHECK_STATUS(search.find(avgpu), Status::ok);
   CHECK(!connection.invariants_hold());
   CHECK_STATUS(guest.open(search.adapter()), Status::ok);
   CHECK_STATUS(search.close(), Status::ok);

@@ -46,7 +46,7 @@ public:
      * invalid_parameter for a path that is missing or too long. */
     [[nodiscard]] Status configure(const char *renderer, const char *executor);
 
-    [[nodiscard]] Status accept(const RvkExecutorOps *executor) override;
+    [[nodiscard]] Status accept(const AvExecutorOps *executor) override;
     [[nodiscard]] Status initialize() override;
     [[nodiscard]] Status start(const uint8_t *gpu_uuid, const CapsetInfo &capset) override;
     uint32_t             sub_apis() const override;
@@ -67,11 +67,11 @@ public:
     void interrupts_changed(bool connected) override;
     void renderer_lost() override;
 
-    bool export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) override;
+    bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) override;
     bool read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                     uint32_t height) override;
     bool reads_frames() const override;
-    bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view) override;
+    bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) override;
     void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) override;
 
     bool alive() const;

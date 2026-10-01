@@ -39,7 +39,7 @@ Status ReplayContext::create(const ExecutorLibrary &library, uint32_t context, S
 {
     AV_SCOPE("ReplayContext::create");
     if (executor_ != nullptr) return Status::invalid_state;
-    RvkExecutor *const made = library.create(api, gpu_uuid);
+    AvExecutor *const made = library.create(api, gpu_uuid);
     if (made == nullptr) return Status::no_memory;
     executor_ = made;
     context_ = context;
@@ -90,9 +90,9 @@ Status ReplayContext::execute(const ExecutorLibrary &library, const RecordedComm
     const uint32_t answered =
         library.execute(executor_, command.header().id(), command.payload(), command.payload_length(),
                         replying ? answer_ : nullptr, replying ? sizeof answer_ : 0u, produced);
-    if (answered == RVK_UNKNOWN) return Status::not_found;
-    if (answered == RVK_UNDECODABLE) return Status::malformed;
-    if (answered != RVK_EXECUTED) return Status::invalid_state;
+    if (answered == AV_UNKNOWN) return Status::not_found;
+    if (answered == AV_UNDECODABLE) return Status::malformed;
+    if (answered != AV_EXECUTED) return Status::invalid_state;
     if (!replying) return Status::ok;
     answered_ = true;
     answer_length_ = produced;

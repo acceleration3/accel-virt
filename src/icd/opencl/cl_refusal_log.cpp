@@ -19,7 +19,7 @@ void ClRefusalLog::note(const char *entry_point)
     if (entry_point == nullptr || !first(entry_point, 0)) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkcl: an entry point this ICD does not serve was called: ");
+    line.append("avcl: an entry point this ICD does not serve was called: ");
     line.append(entry_point);
     log_.write(line.text());
 }
@@ -30,7 +30,7 @@ void ClRefusalLog::note_failure(const char *entry_point, int32_t error)
     if (entry_point == nullptr || error >= 0 || !first(entry_point, error)) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkcl: ");
+    line.append("avcl: ");
     line.append(entry_point);
     line.append(" answered -");
     line.append_decimal(static_cast<uint64_t>(-static_cast<int64_t>(error)));

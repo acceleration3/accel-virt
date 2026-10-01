@@ -34,7 +34,7 @@ TEST(batch_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[BatchHeader::encoded_size] = {};
   CHECK_STATUS(BatchHeader(0x123u, 0x1122334455667788u).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x424B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00425641u);
   CHECK(layout.at(4u, 4u) == 0x123u);
   CHECK(layout.at(8u, 8u) == 0x1122334455667788u);
   CHECK(layout.at(16u, 8u) == 0u);

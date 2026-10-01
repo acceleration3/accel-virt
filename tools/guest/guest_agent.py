@@ -209,7 +209,7 @@ UNRELAYED = ("guest-sync", "guest-sync-delimited", "guest-shutdown", "guest-susp
 
 
 class AgentRelay:
-    """Lets another program - tools/mcp/rvk_inspect.py - reach the guest while
+    """Lets another program - tools/mcp/av_inspect.py - reach the guest while
     a run holds the agent's only connection: a unix socket taking one JSON
     request per line and answering each with one line, forwarded over whatever
     connection the run holds now (it changes at every reboot)."""

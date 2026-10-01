@@ -21,7 +21,7 @@ TEST(umd_adapter_info, three_words_where_they_fit_and_the_first_two_where_only_t
   CHECK_STATUS(info.encode(bytes, sizeof bytes, written), Status::ok);
   CHECK_EQ(written, 24u);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 8u) == 0x44494C554B5652ull);
+  CHECK(layout.at(0u, 8u) == 0x0044494C555641ull);
   CHECK(layout.at(8u, 8u) == 0x1122334455667788ull);
   CHECK(layout.at(16u, 8u) == 1u);
   std::uint8_t old[16] = {};

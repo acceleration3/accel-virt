@@ -25,7 +25,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import list_gpus  # noqa: E402
 
-VERDICT = re.compile(r"virtio-gpu-rvk: probe (exported memory|guest import): "
+VERDICT = re.compile(r"virtio-gpu-av: probe (exported memory|guest import): "
                      r"(passed, (?P<measured>\d+)|failed, status (?P<status>\d+)(, host (?P<host>-?\d+))?)")
 PROBES = {"exported memory": "exported_memory", "guest import": "guest_import"}
 GUEST_MEMORY = "512M"
@@ -51,7 +51,7 @@ class Device:
                 "-display", "none", "-nodefaults", "-monitor", "none", "-serial", "none", "-S",
                 "-object", f"memory-backend-memfd,id=mem,size={GUEST_MEMORY},share=on",
                 "-machine", "memory-backend=mem",
-                "-device", f"virtio-gpu-rvk-pci,addr=05.0,host-gpu={self.gpu.uuid},hostmem={HOSTMEM}"]
+                "-device", f"virtio-gpu-av-pci,addr=05.0,host-gpu={self.gpu.uuid},hostmem={HOSTMEM}"]
 
     def realize(self):
         """What the device said while realizing; it is stopped once it has."""

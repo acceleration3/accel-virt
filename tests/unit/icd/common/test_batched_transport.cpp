@@ -39,7 +39,7 @@ constexpr std::size_t   framed = CommandHeader::encoded_size + largest;
 constexpr std::uint32_t first_id = 0x10001u;
 constexpr std::uint32_t refused = 0xC0000001u;
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 
 /* A made transport over MockKmt, and a block of room for two whole commands. */
 class Rig {
@@ -47,7 +47,7 @@ public:
     Rig() : connection_(kmt_), staging_{}, transport_(connection_, SubApi::opengl, 12u, reply_bytes, staging_,
                                                       sizeof staging_), block_{}
     {
-        kmt_.add_adapter(rvk, 3200u);
+        kmt_.add_adapter(av, 3200u);
         std::uint32_t adapter = 0u, count = 0u;
         CHECK_STATUS(kmt_.enumerate_adapters(&adapter, 1u, count), Status::ok);
         CHECK_STATUS(connection_.open(adapter), Status::ok);

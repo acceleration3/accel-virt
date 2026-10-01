@@ -57,7 +57,7 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     if (shadows_.size_of(buffer, known)) {
         size = static_cast<int64_t>(known);
     } else {
-        glproto::rvk_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
+        glproto::av_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
         /* No answer: the host's own error says why, and the name is no buffer. */
         if (size < 0) return gl_invalid_operation;
         shadows_.sized(buffer, static_cast<uint64_t>(size));
@@ -225,7 +225,7 @@ void MappedBuffers::log_once()
     AV_SCOPE("MappedBuffers::log_once");
     if (logged_) return;
     logged_ = true;
-    log_.write("rvkgl: buffer maps are guest copies: filled at map from what the host holds, the bytes that "
+    log_.write("avgl: buffer maps are guest copies: filled at map from what the host holds, the bytes that "
                "changed written back at unmap, and before every command that reads buffers while a persistent "
                "map writes");
 }

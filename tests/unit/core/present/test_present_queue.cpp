@@ -90,7 +90,7 @@ public:
     void          serve() { static_cast<void>(queue_.answer_all(request_, sizeof request_, &EngineSide::answer, this)); }
     std::uint32_t presents() const { return presents_; }
     /* The host's snapshot of an application's buffer, under `key`. */
-    void          frame(const av::SurfacePoint &frame, const RvkFrameView &view) { plane_.serve_frame(frame, view); }
+    void          frame(const av::SurfacePoint &frame, const AvFrameView &view) { plane_.serve_frame(frame, view); }
 
 private:
     static void stall(void *context)
@@ -361,7 +361,7 @@ TEST(present_queue, a_blt_from_a_snapshot_is_moved_out_of_it_by_the_device)
   CHECK_STATUS(queue.start(), Status::ok);
   static std::uint32_t pixels[side * side];
   for (std::uint32_t at = 0u; at < side * side; at++) pixels[at] = 0x80000000u | at;
-  device.frame(av::SurfacePoint(0x4242u, 7u), RvkFrameView{reinterpret_cast<const std::uint8_t *>(pixels), pitch, side, side, 0u});
+  device.frame(av::SurfacePoint(0x4242u, 7u), AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), pitch, side, side, 0u});
   Surface              source(fixture.platform());
   Surface              destination(fixture.platform());
   const PresentSurface from = source.present(red_first);

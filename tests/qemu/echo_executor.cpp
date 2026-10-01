@@ -1,10 +1,10 @@
-// An executor library for the qtest suites (src/device/abi/rvk_executor.h): it
+// An executor library for the qtest suites (src/device/abi/av_executor.h): it
 // offers the Vulkan sub-API and runs a handful of commands, so the device's
 // execution path can be driven on the real device without render-server.
 //
 //   0x10001 echo         the payload is the answer
-//   0x10002 undecodable  RVK_UNDECODABLE
-//   0x10003 lose device  RVK_DEVICE_LOST
+//   0x10002 undecodable  AV_UNDECODABLE
+//   0x10003 lose device  AV_DEVICE_LOST
 //   0x10004 count        the answer is u64 commands this executor ran before
 //                        it, then u32 1 when every call so far came from the
 //                        thread that created it
@@ -17,40 +17,40 @@
 //   0x10006 poke         payload u64 handle, u64 offset, then bytes written at
 //                        `offset` of the import's pointer, as a host GPU would
 //                        write them: the answer is u32 1 when they were written
-//   0x10007 crash        with RVK_ECHO_ALLOW_CRASH set, aborts the process the
+//   0x10007 crash        with AV_ECHO_ALLOW_CRASH set, aborts the process the
 //                        executor runs in, as a driver crash would; otherwise
-//                        RVK_UNKNOWN
+//                        AV_UNKNOWN
 //
 //   0x30007 options      on an OpenGL context: the answer is the u8 major,
 //                        minor, profile and flags it was created with, then
 //                        the u64 ordinal of the executor it shares (0: none)
 //
-// Anything else is RVK_UNKNOWN. With RVK_ECHO_FAIL_CREATE set, create fails.
+// Anything else is AV_UNKNOWN. With AV_ECHO_FAIL_CREATE set, create fails.
 //
 // Version 4 (feature 050): create_with_options records what it was asked for.
-// With RVK_ECHO_OPENGL set the library offers OpenGL beside Vulkan, and with
-// RVK_ECHO_ABI_VERSION_3 it answers the version 3 table, which makes only
+// With AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan, and with
+// AV_ECHO_ABI_VERSION_3 it answers the version 3 table, which makes only
 // default contexts.
 //
 // It is a version 3 library (feature 045): import_blob records a host pointer
 // the device hands it, imported_handle answers blob_id | 0x4000000000000000 for
 // one it holds, and release_blob forgets it - so qtest can judge the device's
 // side of IMPORT_BLOB, reading and writing the guest's pages through the
-// pointer, without a GPU. With RVK_ECHO_ABI_VERSION_1 set it answers the
+// pointer, without a GPU. With AV_ECHO_ABI_VERSION_1 set it answers the
 // version 1 table instead, a library that imports nothing.
 //
 // Two controls make a real timeout happen without rebuilding anything
 // (feature 040, FR-006), read from the environment at load:
 //
-//   RVK_ECHO_STALL_MS      every command sleeps this long before answering
-//   RVK_ECHO_FAULT_AFTER   the Nth command on each executor answers
-//                          RVK_DEVICE_LOST, whatever it asked for
-//   RVK_ECHO_ONLY_NTH      both apply only to the Nth executor created, so one
+//   AV_ECHO_STALL_MS      every command sleeps this long before answering
+//   AV_ECHO_FAULT_AFTER   the Nth command on each executor answers
+//                          AV_DEVICE_LOST, whatever it asked for
+//   AV_ECHO_ONLY_NTH      both apply only to the Nth executor created, so one
 //                          context can stall or fault while another completes
 //
 // A stall longer than TdrDelay is what dxgkrnl times out on; the guest suite's
 // tdr scenario sets them for the run that needs them.
-#include "rvk_executor.h"
+#include "av_executor.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -84,16 +84,16 @@ struct Executor {
     pthread_t     thread;
     std::uint64_t executed;
     /* Which executor this is, counted from one in the order they were created:
-     * what RVK_ECHO_ONLY_NTH names. */
+     * what AV_ECHO_ONLY_NTH names. */
     std::uint64_t ordinal;
     bool          one_thread;
     Import        imports[max_imports];
-    RvkContextOptions options;
+    AvContextOptions options;
     /* The ordinal of the executor it shares objects with, or 0. */
     std::uint64_t     shares;
 };
 
-Executor *executor_of(RvkExecutor *handle) { return static_cast<Executor *>(static_cast<void *>(handle)); }
+Executor *executor_of(AvExecutor *handle) { return static_cast<Executor *>(static_cast<void *>(handle)); }
 
 Import *import_named(Executor *executor, std::uint64_t handle)
 {
@@ -177,40 +177,40 @@ void stall(std::uint64_t milliseconds)
 
 std::uint32_t sub_apis(void *)
 {
-    const std::uint32_t opengl = std::getenv("RVK_ECHO_OPENGL") != nullptr ? RVK_EXECUTOR_SUB_API_OPENGL : 0u;
-    return RVK_EXECUTOR_SUB_API_VULKAN | opengl;
+    const std::uint32_t opengl = std::getenv("AV_ECHO_OPENGL") != nullptr ? AV_EXECUTOR_SUB_API_OPENGL : 0u;
+    return AV_EXECUTOR_SUB_API_VULKAN | opengl;
 }
 
-RvkExecutor *create(void *opaque, std::uint32_t sub_api, const std::uint8_t *)
+AvExecutor *create(void *opaque, std::uint32_t sub_api, const std::uint8_t *)
 {
     /* Only what sub_apis offers. Accepting anything looks harmless in a test
      * library and is not: the device would hand that context commands of an
      * API nothing here decodes, and the guest would wait for answers that
      * never come. The conformance suite found this one (feature 042). */
     if ((sub_apis(opaque) & sub_api) == 0u || sub_api == 0u || (sub_api & (sub_api - 1u)) != 0u) return nullptr;
-    if (std::getenv("RVK_ECHO_FAIL_CREATE") != nullptr) return nullptr;
+    if (std::getenv("AV_ECHO_FAIL_CREATE") != nullptr) return nullptr;
     auto *const executor = static_cast<Executor *>(std::calloc(1u, sizeof(Executor)));
     if (executor == nullptr) return nullptr;
     executor->thread = pthread_self();
     executor->ordinal = ++created;
     executor->one_thread = true;
-    return static_cast<RvkExecutor *>(static_cast<void *>(executor));
+    return static_cast<AvExecutor *>(static_cast<void *>(executor));
 }
 
-bool defaults(const RvkContextOptions *options)
+bool defaults(const AvContextOptions *options)
 {
     return options == nullptr || (options->major == 0u && options->minor == 0u && options->profile == 0u &&
                                   options->flags == 0u && options->reserved == 0u);
 }
 
 /* Options and a share only for OpenGL, and a share only of an OpenGL executor. */
-RvkExecutor *create_with_options(void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
-                                 const RvkContextOptions *options, RvkExecutor *share)
+AvExecutor *create_with_options(void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
+                                 const AvContextOptions *options, AvExecutor *share)
 {
-    const bool opengl = sub_api == RVK_EXECUTOR_SUB_API_OPENGL;
+    const bool opengl = sub_api == AV_EXECUTOR_SUB_API_OPENGL;
     if ((!defaults(options) || share != nullptr) && !opengl) return nullptr;
     if (options != nullptr && (options->major > 4u || options->reserved != 0u)) return nullptr;
-    RvkExecutor *const made = create(opaque, sub_api, uuid);
+    AvExecutor *const made = create(opaque, sub_api, uuid);
     if (made == nullptr) return nullptr;
     Executor *const executor = executor_of(made);
     if (options != nullptr) executor->options = *options;
@@ -218,9 +218,9 @@ RvkExecutor *create_with_options(void *opaque, std::uint32_t sub_api, const std:
     return made;
 }
 
-void destroy(void *, RvkExecutor *handle) { std::free(handle); }
+void destroy(void *, AvExecutor *handle) { std::free(handle); }
 
-std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::uint8_t *payload, std::size_t size,
+std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::uint8_t *payload, std::size_t size,
                       std::uint8_t *reply, std::size_t capacity, std::size_t *reply_size)
 {
     auto *const executor = static_cast<Executor *>(static_cast<void *>(handle));
@@ -230,20 +230,20 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
      * cannot ask for and a test has to be able to produce. Either is aimed at
      * one executor where the run named one, so that what happens to a context
      * can be told apart from what happens to the device. */
-    const std::uint64_t only = from_environment("RVK_ECHO_ONLY_NTH");
+    const std::uint64_t only = from_environment("AV_ECHO_ONLY_NTH");
     const bool steered = only == 0u || only == executor->ordinal;
-    if (steered) stall(from_environment("RVK_ECHO_STALL_MS"));
-    const std::uint64_t fault_after = from_environment("RVK_ECHO_FAULT_AFTER");
-    if (steered && fault_after != 0u && executor->executed + 1u >= fault_after) return RVK_DEVICE_LOST;
+    if (steered) stall(from_environment("AV_ECHO_STALL_MS"));
+    const std::uint64_t fault_after = from_environment("AV_ECHO_FAULT_AFTER");
+    if (steered && fault_after != 0u && executor->executed + 1u >= fault_after) return AV_DEVICE_LOST;
     switch (id) {
     case echo:
         *reply_size = size;
         if (size <= capacity && size != 0u) std::memcpy(reply, payload, size);
         break;
-    case undecodable: return RVK_UNDECODABLE;
-    case lose_device: return RVK_DEVICE_LOST;
+    case undecodable: return AV_UNDECODABLE;
+    case lose_device: return AV_DEVICE_LOST;
     case crash:
-        if (std::getenv("RVK_ECHO_ALLOW_CRASH") == nullptr) return RVK_UNKNOWN;
+        if (std::getenv("AV_ECHO_ALLOW_CRASH") == nullptr) return AV_UNKNOWN;
         std::abort();
     case peek: answer_peek(executor, payload, size, reply, capacity, reply_size); break;
     case poke: answer_poke(executor, payload, size, reply, capacity, reply_size); break;
@@ -266,10 +266,10 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
         }
         break;
     }
-    default: return RVK_UNKNOWN;
+    default: return AV_UNKNOWN;
     }
     executor->executed++;
-    return RVK_EXECUTED;
+    return AV_EXECUTED;
 }
 
 /* Copy at the boundary: the capset the echo executor's device describes stays
@@ -278,27 +278,27 @@ std::uint32_t import_kinds(void *, std::uint32_t, const std::uint8_t *) { return
 
 /* A host pointer of whole pages and nothing else: a dma-buf's fd would be the
  * callee's to close, and nothing here would use it. */
-std::uint32_t import_blob(void *, RvkExecutor *handle, std::uint64_t blob_id, const RvkBlobHandle *blob)
+std::uint32_t import_blob(void *, AvExecutor *handle, std::uint64_t blob_id, const AvBlobHandle *blob)
 {
     Executor *const executor = executor_of(handle);
-    if (blob == nullptr || blob->kind != RVK_BLOB_HOST_POINTER || blob->pointer == nullptr || blob->size == 0u ||
+    if (blob == nullptr || blob->kind != AV_BLOB_HOST_POINTER || blob->pointer == nullptr || blob->size == 0u ||
         blob->size % page != 0u)
-        return RVK_UNDECODABLE;
+        return AV_UNDECODABLE;
     for (Import &import : executor->imports) {
         if (import.live) continue;
         import = Import{blob_id, static_cast<std::uint8_t *>(blob->pointer), blob->size, blob->reserved, true};
-        return RVK_EXECUTED;
+        return AV_EXECUTED;
     }
-    return RVK_UNDECODABLE;
+    return AV_UNDECODABLE;
 }
 
-void release_blob(void *, RvkExecutor *handle, std::uint64_t blob_id)
+void release_blob(void *, AvExecutor *handle, std::uint64_t blob_id)
 {
     for (Import &import : executor_of(handle)->imports)
         if (import.live && import.blob_id == blob_id) import.live = false;
 }
 
-std::uint64_t imported_handle(void *, RvkExecutor *handle, std::uint64_t blob_id)
+std::uint64_t imported_handle(void *, AvExecutor *handle, std::uint64_t blob_id)
 {
     return import_named(executor_of(handle), blob_id | handle_bit) != nullptr ? blob_id | handle_bit : 0u;
 }
@@ -306,23 +306,23 @@ std::uint64_t imported_handle(void *, RvkExecutor *handle, std::uint64_t blob_id
 /* An echo executor completes everything on the thread that asked, so there is
  * nothing to signal about: it takes the callback and never calls it, which is
  * what the device must be able to cope with. */
-void set_signal(void *, RvkExecutor *, void (*)(void *), void *) {}
+void set_signal(void *, AvExecutor *, void (*)(void *), void *) {}
 
 /* Version 6: an echo library has no host API behind it, so it makes no host
  * object and exports no descriptor of one. The device answers every
  * shared-object command with "the executor refused", which is a status and not
  * a fault, and that refusal is what the qemu suites see. */
-uint32_t export_object(void *, RvkExecutor *, uint32_t, uint64_t, uint32_t *, int *)
+uint32_t export_object(void *, AvExecutor *, uint32_t, uint64_t, uint32_t *, int *)
 {
-    return RVK_UNKNOWN;
+    return AV_UNKNOWN;
 }
-uint32_t import_object(void *, RvkExecutor *, uint32_t, uint32_t, int, uint64_t, uint64_t *)
+uint32_t import_object(void *, AvExecutor *, uint32_t, uint32_t, int, uint64_t, uint64_t *)
 {
-    return RVK_UNKNOWN;
+    return AV_UNKNOWN;
 }
-void release_object(void *, RvkExecutor *, uint32_t, uint64_t) {}
+void release_object(void *, AvExecutor *, uint32_t, uint64_t) {}
 
-const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
+const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
                               create,
@@ -339,7 +339,7 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               release_object, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 
 /* Version 3: default contexts only (feature 050). */
-const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
+const AvExecutorOps version_3_table = {AV_EXECUTOR_ABI_VERSION_HANDLES,
                                         nullptr,
                                         sub_apis,
                                         create,
@@ -359,7 +359,7 @@ const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
 /* Version 1, carrying none of the memory operations: the device must keep
  * accepting a library that imports nothing, and a suite whose only library is
  * the newest version never proves it (feature 042). */
-const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
+const AvExecutorOps version_1_table = {AV_EXECUTOR_ABI_VERSION_MINIMUM,
                                         nullptr,
                                         sub_apis,
                                         create,
@@ -381,10 +381,10 @@ const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
 extern "C" {
 
 __attribute__((visibility("default")))
-const RvkExecutorOps *rvk_executor_ops(void)
+const AvExecutorOps *av_executor_ops(void)
 {
-    if (std::getenv("RVK_ECHO_ABI_VERSION_1") != nullptr) return &version_1_table;
-    return std::getenv("RVK_ECHO_ABI_VERSION_3") != nullptr ? &version_3_table : &table;
+    if (std::getenv("AV_ECHO_ABI_VERSION_1") != nullptr) return &version_1_table;
+    return std::getenv("AV_ECHO_ABI_VERSION_3") != nullptr ? &version_3_table : &table;
 }
 
 }

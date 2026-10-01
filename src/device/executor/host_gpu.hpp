@@ -29,7 +29,7 @@ public:
 
     bool     matches(const uint8_t *uuid) const;
     uint32_t sub_apis() const;
-    /* The RVK_BLOB_* kinds `sub_api` imports here; zero for a sub-API this GPU
+    /* The AV_BLOB_* kinds `sub_api` imports here; zero for a sub-API this GPU
      * does not serve, and zero for one that serves it only by copying. */
     uint32_t import_kinds(uint32_t sub_api) const;
     /* Where this GPU sat in the host's enumeration, which is what a backend

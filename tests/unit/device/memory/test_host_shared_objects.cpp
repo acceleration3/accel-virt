@@ -10,7 +10,7 @@
  * separation that lets a context die without the object doing so. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/memory/host_shared_object.hpp"
 #include "device/memory/host_shared_objects.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -72,14 +72,14 @@ TEST(host_shared_objects_initialize, is_done_once_and_a_table_with_no_lock_answe
    * and a refusal there is the one that does not close the descriptor: there
    * is no lock to close it under. */
   const int early = host.open_descriptor();
-  CHECK_STATUS(objects.publish(1u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, early),
+  CHECK_STATUS(objects.publish(1u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, early),
                Status::invalid_state);
   CHECK(host.descriptor_open(early));
   host.close_dmabuf(early);
   std::uint32_t handle_kind = 9u;
   std::uint64_t answered = 9u;
   int           fd = 9;
-  CHECK_STATUS(objects.open(1u, RVK_SHARED_MEMORY, size, handle_kind, answered, fd), Status::invalid_state);
+  CHECK_STATUS(objects.open(1u, AV_SHARED_MEMORY, size, handle_kind, answered, fd), Status::invalid_state);
   CHECK_EQ(handle_kind, 0u);
   CHECK_EQ(answered, 0u);
   CHECK_EQ(fd, -1);
@@ -99,15 +99,15 @@ TEST(host_shared_objects_initialize, propagates_a_host_with_no_mutex_to_give)
 TEST(host_shared_objects_publish, records_the_descriptor_and_counts_the_publisher)
 { Fixture   rig;
   const int fd = rig.descriptor();
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
   rig.check();
   CHECK_EQ(rig.objects().live(), 1u);
   std::uint32_t handle_kind = 0u;
   std::uint64_t answered = 0u;
   int           given = -1;
-  CHECK_STATUS(rig.objects().open(7u, RVK_SHARED_MEMORY, size, handle_kind, answered, given), Status::ok);
+  CHECK_STATUS(rig.objects().open(7u, AV_SHARED_MEMORY, size, handle_kind, answered, given), Status::ok);
   rig.check();
-  CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+  CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
   CHECK_EQ(answered, size);
   CHECK_EQ(given, fd);
   rig.objects().close(7u);
@@ -121,15 +121,15 @@ TEST(host_shared_objects_publish, records_the_descriptor_and_counts_the_publishe
 TEST(host_shared_objects, two_contexts_holding_one_object_share_one_descriptor)
 { Fixture   rig;
   const int fd = rig.descriptor();
-  CHECK_STATUS(rig.objects().publish(3u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK_STATUS(rig.objects().publish(3u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
   rig.check();
   /* Two importers, of two guest devices, of two guest processes. */
   std::uint32_t first_kind = 0u, second_kind = 0u;
   std::uint64_t first_size = 0u, second_size = 0u;
   int           first = -1, second = -1;
-  CHECK_STATUS(rig.objects().open(3u, RVK_SHARED_MEMORY, size, first_kind, first_size, first), Status::ok);
+  CHECK_STATUS(rig.objects().open(3u, AV_SHARED_MEMORY, size, first_kind, first_size, first), Status::ok);
   rig.check();
-  CHECK_STATUS(rig.objects().open(3u, RVK_SHARED_MEMORY, size, second_kind, second_size, second), Status::ok);
+  CHECK_STATUS(rig.objects().open(3u, AV_SHARED_MEMORY, size, second_kind, second_size, second), Status::ok);
   rig.check();
   CHECK_EQ(first, second);
   CHECK_EQ(first, fd);
@@ -152,11 +152,11 @@ TEST(host_shared_objects, two_contexts_holding_one_object_share_one_descriptor)
 TEST(host_shared_objects, an_object_outlives_the_context_that_published_it)
 { Fixture   rig;
   const int fd = rig.descriptor();
-  CHECK_STATUS(rig.objects().publish(3u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK_STATUS(rig.objects().publish(3u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
   std::uint32_t handle_kind = 0u;
   std::uint64_t answered = 0u;
   int           given = -1;
-  CHECK_STATUS(rig.objects().open(3u, RVK_SHARED_MEMORY, size, handle_kind, answered, given), Status::ok);
+  CHECK_STATUS(rig.objects().open(3u, AV_SHARED_MEMORY, size, handle_kind, answered, given), Status::ok);
   rig.check();
   /* The publisher's process exits, so its context is torn down and releases
    * what it held. Nothing the other process holds may change. */
@@ -167,7 +167,7 @@ TEST(host_shared_objects, an_object_outlives_the_context_that_published_it)
   std::uint32_t again_kind = 0u;
   std::uint64_t again_size = 0u;
   int           again = -1;
-  CHECK_STATUS(rig.objects().open(3u, RVK_SHARED_MEMORY, size, again_kind, again_size, again), Status::ok);
+  CHECK_STATUS(rig.objects().open(3u, AV_SHARED_MEMORY, size, again_kind, again_size, again), Status::ok);
   rig.check();
   CHECK_EQ(again, fd);
   CHECK_EQ(again_size, size);
@@ -180,9 +180,9 @@ TEST(host_shared_objects_publish, refuses_an_id_already_published_and_leaves_the
 { Fixture   rig;
   const int first = rig.descriptor();
   const int second = rig.descriptor();
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, first), Status::ok);
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, first), Status::ok);
   rig.check();
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, second), Status::conflict);
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, second), Status::conflict);
   rig.check();
   CHECK_EQ(rig.objects().live(), 1u);
   /* The one already published is untouched; the refused one is closed, since
@@ -190,7 +190,7 @@ TEST(host_shared_objects_publish, refuses_an_id_already_published_and_leaves_the
   std::uint32_t handle_kind = 0u;
   std::uint64_t answered = 0u;
   int           given = -1;
-  CHECK_STATUS(rig.objects().open(7u, RVK_SHARED_MEMORY, size, handle_kind, answered, given), Status::ok);
+  CHECK_STATUS(rig.objects().open(7u, AV_SHARED_MEMORY, size, handle_kind, answered, given), Status::ok);
   CHECK_EQ(given, first);
   CHECK(!rig.host().descriptor_open(second));
   rig.objects().release_all();
@@ -199,21 +199,21 @@ TEST(host_shared_objects_publish, refuses_an_id_already_published_and_leaves_the
 
 TEST(host_shared_objects_publish, passes_a_field_no_object_can_have_through_to_a_refusal)
 { Fixture rig;
-  CHECK_STATUS(rig.objects().publish(0u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(0u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::invalid_parameter);
   rig.check();
-  CHECK_STATUS(rig.objects().publish(1u, 0u, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(1u, 0u, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::invalid_parameter);
   rig.check();
-  CHECK_STATUS(rig.objects().publish(1u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, -1),
+  CHECK_STATUS(rig.objects().publish(1u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, -1),
                Status::invalid_parameter);
   rig.check();
   /* Memory with no length, and a fence with one: both describe something the
    * host cannot make. */
-  CHECK_STATUS(rig.objects().publish(1u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0u, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(1u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0u, rig.descriptor()),
                Status::invalid_parameter);
   rig.check();
-  CHECK_STATUS(rig.objects().publish(1u, RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, size,
+  CHECK_STATUS(rig.objects().publish(1u, AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, size,
                                      rig.descriptor()),
                Status::invalid_parameter);
   rig.check();
@@ -221,14 +221,14 @@ TEST(host_shared_objects_publish, passes_a_field_no_object_can_have_through_to_a
 
 TEST(host_shared_objects_open, refuses_a_size_that_disagrees_so_nothing_is_imported_past_its_end)
 { Fixture rig;
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::ok);
   const std::uint64_t wrong[] = {0u, 4096u, size - 4096u, size + 4096u, 0xFFFFFFFFFFFFF000u};
   for (const std::uint64_t claimed : wrong) {
       std::uint32_t handle_kind = 9u;
       std::uint64_t answered = 9u;
       int           fd = 9;
-      CHECK_STATUS(rig.objects().open(7u, RVK_SHARED_MEMORY, claimed, handle_kind, answered, fd),
+      CHECK_STATUS(rig.objects().open(7u, AV_SHARED_MEMORY, claimed, handle_kind, answered, fd),
                    Status::invalid_parameter);
       rig.check();
       CHECK_EQ(fd, -1);
@@ -236,7 +236,7 @@ TEST(host_shared_objects_open, refuses_a_size_that_disagrees_so_nothing_is_impor
   std::uint32_t handle_kind = 0u;
   std::uint64_t answered = 0u;
   int           fd = -1;
-  CHECK_STATUS(rig.objects().open(7u, RVK_SHARED_MEMORY, size, handle_kind, answered, fd), Status::ok);
+  CHECK_STATUS(rig.objects().open(7u, AV_SHARED_MEMORY, size, handle_kind, answered, fd), Status::ok);
   rig.check();
   CHECK_EQ(answered, size);
   rig.objects().release_all();
@@ -245,19 +245,19 @@ TEST(host_shared_objects_open, refuses_a_size_that_disagrees_so_nothing_is_impor
 TEST(host_shared_objects_publish, fills_up_and_then_has_no_space)
 { Fixture rig;
   for (std::uint64_t id = 1u; id <= HostSharedObjects::max_objects; id++)
-      CHECK_STATUS(rig.objects().publish(id, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, rig.descriptor()),
+      CHECK_STATUS(rig.objects().publish(id, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, rig.descriptor()),
                    Status::ok);
   rig.check();
   CHECK_EQ(rig.objects().live(), HostSharedObjects::max_objects);
   const int spare = rig.descriptor();
-  CHECK_STATUS(rig.objects().publish(0xFFFFu, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, spare),
+  CHECK_STATUS(rig.objects().publish(0xFFFFu, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, spare),
                Status::no_space);
   rig.check();
   CHECK(!rig.host().descriptor_open(spare));
   /* One let go makes room again, and the id that was refused is taken. */
   rig.objects().close(1u);
   rig.check();
-  CHECK_STATUS(rig.objects().publish(0xFFFFu, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(0xFFFFu, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, rig.descriptor()),
                Status::ok);
   rig.check();
   rig.objects().release_all();
@@ -266,14 +266,14 @@ TEST(host_shared_objects_publish, fills_up_and_then_has_no_space)
 
 TEST(host_shared_objects_open, refuses_an_id_this_device_never_published)
 { Fixture rig;
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::ok);
   const std::uint64_t forged[] = {0u, 6u, 8u, 0xFFFFFFFFFFFFFFFFu};
   for (const std::uint64_t id : forged) {
       std::uint32_t handle_kind = 9u;
       std::uint64_t answered = 9u;
       int           fd = 9;
-      CHECK_STATUS(rig.objects().open(id, RVK_SHARED_MEMORY, size, handle_kind, answered, fd), Status::not_found);
+      CHECK_STATUS(rig.objects().open(id, AV_SHARED_MEMORY, size, handle_kind, answered, fd), Status::not_found);
       rig.check();
       CHECK_EQ(fd, -1);
       CHECK_EQ(answered, 0u);
@@ -282,10 +282,10 @@ TEST(host_shared_objects_open, refuses_an_id_this_device_never_published)
 
 TEST(host_shared_objects_open, refuses_a_kind_that_disagrees_so_a_fence_is_never_opened_as_memory)
 { Fixture rig;
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, 0u,
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 0u,
                                      rig.descriptor()),
                Status::ok);
-  const std::uint32_t wrong[] = {RVK_SHARED_MEMORY, RVK_SHARED_NATIVE_FENCE, 0u, 99u};
+  const std::uint32_t wrong[] = {AV_SHARED_MEMORY, AV_SHARED_NATIVE_FENCE, 0u, 99u};
   for (const std::uint32_t kind : wrong) {
       std::uint32_t handle_kind = 9u;
       std::uint64_t answered = 9u;
@@ -298,7 +298,7 @@ TEST(host_shared_objects_open, refuses_a_kind_that_disagrees_so_a_fence_is_never
   std::uint32_t handle_kind = 0u;
   std::uint64_t answered = 0u;
   int           fd = -1;
-  CHECK_STATUS(rig.objects().open(7u, RVK_SHARED_MONITORED_FENCE, 0u, handle_kind, answered, fd), Status::ok);
+  CHECK_STATUS(rig.objects().open(7u, AV_SHARED_MONITORED_FENCE, 0u, handle_kind, answered, fd), Status::ok);
   rig.check();
   CHECK(fd >= 0);
   rig.objects().release_all(); }
@@ -307,7 +307,7 @@ TEST(host_shared_objects_close, an_id_this_device_does_not_hold_is_ignored)
 { Fixture rig;
   rig.objects().close(1u);
   rig.check();
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::ok);
   rig.objects().close(8u);
   rig.check();
@@ -322,12 +322,12 @@ TEST(host_shared_objects_release_all, closes_every_descriptor_whatever_its_count
   int      fds[3] = {-1, -1, -1};
   for (std::uint64_t id = 1u; id <= 3u; id++) {
       fds[id - 1u] = rig.descriptor();
-      CHECK_STATUS(rig.objects().publish(id, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, fds[id - 1u]),
+      CHECK_STATUS(rig.objects().publish(id, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, fds[id - 1u]),
                    Status::ok);
       std::uint32_t handle_kind = 0u;
       std::uint64_t answered = 0u;
       int           given = -1;
-      CHECK_STATUS(rig.objects().open(id, RVK_SHARED_MEMORY, 4096u, handle_kind, answered, given), Status::ok);
+      CHECK_STATUS(rig.objects().open(id, AV_SHARED_MEMORY, 4096u, handle_kind, answered, given), Status::ok);
   }
   rig.check();
   CHECK_EQ(rig.objects().live(), 3u);
@@ -347,7 +347,7 @@ TEST(host_shared_objects, a_table_destroyed_with_objects_left_closes_them_rather
       HostSharedObjects objects(host);
       CHECK_STATUS(objects.initialize(), Status::ok);
       fd = host.open_descriptor();
-      CHECK_STATUS(objects.publish(1u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, fd), Status::ok);
+      CHECK_STATUS(objects.publish(1u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, fd), Status::ok);
   }
   CHECK(!host.descriptor_open(fd));
   CHECK_EQ(host.live_dmabufs(), 0u); }
@@ -364,7 +364,7 @@ TEST(host_shared_objects_report, names_every_object_and_says_busy_when_a_worker_
       CHECK(std::strstr(writer.dump(), "live=") == nullptr);
   }
   Fixture rig;
-  CHECK_STATUS(rig.objects().publish(0x2Au, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_OPAQUE_FD, 0x3000u,
+  CHECK_STATUS(rig.objects().publish(0x2Au, AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, 0x3000u,
                                      rig.descriptor()),
                Status::ok);
   char        text[1024] = {};
@@ -388,9 +388,9 @@ TEST(host_shared_objects_report, names_every_object_and_says_busy_when_a_worker_
 
 TEST(host_shared_objects_invariants, refuse_a_broken_object_and_two_slots_naming_one_id)
 { Fixture rig;
-  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::ok);
-  CHECK_STATUS(rig.objects().publish(8u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+  CHECK_STATUS(rig.objects().publish(8u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
                Status::ok);
   CHECK(rig.objects().invariants_hold());
 

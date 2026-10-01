@@ -54,7 +54,7 @@ public:
 
     /* The DXGK_ALLOCATIONINFO fields the driver answers. */
     void report_to(DxgkAllocationInfoRecord &info);
-    /* `device` is the device opening it. The pages an rvk context runs on - its
+    /* `device` is the device opening it. The pages an av context runs on - its
      * ring and its fence page - belong to the device that made them, and a
      * second device asking for them is refused: they are the transport's, not
      * shared memory (feature 041, FR-003). Nothing else is refused a second
@@ -62,7 +62,7 @@ public:
      * held by more than one (feature 053). */
     [[nodiscard]] Status open(const void *device, const void *process);
     [[nodiscard]] Status close();
-    /* Whether the same device holds both, or neither is held: two rvk contexts
+    /* Whether the same device holds both, or neither is held: two av contexts
      * share objects only on one device (feature 050). */
     bool                 held_with(const Allocation &other) const;
     /* Whether the two are held by devices of one process: an OpenCL context

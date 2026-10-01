@@ -53,7 +53,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t magic = 0x524B5652u; /* "RVKR" */
+    static constexpr uint32_t magic = 0x00525641u; /* "AVR" */
 
     uint16_t major_;
     uint16_t minor_;

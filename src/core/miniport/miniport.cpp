@@ -148,10 +148,10 @@ Status Miniport::add_device(void *physical_device_object, void *&context)
         if (slot.constructed()) continue;
         const Status constructed = slot.construct(platform_, physical_device_object);
         context = slot.address();
-        platform_.log("rvkgpu: AddDevice");
+        platform_.log("avgpu: AddDevice");
         return constructed;
     }
-    platform_.log("rvkgpu: AddDevice refused, no free adapter slot");
+    platform_.log("avgpu: AddDevice refused, no free adapter slot");
     return Status::no_memory;
 }
 

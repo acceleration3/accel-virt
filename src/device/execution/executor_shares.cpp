@@ -41,7 +41,7 @@ bool ExecutorShares::on_gpu(uint32_t index, const uint8_t *uuid) const
     return true;
 }
 
-Status ExecutorShares::publish(uint32_t id, const uint8_t *uuid, RvkExecutor *executor)
+Status ExecutorShares::publish(uint32_t id, const uint8_t *uuid, AvExecutor *executor)
 {
     AV_SCOPE("ExecutorShares::publish");
     if (lock_ == nullptr) return Status::invalid_state;
@@ -77,14 +77,14 @@ void ExecutorShares::withdraw(uint32_t id)
 
 /* The lock is held across the library's create: that is what keeps the shared
  * executor alive for it. */
-RvkExecutor *ExecutorShares::create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
-                                            const RvkContextOptions &options)
+AvExecutor *ExecutorShares::create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
+                                            const AvContextOptions &options)
 {
     AV_SCOPE("ExecutorShares::create_sharing");
     if (lock_ == nullptr || share_id == 0u) return nullptr;
     host_.lock_mutex(lock_);
     const uint32_t index = index_of(share_id);
-    RvkExecutor   *made = nullptr;
+    AvExecutor   *made = nullptr;
     if (index != none && on_gpu(index, uuid))
         made = library_.create(api, uuid, &options, executors_[index]);
     host_.unlock_mutex(lock_);

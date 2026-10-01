@@ -1,8 +1,8 @@
 /* Many contexts on many threads (US3, T039): contexts on two threads share the
- * process's one rvkgpu device while each owns its rvk context; a context
+ * process's one avgpu device while each owns its av context; a context
  * current on one thread is refused on another; deleting contexts in every
  * order releases each host context once and the last one closes the device;
- * and a Vulkan connection beside them keeps its own rvk context. Everything is
+ * and a Vulkan connection beside them keeps its own av context. Everything is
  * driven as opengl32 drives it, through FakeOpengl32, with invariants checked
  * after every step. */
 #include "guest/kmt/pci_identity.hpp"
@@ -14,7 +14,7 @@
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include "gl_protocol_ids.h"
@@ -83,7 +83,7 @@ struct Scenario {
 
 }  // namespace
 
-TEST(gl_contexts, three_contexts_on_two_threads_share_one_device_and_own_three_rvk_contexts)
+TEST(gl_contexts, three_contexts_on_two_threads_share_one_device_and_own_three_av_contexts)
 { Scenario scenario;
   GlIcdRig &rig = scenario.rig;
   const void *const first = scenario.made_on(1u);
@@ -100,7 +100,7 @@ TEST(gl_contexts, three_contexts_on_two_threads_share_one_device_and_own_three_r
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 3u);
   CHECK_EQ(scenario.live_host_contexts(), 3u);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::opengl);
   /* Each thread draws on its own current context. */
@@ -204,21 +204,21 @@ TEST(gl_contexts, the_last_context_deleted_closes_the_device)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 2u); }
 
 /* 045's Vulkan ICD opens its own device and transport in the same process: an
- * OpenGL context beside it gets a device and an rvk context of its own, and
+ * OpenGL context beside it gets a device and an av context of its own, and
  * either one closing leaves the other working. */
-TEST(gl_contexts, a_vulkan_connection_and_an_opengl_context_each_keep_their_own_rvk_context)
+TEST(gl_contexts, a_vulkan_connection_and_an_opengl_context_each_keep_their_own_av_context)
 { Scenario scenario;
   GlIcdRig &rig = scenario.rig;
-  const av::PciIdentity rvkgpu(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                               av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem);
+  const av::PciIdentity avgpu(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
+                               av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem);
   av::AdapterSearch     search(rig.kmt());
-  CHECK_STATUS(search.find(rvkgpu), Status::ok);
+  CHECK_STATUS(search.find(avgpu), Status::ok);
   av::GuestConnection vulkan_device(rig.kmt());
   CHECK_STATUS(vulkan_device.open(search.adapter()), Status::ok);
   std::uint8_t     staging[4096] = {};
   av::KmtTransport vulkan(vulkan_device, av::SubApi::vulkan, 12u, 4096u, staging, sizeof staging);
   CHECK_STATUS(vulkan.initialize(), Status::ok);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::vulkan);
 

@@ -27,9 +27,9 @@ uint32_t GuestSuite::run_timeout()
     return report_.failed();
 }
 
-uint32_t GuestSuite::run_rvk()
+uint32_t GuestSuite::run_av()
 {
-    AV_SCOPE("GuestSuite::run_rvk");
+    AV_SCOPE("GuestSuite::run_av");
     adapter_.run();
     transport_.run();
     /* What user-mode submission bought, on the boot it ran on (feature 049,
@@ -54,7 +54,7 @@ uint32_t GuestSuite::run_round_trip()
 {
     AV_SCOPE("GuestSuite::run_round_trip");
     adapter_.run();
-    /* Which adapter answered: with two rvkgpu adapters, each is its own device
+    /* Which adapter answered: with two avgpu adapters, each is its own device
      * and worker on the host. */
     uint64_t luid = 0u;
     static_cast<void>(kmt_.adapter_luid(search_.adapter(), luid));

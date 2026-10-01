@@ -36,7 +36,7 @@ TEST(submission_descriptor_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[SubmissionDescriptor::encoded_size] = {};
   CHECK_STATUS(SubmissionDescriptor(9u, 100u, 164u).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x534B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00535641u);
   CHECK(layout.at(4u, 4u) == 0u);
   CHECK(layout.at(8u, 8u) == 9u);
   CHECK(layout.at(16u, 8u) == 100u);

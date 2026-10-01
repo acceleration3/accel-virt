@@ -12,14 +12,14 @@ namespace av::d3d {
 namespace {
 
 constexpr uint32_t line_bytes = 128u;
-constexpr char     adapter_name[] = "rvkgpu paravirtual GPU";
+constexpr char     adapter_name[] = "avgpu paravirtual GPU";
 
 void note(icd::LogSink &log, const char *what, uint64_t value)
 {
     AV_SCOPE("note");
     char       line[line_bytes] = {};
     TextBuffer text(line, sizeof line);
-    text.append("rvkumd: ");
+    text.append("avumd: ");
     text.append(what);
     text.append(" ");
     text.append_decimal(value);

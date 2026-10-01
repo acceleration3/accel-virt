@@ -36,7 +36,7 @@ KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_(), bu
 {
     AV_SCOPE("KernelPlatform::KernelPlatform");
     KeInitializeCallbackRecord(&bugcheck_record_);
-    if (log_.start() != Status::ok) log("rvkgpu: the log thread did not start; lines go out on the caller's thread");
+    if (log_.start() != Status::ok) log("avgpu: the log thread did not start; lines go out on the caller's thread");
 }
 
 KernelPlatform::~KernelPlatform()
@@ -517,7 +517,7 @@ void KernelPlatform::write_register_u64(void *address, uint64_t value)
 void KernelPlatform::log(const char *message)
 {
     AV_SCOPE("KernelPlatform::log");
-    DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "rvkgpu: %s\n", message);
+    DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "avgpu: %s\n", message);
     log_.write(message);
 }
 
@@ -532,7 +532,7 @@ void KernelPlatform::log_at_bugcheck(const char *message)
 bool KernelPlatform::register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine)
 {
     AV_SCOPE("KernelPlatform::register_bugcheck");
-    static constexpr char component[] = "rvkgpu-trace";
+    static constexpr char component[] = "avgpu-trace";
     return KeRegisterBugCheckCallback(&bugcheck_record_, reinterpret_cast<PKBUGCHECK_CALLBACK_ROUTINE>(routine),
                                       buffer, static_cast<ULONG>(bytes),
                                       const_cast<PUCHAR>(reinterpret_cast<const UCHAR *>(component))) != FALSE;
@@ -633,7 +633,7 @@ Status KernelPlatform::write_driver_u64(void *physical_device_object, const char
 void KernelPlatform::report_broken_invariant(const char *what, const char *function)
 {
     AV_SCOPE("KernelPlatform::report_broken_invariant");
-    DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "rvkgpu: invariant %s broken in %s\n",
+    DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "avgpu: invariant %s broken in %s\n",
                what, function);
     __fastfail(FAST_FAIL_INVALID_ARG);
 }

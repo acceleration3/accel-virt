@@ -13,11 +13,11 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (DOORBELL_SHM_ID, FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, GuestRing, create_context,
-                         guest_blob, response_type, rvk_device, setup, submit)
+from av_context import (DOORBELL_SHM_ID, FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, GuestRing, create_context,
+                         guest_blob, response_type, av_device, setup, submit)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
-FENCE_MAGIC = 0x464B5652
+FENCE_MAGIC = 0x00465641
 FENCE_QUEUE_FIRST = 2
 DOORBELLS = 64
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
@@ -70,7 +70,7 @@ class Context:
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuFences(unittest.TestCase):
-    def qtest(self, device=rvk_device(",vectors=6")):
+    def qtest(self, device=av_device(",vectors=6")):
         qtest = virtio_qtest.Qtest(BUILD, device)
         self.addCleanup(qtest.close)
         return qtest
@@ -178,7 +178,7 @@ class VirtioGpuFences(unittest.TestCase):
 
     def test_a_driver_that_stops_without_resetting_releases_its_fence_interrupts(self):
         """035's live run: viogpudo cleared DRIVER_OK with status 11 and never
-        reset, so the guest notifiers stayed registered and rvkgpu's MSI-X
+        reset, so the guest notifiers stayed registered and avgpu's MSI-X
         toggle registered the same eventfd twice, which KVM refuses."""
         qtest = self.qtest()
         gpu, msix = self.msix_gpu(qtest, {6: 2})

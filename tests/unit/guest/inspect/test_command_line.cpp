@@ -28,14 +28,14 @@ const std::uint16_t *wide(const char16_t *text) { return reinterpret_cast<const 
 TEST(command_line_parse, splits_arguments_after_the_program_name)
 { CommandLine line;
   CHECK(line.invariants_hold());
-  CHECK_STATUS(line.parse(wide(u"\"C:\\rvk\\rvk inspect.exe\"  trace\t4242 rvkvk --out C:\\rvk\\t.bin")), Status::ok);
+  CHECK_STATUS(line.parse(wide(u"\"C:\\av\\av inspect.exe\"  trace\t4242 avvk --out C:\\av\\t.bin")), Status::ok);
   CHECK(line.invariants_hold());
   CHECK_EQ(line.count(), 5u);
   CHECK(std::strcmp(line.argument(0u), "trace") == 0);
   CHECK(std::strcmp(line.argument(1u), "4242") == 0);
-  CHECK(std::strcmp(line.argument(2u), "rvkvk") == 0);
+  CHECK(std::strcmp(line.argument(2u), "avvk") == 0);
   CHECK(std::strcmp(line.argument(3u), "--out") == 0);
-  CHECK(std::strcmp(line.argument(4u), "C:\\rvk\\t.bin") == 0);
+  CHECK(std::strcmp(line.argument(4u), "C:\\av\\t.bin") == 0);
   CHECK(std::strcmp(line.argument(5u), "") == 0); }
 
 TEST(command_line_parse, a_quoted_run_is_one_argument_and_an_empty_quote_is_an_argument)
@@ -49,7 +49,7 @@ TEST(command_line_parse, a_quoted_run_is_one_argument_and_an_empty_quote_is_an_a
 
 TEST(command_line_parse, a_line_with_only_the_program_or_nothing_has_no_arguments)
 { CommandLine line;
-  CHECK_STATUS(line.parse(wide(u"rvkinspect.exe   ")), Status::ok);
+  CHECK_STATUS(line.parse(wide(u"avinspect.exe   ")), Status::ok);
   CHECK_EQ(line.count(), 0u);
   CHECK_STATUS(line.parse(wide(u"")), Status::ok);
   CHECK_EQ(line.count(), 0u);

@@ -51,7 +51,7 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
         made = device_.make_image(format, info.imageExtent, info.imageUsage, image);
     }
     if (made != VK_SUCCESS) {
-        log_.write("rvkvk: a swapchain's host objects could not be made");
+        log_.write("avvk: a swapchain's host objects could not be made");
         release();
         return made;
     }
@@ -131,7 +131,7 @@ void Swapchain::refused(const char *what, uint64_t asked, uint64_t beside) const
     AV_SCOPE("Swapchain::refused");
     char       line[refusal_line_bytes] = {};
     TextBuffer text(line, sizeof line);
-    text.append("rvkvk: a swapchain is refused on its ");
+    text.append("avvk: a swapchain is refused on its ");
     text.append(what);
     text.append(": ");
     text.append_decimal(asked);
@@ -188,7 +188,7 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
         rows = frame_;
     }
     if (!windows_.blit_window_top_down(window_, extent_.width, extent_.height, rows)) {
-        log_.write("rvkvk: a presented frame was refused by its window");
+        log_.write("avvk: a presented frame was refused by its window");
         return window_state();
     }
     presented_++;
@@ -209,7 +209,7 @@ VkResult Swapchain::present_chained(VkQueue queue, uint32_t index, uint32_t wait
         device_.copy_into(queue, device_.made(index).image_, chained_.slot(), extent_, wait_count, waits);
     if (copied != VK_SUCCESS) return copied;
     if (!chained_.show()) {
-        log_.write("rvkvk: a presented frame was refused by its window's chain");
+        log_.write("avvk: a presented frame was refused by its window's chain");
         return window_state();
     }
     presented_++;

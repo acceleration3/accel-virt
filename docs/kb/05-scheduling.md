@@ -72,10 +72,10 @@ to a dummy page.
 #### What this driver answers (feature 049)
 
 `DXGKQAITYPE_USERMODESUBMISSION_CAPS` reports a four-byte doorbell at offset 0
-of the page and no secondary one, which is what `rvk_device.h` says a store is.
+of the page and no secondary one, which is what `av_device.h` says a store is.
 A doorbell is `DoorbellTable`'s `QueueDoorbell`, holding the hardware queue it
 was made on and the page index that queue's context was bound to —
-`RvkContextTable` hands out a doorbell page and a host context together, so the
+`AvContextTable` hands out a doorbell page and a host context together, so the
 page a process stores to is the one the device's worker for that context waits
 on. `ConnectDoorbell` answers the kernel address of that page inside the BAR
 the miniport mapped, and `CONNECTED`: this device never asks for

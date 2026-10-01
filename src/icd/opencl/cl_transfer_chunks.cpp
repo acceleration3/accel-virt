@@ -20,7 +20,7 @@ cl_int ClTransferChunks::read(uint64_t buffer, size_t offset, size_t bytes, void
     for (size_t done = 0u; done < bytes;) {
         const size_t piece = bytes - done < read_room ? bytes - done : read_room;
         ++commands_;
-        const cl_int read = av::clproto::rvk_clEnqueueReadBuffer(
+        const cl_int read = av::clproto::av_clEnqueueReadBuffer(
             wire_, queue_, buffer, CL_TRUE, offset + done, piece, to + done, 0u, nullptr, nullptr);
         if (read != CL_SUCCESS) return read;
         done += piece;
@@ -39,7 +39,7 @@ cl_int ClTransferChunks::write(uint64_t buffer, size_t offset, size_t bytes, con
     for (size_t done = 0u; done < bytes;) {
         const size_t piece = bytes - done < write_room ? bytes - done : write_room;
         ++commands_;
-        const cl_int written = av::clproto::rvk_clEnqueueWriteBuffer(
+        const cl_int written = av::clproto::av_clEnqueueWriteBuffer(
             unanswered, queue_, buffer, CL_TRUE, offset + done, piece, source + done, 0u, nullptr,
             nullptr);
         if (written != CL_SUCCESS) return written;
@@ -71,7 +71,7 @@ cl_int ClTransferChunks::read_row(uint64_t image, const ClImageRegion &region, s
         region.origin_of(x, row, slice, origin);
         const size_t extent[3] = {count, 1u, 1u};
         ++commands_;
-        const cl_int read = av::clproto::rvk_clEnqueueReadImage(
+        const cl_int read = av::clproto::av_clEnqueueReadImage(
             wire_, queue_, image, CL_TRUE, origin, extent, 0u, 0u,
             into + x * region.element_bytes(), count * region.element_bytes(), 0u, nullptr, nullptr);
         if (read != CL_SUCCESS) return read;
@@ -90,7 +90,7 @@ cl_int ClTransferChunks::write_row(uint64_t image, const ClImageRegion &region, 
         region.origin_of(x, row, slice, origin);
         const size_t extent[3] = {count, 1u, 1u};
         ++commands_;
-        const cl_int written = av::clproto::rvk_clEnqueueWriteImage(
+        const cl_int written = av::clproto::av_clEnqueueWriteImage(
             wire_, queue_, image, CL_TRUE, origin, extent, 0u, 0u,
             from + x * region.element_bytes(), count * region.element_bytes(), 0u, nullptr, nullptr);
         if (written != CL_SUCCESS) return written;
@@ -119,7 +119,7 @@ cl_int ClTransferChunks::read_image(uint64_t image, const ClImageRegion &region,
             region.origin_of(0u, row, slice, origin);
             const size_t extent[3] = {region.width(), run, 1u};
             ++commands_;
-            const cl_int read = av::clproto::rvk_clEnqueueReadImage(
+            const cl_int read = av::clproto::av_clEnqueueReadImage(
                 wire_, queue_, image, CL_TRUE, origin, extent, 0u, 0u, at, run * region.row_bytes(),
                 0u, nullptr, nullptr);
             if (read != CL_SUCCESS) return read;
@@ -151,7 +151,7 @@ cl_int ClTransferChunks::write_image(uint64_t image, const ClImageRegion &region
             const size_t extent[3] = {region.width(), run, 1u};
             const size_t span = (run - 1u) * region.row_pitch() + region.row_bytes();
             ++commands_;
-            const cl_int written = av::clproto::rvk_clEnqueueWriteImage(
+            const cl_int written = av::clproto::av_clEnqueueWriteImage(
                 wire_, queue_, image, CL_TRUE, origin, extent, region.row_pitch(), 0u, at, span, 0u,
                 nullptr, nullptr);
             if (written != CL_SUCCESS) return written;

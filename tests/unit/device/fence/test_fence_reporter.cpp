@@ -103,7 +103,7 @@ TEST(fence_reporter_prepare, writes_a_fresh_page)
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   CHECK(fixture.reporter().invariants_hold());
   const ByteLayout layout(fixture.bytes(), 32u);
-  CHECK(layout.at(0u, 4u) == 0x464B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00465641u);
   CHECK(layout.at(4u, 4u) == 0u);
   CHECK(layout.at(8u, 8u) == 0u);
   CHECK(layout.at(16u, 8u) == 0u);
@@ -316,7 +316,7 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
 
 TEST(fence_reporter_complete, records_the_fence_it_told_the_guest_about)
 { Fixture fixture;
-  CHECK_STATUS(fixture.recorder().open("fences.rvk", 0u, "fence", av::AtCeiling::stop,
+  CHECK_STATUS(fixture.recorder().open("fences.av", 0u, "fence", av::AtCeiling::stop,
                                        av::GpuIdentity(), av::ProtocolVersion(1u, 1u)),
                Status::ok);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
@@ -326,7 +326,7 @@ TEST(fence_reporter_complete, records_the_fence_it_told_the_guest_about)
       reporter.complete(9u);
   });
   CHECK(fixture.reporter().invariants_hold());
-  av::RecordedFile   file(fixture.host(), "fences.rvk");
+  av::RecordedFile   file(fixture.host(), "fences.av");
   av::RecordHeader   record;
   CHECK(file.expect(av::RecordKind::fence_completed, record) != nullptr);
   CHECK(record.fence() == 4u);
@@ -340,7 +340,7 @@ TEST(fence_reporter_complete, records_the_fence_it_told_the_guest_about)
 
 TEST(fence_reporter_complete, a_faulted_context_completes_nothing_and_records_nothing)
 { Fixture fixture;
-  CHECK_STATUS(fixture.recorder().open("fences.rvk", 0u, "fence", av::AtCeiling::stop,
+  CHECK_STATUS(fixture.recorder().open("fences.av", 0u, "fence", av::AtCeiling::stop,
                                        av::GpuIdentity(), av::ProtocolVersion(1u, 1u)),
                Status::ok);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
@@ -349,5 +349,5 @@ TEST(fence_reporter_complete, a_faulted_context_completes_nothing_and_records_no
       reporter.complete(4u);
   });
   CHECK(fixture.reporter().invariants_hold());
-  CHECK_EQ(av::RecordedFile(fixture.host(), "fences.rvk").remaining(), 0u);
+  CHECK_EQ(av::RecordedFile(fixture.host(), "fences.av").remaining(), 0u);
   fixture.recorder().close(); }

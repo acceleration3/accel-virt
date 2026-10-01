@@ -20,7 +20,7 @@ constexpr const char *device_prefix = "OpenCL ";
 constexpr const char *language_prefix = "OpenCL C ";
 /* What follows the number, so a log of an application's device list says which
  * driver answered. */
-constexpr const char *reported_by = " rvkgpu";
+constexpr const char *reported_by = " avgpu";
 
 size_t length_within(const char *text, size_t bytes)
 {

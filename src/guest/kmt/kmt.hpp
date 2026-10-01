@@ -29,7 +29,7 @@ public:
     /* KMTQAITYPE_WDDM_3_1_CAPS: whether the OS let the adapter report native
      * GPU fences, without which no hardware queue is given a doorbell. */
     virtual Status   query_native_gpu_fences(uint32_t adapter, bool &supported) = 0;
-    /* UMDRIVERPRIVATE: what rvkgpu.sys says the device under the adapter
+    /* UMDRIVERPRIVATE: what avgpu.sys says the device under the adapter
      * offers a user-mode driver (UmdAdapterInfo); none from a miniport that
      * does not say. */
     virtual Status   query_adapter_features(uint32_t adapter, UmdAdapterInfo &info) = 0;
@@ -117,8 +117,8 @@ public:
     virtual Status   free_gpu_virtual_address(uint32_t adapter, uint64_t address, uint64_t pages) = 0;
     virtual Status   wait_for_fence(uint32_t device, uint32_t fence_object, uint64_t fence) = 0;
     virtual Status   create_context(uint32_t device, uint32_t &context) = 0;
-    /* A virtual context carrying private driver data - the RvkContextRecord an
-     * rvk transport asks its context with; the miniport decodes it. */
+    /* A virtual context carrying private driver data - the AvContextRecord an
+     * av transport asks its context with; the miniport decodes it. */
     virtual Status   create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
                                             uint32_t &context) = 0;
     /* The same context, asked for as one a hardware queue may run on
@@ -134,7 +134,7 @@ public:
     /* On a context made with create_context_virtual, dxgkrnl routes this to the
      * DxgkDdiSubmitCommandVirtual DDI; `commands` is the DMA buffer's GPU
      * virtual address. `private_data` is copied by dxgkrnl and handed to the
-     * driver beside it - where an rvk transport puts its submission
+     * driver beside it - where an av transport puts its submission
      * descriptor, since the driver cannot read a GPU address (feature 043).
      * Null and 0 for none. */
     virtual Status   submit(uint32_t context, uint64_t commands, uint64_t length, const uint8_t *private_data,

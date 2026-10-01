@@ -19,12 +19,12 @@ from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "codegen"))
 
-from rvk_codegen.ir import CType                                  # noqa: E402
-from rvk_codegen.opencl import emit as cl_emit                    # noqa: E402
-from rvk_codegen.opencl import lower as cl_lower                  # noqa: E402
-from rvk_codegen.opencl import model as cl_model                  # noqa: E402
-from rvk_codegen.opencl import parse as cl_parse                  # noqa: E402
-from rvk_codegen.opencl import profile as cl_profile              # noqa: E402
+from av_codegen.ir import CType                                  # noqa: E402
+from av_codegen.opencl import emit as cl_emit                    # noqa: E402
+from av_codegen.opencl import lower as cl_lower                  # noqa: E402
+from av_codegen.opencl import model as cl_model                  # noqa: E402
+from av_codegen.opencl import parse as cl_parse                  # noqa: E402
+from av_codegen.opencl import profile as cl_profile              # noqa: E402
 
 CL_XML = ROOT / "third_party" / "khronos" / "cl.xml"
 
@@ -38,10 +38,10 @@ ADDED = ("clEnqueueMapBuffer", "clEnqueueUnmapMemObject", "clSVMAlloc", "clSVMFr
 def function_body(text, name):
     """The one function of that name, by matching braces from its own.
 
-    The client writes `rvk_<name>`, the server `decode_<name>`, and the default
+    The client writes `av_<name>`, the server `decode_<name>`, and the default
     dispatch `on_<name>` - and the server also *calls* `on_<name>`, so the
     server's own spelling is looked for first."""
-    for spelling in (f"decode_{name}(", f"rvk_{name}(", f"on_{name}("):
+    for spelling in (f"decode_{name}(", f"av_{name}(", f"on_{name}("):
         if spelling in text:
             start = text.rindex("\n", 0, text.index(spelling)) + 1
             break
@@ -106,8 +106,8 @@ class Emitted(unittest.TestCase):
         """A host address is not a pointer the guest may hold, let alone
         dereference. It crosses as a number, exactly as a handle does, and the
         ICD is what decides what the application is handed instead."""
-        self.assertIn("uint64_t rvk_clAllocTest(", self.client_header)
-        self.assertNotIn("void* rvk_clAllocTest(", self.client_header)
+        self.assertIn("uint64_t av_clAllocTest(", self.client_header)
+        self.assertNotIn("void* av_clAllocTest(", self.client_header)
 
     def test_an_address_returning_client_fails_with_zero(self):
         body = function_body(self.client, "clAllocTest")
@@ -259,7 +259,7 @@ class CommittedTreeCarriesThem(unittest.TestCase):
     def test_the_client_declares_every_added_command(self):
         header = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_client.h").read_text()
         for name in ADDED:
-            self.assertIn(f"rvk_{name}(", header, name)
+            self.assertIn(f"av_{name}(", header, name)
 
     def test_the_protocol_ids_carry_every_added_command(self):
         ids = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_protocol_ids.h").read_text()

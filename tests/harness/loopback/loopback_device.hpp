@@ -1,5 +1,5 @@
 /* The device core as a guest core reaches it in one process (docs/testing.md,
- * L4): a realized virtio-gpu-rvk over a MockHost whose guest memory is the
+ * L4): a realized virtio-gpu-av over a MockHost whose guest memory is the
  * guest's MockPlatform, running commands through a MockExecutorOps - or through
  * an executor table it is given, the real library's among them (feature 044). Control
  * requests pass as bytes, doorbell stores ring the host, and interrupts are
@@ -9,7 +9,7 @@
 #ifndef AV_LOOPBACK_DEVICE_HPP
 #define AV_LOOPBACK_DEVICE_HPP
 
-#include "device/module/virtio_gpu_rvk.hpp"
+#include "device/module/virtio_gpu_av.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/loopback/loopback_doorbells.hpp"
@@ -35,14 +35,14 @@ public:
                             const char *record = nullptr);
     /* Realized on `executor` instead, bound to the host GPU whose UUID is
      * `gpu`; executor() is then a mock nothing calls. */
-    LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &executor, const std::uint8_t *gpu);
+    LoopbackDevice(MockPlatform &guest, const AvExecutorOps &executor, const std::uint8_t *gpu);
     ~LoopbackDevice();
     LoopbackDevice(const LoopbackDevice &) = delete;
     LoopbackDevice &operator=(const LoopbackDevice &) = delete;
 
     MockHost          &host();
     MockExecutorOps   &executor();
-    VirtioGpuRvk      &device();
+    VirtioGpuAv      &device();
     LoopbackDoorbells &doorbells();
 
     /* One control request through the device core: the answer's length. */
@@ -53,12 +53,12 @@ public:
     bool        holding(std::uint32_t count);
 
 private:
-    void realize(const RvkExecutorOps &executor, const std::uint8_t *gpu, const char *record);
+    void realize(const AvExecutorOps &executor, const std::uint8_t *gpu, const char *record);
 
     MockPlatform     &guest_;
     MockHost          host_;
     MockExecutorOps   executor_;
-    VirtioGpuRvk      device_;
+    VirtioGpuAv      device_;
     LoopbackDoorbells doorbells_;
 };
 

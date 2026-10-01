@@ -29,7 +29,7 @@ Status GpuBinding::bind(const char *selection, TextBuffer &message)
     bound_ = false;
     if (selection != nullptr && !is_auto(selection)) return bind_uuid(selection, message);
     if (host_.gpu_count() == 0u) {
-        message.append("virtio-gpu-rvk: the host has no Vulkan device");
+        message.append("virtio-gpu-av: the host has no Vulkan device");
         return refuse(Status::not_found, message);
     }
     return take(0u, message);
@@ -40,7 +40,7 @@ Status GpuBinding::bind_uuid(const char *selection, TextBuffer &message)
     AV_SCOPE("GpuBinding::bind_uuid");
     DeviceUuid wanted;
     if (wanted.parse(selection) != Status::ok) {
-        message.append("virtio-gpu-rvk: host-gpu '");
+        message.append("virtio-gpu-av: host-gpu '");
         message.append(selection);
         message.append("' is neither auto nor a device UUID");
         return refuse(Status::invalid_parameter, message);
@@ -50,7 +50,7 @@ Status GpuBinding::bind_uuid(const char *selection, TextBuffer &message)
         if (!wanted.equals(host_.gpu_identity(index).uuid())) continue;
         return take(index, message);
     }
-    message.append("virtio-gpu-rvk: no host Vulkan device has UUID ");
+    message.append("virtio-gpu-av: no host Vulkan device has UUID ");
     message.append(selection);
     return refuse(Status::not_found, message);
 }
@@ -63,7 +63,7 @@ Status GpuBinding::take(uint32_t index, TextBuffer &message)
     AV_SCOPE("GpuBinding::take");
     const Status taken = host_.bind_gpu(index);
     if (taken != Status::ok) {
-        message.append("virtio-gpu-rvk: the host refused host GPU ");
+        message.append("virtio-gpu-av: the host refused host GPU ");
         message.append_decimal(index);
         return refuse(taken, message);
     }

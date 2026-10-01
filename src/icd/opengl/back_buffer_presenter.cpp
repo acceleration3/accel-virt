@@ -110,7 +110,7 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     const auto right = static_cast<int32_t>(width_);
     const auto top = static_cast<int32_t>(height_);
     if (framebuffers_[resolve] != 0u)
-        glproto::rvk_glBlitNamedFramebuffer(wire, framebuffers_[draw], framebuffers_[resolve], 0, 0, right, top, 0, 0,
+        glproto::av_glBlitNamedFramebuffer(wire, framebuffers_[draw], framebuffers_[resolve], 0, 0, right, top, 0, 0,
                                             right, top, gl_color_buffer_bit, gl_nearest);
     if (loop != nullptr && draw_chained(wire, *loop, luid)) return true;
     if (loop != nullptr && queue_read(wire, state, *loop)) return true;
@@ -125,7 +125,7 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     if (surface.blit(dc, width_, height_, pixels_) || refusal_logged_) return true;
     char       line[line_bytes];
     TextBuffer text(line, sizeof line);
-    text.append("rvkgl: the window's DC refused a frame of ");
+    text.append("avgl: the window's DC refused a frame of ");
     text.append_decimal(width_);
     text.append("x");
     text.append_decimal(height_);
@@ -227,13 +227,13 @@ Status BackBufferPresenter::create(ClientTransport &wire)
     const bool     multisampled = format_.samples() != 0u;
     const bool     depth_stencil = format_.depth_bits() != 0u;
     const uint32_t made_framebuffers = multisampled ? 2u : 1u;
-    glproto::rvk_glCreateFramebuffers(wire, static_cast<GLsizei>(made_framebuffers), framebuffers_);
-    glproto::rvk_glCreateTextures(wire, gl_texture_2d, 1, &texture_);
+    glproto::av_glCreateFramebuffers(wire, static_cast<GLsizei>(made_framebuffers), framebuffers_);
+    glproto::av_glCreateTextures(wire, gl_texture_2d, 1, &texture_);
     /* The colour renderbuffer first, when there is one; the depth one after. */
     uint32_t made[renderbuffers] = {};
     const uint32_t made_renderbuffers = (multisampled ? 1u : 0u) + (depth_stencil ? 1u : 0u);
     if (made_renderbuffers != 0u)
-        glproto::rvk_glCreateRenderbuffers(wire, static_cast<GLsizei>(made_renderbuffers), made);
+        glproto::av_glCreateRenderbuffers(wire, static_cast<GLsizei>(made_renderbuffers), made);
     renderbuffers_[colour] = multisampled ? made[0] : 0u;
     renderbuffers_[depth] = depth_stencil ? made[made_renderbuffers - 1u] : 0u;
     /* No framebuffer at all is the one incomplete set the invariant allows. */
@@ -242,21 +242,21 @@ Status BackBufferPresenter::create(ClientTransport &wire)
     const auto     edge_height = static_cast<GLsizei>(height_ != 0u ? height_ : 1u);
     const auto     samples = static_cast<GLsizei>(format_.samples());
     const uint32_t colour_format = format_.srgb() ? gl_srgb8_alpha8 : gl_rgba8;
-    glproto::rvk_glTextureStorage2D(wire, texture_, 1, colour_format, edge_width, edge_height);
+    glproto::av_glTextureStorage2D(wire, texture_, 1, colour_format, edge_width, edge_height);
     const uint32_t sampled = multisampled ? framebuffers_[resolve] : framebuffers_[draw];
-    glproto::rvk_glNamedFramebufferTexture(wire, sampled, gl_color_attachment0, texture_, 0);
+    glproto::av_glNamedFramebufferTexture(wire, sampled, gl_color_attachment0, texture_, 0);
     if (multisampled) {
-        glproto::rvk_glNamedRenderbufferStorageMultisample(wire, renderbuffers_[colour], samples, colour_format,
+        glproto::av_glNamedRenderbufferStorageMultisample(wire, renderbuffers_[colour], samples, colour_format,
                                                            edge_width, edge_height);
-        glproto::rvk_glNamedFramebufferRenderbuffer(wire, framebuffers_[draw], gl_color_attachment0, gl_renderbuffer,
+        glproto::av_glNamedFramebufferRenderbuffer(wire, framebuffers_[draw], gl_color_attachment0, gl_renderbuffer,
                                                     renderbuffers_[colour]);
     }
     if (depth_stencil) {
         const bool stencil = format_.stencil_bits() != 0u;
-        glproto::rvk_glNamedRenderbufferStorageMultisample(wire, renderbuffers_[depth], samples,
+        glproto::av_glNamedRenderbufferStorageMultisample(wire, renderbuffers_[depth], samples,
                                                            stencil ? gl_depth24_stencil8 : gl_depth_component32f,
                                                            edge_width, edge_height);
-        glproto::rvk_glNamedFramebufferRenderbuffer(wire, framebuffers_[draw],
+        glproto::av_glNamedFramebufferRenderbuffer(wire, framebuffers_[draw],
                                                     stencil ? gl_depth_stencil_attachment : gl_depth_attachment,
                                                     gl_renderbuffer, renderbuffers_[depth]);
     }
@@ -272,9 +272,9 @@ void BackBufferPresenter::delete_objects(ClientTransport &wire)
     bool           held = false;
     for (const uint32_t name : names) held = held || name != 0u;
     if (held) {
-        glproto::rvk_glDeleteFramebuffers(wire, framebuffers, framebuffers_);
-        glproto::rvk_glDeleteTextures(wire, 1, &texture_);
-        glproto::rvk_glDeleteRenderbuffers(wire, renderbuffers, renderbuffers_);
+        glproto::av_glDeleteFramebuffers(wire, framebuffers, framebuffers_);
+        glproto::av_glDeleteTextures(wire, 1, &texture_);
+        glproto::av_glDeleteRenderbuffers(wire, renderbuffers, renderbuffers_);
     }
     forget_objects();
 }
@@ -305,10 +305,10 @@ void BackBufferPresenter::set_pack(ClientTransport &wire, const ClientArrayState
     AV_SCOPE("BackBufferPresenter::set_pack");
     constexpr uint32_t names[] = {gl_pack_alignment,   gl_pack_row_length, gl_pack_skip_rows,
                                   gl_pack_skip_pixels, gl_pack_skip_images, gl_pack_image_height};
-    glproto::rvk_glBindBuffer(wire, gl_pixel_pack_buffer, plain ? 0u : state.bound_buffer(gl_pixel_pack_buffer));
+    glproto::av_glBindBuffer(wire, gl_pixel_pack_buffer, plain ? 0u : state.bound_buffer(gl_pixel_pack_buffer));
     for (const uint32_t name : names) {
         const int32_t neutral = name == gl_pack_alignment ? default_alignment : 0;
-        glproto::rvk_glPixelStorei(wire, name, plain ? neutral : state.pixel_value(name));
+        glproto::av_glPixelStorei(wire, name, plain ? neutral : state.pixel_value(name));
     }
 }
 
@@ -321,7 +321,7 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
     const auto     rows = static_cast<uint32_t>(chunk / row_bytes);
     for (uint32_t row = 0u; row < height_; row += rows) {
         const uint32_t taken = height_ - row < rows ? height_ - row : rows;
-        glproto::rvk_glGetTextureSubImage(wire, texture_, 0, 0, static_cast<GLint>(row), 0,
+        glproto::av_glGetTextureSubImage(wire, texture_, 0, 0, static_cast<GLint>(row), 0,
                                           static_cast<GLsizei>(width_), static_cast<GLsizei>(taken), 1, gl_bgra,
                                           gl_unsigned_byte, static_cast<GLsizei>(row_bytes * taken),
                                           pixels_ + row_bytes * row);
@@ -341,7 +341,7 @@ bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentLoop &loo
         settle();
         if (!chained_.open(wire, loop.chains(), window_, luid, width_, height_, format_.srgb())) {
             chain_refused_ = true;
-            log_.write("rvkgl: a window's frames cannot be presented as host surfaces; they are read back");
+            log_.write("avgl: a window's frames cannot be presented as host surfaces; they are read back");
             return false;
         }
     }
@@ -369,7 +369,7 @@ bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArraySta
     const bool plain = pack_is_plain(state);
     if (!plain) set_pack(wire, state, true);
     const size_t frame = frame_bytes();
-    glproto::rvk_glGetTextureSubImage_into_blob(wire, texture_, 0, 0, 0, 0, static_cast<GLsizei>(width_),
+    glproto::av_glGetTextureSubImage_into_blob(wire, texture_, 0, 0, 0, 0, static_cast<GLsizei>(width_),
                                                 static_cast<GLsizei>(height_), 1, gl_bgra, gl_unsigned_byte,
                                                 static_cast<GLsizei>(frame), room_.offset() + slot * frame);
     if (!plain) set_pack(wire, state, false);

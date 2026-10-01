@@ -1,4 +1,4 @@
-/* An ICD's ways to the rvkgpu adapter in a process: the adapter found by
+/* An ICD's ways to the avgpu adapter in a process: the adapter found by
  * enumeration - a session-0 window's DC opens none (feature 050, T009) - and
  * the devices on it that contexts' transports share. A device opens with the
  * first context made on it and closes with the last one gone. When one
@@ -43,7 +43,7 @@ public:
 
     /* One more context uses a device: the device new contexts share, or a
      * new one when there is none or it was lost. `link` names it; no_link on
-     * failure. not_supported with no rvkgpu adapter or no device made on it,
+     * failure. not_supported with no avgpu adapter or no device made on it,
      * no_space with every link lost and still held - nothing opened for
      * either. */
     [[nodiscard]] Status acquire(uint32_t &link);

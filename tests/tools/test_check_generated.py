@@ -24,7 +24,7 @@ class CheckGenerated(unittest.TestCase):
         self.out = self.scratch / "generated" / "toy"
         self.out.mkdir(parents=True)
         # A stand-in generator: writes one file whose text comes from the
-        # registry, and implements --check the way rvk_codegen does.
+        # registry, and implements --check the way av_codegen does.
         self.generator = self.scratch / "toy_generator.py"
         self.generator.write_text(textwrap.dedent('''
             import argparse, filecmp, pathlib, sys, tempfile

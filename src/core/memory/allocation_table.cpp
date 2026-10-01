@@ -100,7 +100,7 @@ Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
     MutexGuard lock(mutex_);
     InvariantScope<AllocationTable> guard(platform_, *this, "create");
     /* A resource's own private data is dxgkrnl's to keep and hand whoever
-     * opens the resource; the one user-mode driver that writes any (rvkumd's
+     * opens the resource; the one user-mode driver that writes any (avumd's
      * share key) writes exactly this much, and nothing here reads it. */
     if (request.NumAllocations == 0u || request.NumAllocations > max_per_call || request.pAllocationInfo == nullptr ||
         (request.PrivateDriverDataSize != 0u && request.PrivateDriverDataSize != resource_private_bytes))

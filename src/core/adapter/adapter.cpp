@@ -87,7 +87,7 @@
 #include "core/present/present_request.hpp"
 #include "core/present/present_ticket.hpp"
 #include "core/present/presented_allocations.hpp"
-#include "core/rvk/capset_exchange.hpp"
+#include "core/av/capset_exchange.hpp"
 #include "core/scheduling/patch_request.hpp"
 #include "core/scheduling/render_request.hpp"
 #include "core/support/invariant_scope.hpp"
@@ -95,7 +95,7 @@
 #include "core/support/text_buffer.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
 #include "core/vidpn/path_transformation.hpp"
@@ -130,7 +130,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      rvk_contexts_(platform, dxgkrnl_, allocations_, window_),
+      av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u),
@@ -165,9 +165,9 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
          * claiming it otherwise fails the adapter start (research.md §17). */
         if (dxgkrnl_.feature_enabled(feature_native_fence, feature_support_stable)) {
             capabilities_.native_fences_allowed();
-            log_status("rvkgpu: native fences", 1);
+            log_status("avgpu: native fences", 1);
         } else {
-            log_status("rvkgpu: native fences", 0);
+            log_status("avgpu: native fences", 0);
         }
         /* And only where the fence half of WDDM 3.1 is live beside it: a node
          * that reports user-mode submission without the NativeGpuFence
@@ -175,8 +175,8 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
          * build refuses the native fence feature outright (§20). */
         user_mode_submission_ = hardware_scheduling_ && capabilities_.native_fences_reportable() &&
                                 dxgkrnl_.feature_enabled(feature_user_mode_submission, feature_support_stable);
-        log_status("rvkgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
-        log_status("rvkgpu: user-mode submission", user_mode_submission_ ? 1 : 0);
+        log_status("avgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
+        log_status("avgpu: user-mode submission", user_mode_submission_ ? 1 : 0);
     }
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
@@ -227,14 +227,14 @@ void Adapter::remember_device()
         /* A window this driver cannot place chunks in is logged, never a
          * failed start: every chunk then falls back to guest RAM. */
         if (host_visible_.offered())
-            log_status("rvkgpu: host window",
+            log_status("avgpu: host window",
                        NtStatus(window_.initialize(host_visible_.base(), host_visible_.size())).value());
         /* A name that did not reach the registry is the INF's name standing,
          * which is a working adapter: logged, never a failed start. */
-        log_status("rvkgpu: adapter description",
+        log_status("avgpu: adapter description",
                    NtStatus(description_.publish(physical_device_object_, capset.gpu())).value());
     }
-    log_status("rvkgpu: device capset", NtStatus(read).value());
+    log_status("avgpu: device capset", NtStatus(read).value());
 }
 
 /* Chunks already placed stay recorded, and are given back into the window as
@@ -260,7 +260,7 @@ void Adapter::judge_device()
      * reset abandoned let go of their chunks as they are destroyed. */
     if (identity_.accept(capset)) return;
     /* Nothing runs on a device that changed, and its region is not the one
-     * VidMm was told about. What an rvk context queued for it stays on the
+     * VidMm was told about. What an av context queued for it stays on the
      * node and never completes: the engine stops moving, and dxgkrnl's timeout
      * detection resets it through ResetEngine. Dropping it here would leave an
      * idle engine answering responsive while VidSch still waits on it, and
@@ -268,7 +268,7 @@ void Adapter::judge_device()
      * (docs/kb/05-scheduling.md). The display is the scanout the transition
      * restored, none of this, and keeps working. */
     withdraw_window();
-    rvk_contexts_.abandon_all();
+    av_contexts_.abandon_all();
 }
 
 Status Adapter::power_up()
@@ -293,7 +293,7 @@ Status Adapter::power_down()
     if (!device_.constructed()) return Status::ok;
     /* A reset destroys every host context and blob, and the device object goes
      * with it. The window stays offered for whatever brings the device back. */
-    rvk_contexts_.abandon_all();
+    av_contexts_.abandon_all();
     presents_.destroy();
     copier_.destroy();
     const Status status = present_ ? device_.object().stop() : Status::ok;
@@ -311,7 +311,7 @@ void Adapter::attach_clock()
     if (attached == Status::ok) return;
     char       bytes[80];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: the device refused the display clock, status 0x");
+    message.append("avgpu: the device refused the display clock, status 0x");
     message.append_hex(static_cast<uint32_t>(NtStatus(attached).value()), 8u);
     platform_.log(message.text());
 }
@@ -329,13 +329,13 @@ void Adapter::start_presents()
     if (presents_.construct(platform_, device_.object(), present_epochs_) != Status::ok) return;
     const Status started = presents_.object().start();
     if (started == Status::ok) {
-        platform_.log("rvkgpu: presents are moved by the device's present engine");
+        platform_.log("avgpu: presents are moved by the device's present engine");
         return;
     }
     presents_.destroy();
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: the device's present engine was not started, status 0x");
+    message.append("avgpu: the device's present engine was not started, status 0x");
     message.append_hex(static_cast<uint32_t>(NtStatus(started).value()), 8u);
     platform_.log(message.text());
 }
@@ -348,7 +348,7 @@ void Adapter::start_copier()
     if (copier_.construct(platform_, device_.object(), mapped_pixels_) != Status::ok) return;
     if (copier_.object().initialize() == Status::ok) return;
     copier_.destroy();
-    platform_.log("rvkgpu: no memory to hand presents to the host; the miniport moves their pixels");
+    platform_.log("avgpu: no memory to hand presents to the host; the miniport moves their pixels");
 }
 
 int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dxgkrnl_interface, uint32_t *sources,
@@ -382,7 +382,7 @@ int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dx
     if (status != Status::ok) {
         char       bytes[72];
         TextBuffer message(bytes, sizeof bytes);
-        message.append("rvkgpu: StartDevice failed, status 0x");
+        message.append("avgpu: StartDevice failed, status 0x");
         message.append_hex(static_cast<uint32_t>(NtStatus(status).value()), 8u);
         platform_.log(message.text());
         return NtStatus(status).value();
@@ -393,12 +393,12 @@ int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dx
      * mode list standing, which is a working display, so this never fails the
      * start - but it is logged, because the modes offered are then not the
      * host's. */
-    log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
+    log_status("avgpu: display info", NtStatus(follow_display_info()).value());
     remember_device();
     *sources = sources_.count();
     *children = sources_.count();
     started_ = true;
-    platform_.log("rvkgpu: StartDevice");
+    platform_.log("avgpu: StartDevice");
     return NtStatus(Status::ok).value();
 }
 
@@ -420,7 +420,7 @@ int32_t Adapter::stop_device()
     withdraw_window();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();
-    log_status("rvkgpu: StopDevice", stopped);
+    log_status("avgpu: StopDevice", stopped);
     return stopped;
 }
 
@@ -472,17 +472,17 @@ void Adapter::dpc_routine()
     /* A device that fails every harvest would otherwise log on every DPC, so
      * each of these lines is spent from the budget (feature 037, FR-003). */
     if (harvest && device_.object().harvest_control(completed) != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: control queue harvest failed in the DPC");
+        platform_.log("avgpu: control queue harvest failed in the DPC");
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
-    rvk_contexts_.serve(node_, hw_submissions_);
+        platform_.log("avgpu: cursor queue harvest failed in the DPC");
+    av_contexts_.serve(node_, hw_submissions_);
     if (harvest && presents_.constructed()) node_.finish(&presents_.object(), presents_.object().completed());
     const uint32_t overdue = node_.release_overdue(now);
-    if (overdue != 0u && budget_.allows()) platform_.log("rvkgpu: a held packet passed its deadline and was let go");
+    if (overdue != 0u && budget_.allows()) platform_.log("avgpu: a held packet passed its deadline and was let go");
     if (node_.complete(notification_) != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: a completion was refused in the DPC");
+        platform_.log("avgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: a progress fence signal was refused in the DPC");
+        platform_.log("avgpu: a progress fence signal was refused in the DPC");
     /* A frame is carried when a submission completed since the last DPC, never
      * because the control queue answered: our own scanout requests complete
      * there, and taking those for presents would flush forever. */
@@ -515,7 +515,7 @@ void Adapter::refresh_scanout(uint64_t now)
     if (due) refreshed_at_ = now;
     if (due) refresh_waiting_ = false;
     if (scanout_.refresh(sources_, shown, due) != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
+        platform_.log("avgpu: a scanout refresh was refused in the DPC");
 }
 
 /* One video output per display the device has. dxgkrnl's array holds one
@@ -527,7 +527,7 @@ int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uin
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_relations");
     if (relations == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (size < (sources_.count() + 1u) * sizeof *relations) return NtStatus(NtStatus::buffer_too_small).value();
-    platform_.log("rvkgpu: QueryChildRelations");
+    platform_.log("avgpu: QueryChildRelations");
     for (uint32_t child = 0u; child < sources_.count(); child++) {
         relations[child].ChildDeviceType = type_video_output;
         relations[child].InterfaceTechnology = output_technology_other;
@@ -553,7 +553,7 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
         status->HotPlugConnected = display_info_.enabled(status->ChildUid) ? 1u : 0u;
         answered = NtStatus(Status::ok).value();
     }
-    log_status("rvkgpu: QueryChildStatus", answered);
+    log_status("avgpu: QueryChildStatus", answered);
     return answered;
 }
 
@@ -566,7 +566,7 @@ int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRec
     /* The monitor's mode set is built from this EDID, so a bring-up that never
      * reaches a committable VidPn needs the answer visible. */
     const int32_t copied = edid_.copy(*descriptor).value();
-    log_status("rvkgpu: QueryDeviceDescriptor", copied);
+    log_status("avgpu: QueryDeviceDescriptor", copied);
     return copied;
 }
 
@@ -578,29 +578,29 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     if (device != adapter_device_uid) return NtStatus(Status::ok).value();
     if (!started_) return NtStatus(Status::invalid_state).value();
     if (power_state == power_d0) {
-        platform_.log("rvkgpu: SetPowerState D0");
+        platform_.log("avgpu: SetPowerState D0");
         const Status powered = power_up();
-        log_status("rvkgpu: SetPowerState D0 device", NtStatus(powered).value());
+        log_status("avgpu: SetPowerState D0 device", NtStatus(powered).value());
         /* What power took away, put back: dxgkrnl kept every allocation and
          * VidPn across this, so what it expects to find is what was scanning
          * out before. */
         if (powered == Status::ok && transition_.held()) restore_scanouts();
         if (powered == Status::ok)
-            log_status("rvkgpu: SetPowerState D0 vsync", NtStatus(vsync_.resume()).value());
+            log_status("avgpu: SetPowerState D0 vsync", NtStatus(vsync_.resume()).value());
         if (powered == Status::ok) judge_device();
         transition_.release();
-        platform_.log("rvkgpu: SetPowerState D0 done");
+        platform_.log("avgpu: SetPowerState D0 done");
         return NtStatus(powered).value();
     }
     if (power_state > power_d0 && power_state <= power_d3) {
-        platform_.log("rvkgpu: SetPowerState D3");
+        platform_.log("avgpu: SetPowerState D3");
         static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
         /* Before the device goes: a vertical blank reported to an adapter that
          * is not powered - or to one on its way out of S3, before dxgkrnl has
          * powered it up - is what bugchecks the guest. */
         vsync_.suspend();
         const int32_t down = NtStatus(power_down()).value();
-        log_status("rvkgpu: SetPowerState D3 done", down);
+        log_status("avgpu: SetPowerState D3 done", down);
         return down;
     }
     return NtStatus(Status::invalid_parameter).value();
@@ -753,7 +753,7 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     if (budget_.allows()) {
         char       bytes[80];
         TextBuffer message(bytes, sizeof bytes);
-        message.append("rvkgpu: QueryAdapterInfo type ");
+        message.append("avgpu: QueryAdapterInfo type ");
         message.append_decimal(static_cast<uint32_t>(request.type()));
         message.append(" status 0x");
         message.append_hex(static_cast<uint32_t>(answered), 8u);
@@ -782,7 +782,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     return NtStatus(answered == Status::malformed ? Status::invalid_parameter : answered).value();
 }
 
-/* A process asking for a chunk on its rvk context - of the host window, or of
+/* A process asking for a chunk on its av context - of the host window, or of
  * guest RAM where the window cannot hold it - or giving one back
  * (docs/host-window.md). A device that refuses the chunk's blob, or refuses to
  * let go of one an import still holds, is STATUS_NOT_SUPPORTED; every other
@@ -796,14 +796,14 @@ int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
     if (escape.hContext == nullptr || escape.PrivateDriverDataSize != HostWindowRecord::encoded_size ||
         record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok || device == nullptr)
         return NtStatus(Status::invalid_parameter).value();
-    const Status status = rvk_contexts_.window_chunk(escape.hContext, record, *device);
+    const Status status = av_contexts_.window_chunk(escape.hContext, record, *device);
     if (status == Status::not_supported) return NtStatus(status).value();
     if (status != Status::ok) return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, HostWindowRecord::encoded_size));   /* the length was checked */
     return NtStatus(Status::ok).value();
 }
 
-/* A process asking where its rvk context's ring and reply slot are: the driver
+/* A process asking where its av context's ring and reply slot are: the driver
  * mapped them into it when the context was made (docs/protocol.md, "Context
  * memory"). Every refusal is STATUS_INVALID_PARAMETER. */
 int32_t Adapter::context_views(const DxgkargEscapeRecord &escape)
@@ -812,7 +812,7 @@ int32_t Adapter::context_views(const DxgkargEscapeRecord &escape)
     auto *const        bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
     ContextViewsRecord record;
     if (escape.hContext == nullptr || record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok ||
-        rvk_contexts_.views(escape.hContext, record) != Status::ok)
+        av_contexts_.views(escape.hContext, record) != Status::ok)
         return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, ContextViewsRecord::encoded_size));   /* decode checked the length */
     return NtStatus(Status::ok).value();
@@ -826,12 +826,12 @@ int32_t Adapter::publish_own_tail(const DxgkargEscapeRecord &escape)
     AV_SCOPE("Adapter::publish_own_tail");
     TailPublishRecord    record;
     const Context *const context = escape.hContext != nullptr ? contexts_.find(escape.hContext) : nullptr;
-    if (context == nullptr || !context->is_rvk() ||
+    if (context == nullptr || !context->is_av() ||
         record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize) !=
             Status::ok ||
-        record.ring() != context->rvk_record().ring())
+        record.ring() != context->av_record().ring())
         return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(rvk_contexts_.user_mode_submits(escape.hContext, nullptr)).value();
+    return NtStatus(av_contexts_.user_mode_submits(escape.hContext, nullptr)).value();
 }
 
 int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
@@ -854,7 +854,7 @@ int32_t Adapter::create_device(DxgkargCreateDeviceRecord *request)
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const void   *runtime = request->hDevice;
     const int32_t created = NtStatus(devices_.create(*this, *request)).value();
-    log_handle("rvkgpu: CreateDevice runtime", runtime, created);
+    log_handle("avgpu: CreateDevice runtime", runtime, created);
     return created;
 }
 
@@ -889,8 +889,8 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
              * of the process shares with it by that name (feature 050); a name
              * freed while the context lives could be a new allocation's, so the
              * context goes with it - which is the order a process exit uses. */
-            void *const user = rvk_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
-            if (user != nullptr) static_cast<void>(rvk_contexts_.unbind(user, answering_device()));
+            void *const user = av_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
+            if (user != nullptr) static_cast<void>(av_contexts_.unbind(user, answering_device()));
         }
     const Status destroyed = allocations_.destroy(*request);
     release_shared();
@@ -910,9 +910,9 @@ void Adapter::release_shared()
     for (uint32_t taken = shared_.take_released(ids, batch); taken != 0u; taken = shared_.take_released(ids, batch)) {
         VirtioGpuDevice *const device = answering_device();
         for (uint32_t index = 0u; device != nullptr && index < taken; index++) {
-            const Status released = rvk_contexts_.release_shared(ids[index], *device);
+            const Status released = av_contexts_.release_shared(ids[index], *device);
             if (released != Status::ok && budget_.allows())
-                log_status("rvkgpu: a shared object's release", NtStatus(released).value());
+                log_status("avgpu: a shared object's release", NtStatus(released).value());
         }
     }
 }
@@ -923,7 +923,7 @@ int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::describe_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t described = NtStatus(allocations_.describe(*request, sources_)).value();
-    log_failure("rvkgpu: DescribeAllocation", described);
+    log_failure("avgpu: DescribeAllocation", described);
     return described;
 }
 
@@ -933,7 +933,7 @@ int32_t Adapter::get_standard_allocation_driver_data(DxgkargGetStandardAllocatio
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_standard_allocation_driver_data");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t described = NtStatus(StandardAllocation(platform_, *request).describe()).value();
-    log_status("rvkgpu: GetStandardAllocationDriverData", described);
+    log_status("avgpu: GetStandardAllocationDriverData", described);
     return described;
 }
 
@@ -946,7 +946,7 @@ int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *requ
     /* dxgkrnl runs an open inside every create, so a refusal here is one a
      * caller reads as a failed CreateAllocation. This was the only DDI in the
      * driver with no line, and it cost four guest boots (research.md §15). */
-    log_status("rvkgpu: OpenAllocation", opened);
+    log_status("avgpu: OpenAllocation", opened);
     return opened;
 }
 
@@ -967,7 +967,7 @@ int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivat
         return NtStatus(Status::invalid_parameter).value();
     const int32_t set =
         NtStatus(sources_.set_private_format(request->VidPnSourceId, request->PrivateDriverFormatAttribute)).value();
-    log_status("rvkgpu: SetDisplayPrivateDriverFormat", set);
+    log_status("avgpu: SetDisplayPrivateDriverFormat", set);
     return set;
 }
 
@@ -980,8 +980,8 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
     if (identity_.changed()) return NtStatus(Status::not_supported).value();
     const Status created = contexts_.create(device, *request);
     Context *const context = created == Status::ok ? contexts_.find(request->hContext) : nullptr;
-    if (context == nullptr || !context->is_rvk()) return NtStatus(created).value();
-    const Status bound = bind_rvk(*context);
+    if (context == nullptr || !context->is_av()) return NtStatus(created).value();
+    const Status bound = bind_av(*context);
     if (bound == Status::ok) return NtStatus(Status::ok).value();
     static_cast<void>(contexts_.destroy(request->hContext));
     request->hContext = nullptr;
@@ -990,15 +990,15 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
     return NtStatus(Status::invalid_parameter).value();
 }
 
-Status Adapter::bind_rvk(Context &context)
+Status Adapter::bind_av(Context &context)
 {
-    AV_SCOPE("Adapter::bind_rvk");
+    AV_SCOPE("Adapter::bind_av");
     if (!doorbells_.constructed() || answering_device() == nullptr) return Status::not_supported;
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
     const Status   read = exchange.read(capset);
     if (read != Status::ok) return read;
-    return rvk_contexts_.bind(&context, context.rvk_record(), device_.object(), doorbells_.object(), capset);
+    return av_contexts_.bind(&context, context.av_record(), device_.object(), doorbells_.object(), capset);
 }
 
 VirtioGpuDevice *Adapter::answering_device()
@@ -1019,8 +1019,8 @@ int32_t Adapter::destroy_context(void *context)
      * unbinds it there and then, and that is the order a process exit uses -
      * dxgkrnl frees the allocations before the context - so asking again here
      * would answer invalid_parameter and log a failure for the ordinary case. */
-    if (found != nullptr && found->is_rvk() && rvk_contexts_.holds(context)) {
-        log_status("rvkgpu: rvk context destroyed", NtStatus(rvk_contexts_.unbind(context, answering_device())).value());
+    if (found != nullptr && found->is_av() && av_contexts_.holds(context)) {
+        log_status("avgpu: av context destroyed", NtStatus(av_contexts_.unbind(context, answering_device())).value());
     }
     return NtStatus(contexts_.destroy(context)).value();
 }
@@ -1110,7 +1110,7 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, modes_, sources_, *request).decide().value();
-    log_status("rvkgpu: IsSupportedVidPn", decided);
+    log_status("avgpu: IsSupportedVidPn", decided);
     return decided;
 }
 
@@ -1119,7 +1119,7 @@ int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidP
     AV_SCOPE("Adapter::recommend_functional_vidpn");
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_functional_vidpn");
     const int32_t declined = NtStatus(NtStatus::no_recommended_functional_vidpn).value();
-    log_status("rvkgpu: RecommendFunctionalVidPn", declined);
+    log_status("avgpu: RecommendFunctionalVidPn", declined);
     return declined;
 }
 
@@ -1151,7 +1151,7 @@ void Adapter::follow_output_count(uint32_t outputs)
     if (status == Status::ok || !budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: the device reports ");
+    message.append("avgpu: the device reports ");
     message.append_decimal(outputs);
     message.append(" displays, offering ");
     message.append_decimal(sources_.count());
@@ -1186,8 +1186,8 @@ Status Adapter::follow_display_modes()
 {
     AV_SCOPE("Adapter::follow_display_modes");
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_modes");
-    uint8_t          request[RvkRequestWriter::max_request_size] = {};
-    RvkRequestWriter writer(request, sizeof request);
+    uint8_t          request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter writer(request, sizeof request);
     static_cast<void>(writer.display_modes());
     uint8_t        answer[DisplayModeSet::max_encoded_size] = {};
     uint32_t       written = 0u;
@@ -1208,7 +1208,7 @@ void Adapter::log_offered_modes(uint32_t offered)
     if (!budget_.allows()) return;
     char       bytes[112];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: the host offers ");
+    message.append("avgpu: the host offers ");
     message.append_decimal(offered);
     message.append(" modes, ");
     message.append_decimal(modes_.count());
@@ -1228,7 +1228,7 @@ void Adapter::announce_display_change(bool running)
     if (!running || platform_.load_atomic(display_announced_) == 0u) return;
     platform_.store_atomic(display_announced_, 0u);
     if (device_.object().acknowledge_display_event() != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: the display event could not be cleared");
+        platform_.log("avgpu: the display event could not be cleared");
     for (uint32_t child = 0u; child < sources_.count(); child++) dxgkrnl_.replug(child);
 }
 
@@ -1246,7 +1246,7 @@ void Adapter::log_unlike_outputs()
         if (!budget_.allows()) return;
         char       bytes[96];
         TextBuffer message(bytes, sizeof bytes);
-        message.append("rvkgpu: display ");
+        message.append("avgpu: display ");
         message.append_decimal(source);
         message.append(" is ");
         message.append_decimal(display_info_.width(source));
@@ -1264,7 +1264,7 @@ void Adapter::follow_display_change()
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_change");
     if (platform_.load_atomic(display_changed_) == 0u) return;
     platform_.store_atomic(display_changed_, 0u);
-    log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
+    log_status("avgpu: display info", NtStatus(follow_display_info()).value());
 }
 
 /* The private-data length shares the line because the length is the question a
@@ -1278,7 +1278,7 @@ void Adapter::log_allocation(const DxgkargCreateAllocationRecord &request, int32
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: CreateAllocation bytes ");
+    message.append("avgpu: CreateAllocation bytes ");
     message.append_decimal(request.pAllocationInfo == nullptr ? 0u
                                                               : request.pAllocationInfo[0].PrivateDriverDataSize);
     message.append(" status 0x");
@@ -1311,7 +1311,7 @@ int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModality
     platform_.require_irql_at_most(Irql::passive, "Adapter::enum_vidpn_cofunc_modality");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, budget_, modes_, sources_, *request).enumerate().value();
-    log_status("rvkgpu: EnumVidPnCofuncModality", enumerated);
+    log_status("avgpu: EnumVidPnCofuncModality", enumerated);
     return enumerated;
 }
 
@@ -1323,9 +1323,9 @@ int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
     const int32_t applied = VidPnCommit(platform_, dxgkrnl_, modes_, sources_, *request).apply().value();
     if (applied >= 0) {
         const Status followed = follow_commit(request->AffectedVidPnSourceId);
-        if (followed != Status::ok) log_status("rvkgpu: CommitVidPn scanout", NtStatus(followed).value());
+        if (followed != Status::ok) log_status("avgpu: CommitVidPn scanout", NtStatus(followed).value());
     }
-    log_status("rvkgpu: CommitVidPn", applied);
+    log_status("avgpu: CommitVidPn", applied);
     return applied;
 }
 
@@ -1346,7 +1346,7 @@ void Adapter::restore_scanouts()
         /* Said for every source power put back, because a resume that restored
          * one and not the other is the difference between a desktop and a
          * black screen. */
-        log_status("rvkgpu: resume scanout", NtStatus(follow_commit(source)).value());
+        log_status("avgpu: resume scanout", NtStatus(follow_commit(source)).value());
     }
 }
 
@@ -1374,7 +1374,7 @@ int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecor
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     follow_display_change();
     const int32_t recommended = MonitorModes(platform_, modes_, sources_, *request).recommend().value();
-    log_status("rvkgpu: RecommendMonitorModes", recommended);
+    log_status("avgpu: RecommendMonitorModes", recommended);
     return recommended;
 }
 
@@ -1383,7 +1383,7 @@ int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRec
     AV_SCOPE("Adapter::recommend_vidpn_topology");
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_vidpn_topology");
     const int32_t declined = NtStatus(NtStatus::no_recommended_vidpn_topology).value();
-    log_status("rvkgpu: RecommendVidPnTopology", declined);
+    log_status("avgpu: RecommendVidPnTopology", declined);
     return declined;
 }
 
@@ -1456,7 +1456,7 @@ void Adapter::log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &reques
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: SetVidPnSourceVisibility source ");
+    message.append("avgpu: SetVidPnSourceVisibility source ");
     message.append_decimal(request.VidPnSourceId);
     message.append(request.Visible != 0u ? " visible" : " hidden");
     message.append(" status 0x");
@@ -1470,7 +1470,7 @@ void Adapter::log_scanout(uint32_t source, uint32_t segment, int64_t address)
     if (platform_.current_irql() >= Irql::dispatch || !budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: SetVidPnSourceAddress source ");
+    message.append("avgpu: SetVidPnSourceAddress source ");
     message.append_decimal(source);
     message.append(" segment ");
     message.append_decimal(segment);
@@ -1499,7 +1499,7 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     const uint32_t first = request->MultipassOffset;
     const int32_t  presented = writing.present().value();
     /* The DMA buffer this wrote is executed on the host only for a context of
-     * the rvk protocol; dxgkrnl's own presents are loopback-completed, so the
+     * the av protocol; dxgkrnl's own presents are loopback-completed, so the
      * pixels the desktop presents move here (feature 046, FR-004). */
     /* A refusal is what dxgkrnl answers by hiding the source: the only trace
      * of why the desktop went dark is this line. More DMA buffer is not one. */
@@ -1516,7 +1516,7 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
         static_cast<void>(writing.operation(kind));
         mark_present(*request, move_presented_pixels(*request, kind, first, end));
     }
-    log_failure("rvkgpu: Present", presented);
+    log_failure("avgpu: Present", presented);
     return presented;
 }
 
@@ -1610,7 +1610,7 @@ void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool oper
     if (!budget_.allows()) return;
     char       bytes[224];
     TextBuffer message(bytes, sizeof bytes);
-    message.append(operation_named ? "rvkgpu: present refused flags 0x" : "rvkgpu: present names no operation flags 0x");
+    message.append(operation_named ? "avgpu: present refused flags 0x" : "avgpu: present names no operation flags 0x");
     message.append_hex(request.Flags, 8u);
     message.append(" list ");
     message.append(request.pAllocationList != nullptr ? "given" : "absent");
@@ -1643,7 +1643,7 @@ void Adapter::log_unreadable_surfaces(const PresentSurface &read, const PresentS
     if (!budget_.allows()) return;
     char       bytes[160];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: present surfaces reachable source ");
+    message.append("avgpu: present surfaces reachable source ");
     message.append_decimal(static_cast<uint32_t>(read.reachable()));
     message.append(" kind ");
     message.append_decimal(static_cast<uint32_t>(source_kind));
@@ -1672,7 +1672,7 @@ void Adapter::log_unmoved_present(const char *why, const DxgkargPresentRecord &r
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: present unmoved ");
+    message.append("avgpu: present unmoved ");
     message.append(why);
     message.append(" flags 0x");
     message.append_hex(request.Flags, 8u);
@@ -1974,12 +1974,12 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
      * record follows anything. */
     FollowRecord follow;
     const bool   follows =
-        !context->is_rvk() && follow.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
+        !context->is_av() && follow.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
                                             request->DmaBufferPrivateDataSize) == Status::ok;
     Status       status = Status::ok;
     const bool   presented = submit_present(*request, status, owner, awaited);
     if (!presented)
-        status = context->is_rvk() ? submit_rvk(*request, awaited)
+        status = context->is_av() ? submit_av(*request, awaited)
                  : follows         ? submit_follow(*context, follow, request->SubmissionFenceId, owner, awaited)
                                    : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) {
@@ -1989,23 +1989,23 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
          * and a DPC per submission doubled the work dxgkrnl's DPC lock
          * serializes. */
         const bool done = presented ? presents_.object().completed() >= awaited
-                                    : rvk_contexts_.completed_already(owner, awaited);
+                                    : av_contexts_.completed_already(owner, awaited);
         if (awaited == 0u || done) static_cast<void>(dxgkrnl_.queue_dpc());
         return NtStatus(Status::ok).value();
     }
     /* A refusal is what dxgkrnl answers the process with, and may be what puts
      * its device in error: the log is the only place the reason survives. */
-    log_status("rvkgpu: SubmitCommandVirtual refused", NtStatus(status).value());
+    log_status("avgpu: SubmitCommandVirtual refused", NtStatus(status).value());
     return NtStatus(Status::invalid_parameter).value();
 }
 
 /* The host may finish the batch before its packet is queued; the DPC queued
  * after both serves what the fence page already says, so nothing waits for an
  * interrupt that came first. */
-Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited)
+Status Adapter::submit_av(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited)
 {
-    AV_SCOPE("Adapter::submit_rvk");
-    const Status published = rvk_contexts_.submit(request.hContext,
+    AV_SCOPE("Adapter::submit_av");
+    const Status published = av_contexts_.submit(request.hContext,
                                                   static_cast<const uint8_t *>(request.pDmaBufferPrivateData),
                                                   request.DmaBufferPrivateDataSize, awaited);
     if (published != Status::ok) return published;
@@ -2013,8 +2013,8 @@ Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uin
 }
 
 /* A packet on an ordinary context that follows a batch on one of its
- * process's rvk contexts: held on the node until that context's host has
- * completed the batch, like the rvk context's own packet would be. */
+ * process's av contexts: held on the node until that context's host has
+ * completed the batch, like the av context's own packet would be. */
 Status Adapter::submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence, void *&owner,
                               uint64_t &awaited)
 {
@@ -2024,7 +2024,7 @@ Status Adapter::submit_follow(const Context &context, const FollowRecord &follow
     owner = followed;
     awaited = follow.fence();
     const Status queued = node_.submit(fence, followed, awaited);
-    if (queued == Status::ok) rvk_contexts_.kick(followed);
+    if (queued == Status::ok) av_contexts_.kick(followed);
     return queued;
 }
 
@@ -2054,7 +2054,7 @@ void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_root_page_table");
     Context *context = request != nullptr ? contexts_.find(request->hContext) : nullptr;
     if (context == nullptr || context->assign_root(*request) != Status::ok)
-        platform_.log("rvkgpu: SetRootPageTable named no context or no usable root");
+        platform_.log("avgpu: SetRootPageTable named no context or no usable root");
 }
 
 size_t Adapter::get_root_page_table_size(DxgkargGetRootPageTableSizeRecord *request)
@@ -2164,9 +2164,9 @@ int32_t Adapter::destroy_hw_queue(void *queue)
      * queue that goes before its doorbell must take the writes with it, or
      * every DPC after stores into memory Windows has handed on. */
     const HwQueue *const found = hw_queues_.find(queue);
-    if (found != nullptr && rvk_contexts_.forget_progress(&found->context(), found->progress()) &&
+    if (found != nullptr && av_contexts_.forget_progress(&found->context(), found->progress()) &&
         budget_.allows())
-        platform_.log("rvkgpu: a hardware queue went before its doorbell; its context stops writing its progress");
+        platform_.log("avgpu: a hardware queue went before its doorbell; its context stops writing its progress");
     hw_submissions_.forget(queue);
     hw_queue_contexts_.forget(queue);
     return NtStatus(hw_queues_.destroy(queue)).value();
@@ -2186,7 +2186,7 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
         /* The same descriptor the virtual path carries, into the same ring:
          * a hardware-scheduled context submits this way and no other
          * (feature 049, research.md §13). */
-        const Status published = rvk_contexts_.submit(context,
+        const Status published = av_contexts_.submit(context,
                                                       static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
                                                       request->DmaBufferPrivateDataSize, awaited);
         if (published != Status::ok) return NtStatus(published).value();
@@ -2198,20 +2198,20 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
     return NtStatus(status).value();
 }
 
-/* A doorbell belongs to a hardware queue on a context, and only an rvk context
+/* A doorbell belongs to a hardware queue on a context, and only an av context
  * has a ring the process could publish a tail into: for any other, there is
  * nothing to hand over and the refusal is the answer. */
 void Adapter::submissions_to_user_mode(const HwQueue &queue)
 {
     AV_SCOPE("Adapter::submissions_to_user_mode");
-    static_cast<void>(rvk_contexts_.user_mode_submits(&queue.context(), queue.progress()));
+    static_cast<void>(av_contexts_.user_mode_submits(&queue.context(), queue.progress()));
 }
 
 void Adapter::submissions_to_driver(void *doorbell)
 {
     AV_SCOPE("Adapter::submissions_to_driver");
     const HwQueue *const queue = doorbell_table_.object().queue_of(doorbell);
-    if (queue != nullptr) static_cast<void>(rvk_contexts_.driver_submits(&queue->context()));
+    if (queue != nullptr) static_cast<void>(av_contexts_.driver_submits(&queue->context()));
 }
 
 int32_t Adapter::create_doorbell(DxgkargCreateDoorbellRecord *request)
@@ -2225,7 +2225,7 @@ int32_t Adapter::create_doorbell(DxgkargCreateDoorbellRecord *request)
      * the context's own ring, and the device wakes that context's worker. */
     HwQueue *const queue = hw_queues_.find(request->hHwQueue);
     if (queue == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const uint32_t page = rvk_contexts_.doorbell_of(&queue->context());
+    const uint32_t page = av_contexts_.doorbell_of(&queue->context());
     void          *made = nullptr;
     const Status   created = doorbell_table_.object().create(*queue, page, made);
     if (created != Status::ok) return NtStatus(created).value();
@@ -2332,7 +2332,7 @@ void Adapter::report(StateWriter &writer)
     contexts_.report(writer);
     hw_queues_.report(writer);
     node_.report(writer);
-    rvk_contexts_.report(writer);
+    av_contexts_.report(writer);
     sources_.report(writer);
     writer.close();
 }

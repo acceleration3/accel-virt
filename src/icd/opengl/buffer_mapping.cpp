@@ -165,7 +165,7 @@ void BufferMapping::read(ClientTransport &wire)
     for (uint64_t at = 0u; at < length_; at += read_bytes) {
         const uint64_t left = length_ - at;
         const size_t   chunk = left < read_bytes ? static_cast<size_t>(left) : read_bytes;
-        glproto::rvk_glGetNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
+        glproto::av_glGetNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
                                              static_cast<GLsizeiptr>(chunk), block_ + at);
     }
 }
@@ -175,7 +175,7 @@ void BufferMapping::send(ClientTransport &wire, uint64_t at, uint64_t end)
     AV_SCOPE("BufferMapping::send");
     while (at < end) {
         const size_t chunk = chunk_for(wire, end - at);
-        glproto::rvk_glNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
+        glproto::av_glNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
                                           static_cast<GLsizeiptr>(chunk), block_ + at);
         at += chunk;
     }
@@ -227,7 +227,7 @@ size_t BufferMapping::chunk_for(ClientTransport &wire, uint64_t left) const
     if (!blobs.ready()) return inline_chunk;
     const size_t wanted = left < blob_write_bytes ? static_cast<size_t>(left) : blob_write_bytes;
     /* Any answered call retires every lease: the host has read them all. */
-    if (blobs.room() < wanted) static_cast<void>(glproto::rvk_glIsBuffer(wire, buffer_));
+    if (blobs.room() < wanted) static_cast<void>(glproto::av_glIsBuffer(wire, buffer_));
     return blobs.room() >= wanted ? wanted : inline_chunk;
 }
 

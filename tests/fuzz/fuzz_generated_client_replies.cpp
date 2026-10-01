@@ -134,7 +134,7 @@ private:
     {
         Output<std::uint64_t> devices(room_);
         std::uint32_t         count = room_;
-        (void)av::vkproto::rvk_vkEnumeratePhysicalDevices(transport_, handle<VkInstance>(), &count,
+        (void)av::vkproto::av_vkEnumeratePhysicalDevices(transport_, handle<VkInstance>(), &count,
                                                           given_or_null(devices));
         judge_counted(devices, count);
     }
@@ -143,7 +143,7 @@ private:
     {
         Output<VkQueueFamilyProperties> families(room_);
         std::uint32_t                   count = room_;
-        av::vkproto::rvk_vkGetPhysicalDeviceQueueFamilyProperties(transport_, handle<VkPhysicalDevice>(), &count,
+        av::vkproto::av_vkGetPhysicalDeviceQueueFamilyProperties(transport_, handle<VkPhysicalDevice>(), &count,
                                                                   given_or_null(families));
         judge_counted(families, count);
     }
@@ -154,7 +154,7 @@ private:
         for (std::uint32_t index = 0u; index < room_; index++)
             families.get()[index].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
         std::uint32_t count = room_;
-        av::vkproto::rvk_vkGetPhysicalDeviceQueueFamilyProperties2(transport_, handle<VkPhysicalDevice>(), &count,
+        av::vkproto::av_vkGetPhysicalDeviceQueueFamilyProperties2(transport_, handle<VkPhysicalDevice>(), &count,
                                                                    given_or_null(families));
         judge_counted(families, count);
         for (std::uint32_t index = 0u; index < room_; index++) require(families.get()[index].pNext == nullptr);
@@ -164,7 +164,7 @@ private:
     {
         Output<VkExtensionProperties> extensions(room_);
         std::uint32_t                 count = room_;
-        const VkResult answered = av::vkproto::rvk_vkEnumerateDeviceExtensionProperties(
+        const VkResult answered = av::vkproto::av_vkEnumerateDeviceExtensionProperties(
             transport_, handle<VkPhysicalDevice>(), nullptr, &count, given_or_null(extensions));
         judge_counted(extensions, count);
         if (!given() || answered < 0) return;
@@ -178,7 +178,7 @@ private:
         for (std::uint32_t index = 0u; index < room_; index++)
             groups.get()[index].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
         std::uint32_t  count = room_;
-        const VkResult answered = av::vkproto::rvk_vkEnumeratePhysicalDeviceGroups(transport_, handle<VkInstance>(),
+        const VkResult answered = av::vkproto::av_vkEnumeratePhysicalDeviceGroups(transport_, handle<VkInstance>(),
                                                                                    &count, given_or_null(groups));
         judge_counted(groups, count);
         if (!given() || answered < 0) return;
@@ -191,7 +191,7 @@ private:
         VkInstanceCreateInfo create = {};
         create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         Output<std::uint64_t> instance(1u);
-        (void)av::vkproto::rvk_vkCreateInstance(transport_, &create, nullptr, instance.get());
+        (void)av::vkproto::av_vkCreateInstance(transport_, &create, nullptr, instance.get());
         require(instance.intact());
     }
 
@@ -201,14 +201,14 @@ private:
         create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         create.size = some_handle;
         Output<VkBuffer> buffer(1u);
-        (void)av::vkproto::rvk_vkCreateBuffer(transport_, handle<VkDevice>(), &create, nullptr, buffer.get());
+        (void)av::vkproto::av_vkCreateBuffer(transport_, handle<VkDevice>(), &create, nullptr, buffer.get());
         require(buffer.intact());
     }
 
     void vk_memory_requirements()
     {
         Output<VkMemoryRequirements> requirements(1u);
-        av::vkproto::rvk_vkGetBufferMemoryRequirements(transport_, handle<VkDevice>(), handle<VkBuffer>(),
+        av::vkproto::av_vkGetBufferMemoryRequirements(transport_, handle<VkDevice>(), handle<VkBuffer>(),
                                                        requirements.get());
         require(requirements.intact());
     }
@@ -217,7 +217,7 @@ private:
     void vk_memory_properties()
     {
         Output<VkPhysicalDeviceMemoryProperties> properties(1u, 0u);
-        av::vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(transport_, handle<VkPhysicalDevice>(), properties.get());
+        av::vkproto::av_vkGetPhysicalDeviceMemoryProperties(transport_, handle<VkPhysicalDevice>(), properties.get());
         require(properties.intact());
         require(properties.get()->memoryTypeCount <= VK_MAX_MEMORY_TYPES);
         require(properties.get()->memoryHeapCount <= VK_MAX_MEMORY_HEAPS);
@@ -233,7 +233,7 @@ private:
         binaries.get()->sType = VK_STRUCTURE_TYPE_PIPELINE_BINARY_HANDLES_INFO_KHR;
         binaries.get()->pipelineBinaryCount = room_;
         binaries.get()->pPipelineBinaries = caller_array;
-        (void)av::vkproto::rvk_vkCreatePipelineBinariesKHR(transport_, handle<VkDevice>(), &create, nullptr,
+        (void)av::vkproto::av_vkCreatePipelineBinariesKHR(transport_, handle<VkDevice>(), &create, nullptr,
                                                            binaries.get());
         require(binaries.intact());
         require(binaries.get()->pPipelineBinaries == caller_array);
@@ -264,7 +264,7 @@ private:
         layered.get()->pLayeredApis = given_or_null(apis);
         properties.get()->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         properties.get()->pNext = asked() ? copy.get() : nullptr;
-        av::vkproto::rvk_vkGetPhysicalDeviceProperties2(transport_, handle<VkPhysicalDevice>(), properties.get());
+        av::vkproto::av_vkGetPhysicalDeviceProperties2(transport_, handle<VkPhysicalDevice>(), properties.get());
         require(properties.intact() && copy.intact() && layered.intact());
         require(properties.get()->pNext == (asked() ? copy.get() : nullptr));
         require(copy.get()->pNext == layered.get() && layered.get()->pNext == nullptr);
@@ -287,7 +287,7 @@ private:
         list.get()->pDrmFormatModifierProperties = given_or_null(modifiers);
         properties.get()->sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
         properties.get()->pNext = asked() ? list.get() : nullptr;
-        av::vkproto::rvk_vkGetPhysicalDeviceFormatProperties2(transport_, handle<VkPhysicalDevice>(),
+        av::vkproto::av_vkGetPhysicalDeviceFormatProperties2(transport_, handle<VkPhysicalDevice>(),
                                                               VK_FORMAT_R8G8B8A8_UNORM, properties.get());
         require(properties.intact() && list.intact());
         require(properties.get()->pNext == (asked() ? list.get() : nullptr));
@@ -302,7 +302,7 @@ private:
     {
         Output<std::uint64_t> platforms(room_);
         Output<cl_uint>       total(1u);
-        (void)av::clproto::rvk_clGetPlatformIDs(transport_, room_, given_or_null(platforms),
+        (void)av::clproto::av_clGetPlatformIDs(transport_, room_, given_or_null(platforms),
                                                 asked() ? total.get() : nullptr);
         require(platforms.intact() && total.intact());
     }
@@ -311,7 +311,7 @@ private:
     {
         Output<std::uint64_t> devices(room_);
         Output<cl_uint>       total(1u);
-        (void)av::clproto::rvk_clGetDeviceIDs(transport_, some_handle, CL_DEVICE_TYPE_GPU, room_,
+        (void)av::clproto::av_clGetDeviceIDs(transport_, some_handle, CL_DEVICE_TYPE_GPU, room_,
                                               given_or_null(devices), asked() ? total.get() : nullptr);
         require(devices.intact() && total.intact());
     }
@@ -326,13 +326,13 @@ private:
         std::size_t *const  report = asked() ? reported.get() : nullptr;
         cl_int              answered = CL_SUCCESS;
         if (name == CL_PROGRAM_BUILD_LOG)
-            answered = av::clproto::rvk_clGetProgramBuildInfo(transport_, some_handle, some_handle, name, room,
+            answered = av::clproto::av_clGetProgramBuildInfo(transport_, some_handle, some_handle, name, room,
                                                               given_or_null(value), report);
         else if (name == CL_PLATFORM_VENDOR)
-            answered = av::clproto::rvk_clGetPlatformInfo(transport_, some_handle, name, room, given_or_null(value),
+            answered = av::clproto::av_clGetPlatformInfo(transport_, some_handle, name, room, given_or_null(value),
                                                           report);
         else
-            answered = av::clproto::rvk_clGetDeviceInfo(transport_, some_handle, name, room, given_or_null(value),
+            answered = av::clproto::av_clGetDeviceInfo(transport_, some_handle, name, room, given_or_null(value),
                                                         report);
         require(value.intact() && reported.intact());
         if (answered == CL_SUCCESS && given() && asked()) require(*report <= room);
@@ -342,7 +342,7 @@ private:
     {
         Output<std::uint8_t>  bytes(room_ * read_bytes_per_room);
         Output<std::uint64_t> event(1u);
-        (void)av::clproto::rvk_clEnqueueReadBuffer(transport_, some_handle, some_handle, CL_TRUE, 0u,
+        (void)av::clproto::av_clEnqueueReadBuffer(transport_, some_handle, some_handle, CL_TRUE, 0u,
                                                    room_ * read_bytes_per_room, given_or_null(bytes), 0u, nullptr,
                                                    asked() ? event.get() : nullptr);
         require(bytes.intact() && event.intact());
@@ -352,14 +352,14 @@ private:
     {
         const std::uint64_t device = some_handle;
         Output<cl_int>      error(1u);
-        (void)av::clproto::rvk_clCreateContext(transport_, nullptr, 1u, &device, asked() ? error.get() : nullptr);
+        (void)av::clproto::av_clCreateContext(transport_, nullptr, 1u, &device, asked() ? error.get() : nullptr);
         require(error.intact());
     }
 
     void cl_create_buffer()
     {
         Output<cl_int> error(1u);
-        (void)av::clproto::rvk_clCreateBuffer(transport_, some_handle, CL_MEM_READ_WRITE, some_handle, nullptr,
+        (void)av::clproto::av_clCreateBuffer(transport_, some_handle, CL_MEM_READ_WRITE, some_handle, nullptr,
                                               asked() ? error.get() : nullptr);
         require(error.intact());
     }
@@ -368,7 +368,7 @@ private:
     {
         Output<cl_image_format> formats(room_);
         Output<cl_uint>         total(1u);
-        (void)av::clproto::rvk_clGetSupportedImageFormats(transport_, some_handle, CL_MEM_READ_WRITE,
+        (void)av::clproto::av_clGetSupportedImageFormats(transport_, some_handle, CL_MEM_READ_WRITE,
                                                           CL_MEM_OBJECT_IMAGE2D, room_, given_or_null(formats),
                                                           room_ * sizeof(cl_image_format),
                                                           asked() ? total.get() : nullptr);
@@ -379,7 +379,7 @@ private:
     {
         Output<std::uint64_t> kernels(room_);
         Output<cl_uint>       total(1u);
-        (void)av::clproto::rvk_clCreateKernelsInProgram(transport_, some_handle, room_, given_or_null(kernels),
+        (void)av::clproto::av_clCreateKernelsInProgram(transport_, some_handle, room_, given_or_null(kernels),
                                                         asked() ? total.get() : nullptr);
         require(kernels.intact() && total.intact());
     }

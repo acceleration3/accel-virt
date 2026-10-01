@@ -113,7 +113,7 @@ TEST(present_request_present, a_blt_writes_one_command_with_both_patches)
   CHECK_EQ(present.run(), 0u);
   const std::size_t size = PresentCommand::header_size + 3u * PresentCommand::sub_rectangle_size;
   CHECK_EQ(present.written(), size);
-  CHECK_EQ(u32(present.dma(), 0u), 0x504B5652u);
+  CHECK_EQ(u32(present.dma(), 0u), 0x00505641u);
   CHECK_EQ(u32(present.dma(), 4u), 1u);
   CHECK_EQ(u32(present.dma(), 8u), 0u);
   CHECK_EQ(u32(present.dma(), 12u), 3u);

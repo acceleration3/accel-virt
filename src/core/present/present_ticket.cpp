@@ -59,7 +59,7 @@ void PresentTicket::log_refusal(Status status)
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("rvkgpu: the present engine did not take a present, status ");
+    message.append("avgpu: the present engine did not take a present, status ");
     message.append_decimal(static_cast<uint32_t>(status));
     message.append("; it moves now");
     platform_.log(message.text());

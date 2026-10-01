@@ -6,7 +6,7 @@
 #ifndef AV_GL_CONTEXT_ATTRIBUTES_HPP
 #define AV_GL_CONTEXT_ATTRIBUTES_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <stdint.h>
 
@@ -15,7 +15,7 @@ namespace av {
 class GlContextAttributes {
 public:
     /* Null is the defaults. */
-    explicit GlContextAttributes(const RvkContextOptions *options);
+    explicit GlContextAttributes(const AvContextOptions *options);
 
     bool           valid() const;
     /* Name, value pairs ending in EGL_NONE. */
@@ -28,7 +28,7 @@ private:
     bool acceptable() const;
     void add(int32_t name, int32_t value);
 
-    RvkContextOptions options_;
+    AvContextOptions options_;
     int32_t  list_[capacity];
     uint32_t used_;
     bool     valid_;

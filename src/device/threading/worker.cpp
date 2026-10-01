@@ -30,7 +30,7 @@ Status Worker::start()
     stopping_ = false;
     Status status = host_.create_event(wake_);
     if (status == Status::ok) status = host_.create_mutex(lock_);
-    if (status == Status::ok) status = host_.start_thread(&RvkWorkerRun, this, thread_);
+    if (status == Status::ok) status = host_.start_thread(&AvWorkerRun, this, thread_);
     if (status != Status::ok) release();
     return status;
 }

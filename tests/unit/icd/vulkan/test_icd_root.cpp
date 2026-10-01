@@ -477,7 +477,7 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       MockKmt::Call call;
   };
   const Refusal refusals[] = {
-      {"no rvkgpu adapter", true, false, MockKmt::Call::count},
+      {"no avgpu adapter", true, false, MockKmt::Call::count},
       {"no LUID", false, true, MockKmt::Call::count},
       {"a capset without Vulkan", false, false, MockKmt::Call::create_context_virtual},
   };
@@ -494,7 +494,7 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows, chains);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                          av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
+                                          av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
                           av::AdapterScenario::wddm_3_2);
       }
       if (refusal.no_luid) kmt.fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);
@@ -510,7 +510,7 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       CHECK(instance == VK_NULL_HANDLE);
       CHECK_EQ(kmt.open_objects(), 0u);
       CHECK_EQ(kmt.commands(), 0u);
-      CHECK_EQ(log.holding("no Vulkan connection to an rvkgpu adapter, status 6"), 1u);
+      CHECK_EQ(log.holding("no Vulkan connection to an avgpu adapter, status 6"), 1u);
       CHECK_EQ(platform.live_allocations(), 0u);
   }
 }

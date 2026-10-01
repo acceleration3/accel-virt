@@ -68,20 +68,20 @@ const GlContext &OpenGlBackend::context() const
     return context_;
 }
 
-bool OpenGlBackend::initialize(const GlDisplay *display, const RvkContextOptions *options, const OpenGlBackend *share)
+bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions *options, const OpenGlBackend *share)
 {
     AV_SCOPE("OpenGlBackend::initialize");
     if (display == nullptr ||
         !context_.open(*display, GlContextAttributes(options), share != nullptr ? &share->context_ : nullptr))
         return false;
     resolved_ = static_cast<uint32_t>(load_real_gl(gl_, resolve_through, &context_));
-    gl_.rvk_bind_sync = bind_sync;
-    gl_.rvk_sync_for = sync_for;
-    gl_.rvk_forget_sync = forget_sync;
-    gl_.rvk_sync_user = this;
-    gl_.rvk_blob = blob_at;
-    gl_.rvk_blob_user = this;
-    gl_.rvk_fixed_function = granted_fixed_function();
+    gl_.av_bind_sync = bind_sync;
+    gl_.av_sync_for = sync_for;
+    gl_.av_forget_sync = forget_sync;
+    gl_.av_sync_user = this;
+    gl_.av_blob = blob_at;
+    gl_.av_blob_user = this;
+    gl_.av_fixed_function = granted_fixed_function();
     import_.configure(context_);
     /* Opened is served. A driver that resolves fewer entry points than the
      * table has is not refused here: the decoder refuses each command whose
@@ -140,13 +140,13 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     /* Named here, because all the guest learns is that its batch could not
      * be decoded, and the device's fault names only the fence. */
     if (!current_ && !context_.make_current()) {
-        fprintf(stderr, "virtio-gpu-rvk: opengl: the context could not be made current for %s\n",
+        fprintf(stderr, "virtio-gpu-av: opengl: the context could not be made current for %s\n",
                 glproto::cmd_id_to_string(command_id));
         return false;
     }
     current_ = true;
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
-        fprintf(stderr, "virtio-gpu-rvk: opengl: %s could not run\n", glproto::cmd_id_to_string(command_id));
+        fprintf(stderr, "virtio-gpu-av: opengl: %s could not run\n", glproto::cmd_id_to_string(command_id));
         return false;
     }
     ran_++;
@@ -209,7 +209,7 @@ bool OpenGlBackend::lost() const
 bool OpenGlBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    if (blob.kind() != RVK_BLOB_HOST_POINTER || region_.length() != 0u) return false;
+    if (blob.kind() != AV_BLOB_HOST_POINTER || region_.length() != 0u) return false;
     region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
     const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
     blob.record(address, address);
@@ -270,11 +270,11 @@ bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
 {
     AV_SCOPE("OpenGlBackend::import_object");
     wire_handle = 0u;
-    if (handle_kind != RVK_SHARED_HANDLE_DMA_BUF || fd < 0) return false;
+    if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0) return false;
     uint32_t name = 0u;
-    if (kind == RVK_SHARED_MEMORY) {
+    if (kind == AV_SHARED_MEMORY) {
         if (size == 0u || !import_.import_memory(fd, size, name)) return false;
-    } else if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) {
+    } else if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         /* The size is the memory kind's and is judged where the object is
          * published; a semaphore's payload carries its own. */
         if (!import_.import_semaphore(fd, name)) return false;
@@ -302,7 +302,7 @@ void OpenGlBackend::release_object(uint32_t kind, uint64_t wire_handle)
 void OpenGlBackend::destroy_made(uint32_t kind, uint32_t name)
 {
     AV_SCOPE("OpenGlBackend::destroy_made");
-    if (kind == RVK_SHARED_MEMORY) {
+    if (kind == AV_SHARED_MEMORY) {
         import_.delete_memory(name);
         return;
     }

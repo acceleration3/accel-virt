@@ -77,7 +77,7 @@ struct TableFixture {
     TableFixture()
     {
         host.set_clock(500u);
-        CHECK_STATUS(table.initialize(region.bytes, four_slots, "rvkvk", 4242u), Status::ok);
+        CHECK_STATUS(table.initialize(region.bytes, four_slots, "avvk", 4242u), Status::ok);
         CHECK(table.invariants_hold());
     }
     const std::uint8_t *bytes() const { return region.bytes; }
@@ -95,14 +95,14 @@ void enter_and_leave_on_same_thread(void *context)
 TEST(trace_table_initialize, writes_the_documented_header_and_zeroes_only_the_table)
 { TableFixture fixture;
   const std::uint8_t *bytes = fixture.bytes();
-  CHECK(std::memcmp(bytes, "RVKTRACE", 8u) == 0);
+  CHECK(std::memcmp(bytes, "AVTRACE", 8u) == 0);
   CHECK_EQ(u32_at(bytes, 8u), 1u);
   CHECK_EQ(u32_at(bytes, 12u), 96u);
   CHECK_EQ(u32_at(bytes, 16u), 4u);
   CHECK_EQ(u32_at(bytes, 20u), slot_size);
   CHECK_EQ(u32_at(bytes, 24u), 32u);
   CHECK_EQ(u32_at(bytes, 28u), 24u);
-  CHECK(std::memcmp(bytes + 32u, "rvkvk\0\0\0\0\0\0\0\0\0\0\0", 16u) == 0);
+  CHECK(std::memcmp(bytes + 32u, "avvk\0\0\0\0\0\0\0\0\0\0\0", 16u) == 0);
   CHECK_EQ(u32_at(bytes, 48u), 4242u);
   CHECK_EQ(u32_at(bytes, 52u), 0u);
   CHECK_EQ(u64_at(bytes, 56u), 500u);

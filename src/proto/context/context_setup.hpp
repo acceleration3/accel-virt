@@ -55,7 +55,7 @@ public:
     [[nodiscard]] Status validate_against(const CapsetInfo &capset) const;
 
 private:
-    static constexpr uint32_t magic         = 0x434B5652u;  /* "RVKC" */
+    static constexpr uint32_t magic         = 0x00435641u;  /* "AVC" */
     static constexpr uint8_t  lowest_order  = 12u;
     static constexpr uint8_t  highest_order = 24u;
 

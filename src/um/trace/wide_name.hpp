@@ -1,6 +1,6 @@
 /* A wide string built from ASCII parts - the names CreateFileMappingW,
  * CreateEventW and CreateFileW take - cut at max_chars and always terminated.
- * The object names are `<scope>\rvk-<kind>-<module>-<pid>` (docs/trace.md). */
+ * The object names are `<scope>\av-<kind>-<module>-<pid>` (docs/trace.md). */
 #ifndef AV_UM_WIDE_NAME_HPP
 #define AV_UM_WIDE_NAME_HPP
 

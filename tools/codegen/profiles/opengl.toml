@@ -396,7 +396,7 @@ driver_implemented = [
 synchronous = ["glFinish"]
 
 # Reads that may also go one-way, the host writing the pixels at an offset
-# of the blob arena the caller set aside (rvk_<name>_into_blob). A swap's
+# of the blob arena the caller set aside (av_<name>_into_blob). A swap's
 # read-back of the window is sent this way so that the application's render
 # thread does not wait for its own frame to finish: the present thread waits
 # for the batch instead, and shows the frame the moment it is there.
@@ -612,43 +612,43 @@ len = "(buffer == 0x1800 ? 4 : 1)"
 # The indexed queries answer with as many values as the query itself
 # does, indexed or not.
 [params."glGetIntegeri_v.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetInteger64i_v.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetBooleani_v.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 # COMPSIZE(value) here is COMPSIZE(pname) under another parameter name:
 # how many values this particular query answers with.
 [params."glGetIntegerui64vNV.result"]
-len = "::av::glproto::pname_count(rvk_t, value)"
+len = "::av::glproto::pname_count(av_t, value)"
 
 # The indexed form of the same query: the index picks which attribute
 # or binding is being asked about and does not change how many values
 # come back.
 [params."glGetIntegerui64i_vNV.result"]
-len = "::av::glproto::pname_count(rvk_t, value)"
+len = "::av::glproto::pname_count(av_t, value)"
 
 # How many values a uniform holds is the uniform's type, which only the
 # program knows. The helper asks it.
 [params."glGetUniformfv.params"]
-len = "::av::glproto::uniform_value_count(rvk_t, program, location)"
+len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 [params."glGetUniformiv.params"]
-len = "::av::glproto::uniform_value_count(rvk_t, program, location)"
+len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 [params."glGetUniformuiv.params"]
-len = "::av::glproto::uniform_value_count(rvk_t, program, location)"
+len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 # COMPSIZE(program,location) is the registry saying the same thing the
 # three above say: ask the program what the uniform's type is.
 [params."glGetUniformui64vNV.params"]
-len = "::av::glproto::uniform_value_count(rvk_t, program, location)"
+len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 [params."glGetUniformi64vNV.params"]
-len = "::av::glproto::uniform_value_count(rvk_t, program, location)"
+len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 # One value per uniform asked about, whatever the property is.
 [params."glGetActiveUniformsiv.params"]
@@ -658,7 +658,7 @@ len = "uniformCount"
 # exception lists the block's active uniforms, and how many that is is
 # a question for the program.
 [params."glGetActiveUniformBlockiv.params"]
-len = "::av::glproto::uniform_block_value_count(rvk_t, program, uniformBlockIndex, pname)"
+len = "::av::glproto::uniform_block_value_count(av_t, program, uniformBlockIndex, pname)"
 
 # A compressed image's size is not computable from its extent: the
 # driver is asked, through the texture level's own parameter. It is a
@@ -668,7 +668,7 @@ len = "::av::glproto::uniform_block_value_count(rvk_t, program, uniformBlockInde
 # count comes from the driver rather than from here.
 [params."glGetCompressedTexImage.img"]
 role = "pixels_out"
-len = "::av::glproto::compressed_image_size(rvk_t, target, level)"
+len = "::av::glproto::compressed_image_size(av_t, target, level)"
 
 
 # An index array is an offset into whatever is bound to
@@ -775,83 +775,83 @@ len = "drawcount"
 # how many values does that pname answer with.
 
 [params."glGetTextureParameterfv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTextureParameteriv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTextureParameterIiv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTextureParameterIuiv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTextureLevelParameterfv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTextureLevelParameteriv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetNamedBufferParameteriv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetNamedBufferParameteri64v.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetNamedFramebufferParameteriv.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetNamedFramebufferAttachmentParameteriv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetNamedRenderbufferParameteriv.params"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTransformFeedbackiv.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTransformFeedbacki_v.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetTransformFeedbacki64_v.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetVertexArrayiv.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetVertexArrayIndexediv.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 # Direct state access asks every one of these questions again with the
 # object named instead of bound, and the answers are the same answers.
 
 [params."glGetVertexArrayIntegervEXT.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetVertexArrayIntegeri_vEXT.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 [params."glGetFloatIndexedvEXT.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetDoubleIndexedvEXT.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetIntegerIndexedvEXT.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetBooleanIndexedvEXT.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 # A compressed level is as long as the driver says it is, which is the
 # same question glGetCompressedTexImage already asks.
 [params."glGetCompressedTextureImageEXT.img"]
 role = "pixels_out"
-len = "::av::glproto::compressed_image_size(rvk_t, target, lod)"
+len = "::av::glproto::compressed_image_size(av_t, target, lod)"
 
 [params."glGetCompressedMultiTexImageEXT.img"]
 role = "pixels_out"
-len = "::av::glproto::compressed_image_size(rvk_t, target, lod)"
+len = "::av::glproto::compressed_image_size(av_t, target, lod)"
 
 # COMPSIZE(size) is the registry being careful about a parameter that
 # is already the answer.
@@ -866,7 +866,7 @@ len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
 # How long an assembly program's source is, asked of the program.
 [params."glGetNamedProgramStringEXT.string"]
-len = "::av::glproto::named_program_string_bytes(rvk_t, program, target)"
+len = "::av::glproto::named_program_string_bytes(av_t, program, target)"
 
 # The old multitexture spelling of glTexCoordPointer: a pointer that is
 # an offset when a buffer is bound, and this file's problem when not.
@@ -874,16 +874,16 @@ len = "::av::glproto::named_program_string_bytes(rvk_t, program, target)"
 role = "buffer_offset"
 
 [params."glGetVertexArrayIndexed64iv.param"]
-len = "::av::glproto::pname_count(rvk_t, pname)"
+len = "::av::glproto::pname_count(av_t, pname)"
 
 # The indexed forms of the ordinary state queries, whose length is the
 # query's own count as everywhere else.
 
 [params."glGetDoublei_v.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetFloati_v.data"]
-len = "::av::glproto::pname_count(rvk_t, target)"
+len = "::av::glproto::pname_count(av_t, target)"
 
 # Clearing one buffer of a framebuffer by name: a colour takes four
 # values, a depth or a stencil one, exactly as the bound form does.
@@ -950,7 +950,7 @@ role = "string_in"
 # A double uniform holds as many values as its type, like the others.
 
 [params."glGetUniformdv.params"]
-len = "::av::glproto::uniform_value_count(rvk_t, program, location)"
+len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 # The named texture uploads carry pixels, exactly as their bound forms
 # do. The registry gives them no length at all — the bound ones say
@@ -1080,27 +1080,27 @@ role = "buffer_offset"
 # A bitmap is one bit per pixel, in rows padded to the unpack
 # alignment. Nothing in the call says how many bytes that is.
 [params."glBitmap.bitmap"]
-len = "::av::glproto::bitmap_bytes(rvk_t, width, height)"
+len = "::av::glproto::bitmap_bytes(av_t, width, height)"
 
 # The stipple pattern is 32 by 32 bits. That is four bytes a row before
 # the alignment is applied, and the alignment is the only thing that
 # can make it more.
 [params."glPolygonStipple.mask"]
-len = "::av::glproto::stipple_bytes(rvk_t, false)"
+len = "::av::glproto::stipple_bytes(av_t, false)"
 
 [params."glGetPolygonStipple.mask"]
-len = "::av::glproto::stipple_bytes(rvk_t, true)"
+len = "::av::glproto::stipple_bytes(av_t, true)"
 
 # A pixel map is as long as the driver was told to make it, which is a
 # query of its own.
 [params."glGetPixelMapfv.values"]
-len = "::av::glproto::pixel_map_size(rvk_t, map)"
+len = "::av::glproto::pixel_map_size(av_t, map)"
 
 [params."glGetPixelMapuiv.values"]
-len = "::av::glproto::pixel_map_size(rvk_t, map)"
+len = "::av::glproto::pixel_map_size(av_t, map)"
 
 [params."glGetPixelMapusv.values"]
-len = "::av::glproto::pixel_map_size(rvk_t, map)"
+len = "::av::glproto::pixel_map_size(av_t, map)"
 
 # An evaluator is given its control points with a stride between them,
 # so the array is as long as the last point's last value: the points
@@ -1124,13 +1124,13 @@ len = "::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * 
 # depends on the map's order and on how many values each point holds —
 # both of which only the driver knows.
 [params."glGetMapdv.v"]
-len = "::av::glproto::map_value_count(rvk_t, target, query)"
+len = "::av::glproto::map_value_count(av_t, target, query)"
 
 [params."glGetMapfv.v"]
-len = "::av::glproto::map_value_count(rvk_t, target, query)"
+len = "::av::glproto::map_value_count(av_t, target, query)"
 
 [params."glGetMapiv.v"]
-len = "::av::glproto::map_value_count(rvk_t, target, query)"
+len = "::av::glproto::map_value_count(av_t, target, query)"
 
 # The client-array pointers, which are the compatibility profile's
 # version of glVertexAttribPointer and are read the same way: an offset
@@ -1138,7 +1138,7 @@ len = "::av::glproto::map_value_count(rvk_t, target, query)"
 # are addresses in the application's memory and the draw would have to
 # gather them — that is the one thing this tier does not do yet, and
 # the driver says so when it sees it rather than sending an address the
-# host would read as an offset. See rvk::glicd::note_client_array.
+# host would read as an offset. See av::glicd::note_client_array.
 [params."glVertexPointer.pointer"]
 role = "buffer_offset"
 

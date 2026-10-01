@@ -102,7 +102,7 @@ std::uint32_t first_byte(ID3D11Device5 *device, ID3D11DeviceContext4 *context, I
 
 void run_ring(Seen &seen)
 {
-    if (std::getenv("RVK_D3D_PATH") == nullptr) setenv("RVK_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::D3dRuntime runtime;
     std::uint8_t   uuid[VK_UUID_SIZE] = {};
     if (!runtime.open() || !first_gpu(uuid)) return;

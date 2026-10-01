@@ -4,7 +4,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu.hpp"
 #include "device/surfaces/shared_surfaces.hpp"
@@ -51,7 +51,7 @@ uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) c
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
-bool ExecutorRoot::export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image)
+bool ExecutorRoot::export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("ExecutorRoot::export_image");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
@@ -78,7 +78,7 @@ bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixel
     return device != nullptr && device->read_image(key, pixels, stride, width, height);
 }
 
-bool ExecutorRoot::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view)
+bool ExecutorRoot::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
 {
     AV_SCOPE("ExecutorRoot::map_frame");
     const HostGpu *const  gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
@@ -94,7 +94,7 @@ void ExecutorRoot::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &fram
     if (surfaces != nullptr) surfaces->unmap(frame);
 }
 
-ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
+ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
                                    ContextSession *share)
 {
     AV_SCOPE("ExecutorRoot::open");
@@ -103,10 +103,10 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
     const bool options_asked = options != nullptr && (options->major != 0u || options->minor != 0u ||
                                                       options->profile != 0u || options->flags != 0u ||
                                                       options->reserved != 0u);
-    if (options_asked && sub_api != RVK_EXECUTOR_SUB_API_OPENGL) return nullptr;
+    if (options_asked && sub_api != AV_EXECUTOR_SUB_API_OPENGL) return nullptr;
     /* An OpenGL context shares another's lists; an OpenCL one shares a GL
      * context's objects (cl_khr_gl_sharing); nothing else shares anything. */
-    if (share != nullptr && sub_api != RVK_EXECUTOR_SUB_API_OPENGL && sub_api != RVK_EXECUTOR_SUB_API_OPENCL)
+    if (share != nullptr && sub_api != AV_EXECUTOR_SUB_API_OPENGL && sub_api != AV_EXECUTOR_SUB_API_OPENCL)
         return nullptr;
     const OpenGlBackend *const shared = share != nullptr ? sharing(share, *gpu) : nullptr;
     if (share != nullptr && shared == nullptr) return nullptr;
@@ -140,7 +140,7 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
         /* Not OpenCL's: its kernels saturate the GPU between the guest's
          * waits, and the peak state's fixed clock is below what a saturated
          * GPU boosts to - held, the OpenCL samples lost 5 to 10%. */
-        if (sub_api != RVK_EXECUTOR_SUB_API_OPENCL && clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
+        if (sub_api != AV_EXECUTOR_SUB_API_OPENCL && clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
             sessions_[slot].hold_clocks(clocks_[gpu->index()]);
         return &sessions_[slot];
     }
@@ -151,10 +151,10 @@ SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
 {
     AV_SCOPE("ExecutorRoot::backend_in");
     switch (sub_api) {
-    case RVK_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot];
-    case RVK_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
-    case RVK_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot];
-    case RVK_EXECUTOR_SUB_API_D3D: return &d3d_[slot];
+    case AV_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot];
+    case AV_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
+    case AV_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot];
+    case AV_EXECUTOR_SUB_API_D3D: return &d3d_[slot];
     default: return nullptr;
     }
 }
@@ -164,14 +164,14 @@ const OpenGlBackend *ExecutorRoot::sharing(const ContextSession *share, const Ho
     AV_SCOPE("ExecutorRoot::sharing");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (&sessions_[slot] != share) continue;
-        const bool fits = share->live() && apis_of_[slot] == RVK_EXECUTOR_SUB_API_OPENGL &&
+        const bool fits = share->live() && apis_of_[slot] == AV_EXECUTOR_SUB_API_OPENGL &&
                           gpus_of_[slot] == gpu.index();
         return fits ? &opengl_[slot] : nullptr;
     }
     return nullptr;
 }
 
-bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const RvkContextOptions *options,
+bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions *options,
                         const OpenGlBackend *share)
 {
     AV_SCOPE("ExecutorRoot::bind");
@@ -180,11 +180,11 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
      * OpenCL cannot take a descriptor, OpenGL takes it and OpenCL names the
      * GL object (feature 053, T019). A host with no display shares nothing
      * and runs everything else. */
-    case RVK_EXECUTOR_SUB_API_OPENCL:
+    case AV_EXECUTOR_SUB_API_OPENCL:
         return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share);
-    case RVK_EXECUTOR_SUB_API_OPENGL:
+    case AV_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
-    case RVK_EXECUTOR_SUB_API_D3D:
+    case AV_EXECUTOR_SUB_API_D3D:
         return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
                                      apis_->surfaces(gpu.index()));
     default: vulkan_[slot].initialize(gpu); return true;
@@ -244,8 +244,8 @@ void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *cont
     AV_SCOPE("ExecutorRoot::set_signal");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (&sessions_[slot] != session) continue;
-        if (apis_of_[slot] == RVK_EXECUTOR_SUB_API_OPENCL) opencl_[slot].bind_signal(signal, context);
-        if (apis_of_[slot] == RVK_EXECUTOR_SUB_API_D3D) d3d_[slot].bind_signal(signal, context);
+        if (apis_of_[slot] == AV_EXECUTOR_SUB_API_OPENCL) opencl_[slot].bind_signal(signal, context);
+        if (apis_of_[slot] == AV_EXECUTOR_SUB_API_D3D) d3d_[slot].bind_signal(signal, context);
         return;
     }
 }
@@ -273,10 +273,10 @@ const char *ExecutorRoot::api_name(uint32_t sub_api) const
 {
     AV_SCOPE("ExecutorRoot::api_name");
     switch (sub_api) {
-    case RVK_EXECUTOR_SUB_API_VULKAN: return "vulkan";
-    case RVK_EXECUTOR_SUB_API_OPENCL: return "opencl";
-    case RVK_EXECUTOR_SUB_API_OPENGL: return "opengl";
-    case RVK_EXECUTOR_SUB_API_D3D: return "d3d";
+    case AV_EXECUTOR_SUB_API_VULKAN: return "vulkan";
+    case AV_EXECUTOR_SUB_API_OPENCL: return "opencl";
+    case AV_EXECUTOR_SUB_API_OPENGL: return "opengl";
+    case AV_EXECUTOR_SUB_API_D3D: return "d3d";
     default: return "unknown";
     }
 }

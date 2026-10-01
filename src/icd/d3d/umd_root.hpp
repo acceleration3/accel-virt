@@ -1,4 +1,4 @@
-/* rvkumd.dll as the Direct3D runtimes reach it (contracts/umd_interface.md):
+/* avumd.dll as the Direct3D runtimes reach it (contracts/umd_interface.md):
  * the answers to the two exports, the adapters opened through them, the
  * devices made on those adapters, and a connection to each kernel adapter
  * they opened, which every open of that adapter shares.
@@ -55,7 +55,7 @@ public:
 
     /* The exports. hr_invalid_arg for a null argument or null callbacks;
      * hr_no_interface for an Interface this driver does not serve;
-     * hr_fail when there is no rvkgpu adapter; hr_out_of_memory with no room.
+     * hr_fail when there is no avgpu adapter; hr_out_of_memory with no room.
      * Nothing is left open unless hr_ok. */
     Hresult open_adapter10_2(D3d10ddiargOpenAdapterRecord *args);
     Hresult open_adapter12(D3d12ddiargOpenAdapterRecord *args);

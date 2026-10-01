@@ -12,28 +12,28 @@ namespace av::d3d11 {
 
 namespace {
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_Present(DXGI_DDI_ARG_PRESENT *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_Present(DXGI_DDI_ARG_PRESENT *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().present(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_Present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_Present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().present1(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_Blt(DXGI_DDI_ARG_BLT *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_Blt(DXGI_DDI_ARG_BLT *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().blt(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_Blt1(DXGI_DDI_ARG_BLT1 *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_Blt1(DXGI_DDI_ARG_BLT1 *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().blt1(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_RotateResourceIdentities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_RotateResourceIdentities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().rotate_resource_identities(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_ResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_ResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().resolve_shared_resource(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_SetDisplayMode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_SetDisplayMode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().set_display_mode(args); }
 
-extern "C" HRESULT APIENTRY rvkumd_dxgi11_QueryResourceResidency(DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *args)
+extern "C" HRESULT APIENTRY avumd_dxgi11_QueryResourceResidency(DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *args)
 { return DeviceCall(reinterpret_cast<void *>(args->hDevice)).device().query_resource_residency(args); }
 
 }  // namespace
@@ -41,14 +41,14 @@ extern "C" HRESULT APIENTRY rvkumd_dxgi11_QueryResourceResidency(DXGI_DDI_ARG_QU
 void fill_dxgi_funcs(DXGI1_6_1_DDI_BASE_FUNCTIONS &table)
 {
     AV_SCOPE("fill_dxgi_funcs");
-    table.pfnPresent = &rvkumd_dxgi11_Present;
-    table.pfnPresent1 = &rvkumd_dxgi11_Present1;
-    table.pfnBlt = &rvkumd_dxgi11_Blt;
-    table.pfnBlt1 = &rvkumd_dxgi11_Blt1;
-    table.pfnRotateResourceIdentities = &rvkumd_dxgi11_RotateResourceIdentities;
-    table.pfnResolveSharedResource = &rvkumd_dxgi11_ResolveSharedResource;
-    table.pfnSetDisplayMode = &rvkumd_dxgi11_SetDisplayMode;
-    table.pfnQueryResourceResidency = &rvkumd_dxgi11_QueryResourceResidency;
+    table.pfnPresent = &avumd_dxgi11_Present;
+    table.pfnPresent1 = &avumd_dxgi11_Present1;
+    table.pfnBlt = &avumd_dxgi11_Blt;
+    table.pfnBlt1 = &avumd_dxgi11_Blt1;
+    table.pfnRotateResourceIdentities = &avumd_dxgi11_RotateResourceIdentities;
+    table.pfnResolveSharedResource = &avumd_dxgi11_ResolveSharedResource;
+    table.pfnSetDisplayMode = &avumd_dxgi11_SetDisplayMode;
+    table.pfnQueryResourceResidency = &avumd_dxgi11_QueryResourceResidency;
 }
 
 }  // namespace av::d3d11

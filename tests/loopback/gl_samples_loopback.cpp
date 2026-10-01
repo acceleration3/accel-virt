@@ -2,11 +2,11 @@
  * machine's GPU, with no guest: FakeOpengl32 loads the ICD as the system
  * opengl32 would, and the ICD root, over DdiKmt, carries every command through
  * the real driver and device core to the executor library - the same path
- * rvkglsamples.exe takes in the VM, less the VM. Its frames and metrics are
+ * avglsamples.exe takes in the VM, less the VM. Its frames and metrics are
  * the guest run's in shape, so tools/opengl_report.py can set them beside the
  * host's (--loopback). It is a tool, not a test: a sample the ICD cannot run
  * is reported, not failed. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
@@ -37,7 +37,7 @@ extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
     return "leak:libOpenCL\nleak:libEGL\nleak:libGLX\nleak:libglapi\nleak:libvulkan\nleak:libnvidia\n"
-           "leak:iris_dri\nleak:libdbus-1\nleak:libz\nleak:libLLVM\nleak:libgallium\nleak:librvk_executor\n";
+           "leak:iris_dri\nleak:libdbus-1\nleak:libz\nleak:libLLVM\nleak:libgallium\nleak:libav_executor\n";
 }
 
 namespace {
@@ -163,7 +163,7 @@ bool create_context(const char *)
 {
     read_slot_names();
     gpu = new av::WidestHostGpu();
-    if ((gpu->sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return false;
+    if ((gpu->sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return false;
     library = new av::ExecutorLibraryFile(AV_EXECUTOR_LIBRARY);
     if (library->ops() == nullptr) return false;
     rig = new av::FullStackRig(*library->ops(), gpu->uuid());

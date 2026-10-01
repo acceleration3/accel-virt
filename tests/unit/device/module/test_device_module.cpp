@@ -5,7 +5,7 @@
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/entry_points.hpp"
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 #include "device/module/device_instance.hpp"
 #include "device/module/device_module.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -110,7 +110,7 @@ TEST(device_module_create, a_failed_realize_or_missing_table_leaves_no_device)
   CHECK(std::strstr(error, "is neither auto nor a device UUID") != nullptr);
   CHECK_EQ(module.live(), 0u);
   CHECK(module.create(nullptr, nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
-  CHECK(std::strcmp(error, "virtio-gpu-rvk: no host operations") == 0); }
+  CHECK(std::strcmp(error, "virtio-gpu-av: no host operations") == 0); }
 
 TEST(device_module_create, one_device_per_slot)
 { MockHost host; MockHostOps ops(host);
@@ -124,31 +124,31 @@ TEST(device_module_create, one_device_per_slot)
       CHECK(instance != nullptr);
   }
   CHECK(module.create(&ops.table(), nullptr, nullptr, false, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
-  CHECK(std::strcmp(error, "virtio-gpu-rvk: every device slot is in use") == 0);
+  CHECK(std::strcmp(error, "virtio-gpu-av: every device slot is in use") == 0);
   for (DeviceInstance *instance : instances) CHECK_STATUS(module.destroy(instance), Status::ok); }
 
-TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
+TEST(av_device_abi, create_reset_and_destroy_through_the_c_entry_points)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   char error[96] = {};
-  RvkDevice *const device = rvk_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
   CHECK(device != nullptr);
   auto *const instance = reinterpret_cast<DeviceInstance *>(device);
-  rvk_device_status(device, 0x0Fu);
+  av_device_status(device, 0x0Fu);
   CHECK(host.fence_interrupts_connected());
   CHECK_STATUS(instance->device().create_context(1u), Status::ok);
-  rvk_device_reset(device);
+  av_device_reset(device);
   CHECK(!host.fence_interrupts_connected());
   CHECK_EQ(instance->device().contexts(), 0u);
   CHECK_EQ(av::device_module.live(), 1u);
-  CHECK_EQ(rvk_device_destroy(device), 0);
-  CHECK_EQ(rvk_device_destroy(device), 1);
-  CHECK(rvk_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK_EQ(av_device_destroy(device), 0);
+  CHECK_EQ(av_device_destroy(device), 1);
+  CHECK(av_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
   CHECK_EQ(av::device_module.live(), 0u); }
 
 /* The glue writes what this answers into the function's configuration space,
  * so a guest's Device Manager and DXGI see the host GPU's IDs. */
-TEST(rvk_device_abi, rvk_device_pci_identity_answers_the_bound_gpus_ids_or_nothing)
+TEST(av_device_abi, av_device_pci_identity_answers_the_bound_gpus_ids_or_nothing)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   host.add_gpu(gpu);
@@ -157,41 +157,41 @@ TEST(rvk_device_abi, rvk_device_pci_identity_answers_the_bound_gpus_ids_or_nothi
   host.add_file("/sys/bus/pci/devices/0000:03:00.0/device", "0x7550\n", 7u);
   host.add_file("/sys/bus/pci/devices/0000:03:00.0/revision", "0xc0\n", 5u);
   char error[96] = {};
-  RvkDevice *const device = rvk_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
   CHECK(device != nullptr);
-  RvkPciIdentity identity = {};
-  CHECK_EQ(rvk_device_pci_identity(device, &identity), 1);
+  AvPciIdentity identity = {};
+  CHECK_EQ(av_device_pci_identity(device, &identity), 1);
   CHECK_EQ(identity.vendor_id, 0x1002u);
   CHECK_EQ(identity.device_id, 0x7550u);
   CHECK_EQ(identity.revision, 0xC0u);
-  CHECK_EQ(rvk_device_destroy(device), 0);
+  CHECK_EQ(av_device_destroy(device), 0);
   /* Bound to a GPU the host cannot place on PCI: virtio-gpu's own IDs stay. */
   MockHost bare; MockHostOps bare_ops(bare);
   bare.add_gpu(gpu);
-  RvkDevice *const off_pci = rvk_device_create(&bare_ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
-  RvkPciIdentity untouched = {0xAAAAu, 0xBBBBu, 0xCCu};
-  CHECK_EQ(rvk_device_pci_identity(off_pci, &untouched), 0);
+  AvDevice *const off_pci = av_device_create(&bare_ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvPciIdentity untouched = {0xAAAAu, 0xBBBBu, 0xCCu};
+  CHECK_EQ(av_device_pci_identity(off_pci, &untouched), 0);
   CHECK_EQ(untouched.vendor_id, 0xAAAAu);
-  CHECK_EQ(rvk_device_destroy(off_pci), 0); }
+  CHECK_EQ(av_device_destroy(off_pci), 0); }
 
-TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_rest_to_the_base_class_and_rvk_device_capsets_offers_one)
+TEST(av_device_abi, av_device_control_answers_blob_requests_and_leaves_the_rest_to_the_base_class_and_av_device_capsets_offers_one)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   host.set_hostmem_size(0x10000u);
-  av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
   char error[96] = {};
-  RvkDevice *const device = rvk_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
   CHECK(device != nullptr);
-  CHECK_EQ(rvk_device_capsets(device), 1u);
+  CHECK_EQ(av_device_capsets(device), 1u);
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x1000u);
   MockRequest blob(create.bytes(), create.size());
-  CHECK_EQ(rvk_device_control(device, &blob, 0x010Cu), 1);
+  CHECK_EQ(av_device_control(device, &blob, 0x010Cu), 1);
   CHECK_EQ(blob.response_type(), 0x1100u);
   GpuRequestBuilder display_info(0x0100u);
   MockRequest base(display_info.bytes(), display_info.size());
-  CHECK_EQ(rvk_device_control(device, &base, 0x0100u), 0);
-  CHECK_EQ(rvk_device_destroy(device), 0);
+  CHECK_EQ(av_device_control(device, &base, 0x0100u), 0);
+  CHECK_EQ(av_device_destroy(device), 0);
   CHECK_EQ(host.live_host_memory(), 0u);
-  CHECK(rvk_device_create(&ops.table(), nullptr, "auto", 1, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK(av_device_create(&ops.table(), nullptr, "auto", 1, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "blob=on is not supported") != nullptr); }

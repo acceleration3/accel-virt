@@ -512,7 +512,7 @@ void stamp(GuestRing &ring, std::uint64_t counter, std::uint64_t published_at)
 std::uint64_t gpu_marked = 0u;
 std::uint64_t gpu_reached = 0u;
 
-void scripted_progress(void *, RvkExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+void scripted_progress(void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached)
 {
     *marked = gpu_marked;
     *reached = gpu_reached;

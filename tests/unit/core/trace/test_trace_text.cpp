@@ -64,7 +64,7 @@ struct Table {
     Table()
     {
         host.set_clock(1u);
-        CHECK_STATUS(table.initialize(bytes, sizeof bytes, "rvkvk", 4242u), Status::ok);
+        CHECK_STATUS(table.initialize(bytes, sizeof bytes, "avvk", 4242u), Status::ok);
     }
     void read() { CHECK_STATUS(snapshot.read(bytes, sizeof bytes), Status::ok); }
     std::uint32_t frame_offset(std::uint32_t slot, std::uint32_t depth) const { return 96u + slot * 824u + 56u + depth * 24u; }
@@ -104,7 +104,7 @@ TEST(trace_text, writes_the_header_each_thread_and_its_named_frames)
   char joined[1024];
   render(text, joined, sizeof joined);
   const char *const expected =
-      "trace module=rvkvk pid=4242 slots=2\n"
+      "trace module=avvk pid=4242 slots=2\n"
       "thread 9 active depth=2 entries=2 waiting=0x000000000000ABCD\n"
       "  #0 Outer::run irql=0 for_ms=35\n"
       "  #1 Inner::leaf irql=2 for_ms=5";
@@ -126,7 +126,7 @@ TEST(trace_text, a_crash_line_follows_the_header_with_the_offset_in_the_image)
   render(inside, joined, sizeof joined);
   char expected[256];
   TextBuffer built(expected, sizeof expected);
-  built.append("trace module=rvkvk pid=4242 slots=2\ncrash code=0xC0000005 address=0x");
+  built.append("trace module=avvk pid=4242 slots=2\ncrash code=0xC0000005 address=0x");
   built.append_hex(base + 0x10u, 16u);
   built.append(" image_offset=0x0000000000000010 thread=31");
   CHECK(std::strcmp(joined, expected) == 0); }
@@ -156,7 +156,7 @@ TEST(trace_text, an_idle_thread_shows_its_last_function_and_how_long_ago)
   render(text, joined, sizeof joined);
   char expected[256];
   TextBuffer built(expected, sizeof expected);
-  built.append("trace module=rvkvk pid=4242 slots=2\nthread 9 idle depth=0 entries=1 holding=0x0000000000000055 last=#");
+  built.append("trace module=avvk pid=4242 slots=2\nthread 9 idle depth=0 entries=1 holding=0x0000000000000055 last=#");
   built.append_hex(outer.id(), 8u);
   built.append(" left_ms=2");
   CHECK(std::strcmp(joined, expected) == 0); }
@@ -190,7 +190,7 @@ TEST(trace_text, names_that_cannot_be_trusted_are_printed_as_their_id)
   render(text, joined, sizeof joined);
   char expected[512];
   TextBuffer built(expected, sizeof expected);
-  built.append("trace module=rvkvk pid=4242 slots=2\nthread 9 active depth=5 entries=5\n  #0 #");
+  built.append("trace module=avvk pid=4242 slots=2\nthread 9 active depth=5 entries=5\n  #0 #");
   built.append_hex(outside.id(), 8u);
   built.append(" irql=0 for_ms=0\n  #1 #");
   built.append_hex(mismatched_id, 8u);
@@ -240,7 +240,7 @@ TEST(trace_text, a_table_with_no_used_slot_is_its_header)
   TraceText text(table.snapshot, image.range(), 0u);
   char joined[256];
   render(text, joined, sizeof joined);
-  CHECK(std::strcmp(joined, "trace module=rvkvk pid=4242 slots=2") == 0); }
+  CHECK(std::strcmp(joined, "trace module=avvk pid=4242 slots=2") == 0); }
 
 TEST(trace_text, a_clock_behind_a_frame_is_age_zero)
 { FakeImage image;

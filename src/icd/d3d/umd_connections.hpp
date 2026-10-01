@@ -1,5 +1,5 @@
-/* The rvkgpu adapters this process holds, one connection per adapter a
- * Direct3D runtime opened. A guest has one rvkgpu adapter per host GPU, and an
+/* The avgpu adapters this process holds, one connection per adapter a
+ * Direct3D runtime opened. A guest has one avgpu adapter per host GPU, and an
  * application choosing among them opens each: the device made on one must
  * reach that adapter's kernel objects, and so its host GPU, while the runtime
  * makes that device's allocations on the same adapter. */

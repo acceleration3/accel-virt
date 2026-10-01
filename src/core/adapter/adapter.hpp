@@ -35,8 +35,8 @@
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/adapter/power_transition.hpp"
-#include "core/rvk/device_identity.hpp"
-#include "core/rvk/rvk_context_table.hpp"
+#include "core/av/device_identity.hpp"
+#include "core/av/av_context_table.hpp"
 #include "core/pci/mapped_register_window.hpp"
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
@@ -162,7 +162,7 @@ public:
     /* Answers at any adapter state: capabilities describe the driver. */
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
     /* A host-visible chunk binding (feature 045), a host window chunk
-     * (docs/host-window.md), a tail publish, or rvkinspect.exe's trace escape
+     * (docs/host-window.md), a tail publish, or avinspect.exe's trace escape
      * (docs/trace.md), told apart by the record's magic. */
     int32_t escape(const DxgkargEscapeRecord *escape);
     int32_t collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect);
@@ -344,13 +344,13 @@ private:
      * raises when the driver was granted one per source. */
     static constexpr uint8_t  isr_configuration_changed = 0x2u;
     static constexpr uint32_t config_message = 0u;
-    /* The shared memory capability locating virtio-gpu-rvk-pci's doorbell
+    /* The shared memory capability locating virtio-gpu-av-pci's doorbell
      * pages on BAR 0 (docs/protocol.md). */
     static constexpr uint8_t  doorbell_region = 0x72u;
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     /* The doorbell pages, when the device has them: a device without them is
-     * one no rvk context can run on, and runs everything else as before. */
+     * one no av context can run on, and runs everything else as before. */
     [[nodiscard]] Status map_doorbells(const PciBaseAddresses &bars);
     /* GUID_WDDM_INTERFACE_FEATURE: fills the caller's table with this
      * driver's feature entry points. */
@@ -362,7 +362,7 @@ private:
     /* CreateContext for a context that asked with a record: the host context
      * set up on memory the driver owns and maps into the process (feature 043;
      * docs/protocol.md, "Context memory"). */
-    [[nodiscard]] Status bind_rvk(Context &context);
+    [[nodiscard]] Status bind_av(Context &context);
     /* The device a teardown can still ask, or null when it cannot. */
     VirtioGpuDevice     *answering_device();
     /* Tells the device of every shared object a destroy forgot. PASSIVE. */
@@ -370,9 +370,9 @@ private:
     int32_t          window_chunk(const DxgkargEscapeRecord &escape);
     int32_t          context_views(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
-    /* SubmitCommandVirtual for an rvk context: published, rung, and held on
+    /* SubmitCommandVirtual for an av context: published, rung, and held on
      * the node until the fence page says the host finished it. */
-    [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
+    [[nodiscard]] Status submit_av(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
     [[nodiscard]] Status submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence,
                                        void *&owner, uint64_t &awaited);
     /* A present's packet: held on the node until the present engine finished
@@ -476,7 +476,7 @@ private:
     ApertureSegment                segment_;
     HostVisibleSegment             host_visible_;
     MemorySegments                 memory_;
-    /* Before the rvk contexts, whose window chunks are placed in it. */
+    /* Before the av contexts, whose window chunks are placed in it. */
     HostWindow                     window_;
     DisplayInfoResponse            display_info_;
     DisplayModeList                modes_;
@@ -488,7 +488,7 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
-    RvkContextTable                rvk_contexts_;
+    AvContextTable                av_contexts_;
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;
     /* What each hardware queue runs on, which a submission at DISPATCH reads
@@ -538,7 +538,7 @@ private:
     bool                           started_;
     /* DXGK_START_INFO.AdapterLuid, HighPart above LowPart: what the user-mode
      * driver is told, through UMDRIVERPRIVATE, so it talks to this adapter
-     * and not the first rvkgpu D3DKMT enumerates. */
+     * and not the first avgpu D3DKMT enumerates. */
     uint64_t                       luid_;
     bool                           present_;
 

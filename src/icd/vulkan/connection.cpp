@@ -31,9 +31,9 @@ Status Connection::open()
     AV_SCOPE("Connection::open");
     if (opened()) return Status::invalid_state;
     ScopeExit undo([&] { close(); });
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-    if (search_.find(rvkgpu) != Status::ok) return Status::not_supported;
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+    if (search_.find(avgpu) != Status::ok) return Status::not_supported;
     if (kmt_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
     staging_ = static_cast<uint8_t *>(memory_.allocate(command_bytes, Pool::paged));

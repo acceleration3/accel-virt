@@ -8,8 +8,8 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t directory[] = L"C:\\ProgramData\\rvk";
-constexpr wchar_t prefix[] = L"C:\\ProgramData\\rvk\\";
+constexpr wchar_t directory[] = L"C:\\ProgramData\\av";
+constexpr wchar_t prefix[] = L"C:\\ProgramData\\av\\";
 constexpr wchar_t suffix[] = L".log";
 constexpr size_t stem_chars = 32u;
 /* The prefix, the stem, a dash, ten digits of a DWORD, the suffix and the NUL. */

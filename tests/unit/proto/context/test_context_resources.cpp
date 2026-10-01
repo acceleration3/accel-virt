@@ -1,6 +1,6 @@
 /* A context's resource ids, as the driver names them and the device reads them
  * back: three transport resources, then 64 chunk slots, and nothing else. */
-#include "core/rvk/rvk_context_binding.hpp"
+#include "core/av/av_context_binding.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/context_resources.hpp"
 
@@ -13,8 +13,8 @@ using av::ContextResources;
 TEST(context_resources, the_chunks_follow_the_three_transport_resources_and_end_where_the_next_context_begins)
 { const ContextResources resources(0x00100000u + 67u * 5u);
   CHECK_EQ(ContextResources::per_context, 67u);
-  CHECK_EQ(av::RvkContextBinding::resources_per_context, ContextResources::per_context);
-  CHECK_EQ(av::RvkContextBinding::chunk_slots, ContextResources::chunk_slots);
+  CHECK_EQ(av::AvContextBinding::resources_per_context, ContextResources::per_context);
+  CHECK_EQ(av::AvContextBinding::chunk_slots, ContextResources::chunk_slots);
   CHECK_EQ(resources.chunk(0u), 0x00100000u + 338u);
   CHECK_EQ(resources.chunk(63u), 0x00100000u + 401u);
   CHECK_EQ(0x00100000u + 67u * 6u, resources.chunk(63u) + 1u); }

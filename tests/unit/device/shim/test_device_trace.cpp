@@ -40,7 +40,7 @@ namespace {
 bool main_loop_answers = true;
 int  bus_handled = 0;
 
-void schedule(RvkHostRoutine routine, void *context)
+void schedule(AvHostRoutine routine, void *context)
 {
     if (main_loop_answers) routine(context);
 }
@@ -73,7 +73,7 @@ void path_for(char *path, std::size_t size, const char *format)
 std::size_t ask(const char *request, char *answer, std::size_t capacity)
 {
     char path[108];
-    path_for(path, sizeof path, "/dev/shm/rvk-state-device-%d.sock");
+    path_for(path, sizeof path, "/dev/shm/av-state-device-%d.sock");
     const int client = socket(AF_UNIX, SOCK_STREAM, 0);
     sockaddr_un address = {};
     address.sun_family = AF_UNIX;
@@ -116,9 +116,9 @@ TEST(posix_trace_host, answers_this_thread_and_a_rising_clock)
 
 TEST(shm_trace_region, makes_a_zeroed_file_and_sweeps_only_dead_processes)
 { char stale[64];
-  std::snprintf(stale, sizeof stale, "/dev/shm/rvk-trace-device-%d", 999999999);
+  std::snprintf(stale, sizeof stale, "/dev/shm/av-trace-device-%d", 999999999);
   char alive[64];
-  std::snprintf(alive, sizeof alive, "/dev/shm/rvk-state-other-%d.sock", static_cast<int>(getpid()));
+  std::snprintf(alive, sizeof alive, "/dev/shm/av-state-other-%d.sock", static_cast<int>(getpid()));
   char kept[64];
   std::snprintf(kept, sizeof kept, "/dev/shm/crash-device-%d.txt", 999999999);
   const char *const made[] = {stale, alive, kept};
@@ -134,7 +134,7 @@ TEST(shm_trace_region, makes_a_zeroed_file_and_sweeps_only_dead_processes)
   CHECK(access(alive, F_OK) == 0);
   CHECK(access(kept, F_OK) == 0);
   char mine[64];
-  std::snprintf(mine, sizeof mine, "/dev/shm/rvk-trace-unit-%d", static_cast<int>(getpid()));
+  std::snprintf(mine, sizeof mine, "/dev/shm/av-trace-unit-%d", static_cast<int>(getpid()));
   struct stat file = {};
   CHECK(stat(mine, &file) == 0);
   CHECK_EQ(static_cast<std::uint64_t>(file.st_size), 4096u);
@@ -147,7 +147,7 @@ TEST(shm_trace_region, an_impossible_size_is_refused_and_nothing_is_left)
   CHECK_STATUS(region.open("huge", static_cast<std::size_t>(-1) / 2u), Status::no_memory);
   CHECK(region.region() == nullptr);
   char mine[64];
-  std::snprintf(mine, sizeof mine, "/dev/shm/rvk-trace-huge-%d", static_cast<int>(getpid()));
+  std::snprintf(mine, sizeof mine, "/dev/shm/av-trace-huge-%d", static_cast<int>(getpid()));
   CHECK(access(mine, F_OK) != 0); }
 
 TEST(posix_module_resolver, names_the_object_an_address_is_in)
@@ -177,13 +177,13 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   signal(SIGILL, SIG_IGN);
   /* Scopes cost every call they open, so the table is bound only where a
    * trace is asked for; this test asks. */
-  setenv("RVK_TRACE_SCOPES", "1", 1);
+  setenv("AV_TRACE_SCOPES", "1", 1);
   services.start(root, &schedule, &forward_crash);
   services.start(root, &schedule, &forward_crash);
 
   /* The table: in /dev/shm, laid out for this process, bound. */
   char table_path[64];
-  path_for(table_path, sizeof table_path, "/dev/shm/rvk-trace-device-%d");
+  path_for(table_path, sizeof table_path, "/dev/shm/av-trace-device-%d");
   const int table_file = open(table_path, O_RDONLY);
   CHECK(table_file >= 0);
   struct stat file = {};

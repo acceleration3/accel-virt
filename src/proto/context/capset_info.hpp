@@ -1,4 +1,4 @@
-/* What one device instance - one host GPU - offers the guest: the rvk capset
+/* What one device instance - one host GPU - offers the guest: the av capset
  * (id 0x72, docs/protocol.md). */
 #ifndef AV_CAPSET_INFO_HPP
 #define AV_CAPSET_INFO_HPP
@@ -64,7 +64,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic           = 0x314B5652u;  /* "RVK1" */
+    static constexpr uint32_t magic           = 0x00315641u;  /* "AV1" */
     static constexpr uint32_t known_sub_apis  = 0xFu;
     static constexpr uint8_t  lowest_order    = 12u;
     static constexpr uint8_t  highest_order   = 24u;

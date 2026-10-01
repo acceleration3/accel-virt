@@ -2,7 +2,7 @@
 
 #include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/host_gpu.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "proto/generated/vulkan/vk_command_names.h"
@@ -337,7 +337,7 @@ VkExternalMemoryHandleTypeFlagBits VulkanBackend::external_type(VkPhysicalDevice
 {
     AV_SCOPE("VulkanBackend::external_type");
     decide_import(physical);
-    return importable_.kind() == RVK_BLOB_DMA_BUF ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
+    return importable_.kind() == AV_BLOB_DMA_BUF ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
                                                   : VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
 }
 
@@ -552,7 +552,7 @@ bool VulkanBackend::adopt(ImportedBlob &blob)
     decide_import(physical_);
     if (blob.kind() != importable_.kind()) return false;
     uint64_t memory = 0u;
-    if (!(blob.kind() == RVK_BLOB_DMA_BUF ? adopt_dmabuf(blob, memory) : adopt_pointer(blob, memory)))
+    if (!(blob.kind() == AV_BLOB_DMA_BUF ? adopt_dmabuf(blob, memory) : adopt_pointer(blob, memory)))
         return false;
     /* A non-dispatchable handle on the wire is the driver's own number, so the
      * memory is what the guest names it by. */
@@ -583,12 +583,12 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
     fd = -1;
     if (device_ == VK_NULL_HANDLE || wire_handle == 0u) return false;
     if (!handles_.knows(wire_handle)) return false;
-    if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) {
+    if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         if (!import_.export_semaphore(device_, wire_handle, fd)) return false;
-        handle_kind = RVK_SHARED_HANDLE_OPAQUE_FD;
+        handle_kind = AV_SHARED_HANDLE_OPAQUE_FD;
         return true;
     }
-    if (kind != RVK_SHARED_MEMORY) return false;
+    if (kind != AV_SHARED_MEMORY) return false;
     /* Memory is shared as a dma-buf and nothing else. An opaque fd carries no
      * memory type with it, and Vulkan requires an import to name the type the
      * allocation was made with - which is the exporting guest's number, on the
@@ -598,7 +598,7 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
     if (external_type(physical_) != VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT) return false;
     if (!import_.export_memory(device_, wire_handle, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd))
         return false;
-    handle_kind = RVK_SHARED_HANDLE_DMA_BUF;
+    handle_kind = AV_SHARED_HANDLE_DMA_BUF;
     return true;
 }
 
@@ -608,14 +608,14 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     AV_SCOPE("VulkanBackend::import_object");
     wire_handle = 0u;
     if (device_ == VK_NULL_HANDLE || fd < 0) return false;
-    if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) {
-        if (handle_kind != RVK_SHARED_HANDLE_OPAQUE_FD) return false;
+    if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
+        if (handle_kind != AV_SHARED_HANDLE_OPAQUE_FD) return false;
         if (!import_.import_shared_semaphore(device_, fd, wire_handle)) return false;
         made(wire_handle);
         return true;
     }
-    if (kind != RVK_SHARED_MEMORY || size == 0u) return false;
-    if (handle_kind != RVK_SHARED_HANDLE_DMA_BUF) return false;
+    if (kind != AV_SHARED_MEMORY || size == 0u) return false;
+    if (handle_kind != AV_SHARED_HANDLE_DMA_BUF) return false;
     const uint32_t memory_type =
         first_memory_type(import_.shared_memory_types(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
     if (memory_type == max_memory_types) return false;
@@ -637,7 +637,7 @@ void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle)
     AV_SCOPE("VulkanBackend::release_object");
     if (wire_handle == 0u || device_ == VK_NULL_HANDLE || !handles_.knows(wire_handle)) return;
     handles_.forget(wire_handle);
-    if (kind == RVK_SHARED_MEMORY) {
+    if (kind == AV_SHARED_MEMORY) {
         import_.release(device_, wire_handle);
         return;
     }

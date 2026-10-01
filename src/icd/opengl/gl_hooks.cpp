@@ -312,10 +312,10 @@ uint64_t mint_sync_token() noexcept
     return glicd::gl_icd_binding.bound() ? glicd::gl_icd_binding.root().mint_sync_token() : 0u;
 }
 
-GLenum rvk_glGetError(ClientTransport &rvk_t)
+GLenum av_glGetError(ClientTransport &av_t)
 {
-    AV_SCOPE("rvk_glGetError");
-    return glicd::GlErrorQuery(rvk_t).ask();
+    AV_SCOPE("av_glGetError");
+    return glicd::GlErrorQuery(av_t).ask();
 }
 
 }  // namespace av::glproto

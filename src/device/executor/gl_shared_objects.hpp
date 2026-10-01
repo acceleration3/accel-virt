@@ -39,7 +39,7 @@ public:
      * did not import - including one no GL name could be. */
     [[nodiscard]] bool forget(uint32_t kind, uint64_t wire_handle, uint32_t &name);
     /* One row still held, dropped: what a teardown deletes them all through.
-     * `kind` is RVK_SHARED_MEMORY or RVK_SHARED_NATIVE_FENCE, which is which
+     * `kind` is AV_SHARED_MEMORY or AV_SHARED_NATIVE_FENCE, which is which
      * entry point deletes it. */
     [[nodiscard]] bool take_any(uint32_t &kind, uint32_t &name);
 

@@ -1,6 +1,6 @@
 #include "harness/host/scripted_renderer_peer.hpp"
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "proto/renderer/reply_message.hpp"
@@ -20,7 +20,7 @@ constexpr std::uint32_t no_import_kinds[ReadyMessage::lanes] = {};
 
 ScriptedRendererPeer::ScriptedRendererPeer(MockHost &host)
     : host_(host), datagrams_{}, delivered_(0u), answers_{}, first_(0u), queued_(0u), outcome_(Status::ok),
-      ready_(1u, RVK_EXECUTOR_ABI_VERSION, RVK_EXECUTOR_SUB_API_VULKAN, no_import_kinds), silent_(false),
+      ready_(1u, AV_EXECUTOR_ABI_VERSION, AV_EXECUTOR_SUB_API_VULKAN, no_import_kinds), silent_(false),
       dying_(false)
 {
 }

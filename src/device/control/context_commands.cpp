@@ -67,7 +67,7 @@ void ContextCommands::capset(ControlRequest &request, GpuResponse &response)
     response.set_capset(capset_.info());
 }
 
-/* Only the rvk capset: context_init's reserved bits must be clear too. */
+/* Only the av capset: context_init's reserved bits must be clear too. */
 uint32_t ContextCommands::create(ControlRequest &request)
 {
     AV_SCOPE("ContextCommands::create");

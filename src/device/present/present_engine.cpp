@@ -59,7 +59,7 @@ Status PresentEngine::attach(uint64_t address, const PresentFrames &snapshots)
     const Status mapped = page_.map(address);
     if (mapped != Status::ok) return mapped;
     stopping_ = false;
-    if (host_.start_thread(&RvkPresentEngineRun, this, thread_) == Status::ok) return Status::ok;
+    if (host_.start_thread(&AvPresentEngineRun, this, thread_) == Status::ok) return Status::ok;
     page_.release();
     return Status::no_memory;
 }

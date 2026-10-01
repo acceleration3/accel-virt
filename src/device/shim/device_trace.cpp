@@ -54,12 +54,12 @@ DeviceTrace::DeviceTrace()
     AV_SCOPE("DeviceTrace::DeviceTrace");
 }
 
-void DeviceTrace::start(StateReporter &root, RvkMainLoopScheduler schedule, CrashHandler handler)
+void DeviceTrace::start(StateReporter &root, AvMainLoopScheduler schedule, CrashHandler handler)
 {
     AV_SCOPE("DeviceTrace::start");
     if (trace_.started()) return;
     if (trace_.start("device") != Status::ok) {
-        static const char refused[] = "virtio-gpu-rvk: no trace table in /dev/shm; tracing is off\n";
+        static const char refused[] = "virtio-gpu-av: no trace table in /dev/shm; tracing is off\n";
         static_cast<void>(write(STDERR_FILENO, refused, sizeof refused - 1u));
         return;
     }
@@ -215,7 +215,7 @@ bool DeviceTrace::await_dump(size_t &length)
     return answered;
 }
 
-void DeviceTraceRoot::start(StateReporter &root, RvkMainLoopScheduler schedule, CrashHandler handler)
+void DeviceTraceRoot::start(StateReporter &root, AvMainLoopScheduler schedule, CrashHandler handler)
 {
     AV_SCOPE("DeviceTraceRoot::start");
     if (trace_.constructed()) return;

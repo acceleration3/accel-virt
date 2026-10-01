@@ -15,7 +15,7 @@
 #include "um/d3d/d3d_session.hpp"
 #include "um/d3d/device_handle.hpp"
 
-extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device);
+extern "C" VOID APIENTRY avumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device);
 
 namespace av::d3d11 {
 
@@ -89,7 +89,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
     if (!channel_.object().open(feature_level_, hresult, made) || hresult != 0u) {
-        log_.write("rvkumd: the host made no Direct3D 11 device");
+        log_.write("avumd: the host made no Direct3D 11 device");
         channel_.destroy();
         session_.leave();
         return E_FAIL;
@@ -130,7 +130,7 @@ void D3d11Device::set_error(HRESULT result)
     AV_SCOPE("D3d11Device::set_error");
     char line[96] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: device error 0x");
+    text.append("avumd: device error 0x");
     text.append_hex(static_cast<uint32_t>(result), 8u);
     log_.write(text.text());
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
@@ -141,7 +141,7 @@ void D3d11Device::not_implemented(const char *call)
     AV_SCOPE("D3d11Device::not_implemented");
     char       line[128] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: ");
+    text.append("avumd: ");
     text.append(call);
     text.append(" is not implemented");
     log_.write(text.text());
@@ -219,7 +219,7 @@ bool D3d11Device::removed_on_host()
 {
     AV_SCOPE("D3d11Device::removed_on_host");
     uint32_t reason = 0u;
-    return !d3dproto::rvk_d3d_Finish11(wire(), &reason) || reason != 0u;
+    return !d3dproto::av_d3d_Finish11(wire(), &reason) || reason != 0u;
 }
 
 d3d::D3dDeviceChannel &D3d11Device::wire()
@@ -378,12 +378,12 @@ void D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
     AV_SCOPE("D3d11Device::upload_piece_of");
     /* Large data leases the arena; an arena short of room is emptied first,
      * which is one round trip rather than a refused upload. */
-    if (bytes > inline_limit && !wire().make_room_for(bytes)) log_.write("rvkumd: an upload larger than the arena");
+    if (bytes > inline_limit && !wire().make_room_for(bytes)) log_.write("avumd: an upload larger than the arena");
     const d3dproto::Box region =
         box == nullptr ? d3dproto::Box{} : d3dproto::Box{static_cast<uint32_t>(box->left), static_cast<uint32_t>(box->top), static_cast<uint32_t>(box->front),
                                      static_cast<uint32_t>(box->right), static_cast<uint32_t>(box->bottom),
                                      static_cast<uint32_t>(box->back)};
-    if (!d3dproto::rvk_d3d_UpdateSubresource(wire(), resource, subresource, box != nullptr ? 1u : 0u, region, row_pitch,
+    if (!d3dproto::av_d3d_UpdateSubresource(wire(), resource, subresource, box != nullptr ? 1u : 0u, region, row_pitch,
                                              depth_pitch, copy_flags, data, bytes))
         set_error(E_OUTOFMEMORY);
 }
@@ -394,7 +394,7 @@ bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource
     if (capacity > inline_limit && !wire().make_room_for(capacity)) return false;
     uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
     uint64_t read = 0u;
-    if (!d3dproto::rvk_d3d_ReadSubresource(wire(), resource.id, subresource, &hresult, &row_pitch, &depth_pitch, out,
+    if (!d3dproto::av_d3d_ReadSubresource(wire(), resource.id, subresource, &hresult, &row_pitch, &depth_pitch, out,
                                            capacity, &read))
         return false;
     return hresult == 0u && read <= capacity;
@@ -403,7 +403,7 @@ bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource
 void D3d11Device::destroy_object(uint32_t id)
 {
     AV_SCOPE("D3d11Device::destroy_object");
-    if (id != 0u) static_cast<void>(d3dproto::rvk_d3d_DestroyObject(wire(), id));
+    if (id != 0u) static_cast<void>(d3dproto::av_d3d_DestroyObject(wire(), id));
 }
 
 /* ---------------------------------------------------------------- device-wide slots */
@@ -552,7 +552,7 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
     if (ran == Status::ok) return;
     char       line[96] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: a command list of ");
+    text.append("avumd: a command list of ");
     text.append_decimal(list.length);
     text.append(" bytes could not be run, status ");
     text.append_decimal(static_cast<uint32_t>(ran));
@@ -623,7 +623,7 @@ VOID D3d11Device::create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEX
     }
     DeviceHandle(args->hDrvContext.pDrvPrivate).bind(*context);
     fill_device_funcs(*args->pWDDM2_6ContextFuncs);
-    args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &rvkumd_d3d11_DestroyDeferredContext;
+    args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &avumd_d3d11_DestroyDeferredContext;
 }
 
 VOID D3d11Device::abandon_command_list()
@@ -662,7 +662,7 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
     const Status took = context.wire().take_recorded(commands, bytes, taken);
     if (took != Status::ok) {
         if (commands != nullptr) memory_.release(commands);
-        if (took == Status::no_space) log_.write("rvkumd: a command list outgrew its deferred context's recording block");
+        if (took == Status::no_space) log_.write("avumd: a command list outgrew its deferred context's recording block");
         set_error(took == Status::no_space ? E_OUTOFMEMORY : D3DDDIERR_DEVICEREMOVED);
         return;
     }
@@ -709,7 +709,7 @@ HRESULT D3d11Device::recycle_create_deferred_context(const D3D11DDIARG_CREATEDEF
         live->core_layer_ = args->hRTCoreLayer;
         live->core_ = args->p11UMCallbacks;
         fill_device_funcs(*args->pWDDM2_6ContextFuncs);
-        args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &rvkumd_d3d11_DestroyDeferredContext;
+        args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &avumd_d3d11_DestroyDeferredContext;
         return S_OK;
     }
     create_deferred_context(args);

@@ -1,4 +1,4 @@
-/* The in-guest suite on Linux: GuestSuite, the program rvktest.exe runs in the
+/* The in-guest suite on Linux: GuestSuite, the program avtest.exe runs in the
  * Windows guest, run unchanged over DdiKmt against the real driver and the
  * real device core. Each run is judged by the report the guest runner reads,
  * line by line where a line carries a measurement. */
@@ -46,7 +46,7 @@ void print(const GuestReport &report)
 
 }  // namespace
 
-/* Every scenario rvktest.exe runs in the guest passes here too, with the same
+/* Every scenario avtest.exe runs in the guest passes here too, with the same
  * steps the guest run reports. vsync measures the driver's timer
  * period on the mock clock, which only the wait moves: it proves the period
  * the driver asks for, not how a host timer keeps it. */
@@ -60,7 +60,7 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
   CHECK_EQ(report.passed(), 37u);
-  CHECK(reported(report, "rvktest: 37 passed, 0 failed"));
+  CHECK(reported(report, "avtest: 37 passed, 0 failed"));
   CHECK(reported(report, "ok adapter.driver_version"));
   CHECK(reported(report, "ok allocation.refuse_hostile"));
   CHECK(reported(report, "ok mapping.map"));
@@ -107,7 +107,7 @@ TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
  * scenario needs dxgkrnl's timeout detection - VidSch seeing the held node
  * make no progress past TdrDelay, QueryEngineStatus, ResetEngine and the held
  * wait failed - and a host told to hold one context. The rig has neither: its
- * sessions' contexts carry no rvk record, so the driver completes them in its
+ * sessions' contexts carry no av record, so the driver completes them in its
  * DPC, and nothing ever times a node out. The held wait completes instead of
  * being refused; every other step passes. */
 TEST(fullstack_suite, the_timeout_run_fails_only_where_the_rig_has_no_tdr)

@@ -1,9 +1,9 @@
-/* rvk-renderer itself, spawned as QEMU spawns it: its socket on descriptor
+/* av-renderer itself, spawned as QEMU spawns it: its socket on descriptor
  * 3, greeted with the library to load, answering with Ready and with each
  * request's reply, living through what it refuses, and leaving with status 0
  * when QEMU closes its end. Every wait is bounded. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -40,7 +40,7 @@ constexpr int           patience_ms = 20000;
 constexpr std::uint8_t  uuid[av::HelloMessage::uuid_bytes] = {0x42u, 7u};
 constexpr std::size_t   capacity = RendererMessageHeader::encoded_size + 8192u;
 
-/* One rvk-renderer, its socket's QEMU end, and its stderr. */
+/* One av-renderer, its socket's QEMU end, and its stderr. */
 class Renderer {
 public:
     Renderer() : pid_(-1), socket_(-1), log_(-1), log_text_{}
@@ -168,7 +168,7 @@ std::uint32_t hello_body(std::uint8_t *body, std::size_t room, const char *libra
 {
     const av::CapsetInfo capset(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                                     av::ProtocolVersion::current_minor),
-                                RVK_EXECUTOR_SUB_API_VULKAN, 64u, 12u, 24u, 0u,
+                                AV_EXECUTOR_SUB_API_VULKAN, 64u, 12u, 24u, 0u,
                                 av::GpuIdentity(0x1002u, 0x7550u, av::GpuIdentity::discrete_gpu, uuid, 1u, 1u, "gpu"));
     std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
     static_cast<void>(capset.encode(capset_bytes, sizeof capset_bytes));
@@ -197,7 +197,7 @@ TEST(renderer_process, greets_serves_survives_refusals_and_leaves_when_qemu_does
   av::ReadyMessage ready;
   CHECK_STATUS(ready.decode(answer, length, 0u), Status::ok);
   CHECK_EQ(ready.version(), 1u);
-  CHECK((ready.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) != 0u);
+  CHECK((ready.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) != 0u);
 
   /* Guest RAM crosses as a memfd and is answered nothing. */
   const int ram = ::memfd_create("guest-ram", MFD_CLOEXEC);
@@ -232,7 +232,7 @@ TEST(renderer_process, greets_serves_survives_refusals_and_leaves_when_qemu_does
   CHECK(renderer.send(Kind::destroy_context, 6u, context, sizeof context));
   CHECK_STATUS(renderer.reply(6u), Status::ok);
   CHECK_EQ(renderer.leave(), 0);
-  CHECK(std::strstr(renderer.log(), "rvk-renderer: a message from QEMU was refused") != nullptr); }
+  CHECK(std::strstr(renderer.log(), "av-renderer: a message from QEMU was refused") != nullptr); }
 
 /* A library that does not load is the hello's refusal: nothing is answered,
  * and a hello naming one that does is answered after it. */
@@ -240,7 +240,7 @@ TEST(renderer_process, a_library_that_does_not_load_is_answered_nothing)
 { Renderer renderer;
   CHECK(renderer.started());
   std::uint8_t body[capacity] = {};
-  CHECK(renderer.send(Kind::hello, 1u, body, hello_body(body, sizeof body, "/no/such/librvk_executor.so")));
+  CHECK(renderer.send(Kind::hello, 1u, body, hello_body(body, sizeof body, "/no/such/libav_executor.so")));
   RendererMessageHeader header;
   std::uint8_t          answer[capacity] = {};
   std::uint32_t         length = 0u;

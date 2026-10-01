@@ -1,5 +1,5 @@
 /* The functions the ICD hands out by address (contracts/icd_interface.md): the
- * fifteen Drv* entries - which rvkgl.dll's exports forward to, and which
+ * fifteen Drv* entries - which avgl.dll's exports forward to, and which
  * FakeOpengl32 finds by name as opengl32 finds the exports - the WGL extension
  * functions DrvGetProcAddress answers, and the recorder every GL 1.1 command
  * the core profile lacks is given in the proc table. Each is one line into the
@@ -48,10 +48,10 @@ GLenum    APIENTRY get_error();
 /* glGetGraphicsResetStatus in every spelling: a lost context answers it. */
 GLenum    APIENTRY get_graphics_reset_status();
 /* The probe's own fault hook (feature 050, T040), found only by name. */
-int32_t   APIENTRY rvkForceContextFault();
+int32_t   APIENTRY avForceContextFault();
 /* The OpenCL ICD's question, found only by name (cl_khr_gl_sharing): the
  * share name of the calling thread's context. */
-uint32_t  APIENTRY rvkGetShareName();
+uint32_t  APIENTRY avGetShareName();
 /* glGetIntegerv, which answers GL_NUM_EXTENSIONS itself. */
 void      APIENTRY get_integerv(GLenum pname, GLint *data);
 

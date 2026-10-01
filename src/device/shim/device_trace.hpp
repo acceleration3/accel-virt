@@ -1,7 +1,7 @@
 /* What the device module adds to its trace table in QEMU's process
  * (docs/trace.md): a crash file written from the fatal signals, chained to
  * whatever handled them before, and the state socket
- * /dev/shm/rvk-state-device-<pid>.sock, whose answer the main loop writes
+ * /dev/shm/av-state-device-<pid>.sock, whose answer the main loop writes
  * under the big lock because that is the lock the module's devices live
  * under. A main loop that does not answer in time is reported as such, never
  * waited on. One per process, in the ABI translation unit's storage. */
@@ -9,7 +9,7 @@
 #define AV_DEVICE_TRACE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 #include "device/shim/host_trace.hpp"
 #include "device/shim/posix_module_resolver.hpp"
 #include "device/shim/state_socket.hpp"
@@ -37,7 +37,7 @@ public:
 
     /* The table, the crash handler and the socket; each part that cannot start
      * is logged to standard error and left off. */
-    void start(StateReporter &root, RvkMainLoopScheduler schedule, CrashHandler handler);
+    void start(StateReporter &root, AvMainLoopScheduler schedule, CrashHandler handler);
     /* From the fatal signal's handler. */
     void crashed(int signal, siginfo_t *info, void *context);
     /* The scheduled main-loop routine: the dump a socket client waits for. */
@@ -61,7 +61,7 @@ private:
     HostTrace            trace_;
     PosixModuleResolver  modules_;
     StateReporter       *root_;
-    RvkMainLoopScheduler schedule_;
+    AvMainLoopScheduler schedule_;
     struct sigaction     previous_[fatal_count];
     uint64_t             crash_written_;
     StateSocket          socket_;
@@ -79,7 +79,7 @@ public:
     DeviceTraceRoot(const DeviceTraceRoot &) = delete;
     DeviceTraceRoot &operator=(const DeviceTraceRoot &) = delete;
 
-    void start(StateReporter &root, RvkMainLoopScheduler schedule, CrashHandler handler);
+    void start(StateReporter &root, AvMainLoopScheduler schedule, CrashHandler handler);
     void crashed(int signal, siginfo_t *info, void *context);
 
 private:

@@ -3,7 +3,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/host_apis.hpp"
 
 namespace av {
@@ -11,8 +11,8 @@ namespace av {
 namespace {
 
 /* The three sub-API bits, in the order their kinds are cached. */
-constexpr uint32_t sub_api_bits[] = {RVK_EXECUTOR_SUB_API_VULKAN, RVK_EXECUTOR_SUB_API_OPENGL,
-                                     RVK_EXECUTOR_SUB_API_OPENCL, RVK_EXECUTOR_SUB_API_D3D};
+constexpr uint32_t sub_api_bits[] = {AV_EXECUTOR_SUB_API_VULKAN, AV_EXECUTOR_SUB_API_OPENGL,
+                                     AV_EXECUTOR_SUB_API_OPENCL, AV_EXECUTOR_SUB_API_D3D};
 
 }  // namespace
 

@@ -71,7 +71,7 @@ TEST(capset_info_encode, places_every_field_at_its_offset)
 { Encoded encoded(sample());
   CHECK_STATUS(encoded.status(), Status::ok);
   const ByteLayout layout(encoded.bytes(), CapsetInfo::encoded_size);
-  CHECK(layout.at(0u, 4u) == 0x314B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00315641u);
   CHECK(layout.at(4u, 2u) == 1u);
   CHECK(layout.at(6u, 2u) == 3u);
   CHECK(layout.at(8u, 4u) == 7u);

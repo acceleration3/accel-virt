@@ -1,4 +1,4 @@
-/* The driver's answer to rvkinspect.exe's escape (docs/trace.md): one window
+/* The driver's answer to avinspect.exe's escape (docs/trace.md): one window
  * of the bound trace table, or of this adapter's state dump built for the
  * call. The request is judged against the bytes it arrived in and the answer
  * is written into the same bytes; nothing is written past them. PASSIVE. */

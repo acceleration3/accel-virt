@@ -6,7 +6,7 @@ kernel. A user-mode import library on the link line links cleanly and then
 fails to load in the guest; so does a header flag a user-mode linker default
 sets.
 
-  check_driver_image.py build/driver/rvkgpu.sys [--require-import NAME ...]
+  check_driver_image.py build/driver/avgpu.sys [--require-import NAME ...]
 
 --require-import proves a static library's code was linked in, e.g. that
 displib's DxgkInitialize reached the image through the routines it imports.

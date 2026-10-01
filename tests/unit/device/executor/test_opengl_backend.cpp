@@ -7,7 +7,7 @@
  * a context and every command is refused, which is also asserted. */
 #include "device/executor/imported_blob.hpp"
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/opengl_backend.hpp"
 #include "device/shim/gl_display.hpp"
 #include "device/shim/loader_host_apis.hpp"
@@ -62,10 +62,10 @@ namespace {
 alignas(4096) std::uint8_t region[2u * 4096u];
 alignas(4096) std::uint8_t second_region[4096];
 
-RvkBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
+AvBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
 {
-    RvkBlobHandle handle = {};
-    handle.kind = RVK_BLOB_HOST_POINTER;
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_HOST_POINTER;
     handle.pointer = base;
     handle.fd = -1;
     handle.size = bytes;
@@ -221,8 +221,8 @@ TEST(opengl_backend, adopts_one_host_pointer_as_its_region)
   backend.shut_down();
   CHECK(backend.guest_bytes(0u, 1u) == nullptr);
   av::ImportedBlob shared;
-  RvkBlobHandle dma = {};
-  dma.kind = RVK_BLOB_DMA_BUF;
+  AvBlobHandle dma = {};
+  dma.kind = AV_BLOB_DMA_BUF;
   dma.fd = 7;
   dma.size = 4096u;
   CHECK_STATUS(shared.take(3u, dma), av::Status::ok);
@@ -239,7 +239,7 @@ TEST(opengl_backend, a_context_on_a_real_gpu_runs_a_command_and_refuses_a_broken
   for (std::uint32_t i = 0u; i < host.gpu_count() && display == nullptr; i++) {
       display = host.gl_display(i);
       /* The host keeps a display exactly where it says OpenGL runs. */
-      CHECK_EQ(display != nullptr, (host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) != 0u);
+      CHECK_EQ(display != nullptr, (host.sub_apis(i) & AV_EXECUTOR_SUB_API_OPENGL) != 0u);
   }
   CHECK(host.gl_display(host.gpu_count()) == nullptr);
   if (display == nullptr) return;
@@ -298,13 +298,13 @@ TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_noth
 { OpenGlBackend backend;
   std::uint32_t handle_kind = 9u;
   int           fd = 9;
-  CHECK(!backend.export_object(RVK_SHARED_MEMORY, 1u, handle_kind, fd));
+  CHECK(!backend.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
   CHECK_EQ(handle_kind, 0u);
   CHECK_EQ(fd, -1);
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
   CHECK_EQ(made, 0u);
-  backend.release_object(RVK_SHARED_MEMORY, 1u);
+  backend.release_object(AV_SHARED_MEMORY, 1u);
   backend.shut_down(); }
 
 /* What is refused before any driver is asked, which is every question the
@@ -313,10 +313,10 @@ TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_noth
 TEST(opengl_backend, an_import_of_the_wrong_shape_never_reaches_a_driver)
 { OpenGlBackend backend;
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, made));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, -1, 4096u, made));
-  CHECK(!backend.import_object(RVK_SHARED_NATIVE_FENCE + 1u, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
-  CHECK(!backend.import_object(0u, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
-  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 0u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(0u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 0u, made));
   CHECK_EQ(made, 0u); }

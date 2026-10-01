@@ -219,7 +219,7 @@ private:
 
 TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_back_through_direct3d)
 {
-    if (std::getenv("RVK_D3D_PATH") == nullptr) setenv("RVK_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::LoaderHostApis apis;
     apis.open();
     std::uint32_t gpu = apis.gpu_count();
@@ -240,7 +240,7 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
     CHECK(direct3d.initialize(apis.d3d11_device(gpu)));
     av::D3dLoopback wire(direct3d);
     std::uint32_t hresult = 1u, level = 0u;
-    CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
 
     /* Every texel its own value, so a layout the two devices disagree on moves
      * texels where a clear would not show it. */
@@ -264,11 +264,11 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         shared.sample_count = 1u;
         shared.bind_flags = bind_shader_resource | bind_render_target;
         shared.misc_flags = misc_shared;
-        CHECK(rvk_d3d_CreateResource(wire, resource, shared, key + round));
+        CHECK(av_d3d_CreateResource(wire, resource, shared, key + round));
         std::uint32_t handle_kind = 0u;
         int           fd = -1;
-        CHECK(direct3d.export_object(RVK_SHARED_MEMORY, resource, handle_kind, fd));
-        CHECK_EQ(handle_kind, std::uint32_t{RVK_SHARED_HANDLE_DMA_BUF});
+        CHECK(direct3d.export_object(AV_SHARED_MEMORY, resource, handle_kind, fd));
+        CHECK_EQ(handle_kind, std::uint32_t{AV_SHARED_HANDLE_DMA_BUF});
         CHECK(fd >= 0);
         const off_t bytes = lseek(fd, 0, SEEK_END);
         CHECK(bytes > 0);
@@ -304,7 +304,7 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         std::memset(pixels, 0, sizeof pixels);
         std::uint32_t row_pitch = 0u, depth_pitch = 0u;
         std::uint64_t read = 0u;
-        CHECK(rvk_d3d_ReadSubresource(wire, resource, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof pixels,
+        CHECK(av_d3d_ReadSubresource(wire, resource, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof pixels,
                                       &read));
         CHECK_EQ(hresult, 0u);
         CHECK_EQ(row_pitch, size * 4u);

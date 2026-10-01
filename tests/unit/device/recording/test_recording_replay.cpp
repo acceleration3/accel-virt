@@ -1,5 +1,5 @@
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/executor_library.hpp"
 #include "device/recording/recorded_command.hpp"
 #include "device/recording/record_header.hpp"
@@ -44,7 +44,7 @@ using av::WireRecorder;
 
 namespace {
 
-constexpr const char  *path = "replay.rvk";
+constexpr const char  *path = "replay.av";
 constexpr std::size_t  widest = 8192u;
 constexpr std::uint8_t uuid[GpuIdentity::uuid_bytes] = {0x41u, 0x42u};
 
@@ -214,7 +214,7 @@ struct RecordingReplayProbe {
 TEST(recording_replay_run, replays_a_recording_into_a_library_with_no_finding)
 { Written written;
   one_batch(written, 0x5Au);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -251,7 +251,7 @@ TEST(recording_replay_run, an_answer_is_never_carried_from_one_batch_into_the_ne
   written.ran(3u, 2u, silent, answer, sizeof answer);
   written.close();
 
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -270,7 +270,7 @@ TEST(recording_replay_run, destroys_every_executor_it_made)
   written.set_up(3u, SubApi::vulkan);
   written.set_up(4u, SubApi::vulkan);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   { RecordingReader reader(written.bytes(), written.length());
@@ -298,7 +298,7 @@ TEST(recording_replay_run, names_the_fence_and_the_command_of_an_answer_that_dif
       bytes[index + 1u] = 0x5Bu;
       break;
   }
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -313,7 +313,7 @@ TEST(recording_replay_run, names_the_fence_and_the_command_of_an_answer_that_dif
 TEST(recording_replay_run, a_library_that_makes_no_executor_is_a_finding_and_not_a_crash)
 { Written written;
   one_batch(written, 0x11u);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ops.fail_create_at(1u);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
@@ -340,7 +340,7 @@ TEST(recording_replay_run, a_command_the_library_cannot_decode_stops_that_contex
   written.ran(3u, 8u, later, nullptr, 0u);
   written.close();
 
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -363,7 +363,7 @@ TEST(recording_replay_run, a_library_that_loses_its_device_stops_that_context)
   batch.add(MockExecutorOps::lost_id, 0u);
   written.ran(3u, 4u, batch, nullptr, 0u);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -381,7 +381,7 @@ TEST(recording_replay_run, a_command_the_library_does_not_know_is_skipped_as_the
   batch.add(MockExecutorOps::unknown_id, 0u).add(0x00010006u, 4u);
   written.ran(3u, 2u, batch, nullptr, 0u);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -399,7 +399,7 @@ TEST(recording_replay_run, a_batch_that_imports_guest_memory_is_reported_unrepla
   batch.add(CommandHeader::import_blob_id, 32u).add(0x00010006u, 4u);
   written.ran(3u, 5u, batch, nullptr, 0u);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -420,7 +420,7 @@ TEST(recording_replay_run, a_blob_imported_into_a_context_leaves_it_unreplayable
   batch.add(0x00010006u, 4u);
   written.ran(3u, 6u, batch, nullptr, 0u);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -437,7 +437,7 @@ TEST(recording_replay_run, more_contexts_than_it_holds_is_a_finding_and_the_rest
   for (std::uint32_t context = 1u; context <= RecordingReplay::max_contexts + 2u; context++)
       written.set_up(context, SubApi::vulkan);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -453,7 +453,7 @@ TEST(recording_replay_run, more_contexts_than_it_holds_is_a_finding_and_the_rest
 TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_read)
 { Written written;
   one_batch(written, 0x77u);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length() - 3u);
@@ -489,7 +489,7 @@ TEST(recording_replay_run, a_filter_narrows_what_is_replayed)
   written.ran(3u, 1u, batch, nullptr, 0u);
   written.ran(4u, 2u, batch, nullptr, 0u);
   written.close();
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -503,7 +503,7 @@ TEST(recording_replay_run, a_filter_narrows_what_is_replayed)
   CHECK(replay.invariants_hold()); }
 
 TEST(replay_context, holds_one_executor_and_compares_the_answer_it_produced)
-{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   ReplayContext context;
@@ -526,8 +526,8 @@ TEST(replay_context, holds_one_executor_and_compares_the_answer_it_produced)
   CHECK(context.invariants_hold()); }
 
 TEST(replay_context, names_each_sub_apis_command_half)
-{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL
-                      | RVK_EXECUTOR_SUB_API_OPENGL);
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL
+                      | AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   struct Case { SubApi api; std::uint16_t half; };
@@ -543,7 +543,7 @@ TEST(replay_context, names_each_sub_apis_command_half)
   } }
 
 TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batches)
-{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   ReplayContext context;
@@ -580,7 +580,7 @@ TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batc
   context.destroy(library); }
 
 TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
-{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   struct Case { std::uint32_t id; Status status; };
@@ -610,7 +610,7 @@ TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
 TEST(recording_replay_run, a_gpu_of_its_own_is_the_one_it_asks_the_library_for)
 { Written written;
   one_batch(written, 0x33u);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
@@ -629,7 +629,7 @@ TEST(recording_replay_run, with_no_gpu_named_it_asks_the_library_for_the_recordi
 { for (std::uint32_t named = 0u; named < 2u; named++) {
       Written written;
       one_batch(written, 0x33u);
-      MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+      MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
       ExecutorLibrary library;
       CHECK_STATUS(library.accept(&ops.table()), Status::ok);
       RecordingReader reader(written.bytes(), written.length());
@@ -647,7 +647,7 @@ TEST(recording_replay_run, a_setup_that_does_not_decode_and_a_context_set_up_twi
   made.add(av::RecordKind::context_setup, 1u, 0u, nothing, 0u)
       .setup(2u, SubApi::vulkan)
       .setup(2u, SubApi::vulkan);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -672,7 +672,7 @@ TEST(recording_replay_run, a_batch_framed_wrong_and_a_transport_command_that_is_
                    .encode(batch + CommandHeader::encoded_size, CommandHeader::encoded_size),
                Status::ok);
   made.setup(1u, SubApi::vulkan).add(av::RecordKind::batch, 1u, 3u, batch, sizeof batch);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -690,7 +690,7 @@ TEST(recording_replay_run, another_apis_commands_and_a_filter_leave_the_library_
   Batch    batch;
   batch.add(0x00020001u, 4u).add(0x00010007u, 4u).add(0x00010006u, 4u);
   made.setup(1u, SubApi::vulkan).add(av::RecordKind::batch, 1u, 4u, batch.bytes(), batch.length());
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -716,7 +716,7 @@ TEST(recording_replay_run, a_blob_created_or_released_is_not_an_import_and_repla
       .add(av::RecordKind::blob, 1u, 0u, released, sizeof released)
       .add(av::RecordKind::blob, 1u, 0u, nothing, 0u)          /* too short to read */
       .add(av::RecordKind::blob, 9u, 0u, created, sizeof created);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -731,7 +731,7 @@ TEST(recording_replay_run, a_blob_imported_into_a_context_it_never_set_up_is_no_
   std::uint8_t imported[32] = {};
   imported[0] = 1u;
   made.add(av::RecordKind::blob, 9u, 0u, imported, sizeof imported);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -753,7 +753,7 @@ TEST(recording_replay_run, nothing_of_a_context_that_gave_up_is_replayed_or_comp
       .add(av::RecordKind::reply, 1u, 5u, answer, sizeof answer)
       .add(av::RecordKind::blob, 1u, 0u, imported, sizeof imported)
       .add(av::RecordKind::batch, 1u, 6u, batch.bytes(), batch.length());
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -774,7 +774,7 @@ TEST(recording_replay_run, a_reply_with_no_answer_behind_it_says_what_it_replied
   made.setup(1u, SubApi::vulkan)
       .add(av::RecordKind::batch, 1u, 7u, batch.bytes(), batch.length())
       .add(av::RecordKind::reply, 1u, 7u, answer, sizeof answer);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -790,7 +790,7 @@ TEST(recording_replay_run, counts_more_findings_than_it_can_keep_and_answers_not
   const std::uint8_t nothing[1] = {};
   for (std::uint32_t index = 0u; index < RecordingReplay::max_findings + 4u; index++)
       made.add(av::RecordKind::context_setup, index + 1u, 0u, nothing, 0u);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -806,7 +806,7 @@ TEST(recording_replay_run, counts_more_findings_than_it_can_keep_and_answers_not
 TEST(recording_replay_invariants, catch_a_replay_whose_contexts_or_findings_do_not_agree)
 { Written written;
   one_batch(written, 0x44u);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   { RecordingReader reader(written.bytes(), written.length());
@@ -835,7 +835,7 @@ TEST(recording_replay_invariants, catch_a_finding_with_no_end)
 { Handmade           made;
   const std::uint8_t nothing[1] = {};
   made.add(av::RecordKind::context_setup, 1u, 0u, nothing, 0u);
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
@@ -848,7 +848,7 @@ TEST(recording_replay_invariants, catch_a_finding_with_no_end)
   CHECK(!replay.invariants_hold()); }
 
 TEST(replay_context, an_answer_longer_than_it_keeps_is_reported_rather_than_compared)
-{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   ReplayContext context;
@@ -864,7 +864,7 @@ TEST(replay_context, an_answer_longer_than_it_keeps_is_reported_rather_than_comp
   context.destroy(library); }
 
 TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have)
-{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   ReplayContext context;

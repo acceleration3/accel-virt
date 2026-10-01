@@ -72,14 +72,14 @@ void run(std::uint8_t which, std::size_t room, const std::uint8_t *reply, std::s
          * inside the room the caller gave. */
         std::size_t answered = 0xFFFFu;
         static_cast<void>(
-            av::clproto::rvk_clGetDeviceInfo(wire, some_handle, CL_DEVICE_NAME, room, into, &answered));
+            av::clproto::av_clGetDeviceInfo(wire, some_handle, CL_DEVICE_NAME, room, into, &answered));
         break;
     }
     case 1u: {
         /* A handle and an error: what every create answers. */
         cl_int error = 0x7Fu;
         const std::uint64_t device = some_handle;
-        static_cast<void>(av::clproto::rvk_clCreateContext(wire, nullptr, 1u, &device, &error));
+        static_cast<void>(av::clproto::av_clCreateContext(wire, nullptr, 1u, &device, &error));
         break;
     }
     case 2u: {
@@ -87,12 +87,12 @@ void run(std::uint8_t which, std::size_t room, const std::uint8_t *reply, std::s
         std::uint64_t ids[8] = {};
         cl_uint       written = 0xFFFFFFFFu;
         static_cast<void>(
-            av::clproto::rvk_clGetDeviceIDs(wire, some_handle, CL_DEVICE_TYPE_ALL, 8u, ids, &written));
+            av::clproto::av_clGetDeviceIDs(wire, some_handle, CL_DEVICE_TYPE_ALL, 8u, ids, &written));
         break;
     }
     case 3u: {
         /* Bytes straight into the application's buffer. */
-        static_cast<void>(av::clproto::rvk_clEnqueueReadBuffer(
+        static_cast<void>(av::clproto::av_clEnqueueReadBuffer(
             wire, some_handle, some_handle, CL_TRUE, 0u, room, into, 0u, nullptr, nullptr));
         break;
     }
@@ -100,14 +100,14 @@ void run(std::uint8_t which, std::size_t room, const std::uint8_t *reply, std::s
         /* An address return - the shape feature 052 added, and the one a
          * guest must never believe on its own. */
         cl_int error = 0x7Fu;
-        static_cast<void>(av::clproto::rvk_clEnqueueMapBuffer(wire, some_handle, some_handle, CL_TRUE,
+        static_cast<void>(av::clproto::av_clEnqueueMapBuffer(wire, some_handle, some_handle, CL_TRUE,
                                                               CL_MAP_READ, 0u, room, 0u, nullptr,
                                                               nullptr, &error));
         break;
     }
     default: {
         /* One status and nothing else, which a cut reply breaks first. */
-        static_cast<void>(av::clproto::rvk_clFinish(wire, some_handle));
+        static_cast<void>(av::clproto::av_clFinish(wire, some_handle));
         break;
     }
     }

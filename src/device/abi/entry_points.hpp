@@ -1,10 +1,10 @@
-/* The C entry points into the device core: the RvkDevice ABI the QEMU glue
- * calls (rvk_device.h), and the routines the host calls back. Each one line,
+/* The C entry points into the device core: the AvDevice ABI the QEMU glue
+ * calls (av_device.h), and the routines the host calls back. Each one line,
  * forwarding to the object behind its pointer. */
 #ifndef AV_DEVICE_ENTRY_POINTS_HPP
 #define AV_DEVICE_ENTRY_POINTS_HPP
 
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 
 namespace av {
 
@@ -17,11 +17,11 @@ extern constinit DeviceModule device_module;
 
 extern "C" {
 
-void RvkWorkerRun(void *worker);
-void RvkRingAttach(void *ring);
-void RvkDisplayClockRun(void *clock);
-void RvkDisplayFramesShow(void *device);
-void RvkPresentEngineRun(void *engine);
+void AvWorkerRun(void *worker);
+void AvRingAttach(void *ring);
+void AvDisplayClockRun(void *clock);
+void AvDisplayFramesShow(void *device);
+void AvPresentEngineRun(void *engine);
 
 }
 

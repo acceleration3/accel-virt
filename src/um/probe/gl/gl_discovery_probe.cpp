@@ -40,7 +40,7 @@ uint32_t GlDiscoveryProbe::run()
     describe();
     set_format();
     create_context();
-    line("rvkgl_loaded", GetModuleHandleW(L"rvkgl.dll") != nullptr ? "yes" : "no", 0u, 0u);
+    line("avgl_loaded", GetModuleHandleW(L"avgl.dll") != nullptr ? "yes" : "no", 0u, 0u);
     report_new_modules(before, before_count);
     write();
     return 0u;

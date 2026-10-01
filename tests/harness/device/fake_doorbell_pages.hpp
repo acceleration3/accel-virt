@@ -1,4 +1,4 @@
-/* The doorbell BAR of virtio-gpu-rvk-pci as a driver's register window sees
+/* The doorbell BAR of virtio-gpu-av-pci as a driver's register window sees
  * it: every store is recorded by page, and the reading any page gives is 0. */
 #ifndef AV_FAKE_DOORBELL_PAGES_HPP
 #define AV_FAKE_DOORBELL_PAGES_HPP

@@ -46,7 +46,7 @@ public:
         if (platform_.construct(static_cast<PlatformArguments &&>(arguments)...) != Status::ok)
             return NtStatus(Status::invalid_state).value();
         PlatformType &platform = platform_.object();
-        platform.log("rvkgpu: DriverEntry");
+        platform.log("avgpu: DriverEntry");
         /* Both storages are empty whenever the platform's was. */
         static_cast<void>(host_.construct());
         static_cast<void>(trace_.construct(platform, host_.object(), image));
@@ -64,7 +64,7 @@ public:
         if (registered < 0) {
             char       bytes[80];
             TextBuffer message(bytes, sizeof bytes);
-            message.append("rvkgpu: DxgkInitialize refused the driver, status 0x");
+            message.append("avgpu: DxgkInitialize refused the driver, status 0x");
             message.append_hex(static_cast<uint32_t>(registered), 8u);
             platform.log(message.text());
             leave();

@@ -1,5 +1,5 @@
 // THIS FILE IS GENERATED. DO NOT EDIT.
-// Regenerate with: python -m rvk_codegen.opengl --xml gl.xml --wgl wgl.xml
+// Regenerate with: python -m av_codegen.opengl --xml gl.xml --wgl wgl.xml
 //                  --profile tools/codegen/profiles/opengl.toml --out ...
 
 #pragma once
@@ -22,32 +22,32 @@ struct RealGl {
     // bounds-checked against the mapping. Set by the server;
     // null when there is no region, in which case a command
     // that names one is refused rather than guessed at.
-    uint8_t* (*rvk_blob)(void*, uint64_t, uint64_t) = nullptr;
-    void* rvk_blob_user = nullptr;
+    uint8_t* (*av_blob)(void*, uint64_t, uint64_t) = nullptr;
+    void* av_blob_user = nullptr;
 
     // A guest mints a sync token; the host binds it to whatever
     // glFenceSync made and looks it up again by the token. Fields
-    // rather than free functions for the reason rvk_blob is one:
+    // rather than free functions for the reason av_blob is one:
     // a parameterless hook cannot reach one context's state, and
     // this project has no file-scope place to put it (042).
-    void (*rvk_bind_sync)(void*, uint64_t, void*) = nullptr;
-    void* (*rvk_sync_for)(void*, uint64_t) = nullptr;
-    void (*rvk_forget_sync)(void*, uint64_t) = nullptr;
-    void* rvk_sync_user = nullptr;
+    void (*av_bind_sync)(void*, uint64_t, void*) = nullptr;
+    void* (*av_sync_for)(void*, uint64_t) = nullptr;
+    void (*av_forget_sync)(void*, uint64_t) = nullptr;
+    void* av_sync_user = nullptr;
 
     // Whether the context has the compatibility profile's
     // fixed-function vertex arrays, which a draw's check of its
     // arrays asks after. Set by the server from what the host
     // granted; a core context has none to ask of.
-    bool rvk_fixed_function = true;
+    bool av_fixed_function = true;
 
     // The vertex array objects a draw found reading only from
     // buffers (arrays_verified). Mutable because dispatch is handed
     // the table const: these are a cache of what the context would
     // answer, not entry points.
-    static constexpr uint32_t rvk_verified_capacity = 8;
-    mutable uint32_t rvk_verified_arrays[rvk_verified_capacity] = {};
-    mutable uint32_t rvk_verified_count = 0;
+    static constexpr uint32_t av_verified_capacity = 8;
+    mutable uint32_t av_verified_arrays[av_verified_capacity] = {};
+    mutable uint32_t av_verified_count = 0;
     void (*glActiveShaderProgram)(GLuint, GLuint) = nullptr;
     void (*glActiveTexture)(GLenum) = nullptr;
     void (*glAttachShader)(GLuint, GLuint) = nullptr;

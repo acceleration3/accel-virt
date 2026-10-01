@@ -30,7 +30,7 @@ uint32_t D3d11Driver::slot_of(uint32_t kmt_adapter)
     for (uint32_t slot = 0u; slot < max_adapters; slot++) {
         if (caps_[slot].learned()) continue;
         if (!caps_[slot].learn(kmt_, kmt_adapter)) {
-            log_.write("rvkumd: the host answers no Direct3D 11 on this adapter");
+            log_.write("avumd: the host answers no Direct3D 11 on this adapter");
             return max_adapters;
         }
         adapters_[slot] = kmt_adapter;
@@ -86,5 +86,5 @@ void D3d11Driver::tear_down(void *block)
 
 /* A deferred context's DestroyDevice slot: its block holds no device cookie,
  * so the table's root would not find it; the context goes back to its pool. */
-extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device)
+extern "C" VOID APIENTRY avumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device)
 { av::d3d11::DeviceHandle(device.pDrvPrivate).device().retire(); }

@@ -46,14 +46,14 @@ public:
     void add_shared_memory_region(std::uint8_t id, std::uint8_t bar, std::uint64_t offset,
                                   std::uint64_t length, std::uint64_t bar_address);
 
-    /* virtio-gpu-rvk-pci's doorbell pages: BAR 0, located by shared memory
+    /* virtio-gpu-av-pci's doorbell pages: BAR 0, located by shared memory
      * capability 0x72, with the 67 virtqueues the device has: control, cursor,
      * a fence queue per doorbell, and the display line. */
     void add_doorbell_region();
-    /* The subsystem ID in configuration space: virtio-gpu-rvk-pci's is 0x5256,
+    /* The subsystem ID in configuration space: virtio-gpu-av-pci's is 0x5256,
      * the captured virtio-gpu-pci's 0x1100. */
     void set_subsystem_id(std::uint16_t id);
-    /* The vendor, device and revision virtio-gpu-rvk-pci presents when its
+    /* The vendor, device and revision virtio-gpu-av-pci presents when its
      * host GPU has a PCI function: that GPU's, in place of 1af4:1050. */
     void present_host_gpu(std::uint16_t vendor, std::uint16_t device, std::uint8_t revision);
     /* Stores to the notify region, or to BAR 0's doorbell pages, reach `window`

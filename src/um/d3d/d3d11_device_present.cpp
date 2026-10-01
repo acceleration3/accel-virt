@@ -52,12 +52,12 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     allocate.pAllocationInfo2 = &info;
     const HRESULT made = kernel_->pfnAllocateCb(runtime_.handle, &allocate);
     if (FAILED(made)) {
-        log_.write("rvkumd: the kernel refused a presented resource's allocation");
+        log_.write("avumd: the kernel refused a presented resource's allocation");
         return made;
     }
     resource.shared_key = surface.key();
     if (resource.shared_key == 0u)
-        log_.write("rvkumd: the miniport minted no identity for a presented resource; nothing can open it");
+        log_.write("avumd: the miniport minted no identity for a presented resource; nothing can open it");
     resource.allocation = info.hAllocation;
     resource.allocation_pitch = surface.pitch();
     /* A blt present names this allocation in a DMA buffer, which dxgkrnl
@@ -68,7 +68,7 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     if (FAILED(resident)) {
         char       line[96] = {};
         TextBuffer text(line, sizeof(line));
-        text.append("rvkumd: the kernel would not keep a presented resource resident 0x");
+        text.append("avumd: the kernel would not keep a presented resource resident 0x");
         text.append_hex(static_cast<uint32_t>(resident), 8u);
         log_.write(text.text());
     }
@@ -85,7 +85,7 @@ HRESULT D3d11Device::make_context()
     create.EngineAffinity = 1u;
     const HRESULT made = kernel_->pfnCreateContextVirtualCb(runtime_.handle, &create);
     if (FAILED(made)) {
-        log_.write("rvkumd: the kernel refused the device's context");
+        log_.write("avumd: the kernel refused the device's context");
         return made;
     }
     context_ = create.hContext;
@@ -155,7 +155,7 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
         return DXGI_ERROR_DEVICE_REMOVED;
     }
     if (FAILED(published)) {
-        log_.write("rvkumd: a present whose surface could not be read back");
+        log_.write("avumd: a present whose surface could not be read back");
         return published;
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
@@ -172,7 +172,7 @@ HRESULT D3d11Device::present_point(ResourceRecord &source, uint32_t subresource,
     if (source.allocation == 0u) return E_INVALIDARG;
     /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
     source.presents = source.presents + 1u == 0u ? 1u : source.presents + 1u;
-    if (!d3dproto::rvk_d3d_PresentPoint(wire(), source.id, subresource, source.presents) ||
+    if (!d3dproto::av_d3d_PresentPoint(wire(), source.id, subresource, source.presents) ||
         wire().flush() != Status::ok) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return DXGI_ERROR_DEVICE_REMOVED;
@@ -210,7 +210,7 @@ void D3d11Device::log_present(const char *what, uint32_t value, const ResourceRe
     AV_SCOPE("D3d11Device::log_present");
     char       line[192] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: ");
+    text.append("avumd: ");
     text.append(what);
     text.append(" 0x");
     text.append_hex(value, 8u);
@@ -237,7 +237,7 @@ HRESULT D3d11Device::follow_host()
     follow_refused_ = true;
     char       line[96] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: the kernel refused the packet that waits for the host 0x");
+    text.append("avumd: the kernel refused the packet that waits for the host 0x");
     text.append_hex(static_cast<uint32_t>(followed), 8u);
     log_.write(text.text());
     return followed;
@@ -280,7 +280,7 @@ HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)
     /* A stretch is copied at the destination's size from the source's corner:
      * DXGI asks for one only when a mode does not match its buffers. */
     const d3dproto::Box region = {0u, 0u, 0u, args->DstRight - args->DstLeft, args->DstBottom - args->DstTop, 1u};
-    return d3dproto::rvk_d3d_CopySubresourceRegion(wire(), to.id, args->DstSubresource, args->DstLeft, args->DstTop, 0u,
+    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.id, args->DstSubresource, args->DstLeft, args->DstTop, 0u,
                                                    from.id, args->SrcSubresource, 1u, region, 0u)
                ? S_OK
                : E_OUTOFMEMORY;
@@ -292,7 +292,7 @@ HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
     const ResourceRecord &to = record(args->hDstResource);
     const ResourceRecord &from = record(args->hSrcResource);
     const d3dproto::Box region = {args->SrcLeft, args->SrcTop, 0u, args->SrcRight, args->SrcBottom, 1u};
-    return d3dproto::rvk_d3d_CopySubresourceRegion(wire(), to.id, args->DstSubresource, args->DstLeft, args->DstTop, 0u,
+    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.id, args->DstSubresource, args->DstLeft, args->DstTop, 0u,
                                                    from.id, args->SrcSubresource, 1u, region, 0u)
                ? S_OK
                : E_OUTOFMEMORY;
@@ -312,7 +312,7 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
     if (args->Resources > max_rotation) return E_INVALIDARG;
     uint32_t ids[max_rotation] = {};
     for (UINT index = 0u; index < args->Resources; index++) ids[index] = record(args->pResources[index]).id;
-    if (!d3dproto::rvk_d3d_RotateResources11(wire(), args->Resources, ids)) return E_OUTOFMEMORY;
+    if (!d3dproto::av_d3d_RotateResources11(wire(), args->Resources, ids)) return E_OUTOFMEMORY;
     const ResourceRecord first = record(args->pResources[0]);
     for (UINT index = 0u; index < args->Resources; index++) {
         ResourceRecord &to = record(args->pResources[index]);
@@ -412,7 +412,7 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     desc.sample_count = 1u;
     desc.usage = D3D10_DDI_USAGE_DEFAULT;
     desc.bind_flags = resource.bind;
-    if (!d3dproto::rvk_d3d_CreateResource(wire(), resource.id, desc, 0u)) return false;
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.id, desc, 0u)) return false;
     const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
     resource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     resource.shadow_watched = 0u;
@@ -467,7 +467,7 @@ void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
     lock.hAllocation = resource.allocation;
     lock.Flags.ReadOnly = 1u;
     if (FAILED(kernel_->pfnLockCb(runtime_.handle, &lock)) || lock.pData == nullptr) {
-        if (!guest_lock_refused_) log_.write("rvkumd: a GDI surface the kernel would not lock");
+        if (!guest_lock_refused_) log_.write("avumd: a GDI surface the kernel would not lock");
         guest_lock_refused_ = true;
         return;
     }

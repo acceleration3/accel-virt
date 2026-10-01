@@ -91,7 +91,7 @@ private:
     bool               ready_;
     /* What was last sent for each exported image slot: a descriptor and the
      * layout the display imported it with. */
-    RvkExportedImage   sent_[image_slots];
+    AvExportedImage   sent_[image_slots];
     /* One guest blob's extents, and the same extents as the virtio memory
      * entries BlobTable reads. */
     RendererExtent     extents_[GuestBlobMessage::max_extents];

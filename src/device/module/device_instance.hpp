@@ -4,21 +4,21 @@
 #define AV_DEVICE_INSTANCE_HPP
 
 #include "device/abi/table_host.hpp"
-#include "device/module/virtio_gpu_rvk.hpp"
+#include "device/module/virtio_gpu_av.hpp"
 
 namespace av {
 
 class DeviceInstance {
 public:
-    explicit DeviceInstance(const RvkHostOps &ops);
+    explicit DeviceInstance(const AvHostOps &ops);
     DeviceInstance(const DeviceInstance &) = delete;
     DeviceInstance &operator=(const DeviceInstance &) = delete;
 
-    VirtioGpuRvk &device();
+    VirtioGpuAv &device();
 
 private:
     TableHost    host_;
-    VirtioGpuRvk device_;
+    VirtioGpuAv device_;
 };
 
 }  // namespace av

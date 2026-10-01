@@ -44,7 +44,7 @@ using av::d3d::D3dCommandStream;
 using av::d3d::D3dDeviceChannel;
 using namespace av::d3dproto;
 using av::d3d12proto::kCmd_DrawInstanced12;
-using av::d3d12proto::rvk_d3d12_DrawInstanced12;
+using av::d3d12proto::av_d3d12_DrawInstanced12;
 
 namespace av {
 
@@ -58,7 +58,7 @@ using av::KmtTransportProbe;
 
 namespace {
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint8_t  ring_order = 16u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::size_t   staging_bytes = 1024u;
@@ -73,7 +73,7 @@ public:
           stream_(transport_, block_, block_bytes), lock_(trace_, 'P'), a_(stream_, lock_, device_a),
           b_(stream_, lock_, device_b), twelve_(stream_, lock_, 0u)
     {
-        kmt_.add_adapter(rvk, 3200u);
+        kmt_.add_adapter(av, 3200u);
         std::uint32_t adapters[1] = {};
         std::uint32_t count = 0u;
         static_cast<void>(kmt_.enumerate_adapters(adapters, 1u, count));
@@ -125,10 +125,10 @@ private:
 
 TEST(d3d_device_channel, a_device_is_selected_only_when_another_spoke_last)
 { Fixture fixture;
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
-  CHECK(rvk_d3d_Draw(fixture.a(), 6u, 0u));
-  CHECK(rvk_d3d_Draw(fixture.b(), 9u, 0u));
-  CHECK(rvk_d3d_Draw(fixture.a(), 12u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 6u, 0u));
+  CHECK(av_d3d_Draw(fixture.b(), 9u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 12u, 0u));
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   std::uint32_t ids[8] = {}, selected[8] = {};
   CHECK_EQ(fixture.shipped(ids, selected, 8u), 7u);
@@ -143,9 +143,9 @@ TEST(d3d_device_channel, a_device_is_selected_only_when_another_spoke_last)
 
 TEST(d3d_device_channel, the_lock_is_held_for_each_call_and_no_longer)
 { Fixture fixture;
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK(!fixture.lock().held());
-  CHECK(rvk_d3d_Draw(fixture.b(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK_STATUS(fixture.b().flush(), Status::ok);
   CHECK(fixture.b().make_room_for(0u) == fixture.transport().blobs().ready());
   CHECK(!fixture.lock().held());
@@ -161,7 +161,7 @@ TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
   const std::uint32_t removed = 0x887A0005u;
   std::memcpy(reply + av::ReplyHeader::encoded_size, &removed, sizeof removed);
   std::uint32_t answered = 0u;
-  CHECK(rvk_d3d_Finish11(fixture.a(), &answered));
+  CHECK(av_d3d_Finish11(fixture.a(), &answered));
   CHECK_EQ(answered, removed);
   CHECK(!fixture.lock().held());
   CHECK(std::strcmp(fixture.trace().text(), "Pp") == 0); }
@@ -170,16 +170,16 @@ TEST(d3d_device_channel, a_command_given_up_before_it_was_sent_lets_the_lock_go)
 { Fixture fixture;
   const Box whole = {};
   /* Four bytes named with no data behind them: refused while encoding. */
-  CHECK(!rvk_d3d_UpdateSubresource(fixture.a(), 1u, 0u, 0u, whole, 0u, 0u, 0u, nullptr, 4u));
+  CHECK(!av_d3d_UpdateSubresource(fixture.a(), 1u, 0u, 0u, whole, 0u, 0u, 0u, nullptr, 4u));
   CHECK(!fixture.lock().held());
-  CHECK(rvk_d3d_Draw(fixture.b(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK(std::strcmp(fixture.trace().text(), "PpPp") == 0); }
 
 TEST(d3d_device_channel, closing_destroys_the_device_and_the_next_speaker_is_selected_again)
 { Fixture fixture;
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK(fixture.a().close());
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   std::uint32_t ids[8] = {}, selected[8] = {};
   CHECK_EQ(fixture.shipped(ids, selected, 8u), 5u);
@@ -193,10 +193,10 @@ TEST(d3d_device_channel, closing_destroys_the_device_and_the_next_speaker_is_sel
 TEST(d3d_device_channel, a_failed_stream_fails_the_command_and_keeps_no_lock)
 { Fixture fixture;
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK_STATUS(fixture.a().flush(), Status::invalid_state);
   CHECK(fixture.stream().failed());
-  CHECK(!rvk_d3d_Draw(fixture.b(), 3u, 0u));
+  CHECK(!av_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK(!fixture.b().close());
   CHECK(!fixture.lock().held()); }
 
@@ -228,7 +228,7 @@ TEST(d3d_device_channel, opening_selects_the_device_without_a_selection_sent_fir
   std::uint32_t ids[4] = {}, selected[4] = {};
   CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
   CHECK_EQ(ids[0], kCmd_CreateDevice11);
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
   CHECK_EQ(ids[0], kCmd_Draw);
@@ -241,7 +241,7 @@ TEST(d3d_device_channel, a_refused_open_leaves_the_next_command_to_select)
   std::uint32_t hresult = 0u, level = 0u;
   CHECK(fixture.a().open(0xb100u, hresult, level));
   CHECK_EQ(hresult, 0x80004005u);
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   std::uint32_t ids[4] = {}, selected[4] = {};
   CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
@@ -261,10 +261,10 @@ TEST(d3d_device_channel, an_open_that_cannot_be_sent_fails_and_keeps_no_lock)
  * needs no selection either. */
 TEST(d3d_device_channel, a_direct3d_12_speaker_selects_nothing_and_keeps_the_selection)
 { Fixture fixture;
-  CHECK(rvk_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
-  CHECK(rvk_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
-  CHECK(rvk_d3d_Draw(fixture.a(), 6u, 0u));
+  CHECK(av_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 6u, 0u));
   CHECK(!fixture.lock().held());
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   std::uint32_t ids[8] = {}, selected[8] = {};
@@ -285,7 +285,7 @@ TEST(d3d_device_channel, a_recording_is_counted_and_taken_under_the_lock)
   av::d3d::CommandRecording recording(platform, block_bytes, block_bytes);
   CHECK_STATUS(recording.initialize(), Status::ok);
   fixture.stream().record(recording);
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   fixture.trace().clear();
   const std::size_t recorded = fixture.a().recorded_bytes();
   /* The selection of a, then its draw. */
@@ -301,7 +301,7 @@ TEST(d3d_device_channel, a_recording_is_counted_and_taken_under_the_lock)
 
 TEST(d3d_device_channel, an_application_flush_is_the_streams_under_the_lock)
 { Fixture fixture;
-  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   fixture.trace().clear();
   CHECK_STATUS(fixture.a().application_flush(), Status::ok);
   CHECK(!fixture.lock().held());

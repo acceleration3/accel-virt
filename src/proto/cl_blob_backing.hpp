@@ -30,9 +30,9 @@ struct ClBlobBackingProbe;
 class ClBlobBacking {
 public:
     /* The property's name. Khronos's own are small integers, and a vendor is
-     * free to define others; this one is "RVK" and an index, so a list that
+     * free to define others; this one is "AV" and an index, so a list that
      * reaches the wrong decoder names nothing it knows. */
-    static constexpr uint64_t property = 0x52564B0000000001ull;
+    static constexpr uint64_t property = 0x4156000000000001ull;
 
     ClBlobBacking();
 

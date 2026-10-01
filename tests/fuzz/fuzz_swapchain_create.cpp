@@ -50,7 +50,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     void *const               window = reinterpret_cast<void *>(0x10u);
     windows.add_dc(reinterpret_cast<void *>(0x20u), window, width, height);
     kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                    av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
+                                    av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
                     av::AdapterScenario::wddm_3_2);
     std::uint32_t adapters[2] = {};
     std::uint32_t found = 0u;

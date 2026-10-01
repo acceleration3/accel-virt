@@ -7,7 +7,7 @@
 #define AV_DOORBELL_OFFERS_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 
 #include <stdint.h>
 
@@ -17,7 +17,7 @@ struct DoorbellOffersProbe;
 
 class DoorbellOffers {
 public:
-    static constexpr uint32_t pages = RVK_DEVICE_DOORBELLS;
+    static constexpr uint32_t pages = AV_DEVICE_DOORBELLS;
 
     DoorbellOffers();
     DoorbellOffers(const DoorbellOffers &) = delete;

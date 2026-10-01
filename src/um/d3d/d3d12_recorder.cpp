@@ -54,7 +54,7 @@ void D3d12Recorder::sent(bool sent_ok, const char *what)
 VOID D3d12Recorder::close_command_list(D3D12DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d12Recorder::close_command_list");
-    sent(rvk_d3d12_CloseCommandList12(device_.wire(), list(handle)), "CloseCommandList12");
+    sent(av_d3d12_CloseCommandList12(device_.wire(), list(handle)), "CloseCommandList12");
 }
 
 /* The pool's allocator is made with the first list that records into it,
@@ -73,16 +73,16 @@ VOID D3d12Recorder::reset_command_list(D3D12DDI_HCOMMANDLIST handle, const D3D12
     if (pool->made == 0u) {
         pool->type = made.type;
         pool->made = 1u;
-        sent(rvk_d3d12_CreateCommandAllocator12(device_.wire(), pool->header.id, pool->type),
+        sent(av_d3d12_CreateCommandAllocator12(device_.wire(), pool->header.id, pool->type),
              "CreateCommandAllocator12");
     }
     if (made.made == 0u) {
         made.made = 1u;
-        sent(rvk_d3d12_CreateCommandList12(device_.wire(), made.header.id, pool->header.id, made.type, 0u),
+        sent(av_d3d12_CreateCommandList12(device_.wire(), made.header.id, pool->header.id, made.type, 0u),
              "CreateCommandList12");
         return;
     }
-    sent(rvk_d3d12_ResetCommandList12(device_.wire(), made.header.id, pool->header.id, 0u), "ResetCommandList12");
+    sent(av_d3d12_ResetCommandList12(device_.wire(), made.header.id, pool->header.id, 0u), "ResetCommandList12");
 }
 
 VOID D3d12Recorder::clear_root_arguments(D3D12DDI_HCOMMANDLIST)
@@ -106,7 +106,7 @@ VOID D3d12Recorder::draw_instanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, 
                                    UINT first_instance)
 {
     AV_SCOPE("D3d12Recorder::draw_instanced");
-    sent(rvk_d3d12_DrawInstanced12(device_.wire(), list(handle), vertices, instances, first_vertex, first_instance),
+    sent(av_d3d12_DrawInstanced12(device_.wire(), list(handle), vertices, instances, first_vertex, first_instance),
          "DrawInstanced12");
 }
 
@@ -114,7 +114,7 @@ VOID D3d12Recorder::draw_indexed_instanced(D3D12DDI_HCOMMANDLIST handle, UINT in
                                            INT base_vertex, UINT first_instance)
 {
     AV_SCOPE("D3d12Recorder::draw_indexed_instanced");
-    sent(rvk_d3d12_DrawIndexedInstanced12(device_.wire(), list(handle), indices, instances, first_index, base_vertex,
+    sent(av_d3d12_DrawIndexedInstanced12(device_.wire(), list(handle), indices, instances, first_index, base_vertex,
                                           first_instance),
          "DrawIndexedInstanced12");
 }
@@ -122,7 +122,7 @@ VOID D3d12Recorder::draw_indexed_instanced(D3D12DDI_HCOMMANDLIST handle, UINT in
 VOID D3d12Recorder::dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT z)
 {
     AV_SCOPE("D3d12Recorder::dispatch");
-    sent(rvk_d3d12_Dispatch12(device_.wire(), list(handle), x, y, z), "Dispatch12");
+    sent(av_d3d12_Dispatch12(device_.wire(), list(handle), x, y, z), "Dispatch12");
 }
 
 VOID D3d12Recorder::clear_render_target_view(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view,
@@ -135,7 +135,7 @@ VOID D3d12Recorder::clear_render_target_view(D3D12DDI_HCOMMANDLIST handle, D3D12
     const UINT count = rects == nullptr ? 0u : (rect_count < most_views ? rect_count : most_views);
     for (UINT index = 0u; index < count; index++)
         areas[index] = Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    sent(rvk_d3d12_ClearRenderTargetView12(device_.wire(), list(handle), device_.descriptor(view), value, count, areas),
+    sent(av_d3d12_ClearRenderTargetView12(device_.wire(), list(handle), device_.descriptor(view), value, count, areas),
          "ClearRenderTargetView12");
 }
 
@@ -148,7 +148,7 @@ VOID D3d12Recorder::clear_depth_stencil_view(D3D12DDI_HCOMMANDLIST handle, D3D12
     const UINT count = rects == nullptr ? 0u : (rect_count < most_views ? rect_count : most_views);
     for (UINT index = 0u; index < count; index++)
         areas[index] = Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    sent(rvk_d3d12_ClearDepthStencilView12(device_.wire(), list(handle), device_.descriptor(view), flags, depth, stencil,
+    sent(av_d3d12_ClearDepthStencilView12(device_.wire(), list(handle), device_.descriptor(view), flags, depth, stencil,
                                            count, areas),
          "ClearDepthStencilView12");
 }
@@ -201,7 +201,7 @@ VOID D3d12Recorder::copy_texture_region(D3D12DDI_HCOMMANDLIST handle, const D3D1
         region = Box{static_cast<uint32_t>(box->Left),  static_cast<uint32_t>(box->Top),
                      static_cast<uint32_t>(box->Front), static_cast<uint32_t>(box->Right),
                      static_cast<uint32_t>(box->Bottom), static_cast<uint32_t>(box->Back)};
-    sent(rvk_d3d12_CopyTextureRegion12(device_.wire(), list(handle), location(*destination, destination_layout), x, y, z,
+    sent(av_d3d12_CopyTextureRegion12(device_.wire(), list(handle), location(*destination, destination_layout), x, y, z,
                                        location(*source, source_layout), box != nullptr ? 1u : 0u, region),
          "CopyTextureRegion12");
 }
@@ -209,7 +209,7 @@ VOID D3d12Recorder::copy_texture_region(D3D12DDI_HCOMMANDLIST handle, const D3D1
 VOID D3d12Recorder::resource_copy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE destination, D3D12DDI_HRESOURCE source)
 {
     AV_SCOPE("D3d12Recorder::resource_copy");
-    sent(rvk_d3d12_CopyResource12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
+    sent(av_d3d12_CopyResource12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
                                   device_.id_of(source.pDrvPrivate)),
          "CopyResource12");
 }
@@ -218,7 +218,7 @@ VOID D3d12Recorder::copy_buffer_region(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG
                                        D3D12DDIARG_BUFFER_PLACEMENT source, UINT64 bytes)
 {
     AV_SCOPE("D3d12Recorder::copy_buffer_region");
-    sent(rvk_d3d12_CopyBufferRegion12(device_.wire(), list(handle),
+    sent(av_d3d12_CopyBufferRegion12(device_.wire(), list(handle),
                                       device_.id_of(destination.BaseAddress.UMD.hResource.pDrvPrivate),
                                       destination.BaseAddress.UMD.Offset,
                                       device_.id_of(source.BaseAddress.UMD.hResource.pDrvPrivate),
@@ -231,7 +231,7 @@ VOID D3d12Recorder::execute_indirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
                                      D3D12DDIARG_BUFFER_PLACEMENT count)
 {
     AV_SCOPE("D3d12Recorder::execute_indirect");
-    sent(rvk_d3d12_ExecuteIndirect12(device_.wire(), list(handle), device_.id_of(signature.pDrvPrivate), max_count,
+    sent(av_d3d12_ExecuteIndirect12(device_.wire(), list(handle), device_.id_of(signature.pDrvPrivate), max_count,
                                      device_.id_of(arguments.BaseAddress.UMD.hResource.pDrvPrivate),
                                      arguments.BaseAddress.UMD.Offset,
                                      device_.id_of(count.BaseAddress.UMD.hResource.pDrvPrivate),
@@ -253,7 +253,7 @@ VOID D3d12Recorder::resource_resolve_subresource(D3D12DDI_HCOMMANDLIST handle, D
                                                  UINT source_subresource, DXGI_FORMAT format)
 {
     AV_SCOPE("D3d12Recorder::resource_resolve_subresource");
-    sent(rvk_d3d12_ResolveSubresource12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
+    sent(av_d3d12_ResolveSubresource12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
                                         destination_subresource, device_.id_of(source.pDrvPrivate), source_subresource,
                                         static_cast<uint32_t>(format)),
          "ResolveSubresource12");
@@ -286,7 +286,7 @@ VOID D3d12Recorder::resource_barrier(D3D12DDI_HCOMMANDLIST handle, UINT count,
                 to.resource_after = device_.id_of(from.Ranged.hResource.pDrvPrivate);
             }
         }
-        sent(rvk_d3d12_ResourceBarrier12(device_.wire(), list(handle), taken, batch), "ResourceBarrier12");
+        sent(av_d3d12_ResourceBarrier12(device_.wire(), list(handle), taken, batch), "ResourceBarrier12");
     }
 }
 
@@ -296,7 +296,7 @@ VOID D3d12Recorder::begin_query(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQUERYHEA
                                 UINT index)
 {
     AV_SCOPE("D3d12Recorder::begin_query");
-    sent(rvk_d3d12_BeginQuery12(device_.wire(), list(handle), device_.id_of(heap.pDrvPrivate), static_cast<uint32_t>(type),
+    sent(av_d3d12_BeginQuery12(device_.wire(), list(handle), device_.id_of(heap.pDrvPrivate), static_cast<uint32_t>(type),
                                 index),
          "BeginQuery12");
 }
@@ -304,7 +304,7 @@ VOID D3d12Recorder::begin_query(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQUERYHEA
 VOID D3d12Recorder::end_query(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQUERYHEAP heap, D3D12DDI_QUERY_TYPE type, UINT index)
 {
     AV_SCOPE("D3d12Recorder::end_query");
-    sent(rvk_d3d12_EndQuery12(device_.wire(), list(handle), device_.id_of(heap.pDrvPrivate), static_cast<uint32_t>(type),
+    sent(av_d3d12_EndQuery12(device_.wire(), list(handle), device_.id_of(heap.pDrvPrivate), static_cast<uint32_t>(type),
                               index),
          "EndQuery12");
 }
@@ -313,7 +313,7 @@ VOID D3d12Recorder::resolve_query_data(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQ
                                        UINT first, UINT count, D3D12DDI_HRESOURCE destination, UINT64 offset)
 {
     AV_SCOPE("D3d12Recorder::resolve_query_data");
-    sent(rvk_d3d12_ResolveQueryData12(device_.wire(), list(handle), device_.id_of(heap.pDrvPrivate),
+    sent(av_d3d12_ResolveQueryData12(device_.wire(), list(handle), device_.id_of(heap.pDrvPrivate),
                                       static_cast<uint32_t>(type), first, count, device_.id_of(destination.pDrvPrivate),
                                       offset),
          "ResolveQueryData12");
@@ -324,7 +324,7 @@ VOID D3d12Recorder::resolve_query_data(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQ
 VOID D3d12Recorder::ia_set_topology(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_PRIMITIVE_TOPOLOGY topology)
 {
     AV_SCOPE("D3d12Recorder::ia_set_topology");
-    sent(rvk_d3d12_SetTopology12(device_.wire(), list(handle), static_cast<uint32_t>(topology)), "SetTopology12");
+    sent(av_d3d12_SetTopology12(device_.wire(), list(handle), static_cast<uint32_t>(topology)), "SetTopology12");
 }
 
 VOID D3d12Recorder::rs_set_viewports(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDI_VIEWPORT *viewports)
@@ -336,7 +336,7 @@ VOID D3d12Recorder::rs_set_viewports(D3D12DDI_HCOMMANDLIST handle, UINT count, c
         const D3D12DDI_VIEWPORT &from = viewports[index];
         made[index] = Viewport{from.TopLeftX, from.TopLeftY, from.Width, from.Height, from.MinDepth, from.MaxDepth};
     }
-    sent(rvk_d3d12_SetViewports12(device_.wire(), list(handle), taken, made), "SetViewports12");
+    sent(av_d3d12_SetViewports12(device_.wire(), list(handle), taken, made), "SetViewports12");
 }
 
 VOID D3d12Recorder::rs_set_scissor_rects(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDI_RECT *rects)
@@ -346,7 +346,7 @@ VOID D3d12Recorder::rs_set_scissor_rects(D3D12DDI_HCOMMANDLIST handle, UINT coun
     const UINT taken = rects == nullptr ? 0u : (count < most_views ? count : most_views);
     for (UINT index = 0u; index < taken; index++)
         made[index] = Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    sent(rvk_d3d12_SetScissorRects12(device_.wire(), list(handle), taken, made), "SetScissorRects12");
+    sent(av_d3d12_SetScissorRects12(device_.wire(), list(handle), taken, made), "SetScissorRects12");
 }
 
 VOID D3d12Recorder::om_set_blend_factor(D3D12DDI_HCOMMANDLIST handle, const FLOAT *factor)
@@ -354,19 +354,19 @@ VOID D3d12Recorder::om_set_blend_factor(D3D12DDI_HCOMMANDLIST handle, const FLOA
     AV_SCOPE("D3d12Recorder::om_set_blend_factor");
     Float4 value = {{1.0f, 1.0f, 1.0f, 1.0f}};
     for (uint32_t channel = 0u; factor != nullptr && channel < 4u; channel++) value.v[channel] = factor[channel];
-    sent(rvk_d3d12_SetBlendFactor12(device_.wire(), list(handle), value), "SetBlendFactor12");
+    sent(av_d3d12_SetBlendFactor12(device_.wire(), list(handle), value), "SetBlendFactor12");
 }
 
 VOID D3d12Recorder::om_set_stencil_ref(D3D12DDI_HCOMMANDLIST handle, UINT reference)
 {
     AV_SCOPE("D3d12Recorder::om_set_stencil_ref");
-    sent(rvk_d3d12_SetStencilRef12(device_.wire(), list(handle), reference), "SetStencilRef12");
+    sent(av_d3d12_SetStencilRef12(device_.wire(), list(handle), reference), "SetStencilRef12");
 }
 
 VOID D3d12Recorder::set_pipeline_state(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPIPELINESTATE pipeline)
 {
     AV_SCOPE("D3d12Recorder::set_pipeline_state");
-    sent(rvk_d3d12_SetPipelineState12(device_.wire(), list(handle), device_.id_of(pipeline.pDrvPrivate)),
+    sent(av_d3d12_SetPipelineState12(device_.wire(), list(handle), device_.id_of(pipeline.pDrvPrivate)),
          "SetPipelineState12");
 }
 
@@ -376,7 +376,7 @@ VOID D3d12Recorder::ia_set_index_buffer(D3D12DDI_HCOMMANDLIST handle, const D3D1
     const uint64_t address = view == nullptr ? 0u : view->BufferLocation;
     const uint32_t size = view == nullptr ? 0u : view->SizeInBytes;
     const uint32_t format = view == nullptr ? 0u : static_cast<uint32_t>(view->Format);
-    sent(rvk_d3d12_SetIndexBuffer12(device_.wire(), list(handle), address, size, format), "SetIndexBuffer12");
+    sent(av_d3d12_SetIndexBuffer12(device_.wire(), list(handle), address, size, format), "SetIndexBuffer12");
 }
 
 VOID D3d12Recorder::ia_set_vertex_buffers(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
@@ -387,7 +387,7 @@ VOID D3d12Recorder::ia_set_vertex_buffers(D3D12DDI_HCOMMANDLIST handle, UINT sta
     const UINT       taken = count < most_buffers ? count : most_buffers;
     for (UINT index = 0u; views != nullptr && index < taken; index++)
         made[index] = VertexBufferView{views[index].BufferLocation, views[index].SizeInBytes, views[index].StrideInBytes};
-    sent(rvk_d3d12_SetVertexBuffers12(device_.wire(), list(handle), start, taken, made), "SetVertexBuffers12");
+    sent(av_d3d12_SetVertexBuffers12(device_.wire(), list(handle), start, taken, made), "SetVertexBuffers12");
 }
 
 /* A single handle to a range names `count` descriptors one increment apart. */
@@ -404,7 +404,7 @@ VOID D3d12Recorder::om_set_render_targets(D3D12DDI_HCOMMANDLIST handle, UINT cou
         made[index] = device_.descriptor(target);
     }
     const DescriptorRef depth_view = depth == nullptr ? DescriptorRef{} : device_.descriptor(*depth);
-    sent(rvk_d3d12_SetRenderTargets12(device_.wire(), list(handle), taken, made, depth != nullptr ? 1u : 0u, depth_view),
+    sent(av_d3d12_SetRenderTargets12(device_.wire(), list(handle), taken, made, depth != nullptr ? 1u : 0u, depth_view),
          "SetRenderTargets12");
 }
 
@@ -416,20 +416,20 @@ VOID D3d12Recorder::set_descriptor_heaps(D3D12DDI_HCOMMANDLIST handle, UINT coun
     uint32_t   ids[2] = {};
     const UINT taken = heaps == nullptr ? 0u : (count < 2u ? count : 2u);
     for (UINT index = 0u; index < taken; index++) ids[index] = device_.id_of(heaps[index].pDrvPrivate);
-    sent(rvk_d3d12_SetDescriptorHeaps12(device_.wire(), list(handle), taken, ids), "SetDescriptorHeaps12");
+    sent(av_d3d12_SetDescriptorHeaps12(device_.wire(), list(handle), taken, ids), "SetDescriptorHeaps12");
 }
 
 VOID D3d12Recorder::set_compute_root_signature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root)
 {
     AV_SCOPE("D3d12Recorder::set_compute_root_signature");
-    sent(rvk_d3d12_SetRootSignature12(device_.wire(), list(handle), compute, device_.id_of(root.pDrvPrivate)),
+    sent(av_d3d12_SetRootSignature12(device_.wire(), list(handle), compute, device_.id_of(root.pDrvPrivate)),
          "SetRootSignature12");
 }
 
 VOID D3d12Recorder::set_graphics_root_signature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root)
 {
     AV_SCOPE("D3d12Recorder::set_graphics_root_signature");
-    sent(rvk_d3d12_SetRootSignature12(device_.wire(), list(handle), graphics, device_.id_of(root.pDrvPrivate)),
+    sent(av_d3d12_SetRootSignature12(device_.wire(), list(handle), graphics, device_.id_of(root.pDrvPrivate)),
          "SetRootSignature12");
 }
 
@@ -437,7 +437,7 @@ VOID D3d12Recorder::set_compute_root_descriptor_table(D3D12DDI_HCOMMANDLIST hand
                                                       D3D12DDI_GPU_DESCRIPTOR_HANDLE base)
 {
     AV_SCOPE("D3d12Recorder::set_compute_root_descriptor_table");
-    sent(rvk_d3d12_SetRootDescriptorTable12(device_.wire(), list(handle), compute, parameter, device_.descriptor(base)),
+    sent(av_d3d12_SetRootDescriptorTable12(device_.wire(), list(handle), compute, parameter, device_.descriptor(base)),
          "SetRootDescriptorTable12");
 }
 
@@ -445,21 +445,21 @@ VOID D3d12Recorder::set_graphics_root_descriptor_table(D3D12DDI_HCOMMANDLIST han
                                                        D3D12DDI_GPU_DESCRIPTOR_HANDLE base)
 {
     AV_SCOPE("D3d12Recorder::set_graphics_root_descriptor_table");
-    sent(rvk_d3d12_SetRootDescriptorTable12(device_.wire(), list(handle), graphics, parameter, device_.descriptor(base)),
+    sent(av_d3d12_SetRootDescriptorTable12(device_.wire(), list(handle), graphics, parameter, device_.descriptor(base)),
          "SetRootDescriptorTable12");
 }
 
 VOID D3d12Recorder::set_compute_root32_bit_constant(D3D12DDI_HCOMMANDLIST handle, UINT parameter, UINT value, UINT at)
 {
     AV_SCOPE("D3d12Recorder::set_compute_root32_bit_constant");
-    sent(rvk_d3d12_SetRootConstants12(device_.wire(), list(handle), compute, parameter, at, 1u, &value),
+    sent(av_d3d12_SetRootConstants12(device_.wire(), list(handle), compute, parameter, at, 1u, &value),
          "SetRootConstants12");
 }
 
 VOID D3d12Recorder::set_graphics_root32_bit_constant(D3D12DDI_HCOMMANDLIST handle, UINT parameter, UINT value, UINT at)
 {
     AV_SCOPE("D3d12Recorder::set_graphics_root32_bit_constant");
-    sent(rvk_d3d12_SetRootConstants12(device_.wire(), list(handle), graphics, parameter, at, 1u, &value),
+    sent(av_d3d12_SetRootConstants12(device_.wire(), list(handle), graphics, parameter, at, 1u, &value),
          "SetRootConstants12");
 }
 
@@ -468,7 +468,7 @@ VOID D3d12Recorder::set_compute_root32_bit_constants(D3D12DDI_HCOMMANDLIST handl
 {
     AV_SCOPE("D3d12Recorder::set_compute_root32_bit_constants");
     const UINT taken = values == nullptr ? 0u : (count < most_constants ? count : most_constants);
-    sent(rvk_d3d12_SetRootConstants12(device_.wire(), list(handle), compute, parameter, at, taken,
+    sent(av_d3d12_SetRootConstants12(device_.wire(), list(handle), compute, parameter, at, taken,
                                       static_cast<const uint32_t *>(values)),
          "SetRootConstants12");
 }
@@ -478,7 +478,7 @@ VOID D3d12Recorder::set_graphics_root32_bit_constants(D3D12DDI_HCOMMANDLIST hand
 {
     AV_SCOPE("D3d12Recorder::set_graphics_root32_bit_constants");
     const UINT taken = values == nullptr ? 0u : (count < most_constants ? count : most_constants);
-    sent(rvk_d3d12_SetRootConstants12(device_.wire(), list(handle), graphics, parameter, at, taken,
+    sent(av_d3d12_SetRootConstants12(device_.wire(), list(handle), graphics, parameter, at, taken,
                                       static_cast<const uint32_t *>(values)),
          "SetRootConstants12");
 }
@@ -487,7 +487,7 @@ void D3d12Recorder::set_root_view(D3D12DDI_HCOMMANDLIST handle, uint32_t pipelin
                                   D3D12DDI_GPU_VIRTUAL_ADDRESS address)
 {
     AV_SCOPE("D3d12Recorder::set_root_view");
-    sent(rvk_d3d12_SetRootView12(device_.wire(), list(handle), pipeline, parameter, kind, address), "SetRootView12");
+    sent(av_d3d12_SetRootView12(device_.wire(), list(handle), pipeline, parameter, kind, address), "SetRootView12");
 }
 
 VOID D3d12Recorder::set_compute_root_constant_buffer_view(D3D12DDI_HCOMMANDLIST handle, UINT parameter,

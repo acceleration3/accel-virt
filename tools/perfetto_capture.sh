@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 # One Perfetto trace of a running guest: the host kernel's scheduling of every
 # QEMU thread (tracebox, which needs root for ftrace) and the device's and
-# executor's scopes (RVK_PERFETTO rings), merged on one timeline.
+# executor's scopes (AV_PERFETTO rings), merged on one timeline.
 #
 #   tools/perfetto_capture.sh [seconds] [output.pftrace]
 #
-# QEMU must have been started with RVK_PERFETTO=1 (run_guest_suite.py --perfetto).
+# QEMU must have been started with AV_PERFETTO=1 (run_guest_suite.py --perfetto).
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 seconds=${1:-5}
-output=${2:-$root/build-perfetto/rvk-$(date +%H%M%S).pftrace}
+output=${2:-$root/build-perfetto/av-$(date +%H%M%S).pftrace}
 tracebox=$root/build-perfetto/tracebox
 if [ ! -x "$tracebox" ]; then
     mkdir -p "$root/build-perfetto"
     curl -sL -o "$tracebox" https://get.perfetto.dev/tracebox
     chmod +x "$tracebox"
 fi
-pid=$(pgrep -f 'qemu-system-x86_64.*virtio-gpu-rvk' | head -1)
-[ -n "$pid" ] || { echo "no QEMU with virtio-gpu-rvk running" >&2; exit 1; }
+pid=$(pgrep -f 'qemu-system-x86_64.*virtio-gpu-av' | head -1)
+[ -n "$pid" ] || { echo "no QEMU with virtio-gpu-av running" >&2; exit 1; }
 system=$(mktemp --suffix=.pftrace)
 trap 'rm -f "$system"' EXIT
 sudo "$tracebox" -o "$system" --time "${seconds}s" \

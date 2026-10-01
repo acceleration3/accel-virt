@@ -125,8 +125,8 @@ namespace {
 
 constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
@@ -218,7 +218,7 @@ TEST(umd_connection_invariants, fail_for_an_open_counted_over_no_adapter)
  * an enumeration the kernel refused is not "this adapter is absent". */
 TEST(umd_connection, an_enumeration_the_kernel_refuses_is_not_a_missing_adapter)
 { MockKmt kmt;
-  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter);
   UmdConnection connection(kmt);
   const Status asked = connection.acquire(0u);
@@ -632,7 +632,7 @@ TEST(device_table_invariants, fail_when_a_device_it_holds_is_broken)
  * table's to notice too. */
 TEST(umd_connections_invariants, fail_for_two_connections_on_one_adapter_or_a_broken_one)
 { { MockKmt kmt;
-    kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt.set_adapter_luid(0u, UmdRig::adapter_luid);
     UmdConnections connections(kmt);
     CHECK(connections.invariants_hold());

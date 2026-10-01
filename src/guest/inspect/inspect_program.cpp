@@ -19,7 +19,7 @@ constexpr size_t   path_bytes = 520u;
 constexpr size_t   reason_bytes = 128u;
 constexpr uint32_t state_length_bytes = 4u;
 /* The modules whose tables `list` looks for (docs/trace.md). */
-constexpr const char *listed_modules[] = {"rvkvk", "rvkgl", "rvktest"};
+constexpr const char *listed_modules[] = {"avvk", "avgl", "avtest"};
 
 /* A process makes its objects in the global namespace when it may, and in its
  * session's otherwise, so a reader tries them in that order. */
@@ -62,8 +62,8 @@ InspectProgram::Exit InspectProgram::run(const uint16_t *line)
 const char *InspectProgram::usage() const
 {
     AV_SCOPE("InspectProgram::usage");
-    return "usage: rvkinspect list|kernel-trace|kernel-state --out FILE\n"
-           "       rvkinspect trace|state PID MODULE --out FILE\n";
+    return "usage: avinspect list|kernel-trace|kernel-state --out FILE\n"
+           "       avinspect trace|state PID MODULE --out FILE\n";
 }
 
 InspectProgram::Exit InspectProgram::list(const char *out)
@@ -179,7 +179,7 @@ InspectProgram::Exit InspectProgram::kernel(TraceEscapeRecord::Kind kind, const 
     if (read != Status::ok) {
         char       reason[reason_bytes];
         TextBuffer text(reason, sizeof reason);
-        text.append(read == Status::not_found ? "no rvkgpu adapter" : "the driver's escape failed, status ");
+        text.append(read == Status::not_found ? "no avgpu adapter" : "the driver's escape failed, status ");
         if (read != Status::not_found) text.append_decimal(static_cast<uint32_t>(read));
         return finish(file.refuse(host_.clock(), text.text()));
     }
@@ -193,7 +193,7 @@ void InspectProgram::name(TextBuffer &out, const char *prefix, const char *kind,
 {
     AV_SCOPE("InspectProgram::name");
     out.append(prefix);
-    out.append("rvk-");
+    out.append("av-");
     out.append(kind);
     out.append("-");
     out.append(module);

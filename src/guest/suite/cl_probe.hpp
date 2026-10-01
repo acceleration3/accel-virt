@@ -1,8 +1,8 @@
-/* What rvkclprobe.exe proves, through whatever OpenCL it was given.
+/* What avclprobe.exe proves, through whatever OpenCL it was given.
  *
  * In the guest that is the Khronos loader beside it, which is the point: what
  * SC-001 is about is the loader's own discovery of this driver through
- * `OpenCLDriverName` on the rvkgpu adapter, and nothing but a real loader
+ * `OpenCLDriverName` on the avgpu adapter, and nothing but a real loader
  * proves that. On the full-stack rig the same steps run against the ICD's
  * dispatch table reached the way a loader reaches it.
  *

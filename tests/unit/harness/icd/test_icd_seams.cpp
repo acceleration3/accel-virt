@@ -85,10 +85,10 @@ TEST(recording_log, keeps_each_line_and_finds_what_they_hold)
   av::icd::LogSink &sink = log;
   CHECK_EQ(log.lines(), 0u);
   CHECK(std::strcmp(log.line(0u), "") == 0);
-  sink.write("rvkvk: refused 4");
-  sink.write("rvkvk: refused 3");
+  sink.write("avvk: refused 4");
+  sink.write("avvk: refused 3");
   CHECK_EQ(log.lines(), 2u);
-  CHECK(std::strcmp(log.line(1u), "rvkvk: refused 3") == 0);
+  CHECK(std::strcmp(log.line(1u), "avvk: refused 3") == 0);
   CHECK_EQ(log.holding("refused"), 2u);
   CHECK_EQ(log.holding("refused 4"), 1u);
   CHECK_EQ(log.holding("accepted"), 0u); }

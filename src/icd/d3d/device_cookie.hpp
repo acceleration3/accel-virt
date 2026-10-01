@@ -23,10 +23,10 @@ class UmdDevice;
 
 class DeviceCookie {
 public:
-    /* 'RVKD' in the high half, this cookie's version in the low: a cookie
+    /* 'AVD' in the high half, this cookie's version in the low: a cookie
      * whose shape changes bumps the version, so a stale block from an older
      * driver in the same process reads as foreign rather than as this one. */
-    static constexpr uint64_t magic = 0x52564B4400000001ull;
+    static constexpr uint64_t magic = 0x4156440000000001ull;
 
     DeviceCookie();
     DeviceCookie(const DeviceCookie &) = delete;

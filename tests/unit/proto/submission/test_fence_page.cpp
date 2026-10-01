@@ -34,7 +34,7 @@ TEST(fence_page_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[FencePage::encoded_size] = {};
   CHECK_STATUS(FencePage(41u, 900u, 0xDEADu).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x464B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00465641u);
   CHECK(layout.at(4u, 4u) == 1u);
   CHECK(layout.at(8u, 8u) == 41u);
   CHECK(layout.at(16u, 8u) == 900u);

@@ -61,7 +61,7 @@ public:
     /* Main loop. A latched frame not yet shown on `head`: true, with its key,
      * once per latch. */
     bool                 take_unshown(uint32_t head, uint64_t &key);
-    /* The thread's body, entered through RvkDisplayClockRun. */
+    /* The thread's body, entered through AvDisplayClockRun. */
     void                 run();
     /* One pass at `now`: every blank due counted, latched, published and,
      * where the guest asked, raised; `next` is the earliest blank still to

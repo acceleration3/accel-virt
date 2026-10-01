@@ -12,7 +12,7 @@ namespace {
  * initialized, and DriverEntry constructs what lives in it. */
 constinit av::DriverImage<av::KernelPlatform, av::KernelTraceHost> driver_image;
 
-/* "rvkg", as pool-tag tools display it. */
+/* "avg", as pool-tag tools display it. */
 constexpr ULONG pool_tag = 0x676B7672u;
 
 /* KBUGCHECK_CALLBACK_ROUTINE: the kernel hands the table back, which the

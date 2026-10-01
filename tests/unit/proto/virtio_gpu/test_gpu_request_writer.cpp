@@ -142,7 +142,7 @@ TEST(gpu_request_writer_detach_backing, names_the_resource_that_lets_go_of_its_p
   GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);
   CHECK_STATUS(header_only.detach_backing(9u), Status::too_large); }
 
-/* rvk's own request: the resource, the frame the display clock shows it as
+/* av's own request: the resource, the frame the display clock shows it as
  * (0: at once), and the key the host image was published under, which the
  * host shows in place of a transfer from the guest's pages. */
 TEST(gpu_request_writer_scanout_image, names_the_resource_the_frame_and_the_host_image_key)

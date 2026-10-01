@@ -16,7 +16,7 @@ constexpr uint64_t nanoseconds_per_second = 1000000000u;
 }  // namespace
 
 VulkanSubmitTiming::VulkanSubmitTiming()
-    : enabled_(getenv("RVK_VK_SUBMIT_TIMING") != nullptr), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
+    : enabled_(getenv("AV_VK_SUBMIT_TIMING") != nullptr), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
       pool_(VK_NULL_HANDLE), queries_(VK_NULL_HANDLE), begin_{}, end_{}, pending_{}, next_(0u), oldest_(0u),
       period_ns_(1.0), last_end_(0u), busy_ns_(0u), gap_ns_(0u), gaps_(0u), long_gaps_(0u), timed_(0u), window_started_(0u)
 {
@@ -62,7 +62,7 @@ void VulkanSubmitTiming::queue_made(VkPhysicalDevice physical, VkDevice device, 
     device_ = device;
     queue_ = queue;
     window_started_ = now();
-    fprintf(stderr, "rvk-vk-timing: timing queue family %u\n", family);
+    fprintf(stderr, "av-vk-timing: timing queue family %u\n", family);
 }
 
 void VulkanSubmitTiming::harvest()
@@ -109,7 +109,7 @@ void VulkanSubmitTiming::report()
     if (at - window_started_ < nanoseconds_per_second || timed_ == 0u) return;
     const double seconds = static_cast<double>(at - window_started_) / 1e9;
     fprintf(stderr,
-            "rvk-vk-timing: %.0f submits/s, GPU %.1f us in each, %.1f us idle before each (of %llu; %llu idle over "
+            "av-vk-timing: %.0f submits/s, GPU %.1f us in each, %.1f us idle before each (of %llu; %llu idle over "
             "1 ms), in submits %.1f%% of the time\n",
             static_cast<double>(timed_) / seconds, static_cast<double>(busy_ns_) / 1e3 / static_cast<double>(timed_),
             gaps_ == 0u ? 0.0 : static_cast<double>(gap_ns_) / 1e3 / static_cast<double>(gaps_),

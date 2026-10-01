@@ -70,7 +70,7 @@ bool StateSocket::listen_on_socket(const char *module, uint32_t process)
 {
     AV_SCOPE("StateSocket::listen_on_socket");
     TextBuffer path(path_, sizeof path_);
-    path.append("/dev/shm/rvk-state-");
+    path.append("/dev/shm/av-state-");
     path.append(module);
     path.append("-");
     path.append_decimal(process);

@@ -1,9 +1,9 @@
-# The Direct3D commands the user-mode driver (rvkumd.dll) sends and the
+# The Direct3D commands the user-mode driver (avumd.dll) sends and the
 # executor runs on the host's Direct3D - DXVK for 11, vkd3d-proton for 12.
 #
 # This is a registry this project writes, because Direct3D has none: every
 # line here is a command the guest can send, and the generator
-# (tools/codegen/rvk_codegen/d3d) emits both ends from it. Values on the wire
+# (tools/codegen/av_codegen/d3d) emits both ends from it. Values on the wire
 # are the Direct3D *API*'s - DXGI_FORMAT, D3D11_BIND_*, D3D11_RESOURCE_MISC_*,
 # D3D11_*_DIMENSION, D3D11_BLEND - not the DDI's, where they differ: the guest
 # translates from the DDI once, and the host hands the values to DXVK as they

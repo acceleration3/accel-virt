@@ -60,7 +60,7 @@ public:
      * so the device can publish it for every context to open (feature 053):
      * false for a handle this backend did not make or a kind it cannot
      * export. The descriptor is the caller's on true, and `handle_kind` says
-     * which RVK_SHARED_HANDLE_* kind it is, because OpenGL and OpenCL import
+     * which AV_SHARED_HANDLE_* kind it is, because OpenGL and OpenCL import
      * only a dma-buf while Vulkan takes either.
      *
      * Every backend answers all three for itself, because an API that shares

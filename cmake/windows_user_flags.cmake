@@ -30,8 +30,8 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
   set(CMAKE_SHARED_LINKER_FLAGS_${config}_INIT "")
 endforeach()
 
-# No C runtime, so each target names its own entry: rvktest.exe and
-# rvkvkprobe.exe are two programs, and a guest ICD is a DLL built the same way,
+# No C runtime, so each target names its own entry: avtest.exe and
+# avvkprobe.exe are two programs, and a guest ICD is a DLL built the same way,
 # its exports through a .def (feature 045).
 # -stdcall-fixup on x86: src/um/imports names each function undecorated, as
 # its DLL exports it, and llvm-dlltool makes the import library from that; the

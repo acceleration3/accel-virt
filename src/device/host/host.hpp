@@ -21,7 +21,7 @@ class PciAddress;
 class ScanoutFramebuffer;
 }  // namespace av
 
-struct RvkExportedImage;
+struct AvExportedImage;
 
 namespace av {
 
@@ -198,7 +198,7 @@ public:
     /* Main loop. Head `head` shows `image`, as export_image gave it:
      * not_supported where the head's console cannot show one, having changed
      * nothing. */
-    [[nodiscard]] virtual Status show_image(uint32_t head, const RvkExportedImage &image) = 0;
+    [[nodiscard]] virtual Status show_image(uint32_t head, const AvExportedImage &image) = 0;
 
     /* The renderer process (docs/renderer.md). Main loop, all of them. A
      * descriptor handed out is a duplicate, the caller's to close; one handed
@@ -226,7 +226,7 @@ public:
     [[nodiscard]] virtual Status dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) = 0;
     virtual void                 close_descriptor(int descriptor) = 0;
     /* The renderer at `path`, started with its socket as descriptor 3; the
-     * device is told through rvk_device_renderer_lost when it dies.
+     * device is told through av_device_renderer_lost when it dies.
      * not_supported where the host starts none. */
     [[nodiscard]] virtual Status start_renderer(const char *path) = 0;
     /* One datagram and its descriptors: not_found once the renderer is gone. */

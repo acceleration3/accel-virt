@@ -16,7 +16,7 @@ EventFile::EventFile() : region_(nullptr), bytes_(0u)
 bool EventFile::wanted() const
 {
     AV_SCOPE("EventFile::wanted");
-    return GetFileAttributesW(L"C:\\ProgramData\\rvk\\perfetto") != INVALID_FILE_ATTRIBUTES;
+    return GetFileAttributesW(L"C:\\ProgramData\\av\\perfetto") != INVALID_FILE_ATTRIBUTES;
 }
 
 /* The flag file's text, "<events per slot> <depth> <scope,scope,...>", every
@@ -25,7 +25,7 @@ void EventFile::read_flag(char *text, uint32_t capacity) const
 {
     AV_SCOPE("EventFile::read_flag");
     text[0] = '\0';
-    const HANDLE file = CreateFileW(L"C:\\ProgramData\\rvk\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    const HANDLE file = CreateFileW(L"C:\\ProgramData\\av\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                     nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return;
     DWORD read = 0u;
@@ -93,7 +93,7 @@ Status EventFile::open(const char *module, uint32_t process, size_t bytes)
     if (region_ != nullptr) return Status::invalid_state;
     char       narrow[96] = {};
     TextBuffer name(narrow, sizeof narrow);
-    name.append("C:\\ProgramData\\rvk\\events-");
+    name.append("C:\\ProgramData\\av\\events-");
     name.append(module);
     name.append("-");
     name.append_decimal(process);

@@ -286,7 +286,7 @@ TEST(device_loss, local_entry_points_answer_lost_with_no_kmt_call)
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(idle), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
   CHECK_EQ(rig.rig().log().holding("on a lost device"), logged + 18u);
-  CHECK_EQ(rig.rig().log().holding("rvkvk: vkQueueWaitIdle on a lost device"), 1u);
+  CHECK_EQ(rig.rig().log().holding("avvk: vkQueueWaitIdle on a lost device"), 1u);
   CHECK(rig.rig().root().invariants_hold()); }
 
 /* The memory queries have no result to answer the loss with: they answer no

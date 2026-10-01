@@ -65,7 +65,7 @@ struct ObjectRecord {
 
 /* A query: its type and how many bytes its answer is. */
 struct QueryRecord {
-    static constexpr uint32_t tag = 0x514B5652u; /* "RVKQ" */
+    static constexpr uint32_t tag = 0x00515641u; /* "AVQ" */
 
     uint32_t magic;
     uint32_t id;
@@ -86,7 +86,7 @@ struct QueryRecord {
 /* A command list's commands, recorded by a deferred context, in memory the
  * device allocated. */
 struct CommandListRecord {
-    static constexpr uint32_t tag = 0x4C4B5652u; /* "RVKL" */
+    static constexpr uint32_t tag = 0x004C5641u; /* "AVL" */
 
     uint32_t magic;
     uint32_t reserved;

@@ -30,7 +30,7 @@ public:
     [[nodiscard]] Status validate_against(const RingHeader &ring) const;
 
 private:
-    static constexpr uint32_t magic = 0x534B5652u;  /* "RVKS" */
+    static constexpr uint32_t magic = 0x00535641u;  /* "AVS" */
 
     uint64_t fence_id_;
     uint64_t begin_;

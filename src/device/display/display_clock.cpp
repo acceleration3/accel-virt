@@ -56,7 +56,7 @@ Status DisplayClock::attach(uint64_t address)
     host_.unlock_mutex(lock_);
     if (mapped != Status::ok || thread_ != nullptr) return mapped;
     stopping_ = false;
-    const Status started = host_.start_thread(&RvkDisplayClockRun, this, thread_);
+    const Status started = host_.start_thread(&AvDisplayClockRun, this, thread_);
     if (started == Status::ok) return Status::ok;
     host_.lock_mutex(lock_);
     page_.release();

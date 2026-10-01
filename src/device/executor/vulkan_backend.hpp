@@ -288,7 +288,7 @@ private:
     AdoptedBlobs     adopted_;
     VulkanHostImport import_;
     ImportableTypes  importable_;
-    /* RVK_VK_SUBMIT_TIMING: the GPU's time in and between submissions. */
+    /* AV_VK_SUBMIT_TIMING: the GPU's time in and between submissions. */
     VulkanSubmitTiming timing_;
     uint64_t parent_;
     uint64_t ran_;

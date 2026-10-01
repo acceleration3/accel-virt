@@ -254,7 +254,7 @@ TEST(blob_commands_unref, a_blob_an_import_holds_is_refused_and_kept)
 
 TEST(blob_commands_create, records_a_blob_created_and_a_blob_released)
 { Fixture fixture;
-  CHECK_STATUS(fixture.recorder().open("blobs.rvk", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(fixture.recorder().open("blobs.av", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
                                        av::ProtocolVersion(1u, 1u)),
                Status::ok);
   GpuRequestBuilder request = create_blob(1u, guest, 0u, 2u, 0u, 0x3000u);
@@ -265,7 +265,7 @@ TEST(blob_commands_create, records_a_blob_created_and_a_blob_released)
   unref.u32(1u).u32(0u);
   CHECK_EQ(fixture.send(unref), ok_nodata);
 
-  av::RecordedFile    file(fixture.host(), "blobs.rvk");
+  av::RecordedFile    file(fixture.host(), "blobs.av");
   av::RecordHeader    record;
   const std::uint8_t *payload = file.expect(av::RecordKind::blob, record);
   CHECK(payload != nullptr);
@@ -313,7 +313,7 @@ TEST(blob_commands, tells_the_contexts_of_every_blob_made_and_let_go)
 
 TEST(blob_commands_create, a_creation_the_device_refused_records_nothing)
 { Fixture fixture;
-  CHECK_STATUS(fixture.recorder().open("refused.rvk", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(fixture.recorder().open("refused.av", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
                                        av::ProtocolVersion(1u, 1u)),
                Status::ok);
   /* A host blob that is not mappable, and an unref of a resource nobody made. */
@@ -321,5 +321,5 @@ TEST(blob_commands_create, a_creation_the_device_refused_records_nothing)
   GpuRequestBuilder unref(BlobCommands::resource_unref);
   unref.u32(99u).u32(0u);
   static_cast<void>(fixture.send(unref));
-  CHECK_EQ(av::RecordedFile(fixture.host(), "refused.rvk").remaining(), 0u);
+  CHECK_EQ(av::RecordedFile(fixture.host(), "refused.av").remaining(), 0u);
   fixture.recorder().close(); }

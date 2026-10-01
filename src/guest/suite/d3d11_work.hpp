@@ -3,7 +3,7 @@
  * pixels read back and judged, and a present.
  *
  * What it proves is the whole layer stack on this driver: DXVK's d3d11.dll on
- * the guest's Vulkan loader on this ICD on rvkgpu. Every step is reported as
+ * the guest's Vulkan loader on this ICD on avgpu. Every step is reported as
  * the runner reads it, and the pixels are judged here rather than by the
  * layer: a frame that came back the wrong colour is a failure with the count
  * on the line. */

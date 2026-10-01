@@ -82,8 +82,8 @@ class GuestAgentClient(unittest.TestCase):
         peer = ScriptedPeer(self.path, [answer({"pid": 7}), answer({"exited": False}),
                                         answer({"exited": True, "exitcode": 3, "out-data": output})])
         agent = GuestAgent(self.path, 2.0)
-        self.assertEqual(agent.run("C:\\rvk\\rvktest.exe", ["-x"], 5.0, poll=0.01), (3, b"hello", b""))
-        self.assertEqual(peer.requests[0]["arguments"], {"path": "C:\\rvk\\rvktest.exe", "arg": ["-x"],
+        self.assertEqual(agent.run("C:\\av\\avtest.exe", ["-x"], 5.0, poll=0.01), (3, b"hello", b""))
+        self.assertEqual(peer.requests[0]["arguments"], {"path": "C:\\av\\avtest.exe", "arg": ["-x"],
                                                          "capture-output": True})
         agent.close()
 
@@ -108,7 +108,7 @@ class GuestAgentClient(unittest.TestCase):
         chunks = [answer({"count": 48 * 1024}), answer({"count": len(data) - 48 * 1024})]
         peer = ScriptedPeer(self.path, [answer(9), *chunks, answer({})])
         agent = GuestAgent(self.path, 2.0)
-        agent.push(data, "C:\\rvk\\file")
+        agent.push(data, "C:\\av\\file")
         written = b"".join(base64.b64decode(r["arguments"]["buf-b64"]) for r in peer.requests[1:3])
         self.assertEqual(written, data)
         self.assertEqual(peer.requests[-1], {"execute": "guest-file-close", "arguments": {"handle": 9}})
@@ -117,7 +117,7 @@ class GuestAgentClient(unittest.TestCase):
         peer = ScriptedPeer(short, [answer(9), answer({"count": 1}), answer({})])
         agent = GuestAgent(short, 2.0)
         with self.assertRaises(AgentError) as raised:
-            agent.push(b"abc", "C:\\rvk\\file")
+            agent.push(b"abc", "C:\\av\\file")
         self.assertIn("short write", str(raised.exception))
         self.assertEqual(peer.requests[-1]["execute"], "guest-file-close")
         agent.close()

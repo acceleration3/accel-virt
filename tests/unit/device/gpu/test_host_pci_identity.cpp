@@ -1,4 +1,4 @@
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 #include "device/gpu/host_pci_identity.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -47,7 +47,7 @@ bool presents_vendor(const char *vendor, std::uint16_t &presented)
     add_text(host, revision_path, "0xc0\n");
     HostPciIdentity identity(host);
     identity.read(0u);
-    RvkPciIdentity answer = {};
+    AvPciIdentity answer = {};
     const bool present = identity.presented(answer);
     presented = answer.vendor_id;
     return present;
@@ -59,7 +59,7 @@ TEST(host_pci_identity, presents_the_bound_gpus_vendor_device_and_revision_and_s
 { MockHost host;
   add_radeon(host);
   HostPciIdentity identity(host);
-  RvkPciIdentity answer = {0xAAAAu, 0xBBBBu, 0xCCu};
+  AvPciIdentity answer = {0xAAAAu, 0xBBBBu, 0xCCu};
   CHECK(!identity.presented(answer));   /* nothing read yet */
   CHECK_EQ(answer.vendor_id, 0xAAAAu);
   identity.read(0u);
@@ -68,7 +68,7 @@ TEST(host_pci_identity, presents_the_bound_gpus_vendor_device_and_revision_and_s
   CHECK_EQ(answer.device_id, 0x7550u);
   CHECK_EQ(answer.revision, 0xC0u);
   CHECK_EQ(host.logged(), 1u);
-  CHECK(std::strcmp(host.last_log(), "virtio-gpu-rvk: pci identity 1002:7550 rev c0, the host's 0000:03:00.0") == 0); }
+  CHECK(std::strcmp(host.last_log(), "virtio-gpu-av: pci identity 1002:7550 rev c0, the host's 0000:03:00.0") == 0); }
 
 TEST(host_pci_identity, a_gpu_with_no_pci_function_presents_nothing)
 { MockHost host;
@@ -77,7 +77,7 @@ TEST(host_pci_identity, a_gpu_with_no_pci_function_presents_nothing)
   HostPciIdentity identity(host);
   identity.read(0u);
   identity.read(1u);   /* a later read replaces the first */
-  RvkPciIdentity answer = {0xAAAAu, 0xBBBBu, 0xCCu};
+  AvPciIdentity answer = {0xAAAAu, 0xBBBBu, 0xCCu};
   CHECK(!identity.presented(answer));
   CHECK_EQ(answer.vendor_id, 0xAAAAu);
   CHECK_EQ(answer.device_id, 0xBBBBu);
@@ -94,7 +94,7 @@ TEST(host_pci_identity, a_function_sysfs_does_not_fully_describe_presents_nothin
     if (std::strcmp(missing, revision_path) != 0) add_text(host, revision_path, "0xc0\n");
     HostPciIdentity identity(host);
     identity.read(0u);
-    RvkPciIdentity answer = {};
+    AvPciIdentity answer = {};
     CHECK(!identity.presented(answer));
     CHECK_EQ(host.logged(), 0u); } }
 
@@ -123,7 +123,7 @@ TEST(host_pci_identity, refuses_text_that_is_not_one_hex_number_in_range)
   add_text(host, revision_path, "0x100\n");
   HostPciIdentity identity(host);
   identity.read(0u);
-  RvkPciIdentity answer = {};
+  AvPciIdentity answer = {};
   CHECK(!identity.presented(answer)); }
 
 /* sysfs never writes more than a line; a file longer than the buffer is read

@@ -1,6 +1,6 @@
 /* One guest context on one host API, judged by what the device will act on:
  * which of the ABI's four results comes back, and how long the answer was. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/context_session.hpp"
 #include "harness/wire/wire_arena_probe.hpp"
 #include "proto/wire/wire_arena.hpp"
@@ -60,7 +60,7 @@ TEST(context_session, a_command_it_knows_runs_and_answers)
   std::size_t  answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::echo_id, payload, sizeof payload, reply,
                            sizeof reply, answer),
-           std::uint32_t{RVK_EXECUTED});
+           std::uint32_t{AV_EXECUTED});
   CHECK_EQ(answer, sizeof payload);
   for (std::size_t i = 0u; i < sizeof payload; i++) CHECK_EQ(reply[i], payload[i]);
   CHECK(session.invariants_hold()); }
@@ -75,7 +75,7 @@ TEST(context_session, an_id_it_does_not_know_is_unknown_not_undecodable)
   CHECK_STATUS(bound.status(), Status::ok);
   std::size_t answer = 1u;
   CHECK_EQ(session.execute(0xDEADu, payload, sizeof payload, nullptr, 0u, answer),
-           std::uint32_t{RVK_UNKNOWN});
+           std::uint32_t{AV_UNKNOWN});
   CHECK_EQ(answer, 0u);
   CHECK_EQ(backend.ran(), 0u); }
 
@@ -88,7 +88,7 @@ TEST(context_session, a_payload_that_does_not_decode_is_undecodable_and_starves_
   std::size_t answer = 1u;
   CHECK_EQ(session.execute(MockSessionBackend::malformed_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_UNDECODABLE});
+           std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(answer, 0u);
   CHECK_EQ(session.starved(), 0u); }
 
@@ -103,7 +103,7 @@ TEST(context_session, a_command_the_block_will_not_hold_is_undecodable_and_count
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::greedy_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_UNDECODABLE});
+           std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(session.starved(), 1u);
   CHECK(session.invariants_hold()); }
 
@@ -121,7 +121,7 @@ TEST(context_session, an_answer_longer_than_the_capacity_reports_its_length)
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::long_answer_id, payload, sizeof payload, reply,
                            sizeof reply, answer),
-           std::uint32_t{RVK_EXECUTED});
+           std::uint32_t{AV_EXECUTED});
   CHECK_EQ(answer, 64u);
   /* Nothing was written: a partial answer is worse than none, because the
    * guest cannot tell it is partial. */
@@ -138,7 +138,7 @@ TEST(context_session, a_command_with_nowhere_to_answer_still_runs)
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::echo_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_EXECUTED});
+           std::uint32_t{AV_EXECUTED});
   CHECK_EQ(answer, sizeof payload);
   CHECK_EQ(backend.ran(), 1u); }
 
@@ -153,10 +153,10 @@ TEST(context_session, a_lost_device_is_lost_for_every_command_after_it)
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_DEVICE_LOST});
+           std::uint32_t{AV_DEVICE_LOST});
   CHECK_EQ(session.execute(MockSessionBackend::echo_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_DEVICE_LOST});
+           std::uint32_t{AV_DEVICE_LOST});
   /* The second command never reached the backend. */
   CHECK_EQ(backend.ran(), 1u);
   CHECK(session.invariants_hold()); }
@@ -167,7 +167,7 @@ TEST(context_session, a_session_with_no_backend_runs_nothing)
   std::size_t answer = 1u;
   CHECK_EQ(session.execute(MockSessionBackend::echo_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_DEVICE_LOST});
+           std::uint32_t{AV_DEVICE_LOST});
   CHECK_EQ(answer, 0u);
   CHECK(session.invariants_hold()); }
 
@@ -194,7 +194,7 @@ TEST(context_session, a_released_session_is_not_still_faulted)
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr, 0u,
                            answer),
-           std::uint32_t{RVK_DEVICE_LOST});
+           std::uint32_t{AV_DEVICE_LOST});
   session.release();
   CHECK(session.invariants_hold());
   CHECK(!session.live()); }
@@ -204,9 +204,9 @@ namespace {
 
 std::uint8_t blob_backing[av::ImportedBlob::page_bytes];
 
-RvkBlobHandle blob_handle(std::uint64_t size = av::ImportedBlob::page_bytes)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_HOST_POINTER;
+AvBlobHandle blob_handle(std::uint64_t size = av::ImportedBlob::page_bytes)
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
   handle.pointer = blob_backing;
   handle.fd = -1;
   handle.size = size;
@@ -217,7 +217,7 @@ RvkBlobHandle blob_handle(std::uint64_t size = av::ImportedBlob::page_bytes)
 TEST(context_session_import, a_blob_the_backend_takes_is_held_until_released)
 { Bound bound;
   CHECK_EQ(bound.session().imports(), 0u);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(bound.session().imports(), 1u);
   CHECK_EQ(bound.backend().adopted(), 1u);
 
@@ -232,8 +232,8 @@ TEST(context_session_import, a_blob_the_backend_takes_is_held_until_released)
 TEST(context_session_import, answers_the_handle_the_guest_names_an_import_by)
 { Bound bound;
   CHECK_EQ(bound.session().imported_handle(5u), 0u);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
-  CHECK_EQ(bound.session().import_blob(6u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(6u, blob_handle()), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(bound.session().imported_handle(5u), 5u + MockSessionBackend::wire_offset);
   CHECK_EQ(bound.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
   CHECK_EQ(bound.session().imported_handle(7u), 0u);
@@ -245,7 +245,7 @@ TEST(context_session_import, answers_the_handle_the_guest_names_an_import_by)
 
   /* A refused import leaves nothing to name. */
   bound.backend().set_adopts(false);
-  CHECK_EQ(bound.session().import_blob(8u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().import_blob(8u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(bound.session().imported_handle(8u), 0u);
   CHECK(bound.session().invariants_hold()); }
 
@@ -259,14 +259,14 @@ TEST(context_session_import, releasing_one_it_never_took_is_nothing)
 /* An id already imported is refused rather than silently torn down. */
 TEST(context_session_import, the_same_id_twice_is_refused)
 { Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(bound.session().imports(), 1u);
   CHECK_EQ(bound.backend().adopted(), 1u); }
 
 TEST(context_session_import, a_handle_the_abi_refuses_never_reaches_the_backend)
 { Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle(1u)), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle(1u)), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(bound.backend().adopted(), 0u);
   CHECK_EQ(bound.session().imports(), 0u); }
 
@@ -275,10 +275,10 @@ TEST(context_session_import, a_handle_the_abi_refuses_never_reaches_the_backend)
 TEST(context_session_import, a_backend_that_will_not_take_it_costs_no_slot)
 { Bound bound;
   bound.backend().set_adopts(false);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(bound.session().imports(), 0u);
   bound.backend().set_adopts(true);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(bound.session().imports(), 1u); }
 
 /* A guest that never releases leaks nothing: destroying the session gives back
@@ -287,7 +287,7 @@ TEST(context_session_import, a_backend_that_will_not_take_it_costs_no_slot)
 TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did_not)
 { Bound bound;
   for (std::uint64_t id = 1u; id <= 3u; id++) {
-      CHECK_EQ(bound.session().import_blob(id, blob_handle()), std::uint32_t{RVK_EXECUTED});
+      CHECK_EQ(bound.session().import_blob(id, blob_handle()), std::uint32_t{AV_EXECUTED});
   }
   CHECK_EQ(bound.session().imports(), 3u);
   bound.session().release();
@@ -297,7 +297,7 @@ TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did
 
 TEST(context_session_import, a_session_with_no_backend_imports_nothing)
 { ContextSession session;
-  CHECK_EQ(session.import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(session.import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(session.imports(), 0u);
   session.release_blob(5u);
   CHECK(session.invariants_hold()); }
@@ -309,8 +309,8 @@ TEST(context_session_import, a_lost_device_imports_nothing)
   std::size_t answer = 0u;
   CHECK_EQ(bound.session().execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr,
                                    0u, answer),
-           std::uint32_t{RVK_DEVICE_LOST});
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+           std::uint32_t{AV_DEVICE_LOST});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(bound.backend().adopted(), 0u);
   CHECK_EQ(bound.session().imports(), 0u);
   CHECK(bound.session().invariants_hold()); }
@@ -319,7 +319,7 @@ TEST(context_session_import, a_lost_device_imports_nothing)
  * something take never let through. */
 TEST(context_session_invariants, an_import_that_breaks_its_own_breaks_them)
 { Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
   ContextSessionProbe probe(bound.session());
   ImportedBlobProbe(*probe.imports().find(5u)).set_size(1u);
   CHECK(!bound.session().invariants_hold()); }
@@ -335,7 +335,7 @@ TEST(context_session_invariants, a_fault_with_no_backend_breaks_them)
  * pointer would outlive the mapping the device keeps for it. */
 TEST(context_session_invariants, imports_with_no_backend_break_them)
 { Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
   ContextSessionProbe(bound.session()).drop_backend();
   CHECK(!bound.session().invariants_hold()); }
 
@@ -359,16 +359,16 @@ TEST(context_session, the_shared_object_calls_reach_the_backend_of_a_live_sessio
   MockSessionBackend &backend = bound.backend();
   std::uint32_t handle_kind = 0u;
   int           fd = -1;
-  CHECK(bound.session().export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+  CHECK(bound.session().export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
   CHECK(fd >= 0);
   CHECK_EQ(backend.exported_objects(), 1u);
 
   std::uint64_t made = 0u;
-  CHECK(bound.session().import_object(RVK_SHARED_MEMORY, handle_kind, fd, 4096u, made));
+  CHECK(bound.session().import_object(AV_SHARED_MEMORY, handle_kind, fd, 4096u, made));
   CHECK(made != 0u);
   CHECK_EQ(backend.imported_objects(), 1u);
-  bound.session().release_object(RVK_SHARED_MEMORY, made);
+  bound.session().release_object(AV_SHARED_MEMORY, made);
   CHECK_EQ(backend.released_objects(), 1u);
   ::close(fd);
   CHECK(bound.session().invariants_hold()); }
@@ -378,11 +378,11 @@ TEST(context_session, a_backend_that_shares_nothing_is_a_refusal_and_not_a_fault
   bound.backend().set_shares(false);
   std::uint32_t handle_kind = 9u;
   int           fd = 9;
-  CHECK(!bound.session().export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK(!bound.session().export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
   CHECK_EQ(handle_kind, 0u);
   CHECK_EQ(fd, -1);
   std::uint64_t made = 9u;
-  CHECK(!bound.session().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
+  CHECK(!bound.session().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
   CHECK_EQ(made, 0u);
   CHECK(bound.session().invariants_hold()); }
 
@@ -390,12 +390,12 @@ TEST(context_session, a_session_that_was_never_bound_shares_nothing_and_releases
 { ContextSession session;
   std::uint32_t  handle_kind = 9u;
   int            fd = 9;
-  CHECK(!session.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK(!session.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
   CHECK_EQ(fd, -1);
   std::uint64_t made = 9u;
-  CHECK(!session.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
+  CHECK(!session.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
   CHECK_EQ(made, 0u);
-  session.release_object(RVK_SHARED_MEMORY, 0x40u);
+  session.release_object(AV_SHARED_MEMORY, 0x40u);
   CHECK(session.invariants_hold()); }
 
 /* A faulted session refuses the shared-object calls as it refuses every
@@ -405,9 +405,9 @@ TEST(context_session, a_faulted_session_shares_nothing)
   ContextSessionProbe(bound.session()).set_faulted(true);
   std::uint32_t handle_kind = 9u;
   int           fd = 9;
-  CHECK(!bound.session().export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK(!bound.session().export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
   std::uint64_t made = 9u;
-  CHECK(!bound.session().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
+  CHECK(!bound.session().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
   CHECK_EQ(made, 0u);
   CHECK_EQ(bound.backend().exported_objects(), 0u);
   ContextSessionProbe(bound.session()).set_faulted(false); }
@@ -425,7 +425,7 @@ TEST(context_session_hold_clocks, a_session_holding_clocks_runs_its_commands_as_
   std::uint8_t reply[16] = {};
   std::size_t  answer = 0u;
   CHECK_EQ(bound.session().execute(MockSessionBackend::echo_id, payload, sizeof payload, reply, sizeof reply, answer),
-           std::uint32_t{RVK_EXECUTED});
+           std::uint32_t{AV_EXECUTED});
   CHECK_EQ(answer, sizeof payload);
   CHECK_EQ(reply[7], payload[7]);
   CHECK_EQ(bound.backend().ran(), 1u);

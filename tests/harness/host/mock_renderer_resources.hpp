@@ -21,7 +21,7 @@ public:
     static constexpr std::uint32_t max_lines = 64u;
     static constexpr std::size_t   max_path = 128u;
 
-    MockRendererResources(MockHost &qemu, const RvkExecutorOps &executor);
+    MockRendererResources(MockHost &qemu, const AvExecutorOps &executor);
     ~MockRendererResources();
     MockRendererResources(const MockRendererResources &) = delete;
     MockRendererResources &operator=(const MockRendererResources &) = delete;
@@ -32,7 +32,7 @@ public:
     void                 offer_host_memory(int descriptor) override;
     void                 take_interrupt_lines(const int *descriptors, std::uint32_t count) override;
     void                 drop_interrupt_lines() override;
-    [[nodiscard]] Status load_executor(const char *path, std::uint32_t length, const RvkExecutorOps *&ops) override;
+    [[nodiscard]] Status load_executor(const char *path, std::uint32_t length, const AvExecutorOps *&ops) override;
 
     /* `count` descriptors arrived with a datagram and are the service's now. */
     void          adopt(std::uint32_t count);
@@ -50,7 +50,7 @@ private:
     void close_offered();
 
     MockHost             &qemu_;
-    const RvkExecutorOps &executor_;
+    const AvExecutorOps &executor_;
     std::uint32_t         descriptors_;
     std::uint32_t         mappings_;
     int                   offered_;

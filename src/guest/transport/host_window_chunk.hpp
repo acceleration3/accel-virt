@@ -1,6 +1,6 @@
 /* One chunk of the device's host window taken by a process
  * (docs/host-window.md): host memory the kernel placed in the window, made a
- * resource of the transport's rvk context and mapped into this process
+ * resource of the transport's av context and mapped into this process
  * write-back, all in one HostWindowRecord escape. There is no allocation, no
  * lock and no paging: the escape is the whole of it, and the close gives it
  * back. */

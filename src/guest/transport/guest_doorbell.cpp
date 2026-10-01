@@ -8,7 +8,7 @@ namespace av {
 namespace {
 
 /* What a store to this device's doorbell is: one four-byte write at offset 0
- * of the page (rvk_device.h). The value carries nothing - the ring's tail is
+ * of the page (av_device.h). The value carries nothing - the ring's tail is
  * what says there is work - so it is the same every time. */
 constexpr uint32_t store_value = 1u;
 

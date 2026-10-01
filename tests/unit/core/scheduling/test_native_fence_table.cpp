@@ -191,7 +191,7 @@ TEST(native_fence_table, a_table_with_no_room_refuses)
   CHECK_STATUS(fences.destroy(destroy), Status::ok);
   CHECK_STATUS(fences.create(past), Status::ok); }
 
-/* What rvk-inspect reads out of a running driver (docs/trace.md), and nothing
+/* What av-inspect reads out of a running driver (docs/trace.md), and nothing
  * but `busy` while another thread holds the table. */
 TEST(native_fence_table_report, writes_each_fence_and_says_when_it_cannot)
 { MockPlatform     platform;

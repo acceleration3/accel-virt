@@ -1,5 +1,5 @@
 """The generated Vulkan ICD wrappers and their table, from a registry small
-enough to read (tools/codegen/rvk_codegen/emit/icd_entries.py).
+enough to read (tools/codegen/av_codegen/emit/icd_entries.py).
 
 What the loader relies on: every row says which object its command dispatches
 on, so vk_icdGetPhysicalDeviceProcAddr can answer only physical-device
@@ -16,8 +16,8 @@ from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "codegen"))
 
-from rvk_codegen.emit import icd_entries  # noqa: E402
-from rvk_codegen.ir import Command, CType, Param, Registry, Struct, StructMember  # noqa: E402
+from av_codegen.emit import icd_entries  # noqa: E402
+from av_codegen.ir import Command, CType, Param, Registry, Struct, StructMember  # noqa: E402
 
 
 def param(name, base, pointer_depth=0, is_const=False, direction="in", len_expr=None):
@@ -129,12 +129,12 @@ class GeneratedIcdEntries(unittest.TestCase):
     def test_every_physical_device_inside_a_group_is_wrapped(self):
         for name in ("vkEnumeratePhysicalDeviceGroups", "vkEnumeratePhysicalDeviceGroupsKHR"):
             body = self.wrapper(name)
-            self.assertIn("rvk_rc != VK_SUCCESS && rvk_rc != VK_INCOMPLETE", body)
+            self.assertIn("av_rc != VK_SUCCESS && av_rc != VK_INCOMPLETE", body)
             self.assertIn("if (pPhysicalDeviceGroupProperties == nullptr) {", body)
             self.assertIn("::av::icd::wrap_server_handle<VkPhysicalDevice>(reinterpret_cast<uint64_t>(", body)
             self.assertIn("return VK_ERROR_OUT_OF_HOST_MEMORY;", body)
             # The wrap follows the call: it reads the host's handles the call wrote.
-            self.assertLess(body.index("rvk_" + name + "("), body.index("wrap_server_handle"))
+            self.assertLess(body.index("av_" + name + "("), body.index("wrap_server_handle"))
 
     def test_each_groups_own_count_bounds_the_devices_wrapped(self):
         body = self.wrapper("vkEnumeratePhysicalDeviceGroups")

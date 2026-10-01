@@ -43,7 +43,7 @@ public:
      * for a run whose device loaded it rather than the echo library
      * (feature 044). */
     uint32_t run_round_trip();
-    uint32_t run_rvk();
+    uint32_t run_av();
 
 private:
     Kmt               &kmt_;

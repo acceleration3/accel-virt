@@ -16,7 +16,7 @@ class ExecutionNode;
 
 class DebugReport {
 public:
-    static constexpr uint32_t magic = 0x444B5652u;   /* "RVKD" */
+    static constexpr uint32_t magic = 0x00445641u;   /* "AVD" */
     static constexpr uint16_t format = 2u;
     /* magic, format, started, powered, negotiated features, then the node: last
      * submitted fence, last completed fence, time of last progress, pending

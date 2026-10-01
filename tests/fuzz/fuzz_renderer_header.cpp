@@ -1,4 +1,4 @@
-/* The header of every datagram QEMU and rvk-renderer send each other, fed
+/* The header of every datagram QEMU and av-renderer send each other, fed
  * attacker-chosen bytes: a renderer running guest shaders may be compromised,
  * so QEMU reads what it sends as hostile. What decodes must re-encode to the
  * bytes read and describe exactly the body that arrived. */

@@ -2,7 +2,7 @@
  * guest build alone.
  *
  * That header is generated against a hosted compiler and includes
- * <type_traits>; rvkcl.dll is built with /X against the Windows kit, which
+ * <type_traits>; avcl.dll is built with /X against the Windows kit, which
  * carries no C++ standard library, so the include resolves here through this
  * target's include path and nowhere else. Same device as
  * src/um/opencl_loader/compat/, which answers the C library names the pinned

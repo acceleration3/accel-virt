@@ -691,7 +691,7 @@ TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the
   /* And once the context is faulted, the import is the loss. */
   const std::uint32_t before = rig.rig().kmt().commands();
   rig.rig().kmt().withhold_answer_at(1u);
-  CHECK_EQ(rig.entry<VkResult (*)(VkPhysicalDevice)>("vkRvkForceContextFault")(rig.physical_device()),
+  CHECK_EQ(rig.entry<VkResult (*)(VkPhysicalDevice)>("vkAvForceContextFault")(rig.physical_device()),
            VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
            VK_ERROR_DEVICE_LOST);
@@ -807,9 +807,9 @@ TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outs
 
   /* And the loader finds it by name, as it finds the fault hook - with a
    * dispatchable handle first, which is what the loader trampolines on: a hook
-   * with no arguments crashed rvkvkprobe.exe inside vulkan-1.dll. */
+   * with no arguments crashed avvkprobe.exe inside vulkan-1.dll. */
   using LastStatus = VkResult (*)(VkPhysicalDevice, std::uint32_t *);
-  const auto entry = rig.entry<LastStatus>("vkRvkLastKernelStatus");
+  const auto entry = rig.entry<LastStatus>("vkAvLastKernelStatus");
   CHECK(entry != nullptr);
   CHECK_EQ(entry(rig.physical_device(), &status), VK_SUCCESS);
   CHECK_EQ(status, MockKmt::invalid_parameter); }

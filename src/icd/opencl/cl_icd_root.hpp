@@ -1,4 +1,4 @@
-/* rvkcl.dll's decisions: what every entry point the Khronos loader reaches
+/* avcl.dll's decisions: what every entry point the Khronos loader reaches
  * answers. One per process - in the exports' storage in the DLL, the one under
  * test in a test - bound to ClIcdBinding for its life.
  *
@@ -95,7 +95,7 @@ public:
 
     /* ---- devices -------------------------------------------------------- */
 
-    /* One device per rvkgpu adapter, made on the first ask and kept. */
+    /* One device per avgpu adapter, made on the first ask and kept. */
     cl_int device_ids(cl_platform_id platform, cl_device_type type, cl_uint num_entries,
                       cl_device_id *devices, cl_uint *num_devices);
     cl_int device_info(cl_device_id device, cl_device_info name, size_t value_bytes, void *value,

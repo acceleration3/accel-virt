@@ -10,7 +10,7 @@ namespace av {
 
 Context::Context(Platform &platform, Device &device, const GpuMmuGeometry &geometry, uint32_t node, uint32_t flags)
     : platform_(platform), device_(device), node_(node), flags_(flags), root_(platform, geometry),
-      rvk_record_(), is_rvk_(false)
+      av_record_(), is_av_(false)
       {
           AV_SCOPE("Context::Context");
       }
@@ -36,26 +36,26 @@ uint32_t Context::flags() const
     return flags_;
 }
 
-void Context::become_rvk(const RvkContextRecord &record)
+void Context::become_av(const AvContextRecord &record)
 {
-    AV_SCOPE("Context::become_rvk");
-    platform_.require_irql_at_most(Irql::apc, "Context::become_rvk");
-    rvk_record_ = record;
-    is_rvk_ = true;
+    AV_SCOPE("Context::become_av");
+    platform_.require_irql_at_most(Irql::apc, "Context::become_av");
+    av_record_ = record;
+    is_av_ = true;
 }
 
-bool Context::is_rvk() const
+bool Context::is_av() const
 {
-    AV_SCOPE("Context::is_rvk");
-    platform_.require_irql_at_most(Irql::dispatch, "Context::is_rvk");
-    return is_rvk_;
+    AV_SCOPE("Context::is_av");
+    platform_.require_irql_at_most(Irql::dispatch, "Context::is_av");
+    return is_av_;
 }
 
-const RvkContextRecord &Context::rvk_record() const
+const AvContextRecord &Context::av_record() const
 {
-    AV_SCOPE("Context::rvk_record");
-    platform_.require_irql_at_most(Irql::dispatch, "Context::rvk_record");
-    return rvk_record_;
+    AV_SCOPE("Context::av_record");
+    platform_.require_irql_at_most(Irql::dispatch, "Context::av_record");
+    return av_record_;
 }
 
 void Context::report_to(DxgkargCreateContextRecord &request)
@@ -67,7 +67,7 @@ void Context::report_to(DxgkargCreateContextRecord &request)
     request.ContextInfoDmaBufferSegmentSet = ApertureSegment::segment_set;
     /* Any other context may carry a FollowRecord (Adapter::submit_command_virtual). */
     request.ContextInfoDmaBufferPrivateDataSize = static_cast<uint32_t>(
-        is_rvk_ ? SubmissionDescriptor::encoded_size : FollowRecord::encoded_size);
+        is_av_ ? SubmissionDescriptor::encoded_size : FollowRecord::encoded_size);
     request.ContextInfoAllocationListSize = allocation_list_entries;
     request.ContextInfoPatchLocationListSize = patch_location_entries;
     request.ContextInfoReserved = 0u;

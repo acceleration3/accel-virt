@@ -1,7 +1,7 @@
 """Blob resources against the real device: guest-backed blobs held by the
 device, and device-allocated blobs the guest reads and writes through the
 hostmem BAR once mapped. Stock virtio-gpu-pci with blob=off refuses every blob
-request; virtio-gpu-rvk-pci answers them itself without offering
+request; virtio-gpu-av-pci answers them itself without offering
 VIRTIO_GPU_F_RESOURCE_BLOB.
 
 Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
@@ -37,7 +37,7 @@ PAGE = 0x1000
 UNASSIGNED = 0xD0000000
 
 STOCK = f"virtio-gpu-pci,hostmem={HOSTMEM}"
-RVK = f"virtio-gpu-rvk-pci,host-gpu=auto,hostmem={HOSTMEM}"
+AV = f"virtio-gpu-av-pci,host-gpu=auto,hostmem={HOSTMEM}"
 
 
 def header(command):
@@ -77,11 +77,11 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(length, HOSTMEM)
         return address
 
-    def test_the_rvk_device_offers_the_same_hostmem_region_and_no_blob_feature(self):
+    def test_the_av_device_offers_the_same_hostmem_region_and_no_blob_feature(self):
         stock = self.open(STOCK)
-        rvk = self.open(RVK)
-        self.assertEqual(rvk.device.offered_features(), stock.device.offered_features())
-        self.assertEqual(rvk.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
+        av = self.open(AV)
+        self.assertEqual(av.device.offered_features(), stock.device.offered_features())
+        self.assertEqual(av.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
         self.assertEqual(stock.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
 
     def test_stock_virtio_gpu_without_blobs_refuses_every_blob_request(self):
@@ -93,7 +93,7 @@ class VirtioGpuBlobs(unittest.TestCase):
             self.assertEqual(hex(self.send(gpu, request)), hex(RESP_ERR_UNSPEC))
 
     def test_a_guest_blob_is_held_until_unreferenced(self):
-        gpu = self.open(RVK)
+        gpu = self.open(AV)
         pages = gpu.device.memory.allocate(3 * PAGE)
         entries = ((pages, PAGE), (pages + PAGE, 2 * PAGE))
         self.assertEqual(hex(self.send(gpu, create_blob(1, BLOB_MEM_GUEST, 0, 3 * PAGE, entries))),
@@ -105,7 +105,7 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNREF, 1))), hex(RESP_ERR_INVALID_RESOURCE_ID))
 
     def test_a_host_blob_is_read_and_written_through_the_hostmem_bar_once_mapped(self):
-        gpu = self.open(RVK)
+        gpu = self.open(AV)
         hostmem = self.hostmem(gpu)
         pattern = bytes(range(256)) * 8
         self.assertEqual(hex(self.send(gpu, create_blob(2, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, 2 * PAGE))),
@@ -127,7 +127,7 @@ class VirtioGpuBlobs(unittest.TestCase):
     def test_a_blob_as_large_as_the_window_is_placed_at_its_start(self):
         """The largest chunk the driver's host window can hand out
         (docs/host-window.md) is the whole BAR, placed at offset 0."""
-        gpu = self.open(RVK)
+        gpu = self.open(AV)
         hostmem = self.hostmem(gpu)
         resource = 0x1000
         self.assertEqual(hex(self.send(gpu, create_blob(resource, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, HOSTMEM))),
@@ -155,7 +155,7 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(gpu.qtest.read_bytes(hostmem, len(pattern)), bytes(len(pattern)))
 
     def test_mappings_stay_inside_the_region_and_apart(self):
-        gpu = self.open(RVK)
+        gpu = self.open(AV)
         for resource in (3, 4):
             self.assertEqual(hex(self.send(gpu, create_blob(resource, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE,
                                                             2 * PAGE))), hex(RESP_OK_NODATA))
@@ -172,7 +172,7 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(hex(response_type(gpu.control(map_blob(4, 2 * PAGE), 32))), hex(RESP_OK_MAP_INFO))
 
     def test_requests_the_protocol_does_not_allow_are_refused_with_the_documented_errors(self):
-        gpu = self.open(RVK)
+        gpu = self.open(AV)
         pages = gpu.device.memory.allocate(PAGE)
         self.assertEqual(hex(self.send(gpu, create_blob(5, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, PAGE))),
                          hex(RESP_OK_NODATA))
@@ -197,7 +197,7 @@ class VirtioGpuBlobs(unittest.TestCase):
                          hex(RESP_ERR_INVALID_RESOURCE_ID))
 
     def test_a_reset_releases_every_blob_and_mapping(self):
-        gpu = self.open(RVK)
+        gpu = self.open(AV)
         hostmem = self.hostmem(gpu)
         self.assertEqual(hex(self.send(gpu, create_blob(7, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, PAGE))),
                          hex(RESP_OK_NODATA))
@@ -210,11 +210,11 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(hex(response_type(again.control(map_blob(7, 0), 32))), hex(RESP_OK_MAP_INFO))
 
     def test_blob_on_is_refused_at_realize(self):
-        qtest = virtio_qtest.Qtest(BUILD, "virtio-gpu-rvk-pci,host-gpu=auto,blob=on")
+        qtest = virtio_qtest.Qtest(BUILD, "virtio-gpu-av-pci,host-gpu=auto,blob=on")
         with self.assertRaises(RuntimeError) as refused:
             qtest.command("readb 0x0")
         qtest.close()
-        self.assertIn("virtio-gpu-rvk: blob=on is not supported; the device answers blob requests itself",
+        self.assertIn("virtio-gpu-av: blob=on is not supported; the device answers blob requests itself",
                       str(refused.exception))
 
 

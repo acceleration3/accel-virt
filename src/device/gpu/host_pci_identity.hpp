@@ -1,5 +1,5 @@
 /* The vendor, device and revision of the PCI function behind the host GPU a
- * device instance is bound to, read from sysfs, which virtio-gpu-rvk-pci
+ * device instance is bound to, read from sysfs, which virtio-gpu-av-pci
  * presents as its own. A Windows guest reads an adapter's IDs from its PCI
  * configuration space and nowhere else - dxgkrnl has no query a driver could
  * answer them through - so this is what makes Device Manager, WMI and DXGI
@@ -9,7 +9,7 @@
 #ifndef AV_HOST_PCI_IDENTITY_HPP
 #define AV_HOST_PCI_IDENTITY_HPP
 
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -30,7 +30,7 @@ public:
     void read(uint32_t gpu_index);
     /* Fills `identity` when there is one to present; false, leaving it
      * untouched, when there is not. */
-    bool presented(RvkPciIdentity &identity) const;
+    bool presented(AvPciIdentity &identity) const;
 
 private:
     /* sysfs writes each of these as "0x%04x\n" or "0x%02x\n". */

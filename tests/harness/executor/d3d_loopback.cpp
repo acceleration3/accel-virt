@@ -1,6 +1,6 @@
 #include "harness/executor/d3d_loopback.hpp"
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/d3d_backend.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -19,8 +19,8 @@ D3dLoopback::D3dLoopback(D3dBackend &backend, std::size_t guest_bytes, std::size
     if (guest_bytes == 0u) return;
     guest_ = static_cast<uint8_t *>(std::aligned_alloc(heap_alignment, guest_bytes));
     guest_bytes_ = guest_bytes;
-    RvkBlobHandle handle = {};
-    handle.kind = RVK_BLOB_HOST_POINTER;
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_HOST_POINTER;
     handle.pointer = guest_;
     handle.fd = -1;
     handle.size = guest_bytes;

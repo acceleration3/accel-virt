@@ -1,4 +1,4 @@
-/* rvkvkprobe.exe (feature 045, T039): VulkanProbe over the Khronos loader in
+/* avvkprobe.exe (feature 045, T039): VulkanProbe over the Khronos loader in
  * vulkan-1.dll - every Vulkan call resolved through its vkGetInstanceProcAddr,
  * the adapter's LUID through gdi32 - its report written to standard output for
  * the guest agent to carry back, its failures the exit code. Translation only:

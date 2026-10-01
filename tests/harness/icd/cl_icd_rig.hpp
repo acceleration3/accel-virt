@@ -1,5 +1,5 @@
 /* One process's OpenCL ICD, as the Khronos loader meets it: the root over
- * MockKmt with the rvkgpu adapter, the host played through ScriptedHost, the
+ * MockKmt with the avgpu adapter, the host played through ScriptedHost, the
  * locks' trace, the log, and a loader that dispatches through the table rather
  * than calling the root by name.
  *

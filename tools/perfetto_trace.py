@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """A timeline of a QEMU process's device and executor scopes, for ui.perfetto.dev.
 
-Run QEMU with RVK_PERFETTO=1 in its environment (tools/guest/run_guest_suite.py
+Run QEMU with AV_PERFETTO=1 in its environment (tools/guest/run_guest_suite.py
 --perfetto does) and every AV_SCOPE on the host is also an event in
-/dev/shm/rvk-events-<module>-<pid>, a ring per thread holding its newest
+/dev/shm/av-events-<module>-<pid>, a ring per thread holding its newest
 events. This reads those rings, keeps the last --seconds, names each scope the
-way tools/mcp/rvk_inspect.py does, and writes Chrome trace-event JSON, which
+way tools/mcp/av_inspect.py does, and writes Chrome trace-event JSON, which
 Perfetto opens directly:
 
     tools/perfetto_trace.py <qemu pid> -o trace.json --seconds 2
@@ -32,7 +32,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools" / "mcp"))
-import rvk_inspect  # noqa: E402
+import av_inspect  # noqa: E402
 
 MAGIC = 0x45564B52
 HEADER = 32
@@ -74,7 +74,7 @@ def collect(pid, seconds, names, now):
     newest = 0
     rings = {}
     for module in MODULES:
-        path = pathlib.Path(f"/dev/shm/rvk-events-{module}-{pid}")
+        path = pathlib.Path(f"/dev/shm/av-events-{module}-{pid}")
         if path.exists():
             rings[module] = list(read_ring(path, now - int(seconds * 1_000_000 * TICKS_PER_US)))
             for _, events in rings[module]:
@@ -84,7 +84,7 @@ def collect(pid, seconds, names, now):
     # the window ends at the host's clock now, which no real event passes.
     newest = min(newest, now)
     if not rings:
-        raise SystemExit(f"no /dev/shm/rvk-events-*-{pid}: was QEMU started with RVK_PERFETTO=1?")
+        raise SystemExit(f"no /dev/shm/av-events-*-{pid}: was QEMU started with AV_PERFETTO=1?")
     since = newest - int(seconds * 1_000_000 * TICKS_PER_US)
     for index, (module, slots) in enumerate(sorted(rings.items())):
         trace.append({"ph": "M", "name": "process_name", "pid": index + 1, "args": {"name": f"qemu {module}"}})
@@ -183,7 +183,7 @@ def protobuf(pid, trace):
 
 
 GUEST_PID_BASE = 0x40000000   # guest processes' track pids, clear of the host's
-CLOCK_PAIR = re.compile(r"rvk-clock host=(\d+) guest=(\d+)")
+CLOCK_PAIR = re.compile(r"av-clock host=(\d+) guest=(\d+)")
 
 
 def guest_shell(work, *arguments):
@@ -196,7 +196,7 @@ def guest_offset(work):
     batch's guest stamp and the host's clock as it ran it show."""
     pairs = CLOCK_PAIR.findall((pathlib.Path(work) / "qemu.log").read_text(errors="replace"))
     if not pairs:
-        raise SystemExit(f"no clock pairs in {work}/qemu.log: was QEMU started with RVK_PERFETTO=1?")
+        raise SystemExit(f"no clock pairs in {work}/qemu.log: was QEMU started with AV_PERFETTO=1?")
     return min(int(host) - int(guest) for host, guest in pairs[-2000:])
 
 
@@ -204,7 +204,7 @@ def freeze_guest(work, frozen=True):
     """Sets the freeze byte of every guest event file: its process stops
     recording, so what the files hold is the time before this. Cleared again
     once they are copied."""
-    guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { "
+    guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\av\\events-*.bin | ForEach-Object { "
                             "$f = [IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'ReadWrite'); "
                             f"$f.Seek(24, 'Begin') | Out-Null; $f.WriteByte({1 if frozen else 0}); $f.Close() }}")
 
@@ -216,17 +216,17 @@ def guest_rings(work, scratch, kept=GUEST_EVENTS_KEPT):
     """Every guest process's recorded events, copied in the guest without the
     ring's unused slots and with only each slot's newest `kept` events, zipped
     and pulled: slot number, count, then the events oldest first."""
-    listing = guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { $_.Name }")
+    listing = guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\av\\events-*.bin | ForEach-Object { $_.Name }")
     for name in listing.split():
         if not name.endswith(".bin"):
             continue
-        remote = f"C:\\ProgramData\\rvk\\{name}"
+        remote = f"C:\\ProgramData\\av\\{name}"
         script = (
             f"$in = [IO.File]::Open('{remote}', 'Open', 'Read', 'ReadWrite'); $r = New-Object IO.BinaryReader($in); "
             "$magic = $r.ReadUInt32(); $version = $r.ReadUInt32(); $slots = $r.ReadUInt32(); $per = $r.ReadUInt32(); "
             f"$out = [IO.File]::Create('{remote}.c.gz'); "
             "$zip = New-Object IO.Compression.GZipStream($out, [IO.Compression.CompressionMode]::Compress); "
-            "$w = New-Object IO.BinaryWriter($zip); $w.Write([uint32]0x434B5652); $w.Write([uint32]$slots); "
+            "$w = New-Object IO.BinaryWriter($zip); $w.Write([uint32]0x00435641); $w.Write([uint32]$slots); "
             "for ($slot = 0; $slot -lt $slots; $slot++) { "
             "  $base = 32 + [int64]$slot * (16 + [int64]$per * 16); $in.Seek($base, 'Begin') | Out-Null; "
             "  $written = $r.ReadUInt64(); if ($written -eq 0) { continue } "
@@ -263,7 +263,7 @@ def read_compact(path):
     as read_ring yields them."""
     data = gzip.decompress(path.read_bytes())
     magic, _slots = struct.unpack_from("<II", data, 0)
-    if magic != 0x434B5652:
+    if magic != 0x00435641:
         raise SystemExit(f"{path}: not a compact event copy")
     at = 8
     while at < len(data):
@@ -328,7 +328,7 @@ def stop_host(pid, stop):
     """Every host ring of `pid` stops recording at `stop` (host clock, 100 ns;
     0 records again)."""
     for module in MODULES:
-        path = pathlib.Path(f"/dev/shm/rvk-events-{module}-{pid}")
+        path = pathlib.Path(f"/dev/shm/av-events-{module}-{pid}")
         if path.exists():
             with open(path, "r+b") as handle:
                 handle.seek(24)
@@ -337,7 +337,7 @@ def stop_host(pid, stop):
 
 def stop_guest(work, stop):
     """Every guest event file stops recording at `stop` (the guest's clock)."""
-    guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { "
+    guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\av\\events-*.bin | ForEach-Object { "
                             "$f = [IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'ReadWrite'); "
                             f"$f.Seek(24, 'Begin') | Out-Null; $f.Write([BitConverter]::GetBytes([uint64]{stop}), 0, 8); "
                             "$f.Close() }")
@@ -347,14 +347,14 @@ def arm_guest(work, events_per_slot, depth, only=""):
     """Guest processes started from now on record events, `events_per_slot`
     per thread, of scopes at most `depth` deep (0: all) - or with `only`
     (comma-separated scope names), just those, at any depth."""
-    guest_shell(work, "ps", "Set-Content -NoNewline -Path C:\\ProgramData\\rvk\\perfetto "
+    guest_shell(work, "ps", "Set-Content -NoNewline -Path C:\\ProgramData\\av\\perfetto "
                             f"-Value '{events_per_slot} {depth} {only}'")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pid", type=int, help="the QEMU process")
-    parser.add_argument("-o", "--output", type=pathlib.Path, default=pathlib.Path("rvk-trace.json"))
+    parser.add_argument("-o", "--output", type=pathlib.Path, default=pathlib.Path("av-trace.json"))
     parser.add_argument("--seconds", type=float, default=2.0, help="how much of the newest history to keep")
     parser.add_argument("--merge", type=pathlib.Path, help="a tracebox .pftrace to append the scopes to")
     parser.add_argument("--lead", type=float, default=3.0,
@@ -365,15 +365,15 @@ def main():
                              "thread, and exit")
     parser.add_argument("--depth", type=int, default=2,
                         help="with --arm: the deepest scope guest processes record (0: all; the host's is "
-                             "RVK_TRACE_DEPTH in QEMU's environment)")
+                             "AV_TRACE_DEPTH in QEMU's environment)")
     parser.add_argument("--only", default="", metavar="SCOPES",
                         help="with --arm: the only scopes guest processes record, comma-separated "
-                             "'Class::method' names, at any depth (the host's is RVK_TRACE_ONLY)")
+                             "'Class::method' names, at any depth (the host's is AV_TRACE_ONLY)")
     parser.add_argument("--guest", type=pathlib.Path, metavar="WORK",
                         help="the run's work directory: add the guest processes' timelines too (they record while "
-                             "C:\\ProgramData\\rvk\\perfetto exists when they start)")
+                             "C:\\ProgramData\\av\\perfetto exists when they start)")
     args = parser.parse_args()
-    names = rvk_inspect.ScopeNames().load()
+    names = av_inspect.ScopeNames().load()
     now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
     guest = []
     if args.guest is not None and args.arm:

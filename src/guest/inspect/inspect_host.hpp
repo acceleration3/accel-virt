@@ -1,6 +1,6 @@
-/* What rvkinspect.exe needs of Windows (docs/trace.md): the processes, a named
+/* What avinspect.exe needs of Windows (docs/trace.md): the processes, a named
  * section's bytes, a process's state service, a file and the clock. Names are
- * ASCII object names (`Global\rvk-trace-rvkvk-1234`); every decision about
+ * ASCII object names (`Global\av-trace-avvk-1234`); every decision about
  * which name to try is InspectProgram's. WindowsInspectHost (src/um) and
  * MockInspectHost (tests) implement it. */
 #ifndef AV_INSPECT_HOST_HPP

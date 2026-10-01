@@ -28,7 +28,7 @@ FullStackRig::FullStackRig()
     start();
 }
 
-FullStackRig::FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *gpu)
+FullStackRig::FullStackRig(const AvExecutorOps &executor, const std::uint8_t *gpu)
     : driver_(), function_(), dxgkrnl_(driver_.platform(), function_), fdo_(driver_.platform(), driver_.table(), dxgkrnl_),
       device_(driver_.platform(), executor, gpu), bridge_(driver_.platform(), function_.common(), device_),
       pump_(fdo_, dxgkrnl_, function_.common(), device_.host(), bridge_),
@@ -50,7 +50,7 @@ void FullStackRig::start()
     function_.set_message_interrupts(message_interrupts);
     function_.add_shared_memory_region(hostmem_region, hostmem_bar, 0u, hostmem_bytes, hostmem_address);
     function_.add_doorbell_region();
-    function_.set_subsystem_id(rvk_subsystem);
+    function_.set_subsystem_id(av_subsystem);
     function_.present_host_gpu(host_vendor, host_device, host_revision);
     function_.serve_notify_with(bridge_);
     function_.serve_doorbells_with(device_.doorbells());

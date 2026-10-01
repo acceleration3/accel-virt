@@ -2,7 +2,7 @@
  * guest core, writes down what crossed the wire. The recording is read back
  * with the same format classes the device wrote it with; what the reader and
  * the tools make of a recording is their own suites' business. */
-#include "core/rvk/guest_context.hpp"
+#include "core/av/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/recording/record_header.hpp"
 #include "device/recording/record_kind.hpp"
@@ -35,7 +35,7 @@ using av::SubApi;
 
 namespace {
 
-constexpr const char *path = "loopback.rvk";
+constexpr const char *path = "loopback.av";
 
 /* A batch of one command that echoes `text` back as its answer. */
 class EchoBatch {
@@ -173,7 +173,7 @@ TEST(loopback_recording, a_recorded_run_replays_into_a_library_with_the_same_rep
   }
   CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 2u));
 
-  av::MockExecutorOps  ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  av::MockExecutorOps  ops(AV_EXECUTOR_SUB_API_VULKAN);
   av::ExecutorLibrary  library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   av::RecordingReader  reader(rig.device().host().recording_bytes(path),

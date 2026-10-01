@@ -83,7 +83,7 @@ Status GuestGlContext::make_once()
     const Status built = build();
     if (built != Status::ok) return built;
     if (!learn()) {
-        log_.write("rvkgl: the host refused the context's options");
+        log_.write("avgl: the host refused the context's options");
         return Status::invalid_parameter;
     }
     undo.dismiss();
@@ -184,7 +184,7 @@ void GuestGlContext::flush()
     send_lock_.acquire();
     const TransportResult sent = batched_.object().flush();
     send_lock_.release();
-    if (sent != TransportResult::ok) log_.write("rvkgl: the held calls could not be sent");
+    if (sent != TransportResult::ok) log_.write("avgl: the held calls could not be sent");
 }
 
 ClientTransport *GuestGlContext::wire()
@@ -196,7 +196,7 @@ ClientTransport *GuestGlContext::wire()
     if (transport_.object().faulted()) connection_.lose(link_);
     if (connection_.lost(link_)) {
         state_ = State::lost;
-        log_.write("rvkgl: the context's device faulted; the context is lost");
+        log_.write("avgl: the context's device faulted; the context is lost");
     }
     /* The batch itself, with no lock: WGL lets a context be current on one
      * thread at a time, and it is only ever called on that one. The lock
@@ -412,7 +412,7 @@ Status GuestGlContext::build()
                                            staging_bytes));
     const Status initialized = transport_.object().initialize(options_);
     if (initialized != Status::ok) {
-        log_.write("rvkgl: the driver refused the context");
+        log_.write("avgl: the driver refused the context");
         return initialized == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
     }
     batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
@@ -424,7 +424,7 @@ Status GuestGlContext::build()
     GuestConnection &device = connection_.device(link_);
     if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
     if (arena_.object().open(arena_bytes) != Status::ok)
-        log_.write("rvkgl: no blob arena for the context; bulk data crosses inline");
+        log_.write("avgl: no blob arena for the context; bulk data crosses inline");
     return Status::ok;
 }
 
@@ -440,22 +440,22 @@ bool GuestGlContext::learn()
     ClientTransport &wire = batched_.object();
     for (uint32_t row = 0u; row < strings; row++) {
         size_t length = 0u;
-        if (!glproto::rvk_glGetString(wire, string_names[row], strings_[row], string_bytes - 1u, &length))
+        if (!glproto::av_glGetString(wire, string_names[row], strings_[row], string_bytes - 1u, &length))
             return false;
         strings_[row][length < string_bytes ? length : string_bytes - 1u] = '\0';
     }
     for (uint32_t list = 0u; list < QueryShapes::lists; list++) {
         int32_t length = 0;
-        glproto::rvk_glGetIntegerv(wire, QueryShapes::length_queries[list], &length);
+        glproto::av_glGetIntegerv(wire, QueryShapes::length_queries[list], &length);
         queries_.learn(static_cast<QueryShapes::List>(list), length);
     }
     /* What the host granted, which its version string does not say: on one of
      * this project's two host GPUs the compatibility string is identical to
      * the core one (feature 051, research.md §1). */
     int32_t major = 0, minor = 0, mask = 0;
-    glproto::rvk_glGetIntegerv(wire, GrantedProfile::major_query, &major);
-    glproto::rvk_glGetIntegerv(wire, GrantedProfile::minor_query, &minor);
-    glproto::rvk_glGetIntegerv(wire, GrantedProfile::mask_query, &mask);
+    glproto::av_glGetIntegerv(wire, GrantedProfile::major_query, &major);
+    glproto::av_glGetIntegerv(wire, GrantedProfile::minor_query, &minor);
+    glproto::av_glGetIntegerv(wire, GrantedProfile::mask_query, &mask);
     profile_.learn(major < 0 ? 0u : static_cast<uint32_t>(major), minor < 0 ? 0u : static_cast<uint32_t>(minor),
                    static_cast<uint32_t>(mask));
     cap_version();
@@ -500,7 +500,7 @@ void GuestGlContext::teardown()
         /* A lost context's host context goes with DestroyContext, and its
          * import with it: nothing is asked of the host. */
         const Status closed = state_ == State::lost ? arena_.object().abandon() : arena_.object().close();
-        if (closed != Status::ok) log_.write("rvkgl: the blob arena did not close whole");
+        if (closed != Status::ok) log_.write("avgl: the blob arena did not close whole");
         arena_.destroy();
     }
     batched_.destroy();

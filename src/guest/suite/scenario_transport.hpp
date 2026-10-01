@@ -1,4 +1,4 @@
-/* The rvk context a scenario runs over (features 043 and 044): a connection on
+/* The av context a scenario runs over (features 043 and 044): a connection on
  * the adapter the search found and one transport of a sub-API on it, set up
  * with each step reported - adapter, connection, initialize - and torn down by
  * close() or the destructor whatever failed. A scenario that needs more
@@ -22,7 +22,7 @@ class ScenarioSteps;
 
 class ScenarioTransport {
 public:
-    /* The smallest ring an RvkContextRecord accepts: one command at a time
+    /* The smallest ring an AvContextRecord accepts: one command at a time
      * never needs more. */
     static constexpr uint8_t  ring_order = 12u;
     /* The largest command the suite sends, header included, and its reply slot

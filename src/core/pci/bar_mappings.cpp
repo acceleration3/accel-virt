@@ -87,7 +87,7 @@ void BarMappings::unmap_all()
     for (uint8_t bar = 0u; bar < PciBaseAddresses::bar_count; bar++) {
         if (addresses_[bar] == nullptr) continue;
         const Status status = dxgkrnl_.unmap_memory(addresses_[bar]);
-        if (status != Status::ok) platform_.log("rvkgpu: DxgkCbUnmapMemory refused a mapping");
+        if (status != Status::ok) platform_.log("avgpu: DxgkCbUnmapMemory refused a mapping");
         addresses_[bar] = nullptr;
         lengths_[bar] = 0u;
     }

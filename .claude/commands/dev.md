@@ -57,7 +57,7 @@ Tools available, and what each is for:
 
 | | |
 |---|---|
-| `clang++` / `clang-cl` / `lld-link` | native tests, and the driver cross-build (`rvkgpu.sys`, built by every `cmake --build build`) |
+| `clang++` / `clang-cl` / `lld-link` | native tests, and the driver cross-build (`avgpu.sys`, built by every `cmake --build build`) |
 | `cmake` + `ninja`, `ctest` | build and the test entry point of each configuration |
 | `llvm-cov`, `llvm-profdata` | the `coverage_gate` test in `build-coverage/` — the 100% branch gate |
 | `llvm-pdbutil` | Microsoft PDBs, public symbols only, no type info |

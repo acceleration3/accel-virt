@@ -294,7 +294,7 @@ TEST(locked_transport, a_generated_command_takes_the_lock_once)
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  const VkResult result = av::vkproto::rvk_vkCreateInstance(seam, &create, nullptr, &instance);
+  const VkResult result = av::vkproto::av_vkCreateInstance(seam, &create, nullptr, &instance);
   CHECK_EQ(result, VK_SUCCESS);
   CHECK_EQ(instance, host_instance);
   CHECK_EQ(inner.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkCreateInstance));

@@ -28,7 +28,7 @@ bool ProbeDmaBuf::make()
     if (shared_ >= 0) return true;
     const int device = ::open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
     if (device < 0) return false;
-    memory_ = static_cast<int>(::syscall(SYS_memfd_create, "rvk-probe", MFD_CLOEXEC | MFD_ALLOW_SEALING));
+    memory_ = static_cast<int>(::syscall(SYS_memfd_create, "av-probe", MFD_CLOEXEC | MFD_ALLOW_SEALING));
     if (memory_ < 0 || ::ftruncate(memory_, page_size) != 0 ||
         ::fcntl(memory_, F_ADD_SEALS, F_SEAL_SHRINK) != 0) {
         ::close(device);

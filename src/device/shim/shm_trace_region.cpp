@@ -15,7 +15,7 @@ namespace av {
 namespace {
 
 constexpr const char directory[] = "/dev/shm";
-constexpr const char *const swept_prefixes[] = {"rvk-trace-", "rvk-state-", "rvk-events-"};
+constexpr const char *const swept_prefixes[] = {"av-trace-", "av-state-", "av-events-"};
 
 /* The pid a swept file names: the digits after its last '-', before any '.'. */
 uint32_t pid_of(const char *name)
@@ -49,7 +49,7 @@ ShmTraceRegion::~ShmTraceRegion()
 Status ShmTraceRegion::open(const char *module, size_t bytes)
 {
     AV_SCOPE("ShmTraceRegion::open");
-    return open("/rvk-trace-", module, bytes);
+    return open("/av-trace-", module, bytes);
 }
 
 Status ShmTraceRegion::open(const char *prefix, const char *module, size_t bytes)

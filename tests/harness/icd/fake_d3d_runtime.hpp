@@ -1,4 +1,4 @@
-/* d3d11.dll and D3D12Core.dll as rvkumd.dll sees them: the fake resolves the
+/* d3d11.dll and D3D12Core.dll as avumd.dll sees them: the fake resolves the
  * export, checks the table the way the real runtime does, and calls the slots
  * in the real order - the role FakeOpengl32 plays for the OpenGL ICD.
  *
@@ -55,7 +55,7 @@ public:
     void offer_no_dxgi_callbacks();
     void offer_no_dxgi_table();
     void scribble_the_device_block();
-    /* Before `open`: the driver's LUID query is answered as rvkgpu.sys answers
+    /* Before `open`: the driver's LUID query is answered as avgpu.sys answers
      * it for the adapter a runtime opened, naming `luid`, where otherwise it is
      * refused. */
     void answer_luid(std::uint64_t luid);

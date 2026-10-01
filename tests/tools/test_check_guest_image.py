@@ -315,7 +315,7 @@ class SyntheticDllCheck(unittest.TestCase):
         self.assertEqual(self.refusals(result), ["imports Vulkan-1.dll, not a module every guest has"])
 
     def test_the_opengl_icds_user32_and_opengl32_imports_are_accepted_only_when_allowed(self):
-        # rvkgl.dll presents through user32 (050 research.md §6); its probe imports opengl32.
+        # avgl.dll presents through user32 (050 research.md §6); its probe imports opengl32.
         image = self.icd(imports={**GUEST_IMPORTS, "user32.dll": ["WindowFromDC", "GetClientRect"],
                                   "opengl32.dll": ["wglCreateContext"]})
         result = self.check(image, *self.exactly_the_icd(), "--require-import", "WindowFromDC")

@@ -14,11 +14,11 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, response_type, rvk_device
+from av_context import FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, response_type, av_device
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
-PRESENT_MAGIC = 0x504B5652
+PRESENT_MAGIC = 0x00505641
 PRESENT_ENGINE = 0x02F6
 QUEUED_PRESENT = 0x02F7
 PRESENT_QUEUE = 67
@@ -51,7 +51,7 @@ def blt(ticket, source, destination):
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuPresentEngine(unittest.TestCase):
     def qtest(self):
-        qtest = virtio_qtest.Qtest(BUILD, rvk_device(",vectors=4"))
+        qtest = virtio_qtest.Qtest(BUILD, av_device(",vectors=4"))
         self.addCleanup(qtest.close)
         return qtest
 

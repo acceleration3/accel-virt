@@ -57,7 +57,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x534B5652u;   /* "RVKS" */
+    static constexpr uint32_t magic = 0x00535641u;   /* "AVS" */
     static constexpr uint32_t version = 1u;
 
     bool fields_valid() const;

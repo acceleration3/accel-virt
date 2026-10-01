@@ -12,7 +12,7 @@ namespace av {
  * the device did not give it. An ABI boundary C requires: the callback is a
  * bare function pointer with nowhere to put a `this`, so the landing pad is
  * the context and this forwards straight into it, with no logic of its own. */
-extern "C" void rvk_context_signalled(void *context)
+extern "C" void av_context_signalled(void *context)
 {
     static_cast<ContextSignal *>(context)->raise();
 }
@@ -50,10 +50,10 @@ bool ContextExecutor::accepts(const GlContextOptions &options) const
     return options.defaults() || library_.names_options();
 }
 
-RvkExecutor *ContextExecutor::make() const
+AvExecutor *ContextExecutor::make() const
 {
     AV_SCOPE("ContextExecutor::make");
-    const RvkContextOptions wanted = {options_.major(), options_.minor(),
+    const AvContextOptions wanted = {options_.major(), options_.minor(),
                                       static_cast<uint8_t>(options_.profile()), options_.flags(), 0u};
     if (options_.share_context() != 0u) return shares_.create_sharing(api_, options_.share_context(), uuid_, wanted);
     return library_.create(api_, uuid_, options_.defaults() ? nullptr : &wanted);
@@ -77,7 +77,7 @@ Status ContextExecutor::create()
      * back: the library's own registrations may outlive this - OpenCL cannot
      * unregister a callback - and the pad is the context's, which lives as
      * long as the device does. */
-    if (signal_ != nullptr) library_.set_signal(executor_, &rvk_context_signalled, signal_);
+    if (signal_ != nullptr) library_.set_signal(executor_, &av_context_signalled, signal_);
     if (api_ != SubApi::opengl) return Status::ok;
     const Status published = shares_.publish(id_, uuid_, executor_);
     if (published == Status::ok) return Status::ok;
@@ -124,10 +124,10 @@ Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, siz
     reply_size = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
     switch (library_.execute(executor_, command_id, payload, size, reply, reply_capacity, reply_size)) {
-    case RVK_EXECUTED: return Status::ok;
-    case RVK_UNKNOWN: return Status::not_found;
-    case RVK_UNDECODABLE: return Status::malformed;
-    case RVK_DEVICE_LOST: return Status::invalid_state;
+    case AV_EXECUTED: return Status::ok;
+    case AV_UNKNOWN: return Status::not_found;
+    case AV_UNDECODABLE: return Status::malformed;
+    case AV_DEVICE_LOST: return Status::invalid_state;
     /* Anything else is a library that does not keep the contract. Saying so is
      * not pedantry: folded into device lost, a bug in an executor reads as a
      * GPU fault and is chased in the wrong place (feature 042). */
@@ -135,13 +135,13 @@ Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, siz
     }
 }
 
-Status ContextExecutor::import(uint64_t blob_id, const RvkBlobHandle &handle, uint64_t &device_memory)
+Status ContextExecutor::import(uint64_t blob_id, const AvBlobHandle &handle, uint64_t &device_memory)
 {
     AV_SCOPE("ContextExecutor::import");
     host_.require_worker("ContextExecutor::import");
     device_memory = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
-    if (!library_.names_imports() || library_.import_blob(executor_, blob_id, handle) != RVK_EXECUTED)
+    if (!library_.names_imports() || library_.import_blob(executor_, blob_id, handle) != AV_EXECUTED)
         return Status::not_supported;
     device_memory = library_.imported_handle(executor_, blob_id);
     if (device_memory != 0u) return Status::ok;

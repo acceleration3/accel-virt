@@ -1,4 +1,4 @@
-/* rvkvkprobe's proof over a scripted Vulkan (feature 045, T037): the adapter's
+/* avvkprobe's proof over a scripted Vulkan (feature 045, T037): the adapter's
  * LUID and the physical device's are the same; a device on it doubles 256
  * elements read back through vkMapMemory and draws a 64x64 image read back
  * through a host-visible buffer; a forced fault answers VK_ERROR_DEVICE_LOST
@@ -34,8 +34,8 @@ using Call = av::ScriptedVulkan::Call;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 /* LowPart 0x1234, HighPart 2: a HighPart the report must not print. */
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 
@@ -46,9 +46,9 @@ void *const module_handle = reinterpret_cast<void *>(0x7771u);
 
 class ProbeRig {
 public:
-    ProbeRig() : report_("rvkvkprobe")
+    ProbeRig() : report_("avvkprobe")
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, adapter_luid);
         vulkan_.set_luid(0u, adapter_luid, true);
         frames_.set_window(window_handle, window_side, window_side);
@@ -129,7 +129,7 @@ TEST(vulkan_probe, every_step_passes_on_a_working_gpu)
                   "ok vulkan.present 4096\n"
                   "ok vulkan.pacing 60\n"
                   "ok vulkan.resized 9216\n"
-                  "rvkvkprobe: 12 passed, 0 failed\n"));
+                  "avvkprobe: 12 passed, 0 failed\n"));
   CHECK_EQ(rig.report().failed(), 0u);
   CHECK_EQ(rig.vulkan().instance_api_version(), (std::uint32_t{1} << 22u) | (std::uint32_t{3} << 12u));
   /* Two instances: the first run's and the recreated one's, which the window
@@ -174,7 +174,7 @@ TEST(vulkan_probe, a_luid_differing_only_in_its_high_part_is_not_the_adapter)
   CHECK(rig.reads("ok vulkan.instance\n"
                   "ok vulkan.adapter_luid 4660\n"
                   "FAIL vulkan.physical_device status=3 1\n"
-                  "rvkvkprobe: 2 passed, 1 failed\n")); }
+                  "avvkprobe: 2 passed, 1 failed\n")); }
 
 /* No listed device is the adapter's: the count is what is reported, and
  * nothing is made on any of them. */
@@ -208,11 +208,11 @@ TEST(vulkan_probe, a_device_listed_past_the_room_is_not_seen)
   rig.run();
   CHECK(rig.holds("FAIL vulkan.physical_device status=3 16\n")); }
 
-/* With no rvkgpu adapter there is no LUID to look for: the run ends there. */
+/* With no avgpu adapter there is no LUID to look for: the run ends there. */
 TEST(vulkan_probe, no_adapter_ends_the_run)
 { MockKmt kmt;
   ScriptedVulkan vulkan;
-  GuestReport report("rvkvkprobe");
+  GuestReport report("avvkprobe");
   av::ScriptedImageSink images;
   av::ScriptedWindowFrame frames;
   { VulkanProbe probe(kmt, report, vulkan, images, frames, nullptr, nullptr);
@@ -220,7 +220,7 @@ TEST(vulkan_probe, no_adapter_ends_the_run)
   report.finish();
   CHECK(std::strcmp(report.text(), "ok vulkan.instance\n"
                                    "FAIL vulkan.adapter_luid status=3 0\n"
-                                   "rvkvkprobe: 1 passed, 1 failed\n") == 0);
+                                   "avvkprobe: 1 passed, 1 failed\n") == 0);
   CHECK_EQ(vulkan.live(), 0u);
   CHECK_EQ(vulkan.calls(Call::enumerate_physical_devices), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }
@@ -240,7 +240,7 @@ TEST(vulkan_probe, a_refused_instance_is_the_only_line)
   rig.vulkan().fail(Call::create_instance, 1u, VK_ERROR_INCOMPATIBLE_DRIVER);
   rig.run();
   CHECK(rig.reads("FAIL vulkan.instance status=7 4294967287\n"
-                  "rvkvkprobe: 0 passed, 1 failed\n")); }
+                  "avvkprobe: 0 passed, 1 failed\n")); }
 
 /* No family both draws and computes. */
 TEST(vulkan_probe, no_queue_family_for_both_fails_the_device)

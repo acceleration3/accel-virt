@@ -3,10 +3,10 @@
 verdict from a real Windows guest, with the evidence to debug it.
 
 A copy-on-write overlay of a prepared image boots on the patched QEMU with
-virtio-gpu-rvk-pci, the guest agent's channel, QMP and the driver's debug
+virtio-gpu-av-pci, the guest agent's channel, QMP and the driver's debug
 port. The package is pushed, test-signed and installed with Driver Verifier's
 standard checks, each reboot waited through; the adapter must have started on
-rvkgpu; rvktest.exe runs. Whatever happened, the guest's event logs, device
+avgpu; avtest.exe runs. Whatever happened, the guest's event logs, device
 install log, device and verifier state and live kernel dumps are pulled into
 diag/. A bugcheck is named from the Hyper-V crash MSRs, and its kernel dump is
 pulled after the guest reboots - or, when it bugchecks on every boot, from the
@@ -57,27 +57,27 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import list_gpus  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-GUEST_DIRECTORY = "C:\\rvk"
+GUEST_DIRECTORY = "C:\\av"
 PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
 # The package's files and their SHA-256, as provision.ps1 reads them.
 PACKAGE_MANIFEST = "package.sha256"
-# The 32-bit drivers rvkgpu.inf's *Wow values name, from --drivers32.
-DRIVERS32 = ("rvkvk32.dll", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll")
+# The 32-bit drivers avgpu.inf's *Wow values name, from --drivers32.
+DRIVERS32 = ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll")
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 REBOOT_REQUIRED = 3010
-SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
+SUMMARY = re.compile(rb"^avtest: (\d+) passed, (\d+) failed$", re.M)
 # The no-op's round trip the transport scenario measures, in microseconds (feature 044).
-RVK_LATENCY = re.compile(rb"^ok transport\.latency (\d+)", re.MULTILINE)
+AV_LATENCY = re.compile(rb"^ok transport\.latency (\d+)", re.MULTILINE)
 # SC-002's regression threshold. The first passing live runs measured 0.87 ms (an
 # idle host) and 4.4 ms (a host building beside it); a no-op past 50 ms is a
 # transport that has stopped being interrupt-driven, and one near dxgkrnl's 2 s
 # TdrDelay is a reset waiting to happen.
-RVK_LATENCY_LIMIT_US = 50000
+AV_LATENCY_LIMIT_US = 50000
 # SC-002's own measurement (feature 065): the same no-op, 31 warm rounds after
 # the first, whose median is what a recording's cost is taken from. The first
 # round trip is cold and swings by milliseconds on this host, which is orders
 # of magnitude more than the one write a record costs.
-RVK_WARM_MEDIAN = re.compile(rb"^ok transport\.warm_median (\d+)", re.MULTILINE)
+AV_WARM_MEDIAN = re.compile(rb"^ok transport\.warm_median (\d+)", re.MULTILINE)
 # The guest ends its lines the Windows way, so nothing anchored at $ may
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
@@ -92,9 +92,9 @@ STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)\r?$", re.M)
 STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 # What the adapter logs when it sets up the host window for a device
 # (docs/host-window.md): the only place a run sees whether it has one.
-WINDOW_LINE = re.compile(r"^rvkgpu: host window status 0x([0-9a-fA-F]{8})\r?$", re.M)
-PROBE_SUMMARY = re.compile(rb"^rvkvkprobe: (\d+) passed, (\d+) failed\r?$", re.M)
-# rvkglprobe --discovery's facts (feature 050): `discovery <key> <text> value=0x.. error=..`.
+WINDOW_LINE = re.compile(r"^avgpu: host window status 0x([0-9a-fA-F]{8})\r?$", re.M)
+PROBE_SUMMARY = re.compile(rb"^avvkprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+# avglprobe --discovery's facts (feature 050): `discovery <key> <text> value=0x.. error=..`.
 DISCOVERY_LINE = re.compile(r"^discovery (\w+) (.*?)\r?$", re.M)
 DISCOVERY_OPEN = re.compile(r"^discovery open_adapter_from_hdc (\w+) value=0x([0-9A-Fa-f]+) error=(\d+)\r?$", re.M)
 PROBE_STEP = re.compile(rb"^ok vulkan\.(\w+)(?: (\S+))?\r?$", re.M)
@@ -107,14 +107,14 @@ PROBE_STEPS = ("instance", "adapter_luid", "physical_device", "device", "compute
                "surface", "present", "pacing", "resized")
 # Feature 050's probe through the system opengl32.dll: the summary, each step,
 # and the strings the context answered, which the probe prints as notes.
-GL_SUMMARY = re.compile(r"^rvkglprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+GL_SUMMARY = re.compile(r"^avglprobe: (\d+) passed, (\d+) failed\r?$", re.M)
 GL_STEP = re.compile(r"^ok opengl\.(\w+)(?: (\S+))?\r?$", re.M)
 GL_NOTE = re.compile(r"^note opengl\.(\w+) (.*?)\r?$", re.M)
 GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "compat", "interval", "resized",
             "attribs", "lost", "recreated")
 # Feature 052's probe through the Khronos OpenCL loader: the summary, each step,
 # and the device the platform answered with, which the probe prints as a note.
-CL_SUMMARY = re.compile(r"^rvkclprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+CL_SUMMARY = re.compile(r"^avclprobe: (\d+) passed, (\d+) failed\r?$", re.M)
 CL_STEP = re.compile(r"^ok opencl\.(\w+)(?: (\S+))?\r?$", re.M)
 CL_NOTE = re.compile(r"^note opencl\.(\w+) (.*?)\r?$", re.M)
 # The probe's own order, from the platform the loader listed to the objects it
@@ -135,7 +135,7 @@ GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated", "opengl-compat
 # d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll. One summary and one step
 # list each, and the steps are the probe's own order - a probe that stops
 # printing one has not proven it, whatever its summary counts.
-D3D_SUMMARY = re.compile(rb"^rvkd3d(9|11|12)probe: (\d+) passed, (\d+) failed\r?$", re.M)
+D3D_SUMMARY = re.compile(rb"^avd3d(9|11|12)probe: (\d+) passed, (\d+) failed\r?$", re.M)
 D3D_STEP = re.compile(rb"^ok d3d(9|11|12)\.(\w+)(?: (\S+))?\r?$", re.M)
 D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "present"),
              "11": ("device", "feature_level", "adapter_luid", "target", "readback", "pixels", "present"),
@@ -212,9 +212,9 @@ MEMORY_DUMP = "MEMORY.DMP"
 # What an --all-gpus run tells provision.ps1 each host GPU is called, one
 # "<vendor>\t<device>\t<name>" line each, hex in lowercase.
 ADAPTER_NAMES = GUEST_DIRECTORY + "\\adapters.txt"
-# virtio-gpu-rvk-pci's subsystem, 5256 by 1af4: DXGI's SubSysId, and the part of
+# virtio-gpu-av-pci's subsystem, 5256 by 1af4: DXGI's SubSysId, and the part of
 # a PNPDeviceID the device always keeps.
-RVK_SUBSYSTEM = 0x52561AF4
+AV_SUBSYSTEM = 0x52561AF4
 
 
 TIMEOUTS = re.compile(r"^timeouts: (\d+)\r?$", re.M)
@@ -248,42 +248,42 @@ def arguments():
                         help="boot the image itself and ready it for runs, instead of running the suite")
     parser.add_argument("--qemu", default=str(ROOT / "build-qemu" / "qemu" / "qemu-system-x86_64"))
     parser.add_argument("--qemu-img", default="qemu-img")
-    parser.add_argument("--executor", default=str(ROOT / "build-qemu" / "librvk_echo_executor.so"))
+    parser.add_argument("--executor", default=str(ROOT / "build-qemu" / "libav_echo_executor.so"))
     parser.add_argument("--renderer", default="",
-                        help="run each device's contexts in this rvk-renderer (docs/renderer.md); the executor "
+                        help="run each device's contexts in this av-renderer (docs/renderer.md); the executor "
                              "is loaded there instead of in QEMU")
     parser.add_argument("--host-gpu", default="auto",
                         help="the device's host-gpu property: auto, or a Vulkan device UUID (tools/host/list_gpus.py)")
     parser.add_argument("--all-gpus", action="store_true",
-                        help="one virtio-gpu-rvk-pci per host GPU (tools/host/list_gpus.py, CPU devices left "
+                        help="one virtio-gpu-av-pci per host GPU (tools/host/list_gpus.py, CPU devices left "
                              "out), and a check that Device Manager, WMI and DXGI name each with the host's "
                              "name and PCI IDs")
     parser.add_argument("--vulkaninfo", metavar="FILE",
                         help="--all-gpus: read the host's GPUs from captured vulkaninfo output instead of "
                              "running vulkaninfo")
     parser.add_argument("--sysfs", default=list_gpus.SYSFS_PCI, help=argparse.SUPPRESS)
-    parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "rvkgpu.sys"))
+    parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "avgpu.sys"))
     parser.add_argument("--d3d-runtime", default=str(ROOT / "build-d3d" / "lib"),
-                        help="the directory the executor loads DXVK and vkd3d-proton from (RVK_D3D_PATH)")
-    parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "rvkgpu.inf"))
-    parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "rvktest.exe"))
-    parser.add_argument("--inspect", default=str(ROOT / "build" / "guest" / "rvkinspect.exe"),
-                        help="the trace inspector (docs/trace.md), pushed to every run so tools/mcp/rvk_inspect.py "
+                        help="the directory the executor loads DXVK and vkd3d-proton from (AV_D3D_PATH)")
+    parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "avgpu.inf"))
+    parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "avtest.exe"))
+    parser.add_argument("--inspect", default=str(ROOT / "build" / "guest" / "avinspect.exe"),
+                        help="the trace inspector (docs/trace.md), pushed to every run so tools/mcp/av_inspect.py "
                              "can read a hung or crashed program")
-    parser.add_argument("--icd", default=str(ROOT / "build" / "guest" / "rvkvk.dll"),
-                        help="the Vulkan ICD the package installs beside rvkgpu.sys (feature 045)")
-    parser.add_argument("--icd-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "rvkvk.json"))
-    parser.add_argument("--gl-icd", default=str(ROOT / "build" / "guest" / "rvkgl.dll"),
+    parser.add_argument("--icd", default=str(ROOT / "build" / "guest" / "avvk.dll"),
+                        help="the Vulkan ICD the package installs beside avgpu.sys (feature 045)")
+    parser.add_argument("--icd-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "avvk.json"))
+    parser.add_argument("--gl-icd", default=str(ROOT / "build" / "guest" / "avgl.dll"),
                         help="the OpenGL ICD the package names (feature 050)")
-    parser.add_argument("--cl-icd", default=str(ROOT / "build" / "guest" / "rvkcl.dll"),
+    parser.add_argument("--cl-icd", default=str(ROOT / "build" / "guest" / "avcl.dll"),
                         help="the OpenCL ICD the package names (feature 052)")
-    parser.add_argument("--umd", default=str(ROOT / "build" / "guest" / "rvkumd.dll"),
+    parser.add_argument("--umd", default=str(ROOT / "build" / "guest" / "avumd.dll"),
                         help="the Direct3D user-mode driver the package names (feature 055)")
     parser.add_argument("--drivers32", default=str(ROOT / "build" / "guest32"),
-                        help="where the 32-bit drivers a WoW64 process loads were built: rvkvk32.dll, "
-                             "rvkgl32.dll, rvkcl32.dll and rvkumd32.dll, which the package names beside "
+                        help="where the 32-bit drivers a WoW64 process loads were built: avvk32.dll, "
+                             "avgl32.dll, avcl32.dll and avumd32.dll, which the package names beside "
                              "the 64-bit ones")
-    parser.add_argument("--icd32-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "rvkvk32.json"))
+    parser.add_argument("--icd32-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "avvk32.json"))
     parser.add_argument("--provision", default=str(ROOT / "tools" / "guest" / "provision.ps1"))
     parser.add_argument("--firmware", default="/usr/share/edk2/x64/OVMF_CODE.4m.fd")
     parser.add_argument("--firmware-vars", default="/usr/share/edk2/x64/OVMF_VARS.4m.fd")
@@ -291,8 +291,8 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--record", action="store_true",
-                        help="write a wire recording to recording.rvk in the work directory, which "
-                             "build/rvkrecord prints and replays (feature 065)")
+                        help="write a wire recording to recording.av in the work directory, which "
+                             "build/avrecord prints and replays (feature 065)")
     parser.add_argument("--record-limit", type=int, default=256 * 1024 * 1024, metavar="BYTES",
                         help="the recording's ceiling; it stops there rather than growing past it")
     parser.add_argument("--hostmem", type=int, default=8192, metavar="MIB",
@@ -320,25 +320,25 @@ def arguments():
     parser.add_argument("--quick", action="store_true",
                         help="an iteration run: install, check and the suite, without the display, mode, power, "
                              "cycle, upgrade, sleep and hibernate scenarios the gate runs (feature 044)")
-    parser.add_argument("--rvk", action="store_true",
-                        help="run rvktest.exe's rvk scenarios - real Vulkan, OpenCL and OpenGL work on the host GPU "
+    parser.add_argument("--av", action="store_true",
+                        help="run avtest.exe's av scenarios - real Vulkan, OpenCL and OpenGL work on the host GPU "
                              "- instead of the suite; needs --executor naming the real library (feature 044)")
     parser.add_argument("--vulkan", action="store_true",
-                        help="find the Vulkan ICD through the Khronos loader and run rvkvkprobe.exe instead of the "
+                        help="find the Vulkan ICD through the Khronos loader and run avvkprobe.exe instead of the "
                              "suite; needs the fetched runtime and --executor naming the real library (feature 045)")
-    parser.add_argument("--probe", default=str(ROOT / "build" / "guest" / "rvkvkprobe.exe"))
+    parser.add_argument("--probe", default=str(ROOT / "build" / "guest" / "avvkprobe.exe"))
     parser.add_argument("--opengl-discovery", action="store_true",
-                        help="run rvkglprobe.exe --discovery through the system opengl32.dll and record what it "
+                        help="run avglprobe.exe --discovery through the system opengl32.dll and record what it "
                              "loaded, instead of the suite (feature 050, T008)")
     parser.add_argument("--opengl", action="store_true",
-                        help="run rvkglprobe.exe's steps through the system opengl32.dll on the host GPU instead of "
+                        help="run avglprobe.exe's steps through the system opengl32.dll on the host GPU instead of "
                              "the suite; needs --executor naming the real library (feature 050, T043)")
-    parser.add_argument("--gl-probe", default=str(ROOT / "build" / "guest" / "rvkglprobe.exe"))
+    parser.add_argument("--gl-probe", default=str(ROOT / "build" / "guest" / "avglprobe.exe"))
     parser.add_argument("--opencl", action="store_true",
-                        help="run rvkclprobe.exe's steps through the Khronos OpenCL loader on the host GPU "
+                        help="run avclprobe.exe's steps through the Khronos OpenCL loader on the host GPU "
                              "instead of the suite; needs the fetched loader and --executor naming the real "
                              "library (feature 052)")
-    parser.add_argument("--cl-probe", default=str(ROOT / "build" / "guest" / "rvkclprobe.exe"))
+    parser.add_argument("--cl-probe", default=str(ROOT / "build" / "guest" / "avclprobe.exe"))
     parser.add_argument("--opencl-loader", default=str(ROOT / "third_party" / "opencl-loader"),
                         help="where tools/fetch_opencl_loader.py put the loader's source")
     parser.add_argument("--opencl-pins", default=str(ROOT / "tools" / "opencl_loader_pins.txt"))
@@ -376,9 +376,9 @@ def arguments():
     parser.add_argument("--page-heap", action="store_true",
                         help="run the D3D probes with full page heap on each of them, and report what Windows "
                              "logged for it either way (feature 047, FR-006); needs --d3d")
-    parser.add_argument("--d3d9-probe", default=str(ROOT / "build" / "guest" / "rvkd3d9probe.exe"))
-    parser.add_argument("--d3d11-probe", default=str(ROOT / "build" / "guest" / "rvkd3d11probe.exe"))
-    parser.add_argument("--d3d12-probe", default=str(ROOT / "build" / "guest" / "rvkd3d12probe.exe"))
+    parser.add_argument("--d3d9-probe", default=str(ROOT / "build" / "guest" / "avd3d9probe.exe"))
+    parser.add_argument("--d3d11-probe", default=str(ROOT / "build" / "guest" / "avd3d11probe.exe"))
+    parser.add_argument("--d3d12-probe", default=str(ROOT / "build" / "guest" / "avd3d12probe.exe"))
     parser.add_argument("--layers", default=str(ROOT / "third_party"),
                         help="where tools/fetch_layers.py put dxvk/ and vkd3d-proton/")
     parser.add_argument("--layer-pins", default=str(ROOT / "tools"),
@@ -405,7 +405,7 @@ def arguments():
                              "work is handed over the moment its steps are done")
     parser.add_argument("--keep", action="store_true",
                         help="keep the guest running until Enter is pressed whatever the verdict, to inspect it "
-                             "(tools/mcp/rvk_inspect.py)")
+                             "(tools/mcp/av_inspect.py)")
     parser.add_argument("--gdb", type=int, metavar="PORT", help="QEMU's gdbstub on 127.0.0.1:PORT")
     parser.add_argument("--vnc", type=int, metavar="DISPLAY", help="the guest's display on 127.0.0.1:5900+DISPLAY")
     # A console's GL context comes from the display backend and never from the
@@ -429,7 +429,7 @@ def arguments():
                         help="an Intel HD Audio controller and codec playing to the host's PipeWire, which Windows "
                              "drives with its inbox driver (default: no sound)")
     parser.add_argument("--perfetto", action="store_true",
-                        help="record every host scope as a timeline event (RVK_PERFETTO=1); "
+                        help="record every host scope as a timeline event (AV_PERFETTO=1); "
                              "tools/perfetto_trace.py <qemu pid> writes it for ui.perfetto.dev")
     parser.add_argument("--trace", action="append", default=[], metavar="PATTERN",
                         help="enable QEMU trace events matching PATTERN into qemu.log, e.g. 'virtio_gpu_*'")
@@ -440,8 +440,8 @@ def arguments():
     parsed = parser.parse_args()
     if not parsed.image:
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
-    if parsed.opengl_discovery and (parsed.rvk or parsed.vulkan or parsed.opengl):
-        parser.error("--opengl-discovery is its own boot: pass it without --rvk, --vulkan and --opengl")
+    if parsed.opengl_discovery and (parsed.av or parsed.vulkan or parsed.opengl):
+        parser.error("--opengl-discovery is its own boot: pass it without --av, --vulkan and --opengl")
     if parsed.all_gpus and parsed.host_gpu != "auto":
         parser.error("--all-gpus binds a device to every host GPU: pass it without --host-gpu")
     if parsed.no_verifier and parsed.power_cycles:
@@ -474,7 +474,7 @@ def qemu_command(args, work, disk, rescue, gpus=()):
     device = []
     for index, host_gpu in enumerate([gpu.uuid for gpu in gpus] or [args.host_gpu]):
         name = DISPLAY_DEVICE if index == 0 else f"{DISPLAY_DEVICE}{index}"
-        properties = [f"virtio-gpu-rvk-pci,id={name}", f"host-gpu={host_gpu}", f"executor={args.executor}",
+        properties = [f"virtio-gpu-av-pci,id={name}", f"host-gpu={host_gpu}", f"executor={args.executor}",
                       f"max_outputs={args.outputs}", f"vectors={FENCE_VECTORS}"]
         # The region exists only where it is asked for, and the capset's
         # host-visible bit follows the device's own hostmem size, so a run without
@@ -515,7 +515,7 @@ def qemu_command(args, work, disk, rescue, gpus=()):
         "-device", "virtio-serial-pci",
         "-chardev", f"socket,id=agent,path={work / 'agent.sock'},server=on,wait=off",
         "-device", "virtserialport,chardev=agent,name=org.qemu.guest_agent.0",
-        "-chardev", f"file,id=debugcon,path={work / f'rvkgpu{suffix}.log'}",
+        "-chardev", f"file,id=debugcon,path={work / f'avgpu{suffix}.log'}",
         "-device", "isa-debugcon,iobase=0x402,chardev=debugcon",
         "-qmp", f"unix:{work / 'qmp.sock'},server=on,wait=off",
         "-action", f"panic={'pause' if args.on_panic == 'pause' else 'none'}",
@@ -597,13 +597,13 @@ DISPLAY_SIZE = (1280, 800)
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
 DISPLAY_DEVICE = "gpu"
-RECORDING = "recording.rvk"
+RECORDING = "recording.av"
 """What --record writes in the work directory, beside qemu.log (feature 065)."""
 RECORDING_COST = "recording-cost.txt"
-"""Where the rvk scenario keeps each side of SC-002's comparison. It outlives a
+"""Where the av scenario keeps each side of SC-002's comparison. It outlives a
 run, because the two sides are two boots: one with --record and one without."""
 # The device's three sources and eight messages its contexts' fence queues
-# share, matching rvkgpu.inf's MessageNumberLimit (feature 043).
+# share, matching avgpu.inf's MessageNumberLimit (feature 043).
 FENCE_VECTORS = 11
 """The device id screendump names when it asks for a head other than the first."""
 HOSTMEM_BAR = 4
@@ -622,7 +622,7 @@ TICKS_PER_SECOND = 10000000
 VSYNC_POLL_SECONDS = 1.0
 """Between reads of the driver's log while waiting for a window at its period."""
 
-VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) periods in (\d+) ticks, (\d+) reported, enabled (\d+) times")
+VSYNC_LINE = re.compile(r"avgpu: vsync (\d+) periods in (\d+) ticks, (\d+) reported, enabled (\d+) times")
 ACCESS_DENIED = 5
 STRESS_PATIENCE = 2.0
 """How much longer than the stress window the guest is given to finish it."""
@@ -722,7 +722,7 @@ class ConsoleProgram:
     redirection in it is an invalid option.
     """
 
-    task = "rvkconsole"
+    task = "avconsole"
     """Created with /f and deleted after each run, so a stale one is replaced."""
     script = GUEST_DIRECTORY + "\\console.cmd"
     poll_seconds = 2.0
@@ -849,7 +849,7 @@ class GuestRun:
             self.layer_files = self.d3d_layers()
         if self.args.all_gpus:
             self.host_gpus = self.every_host_gpu()
-        for stale in ("overlay.qcow2", "vars.fd", "agent.sock", "qmp.sock", "rvkgpu.log", "rvkgpu-rescue.log",
+        for stale in ("overlay.qcow2", "vars.fd", "agent.sock", "qmp.sock", "avgpu.log", "avgpu-rescue.log",
                       "qemu-rescue.log", "panic.txt", "hostmem.bin"):
             (self.work / stale).unlink(missing_ok=True)
         for stale in ("diag", "symbols"):
@@ -1007,26 +1007,26 @@ class GuestRun:
         self.qmp_lost = False
         if self.args.record and not rescue:
             self.say(f"recording what crosses the wire into {self.work / RECORDING}; "
-                     f"build/rvkrecord print it")
+                     f"build/avrecord print it")
         output = open(self.qemu_log, "wb")
         environment = dict(os.environ, QEMU_MODULE_DIR=os.path.dirname(os.path.abspath(self.args.qemu)))
         # Where the executor library loads the host's Direct3D from: DXVK and
         # vkd3d-proton as tools/build_d3d_runtime.sh installs them. A checkout
         # without them runs every other sub-API (src/device/shim/d3d_runtime.hpp).
-        if os.path.isdir(self.args.d3d_runtime) and "RVK_D3D_PATH" not in environment:
-            environment["RVK_D3D_PATH"] = os.path.abspath(self.args.d3d_runtime)
+        if os.path.isdir(self.args.d3d_runtime) and "AV_D3D_PATH" not in environment:
+            environment["AV_D3D_PATH"] = os.path.abspath(self.args.d3d_runtime)
         # DXVK writes its logs to the working directory unless told otherwise.
         environment.setdefault("DXVK_LOG_PATH", str(self.work))
         if self.args.perfetto:
-            environment["RVK_PERFETTO"] = "1"
+            environment["AV_PERFETTO"] = "1"
         # What the test executor is told to do to the host's work: a stall
         # longer than TdrDelay is what dxgkrnl times out on (feature 040, US3).
         if self.args.stall_ms:
-            environment["RVK_ECHO_STALL_MS"] = str(self.args.stall_ms)
+            environment["AV_ECHO_STALL_MS"] = str(self.args.stall_ms)
         if self.args.fault_after:
-            environment["RVK_ECHO_FAULT_AFTER"] = str(self.args.fault_after)
+            environment["AV_ECHO_FAULT_AFTER"] = str(self.args.fault_after)
         if self.args.stall_ms or self.args.fault_after:
-            environment["RVK_ECHO_ONLY_NTH"] = str(self.args.stall_context)
+            environment["AV_ECHO_ONLY_NTH"] = str(self.args.stall_context)
         self.qemu = subprocess.Popen(qemu_command(self.args, self.work, self.disk, rescue, self.host_gpus),
                                      stdout=output, stderr=subprocess.STDOUT, env=environment)
         output.close()
@@ -1074,18 +1074,18 @@ class GuestRun:
             # The INF names the ICD whatever the run is for, pnputil refuses a
             # package missing a file it names, and the sign stage catalogs the
             # package's whole directory (feature 045).
-            files += [(self.args.driver, PACKAGE_DIRECTORY + "\\rvkgpu.sys"),
-                      (self.args.inf, PACKAGE_DIRECTORY + "\\rvkgpu.inf"),
-                      (self.args.icd, PACKAGE_DIRECTORY + "\\rvkvk.dll"),
-                      (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
-                      (self.args.gl_icd, PACKAGE_DIRECTORY + "\\rvkgl.dll"),
-                      (self.args.cl_icd, PACKAGE_DIRECTORY + "\\rvkcl.dll"),
-                      (self.args.umd, PACKAGE_DIRECTORY + "\\rvkumd.dll"),
-                      (self.args.icd32_manifest, PACKAGE_DIRECTORY + "\\rvkvk32.json")]
+            files += [(self.args.driver, PACKAGE_DIRECTORY + "\\avgpu.sys"),
+                      (self.args.inf, PACKAGE_DIRECTORY + "\\avgpu.inf"),
+                      (self.args.icd, PACKAGE_DIRECTORY + "\\avvk.dll"),
+                      (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\avvk.json"),
+                      (self.args.gl_icd, PACKAGE_DIRECTORY + "\\avgl.dll"),
+                      (self.args.cl_icd, PACKAGE_DIRECTORY + "\\avcl.dll"),
+                      (self.args.umd, PACKAGE_DIRECTORY + "\\avumd.dll"),
+                      (self.args.icd32_manifest, PACKAGE_DIRECTORY + "\\avvk32.json")]
             files += [(str(pathlib.Path(self.args.drivers32) / name), PACKAGE_DIRECTORY + "\\" + name)
                       for name in DRIVERS32]
-            files += [(self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
-                      (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
+            files += [(self.args.test, GUEST_DIRECTORY + "\\avtest.exe"),
+                      (self.args.inspect, GUEST_DIRECTORY + "\\avinspect.exe")]
             if self.host_gpus:
                 files.append((self.adapter_names(), ADAPTER_NAMES))
         if self.args.vulkan:
@@ -1094,17 +1094,17 @@ class GuestRun:
             runtime = pathlib.Path(self.args.vulkan_runtime)
             files += [(runtime / "vulkan-1.dll", GUEST_DIRECTORY + "\\vulkan-1.dll"),
                       (runtime / "vulkaninfo.exe", GUEST_DIRECTORY + "\\vulkaninfo.exe"),
-                      (self.args.probe, GUEST_DIRECTORY + "\\rvkvkprobe.exe")]
+                      (self.args.probe, GUEST_DIRECTORY + "\\avvkprobe.exe")]
 
         if self.args.opengl_discovery or self.args.opengl:
-            files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\rvkglprobe.exe"))
+            files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\avglprobe.exe"))
 
         if self.args.opencl:
             # The loader beside the probe that imports it, where Windows looks
             # first, so the run is the fetched loader's rather than whatever
             # another runtime left in System32.
             files += [(self.opencl_loader_dll(), GUEST_DIRECTORY + "\\OpenCL.dll"),
-                      (self.args.cl_probe, GUEST_DIRECTORY + "\\rvkclprobe.exe")]
+                      (self.args.cl_probe, GUEST_DIRECTORY + "\\avclprobe.exe")]
 
         if self.args.cts:
             # The CTS and the loader it calls, in a directory of its own: it
@@ -1122,9 +1122,9 @@ class GuestRun:
             files.append((runtime / "vulkan-1.dll", GUEST_DIRECTORY + "\\vulkan-1.dll"))
             for _layer, pushed in sorted(self.layer_files.items()):
                 files += [(local, GUEST_DIRECTORY + "\\" + name) for local, name in pushed]
-            files += [(self.args.d3d9_probe, GUEST_DIRECTORY + "\\rvkd3d9probe.exe"),
-                      (self.args.d3d11_probe, GUEST_DIRECTORY + "\\rvkd3d11probe.exe"),
-                      (self.args.d3d12_probe, GUEST_DIRECTORY + "\\rvkd3d12probe.exe")]
+            files += [(self.args.d3d9_probe, GUEST_DIRECTORY + "\\avd3d9probe.exe"),
+                      (self.args.d3d11_probe, GUEST_DIRECTORY + "\\avd3d11probe.exe"),
+                      (self.args.d3d12_probe, GUEST_DIRECTORY + "\\avd3d12probe.exe")]
 
         def send():
             # The CTS keeps its build and its logs in a directory of its own,
@@ -1169,7 +1169,7 @@ class GuestRun:
         adapters = re.search(r"adapters=(\d+)", output)
         if self.host_gpus and (adapters is None or int(adapters.group(1)) != devices):
             found = adapters.group(1) if adapters else "no"
-            raise StepFailed("check", f"the guest has {found} rvkgpu adapters, not {devices}")
+            raise StepFailed("check", f"the guest has {found} avgpu adapters, not {devices}")
         self.say(f"check ok: {monitors.group(1)} monitor(s)")
 
     def expected_adapters(self):
@@ -1192,7 +1192,7 @@ class GuestRun:
         dxgi = [row for row in rows if row[0] == "dxgi" and len(row) >= 9]
         missing = []
         for vendor, device, revision, name in self.expected_adapters():
-            pnp = f"PCI\\VEN_{vendor:04X}&DEV_{device:04X}&SUBSYS_{RVK_SUBSYSTEM:08X}&REV_{revision:02X}\\"
+            pnp = f"PCI\\VEN_{vendor:04X}&DEV_{device:04X}&SUBSYS_{AV_SUBSYSTEM:08X}&REV_{revision:02X}\\"
             shown = next((row for row in wmi if row[1].upper().startswith(pnp) and row[5] == name), None)
             if shown is None:
                 missing.append(f"WMI has no {pnp[:-1]} named {name!r}")
@@ -1200,7 +1200,7 @@ class GuestRun:
                 wmi.remove(shown)
                 self.say(f"adapters: WMI {name!r} {shown[1]}, AdapterRAM {shown[2]}, "
                          f"AdapterCompatibility {shown[3]!r}")
-            ids = (f"{vendor:04x}", f"{device:04x}", f"{RVK_SUBSYSTEM:08x}", f"{revision:02x}")
+            ids = (f"{vendor:04x}", f"{device:04x}", f"{AV_SUBSYSTEM:08x}", f"{revision:02x}")
             listed = next((row for row in dxgi if tuple(row[1:5]) == ids and row[8] == name), None)
             if listed is None:
                 missing.append(f"DXGI has no {':'.join(ids[:2])} subsystem {ids[2]} rev {ids[3]} named {name!r}")
@@ -1269,7 +1269,7 @@ class GuestRun:
         seconds = int(self.args.stress_minutes * 60)
         # The guest is given the whole stress window plus the rest of the suite.
         patience = self.args.step_timeout + seconds * STRESS_PATIENCE
-        code, out, error = self.step("rvktest", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe",
+        code, out, error = self.step("avtest", lambda: self.agent.run(GUEST_DIRECTORY + "\\avtest.exe",
                                                                        [str(seconds)] if seconds else [],
                                                                        patience))
         (self.work / "report.txt").write_bytes(out)
@@ -1351,9 +1351,9 @@ class GuestRun:
         for head in range(self.heads):
             self.display_head(head)
         driver = self.driver_log()
-        if "rvkgpu: aperture map segment 1" not in driver:
+        if "avgpu: aperture map segment 1" not in driver:
             raise StepFailed("display", "the primary's aperture pages were never recorded")
-        refused = [line for line in driver.splitlines() if line.startswith("rvkgpu: scanout ")]
+        refused = [line for line in driver.splitlines() if line.startswith("avgpu: scanout ")]
         if refused:
             raise StepFailed("display", f"a frame was not carried: {refused[0]}")
         self.say(f"display ok: {self.heads} head(s) of {DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]} scanned out of "
@@ -1562,7 +1562,7 @@ class GuestRun:
         self.colours = len(colours)
 
     def driver_log(self):
-        path = self.work / "rvkgpu.log"
+        path = self.work / "avgpu.log"
         return path.read_text(errors="replace") if path.exists() else ""
 
     def offers_sleep(self, state):
@@ -1657,7 +1657,7 @@ class GuestRun:
         completed. Only this runs in such a run: every other scenario would be
         measuring the injection."""
         patience = self.args.step_timeout + self.args.stall_ms / 1000.0 * TDR_PATIENCE
-        code, out, error = self.step("tdr", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe",
+        code, out, error = self.step("tdr", lambda: self.agent.run(GUEST_DIRECTORY + "\\avtest.exe",
                                                                    ["tdr"], patience))
         (self.work / "tdr.txt").write_bytes(out)
         summary = SUMMARY.search(out)
@@ -1669,28 +1669,28 @@ class GuestRun:
         self.say(f"tdr ok: {int(summary.group(1))} passed, the held context lost and the other one's work done")
         self.timeout_events()
 
-    def rvk(self):
-        """Feature 044: the rvk scenarios send real streams to the executor the
+    def av(self):
+        """Feature 044: the av scenarios send real streams to the executor the
         device loaded, so which library and which GPU they ran on is part of the
         verdict, and the transport's no-op round trip is its latency."""
-        self.say(f"rvk: executor {self.args.executor}, host-gpu {self.args.host_gpu}")
-        code, out, error = self.step("rvk", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe", ["rvk"],
+        self.say(f"av: executor {self.args.executor}, host-gpu {self.args.host_gpu}")
+        code, out, error = self.step("av", lambda: self.agent.run(GUEST_DIRECTORY + "\\avtest.exe", ["av"],
                                                                    self.args.step_timeout))
-        (self.work / "rvk.txt").write_bytes(out)
+        (self.work / "av.txt").write_bytes(out)
         summary = SUMMARY.search(out)
         if summary is None:
-            raise StepFailed("rvk", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
+            raise StepFailed("av", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
         failed = int(summary.group(2))
         if failed != 0 or code != 0:
-            raise StepFailed("rvk", f"{failed} step(s) failed, exit {code}; see rvk.txt")
-        self.say(f"rvk ok: {int(summary.group(1))} passed")
-        latency = RVK_LATENCY.search(out)
+            raise StepFailed("av", f"{failed} step(s) failed, exit {code}; see av.txt")
+        self.say(f"av ok: {int(summary.group(1))} passed")
+        latency = AV_LATENCY.search(out)
         if latency is None:
             return
         microseconds = int(latency.group(1))
-        self.say(f"rvk latency: a transport no-op round trip took {microseconds} us")
-        if microseconds > RVK_LATENCY_LIMIT_US:
-            raise StepFailed("rvk", f"a no-op took {microseconds} us, past the {RVK_LATENCY_LIMIT_US} us threshold")
+        self.say(f"av latency: a transport no-op round trip took {microseconds} us")
+        if microseconds > AV_LATENCY_LIMIT_US:
+            raise StepFailed("av", f"a no-op took {microseconds} us, past the {AV_LATENCY_LIMIT_US} us threshold")
         self.recording_cost(out)
 
     def recording_cost(self, report):
@@ -1699,9 +1699,9 @@ class GuestRun:
         its warm median beside qemu.log and whichever completes the pair
         subtracts. Said, never judged: the threshold a run would be failed
         against is a number this comparison exists to produce."""
-        median = RVK_WARM_MEDIAN.search(report)
+        median = AV_WARM_MEDIAN.search(report)
         if median is None:
-            self.say("recording cost skipped: the rvk run timed no warm round trip")
+            self.say("recording cost skipped: the av run timed no warm round trip")
             return
         measured = int(median.group(1))
         side = "on" if self.args.record else "off"
@@ -1723,7 +1723,7 @@ class GuestRun:
                   "a recording costs nothing this pair could measure"))
 
     def vulkan(self):
-        """Feature 045: the Khronos loader finds rvkvk.dll through the adapter's
+        """Feature 045: the Khronos loader finds avvk.dll through the adapter's
         VulkanDriverName alone, vulkaninfo lists the one device that gives it,
         and the probe proves a device, its work and its loss through the loader
         on the host GPU the executor runs on."""
@@ -1755,14 +1755,14 @@ class GuestRun:
             return
         if code != 0:
             raise StepFailed("khronos", f"reg query exited {code}: {text.strip()[-300:]}")
-        registered = [line.strip() for line in text.splitlines() if "rvk" in line.lower()]
+        registered = [line.strip() for line in text.splitlines() if "av" in line.lower()]
         if registered:
             raise StepFailed("khronos", f"the global key lists {registered[0]}: the ICD must be found through "
                                         "the adapter alone")
-        self.say("khronos ok: the key lists no rvk driver")
+        self.say("khronos ok: the key lists no av driver")
 
     def vulkaninfo(self):
-        """SC-001: the loader, asked by a program that knows nothing of rvk,
+        """SC-001: the loader, asked by a program that knows nothing of av,
         lists exactly one physical device and that device's LUID; its LowPart."""
         # The listing goes to a guest file and is pulled: with the agent capturing
         # its standard output, vulkaninfo on a live guest never exited, although
@@ -1792,7 +1792,7 @@ class GuestRun:
         return low_part
 
     def probe(self):
-        """SC-002 and SC-003: rvkvkprobe.exe's report, every step of it; the
+        """SC-002 and SC-003: avvkprobe.exe's report, every step of it; the
         values the steps printed, by step.
 
         It runs in the console session: its present steps make a window and read
@@ -1800,9 +1800,9 @@ class GuestRun:
         (ConsoleProgram)."""
         console = ConsoleProgram(self.agent, self.args.step_timeout)
         report = GUEST_DIRECTORY + "\\vulkan.txt"
-        code = self.step("rvkvkprobe",
-                         lambda: console.run(GUEST_DIRECTORY + "\\rvkvkprobe.exe", report, "rvkvkprobe"))
-        self.step("rvkvkprobe.pull", lambda: self.agent.pull(report, self.work / "vulkan.txt"))
+        code = self.step("avvkprobe",
+                         lambda: console.run(GUEST_DIRECTORY + "\\avvkprobe.exe", report, "avvkprobe"))
+        self.step("avvkprobe.pull", lambda: self.agent.pull(report, self.work / "vulkan.txt"))
         out = (self.work / "vulkan.txt").read_bytes()
         summary = PROBE_SUMMARY.search(out)
         if summary is None:
@@ -1824,7 +1824,7 @@ class GuestRun:
         They run in the console session: a D3D9 or D3D11 device is made on a
         window, and a window of the agent's own session is not one a layer can
         present on (ConsoleProgram)."""
-        programs = [f"rvkd3d{api}probe.exe" for api in ("9", "11", "12")]
+        programs = [f"avd3d{api}probe.exe" for api in ("9", "11", "12")]
         if self.args.page_heap:
             self.page_heap(programs, enable=True)
         try:
@@ -1871,7 +1871,7 @@ class GuestRun:
         """One probe: run, pulled back, and judged against the steps its API
         must report."""
         console = ConsoleProgram(self.agent, self.args.step_timeout)
-        name = f"rvkd3d{api}probe"
+        name = f"avd3d{api}probe"
         report = f"{GUEST_DIRECTORY}\\d3d{api}.txt"
         code = self.step(name, lambda: console.run(f"{GUEST_DIRECTORY}\\{name}.exe", report, name))
         self.step(f"{name}.pull", lambda: self.agent.pull(report, self.work / f"d3d{api}.txt"))
@@ -2069,7 +2069,7 @@ class GuestRun:
         if self.args.opengl_discovery:
             self.opengl_discovery()
             return
-        scenarios = [scenario for chosen, scenario in ((self.args.rvk, self.rvk), (self.args.vulkan, self.vulkan),
+        scenarios = [scenario for chosen, scenario in ((self.args.av, self.av), (self.args.vulkan, self.vulkan),
                                                         (self.args.opengl, self.opengl),
                                                         (self.args.opencl, self.opencl),
                                                         (self.args.d3d, self.d3d),
@@ -2108,7 +2108,7 @@ class GuestRun:
         recorded rather than judged, since the answer decides how the ICD is
         built (research.md §9). Only a probe that made no report fails."""
         report = GUEST_DIRECTORY + "\\discovery.txt"
-        command = f"{GUEST_DIRECTORY}\\rvkglprobe.exe --discovery > {report} 2>&1"
+        command = f"{GUEST_DIRECTORY}\\avglprobe.exe --discovery > {report} 2>&1"
         code, _out, _error = self.step("discovery.run", lambda: self.agent.run(CMD, ["/c", command],
                                                                              self.args.step_timeout))
         self.step("discovery.pull", lambda: self.agent.pull(report, self.work / "discovery.txt"))
@@ -2117,9 +2117,9 @@ class GuestRun:
             raise StepFailed("discovery", f"the probe exited {code} (its window could not be made); "
                                           "see discovery.txt")
         facts = dict(DISCOVERY_LINE.findall(text))
-        if "rvkgl_loaded" not in facts:
-            raise StepFailed("discovery", "the probe reported no rvkgl_loaded line")
-        loaded = "loaded" if facts["rvkgl_loaded"].startswith("yes") else "not loaded"
+        if "avgl_loaded" not in facts:
+            raise StepFailed("discovery", "the probe reported no avgl_loaded line")
+        loaded = "loaded" if facts["avgl_loaded"].startswith("yes") else "not loaded"
         opened = DISCOVERY_OPEN.search(text)
         if opened is not None and opened.group(1) == "ok":
             adapter = f"the DC opened an adapter (LUID {int(opened.group(2), 16):#x})"
@@ -2127,14 +2127,14 @@ class GuestRun:
             adapter = f"the DC opened no adapter (status {int(opened.group(3)):#010X})".replace("0X", "0x")
         else:
             adapter = "the probe did not open the DC's adapter"
-        self.say(f"discovery ok: rvkgl.dll {loaded}, {adapter}")
+        self.say(f"discovery ok: avgl.dll {loaded}, {adapter}")
 
     def opengl(self):
-        """Feature 050, SC-001 to SC-003: every step of rvkglprobe.exe through the
+        """Feature 050, SC-001 to SC-003: every step of avglprobe.exe through the
         system opengl32.dll, on a renderer that is the host GPU's. The report is
         written to a guest file and pulled, as vulkaninfo's is."""
         report = GUEST_DIRECTORY + "\\opengl.txt"
-        command = f"{GUEST_DIRECTORY}\\rvkglprobe.exe > {report} 2>&1"
+        command = f"{GUEST_DIRECTORY}\\avglprobe.exe > {report} 2>&1"
         code, _out, _error = self.step("opengl.run", lambda: self.agent.run(CMD, ["/c", command],
                                                                           self.args.step_timeout))
         self.step("opengl.pull", lambda: self.agent.pull(report, self.work / "opengl.txt"))
@@ -2160,11 +2160,11 @@ class GuestRun:
         self.pictures("opengl", GL_PICTURES)
 
     def opencl(self):
-        """Feature 052, SC-001 to SC-003: every step of rvkclprobe.exe through the
+        """Feature 052, SC-001 to SC-003: every step of avclprobe.exe through the
         Khronos OpenCL loader, on a device that is the host GPU's. The report is
         written to a guest file and pulled, as the OpenGL probe's is."""
         report = GUEST_DIRECTORY + "\\opencl.txt"
-        command = f"{GUEST_DIRECTORY}\\rvkclprobe.exe > {report} 2>&1"
+        command = f"{GUEST_DIRECTORY}\\avclprobe.exe > {report} 2>&1"
         code, _out, _error = self.step("opencl.run", lambda: self.agent.run(CMD, ["/c", command],
                                                                           self.args.step_timeout))
         self.step("opencl.pull", lambda: self.agent.pull(report, self.work / "opencl.txt"))
@@ -2241,8 +2241,8 @@ class GuestRun:
             if refusal in log:
                 raise StepFailed("scanout", f"the device refused a scanout: {refusal}")
         driver = self.driver_log()
-        if "rvkgpu: scanout blob" in driver:
-            raise StepFailed("scanout", "the driver could not carry a frame: see rvkgpu.log")
+        if "avgpu: scanout blob" in driver:
+            raise StepFailed("scanout", "the driver could not carry a frame: see avgpu.log")
         self.say("scanout ok: a head shows the guest's primary as a dma-buf, and no frame is copied")
 
     def prepare_guest(self):
@@ -2278,7 +2278,7 @@ class GuestRun:
             self.say(f"{failed.step} failed: {failed.reason}")
         if not panicked:
             return False
-        self.say("rescue: booting the overlay without virtio-gpu-rvk-pci for its dumps")
+        self.say("rescue: booting the overlay without virtio-gpu-av-pci for its dumps")
         self.stop_qemu()
         try:
             self.boot(rescue=True)
@@ -2350,7 +2350,7 @@ class GuestRun:
 
     def hold(self):
         # The relay goes with the connection: a held guest's agent socket is free
-        # for tools/guest/guest_shell.py and tools/mcp/rvk_inspect.py directly.
+        # for tools/guest/guest_shell.py and tools/mcp/av_inspect.py directly.
         self.relay.stop()
         for channel in (self.agent, self.qmp):
             if channel is not None:
@@ -2364,7 +2364,7 @@ class GuestRun:
             print(f"  gdb    target remote 127.0.0.1:{self.args.gdb}")
         if self.args.vnc is not None:
             print(f"  vnc    127.0.0.1:{5900 + self.args.vnc}")
-        print(f"  logs   {self.work / 'rvkgpu.log'}, {self.work / 'qemu.log'}")
+        print(f"  logs   {self.work / 'avgpu.log'}, {self.work / 'qemu.log'}")
         print("  press Enter (or close the guest's window) to power the guest off", flush=True)
         try:
             while self.qemu.poll() is None:

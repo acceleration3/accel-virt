@@ -7,14 +7,14 @@
  * loaded it.
  *
  * An ABI boundary the constitution permits and the only place in the library
- * where a function is not a method: `rvk_executor_ops()` takes no argument, so
+ * where a function is not a method: `av_executor_ops()` takes no argument, so
  * there is nowhere to put a `this`, and the root lives in storage of its own
  * for exactly that reason (CLAUDE.md). No logic lives here - each entry point
  * is one line into ExecutorRoot.
  */
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
 #include "device/shim/host_trace.hpp"
@@ -37,7 +37,7 @@ public:
      * A sub-API with no backend is refused by the root rather than given a
      * session that would answer nothing; the capset already says which those
      * are, because it offers only what a GPU here reports running. */
-    av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
+    av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
                                av::ContextSession *share)
     {
         AV_SCOPE("Library::create");
@@ -72,7 +72,7 @@ public:
     }
 
 private:
-    /* The root's dump on /dev/shm/rvk-state-executor-<pid>.sock. The library
+    /* The root's dump on /dev/shm/av-state-executor-<pid>.sock. The library
      * pins itself first: the socket's thread and each traced thread's signal
      * stack run or free code in this object for the rest of the process, and
      * QEMU closes an executor it no longer needs. */
@@ -97,18 +97,18 @@ private:
 
 Library library;
 
-/* The device holds a session as an opaque RvkExecutor *; these two are the
+/* The device holds a session as an opaque AvExecutor *; these two are the
  * only places that spelling is crossed. */
-av::ContextSession *session_of(RvkExecutor *executor)
+av::ContextSession *session_of(AvExecutor *executor)
 {
     AV_SCOPE("session_of");
     return static_cast<av::ContextSession *>(static_cast<void *>(executor));
 }
 
-RvkExecutor *handle_of(av::ContextSession *session)
+AvExecutor *handle_of(av::ContextSession *session)
 {
     AV_SCOPE("handle_of");
-    return static_cast<RvkExecutor *>(static_cast<void *>(session));
+    return static_cast<AvExecutor *>(static_cast<void *>(session));
 }
 
 uint32_t sub_apis(void *)
@@ -117,26 +117,26 @@ uint32_t sub_apis(void *)
     return library.root().sub_apis();
 }
 
-RvkExecutor *create(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
+AvExecutor *create(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
 {
     AV_SCOPE("create");
     return handle_of(library.create(sub_api, gpu_uuid, nullptr, nullptr));
 }
 
-RvkExecutor *create_with_options(void *, uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
-                                 RvkExecutor *share)
+AvExecutor *create_with_options(void *, uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
+                                 AvExecutor *share)
 {
     AV_SCOPE("create_with_options");
     return handle_of(library.create(sub_api, gpu_uuid, options, session_of(share)));
 }
 
-void destroy(void *, RvkExecutor *executor)
+void destroy(void *, AvExecutor *executor)
 {
     AV_SCOPE("destroy");
     library.destroy(session_of(executor));
 }
 
-uint32_t execute(void *, RvkExecutor *executor, uint32_t command_id, const uint8_t *payload,
+uint32_t execute(void *, AvExecutor *executor, uint32_t command_id, const uint8_t *payload,
                  size_t size, uint8_t *reply, size_t reply_capacity, size_t *reply_size)
 {
     AV_SCOPE("execute");
@@ -145,7 +145,7 @@ uint32_t execute(void *, RvkExecutor *executor, uint32_t command_id, const uint8
     const uint32_t result = session != nullptr
                                 ? session->execute(command_id, payload, size, reply, reply_capacity,
                                                    answer)
-                                : RVK_DEVICE_LOST;
+                                : AV_DEVICE_LOST;
     if (reply_size != nullptr) *reply_size = answer;
     return result;
 }
@@ -156,53 +156,53 @@ uint32_t import_kinds(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
     return library.root().import_kinds(sub_api, gpu_uuid);
 }
 
-uint32_t import_blob(void *, RvkExecutor *executor, uint64_t blob_id,
-                     const RvkBlobHandle *handle)
+uint32_t import_blob(void *, AvExecutor *executor, uint64_t blob_id,
+                     const AvBlobHandle *handle)
 {
     AV_SCOPE("import_blob");
     av::ContextSession *const session = session_of(executor);
-    if (session == nullptr || handle == nullptr) return RVK_UNDECODABLE;
+    if (session == nullptr || handle == nullptr) return AV_UNDECODABLE;
     return session->import_blob(blob_id, *handle);
 }
 
-void release_blob(void *, RvkExecutor *executor, uint64_t blob_id)
+void release_blob(void *, AvExecutor *executor, uint64_t blob_id)
 {
     AV_SCOPE("release_blob");
     av::ContextSession *const session = session_of(executor);
     if (session != nullptr) session->release_blob(blob_id);
 }
 
-uint64_t imported_handle(void *, RvkExecutor *executor, uint64_t blob_id)
+uint64_t imported_handle(void *, AvExecutor *executor, uint64_t blob_id)
 {
     AV_SCOPE("imported_handle");
     return library.root().imported_handle(session_of(executor), blob_id);
 }
 
-void set_signal(void *, RvkExecutor *executor, void (*signal)(void *context), void *context)
+void set_signal(void *, AvExecutor *executor, void (*signal)(void *context), void *context)
 {
     AV_SCOPE("set_signal");
     library.root().set_signal(session_of(executor), signal, context);
 }
 
-uint32_t export_object(void *, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle,
+uint32_t export_object(void *, AvExecutor *executor, uint32_t kind, uint64_t wire_handle,
                        uint32_t *handle_kind, int *fd)
 {
     AV_SCOPE("export_object");
     return library.root().export_object(session_of(executor), kind, wire_handle, *handle_kind, *fd)
-               ? RVK_EXECUTED
-               : RVK_UNKNOWN;
+               ? AV_EXECUTED
+               : AV_UNKNOWN;
 }
 
-uint32_t import_object(void *, RvkExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
+uint32_t import_object(void *, AvExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
                        uint64_t size, uint64_t *wire_handle)
 {
     AV_SCOPE("import_object");
     return library.root().import_object(session_of(executor), kind, handle_kind, fd, size, *wire_handle)
-               ? RVK_EXECUTED
-               : RVK_UNKNOWN;
+               ? AV_EXECUTED
+               : AV_UNKNOWN;
 }
 
-void release_object(void *, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle)
+void release_object(void *, AvExecutor *executor, uint32_t kind, uint64_t wire_handle)
 {
     AV_SCOPE("release_object");
     library.root().release_object(session_of(executor), kind, wire_handle);
@@ -212,22 +212,22 @@ uint32_t read_image(void *, const uint8_t *gpu_uuid, uint64_t key, void *pixels,
                     uint32_t height)
 {
     AV_SCOPE("read_image");
-    return library.root().read_image(gpu_uuid, key, pixels, stride, width, height) ? RVK_EXECUTED : RVK_UNKNOWN;
+    return library.root().read_image(gpu_uuid, key, pixels, stride, width, height) ? AV_EXECUTED : AV_UNKNOWN;
 }
 
-uint32_t export_image(void *, const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage *image)
+uint32_t export_image(void *, const uint8_t *gpu_uuid, uint64_t key, AvExportedImage *image)
 {
     AV_SCOPE("export_image");
-    return image != nullptr && library.root().export_image(gpu_uuid, key, *image) ? RVK_EXECUTED : RVK_UNKNOWN;
+    return image != nullptr && library.root().export_image(gpu_uuid, key, *image) ? AV_EXECUTED : AV_UNKNOWN;
 }
 
 uint32_t map_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point, uint32_t wait_ms,
-                   RvkFrameView *view)
+                   AvFrameView *view)
 {
     AV_SCOPE("map_frame");
     return view != nullptr && library.root().map_frame(gpu_uuid, av::SurfacePoint(surface, point), wait_ms, *view)
-               ? RVK_EXECUTED
-               : RVK_UNKNOWN;
+               ? AV_EXECUTED
+               : AV_UNKNOWN;
 }
 
 void unmap_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point)
@@ -242,21 +242,21 @@ void release_shared(void *, const uint8_t *gpu_uuid, uint64_t object_id)
     library.root().release_shared(gpu_uuid, object_id);
 }
 
-void end_batch(void *, RvkExecutor *executor)
+void end_batch(void *, AvExecutor *executor)
 {
     AV_SCOPE("end_batch");
     av::ContextSession *const session = session_of(executor);
     if (session != nullptr) session->end_batch();
 }
 
-uint32_t poll(void *, RvkExecutor *executor)
+uint32_t poll(void *, AvExecutor *executor)
 {
     AV_SCOPE("poll");
     av::ContextSession *const session = session_of(executor);
     return session != nullptr && session->poll() ? 1u : 0u;
 }
 
-void gpu_progress(void *, RvkExecutor *executor, uint64_t *marked, uint64_t *reached)
+void gpu_progress(void *, AvExecutor *executor, uint64_t *marked, uint64_t *reached)
 {
     AV_SCOPE("gpu_progress");
     uint64_t                  at = 0u;
@@ -267,7 +267,7 @@ void gpu_progress(void *, RvkExecutor *executor, uint64_t *marked, uint64_t *rea
     if (reached != nullptr) *reached = done;
 }
 
-const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
+const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
                               create,
@@ -293,7 +293,7 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
 
 }  // namespace
 
-extern "C" __attribute__((visibility("default"))) const RvkExecutorOps *rvk_executor_ops(void)
+extern "C" __attribute__((visibility("default"))) const AvExecutorOps *av_executor_ops(void)
 {
     return &table;
 }

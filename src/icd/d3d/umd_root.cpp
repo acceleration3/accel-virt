@@ -50,19 +50,19 @@ void UmdRoot::note(const char *what, uint64_t value)
     AV_SCOPE("UmdRoot::note");
     char       line[line_bytes] = {};
     TextBuffer text(line, sizeof line);
-    text.append("rvkumd: ");
+    text.append("avumd: ");
     text.append(what);
     text.append(" ");
     text.append_decimal(value);
     log_.write(text.text());
 }
 
-/* The LUID rvkgpu.sys answers UMDRIVERPRIVATE with: which adapter the runtime
- * opened. 0 - an older driver, or a refusal - takes the first rvkgpu adapter. */
+/* The LUID avgpu.sys answers UMDRIVERPRIVATE with: which adapter the runtime
+ * opened. 0 - an older driver, or a refusal - takes the first avgpu adapter. */
 uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
 {
     AV_SCOPE("UmdRoot::adapter_luid");
-    constexpr uint64_t umd_private_tag = 0x44494C554B5652ull;
+    constexpr uint64_t umd_private_tag = 0x0044494C555641ull;
     struct QueryAdapterInfo {
         void    *pPrivateDriverData;
         uint32_t PrivateDriverDataSize;
@@ -91,7 +91,7 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
     UmdConnection *connection = nullptr;
     const Status   held = connections_.acquire(adapter_luid(runtime_adapter, callbacks), connection);
     if (held != Status::ok) {
-        note("no rvkgpu adapter, status", static_cast<uint64_t>(held));
+        note("no avgpu adapter, status", static_cast<uint64_t>(held));
         return hr_fail;
     }
     bool      keep = false;

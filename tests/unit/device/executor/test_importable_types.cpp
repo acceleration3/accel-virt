@@ -5,7 +5,7 @@
  * measured are Intel's 0x7f over seven types and NVIDIA's 0x18 over six, where
  * the BAR type 5 is host visible to the host and not importable; a dma-buf is
  * taken into other types again, and is preferred wherever it is taken at all. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/importable_types.hpp"
 #include "harness/executor/importable_types_probe.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -52,11 +52,11 @@ TEST(importable_types, a_dma_buf_is_preferred_and_carries_its_own_types)
 { ImportableTypes importable;
   importable.learn(intel, 0x20u, 0x7fu);
   CHECK(importable.invariants_hold());
-  CHECK_EQ(importable.kind(), std::uint32_t{RVK_BLOB_DMA_BUF});
+  CHECK_EQ(importable.kind(), std::uint32_t{AV_BLOB_DMA_BUF});
   CHECK(importable.includes(5u));
   CHECK(!importable.includes(0u));   /* the pointer's types are not offered */
   importable.learn(intel, 0u, 0x7fu);
-  CHECK_EQ(importable.kind(), std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(importable.kind(), std::uint32_t{AV_BLOB_HOST_POINTER});
   CHECK(importable.includes(0u));
   importable.learn(0u, 0u, 0u);
   CHECK(importable.invariants_hold());
@@ -160,5 +160,5 @@ TEST(importable_types, invariants_refuse_a_device_with_no_kind)
   CHECK(!importable.invariants_hold());
   ImportableTypesProbe(importable).set_kind(3u);
   CHECK(!importable.invariants_hold());
-  ImportableTypesProbe(importable).set_kind(RVK_BLOB_HOST_POINTER);
+  ImportableTypesProbe(importable).set_kind(AV_BLOB_HOST_POINTER);
   CHECK(importable.invariants_hold()); }

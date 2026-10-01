@@ -113,7 +113,7 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due
             if (key == 0u && resources_[source].keyed()) {
                 char       bytes[160];
                 TextBuffer line(bytes, sizeof bytes);
-                line.append("rvkgpu: unkeyed scanout address 0x");
+                line.append("avgpu: unkeyed scanout address 0x");
                 line.append_hex(address, 16u);
                 line.append(" primary 0x");
                 line.append_hex(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(primary)), 16u);

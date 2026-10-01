@@ -1,5 +1,5 @@
 /* The private data of a packet a process submits on one of its ordinary
- * contexts to follow a batch on one of its rvk contexts: the rvk context is
+ * contexts to follow a batch on one of its av contexts: the av context is
  * named by its ring's allocation handle, which only resolves in that process,
  * and the packet completes once the host has completed `fence` on it.
  *
@@ -31,7 +31,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x464B5652u;  /* "RVKF" */
+    static constexpr uint32_t magic = 0x00465641u;  /* "AVF" */
 
     uint32_t ring_;
     uint64_t fence_;

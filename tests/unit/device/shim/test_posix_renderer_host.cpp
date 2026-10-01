@@ -5,7 +5,7 @@
  * notifiers QEMU passed, recordings on disk - and everything only QEMU has
  * answered not_supported. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/display/scanout_framebuffer.hpp"
 #include "device/gpu/pci_address.hpp"
 #include "device/renderer/doorbell_offers.hpp"
@@ -51,7 +51,7 @@ private:
 
 int memfd(std::uint64_t size)
 {
-    const int descriptor = ::memfd_create("rvk-test", MFD_CLOEXEC);
+    const int descriptor = ::memfd_create("av-test", MFD_CLOEXEC);
     if (descriptor >= 0 && ::ftruncate(descriptor, static_cast<off_t>(size)) != 0) {
         ::close(descriptor);
         return -1;
@@ -228,23 +228,23 @@ TEST(posix_renderer_host_main_loop, names_a_call_on_the_wrong_thread)
   PosixRendererHost &host = rig.host();
   { StderrCapture capture;
     host.require_main_loop("Before::become");
-    CHECK(std::strstr(capture.finish(), "rvk-renderer: Before::become called off the control thread") != nullptr); }
+    CHECK(std::strstr(capture.finish(), "av-renderer: Before::become called off the control thread") != nullptr); }
   CHECK_STATUS(host.become_main_loop(), Status::ok);
   { StderrCapture capture;
     host.require_main_loop("Main::ok");
     host.require_worker("Worker::here");
     const char *const text = capture.finish();
     CHECK(std::strstr(text, "Main::ok") == nullptr);
-    CHECK(std::strstr(text, "rvk-renderer: Worker::here called on the control thread") != nullptr); }
+    CHECK(std::strstr(text, "av-renderer: Worker::here called on the control thread") != nullptr); }
   { StderrCapture capture;
     Asker  asker = {&host};
     void  *thread = nullptr;
     CHECK_STATUS(host.start_thread(&ask_main_loop, &asker, thread), Status::ok);
     host.join_thread(thread);
-    CHECK(std::strstr(capture.finish(), "rvk-renderer: Asker::ask called off the control thread") != nullptr); }
+    CHECK(std::strstr(capture.finish(), "av-renderer: Asker::ask called off the control thread") != nullptr); }
   { StderrCapture capture;
     host.log("hello there");
-    CHECK(std::strcmp(capture.finish(), "rvk-renderer: hello there\n") == 0); } }
+    CHECK(std::strcmp(capture.finish(), "av-renderer: hello there\n") == 0); } }
 
 /* A worker's event wakes on its own signal, auto-resetting. */
 TEST(posix_renderer_host_event, wakes_on_its_own_signal_and_resets)
@@ -442,7 +442,7 @@ TEST(posix_renderer_host_memory, a_host_blob_maps_the_memfd_qemu_offered)
 TEST(posix_renderer_host_memory, a_host_blob_is_a_dma_buf_over_the_memfd_qemu_offered)
 { Rig rig;
   PosixRendererHost &host = rig.host();
-  const int sealed = ::memfd_create("rvk-test", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  const int sealed = ::memfd_create("av-test", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   CHECK(sealed >= 0);
   CHECK_EQ(::ftruncate(sealed, static_cast<off_t>(3u * page)), 0);
   CHECK_EQ(::fcntl(sealed, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL), 0);
@@ -537,7 +537,7 @@ TEST(posix_renderer_host_interrupts, lines_past_the_last_page_are_closed)
 TEST(posix_renderer_host_recording, writes_truncates_and_closes_a_file)
 { Rig rig;
   PosixRendererHost &host = rig.host();
-  char directory[] = "/tmp/rvk-renderer-host-XXXXXX";
+  char directory[] = "/tmp/av-renderer-host-XXXXXX";
   CHECK(::mkdtemp(directory) != nullptr);
   char path[128] = {};
   std::snprintf(path, sizeof path, "%s/recording", directory);
@@ -631,7 +631,7 @@ TEST(posix_renderer_host, what_only_qemu_has_is_not_supported)
  * loaded again. */
 TEST(posix_renderer_host_executor, loads_the_library_the_hello_named)
 { Rig rig;
-  const RvkExecutorOps *ops = reinterpret_cast<const RvkExecutorOps *>(&rig);
+  const AvExecutorOps *ops = reinterpret_cast<const AvExecutorOps *>(&rig);
   CHECK_STATUS(rig.host().load_executor("/no/such/library.so", 19u, ops), Status::not_found);
   CHECK(ops == nullptr);
   CHECK_STATUS(rig.host().load_executor(AV_ECHO_EXECUTOR, 0u, ops), Status::not_found);
@@ -645,7 +645,7 @@ TEST(posix_renderer_host_executor, loads_the_library_the_hello_named)
   std::memcpy(padded + sizeof AV_ECHO_EXECUTOR - 1u, "xyz", 3u);
   CHECK_STATUS(rig.host().load_executor(padded, sizeof AV_ECHO_EXECUTOR - 1u, ops), Status::ok);
   CHECK(ops != nullptr);
-  CHECK(ops != nullptr && (ops->sub_apis(ops->opaque) & RVK_EXECUTOR_SUB_API_VULKAN) != 0u);
+  CHECK(ops != nullptr && (ops->sub_apis(ops->opaque) & AV_EXECUTOR_SUB_API_VULKAN) != 0u);
   CHECK_STATUS(rig.host().load_executor(padded, sizeof AV_ECHO_EXECUTOR - 1u, ops), Status::invalid_state); }
 
 TEST(posix_renderer_host, its_clock_moves_forward_and_its_memory_is_zeroed)

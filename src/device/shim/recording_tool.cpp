@@ -1,5 +1,5 @@
-/* rvkrecord: prints a wire recording, or replays it into an executor library
- * (contracts/rvkrecord.md). The shim, so it holds the platform and nothing
+/* avrecord: prints a wire recording, or replays it into an executor library
+ * (contracts/avrecord.md). The shim, so it holds the platform and nothing
  * else - argv, a mapping, a dlopen, and writing to standard output. Every
  * decision is in src/device/recording/, where the coverage gate measures it:
  * what the arguments mean is RecordingToolRequest's, what a line says is
@@ -36,12 +36,12 @@ int replay(av::RecordingReader &reader, const av::RecordingFilter &filter,
     AV_SCOPE("replay");
     av::PosixExecutorModule module;
     if (module.open(request.executor()) != av::Status::ok) {
-        std::fprintf(stderr, "rvkrecord: %s is no executor library\n", request.executor());
+        std::fprintf(stderr, "avrecord: %s is no executor library\n", request.executor());
         return 2;
     }
     av::ExecutorLibrary library;
     if (library.accept(module.ops()) != av::Status::ok) {
-        std::fprintf(stderr, "rvkrecord: %s answers a table this ABI does not accept\n",
+        std::fprintf(stderr, "avrecord: %s answers a table this ABI does not accept\n",
                      request.executor());
         return 2;
     }
@@ -65,12 +65,12 @@ int main(int count, char **arguments)
     av::RecordingFilter      filter;
     av::RecordingToolRequest request;
     if (request.parse(count, arguments, filter) != av::Status::ok) {
-        std::fprintf(stderr, "rvkrecord: %s\n", request.reason());
+        std::fprintf(stderr, "avrecord: %s\n", request.reason());
         return 2;
     }
     av::MappedFile file;
     if (file.open(request.recording()) != av::Status::ok) {
-        std::fprintf(stderr, "rvkrecord: %s could not be read\n", request.recording());
+        std::fprintf(stderr, "avrecord: %s could not be read\n", request.recording());
         return 2;
     }
     av::RecordingReader reader(file.bytes(), file.length());

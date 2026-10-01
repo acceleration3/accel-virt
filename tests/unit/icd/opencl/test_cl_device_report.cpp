@@ -71,13 +71,13 @@ bool reads_back(const ClDeviceReport &report, cl_device_info name, char *into, s
 
 }  // namespace
 
-TEST(cl_device_report, the_vendor_id_is_the_rvkgpu_adapters_rather_than_the_host_gpus)
+TEST(cl_device_report, the_vendor_id_is_the_avgpu_adapters_rather_than_the_host_gpus)
 { ClDeviceReport report(adapter_luid);
   cl_uint vendor = 0u;
   std::size_t bytes = 0u;
   CHECK_EQ(report.info(CL_DEVICE_VENDOR_ID, sizeof vendor, &vendor, &bytes), CL_SUCCESS);
   CHECK_EQ(bytes, sizeof(cl_uint));
-  /* Red Hat's, which is the PCI vendor of the virtio function rvkgpu drives;
+  /* Red Hat's, which is the PCI vendor of the virtio function avgpu drives;
    * the host GPU's would name a device the guest has no handle to. */
   CHECK_EQ(vendor, 0x1AF4u);
   CHECK(report.decides(CL_DEVICE_VENDOR_ID));
@@ -232,7 +232,7 @@ TEST(cl_device_report, a_version_with_nothing_after_the_number_is_read_all_the_s
   CHECK_EQ(std::strncmp(text, "OpenCL 1.2 ", 11u), 0);
   /* And what this ICD reports names itself, so a log says which driver
    * answered. */
-  CHECK(std::strstr(text, "rvkgpu") != nullptr); }
+  CHECK(std::strstr(text, "avgpu") != nullptr); }
 
 TEST(cl_device_report, svm_is_coarse_grained_or_nothing_whatever_the_host_offers)
 { ClDeviceReport report(adapter_luid);

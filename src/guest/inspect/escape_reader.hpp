@@ -1,5 +1,5 @@
 /* The driver's trace table or state dump, read through D3DKMTEscape one
- * 16 KiB window at a time (docs/trace.md, TraceEscapeRecord) on the rvkgpu
+ * 16 KiB window at a time (docs/trace.md, TraceEscapeRecord) on the avgpu
  * adapter. The first answer says how much there is; every later one must say
  * the same and fill its window, or the read is refused - a dump that changes
  * under the reader is not one dump. */
@@ -29,7 +29,7 @@ public:
     EscapeReader &operator=(const EscapeReader &) = delete;
 
     /* Reads the whole of `kind`, replacing what was held. not_found without
-     * an rvkgpu adapter; the escape's own failure; malformed for an answer
+     * an avgpu adapter; the escape's own failure; malformed for an answer
      * that is not one to the request, a total that changed or a window left
      * short; too_large past max_total; no_memory. Nothing is held unless ok. */
     [[nodiscard]] Status read(TraceEscapeRecord::Kind kind);

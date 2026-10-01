@@ -1,6 +1,6 @@
 """The virtio-gpu 2D protocol the driver talks to, against the real device: the
-patched QEMU's stock virtio-gpu-pci and virtio-gpu-rvk-pci must answer alike,
-because the rvk device leaves the 2D protocol to its base class. Requests the
+patched QEMU's stock virtio-gpu-pci and virtio-gpu-av-pci must answer alike,
+because the av device leaves the 2D protocol to its base class. Requests the
 driver sends are the driver's own bytes (gpu_request_bytes); the display
 requests it will send next are laid out here from the virtio 1.2 structures.
 
@@ -12,7 +12,7 @@ import struct
 import subprocess
 import unittest
 
-import rvk_context
+import av_context
 import virtio_qtest
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
@@ -36,8 +36,8 @@ FEATURE_VIRGL = 1 << 0
 FEATURE_RESOURCE_BLOB = 1 << 3
 FEATURE_CONTEXT_INIT = 1 << 4
 
-DEVICES = {"stock": "virtio-gpu-pci", "rvk": "virtio-gpu-rvk-pci,host-gpu=auto",
-           "rvk with an executor": rvk_context.rvk_device()}
+DEVICES = {"stock": "virtio-gpu-pci", "av": "virtio-gpu-av-pci,host-gpu=auto",
+           "av with an executor": av_context.av_device()}
 
 
 def header(command):
@@ -49,7 +49,7 @@ def response_type(response):
 
 
 def driver_request(*arguments):
-    """The bytes rvkgpu.sys's GpuRequestWriter writes for a request."""
+    """The bytes avgpu.sys's GpuRequestWriter writes for a request."""
     result = subprocess.run([REQUEST_BYTES, *map(str, arguments)], capture_output=True, text=True, check=True)
     return bytes.fromhex(result.stdout.strip())
 
@@ -66,14 +66,14 @@ class VirtioGpu2d(unittest.TestCase):
             with self.subTest(device=name):
                 yield name, self.open(name)
 
-    def test_the_rvk_device_offers_what_stock_offers_and_context_init_only_with_an_executor(self):
+    def test_the_av_device_offers_what_stock_offers_and_context_init_only_with_an_executor(self):
         stock = self.open("stock").device.offered_features()
-        rvk = self.open("rvk").device.offered_features()
-        executing = self.open("rvk with an executor").device.offered_features()
-        self.assertEqual(rvk, stock)
+        av = self.open("av").device.offered_features()
+        executing = self.open("av with an executor").device.offered_features()
+        self.assertEqual(av, stock)
         self.assertEqual(executing, stock | FEATURE_CONTEXT_INIT)
-        self.assertTrue(rvk & virtio_qtest.FEATURE_EDID)
-        self.assertTrue(rvk & virtio_qtest.FEATURE_VERSION_1)
+        self.assertTrue(av & virtio_qtest.FEATURE_EDID)
+        self.assertTrue(av & virtio_qtest.FEATURE_VERSION_1)
         self.assertFalse(stock & FEATURE_CONTEXT_INIT)
         self.assertFalse(executing & (FEATURE_VIRGL | FEATURE_RESOURCE_BLOB))
 

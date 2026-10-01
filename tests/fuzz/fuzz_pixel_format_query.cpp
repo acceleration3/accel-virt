@@ -1,5 +1,5 @@
 /* Hostile wglChoosePixelFormatARB and wglGetPixelFormatAttribivARB input, as
- * an application hands it to rvkgl.dll: whatever the lists hold, a query
+ * an application hands it to avgl.dll: whatever the lists hold, a query
  * answers, reads no further than max_pairs pairs and a terminator, and every
  * format it chooses or describes exists. */
 #include "core/support/status.hpp"

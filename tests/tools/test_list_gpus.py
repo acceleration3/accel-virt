@@ -99,9 +99,9 @@ class ListGpus(unittest.TestCase):
         result = self.list(CAPTURE, "--qemu")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), [
-            "-device virtio-gpu-rvk-pci,host-gpu=8680a646-0c00-0000-0002-000000000000,max_outputs=1",
-            "-device virtio-gpu-rvk-pci,host-gpu=7b7ad2c5-4219-8c80-c4fd-a64b8775aedb,max_outputs=1",
-            "-device virtio-gpu-rvk-pci,host-gpu=6d657361-3231-2e31-2e30-000000000000,max_outputs=1",
+            "-device virtio-gpu-av-pci,host-gpu=8680a646-0c00-0000-0002-000000000000,max_outputs=1",
+            "-device virtio-gpu-av-pci,host-gpu=7b7ad2c5-4219-8c80-c4fd-a64b8775aedb,max_outputs=1",
+            "-device virtio-gpu-av-pci,host-gpu=6d657361-3231-2e31-2e30-000000000000,max_outputs=1",
         ])
 
     def test_libvirt_passes_the_same_arguments_with_shared_memfd_memory(self):
@@ -110,7 +110,7 @@ class ListGpus(unittest.TestCase):
         self.assertIn("<source type='memfd'/><access mode='shared'/>", result.stdout)
         self.assertIn("<model type='none'/>", result.stdout)
         self.assertEqual(result.stdout.count("<qemu:arg value='-device'/>"), 3)
-        self.assertIn('<qemu:arg value="virtio-gpu-rvk-pci,host-gpu=7b7ad2c5-4219-8c80-c4fd-a64b8775aedb,'
+        self.assertIn('<qemu:arg value="virtio-gpu-av-pci,host-gpu=7b7ad2c5-4219-8c80-c4fd-a64b8775aedb,'
                       'max_outputs=1"/>', result.stdout)
 
     def test_output_without_a_device_is_an_error(self):

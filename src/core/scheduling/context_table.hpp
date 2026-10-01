@@ -29,7 +29,7 @@ public:
     [[nodiscard]] Status create(void *device, DxgkargCreateContextRecord &request);
     [[nodiscard]] Status destroy(void *context);
     Context             *find(void *context);
-    /* The rvk context of `follower`'s process whose ring is the allocation
+    /* The av context of `follower`'s process whose ring is the allocation
      * `ring` names there, or null: what a FollowRecord on `follower` waits for.
      * A handle names an allocation only in the process that made it, so a
      * process can follow nothing but its own. */

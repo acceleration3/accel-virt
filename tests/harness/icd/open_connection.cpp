@@ -11,7 +11,7 @@ OpenConnection::OpenConnection()
     : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), connection_(kmt_, platform_, lock_)
 {
     kmt_.add_adapter(PciIdentity(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                                 AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem),
+                                 AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem),
                      AdapterScenario::wddm_3_2);
     CHECK_STATUS(connection_.open(), Status::ok);
 }

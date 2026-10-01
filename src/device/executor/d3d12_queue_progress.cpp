@@ -88,7 +88,7 @@ void D3d12QueueProgress::log_stuck() const
 {
     AV_SCOPE("D3d12QueueProgress::log_stuck");
     for (uint32_t slot = 0u; slot < count_; slot++)
-        fprintf(stderr, "virtio-gpu-rvk: d3d12: queue %u progress signalled %llu completed %llu\n", ids_[slot],
+        fprintf(stderr, "virtio-gpu-av: d3d12: queue %u progress signalled %llu completed %llu\n", ids_[slot],
                 static_cast<unsigned long long>(signalled_[slot]),
                 static_cast<unsigned long long>(fences_[slot]->GetCompletedValue()));
 }

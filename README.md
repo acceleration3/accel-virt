@@ -16,16 +16,16 @@ dedicated video memory.
 
 | Piece | What it is | Source |
 |---|---|---|
-| `rvkgpu.sys` | A WDDM 3.2 kernel-mode display miniport. It speaks virtio-gpu plus this project's rvk protocol. | `src/core/` (portable), `src/km/` (Windows shim) |
-| `rvkumd.dll` | The Direct3D 11 and 12 user-mode driver, with DXGI | `src/icd/d3d/`, `src/um/d3d/` |
-| `rvkvk.dll` | The Vulkan installable client driver | `src/icd/vulkan/`, `src/um/vulkan/` |
-| `rvkgl.dll` | The OpenGL installable client driver (the `Drv*` interface) | `src/icd/opengl/`, `src/um/opengl/` |
-| `rvkcl.dll` | The OpenCL installable client driver | `src/icd/opencl/`, `src/um/opencl/` |
-| `rvkumd32.dll`, `rvkvk32.dll`, `rvkgl32.dll`, `rvkcl32.dll` | The same four, built for x86, which 32-bit processes load | the same sources, built with `AV_GUEST_ARCH=x86` |
-| `virtio-gpu-rvk-pci` | A QEMU device, built into a patched QEMU 11.1.1 | `src/device/` |
-| `librvk_executor.so` | The host library that runs guest commands on the host GPU | `src/device/executor/`, `src/device/shim/` |
-| `rvk-renderer` | An optional separate process for the executor, so that a host driver crash cannot take the VM | `src/device/renderer/`, `src/device/isolation/` |
-| the rvk protocol | Shared by both sides, specified in [`docs/protocol.md`](docs/protocol.md) | `src/proto/` |
+| `avgpu.sys` | A WDDM 3.2 kernel-mode display miniport. It speaks virtio-gpu plus this project's av protocol. | `src/core/` (portable), `src/km/` (Windows shim) |
+| `avumd.dll` | The Direct3D 11 and 12 user-mode driver, with DXGI | `src/icd/d3d/`, `src/um/d3d/` |
+| `avvk.dll` | The Vulkan installable client driver | `src/icd/vulkan/`, `src/um/vulkan/` |
+| `avgl.dll` | The OpenGL installable client driver (the `Drv*` interface) | `src/icd/opengl/`, `src/um/opengl/` |
+| `avcl.dll` | The OpenCL installable client driver | `src/icd/opencl/`, `src/um/opencl/` |
+| `avumd32.dll`, `avvk32.dll`, `avgl32.dll`, `avcl32.dll` | The same four, built for x86, which 32-bit processes load | the same sources, built with `AV_GUEST_ARCH=x86` |
+| `virtio-gpu-av-pci` | A QEMU device, built into a patched QEMU 11.1.1 | `src/device/` |
+| `libav_executor.so` | The host library that runs guest commands on the host GPU | `src/device/executor/`, `src/device/shim/` |
+| `av-renderer` | An optional separate process for the executor, so that a host driver crash cannot take the VM | `src/device/renderer/`, `src/device/isolation/` |
+| the av protocol | Shared by both sides, specified in [`docs/protocol.md`](docs/protocol.md) | `src/proto/` |
 
 Everything is written from the WDK headers and from reverse engineering
 Microsoft's shipping binaries (`dxgkrnl.sys`, `dxgmms2.sys`, `cdd.dll`,
@@ -57,13 +57,13 @@ Microsoft's shipping binaries (`dxgkrnl.sys`, `dxgmms2.sys`, `cdd.dll`,
  Windows 11 guest                                                    Linux host
  ───────────────────────────────────────────────────                ──────────────────────────────────────────────
  application
-   ├─ d3d11.dll / D3D12Core.dll ─→ rvkumd.dll ┐
-   ├─ vulkan-1.dll ──────────────→ rvkvk.dll  │  one rvk context each:          QEMU  ─ virtio-gpu-rvk-pci
-   ├─ opengl32.dll ──────────────→ rvkgl.dll  ├─ ring in guest RAM ──────────→        (librvk_device.a)
-   └─ OpenCL.dll ────────────────→ rvkcl.dll  ┘  doorbell (BAR 0, ioeventfd)          │ per-context workers
+   ├─ d3d11.dll / D3D12Core.dll ─→ avumd.dll ┐
+   ├─ vulkan-1.dll ──────────────→ avvk.dll  │  one av context each:          QEMU  ─ virtio-gpu-av-pci
+   ├─ opengl32.dll ──────────────→ avgl.dll  ├─ ring in guest RAM ──────────→        (libav_device.a)
+   └─ OpenCL.dll ────────────────→ avcl.dll  ┘  doorbell (BAR 0, ioeventfd)          │ per-context workers
                                                   fence page + MSI-X ←──────────────  │
- DWM, GDI (cdd.dll) ─→ dxgkrnl ─→ rvkgpu.sys ── virtio-gpu control queue ──→   librvk_executor.so
-                                  (VidPn, VidMm, VidSch,                        (in QEMU, or in rvk-renderer)
+ DWM, GDI (cdd.dll) ─→ dxgkrnl ─→ avgpu.sys ── virtio-gpu control queue ──→   libav_executor.so
+                                  (VidPn, VidMm, VidSch,                        (in QEMU, or in av-renderer)
                                    scanout, cursor, fences)                       ├─ Vulkan      → host Vulkan driver
                                                                                   ├─ OpenGL      → EGL + host GL
                                                                                   ├─ OpenCL      → host OpenCL (e.g. rusticl)
@@ -71,7 +71,7 @@ Microsoft's shipping binaries (`dxgkrnl.sys`, `dxgmms2.sys`, `cdd.dll`,
                                                                                                     → host Vulkan
 ```
 
-**One adapter per host GPU.** Each `virtio-gpu-rvk-pci` device binds one host
+**One adapter per host GPU.** Each `virtio-gpu-av-pci` device binds one host
 GPU by its Vulkan device UUID, which survives reboots and driver updates where
 enumeration order does not. The PCI function presents that GPU's vendor, device
 and revision as its own. Its subsystem stays `1af4:5256`, which is how the
@@ -80,8 +80,8 @@ Vulkan device name. A second host GPU can be added as a second device. With
 `display=off` it is a render-only adapter, and frames rendered on it are shown
 through the display adapter.
 
-**rvk contexts.** Each API context a process creates, whether a Vulkan device,
-a GL context, a CL context or a D3D device, gets an rvk context:
+**av contexts.** Each API context a process creates, whether a Vulkan device,
+a GL context, a CL context or a D3D device, gets an av context:
 
 - a ring in guest memory that the process writes command batches into;
 - a doorbell page in BAR 0, which is a KVM ioeventfd, so a 4-byte store wakes
@@ -119,7 +119,7 @@ dma-buf when the display backend has a GL context (`gtk,gl=on` or
 the cursor is a 64x64 hardware cursor.
 
 **Isolation.** With `renderer=`, the whole host GPU stack runs in
-`rvk-renderer`. A crash there loses the device's contexts, which the guest sees
+`av-renderer`. A crash there loses the device's contexts, which the guest sees
 as a device reset that Windows already recovers from, and QEMU starts a new
 renderer ([`docs/renderer.md`](docs/renderer.md)).
 
@@ -127,13 +127,13 @@ renderer ([`docs/renderer.md`](docs/renderer.md)).
 
 | API | Guest path | Host path | What is offered |
 |---|---|---|---|
-| Desktop (DWM, GDI) | `rvkumd.dll` (Direct3D 11) | DXVK | composited on the host GPU, scanned out zero-copy, 60 fps |
-| Direct3D 11 | `d3d11.dll` → `rvkumd.dll` (`OpenAdapter10_2`, the D3D11 DDI at WDDM 3.2) | DXVK's `d3d11`, native | feature levels up to 12_1 |
-| Direct3D 12 | `D3D12Core.dll` → `rvkumd.dll` (`OpenAdapter12`) | vkd3d-proton, native and patched | what vkd3d-proton offers on the host GPU |
-| Vulkan | Khronos loader → `rvkvk.dll` | the host's Vulkan driver | Vulkan 1.3, with the host device's extensions under the ICD's extension policy |
-| OpenGL | `opengl32.dll` → `rvkgl.dll` | EGL + the host's GL | up to 4.6, core and compatibility profiles, WGL pixel formats and sharing |
-| OpenCL | Khronos loader → `rvkcl.dll` | the host's OpenCL | OpenCL 3.0, including SVM and `cl_khr_gl_sharing` |
-| Direct3D 9 | DXVK's Windows `d3d9.dll` beside the application → `rvkvk.dll` (`rvkvk32.dll` for a 32-bit one) | the host's Vulkan driver | no native D3D9 user-mode driver yet |
+| Desktop (DWM, GDI) | `avumd.dll` (Direct3D 11) | DXVK | composited on the host GPU, scanned out zero-copy, 60 fps |
+| Direct3D 11 | `d3d11.dll` → `avumd.dll` (`OpenAdapter10_2`, the D3D11 DDI at WDDM 3.2) | DXVK's `d3d11`, native | feature levels up to 12_1 |
+| Direct3D 12 | `D3D12Core.dll` → `avumd.dll` (`OpenAdapter12`) | vkd3d-proton, native and patched | what vkd3d-proton offers on the host GPU |
+| Vulkan | Khronos loader → `avvk.dll` | the host's Vulkan driver | Vulkan 1.3, with the host device's extensions under the ICD's extension policy |
+| OpenGL | `opengl32.dll` → `avgl.dll` | EGL + the host's GL | up to 4.6, core and compatibility profiles, WGL pixel formats and sharing |
+| OpenCL | Khronos loader → `avcl.dll` | the host's OpenCL | OpenCL 3.0, including SVM and `cl_khr_gl_sharing` |
+| Direct3D 9 | DXVK's Windows `d3d9.dll` beside the application → `avvk.dll` (`avvk32.dll` for a 32-bit one) | the host's Vulkan driver | no native D3D9 user-mode driver yet |
 
 Every row works in 32-bit processes too. The package installs an x86 build of
 each user-mode driver, and Windows gives it to a WoW64 process through the
@@ -162,10 +162,10 @@ Tested beyond the probes and sample suites:
 - **32-bit processes need their own loaders.** A 32-bit Vulkan or OpenCL
   application finds `vulkan-1.dll` and `OpenCL.dll` in `C:\Windows\SysWOW64`,
   and Windows ships neither (see [Installing](#installing)).
-- **No native Direct3D 9.** `rvkumd.dll` exports `OpenAdapter10_2` and
+- **No native Direct3D 9.** `avumd.dll` exports `OpenAdapter10_2` and
   `OpenAdapter12` only. A D3D8 or D3D9 program runs by putting DXVK's Windows
   `d3d9.dll` beside it, which then runs on the Vulkan ICD. That is the path
-  `rvkd3d9probe.exe` checks.
+  `avd3d9probe.exe` checks.
 
 **Display:**
 - **One display per adapter**, at 60 Hz.
@@ -188,7 +188,7 @@ Tested beyond the probes and sample suites:
   device the real driver bugchecks. `provision.ps1` turns driver searches off
   (`NoDriverUpdates`), both at `prepare` and at `install`. Keep them off in any
   guest that has network access.
-- **The host must find DXVK and vkd3d-proton** (`RVK_D3D_PATH`, below).
+- **The host must find DXVK and vkd3d-proton** (`AV_D3D_PATH`, below).
   Without them the host offers no Direct3D, and DWM crash-loops with
   `0x889800B2` ("the host answers no Direct3D 11 on this adapter").
 - **The distribution's QEMU cannot load the device.** Its compiled-in module
@@ -243,11 +243,11 @@ tools/fetch_windows_kit.sh            # the WDK/SDK header and import-library su
 tools/fetch_khronos_registries.py     # vk.xml, gl.xml, cl.xml and the Khronos headers
 tools/fetch_qemu.sh                   # QEMU 11.1.1's release tarball
 
-# 1. rvkgpu.sys, the guest DLLs and programs, and the host unit tests
+# 1. avgpu.sys, the guest DLLs and programs, and the host unit tests
 cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
 
-# 2. QEMU with virtio-gpu-rvk-pci, the executor library and rvk-renderer
+# 2. QEMU with virtio-gpu-av-pci, the executor library and av-renderer
 cmake -S . -B build-qemu -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release -DAV_QEMU=ON
 cmake --build build-qemu
 
@@ -269,19 +269,19 @@ What comes out:
 
 | File | Built by | Goes |
 |---|---|---|
-| `build/driver/rvkgpu.sys` | `build`: `src/core` compiled a second time with `clang-cl /kernel` | the guest's driver package |
-| `build/guest/rvkumd.dll`, `rvkvk.dll`, `rvkgl.dll`, `rvkcl.dll` | `build`: `src/icd` and `src/um` with `clang-cl` and no C runtime | the guest's driver package |
-| `src/km/rvkgpu.inf`, `src/um/vulkan/rvkvk.json` | committed | the guest's driver package |
+| `build/driver/avgpu.sys` | `build`: `src/core` compiled a second time with `clang-cl /kernel` | the guest's driver package |
+| `build/guest/avumd.dll`, `avvk.dll`, `avgl.dll`, `avcl.dll` | `build`: `src/icd` and `src/um` with `clang-cl` and no C runtime | the guest's driver package |
+| `src/km/avgpu.inf`, `src/um/vulkan/avvk.json` | committed | the guest's driver package |
 | `build/guest/OpenCL.dll` | `build`, once the loader is fetched | the guest's `C:\Windows\System32` |
-| `build/guest32/rvkumd32.dll`, `rvkvk32.dll`, `rvkgl32.dll`, `rvkcl32.dll` | `build`: the same tree built again for x86 | the guest's driver package |
-| `src/um/vulkan/rvkvk32.json` | committed | the guest's driver package |
+| `build/guest32/avumd32.dll`, `avvk32.dll`, `avgl32.dll`, `avcl32.dll` | `build`: the same tree built again for x86 | the guest's driver package |
+| `src/um/vulkan/avvk32.json` | committed | the guest's driver package |
 | `build/guest32/OpenCL.dll` | `build`, once the loader is fetched | the guest's `C:\Windows\SysWOW64` |
 | `build/guest32/*.exe` | `build` | the guest: the probes, samples and suite, as 32-bit programs |
-| `build/guest/rvktest.exe`, `rvkinspect.exe`, `rvk*probe.exe`, `rvk*samples.exe` | `build` | the guest, for testing and inspection |
+| `build/guest/avtest.exe`, `avinspect.exe`, `av*probe.exe`, `av*samples.exe` | `build` | the guest, for testing and inspection |
 | `build-qemu/qemu/qemu-system-x86_64` and its modules | `build-qemu` | the host, run with `QEMU_MODULE_DIR=build-qemu/qemu` |
-| `build-qemu/librvk_executor.so`, `build-qemu/rvk-renderer` | `build-qemu` | the host, named by `executor=` and `renderer=` |
-| `build-qemu/rvkrecord` | `build-qemu` | the host: prints and replays wire recordings |
-| `build-d3d/lib/` | `tools/build_d3d_runtime.sh` | the host, named by `RVK_D3D_PATH` |
+| `build-qemu/libav_executor.so`, `build-qemu/av-renderer` | `build-qemu` | the host, named by `executor=` and `renderer=` |
+| `build-qemu/avrecord` | `build-qemu` | the host: prints and replays wire recordings |
+| `build-d3d/lib/` | `tools/build_d3d_runtime.sh` | the host, named by `AV_D3D_PATH` |
 
 A core change that would not build in the guest kernel fails the build. That
 covers a hosted header, a C runtime call, `new`, `throw` or `typeid`.
@@ -296,7 +296,7 @@ already installed.
 
 `tools/guest/run_guest_suite.py` drives everything through the QEMU guest
 agent. It boots a copy-on-write overlay of an image, pushes the package, signs
-it, installs it, reboots, checks the adapter started on `rvkgpu`, and runs the
+it, installs it, reboots, checks the adapter started on `avgpu`, and runs the
 suite.
 
 Prepare the image once. This is the one run that writes the image:
@@ -310,7 +310,7 @@ tools/guest/run_guest_suite.py --image /path/to/windows.qcow2 --prepare-image
 - kernel memory dumps with automatic reboot, and verbose `setupapi.dev.log`;
 - nothing that interrupts a run: no fast startup, hibernation, sleep,
   automatic updates, automatic maintenance, driver searches or boot recovery;
-- a Defender exclusion for `C:\rvk`.
+- a Defender exclusion for `C:\av`.
 
 It is idempotent.
 
@@ -324,7 +324,7 @@ A VM to use:
 
 ```bash
 tools/guest/run_guest_suite.py --image /path/to/windows.qcow2 --work build-guest-render \
-    --executor build-qemu/librvk_executor.so --all-gpus --hostmem 8192 \
+    --executor build-qemu/libav_executor.so --all-gpus --hostmem 8192 \
     --quick --keep --no-collect --display gtk --net --audio
 ```
 
@@ -339,14 +339,14 @@ guest running until you press Enter.
 > to keep, copy the overlay first (`cp --reflink=always`, with `vars.fd` beside
 > it). From then on, relaunch QEMU yourself from its saved command line
 > (`tr '\0' '\n' < /proc/<pid>/cmdline`) with the runner's environment
-> (`QEMU_MODULE_DIR`, `RVK_D3D_PATH`).
+> (`QEMU_MODULE_DIR`, `AV_D3D_PATH`).
 
 ### 2. By hand, on an existing Windows 11 VM
 
 **On the host,** give the VM the device. A complete command line:
 
 ```bash
-QEMU_MODULE_DIR=build-qemu/qemu RVK_D3D_PATH=$PWD/build-d3d/lib \
+QEMU_MODULE_DIR=build-qemu/qemu AV_D3D_PATH=$PWD/build-d3d/lib \
 build-qemu/qemu/qemu-system-x86_64 \
   -machine q35,accel=kvm,memory-backend=ram \
   -object memory-backend-memfd,id=ram,size=8192M,share=on -m 8192M \
@@ -356,10 +356,10 @@ build-qemu/qemu/qemu-system-x86_64 \
   -drive if=pflash,format=raw,file=vars.fd \
   -drive if=none,id=disk,format=qcow2,file=windows.qcow2 -device ide-hd,drive=disk,bus=ide.0 \
   -vga none \
-  -device virtio-gpu-rvk-pci,id=gpu,host-gpu=auto,executor=build-qemu/librvk_executor.so,max_outputs=1,vectors=11,hostmem=8192M \
+  -device virtio-gpu-av-pci,id=gpu,host-gpu=auto,executor=build-qemu/libav_executor.so,max_outputs=1,vectors=11,hostmem=8192M \
   -display gtk,gl=on \
   -device qemu-xhci -device usb-tablet \
-  -chardev file,id=debugcon,path=rvkgpu.log -device isa-debugcon,iobase=0x402,chardev=debugcon \
+  -chardev file,id=debugcon,path=avgpu.log -device isa-debugcon,iobase=0x402,chardev=debugcon \
   -qmp unix:qmp.sock,server=on,wait=off
 ```
 
@@ -372,32 +372,32 @@ Keep `-vga none`: another display adapter would take the desktop. The
 
 **In the guest,** as Administrator:
 
-1. Copy the package into `C:\rvk\package`:
-   - `rvkgpu.sys`, `rvkgpu.inf`, `rvkvk.dll`, `rvkvk.json`, `rvkgl.dll`,
-     `rvkcl.dll`, `rvkumd.dll`;
-   - the 32-bit drivers from `build/guest32`: `rvkvk32.dll`, `rvkgl32.dll`,
-     `rvkcl32.dll` and `rvkumd32.dll`, with `src/um/vulkan/rvkvk32.json`. The
+1. Copy the package into `C:\av\package`:
+   - `avgpu.sys`, `avgpu.inf`, `avvk.dll`, `avvk.json`, `avgl.dll`,
+     `avcl.dll`, `avumd.dll`;
+   - the 32-bit drivers from `build/guest32`: `avvk32.dll`, `avgl32.dll`,
+     `avcl32.dll` and `avumd32.dll`, with `src/um/vulkan/avvk32.json`. The
      INF names them all, and `pnputil` refuses a package missing a file it
      names;
-   - `tools/guest/provision.ps1` into `C:\rvk`.
+   - `tools/guest/provision.ps1` into `C:\av`.
 2. Sign the package:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File C:\rvk\provision.ps1 -Stage sign
+   powershell -ExecutionPolicy Bypass -File C:\av\provision.ps1 -Stage sign
    ```
 
-   This names every present `virtio-gpu-rvk-pci` in the INF, makes and trusts
+   This names every present `virtio-gpu-av-pci` in the INF, makes and trusts
    the test certificate, catalogs and signs the package, and turns test signing
    on. Exit code 3010 means reboot, then continue.
 3. Install:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File C:\rvk\provision.ps1 -Stage install -NoVerifier
+   powershell -ExecutionPolicy Bypass -File C:\av\provision.ps1 -Stage install -NoVerifier
    ```
 
    This turns driver updates off, enables user-mode submission and native
    fences, and runs `pnputil /add-driver ... /install`. Without `-NoVerifier`
-   it also puts Driver Verifier's standard checks on `rvkgpu.sys`, which is
+   it also puts Driver Verifier's standard checks on `avgpu.sys`, which is
    right for testing and slow for use. Reboot.
 4. Put the loaders in place:
    - the Vulkan loader: either run LunarG's Vulkan Runtime installer, or copy
@@ -411,10 +411,10 @@ Keep `-vga none`: another display adapter would take the desktop. The
 5. Check:
 
    ```powershell
-   C:\rvk\provision.ps1 -Stage check
+   C:\av\provision.ps1 -Stage check
    ```
 
-   This confirms every rvkgpu adapter started with no problem code.
+   This confirms every avgpu adapter started with no problem code.
    `-Stage adapters` shows what WMI and DXGI call it, and `-Stage modes` lists
    the display modes.
 
@@ -424,10 +424,10 @@ interrupts an automated run, which you may not want on a VM you use.
 ### 3. Updating an installed driver
 
 - **As an update would arrive, with no reboot.** Put the new files in
-  `C:\rvk\package`, run `-Stage sign` (it signs `rvkgpu.sys` and the catalog),
+  `C:\av\package`, run `-Stage sign` (it signs `avgpu.sys` and the catalog),
   then `-Stage upgrade -Minutes 1`. That raises `DriverVer`'s build number by
   1, installs over the running driver, and checks the adapter now runs the new
-  version. The count starts from the INF in `C:\rvk\package`, which each
+  version. The count starts from the INF in `C:\av\package`, which each
   upgrade rewrites. Copying the repository's INF over it resets the count, and
   an upgrade to a version already installed keeps the old files without saying
   so: compare a file's hash in the driver store after installing.
@@ -435,23 +435,23 @@ interrupts an automated run, which you may not want on a VM you use.
   below. The next process to load it gets the new one, with no reboot and no
   signature check, since user-mode DLLs are verified only at install.
 - **Quickest, for a kernel-only change.** Sign as above, then replace
-  `rvkgpu.sys` in the driver store and reboot. The driver store copy is
-  `C:\Windows\System32\DriverStore\FileRepository\rvkgpu.inf_amd64_*\`; rename
+  `avgpu.sys` in the driver store and reboot. The driver store copy is
+  `C:\Windows\System32\DriverStore\FileRepository\avgpu.inf_amd64_*\`; rename
   the old file, don't delete it. Windows loads the store's copy at the next
   start.
 
 If the new driver bugchecks at boot, boot the same disk without the device
-(drop `virtio-gpu-rvk-pci` and add `-vga std`) and put the old file back.
+(drop `virtio-gpu-av-pci` and add `-vga std`) and put the old file back.
 
 ## Device parameters
 
-`-device virtio-gpu-rvk-pci,<property>=<value>,...` takes these properties.
+`-device virtio-gpu-av-pci,<property>=<value>,...` takes these properties.
 
 | Property | Default | Meaning |
 |---|---|---|
 | `host-gpu` | `auto` | The host GPU this adapter runs on: `auto` (the first Vulkan device) or a Vulkan device UUID from `tools/host/list_gpus.py`. A malformed or absent GPU fails to start, with the reason. |
-| `executor` | none | The executor library, usually `build-qemu/librvk_executor.so`. Without one the device is a plain virtio-gpu with no rvk capset: 2D only, no acceleration. `librvk_echo_executor.so` is the test double the runner defaults to. |
-| `renderer` | none | The path to `rvk-renderer`. The executor then runs in that process instead of QEMU, and a host driver crash costs the guest a device reset instead of the VM. |
+| `executor` | none | The executor library, usually `build-qemu/libav_executor.so`. Without one the device is a plain virtio-gpu with no av capset: 2D only, no acceleration. `libav_echo_executor.so` is the test double the runner defaults to. |
+| `renderer` | none | The path to `av-renderer`. The executor then runs in that process instead of QEMU, and a host driver crash costs the guest a device reset instead of the VM. |
 | `modes` | empty | The display's resolutions: `WxH` between commas, the first preferred, e.g. `2560x1440,1920x1080,1000x600`. Empty means the host monitors' own modes. It can be changed while the guest runs (see [Resolutions](#resolutions)). |
 | `display` | `on` | `off` makes a render-only adapter with no outputs, for a second host GPU. |
 | `record` | none | A file to write a wire recording to: everything the executor received. |
@@ -520,26 +520,26 @@ What the driver does with the list:
 
 ## Environment variables
 
-These are read by QEMU, the executor library and `rvk-renderer`.
+These are read by QEMU, the executor library and `av-renderer`.
 
 | Variable | Effect |
 |---|---|
 | `QEMU_MODULE_DIR` | Where QEMU finds its modules: `build-qemu/qemu`. Required. |
-| `RVK_D3D_PATH` | The directory holding DXVK's and vkd3d-proton's native libraries (`build-d3d/lib`). Unset, the loader's own search is used, and without them the host serves no Direct3D. |
+| `AV_D3D_PATH` | The directory holding DXVK's and vkd3d-proton's native libraries (`build-d3d/lib`). Unset, the loader's own search is used, and without them the host serves no Direct3D. |
 | `DXVK_LOG_PATH` | DXVK's own log directory (DXVK's variable; the runner sets it to the work directory). |
-| `RVK_PERFETTO=1` | Record every host function scope as a timeline event (`/dev/shm/rvk-events-*`) for `tools/perfetto_trace.py`. Also lets any process of the user ptrace QEMU for sampling. |
-| `RVK_TRACE_SCOPES=1` | Bind the host trace tables, so live thread state can be read, without timeline events. |
-| `RVK_TRACE_DEPTH=<n>` | How deep the timeline records (0 is everything; the defaults are 2 for the device and 6 for the executor). |
-| `RVK_TRACE_ONLY=<names>` | Record only these comma-separated `Class::method` scopes. |
-| `RVK_PTRACE=1` | Allow any process of the user to attach to QEMU, under Yama's `ptrace_scope` 1. |
-| `RVK_VK_SUBMIT_TIMING=1` | Log, once a second, the GPU's time spent in and between Vulkan submissions. |
+| `AV_PERFETTO=1` | Record every host function scope as a timeline event (`/dev/shm/av-events-*`) for `tools/perfetto_trace.py`. Also lets any process of the user ptrace QEMU for sampling. |
+| `AV_TRACE_SCOPES=1` | Bind the host trace tables, so live thread state can be read, without timeline events. |
+| `AV_TRACE_DEPTH=<n>` | How deep the timeline records (0 is everything; the defaults are 2 for the device and 6 for the executor). |
+| `AV_TRACE_ONLY=<names>` | Record only these comma-separated `Class::method` scopes. |
+| `AV_PTRACE=1` | Allow any process of the user to attach to QEMU, under Yama's `ptrace_scope` 1. |
+| `AV_VK_SUBMIT_TIMING=1` | Log, once a second, the GPU's time spent in and between Vulkan submissions. |
 
 `VKD3D_VULKAN_DEVICE` is set by the executor itself, per device, to pin
 vkd3d-proton to the adapter's GPU. Don't set it yourself.
 
 ## What the driver package installs
 
-`rvkgpu.inf` matches `PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4`: the device on a
+`avgpu.inf` matches `PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4`: the device on a
 host GPU with no PCI function, such as llvmpipe. The `sign` stage adds one
 model line for each present `PCI\VEN_xxxx&DEV_yyyy&SUBSYS_52561AF4`, named
 after the host GPU, because the IDs differ from host to host. It installs into
@@ -547,11 +547,11 @@ the driver store and writes these values:
 
 | Value | Where | Why |
 |---|---|---|
-| `UserModeDriverName` | adapter software key | Four `%13%` paths to `rvkumd.dll`, one per Direct3D version. dxgkrnl refuses the adapter without this value. A bare file name is looked for in System32, never in the driver store, and every process, DWM included, would fall back to WARP. |
+| `UserModeDriverName` | adapter software key | Four `%13%` paths to `avumd.dll`, one per Direct3D version. dxgkrnl refuses the adapter without this value. A bare file name is looked for in System32, never in the driver store, and every process, DWM included, would fall back to WARP. |
 | `UserModeDriverNameWow`, `VulkanDriverNameWow`, `OpenGLDriverNameWow`, `OpenGLVersionWow`, `OpenGLFlagsWow`, `OpenCLDriverNameWow` | adapter software key | The same six values for a 32-bit process, naming the `*32` drivers. dxgkrnl reads the Direct3D and OpenGL ones for a WoW64 caller, and the Vulkan and OpenCL loaders read theirs when `IsWow64Process` says so. They are `%13%` paths too: the driver store is exempt from WoW64's System32 redirection. |
-| `VulkanDriverName` | adapter software key | `%13%\rvkvk.json`, how the Vulkan loader finds the ICD through this adapter |
-| `OpenGLDriverName`, `OpenGLVersion`, `OpenGLFlags` | adapter software key | `rvkgl.dll`. Flags `1` makes opengl32 ask the ICD for pixel formats. |
-| `OpenCLDriverName` | adapter software key | `rvkcl.dll`, as `REG_SZ`. The loader's fast path ignores a multi-string. |
+| `VulkanDriverName` | adapter software key | `%13%\avvk.json`, how the Vulkan loader finds the ICD through this adapter |
+| `OpenGLDriverName`, `OpenGLVersion`, `OpenGLFlags` | adapter software key | `avgl.dll`. Flags `1` makes opengl32 ask the ICD for pixel formats. |
+| `OpenCLDriverName` | adapter software key | `avcl.dll`, as `REG_SZ`. The loader's fast path ignores a multi-string. |
 | `Features\4`, `Features\37` | adapter key, and the global `GraphicsDrivers` key at install | Enable user-mode submission and native fences, which Windows ships staged off |
 | `Scheduler\EnablePreemption = 0` | `GraphicsDrivers` | See [Limitations and nuances](#limitations-and-nuances). |
 | `MSISupported`, `MessageNumberLimit = 11` | device hardware key | MSI-X, one vector per interrupt source |
@@ -561,16 +561,16 @@ description.
 
 ## Debugging
 
-**Driver log.** `rvkgpu.sys` writes `rvkgpu: ...` lines to I/O port 0x402.
+**Driver log.** `avgpu.sys` writes `avgpu: ...` lines to I/O port 0x402.
 With `-device isa-debugcon,iobase=0x402,chardev=...` they land in a host file
-(the runner's `<work>/rvkgpu.log`), across reboots and up to the moment of a
+(the runner's `<work>/avgpu.log`), across reboots and up to the moment of a
 bugcheck.
 
 **Guest user-mode logs.** Each driver appends to
-`C:\ProgramData\rvk\<module>-<pid>.log`, where the module is `rvkvk`, `rvkgl`,
-`rvkcl` or `rvkumd`. The logs name each refused or failed call, shader and
+`C:\ProgramData\av\<module>-<pid>.log`, where the module is `avvk`, `avgl`,
+`avcl` or `avumd`. The logs name each refused or failed call, shader and
 kernel build errors, and the host's reason for a fault. An unhandled exception
-writes `C:\ProgramData\rvk\crash-<module>-<pid>.txt`.
+writes `C:\ProgramData\av\crash-<module>-<pid>.txt`.
 
 **Live state, without stopping anything.** Every function opens with
 `AV_SCOPE("Class::method")`. Each binary keeps a table of which thread is in
@@ -579,17 +579,17 @@ maps that table from outside ([`docs/trace.md`](docs/trace.md)):
 
 | Binary | Where its table is | Reader |
 |---|---|---|
-| `rvkgpu.sys` | non-paged memory (the physical address is logged at `DriverEntry`) | `rvkinspect.exe kernel ...`, or QMP `pmemsave` on a wedged guest |
-| the guest DLLs, `rvktest.exe` | the section `Global\rvk-trace-<module>-<pid>` | `rvkinspect.exe` |
-| QEMU's device, the executor | `/dev/shm/rvk-trace-{device,executor}-<pid>` and a state socket beside it | `tools/mcp/rvk_inspect.py` |
+| `avgpu.sys` | non-paged memory (the physical address is logged at `DriverEntry`) | `avinspect.exe kernel ...`, or QMP `pmemsave` on a wedged guest |
+| the guest DLLs, `avtest.exe` | the section `Global\av-trace-<module>-<pid>` | `avinspect.exe` |
+| QEMU's device, the executor | `/dev/shm/av-trace-{device,executor}-<pid>` and a state socket beside it | `tools/mcp/av_inspect.py` |
 
-`tools/mcp/rvk_inspect.py` is an MCP server over all of it: guest and host
+`tools/mcp/av_inspect.py` is an MCP server over all of it: guest and host
 threads, driver and device state, crash reports and the driver log. Add it with
-`claude mcp add rvk-inspect -- python3 tools/mcp/rvk_inspect.py`.
+`claude mcp add av-inspect -- python3 tools/mcp/av_inspect.py`.
 
 **Timelines.**
 - `tools/perfetto_trace.py <qemu pid>` writes the host's scopes for
-  ui.perfetto.dev (QEMU started with `RVK_PERFETTO=1`, or the runner's
+  ui.perfetto.dev (QEMU started with `AV_PERFETTO=1`, or the runner's
   `--perfetto`). With `--guest` it merges the guest's own scopes onto the same
   clock.
 - `tools/frame_breakdown.py` cuts the result into frames and shows where each
@@ -607,9 +607,9 @@ threads, driver and device state, crash reports and the driver log. Add it with
 into an executor library, on this GPU or another one:
 
 ```bash
--device virtio-gpu-rvk-pci,...,record=/tmp/run.rvk
-build-qemu/rvkrecord print /tmp/run.rvk
-build-qemu/rvkrecord replay /tmp/run.rvk --executor build-qemu/librvk_executor.so
+-device virtio-gpu-av-pci,...,record=/tmp/run.av
+build-qemu/avrecord print /tmp/run.av
+build-qemu/avrecord replay /tmp/run.av --executor build-qemu/libav_executor.so
 ```
 
 The replay names every answer that differs. Records are flushed as they are
@@ -618,7 +618,7 @@ taken, so a QEMU that dies inside a host driver leaves the batch that killed it.
 **Bugchecks.** QEMU with `hv-crash` reports the bugcheck code and parameters
 through the Hyper-V crash MSRs, and the runner names it without a dump. The
 runner collects minidumps, live kernel reports and, with `--memory-dump`,
-`MEMORY.DMP`, with the matching `rvkgpu.pdb` in `<work>/symbols/`. When the
+`MEMORY.DMP`, with the matching `avgpu.pdb` in `<work>/symbols/`. When the
 guest stops at a bugcheck (`-action panic=pause`),
 `tools/guest/read_bugcheck.py` reads it out through QEMU's gdbstub.
 
@@ -627,8 +627,8 @@ PowerShell and programs and moves files over the guest agent:
 
 ```bash
 tools/guest/guest_shell.py --work build-guest-render ps 'Get-PnpDevice -Class Display'
-tools/guest/guest_shell.py --work build-guest-render push file 'C:\rvk\file'
-tools/guest/guest_shell.py --work build-guest-render pull 'C:\ProgramData\rvk\rvkvk-1234.log' .
+tools/guest/guest_shell.py --work build-guest-render push file 'C:\av\file'
+tools/guest/guest_shell.py --work build-guest-render pull 'C:\ProgramData\av\avvk-1234.log' .
 ```
 
 ## Testing
@@ -658,14 +658,14 @@ tools/gate.sh                          # the full verdict: all configurations, a
 | coverage | `build-coverage/` (`-DAV_COVERAGE=ON`) | 100% of branches in `src/core`, `src/device`, `src/proto`, `src/guest` and `src/icd`; a line marked `AV_UNTESTABLE` is left out and named in the report |
 | fuzz | `build-fuzz/` (`-DAV_FUZZ=ON`) | every libFuzzer target, 60 s each (`AV_FUZZ_SECONDS`) |
 | qemu | `build-qemu/` (`-DAV_QEMU=ON`) | the device in real QEMU under qtest: the PCI function, realize failures, the virtio-gpu suites |
-| guest | `build-guest*/` | the package installed under Driver Verifier; `rvktest.exe`'s scenarios; the Vulkan, OpenGL, OpenCL and D3D probes and the Vulkan CTS subset once their runtimes are fetched |
+| guest | `build-guest*/` | the package installed under Driver Verifier; `avtest.exe`'s scenarios; the Vulkan, OpenGL, OpenCL and D3D probes and the Vulkan CTS subset once their runtimes are fetched |
 
 The 32-bit build of every guest program is in `build/guest32`, for testing the
 drivers a WoW64 process loads. One part of it is 64-bit only by nature:
-`rvktest.exe rvk`'s raw-wire Vulkan scenarios hold the host's dispatchable
+`avtest.exe av`'s raw-wire Vulkan scenarios hold the host's dispatchable
 handles (64-bit values) in Vulkan's pointer-sized handle types, which a 32-bit
 process cannot. The Vulkan ICD itself maps those handles through its own
-objects, so `rvkvk32.dll` is not affected.
+objects, so `avvk32.dll` is not affected.
 
 Side-by-side reports run the same program on the host natively and in the
 guest, and write the frames, their difference and the timings to HTML:
@@ -712,7 +712,7 @@ and `tools/gate.sh` runs every gate.
 ## Source layout
 
 ```
-src/core/                     rvkgpu.sys's logic, portable: no platform header anywhere
+src/core/                     avgpu.sys's logic, portable: no platform header anywhere
   support/                      Status, NtStatus, ObjectPool/Storage, ScopeExit, Alignment, ByteRange, TextBuffer
   platform/                     the Platform contract, locks and lock ranks, timers
   miniport/                     registration, the DDI table, dxgkrnl's callbacks, interrupt reports
@@ -724,25 +724,25 @@ src/core/                     rvkgpu.sys's logic, portable: no platform header a
   display/                      modes, EDID, scanout sources, synthetic vsync, the hardware cursor
   vidpn/                        VidPn topology, mode sets, cofunctional modality, support check, commit
   present/                      Present, and how it addresses allocations
-  rvk/                          rvk contexts as the driver drives them: capset, setup, ring, fences
+  av/                          av contexts as the driver drives them: capset, setup, ring, fences
   trace/                        AV_SCOPE, trace tables, event rings, crash reports
-src/km/                       Windows kernel shim, translation only: KernelPlatform, DriverEntry, rvkgpu.inf
+src/km/                       Windows kernel shim, translation only: KernelPlatform, DriverEntry, avgpu.inf
 src/icd/                      the user-mode drivers' logic, portable, tested on Linux over MockKmt
   common/                       what they share: extension policy, locked and batched transports, sliced waits
-  vulkan/  opengl/  opencl/     rvkvk.dll, rvkgl.dll, rvkcl.dll
-  d3d/                          rvkumd.dll: adapters, devices, DXGI; ddi/ mirrors the runtimes' structures
+  vulkan/  opengl/  opencl/     avvk.dll, avgl.dll, avcl.dll
+  d3d/                          avumd.dll: adapters, devices, DXGI; ddi/ mirrors the runtimes' structures
 src/um/                       Windows user-mode shim, translation only: the DLLs' exports and roots, probes,
-                              rvktest.exe, rvkinspect.exe, the OpenCL loader's C runtime, crash and trace hosts
-src/guest/                    the in-guest D3DKMT suite (rvktest.exe) and rvkinspect.exe, portable
+                              avtest.exe, avinspect.exe, the OpenCL loader's C runtime, crash and trace hosts
+src/guest/                    the in-guest D3DKMT suite (avtest.exe) and avinspect.exe, portable
 src/device/                   the QEMU device core and host side, freestanding C++23
-  host/  abi/                   the Host contract; rvk_device.h and rvk_executor.h, the C ABIs
+  host/  abi/                   the Host contract; av_device.h and av_executor.h, the C ABIs
   module/  gpu/  capset/        the device object; host GPU binding and identity; the capset
   memory/  ring/  context/      blobs and their windows; ring consumption; the context table
   threading/  fence/            per-context workers and doorbells; fence pages and interrupts
   control/  display/            control-queue answers; display heads, modes, scanout
   execution/  executor/         command execution; the executor library's backends (Vulkan, GL, CL, D3D)
   shim/                         the host platform: loaders, EGL, DXVK/vkd3d-proton, dma-buf, traces
-  renderer/  isolation/         rvk-renderer, and the device's side of it
+  renderer/  isolation/         av-renderer, and the device's side of it
   recording/  probe/            wire recordings and replay; host feasibility probes
   qemu/                         the C glue and build patch installed into QEMU, translation only
 src/proto/                    the wire, shared by both sides
@@ -762,7 +762,7 @@ tools/                        gates, fetches, generators, reports, profilers
     probes/                       wgc_probe.exe and etw_schema.exe, the guest's side of frame_pacing.py
   etw/                          ETL reading, the guest's event schemas, scheduling, DWM frames, symbols
   host/                         list_gpus.py, device captures, host-memory probes
-  mcp/                          rvk_inspect.py
+  mcp/                          av_inspect.py
   re/                           symbol and binary fetching for reverse engineering
   dxvk-patches/  vkd3d-proton-patches/   what the host's Direct3D is patched with
 cmake/                        the Windows kernel and user-mode cross toolchains (clang-cl, lld-link; user mode x64 or x86)
@@ -773,7 +773,7 @@ third_party/                  fetched and pinned: windows-kit, khronos, qemu, dx
 
 | | |
 |---|---|
-| [`docs/protocol.md`](docs/protocol.md) | The rvk wire protocol, normative: the capset, context setup, rings, batches, fence pages, the executor ABI, recordings |
+| [`docs/protocol.md`](docs/protocol.md) | The av wire protocol, normative: the capset, context setup, rings, batches, fence pages, the executor ABI, recordings |
 | [`docs/ddi-sequences.md`](docs/ddi-sequences.md) | What each DDI does and answers, and the sequences dxgkrnl drives them in |
 | [`docs/d3d-desktop.md`](docs/d3d-desktop.md) | The desktop on Direct3D: the design, from guest evidence, dxgkrnl's code and prior art |
 | [`docs/host-window.md`](docs/host-window.md) | Host-visible memory: the hostmem window, and dedicated video memory |

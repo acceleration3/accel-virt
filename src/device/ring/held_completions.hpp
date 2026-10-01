@@ -1,5 +1,5 @@
 /* The batches a ring has run whose GPU work has not finished: each fence with
- * the mark its batch left (RvkExecutorOps::gpu_progress), completed in the
+ * the mark its batch left (AvExecutorOps::gpu_progress), completed in the
  * order the batches ran once the GPU reaches the mark. A fence behind one
  * still held is held too, whatever its own mark, because the guest reads a
  * context's completions as one rising value. */

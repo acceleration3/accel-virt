@@ -17,12 +17,12 @@ constexpr size_t path_bytes = 4096u;
 
 }  // namespace
 
-/* The file `name` in RVK_D3D_PATH, or the bare name for the loader's own
+/* The file `name` in AV_D3D_PATH, or the bare name for the loader's own
  * search when that is unset. */
 void *D3dRuntime::open_library(const char *name) const
 {
     AV_SCOPE("D3dRuntime::open_library");
-    const char *const directory = getenv("RVK_D3D_PATH");
+    const char *const directory = getenv("AV_D3D_PATH");
     if (directory == nullptr || directory[0] == '\0') return dlopen(name, RTLD_NOW | RTLD_LOCAL);
     char path[path_bytes];
     const int written = snprintf(path, sizeof(path), "%s/%s", directory, name);
@@ -65,7 +65,7 @@ bool D3dRuntime::open()
     }
     /* d3d12 finds its core by soname alone (vkd3d-proton's libs/d3d12/main.c,
      * load_d3d12core_module), which the loader's search cannot resolve in
-     * RVK_D3D_PATH: loaded first, the core is already in the link map under
+     * AV_D3D_PATH: loaded first, the core is already in the link map under
      * that soname, and without it every D3D12CreateDevice fails. */
     d3d12core_ = open_library("libvkd3d-proton-d3d12core.so");
     if (d3d12core_ != nullptr) d3d12_ = open_library("libvkd3d-proton-d3d12.so");

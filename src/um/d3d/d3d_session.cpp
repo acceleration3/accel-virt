@@ -50,12 +50,12 @@ HRESULT D3dSession::open(uint32_t adapter)
     batch_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
     if (staging_ == nullptr || batch_ == nullptr) return E_OUTOFMEMORY;
     if (connection_.open(adapter) != Status::ok) {
-        log_.write("rvkumd: no device on the adapter for a Direct3D session");
+        log_.write("avumd: no device on the adapter for a Direct3D session");
         return E_FAIL;
     }
     static_cast<void>(transport_.construct(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes));
     if (transport_.object().initialize() != Status::ok) {
-        log_.write("rvkumd: the kernel refused the Direct3D context");
+        log_.write("avumd: the kernel refused the Direct3D context");
         return E_FAIL;
     }
     static_cast<void>(arena_.construct(connection_, transport_.object()));
@@ -69,7 +69,7 @@ HRESULT D3dSession::open(uint32_t adapter)
         opened = arena_.object().open(bytes);
     }
     if (opened != Status::ok)
-        log_.write("rvkumd: no blob arena for the session; bulk data crosses inline");
+        log_.write("avumd: no blob arena for the session; bulk data crosses inline");
     else
         query_results_.reserve(transport_.object().blobs(), arena_.object().view(), arena_.object().bytes());
     static_cast<void>(stream_.construct(transport_.object(), batch_, batch_bytes));

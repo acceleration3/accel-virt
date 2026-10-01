@@ -102,7 +102,7 @@ void D3d11FramePool::Frame::drop()
     width_ = height_ = format_ = 0u;
 }
 
-StagedFrame::Reading D3d11FramePool::Frame::read(RvkFrameView &view)
+StagedFrame::Reading D3d11FramePool::Frame::read(AvFrameView &view)
 {
     AV_SCOPE("D3d11FramePool::Frame::read");
     device_->lock(nullptr);

@@ -1,4 +1,4 @@
-/* The Direct3D 12 half of rvkumd.dll that needs the host: the devices
+/* The Direct3D 12 half of avumd.dll that needs the host: the devices
  * D3D12Core makes, each a D3d12Device in this pool, and for each adapter its
  * host capabilities, asked once, the one session its devices share, and where
  * in that session's arena their CPU-visible heaps are. One per process, in the

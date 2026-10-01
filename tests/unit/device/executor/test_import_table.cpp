@@ -1,5 +1,5 @@
 /* The blobs one session holds, by the id the guest used. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/import_table.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -13,9 +13,9 @@ namespace {
 
 std::uint8_t backing[ImportedBlob::page_bytes];
 
-RvkBlobHandle handle_of(std::uint64_t size = ImportedBlob::page_bytes)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_HOST_POINTER;
+AvBlobHandle handle_of(std::uint64_t size = ImportedBlob::page_bytes)
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
   handle.pointer = backing;
   handle.fd = -1;
   handle.size = size;

@@ -1,7 +1,7 @@
 /* The file a Windows process's timeline events go to while Perfetto records:
- * C:\ProgramData\rvk\events-<module>-<pid>.bin, mapped, so the host pulls it
+ * C:\ProgramData\av\events-<module>-<pid>.bin, mapped, so the host pulls it
  * through the guest agent while the process still writes. Recording is on
- * while C:\ProgramData\rvk\perfetto exists when the process starts. */
+ * while C:\ProgramData\av\perfetto exists when the process starts. */
 #ifndef AV_UM_EVENT_FILE_HPP
 #define AV_UM_EVENT_FILE_HPP
 

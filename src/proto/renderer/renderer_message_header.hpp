@@ -1,4 +1,4 @@
-/* What opens every datagram on the socket between QEMU and rvk-renderer
+/* What opens every datagram on the socket between QEMU and av-renderer
  * (docs/renderer.md): the message's kind, how many body bytes follow, and the
  * sender's sequence number, which a reply names. SOCK_SEQPACKET keeps each
  * message one datagram, so the body length must be exactly what arrived. */

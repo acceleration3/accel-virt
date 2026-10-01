@@ -163,7 +163,7 @@ bool create_device(ID3D12Device **device)
 {
     setenv("VKD3D_DEBUG", "none", 0);
     setenv("VKD3D_SHADER_DEBUG", "none", 0);
-    const char *directory = getenv("RVK_D3D_PATH");
+    const char *directory = getenv("AV_D3D_PATH");
     char path[1024] = {};
     // d3d12core first: d3d12 finds it by its soname, and it is not on the library path.
     snprintf(path, sizeof path, "%s/libvkd3d-proton-d3d12core.so", directory != nullptr ? directory : "build-d3d/lib");

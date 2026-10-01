@@ -31,7 +31,7 @@ struct RecordHeader {
 /* A heap: its guest address range (placed buffers are found in it), and for a
  * CPU-visible one where in the session's arena its pages are. */
 struct HeapRecord {
-    static constexpr uint32_t tag = 0x484B5652u; /* "RVKH" */
+    static constexpr uint32_t tag = 0x00485641u; /* "AVH" */
     static constexpr uint64_t no_arena = ~uint64_t{0};
 
     RecordHeader header;
@@ -51,7 +51,7 @@ struct HeapRecord {
 
 /* A resource and what a view or a copy needs to know of it without asking. */
 struct ResourceRecord {
-    static constexpr uint32_t tag = 0x524B5652u; /* "RVKR" */
+    static constexpr uint32_t tag = 0x00525641u; /* "AVR" */
 
     RecordHeader header;
     uint64_t     width;
@@ -83,7 +83,7 @@ struct ResourceRecord {
  * `increment` bytes each holding its own heap id and index, which is all a
  * CPU descriptor handle - the slot's address - has to say. */
 struct DescriptorHeapRecord {
-    static constexpr uint32_t tag = 0x444B5652u; /* "RVKD" */
+    static constexpr uint32_t tag = 0x00445641u; /* "AVD" */
 
     RecordHeader header;
     uint32_t     type; /* D3D12DDI_DESCRIPTOR_HEAP_TYPE */
@@ -101,7 +101,7 @@ struct DescriptorSlot {
  * copied into the block after this record, since the pipeline that uses them
  * comes later and the runtime's memory is gone by then. */
 struct ShaderRecord {
-    static constexpr uint32_t tag = 0x534B5652u; /* "RVKS" */
+    static constexpr uint32_t tag = 0x00535641u; /* "AVS" */
 
     RecordHeader header;
     uint32_t     stage; /* the SignatureEntry stage number */
@@ -111,28 +111,28 @@ struct ShaderRecord {
 };
 
 struct BlendRecord {
-    static constexpr uint32_t tag = 0x424B5652u; /* "RVKB" */
+    static constexpr uint32_t tag = 0x00425641u; /* "AVB" */
 
     RecordHeader            header;
     D3D12DDI_BLEND_DESC_0010 desc;
 };
 
 struct RasterizerRecord {
-    static constexpr uint32_t tag = 0x5A4B5652u; /* "RVKZ" */
+    static constexpr uint32_t tag = 0x005A5641u; /* "AVZ" */
 
     RecordHeader                header;
     D3D12DDI_RASTERIZER_DESC_0102 desc;
 };
 
 struct DepthStencilRecord {
-    static constexpr uint32_t tag = 0x544B5652u; /* "RVKT" */
+    static constexpr uint32_t tag = 0x00545641u; /* "AVT" */
 
     RecordHeader                   header;
     D3D12DDI_DEPTH_STENCIL_DESC_0095 desc;
 };
 
 struct LayoutRecord {
-    static constexpr uint32_t tag = 0x4C4B5652u; /* "RVKL" */
+    static constexpr uint32_t tag = 0x004C5641u; /* "AVL" */
     static constexpr uint32_t max_elements = 32u;
 
     RecordHeader             header;
@@ -144,7 +144,7 @@ struct LayoutRecord {
 /* Any object whose record is its header alone: a pipeline, a root signature,
  * a fence, a query heap. */
 struct ObjectRecord {
-    static constexpr uint32_t tag = 0x4F4B5652u; /* "RVKO" */
+    static constexpr uint32_t tag = 0x004F5641u; /* "AVO" */
 
     RecordHeader header;
     uint32_t     kind;
@@ -154,7 +154,7 @@ struct ObjectRecord {
 /* A command queue, and the kernel context D3D12Core signals and waits its
  * fences on. */
 struct QueueRecord {
-    static constexpr uint32_t tag = 0x514B5652u; /* "RVKQ" */
+    static constexpr uint32_t tag = 0x00515641u; /* "AVQ" */
 
     RecordHeader             header;
     D3D12DDI_HRTCOMMANDQUEUE runtime;
@@ -167,7 +167,7 @@ struct QueueRecord {
 /* A command pool: the host's command allocator, made when a list first
  * records into it, since only a list says which type the allocator must be. */
 struct PoolRecord {
-    static constexpr uint32_t tag = 0x504B5652u; /* "RVKP" */
+    static constexpr uint32_t tag = 0x00505641u; /* "AVP" */
 
     RecordHeader header;
     uint32_t     type; /* D3D12_COMMAND_LIST_TYPE */
@@ -176,7 +176,7 @@ struct PoolRecord {
 
 /* A command recorder: which pool a list reset with it records into. */
 struct RecorderRecord {
-    static constexpr uint32_t tag = 0x434B5652u; /* "RVKC" */
+    static constexpr uint32_t tag = 0x00435641u; /* "AVC" */
 
     RecordHeader header;
     PoolRecord  *pool;
@@ -185,7 +185,7 @@ struct RecorderRecord {
 /* A command list, made on the host when first reset: D3D12 at this interface
  * creates a list closed and names no allocator until the reset. */
 struct ListRecord {
-    static constexpr uint32_t tag = 0x494B5652u; /* "RVKI" */
+    static constexpr uint32_t tag = 0x00495641u; /* "AVI" */
 
     RecordHeader header;
     uint32_t     type; /* D3D12_COMMAND_LIST_TYPE */

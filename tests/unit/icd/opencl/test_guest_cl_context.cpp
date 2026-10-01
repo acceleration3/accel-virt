@@ -1,4 +1,4 @@
-/* One cl_context and the rvk context that carries it.
+/* One cl_context and the av context that carries it.
  *
  * Two things matter here and the rest follows from them. Nothing reaches the
  * device before the context is made, and a make that fails holds nothing -
@@ -162,7 +162,7 @@ TEST(guest_cl_context, a_second_make_is_refused_and_changes_nothing)
   CHECK_EQ(rig.kmt().open_objects(), objects);
   CHECK(context.invariants_hold()); }
 
-TEST(guest_cl_context, with_no_rvkgpu_adapter_it_is_not_supported_and_holds_nothing)
+TEST(guest_cl_context, with_no_avgpu_adapter_it_is_not_supported_and_holds_nothing)
 { av::MockPlatform platform;
   MockKmt kmt;
   av::ScriptedHost host(kmt);
@@ -172,7 +172,7 @@ TEST(guest_cl_context, with_no_rvkgpu_adapter_it_is_not_supported_and_holds_noth
   av::icd::IcdConnection connection(kmt);
   av::RecordingThreadLock handles_lock(trace, 'H');
   av::icd::SharedHandles  handles(kmt, handles_lock);
-  /* No adapter was added: what a process on a machine with no rvkgpu sees. */
+  /* No adapter was added: what a process on a machine with no avgpu sees. */
   GuestClContext context(connection, platform, send_lock, log, handles);
   CHECK_STATUS(context.make(), Status::not_supported);
   CHECK(context.state() == GuestClContext::State::created);
@@ -229,7 +229,7 @@ TEST(guest_cl_context, a_faulted_transport_makes_the_context_lost_where_a_call_a
    * faults it, and `wire()` is where the context finds out. */
   rig.kmt().withhold_answer_at(1u);
   /* Any round trip will do; a flush is the smallest one an application makes. */
-  static_cast<void>(av::clproto::rvk_clFlush(*context.wire(), 0u));
+  static_cast<void>(av::clproto::av_clFlush(*context.wire(), 0u));
 
   CHECK(context.wire() == nullptr);
   CHECK(context.lost());

@@ -2,7 +2,7 @@
 
 The criterion asks for the same round trip both ways, and no single boot can
 give it: one run tells the device `record=<path>` and one tells it nothing, so
-the number is the difference between two runs. Each rvk run writes its own side
+the number is the difference between two runs. Each av run writes its own side
 into the run directory beside qemu.log, and whichever run completes the pair
 says the difference.
 
@@ -19,12 +19,12 @@ import re
 
 SIDE_LINE = re.compile(r"^(off|on)\s+(\d+)$")
 SIDES = ("off", "on")
-# A no-op round trip past a second is not one: the rvk scenario fails its own
+# A no-op round trip past a second is not one: the av scenario fails its own
 # run at 50 ms. A line past this is a typo, and a typo read as a measurement
 # would be a cost nobody paid.
 MAX_MICROSECONDS = 1000000
 HEADER = ("# What a no-op round trip cost this host with a wire recording and without,\n"
-          "# in microseconds (SC-002, feature 065). Written by run_guest_suite.py's rvk\n"
+          "# in microseconds (SC-002, feature 065). Written by run_guest_suite.py's av\n"
           "# scenario; a side is replaced by the next run that measures it.\n")
 
 

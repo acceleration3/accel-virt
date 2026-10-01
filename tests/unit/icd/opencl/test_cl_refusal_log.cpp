@@ -30,8 +30,8 @@ TEST(cl_refusal_log, each_refused_entry_point_is_named_once_and_in_the_order_cal
   refusals.note(mem_info);
   CHECK_EQ(log.lines(), 2u);
   CHECK_EQ(refusals.named(), 2u);
-  CHECK(std::strcmp(log.line(0u), "rvkcl: an entry point this ICD does not serve was called: clCreateImage2D") == 0);
-  CHECK(std::strcmp(log.line(1u), "rvkcl: an entry point this ICD does not serve was called: clGetMemObjectInfo") == 0);
+  CHECK(std::strcmp(log.line(0u), "avcl: an entry point this ICD does not serve was called: clCreateImage2D") == 0);
+  CHECK(std::strcmp(log.line(1u), "avcl: an entry point this ICD does not serve was called: clGetMemObjectInfo") == 0);
   /* Every look at the list is under the lock, and none is left held. */
   CHECK_EQ(lock.acquisitions(), 4u);
   CHECK(!lock.held());
@@ -70,9 +70,9 @@ TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success
   refusals.note_failure(mem_info, 5);
   refusals.note_failure(nullptr, -38);
   CHECK_EQ(log.lines(), 3u);
-  CHECK(std::strcmp(log.line(0u), "rvkcl: clCreateImage2D answered -38") == 0);
-  CHECK(std::strcmp(log.line(1u), "rvkcl: clCreateImage2D answered -30") == 0);
-  CHECK(std::strcmp(log.line(2u), "rvkcl: clGetMemObjectInfo answered -38") == 0);
+  CHECK(std::strcmp(log.line(0u), "avcl: clCreateImage2D answered -38") == 0);
+  CHECK(std::strcmp(log.line(1u), "avcl: clCreateImage2D answered -30") == 0);
+  CHECK(std::strcmp(log.line(2u), "avcl: clGetMemObjectInfo answered -38") == 0);
   /* A refusal and a failure of one entry point are two things to name. */
   refusals.note(image_2d);
   CHECK_EQ(log.lines(), 4u);

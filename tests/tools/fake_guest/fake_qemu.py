@@ -6,24 +6,24 @@ log, and answers guest-exec and guest-file-read from a script.
 
 The script is JSON at $FAKE_GUEST_SCRIPT:
   stages     {"sign": [3010, 0], ...}: exit codes of successive calls of a stage
-  outputs    {"check": "...", "rvktest": "..."}: standard output by stage, or by
+  outputs    {"check": "...", "avtest": "..."}: standard output by stage, or by
              program for the ones in PROGRAMS
   files      {"C:\\guest\\path": "content"}: what guest-file-read returns, byte
              per character (latin-1), so a dump's binary header can be scripted
-  rvktest, rvkvkprobe, rvkglprobe, rvkclprobe, rvkd3d9probe, rvkd3d11probe, rvkd3d12probe,
+  avtest, avvkprobe, avglprobe, avclprobe, avd3d9probe, avd3d11probe, avd3d12probe,
              vulkaninfo, reg, deqp-vk
              exit code of that program; one run as `cmd.exe /c PROGRAM > FILE`
              leaves its output in FILE
   panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
              the stage runs, then reboots; with loop, it bugchecks on every boot
-             until QEMU is started again without virtio-gpu-rvk-pci
+             until QEMU is started again without virtio-gpu-av-pci
   die_during stage: QEMU aborts with an assertion when the stage runs
   refuse     ["guest-suspend-ram", ...]: agent commands answered with an error
   window_status  "0xc0000017" or null: what the driver logs for the host
              window a device with hostmem= has; null takes the line away, as a
              capset without the host-visible bit does
   inspect    {"list": text, "trace": base64, "state": text, "kernel-trace":
-             base64, "kernel-state": text}: what rvkinspect.exe writes at its
+             base64, "kernel-state": text}: what avinspect.exe writes at its
              --out path; trace answers are whole snapshot files, state answers
              are wrapped as snapshot kind 2 (docs/trace.md); a command not
              scripted exits 1 and writes nothing
@@ -56,13 +56,13 @@ ASSERTION = "qemu-system-x86_64: ../source/hw/pci/msix.c:122: msix_fire_vector_n
 LOOP_PERIOD = 0.5
 HOSTMEM_BAR = 4
 """The BAR virtio-gpu-pci registers the host window in."""
-INSPECTOR = "rvkinspect"
+INSPECTOR = "avinspect"
 SNAPSHOT_STATE = 2
 HOSTMEM_BASE = 0xC0000000
 """Where this fake's guest programmed that BAR."""
 MODERN_BAR_BASE = 0xB0000000
-PROGRAMS = ("rvktest", "rvkvkprobe", "rvkglprobe", "rvkclprobe", "rvkd3d9probe", "rvkd3d11probe",
-            "rvkd3d12probe", "vulkaninfo", "reg", "deqp-vk")
+PROGRAMS = ("avtest", "avvkprobe", "avglprobe", "avclprobe", "avd3d9probe", "avd3d11probe",
+            "avd3d12probe", "vulkaninfo", "reg", "deqp-vk")
 """The programs the runner starts itself rather than through provision.ps1."""
 
 
@@ -210,7 +210,7 @@ class Guest:
         return {"exited": True, "exitcode": 1, "out-data": "", "err-data": ""}
 
     def inspect(self, arguments):
-        """rvkinspect.exe COMMAND ... --out F: the scripted answer lands in F."""
+        """avinspect.exe COMMAND ... --out F: the scripted answer lands in F."""
         answers = self.script.get("inspect", {})
         command = arguments[0] if arguments else ""
         target = arguments[arguments.index("--out") + 1] if "--out" in arguments[:-1] else None
@@ -221,7 +221,7 @@ class Guest:
             content = base64.b64decode(answer)
         elif command in ("state", "kernel-state"):
             text = answer.encode()
-            content = b"RVKSNAP1" + struct.pack("<QII", 0, SNAPSHOT_STATE, len(text)) + text
+            content = b"AVSNAP1\0" + struct.pack("<QII", 0, SNAPSHOT_STATE, len(text)) + text
         else:
             content = answer.encode()
         self.script.setdefault("files", {})[target] = content.decode("latin-1")
@@ -495,15 +495,15 @@ def append_later(path, lines, seconds):
 def main():
     argv = sys.argv[1:]
     script = json.load(open(os.environ["FAKE_GUEST_SCRIPT"]))
-    device = any(word.startswith("virtio-gpu-rvk-pci") for word in argv)
-    hostmem = size_property(field(option(argv, "-device", "virtio-gpu-rvk-pci") or "", "hostmem"))
+    device = any(word.startswith("virtio-gpu-av-pci") for word in argv)
+    hostmem = size_property(field(option(argv, "-device", "virtio-gpu-av-pci") or "", "hostmem"))
     guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device, hostmem)
     guest.note("argv " + " ".join(argv))
     # What the device's executor was told to do, as the runner set it: the
     # environment is how a test executor is steered without a rebuild.
     work = os.path.dirname(os.environ["FAKE_GUEST_JOURNAL"])
     with open(os.path.join(work, "work", "environment.json"), "w") as out:
-        json.dump({name: value for name, value in os.environ.items() if name.startswith("RVK_ECHO_")}, out)
+        json.dump({name: value for name, value in os.environ.items() if name.startswith("AV_ECHO_")}, out)
     if script.get("exit_at_boot") or (not device and os.environ.get("FAKE_QEMU_RESCUE_FAILS")):
         sys.exit(1)
     agent = field(option(argv, "-chardev", "socket,id=agent"), "path")
@@ -513,15 +513,15 @@ def main():
     if not os.path.isfile(disk):
         sys.exit(f"fake qemu: no disk at {disk}")
     with open(debug, "w") as log:
-        lines = script.get("driver_log", ["rvkgpu: DriverEntry",
-                                          "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                          "rvkgpu: vsync 600 periods in 100000000 ticks, 600 reported, enabled 0 times"])
+        lines = script.get("driver_log", ["avgpu: DriverEntry",
+                                          "avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                          "avgpu: vsync 600 periods in 100000000 ticks, 600 reported, enabled 0 times"])
         # A device with a window makes the driver say what came of setting it
         # up, whatever else the scenario had it log, because the line belongs
         # to the device rather than to the run.
         status = script.get("window_status", "0x00000000")
         if hostmem and status is not None:
-            lines = lines + [f"rvkgpu: host window status {status}"]
+            lines = lines + [f"avgpu: host window status {status}"]
         log.write("".join(line + "\n" for line in lines) if device else "")
     # A driver goes on logging while the run reads: what it says every 120
     # blanks arrives long after the line before it.

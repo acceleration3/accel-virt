@@ -35,7 +35,7 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     if ((type == D3D10_DDI_MAP_READ || type == D3D10_DDI_MAP_READWRITE) && !read_back(resource, subresource, at, bytes)) {
         char       line[96] = {};
         TextBuffer text(line, sizeof(line));
-        text.append("rvkumd: a map could not read back ");
+        text.append("avumd: a map could not read back ");
         text.append_decimal(bytes);
         text.append(" bytes of format ");
         text.append_decimal(resource.format);

@@ -1,4 +1,4 @@
-/* rvkvkprobe's proof that a shared object's identity is minted in the kernel
+/* avvkprobe's proof that a shared object's identity is minted in the kernel
  * (feature 053, US1), over whatever Vulkan it is handed.
  *
  * Four calls in `GdiKmt` exist only for this and nothing else in the guest

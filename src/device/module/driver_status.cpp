@@ -26,7 +26,7 @@ void DriverStatus::set(uint8_t status)
     if (interrupts_.connect() == Status::ok) return;
     char       bytes[112];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("virtio-gpu-rvk: the fence interrupts could not be connected for status ");
+    message.append("virtio-gpu-av: the fence interrupts could not be connected for status ");
     message.append_decimal(status);
     host_.log(message.text());
 }

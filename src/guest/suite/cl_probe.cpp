@@ -100,7 +100,7 @@ Status ClProbe::platform_step()
     if (steps_.check_result("platforms", cl_.platforms(found, 8u, written)) != Status::ok) {
         return Status::not_found;
     }
-    /* This driver's platform is the one whose suffix is RVK. A machine may
+    /* This driver's platform is the one whose suffix is AV. A machine may
      * have others, and the loader lists them all. */
     for (uint32_t index = 0u; index < written && index < 8u; ++index) {
         char   suffix[16] = {};
@@ -108,7 +108,7 @@ Status ClProbe::platform_step()
         if (cl_.platform_text(found[index], platform_icd_suffix, suffix, sizeof suffix, bytes) != 0) {
             continue;
         }
-        if (suffix[0] == 'R' && suffix[1] == 'V' && suffix[2] == 'K' && suffix[3] == '\0') {
+        if (suffix[0] == 'A' && suffix[1] == 'V' && suffix[2] == '\0') {
             platform_ = found[index];
             break;
         }
@@ -147,7 +147,7 @@ void ClProbe::luid_step()
     uint64_t luid = 0u;
     const int32_t asked_vendor = cl_.device_number(device_, device_vendor_id, vendor);
     const int32_t asked_luid = cl_.device_number(device_, device_luid, luid);
-    /* Both are the rvkgpu adapter's rather than the host GPU's. A LUID of
+    /* Both are the avgpu adapter's rather than the host GPU's. A LUID of
      * zero is what a device on no adapter would answer. */
     const bool named = asked_vendor == 0 && asked_luid == 0 && luid != 0u && vendor != 0u;
     /* Measured rather than checked: this step makes no D3DKMT call, so the

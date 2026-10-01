@@ -1,7 +1,7 @@
-/* rvkcl.dll's ICD root and what it is constructed over: the process heap, the
+/* avcl.dll's ICD root and what it is constructed over: the process heap, the
  * two thread locks, the log file and D3DKMT through gdi32. No window surface
  * and no memory lock, because an OpenCL ICD presents nothing. One per process,
- * in the exports' storage (rvkcl_exports.cpp), constructed on the loader's
+ * in the exports' storage (avcl_exports.cpp), constructed on the loader's
  * first call rather than at DLL attach, where the loader lock forbids opening
  * a file or an event. Translation only: what the root decides is in
  * src/icd/opencl. */

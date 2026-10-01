@@ -1,4 +1,4 @@
-/* The window rvkglprobe.exe draws into (feature 050, T008 and T042): a class
+/* The window avglprobe.exe draws into (feature 050, T008 and T042): a class
  * registered once, a 64x64 overlapped window with its own DC, released and
  * destroyed at the end. Each step answers whether it worked and keeps
  * GetLastError, so the discovery run can report every step. Translation only. */

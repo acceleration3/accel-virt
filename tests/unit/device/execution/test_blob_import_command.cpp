@@ -115,7 +115,7 @@ TEST(blob_import_command_run, an_import_of_a_guest_chunk_answers_status_0_and_th
   CHECK_EQ(run.produced(), BlobImportAnswer::encoded_size);
   CHECK_EQ(run.answer().status(), BlobImportAnswer::imported);
   CHECK_EQ(run.answer().device_memory(), 1u | MockExecutorOps::handle_bit);
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
   CHECK_EQ(handed.reserved, 6u);
   CHECK_EQ(handed.size, 2u * page);
@@ -131,7 +131,7 @@ TEST(blob_import_command_run, an_import_of_a_host_chunk_answers_status_0_and_the
   CHECK_STATUS(run.status(), Status::ok);
   CHECK_EQ(run.answer().status(), BlobImportAnswer::imported);
   CHECK_EQ(run.answer().device_memory(), 1u | MockExecutorOps::handle_bit);
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
   CHECK_EQ(handed.size, 2u * page);
   CHECK_EQ(rig.imports().imports(), 1u);

@@ -1,10 +1,10 @@
 #include "harness/loopback/loopback_driver.hpp"
 
-#include "core/rvk/capset_query.hpp"
-#include "core/rvk/guest_context.hpp"
+#include "core/av/capset_query.hpp"
+#include "core/av/guest_context.hpp"
 #include "harness/loopback/loopback_device.hpp"
 #include "harness/platform/mock_platform.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 namespace av {
 
@@ -23,7 +23,7 @@ std::size_t LoopbackDriver::exchange(const std::uint8_t *request, std::size_t le
 Status LoopbackDriver::query(CapsetQuery &query)
 {
     Status       accepted = Status::ok;
-    std::uint8_t request[RvkRequestWriter::max_request_size] = {};
+    std::uint8_t request[AvRequestWriter::max_request_size] = {};
     std::size_t  length = 0u;
     platform_.set_irql(Irql::dispatch);
     while (query.next_request(request, sizeof request, length) == Status::ok) {
@@ -38,7 +38,7 @@ Status LoopbackDriver::query(CapsetQuery &query)
 std::uint32_t LoopbackDriver::converse(GuestContext &context)
 {
     std::uint32_t exchanged = 0u;
-    std::uint8_t  request[RvkRequestWriter::max_request_size] = {};
+    std::uint8_t  request[AvRequestWriter::max_request_size] = {};
     std::size_t   length = 0u;
     platform_.set_irql(Irql::dispatch);
     while (context.next_request(request, sizeof request, length) == Status::ok) {

@@ -50,7 +50,7 @@ import sys
 uuid = [a for a in sys.argv if "host-gpu=" in a][0].split("host-gpu=")[1].split(",")[0]
 verdicts = {verdicts}
 for line in verdicts[uuid]:
-    print(f"qemu-system-x86_64: -device virtio-gpu-rvk-pci: warning: virtio-gpu-rvk: {{line}}", file=sys.stderr)
+    print(f"qemu-system-x86_64: -device virtio-gpu-av-pci: warning: virtio-gpu-av: {{line}}", file=sys.stderr)
 sys.exit(0)
 """
 

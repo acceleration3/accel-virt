@@ -1,5 +1,5 @@
 /* The security every trace object is made with: SYSTEM and Administrators get
- * full access, so rvkinspect.exe - run by the guest agent as SYSTEM - opens
+ * full access, so avinspect.exe - run by the guest agent as SYSTEM - opens
  * another user's section and events. Built with ntdll's own routines, since
  * advapi32 is a DLL the images may not import. */
 #ifndef AV_UM_OBJECT_SECURITY_HPP

@@ -18,7 +18,7 @@ extern "C" char *getenv(const char *name);   /* freestanding: libc's own */
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(getenv("RVK_PERFETTO") != nullptr), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(getenv("AV_PERFETTO") != nullptr), prepared_(false),
       attached_(false), faulted_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
@@ -217,7 +217,7 @@ void RingConsumer::note_clock(uint64_t published_at)
     timespec now = {};
     clock_gettime(CLOCK_MONOTONIC, &now);
     const uint64_t host = (static_cast<uint64_t>(now.tv_sec) * 1000000000u + static_cast<uint64_t>(now.tv_nsec)) / 100u;
-    fprintf(stderr, "rvk-clock host=%llu guest=%llu\n", static_cast<unsigned long long>(host),
+    fprintf(stderr, "av-clock host=%llu guest=%llu\n", static_cast<unsigned long long>(host),
             static_cast<unsigned long long>(published_at));
 }
 
@@ -232,7 +232,7 @@ void RingConsumer::fault(FaultCode code, const char *reason, uint64_t value)
     AV_SCOPE("RingConsumer::fault");
     char       bytes[160];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("virtio-gpu-rvk: context faulted, code ");
+    message.append("virtio-gpu-av: context faulted, code ");
     message.append_decimal(static_cast<uint32_t>(code));
     message.append(": ");
     message.append(reason);

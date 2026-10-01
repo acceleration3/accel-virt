@@ -9,7 +9,7 @@ namespace av {
 namespace {
 
 /* What a store to a doorbell is on this device: one four-byte write at offset
- * 0 of the page (rvk_device.h). */
+ * 0 of the page (av_device.h). */
 std::uint32_t &word_of(std::uint8_t *page)
 {
     return *reinterpret_cast<std::uint32_t *>(page);

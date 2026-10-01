@@ -61,19 +61,19 @@ TEST(gpu_binding_bind, auto_or_an_unset_property_binds_the_first_device)
 TEST(gpu_binding_bind, each_failure_is_named_and_logged)
 { Fixture malformed;
   CHECK_STATUS(malformed.binding().bind("gpu0", malformed.text()), Status::invalid_parameter);
-  CHECK(std::strcmp(malformed.message(), "virtio-gpu-rvk: host-gpu 'gpu0' is neither auto nor a device UUID") == 0);
+  CHECK(std::strcmp(malformed.message(), "virtio-gpu-av: host-gpu 'gpu0' is neither auto nor a device UUID") == 0);
   CHECK(!malformed.binding().bound());
   CHECK_EQ(malformed.host().logged(), 1u);
   Fixture absent;
   CHECK_STATUS(absent.binding().bind("00000000-0000-0000-0000-000000000001", absent.text()), Status::not_found);
   CHECK(std::strcmp(absent.message(),
-                    "virtio-gpu-rvk: no host Vulkan device has UUID 00000000-0000-0000-0000-000000000001") == 0);
+                    "virtio-gpu-av: no host Vulkan device has UUID 00000000-0000-0000-0000-000000000001") == 0);
   MockHost bare;
   char bytes[80];
   TextBuffer text(bytes, sizeof bytes);
   GpuBinding none(bare);
   CHECK_STATUS(none.bind("auto", text), Status::not_found);
-  CHECK(std::strcmp(bytes, "virtio-gpu-rvk: the host has no Vulkan device") == 0);
+  CHECK(std::strcmp(bytes, "virtio-gpu-av: the host has no Vulkan device") == 0);
   CHECK_STATUS(none.bind("7b7ad2c5-4219-8c80-c4fd-a64b8775aedb", text), Status::not_found); }
 
 /* The glue cannot allocate on a physical device nobody named to it, so binding

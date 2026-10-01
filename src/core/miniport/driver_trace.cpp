@@ -25,25 +25,25 @@ void DriverTrace::start(BugcheckRoutine routine)
     const size_t bytes = TraceLayout(slots).bytes();
     auto *const region = static_cast<uint8_t *>(platform_.allocate_contiguous(bytes));
     if (region == nullptr) {
-        platform_.log("rvkgpu: trace table not allocated; tracing is off");
+        platform_.log("avgpu: trace table not allocated; tracing is off");
         return;
     }
     region_ = region;
     bytes_ = bytes;
     /* Contiguous memory is page-aligned and this size holds every slot, so the
      * table cannot refuse it. */
-    static_cast<void>(table_.initialize(region_, bytes_, "rvkgpu", 0u));
+    static_cast<void>(table_.initialize(region_, bytes_, "avgpu", 0u));
     scope_binding.bind(table_);
     char       line[line_bytes];
     TextBuffer message(line, sizeof line);
-    message.append("rvkgpu: trace table at physical 0x");
+    message.append("avgpu: trace table at physical 0x");
     message.append_hex(platform_.physical_address(region_), 16u);
     message.append(" bytes ");
     message.append_decimal(bytes_);
     platform_.log(message.text());
     if (routine == nullptr) return;
     registered_ = platform_.register_bugcheck(region_, bytes_, routine);
-    if (!registered_) platform_.log("rvkgpu: trace table bugcheck callback refused");
+    if (!registered_) platform_.log("avgpu: trace table bugcheck callback refused");
 }
 
 void DriverTrace::stop()
@@ -68,14 +68,14 @@ void DriverTrace::bugcheck()
     if (region_ == nullptr) return;
     TraceSnapshot snapshot;
     if (snapshot.read(region_, bytes_) != Status::ok) {
-        platform_.log_at_bugcheck("rvkgpu: trace table unreadable at the bugcheck");
+        platform_.log_at_bugcheck("avgpu: trace table unreadable at the bugcheck");
         return;
     }
     TraceText text(snapshot, image_, host_.clock());
     for (;;) {
         char       line[line_bytes];
         TextBuffer out(line, sizeof line);
-        out.append("rvkgpu: ");
+        out.append("avgpu: ");
         if (!text.next(out)) return;
         platform_.log_at_bugcheck(out.text());
     }

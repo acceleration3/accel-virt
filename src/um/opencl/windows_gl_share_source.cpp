@@ -13,7 +13,7 @@ uint32_t WindowsGlShareSource::share_name(void *gl_context)
 {
     AV_SCOPE("WindowsGlShareSource::share_name");
     if (gl_context == nullptr || !resolve() || current_() != static_cast<HGLRC>(gl_context)) return 0u;
-    const auto named = reinterpret_cast<ShareName>(proc_address_("rvkGetShareName"));
+    const auto named = reinterpret_cast<ShareName>(proc_address_("avGetShareName"));
     return named != nullptr ? named() : 0u;
 }
 

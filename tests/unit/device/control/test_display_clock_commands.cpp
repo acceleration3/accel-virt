@@ -61,7 +61,7 @@ TEST(display_clock_commands, a_page_of_guest_ram_is_taken_and_published_in)
   CHECK(rig.clock.latches(0u));
   std::uint32_t magic = 0u;
   std::memcpy(&magic, rig.host.guest_ram(ram + 0x2000u), sizeof magic);
-  CHECK_EQ(magic, 0x434B5652u);
+  CHECK_EQ(magic, 0x00435641u);
   GpuRequestBuilder none(0x02F4u);
   none.u64(0u);
   CHECK_EQ(rig.send(none, 0x02F4u), 0x1100u);   /* none stops publishing */

@@ -14,10 +14,10 @@ enum class AllocationKind : uint16_t {
     gdi = 4u,
     /* A user-mode driver's surface the kernel must reach: one presented,
      * blitted by the miniport or shared with another process, whose pages the
-     * host's pixels are read back into (the Direct3D driver, rvkumd). */
+     * host's pixels are read back into (the Direct3D driver, avumd). */
     surface = 5u,
     client = 16u,
-    /* The page that names an rvk context: the one handle of a context a driver
+    /* The page that names an av context: the one handle of a context a driver
      * resolves in the process that made it, so another context of that process
      * names it by this (feature 050). No device reads it - a context runs on
      * memory the driver owns (docs/protocol.md, "Context memory"). */

@@ -189,7 +189,7 @@ TEST(cofunc_modality_visit, each_path_says_what_it_was_asked_and_what_was_pinned
 { Enumeration unpinned;
   CHECK_EQ(unpinned.run(), 0u);
   CHECK(std::strcmp(unpinned.fixture().platform().last_log(),
-                    "rvkgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source unpinned target unpinned") == 0);
+                    "avgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source unpinned target unpinned") == 0);
   Enumeration pinned;
   pinned.vidpn().source_modes(0u).seed(source_mode(1024u, 768u), true);
   D3dkmdtVidPnTargetModeRecord target = {};
@@ -197,7 +197,7 @@ TEST(cofunc_modality_visit, each_path_says_what_it_was_asked_and_what_was_pinned
   pinned.vidpn().target_modes(0u).seed(target, true);
   CHECK_EQ(pinned.run(), 0u);
   CHECK(std::strcmp(pinned.fixture().platform().last_log(),
-                    "rvkgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source 1024x768 target pinned") == 0); }
+                    "avgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source 1024x768 target pinned") == 0); }
 
 /* dxgkrnl repeats the VidPn DDIs while it settles a topology, so the line comes
  * out of the budget like every other repeated one. */

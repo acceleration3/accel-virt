@@ -34,7 +34,7 @@ TEST(reply_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[ReplyHeader::encoded_size] = {};
   CHECK_STATUS(ReplyHeader(0x1122334455667788u, 300u).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x594B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00595641u);
   CHECK(layout.at(4u, 4u) == ReplyHeader::status_ok);
   CHECK(layout.at(8u, 8u) == 0x1122334455667788u);
   CHECK(layout.at(16u, 4u) == 300u);

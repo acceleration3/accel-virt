@@ -112,7 +112,7 @@ NoDevices           root;
 av::DeviceTraceRoot services;
 
 void forward_crash(int signal, siginfo_t *info, void *context) { services.crashed(signal, info, context); }
-void never_scheduled(RvkHostRoutine, void *) {}
+void never_scheduled(AvHostRoutine, void *) {}
 
 [[gnu::noinline]] std::uint64_t recurse(std::uint64_t depth)
 {
@@ -165,7 +165,7 @@ TEST(device_trace, a_stack_overflow_on_any_thread_writes_the_crash_file)
   if (child == 0) {
     /* The frames a crash file lists are the bound table's, and the table is
      * bound only where a trace is asked for. */
-    setenv("RVK_TRACE_SCOPES", "1", 1);
+    setenv("AV_TRACE_SCOPES", "1", 1);
     services.start(root, &never_scheduled, &forward_crash);
     pthread_attr_t attributes = {};
     pthread_attr_init(&attributes);
@@ -195,8 +195,8 @@ TEST(device_trace, a_stack_overflow_on_any_thread_writes_the_crash_file)
   CHECK(std::strstr(text, "\nnative #0 0x") != nullptr);
   unlink(path);
   char table[64];
-  std::snprintf(table, sizeof table, "/dev/shm/rvk-trace-device-%d", static_cast<int>(child));
+  std::snprintf(table, sizeof table, "/dev/shm/av-trace-device-%d", static_cast<int>(child));
   unlink(table);
   char socket_path[64];
-  std::snprintf(socket_path, sizeof socket_path, "/dev/shm/rvk-state-device-%d.sock", static_cast<int>(child));
+  std::snprintf(socket_path, sizeof socket_path, "/dev/shm/av-state-device-%d.sock", static_cast<int>(child));
   unlink(socket_path); }

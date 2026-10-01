@@ -1,0 +1,4 @@
+LIBRARY avcl.dll
+EXPORTS
+clGetExtensionFunctionAddress
+clIcdGetPlatformIDsKHR

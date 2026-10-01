@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The virtio-gpu-rvk device in the QEMU tools/build_qemu.sh built, with no guest:
+"""The virtio-gpu-av device in the QEMU tools/build_qemu.sh built, with no guest:
 qtest's port I/O reads the PCI function a guest driver would see, and the
 realize failures a bad host-gpu property produces.
 
@@ -13,10 +13,10 @@ import sys
 
 SLOT = 5
 VIRTIO_GPU = 0x10501AF4          # device 1050, vendor 1af4
-RVK_SUBSYSTEM = 0x52561AF4       # subsystem 5256 ("RV"), vendor 1af4
+AV_SUBSYSTEM = 0x52561AF4       # subsystem 5256 ("RV"), vendor 1af4
 # What the device says when it takes the bound host GPU's PCI identity as its
 # own; without the line it kept virtio-gpu's.
-HOST_IDENTITY = re.compile(r"virtio-gpu-rvk: pci identity ([0-9a-f]{4}):([0-9a-f]{4}) rev ([0-9a-f]{2}), "
+HOST_IDENTITY = re.compile(r"virtio-gpu-av: pci identity ([0-9a-f]{4}):([0-9a-f]{4}) rev ([0-9a-f]{2}), "
                            r"the host's ([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7])")
 SYSFS_PCI = "/sys/bus/pci/devices"
 
@@ -28,7 +28,7 @@ class Qemu:
 
     def start(self, host_gpu, options=""):
         command = [self.binary, "-M", "pc", "-display", "none", "-nodefaults", "-machine", "accel=qtest",
-                   "-qtest", "stdio", "-device", f"virtio-gpu-rvk-pci,addr={SLOT:02x}.0,host-gpu={host_gpu}{options}"]
+                   "-qtest", "stdio", "-device", f"virtio-gpu-av-pci,addr={SLOT:02x}.0,host-gpu={host_gpu}{options}"]
         return subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, env=self.environment)
 
@@ -74,7 +74,7 @@ def complaints(stderr):
     feasibility probe found (feature 039) whether it passed or not, so those
     lines are the device working, not the device complaining."""
     return "\n".join(line for line in stderr.splitlines()
-                     if "virtio-gpu-rvk" in line and ": probe " not in line and ": pci identity " not in line)
+                     if "virtio-gpu-av" in line and ": probe " not in line and ": pci identity " not in line)
 
 
 def sysfs_value(address, attribute):
@@ -112,7 +112,7 @@ def main():
     expected, revision = presented_identity(stderr)
     check(identity == expected, f"vendor/device 0x{identity:08x}, want 0x{expected:08x}")
     check(class_revision & 0xFF == revision, f"revision 0x{class_revision & 0xFF:02x}, want 0x{revision:02x}")
-    check(subsystem == RVK_SUBSYSTEM, f"subsystem 0x{subsystem:08x}, want 0x{RVK_SUBSYSTEM:08x}")
+    check(subsystem == AV_SUBSYSTEM, f"subsystem 0x{subsystem:08x}, want 0x{AV_SUBSYSTEM:08x}")
     check(not complaints(stderr), f"a device realized on auto logged: {stderr}")
     check(": probe exported memory: " in stderr and ": probe guest import: " in stderr,
           f"a realize said nothing about its probes: {stderr}")
@@ -125,8 +125,8 @@ def main():
     # The third is the one that used to pass silently: a library that loads and
     # answers no table left the device up as a plain virtio-gpu with no capset,
     # and nothing said why (feature 042).
-    for executor, reason in (("/nonexistent/librvk_codec.so", "could not be loaded"),
-                             ("libc.so.6", "exports no rvk_executor_ops"),
+    for executor, reason in (("/nonexistent/libav_codec.so", "could not be loaded"),
+                             ("libc.so.6", "exports no av_executor_ops"),
                              (sys.argv[3], "answered no table")):
         code, stderr = qemu.refused("auto", f",executor={executor}")
         check(code != 0, f"executor={executor} realized")

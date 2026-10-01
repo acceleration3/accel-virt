@@ -8,7 +8,7 @@
 namespace av {
 
 UmdLibrary::Seams::Seams()
-    : heap(), lock(), log(L"rvkumd"), kmt(), driver(heap, kmt, log),
+    : heap(), lock(), log(L"avumd"), kmt(), driver(heap, kmt, log),
       root(heap, kmt, lock, log, d3d::umd_binding, &driver), trace()
 {
     AV_SCOPE("UmdLibrary::Seams::Seams");
@@ -20,7 +20,7 @@ d3d::UmdRoot *UmdLibrary::root()
     AV_SCOPE("UmdLibrary::root");
     if (!seams_.constructed() && !refused_ && seams_.construct() == Status::ok &&
         seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("rvkumd: no D3DKMT wait event, refusing the runtime");
+        seams_.object().log.write("avumd: no D3DKMT wait event, refusing the runtime");
         seams_.destroy();
         refused_ = true;
         return nullptr;
@@ -28,8 +28,8 @@ d3d::UmdRoot *UmdLibrary::root()
     if (seams_.constructed() && !started_trace_) {
         started_trace_ = true;
         Seams &seams = seams_.object();
-        const Status traced = seams.trace.start("rvkumd", seams.root, crashed_);
-        if (traced != Status::ok) seams.log.write("rvkumd: tracing is off: its section, pin or service failed");
+        const Status traced = seams.trace.start("avumd", seams.root, crashed_);
+        if (traced != Status::ok) seams.log.write("avumd: tracing is off: its section, pin or service failed");
     }
     return seams_.constructed() ? &seams_.object().root : nullptr;
 }

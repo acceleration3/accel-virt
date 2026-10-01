@@ -77,19 +77,19 @@ KMD as a DDI call. That is the contract that actually matters for this project.
 ## How the Vulkan loader finds an ICD on a WDDM adapter
 
 Read from Khronos Vulkan-Loader `bde79ad2dd83` for feature 045; it is the record
-`src/km/rvkgpu.inf` and `rvkvk.dll` are written against.
+`src/km/avgpu.inf` and `avvk.dll` are written against.
 
 - **Discovery is per adapter.** `windows_read_manifest_from_d3d_adapters`
   (`loader_windows.c:499`) enumerates adapters with `D3DKMTEnumAdapters2` and
   reads each one's `VulkanDriverName` from the adapter's software key through
   `D3DKMTQueryAdapterInfo(KMTQAITYPE_QUERYREGISTRY, D3DDDI_QUERYREGISTRY_ADAPTERKEY)`,
   as `REG_MULTI_SZ` then `REG_SZ` (`REG_EXPAND_SZ` is refused). So the INF writes
-  `HKR,, VulkanDriverName, 0x00010000, "%13%\rvkvk.json"` in the software
+  `HKR,, VulkanDriverName, 0x00010000, "%13%\avvk.json"` in the software
   settings and nothing under `HKLM\SOFTWARE\Khronos\Vulkan\Drivers`, which the
   loader reads additively and would list the device twice from.
 - **The manifest's library path.** A relative `library_path` is joined to the
   manifest's directory only when it contains a backslash (`loader.c:2460`):
-  `.\\rvkvk.dll`, not `rvkvk.dll`.
+  `.\\avvk.dll`, not `avvk.dll`.
 - **Interface version 7.** Only `vk_icdGetInstanceProcAddr` must be exported;
   `vk_icdNegotiateLoaderICDInterfaceVersion` is exported too, and
   `vkCreateInstance`, `vkEnumerateInstanceExtensionProperties`,
@@ -120,8 +120,8 @@ Read from Khronos Vulkan-Loader `bde79ad2dd83` for feature 045; it is the record
 
 Read from the system `opengl32.dll` (10.0.26100.5074, pinned in
 `tools/re/binaries.txt`) and `dxgkrnl.sys` for feature 050; it is the record
-`src/km/rvkgpu.inf` and `rvkgl.dll` are written against. The adapter's software
-key carries `OpenGLDriverName` (`REG_MULTI_SZ`, `%13%\rvkgl.dll`),
+`src/km/avgpu.inf` and `avgl.dll` are written against. The adapter's software
+key carries `OpenGLDriverName` (`REG_MULTI_SZ`, `%13%\avgl.dll`),
 `OpenGLVersion` (`REG_DWORD` 2) and `OpenGLFlags` (`REG_DWORD` 1); nothing is
 written under `HKLM\...\OpenGLDrivers`.
 
@@ -184,7 +184,7 @@ and it is the one opengl32 calls - `wglCreateContext` became
 `DrvCreateLayerContext(hdc, 0)` and never `DrvCreateContext`. A window a
 session-0 service makes has a DC for which `D3DKMTOpenAdapterFromHdc` fails
 (`STATUS_INVALID_PARAMETER`), and opengl32 then takes the first adapter
-`D3DKMTEnumAdapters2` lists, which is rvkgpu's in these guests - so the ICD
+`D3DKMTEnumAdapters2` lists, which is avgpu's in these guests - so the ICD
 finds its adapter by enumeration too, and no interactive session is needed.
 `wglGetProcAddress` answers only a thread that has a context of the ICD
 current: asked with none, it answers null and `ERROR_PROC_NOT_FOUND`, which is
@@ -225,10 +225,10 @@ trip.
 Read from the Khronos OpenCL ICD loader source pinned by
 `tools/opencl_loader_pins.txt` (tag `v2024.10.24`, fetched into
 `third_party/opencl-loader/` by `tools/fetch_opencl_loader.py`) for feature
-052; it is the record `src/km/rvkgpu.inf` and `rvkcl.dll` are written against.
+052; it is the record `src/km/avgpu.inf` and `avcl.dll` are written against.
 Line numbers are that source's. Unlike Vulkan and OpenGL there is no loader to
 pin as a binary - Khronos publishes none - so the guest's `OpenCL.dll` is this
-source cross-compiled with the toolchain that builds `rvkgpu.sys`
+source cross-compiled with the toolchain that builds `avgpu.sys`
 (research.md §2).
 
 **Discovery runs once per process** - `khrIcdOsVendorsEnumerateOnce` wraps it
@@ -254,7 +254,7 @@ global vendors key. Each path's failure is traced and the next runs anyway.
    uses neither.
 
 **Why the value is `REG_SZ`.** The INF writes `HKR,, OpenCLDriverName,
-0x00000000, "%13%\rvkcl.dll"` - a plain string, not the `REG_MULTI_SZ` that
+0x00000000, "%13%\avcl.dll"` - a plain string, not the `REG_MULTI_SZ` that
 `VulkanDriverName` and `OpenGLDriverName` beside it use. Path 1 asks for
 `REG_SZ` and only retries the query as `REG_MULTI_SZ` when the call itself
 returns a failure `NTSTATUS` (`icd_windows_dxgk.c:118-121`, "Accepting
@@ -272,7 +272,7 @@ Feature 061 writes that second value, as it does for the other two ICDs.
 **One export.** `khrIcdVendorAdd` (`icd.c:70`) resolves exactly one symbol by
 name from the DLL: **`clGetExtensionFunctionAddress`** (`:92`). Nothing else is
 looked up as an export - `clIcdGetPlatformIDsKHR` is obtained *through* it
-(`:100`) and the ICD is refused if that answers null. So `rvkcl.dll` exports
+(`:100`) and the ICD is refused if that answers null. So `avcl.dll` exports
 that function and `clIcdGetPlatformIDsKHR`, which older loaders looked up
 directly and which costs a line, and nothing else: the rest of the API is
 reached through the dispatch table, and an export the loader never looks up
@@ -292,7 +292,7 @@ but `CL_SUCCESS` drops that platform silently, and a platform with no suffix is
 a platform the loader will not name. Both are answered from the platform alone,
 before any device exists and without opening an adapter, because the loader
 asks them while enumerating - an ICD that opened a device here would open one
-in every process that ever calls `clGetPlatformIDs`. `rvkcl.dll` answers `RVK`.
+in every process that ever calls `clGetPlatformIDs`. `avcl.dll` answers `AV`.
 
 **Load and unload.** The DLL is loaded for the probe, loaded a second time per
 platform accepted (`:178`), and the probe's own reference is freed at the end
@@ -346,7 +346,7 @@ the UMD, which is what makes option 2 reachable.
 
 The desktop's own presents are a separate matter: dxgkrnl writes them as DMA
 buffers for the miniport's node, and this driver's `ExecutionNode` completes
-anything that is not an rvk context as a loopback, so nothing ever executed the
+anything that is not an av context as a loopback, so nothing ever executed the
 blits. `PresentBlit` (`src/core/present/`) now moves those pixels in the
 miniport, between allocations whose guest pages the aperture mapping recorded,
 and `adapter/0 present_rows` in a state dump says how many rows it moved.
@@ -360,7 +360,7 @@ active with `dwm.exe`, `explorer.exe` and `winlogon.exe` running):
 - In a whole boot `DxgkDdiPresent` is called **twice**, both with
   `Flags = Blt` and `NumSrcAllocations = NumDstAllocations = 0` - no allocation
   list at all, so there is nothing to move. The driver says so once per present:
-  `rvkgpu: present unmoved list flags 0x00000001 sources 0 destinations 0`.
+  `avgpu: present unmoved list flags 0x00000001 sources 0 destinations 0`.
 - `DxgkDdiSetVidPnSourceAddress` only ever names `0xC0000000`, the shared
   primary (`kind=1`); the adapter holds exactly two allocations, that primary
   and a shadow (`kind=2`) of the same 1280x800x4 bytes, both CPU-visible.
@@ -370,7 +370,7 @@ active with `dwm.exe`, `explorer.exe` and `winlogon.exe` running):
   The screendump is black in both cases and no further present arrives.
 - The display class key has no `UserModeDriverName`: there is no D3D UMD, so
   DWM composes with WARP and its output never becomes bytes in an allocation
-  this miniport has pages for. The 35 DMA buffers the two non-rvk contexts
+  this miniport has pages for. The 35 DMA buffers the two non-av contexts
   submit are loopback-completed by `ExecutionNode` as before.
 
 So the clarification this feature planned against - "every source DWM presents
@@ -472,13 +472,13 @@ in that register.
 
 Feature 053 learned this from a guest, twice:
 
-- `vkRvkLastKernelStatus()` took no arguments at all. The probe crashed with
+- `vkAvLastKernelStatus()` took no arguments at all. The probe crashed with
   `0xC0000005` inside `vulkan-1.dll+0x80dda` on the first call - the trampoline
   reading a dispatch table out of an uninitialised register.
-- Respelled `vkRvkLastKernelStatus(VkPhysicalDevice, uint32_t *)` it works, and
+- Respelled `vkAvLastKernelStatus(VkPhysicalDevice, uint32_t *)` it works, and
   has been read back from a live guest since.
 
-`vkRvkForceContextFault(VkInstance, VkPhysicalDevice)` from feature 044 had the
+`vkAvForceContextFault(VkInstance, VkPhysicalDevice)` from feature 044 had the
 shape right from the start, which is why nothing had caught the rule: both of
 the project's private entry points now begin with a dispatchable handle because
 the loader requires it, not because they need one.

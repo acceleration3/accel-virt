@@ -38,7 +38,7 @@ TEST(present_ticket_record_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[PresentTicketRecord::encoded_size] = {};
   CHECK_STATUS(PresentTicketRecord(0x11223344u, 0x5566778899AABBCCull).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x544B5652u);   /* "RVKT" */
+  CHECK(layout.at(0u, 4u) == 0x00545641u);   /* "AVT" */
   CHECK(layout.at(4u, 4u) == 0x11223344u);
   CHECK(layout.at(8u, 8u) == 0x5566778899AABBCCull); }
 
@@ -48,7 +48,7 @@ TEST(present_ticket_record, round_trips_and_reads_only_its_own_bytes_of_longer_p
   CHECK_STATUS(PresentTicketRecord(2u, 9u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(bytes[16], 0xEEu);
   PresentTicketRecord decoded;
-  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);   /* an rvk context's private data is longer */
+  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);   /* an av context's private data is longer */
   CHECK_EQ(decoded.epoch(), 2u);
   CHECK(decoded.ticket() == 9u);
   const PresentTicketRecord none;

@@ -33,7 +33,7 @@ TEST(present_command_write, lays_out_the_documented_header)
   command.write(writer);
   CHECK_STATUS(writer.status(), Status::ok);
   CHECK_EQ(writer.offset(), PresentCommand::header_size);
-  CHECK_EQ(u32(bytes, 0u), 0x504B5652u);
+  CHECK_EQ(u32(bytes, 0u), 0x00505641u);
   CHECK_EQ(u32(bytes, 4u), 2u);
   CHECK_EQ(u32(bytes, 8u), 0x00FF8040u);
   CHECK_EQ(u32(bytes, 12u), 5u);

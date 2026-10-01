@@ -1,4 +1,4 @@
-/* rvkvkprobe's proof through the ICD on this machine's GPU (feature 045,
+/* avvkprobe's proof through the ICD on this machine's GPU (feature 045,
  * T038): the probe calls the ICD's own entry point as the Windows loader would
  * - vkCreateInstance from the null instance, everything else through the
  * instance - and the ICD root, over DdiKmt, carries every command through the
@@ -6,7 +6,7 @@
  * and bound to the host GPU that runs the most sub-APIs. Host-visible memory
  * is the guest process's own pages, imported by the host GPU. A host without
  * Vulkan has nothing here to judge, and the test returns without checking. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/loader_vulkan.hpp"
 #include "guest/suite/vulkan_probe.hpp"
@@ -52,7 +52,7 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libz\n"
            "leak:libLLVM\n"
            "leak:libgallium\n"
-           "leak:librvk_executor\n";
+           "leak:libav_executor\n";
 }
 
 using av::DdiKmt;
@@ -111,13 +111,13 @@ bool reported(const GuestReport &report, const char *line)
 
 TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
 { const WidestHostGpu gpu;
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
   const ExecutorLibraryFile library(AV_EXECUTOR_LIBRARY);
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
   FullStackRig rig(*library.ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  GuestReport report("rvkvkprobe");
+  GuestReport report("avvkprobe");
   { IcdProcess process(rig.kmt());
     LoaderVulkan vulkan(&av::bound_icd_instance_proc_addr);
     av::DirectoryImageSink images(AV_IMAGE_DIR);
@@ -146,6 +146,6 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   CHECK(reported(report, "ok vulkan.surface 4096"));
   CHECK(reported(report, "ok vulkan.present 4096"));
   CHECK(reported(report, "ok vulkan.resized 9216"));
-  CHECK(reported(report, "rvkvkprobe: 12 passed, 0 failed"));
+  CHECK(reported(report, "avvkprobe: 12 passed, 0 failed"));
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }

@@ -31,7 +31,7 @@ TEST(clock_page_header, a_page_s_header_names_its_heads_and_where_each_record_is
 { std::uint8_t bytes[ClockPageHeader::encoded_size] = {};
   const ClockPageHeader header(2u);
   CHECK_STATUS(header.encode(bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(field_at<std::uint32_t>(bytes, 0u), 0x434B5652u);
+  CHECK_EQ(field_at<std::uint32_t>(bytes, 0u), 0x00435641u);
   CHECK_EQ(field_at<std::uint32_t>(bytes, 4u), 1u);
   CHECK_EQ(field_at<std::uint32_t>(bytes, 8u), 2u);
   ClockPageHeader read;

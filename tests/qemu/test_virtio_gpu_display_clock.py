@@ -14,11 +14,11 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, response_type, rvk_device
+from av_context import FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, response_type, av_device
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
-CLOCK_MAGIC = 0x434B5652
+CLOCK_MAGIC = 0x00435641
 DISPLAY_CLOCK = 0x02F4
 DISPLAY_TIMING = 0x02F5
 DISPLAY_QUEUE = 66
@@ -58,7 +58,7 @@ class Blank:
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuDisplayClock(unittest.TestCase):
     def qtest(self):
-        qtest = virtio_qtest.Qtest(BUILD, rvk_device(",vectors=4"))
+        qtest = virtio_qtest.Qtest(BUILD, av_device(",vectors=4"))
         self.addCleanup(qtest.close)
         return qtest
 

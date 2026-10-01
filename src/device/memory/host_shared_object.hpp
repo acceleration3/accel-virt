@@ -29,7 +29,7 @@ public:
 
     /* Takes `descriptor` for `object_id`, with one holder - whoever published
      * it. invalid_parameter for an id of 0, a kind that is not a
-     * RVK_SHARED_* value, a handle kind that is not an RVK_SHARED_HANDLE_*
+     * AV_SHARED_* value, a handle kind that is not an AV_SHARED_HANDLE_*
      * value, a size that is not what its kind has - memory is a length and a
      * fence is not - or a descriptor below 0; invalid_state for a slot already live.
      * The descriptor is this object's on success and the caller's otherwise. */

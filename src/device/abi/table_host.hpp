@@ -3,14 +3,14 @@
 #ifndef AV_TABLE_HOST_HPP
 #define AV_TABLE_HOST_HPP
 
-#include "device/abi/rvk_device.h"
+#include "device/abi/av_device.h"
 #include "device/host/host.hpp"
 
 namespace av {
 
 class TableHost final : public Host {
 public:
-    explicit TableHost(const RvkHostOps &ops);
+    explicit TableHost(const AvHostOps &ops);
 
     void     log(const char *message) override;
     void     require_main_loop(const char *function) override;
@@ -72,7 +72,7 @@ public:
     Status   show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
     void     update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
     void     hide_scanout(uint32_t head) override;
-    Status   show_image(uint32_t head, const RvkExportedImage &image) override;
+    Status   show_image(uint32_t head, const AvExportedImage &image) override;
     int      event_descriptor(void *event) override;
     int      fence_interrupt_descriptor(uint32_t line) override;
     uint32_t guest_region_count() override;
@@ -90,7 +90,7 @@ public:
 private:
     void violated(const char *rule, const char *function);
 
-    const RvkHostOps &ops_;
+    const AvHostOps &ops_;
 };
 
 }  // namespace av

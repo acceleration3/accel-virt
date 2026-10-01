@@ -8,8 +8,8 @@
  * next request with the bytes, 1 writes the ring's head, 2 writes the fence
  * page, 3 submits the next batch of `count` bytes, 4 serves, 5 answers OK. */
 #include "core/platform/platform.hpp"
-#include "core/rvk/context_memory.hpp"
-#include "core/rvk/guest_context.hpp"
+#include "core/av/context_memory.hpp"
+#include "core/av/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/device/fake_doorbell_pages.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -21,7 +21,7 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -48,7 +48,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
                        av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 2u, 12u, 3u, 0u, 4u),
                        memory.pages()) != av::Status::ok)
         __builtin_trap();
-    std::uint8_t  request[av::RvkRequestWriter::max_request_size] = {};
+    std::uint8_t  request[av::AvRequestWriter::max_request_size] = {};
     std::size_t   length = 0u;
     std::uint64_t fence = 1u;
     platform.set_irql(av::Irql::dispatch);

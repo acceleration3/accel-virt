@@ -40,7 +40,7 @@ bool D3d11HostCaps::learn(Kmt &kmt, uint32_t adapter)
     ScopeExit torn([&] { transport.teardown(); });
     uint64_t             answered = 0u;
     d3dproto::FormatCaps rows[format_count] = {};
-    if (!d3dproto::rvk_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;
+    if (!d3dproto::av_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;
     for (uint32_t format = 0u; format < format_count; format++) {
         formats_.record(format, rows[format].support, rows[format].support2);
         /* A row's sample counts are a bit per power of two, all at one level count. */

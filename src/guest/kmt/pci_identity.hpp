@@ -1,5 +1,5 @@
 /* The PCI identity an adapter reports to user mode: vendor and device, and the
- * subsystem pair that tells virtio-gpu-rvk-pci from stock virtio-gpu-pci. */
+ * subsystem pair that tells virtio-gpu-av-pci from stock virtio-gpu-pci. */
 #ifndef AV_PCI_IDENTITY_HPP
 #define AV_PCI_IDENTITY_HPP
 
@@ -14,7 +14,7 @@ public:
 
     bool same_as(const PciIdentity &other) const;
     /* Whether `other` carries the same subsystem pair, whatever its vendor and
-     * device. virtio-gpu-rvk-pci presents its host GPU's vendor and device,
+     * device. virtio-gpu-av-pci presents its host GPU's vendor and device,
      * which differ from host to host, so its subsystem 1af4:5256 is what
      * names it. */
     bool same_subsystem_as(const PciIdentity &other) const;

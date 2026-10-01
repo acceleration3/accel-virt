@@ -30,7 +30,7 @@ void ControlRequest::respond(const GpuResponse &response)
         uint8_t bytes[sizeof(uint32_t)] = {};
         static_cast<void>(host_.read_request(request_, 0u, bytes, sizeof bytes));
         const uint32_t command = static_cast<uint32_t>(bytes[0]) | static_cast<uint32_t>(bytes[1]) << 8u;
-        fprintf(stderr, "virtio-gpu-rvk: command 0x%04x answered 0x%04x\n", command, response.type());
+        fprintf(stderr, "virtio-gpu-av: command 0x%04x answered 0x%04x\n", command, response.type());
     }
     host_.respond(request_, response.bytes(), response.length());
     responded_ = true;

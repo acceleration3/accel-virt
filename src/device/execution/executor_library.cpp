@@ -10,12 +10,12 @@ ExecutorLibrary::ExecutorLibrary() : ops_(nullptr)
     AV_SCOPE("ExecutorLibrary::ExecutorLibrary");
 }
 
-Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
+Status ExecutorLibrary::accept(const AvExecutorOps *ops)
 {
     AV_SCOPE("ExecutorLibrary::accept");
     if (ops_ != nullptr) return Status::invalid_state;
     if (ops == nullptr) return Status::ok;
-    if (ops->abi_version < RVK_EXECUTOR_ABI_VERSION_MINIMUM || ops->abi_version > RVK_EXECUTOR_ABI_VERSION ||
+    if (ops->abi_version < AV_EXECUTOR_ABI_VERSION_MINIMUM || ops->abi_version > AV_EXECUTOR_ABI_VERSION ||
         ops->sub_apis == nullptr || ops->create == nullptr || ops->destroy == nullptr ||
         ops->execute == nullptr)
         return Status::invalid_parameter;
@@ -23,16 +23,16 @@ Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
      * claims the version and carries half of it would be found out one blob
      * later, on a worker, with a guest waiting. Version 3's one operation the
      * same. */
-    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_IMPORTS &&
+    if (ops->abi_version >= AV_EXECUTOR_ABI_VERSION_IMPORTS &&
         (ops->import_kinds == nullptr || ops->import_blob == nullptr || ops->release_blob == nullptr))
         return Status::invalid_parameter;
-    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_HANDLES && ops->imported_handle == nullptr)
+    if (ops->abi_version >= AV_EXECUTOR_ABI_VERSION_HANDLES && ops->imported_handle == nullptr)
         return Status::invalid_parameter;
-    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_OPTIONS && ops->create_with_options == nullptr)
+    if (ops->abi_version >= AV_EXECUTOR_ABI_VERSION_OPTIONS && ops->create_with_options == nullptr)
         return Status::invalid_parameter;
-    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_EVENTS && ops->set_signal == nullptr)
+    if (ops->abi_version >= AV_EXECUTOR_ABI_VERSION_EVENTS && ops->set_signal == nullptr)
         return Status::invalid_parameter;
-    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_SHARING &&
+    if (ops->abi_version >= AV_EXECUTOR_ABI_VERSION_SHARING &&
         (ops->export_object == nullptr || ops->import_object == nullptr || ops->release_object == nullptr))
         return Status::invalid_parameter;
     ops_ = ops;
@@ -42,28 +42,28 @@ Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
 bool ExecutorLibrary::imports() const
 {
     AV_SCOPE("ExecutorLibrary::imports");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_IMPORTS;
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_IMPORTS;
 }
 
 bool ExecutorLibrary::names_imports() const
 {
     AV_SCOPE("ExecutorLibrary::names_imports");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_HANDLES;
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_HANDLES;
 }
 
-uint32_t ExecutorLibrary::import_blob(RvkExecutor *executor, uint64_t blob_id, const RvkBlobHandle &handle) const
+uint32_t ExecutorLibrary::import_blob(AvExecutor *executor, uint64_t blob_id, const AvBlobHandle &handle) const
 {
     AV_SCOPE("ExecutorLibrary::import_blob");
     return ops_->import_blob(ops_->opaque, executor, blob_id, &handle);
 }
 
-void ExecutorLibrary::release_blob(RvkExecutor *executor, uint64_t blob_id) const
+void ExecutorLibrary::release_blob(AvExecutor *executor, uint64_t blob_id) const
 {
     AV_SCOPE("ExecutorLibrary::release_blob");
     ops_->release_blob(ops_->opaque, executor, blob_id);
 }
 
-uint64_t ExecutorLibrary::imported_handle(RvkExecutor *executor, uint64_t blob_id) const
+uint64_t ExecutorLibrary::imported_handle(AvExecutor *executor, uint64_t blob_id) const
 {
     AV_SCOPE("ExecutorLibrary::imported_handle");
     return ops_->imported_handle(ops_->opaque, executor, blob_id);
@@ -72,10 +72,10 @@ uint64_t ExecutorLibrary::imported_handle(RvkExecutor *executor, uint64_t blob_i
 bool ExecutorLibrary::shares_objects() const
 {
     AV_SCOPE("ExecutorLibrary::shares_objects");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_SHARING;
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_SHARING;
 }
 
-bool ExecutorLibrary::export_object(RvkExecutor *executor, uint32_t kind, uint64_t wire_handle,
+bool ExecutorLibrary::export_object(AvExecutor *executor, uint32_t kind, uint64_t wire_handle,
                                     uint32_t &handle_kind, int &fd) const
 {
     AV_SCOPE("ExecutorLibrary::export_object");
@@ -85,15 +85,15 @@ bool ExecutorLibrary::export_object(RvkExecutor *executor, uint32_t kind, uint64
      * HostSharedObject refuses a kind that is not one and a descriptor below
      * zero, and closes what it refused. Judging it twice would mean two places
      * that have to agree about what a lying library looks like. */
-    return ops_->export_object(ops_->opaque, executor, kind, wire_handle, &handle_kind, &fd) == RVK_EXECUTED;
+    return ops_->export_object(ops_->opaque, executor, kind, wire_handle, &handle_kind, &fd) == AV_EXECUTED;
 }
 
-bool ExecutorLibrary::import_object(RvkExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
+bool ExecutorLibrary::import_object(AvExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
                                     uint64_t size, uint64_t &wire_handle) const
 {
     AV_SCOPE("ExecutorLibrary::import_object");
     wire_handle = 0u;
-    if (ops_->import_object(ops_->opaque, executor, kind, handle_kind, fd, size, &wire_handle) != RVK_EXECUTED)
+    if (ops_->import_object(ops_->opaque, executor, kind, handle_kind, fd, size, &wire_handle) != AV_EXECUTED)
         return false;
     /* A library that imports and names nothing is one the guest could not use
      * the import of, and there is no id to give it back by: the object is the
@@ -101,24 +101,24 @@ bool ExecutorLibrary::import_object(RvkExecutor *executor, uint32_t kind, uint32
     return wire_handle != 0u;
 }
 
-void ExecutorLibrary::release_object(RvkExecutor *executor, uint32_t kind, uint64_t wire_handle) const
+void ExecutorLibrary::release_object(AvExecutor *executor, uint32_t kind, uint64_t wire_handle) const
 {
     AV_SCOPE("ExecutorLibrary::release_object");
     ops_->release_object(ops_->opaque, executor, kind, wire_handle);
 }
 
-bool ExecutorLibrary::export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) const
+bool ExecutorLibrary::export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) const
 {
     AV_SCOPE("ExecutorLibrary::export_image");
-    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_EXPORTS || ops_->export_image == nullptr)
+    if (ops_ == nullptr || ops_->abi_version < AV_EXECUTOR_ABI_VERSION_EXPORTS || ops_->export_image == nullptr)
         return false;
-    return ops_->export_image(ops_->opaque, gpu_uuid, key, &image) == RVK_EXECUTED;
+    return ops_->export_image(ops_->opaque, gpu_uuid, key, &image) == AV_EXECUTED;
 }
 
 void ExecutorLibrary::release_shared(const uint8_t *gpu_uuid, uint64_t object_id) const
 {
     AV_SCOPE("ExecutorLibrary::release_shared");
-    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE ||
+    if (ops_ == nullptr || ops_->abi_version < AV_EXECUTOR_ABI_VERSION_SHARED_RELEASE ||
         ops_->release_shared == nullptr)
         return;
     ops_->release_shared(ops_->opaque, gpu_uuid, object_id);
@@ -127,15 +127,15 @@ void ExecutorLibrary::release_shared(const uint8_t *gpu_uuid, uint64_t object_id
 bool ExecutorLibrary::reads_frames() const
 {
     AV_SCOPE("ExecutorLibrary::reads_frames");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_FRAMES &&
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_FRAMES &&
            ops_->map_frame != nullptr && ops_->unmap_frame != nullptr;
 }
 
-bool ExecutorLibrary::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view) const
+bool ExecutorLibrary::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) const
 {
     AV_SCOPE("ExecutorLibrary::map_frame");
     if (!reads_frames()) return false;
-    return ops_->map_frame(ops_->opaque, gpu_uuid, frame.surface(), frame.point(), wait_ms, &view) == RVK_EXECUTED;
+    return ops_->map_frame(ops_->opaque, gpu_uuid, frame.surface(), frame.point(), wait_ms, &view) == AV_EXECUTED;
 }
 
 void ExecutorLibrary::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) const
@@ -148,9 +148,9 @@ bool ExecutorLibrary::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pi
                                  uint32_t width, uint32_t height) const
 {
     AV_SCOPE("ExecutorLibrary::read_image");
-    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_IMAGES || ops_->read_image == nullptr)
+    if (ops_ == nullptr || ops_->abi_version < AV_EXECUTOR_ABI_VERSION_IMAGES || ops_->read_image == nullptr)
         return false;
-    return ops_->read_image(ops_->opaque, gpu_uuid, key, pixels, stride, width, height) == RVK_EXECUTED;
+    return ops_->read_image(ops_->opaque, gpu_uuid, key, pixels, stride, width, height) == AV_EXECUTED;
 }
 
 uint32_t ExecutorLibrary::import_kinds(SubApi api, const uint8_t *gpu_uuid) const
@@ -175,16 +175,16 @@ uint32_t ExecutorLibrary::sub_apis() const
 bool ExecutorLibrary::names_options() const
 {
     AV_SCOPE("ExecutorLibrary::names_options");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_OPTIONS;
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_OPTIONS;
 }
 
 bool ExecutorLibrary::names_events() const
 {
     AV_SCOPE("ExecutorLibrary::names_events");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_EVENTS;
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_EVENTS;
 }
 
-void ExecutorLibrary::set_signal(RvkExecutor *executor, void (*signal)(void *context),
+void ExecutorLibrary::set_signal(AvExecutor *executor, void (*signal)(void *context),
                                  void *context) const
 {
     AV_SCOPE("ExecutorLibrary::set_signal");
@@ -192,8 +192,8 @@ void ExecutorLibrary::set_signal(RvkExecutor *executor, void (*signal)(void *con
     ops_->set_signal(ops_->opaque, executor, signal, context);
 }
 
-RvkExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
-                                     RvkExecutor *share) const
+AvExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid, const AvContextOptions *options,
+                                     AvExecutor *share) const
 {
     AV_SCOPE("ExecutorLibrary::create");
     if (names_options())
@@ -202,37 +202,37 @@ RvkExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid, const 
     return ops_->create(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid);
 }
 
-void ExecutorLibrary::destroy(RvkExecutor *executor) const
+void ExecutorLibrary::destroy(AvExecutor *executor) const
 {
     AV_SCOPE("ExecutorLibrary::destroy");
     ops_->destroy(ops_->opaque, executor);
 }
 
-bool ExecutorLibrary::poll(RvkExecutor *executor) const
+bool ExecutorLibrary::poll(AvExecutor *executor) const
 {
     AV_SCOPE("ExecutorLibrary::poll");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_POLL && ops_->poll != nullptr &&
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_POLL && ops_->poll != nullptr &&
            ops_->poll(ops_->opaque, executor) != 0u;
 }
 
-void ExecutorLibrary::gpu_progress(RvkExecutor *executor, uint64_t &marked, uint64_t &reached) const
+void ExecutorLibrary::gpu_progress(AvExecutor *executor, uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("ExecutorLibrary::gpu_progress");
     marked = 0u;
     reached = 0u;
-    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_PROGRESS || ops_->gpu_progress == nullptr)
+    if (ops_ == nullptr || ops_->abi_version < AV_EXECUTOR_ABI_VERSION_PROGRESS || ops_->gpu_progress == nullptr)
         return;
     ops_->gpu_progress(ops_->opaque, executor, &marked, &reached);
 }
 
-void ExecutorLibrary::end_batch(RvkExecutor *executor) const
+void ExecutorLibrary::end_batch(AvExecutor *executor) const
 {
     AV_SCOPE("ExecutorLibrary::end_batch");
-    if (ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_BATCHES && ops_->end_batch != nullptr)
+    if (ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_BATCHES && ops_->end_batch != nullptr)
         ops_->end_batch(ops_->opaque, executor);
 }
 
-uint32_t ExecutorLibrary::execute(RvkExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
+uint32_t ExecutorLibrary::execute(AvExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                                   uint8_t *reply, size_t reply_capacity, size_t &reply_size) const
 {
     AV_SCOPE("ExecutorLibrary::execute");

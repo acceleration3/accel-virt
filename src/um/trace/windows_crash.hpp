@@ -1,7 +1,7 @@
 /* What a process's unhandled-exception filter does (docs/trace.md): the crash
  * goes into the trace table, the faulting thread's stack is unwound from the
  * exception's context, and CrashReport's lines are written to
- * `C:\ProgramData\rvk\crash-<module>-<pid>.txt`. Nothing is allocated; the
+ * `C:\ProgramData\av\crash-<module>-<pid>.txt`. Nothing is allocated; the
  * process is about to die. Translation only. */
 #ifndef AV_UM_WINDOWS_CRASH_HPP
 #define AV_UM_WINDOWS_CRASH_HPP

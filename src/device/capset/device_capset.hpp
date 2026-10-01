@@ -1,4 +1,4 @@
-/* What one device instance offers the guest as the rvk capset (docs/protocol.md):
+/* What one device instance offers the guest as the av capset (docs/protocol.md):
  * this protocol version, the sub-APIs its executor library runs, a context per table
  * slot, every ring order the protocol allows, host-visible memory when a
  * hostmem region exists, and the host GPU the device is bound to. Described

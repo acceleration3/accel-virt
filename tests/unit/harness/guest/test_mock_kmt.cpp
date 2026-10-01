@@ -9,7 +9,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/context/context_views_record.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -34,32 +34,32 @@ using av::ClientDescriptor;
 using av::MockKmt;
 using av::PciIdentity;
 using av::ReplyHeader;
-using av::RvkContextRecord;
+using av::AvContextRecord;
 using av::SubApi;
 using av::SubmissionDescriptor;
 using av::Status;
 
 namespace {
 
-/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av_gpu(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint32_t refused_code = 0xC0000001u;
 
 }  // namespace
 
 TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[4] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 4u, count), Status::ok);
   CHECK_EQ(count, 1u);
   PciIdentity identity;
   CHECK_STATUS(kmt.query_identity(adapters[0], identity), Status::ok);
-  CHECK(identity.same_as(rvk));
+  CHECK(identity.same_as(av_gpu));
   std::uint32_t version = 0u;
   CHECK_STATUS(kmt.query_driver_version(adapters[0], version), Status::ok);
   CHECK_EQ(version, 3200u);
@@ -110,7 +110,7 @@ TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
 
 TEST(mock_kmt, scripted_failures_zero_answers_and_claims)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[2] = {};
   std::uint32_t count = 0u;
   kmt.fail_at(MockKmt::Call::enumerate_adapters, 1u, 0xC0000001u);
@@ -169,7 +169,7 @@ TEST(mock_kmt, scripted_failures_zero_answers_and_claims)
 
 TEST(mock_kmt, refuses_bad_descriptors_pages_fences_and_submissions)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[1] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
@@ -202,7 +202,7 @@ TEST(mock_kmt, refuses_bad_descriptors_pages_fences_and_submissions)
 
 TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[1] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
@@ -269,7 +269,7 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
  * mock keeps what is written through each. */
 TEST(mock_kmt, holds_several_views_at_once)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[1] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
@@ -295,13 +295,13 @@ TEST(mock_kmt, holds_several_views_at_once)
 /* A virtual context records the private data the transport asked it with. */
 TEST(mock_kmt, a_virtual_context_records_its_private_data)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[1] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
   std::uint32_t device = 0u;
   CHECK_STATUS(kmt.create_device(adapters[0], device), Status::ok);
-  const std::uint8_t record[] = {0x52u, 0x56u, 0x4Bu, 0x54u, 1u, 2u, 3u, 4u};
+  const std::uint8_t record[] = {0x41u, 0x56u, 0x54u, 0x00u, 1u, 2u, 3u, 4u};
   std::uint32_t context = 0u;
   CHECK_STATUS(kmt.create_context_virtual(device, record, sizeof record, context), Status::ok);
   CHECK(context != 0u);
@@ -321,7 +321,7 @@ class AnsweringRig {
 public:
     explicit AnsweringRig(MockKmt &kmt) : kmt_(kmt), device_(0u), buffer_(0u), name_(0u), address_(0u), slot_(nullptr)
     {
-        kmt.add_adapter(rvk, 3200u);
+        kmt.add_adapter(av_gpu, 3200u);
         std::uint32_t adapters[1] = {};
         std::uint32_t count = 0u;
         CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
@@ -339,8 +339,8 @@ public:
     /* A context made with a record, whose reply slot becomes the rig's. */
     std::uint32_t context()
     {
-        std::uint8_t record[RvkContextRecord::encoded_size] = {};
-        CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 12u, name_, reply_bytes).encode(record, sizeof record),
+        std::uint8_t record[AvContextRecord::encoded_size] = {};
+        CHECK_STATUS(AvContextRecord(SubApi::vulkan, 12u, name_, reply_bytes).encode(record, sizeof record),
                      Status::ok);
         std::uint32_t context = 0u;
         CHECK_STATUS(kmt_.create_context_virtual(device_, record, sizeof record, context), Status::ok);
@@ -442,7 +442,7 @@ TEST(mock_kmt, only_a_record_context_and_a_described_submission_are_answered)
     AnsweringRig rig(kmt);
     rig.context();
     kmt.answer_waits(answer, sizeof answer);
-    const std::uint8_t garbage[RvkContextRecord::encoded_size] = {0xFFu};
+    const std::uint8_t garbage[AvContextRecord::encoded_size] = {0xFFu};
     std::uint32_t context = 0u;
     CHECK_STATUS(kmt.create_context_virtual(rig.device(), garbage, sizeof garbage, context), Status::ok);
     CHECK(kmt.reply_of(context) == nullptr);
@@ -524,7 +524,7 @@ TEST(mock_kmt_withhold_answer_at, the_nth_wait_writes_nothing_and_takes_no_queue
  * the journal stops, and an index past it answers 0. */
 TEST(mock_kmt_journal, records_each_command_and_a_wait_frees_the_ring)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -564,13 +564,13 @@ class EscapeRig {
 public:
     explicit EscapeRig(MockKmt &kmt) : kmt_(kmt), adapter_(0u), device_(0u), name_(0u), context_(0u)
     {
-        kmt.add_adapter(rvk, 3200u);
+        kmt.add_adapter(av_gpu, 3200u);
         std::uint32_t count = 0u;
         CHECK_STATUS(kmt.enumerate_adapters(&adapter_, 1u, count), Status::ok);
         CHECK_STATUS(kmt.create_device(adapter_, device_), Status::ok);
         name_ = allocate(av::AllocationKind::context_ring, 4096u);
-        std::uint8_t record[RvkContextRecord::encoded_size] = {};
-        CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 12u, name_, reply_bytes).encode(record, sizeof record),
+        std::uint8_t record[AvContextRecord::encoded_size] = {};
+        CHECK_STATUS(AvContextRecord(SubApi::vulkan, 12u, name_, reply_bytes).encode(record, sizeof record),
                      Status::ok);
         CHECK_STATUS(kmt.create_context_virtual(device_, record, sizeof record, context_), Status::ok);
     }
@@ -774,7 +774,7 @@ TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
   CHECK_STATUS(kmt.create_device(rig.adapter(), other_device), Status::ok);
   CHECK_STATUS(kmt.escape(rig.adapter(), other_device, rig.context(), record, sizeof record),
                Status::invalid_parameter);
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[2] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 2u, count), Status::ok);
@@ -846,7 +846,7 @@ TEST(mock_kmt_play_at_wait, runs_the_callback_at_the_nth_wait_only)
  * claimed but was never added answers 0. */
 TEST(mock_kmt_adapter_luid, answers_each_adapters_luid_by_the_order_it_was_added)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   kmt.add_adapter(PciIdentity(0x1414u, 0x008Cu, 0u, 0u), 3100u);
   kmt.set_adapter_luid(1u, 0x0000000200000034ull);
   std::uint32_t adapters[3] = {};
@@ -871,7 +871,7 @@ TEST(mock_kmt_adapter_luid, answers_each_adapters_luid_by_the_order_it_was_added
 
 TEST(mock_kmt_adapter_luid, a_handle_it_never_gave_a_failure_and_a_zero_answer)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -894,7 +894,7 @@ TEST(mock_kmt_adapter_luid, a_handle_it_never_gave_a_failure_and_a_zero_answer)
  * default the mock's own; a group D3DKMT does not define is refused. */
 TEST(mock_kmt_query_video_memory, answers_the_scripted_budget_and_usage_of_each_group)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -922,7 +922,7 @@ TEST(mock_kmt_query_video_memory, answers_the_scripted_budget_and_usage_of_each_
 
 TEST(mock_kmt_query_video_memory, a_handle_it_never_gave_a_failure_and_a_zero_answer)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1000,7 +1000,7 @@ std::uint32_t shareable_allocation(MockKmt &kmt, std::uint32_t device, std::uint
 
 TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the_creators_bytes)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1048,7 +1048,7 @@ TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the
 
 TEST(mock_kmt_share_object, a_handle_it_never_minted_opens_nothing_and_closes_nothing)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1070,7 +1070,7 @@ TEST(mock_kmt_share_object, a_handle_it_never_minted_opens_nothing_and_closes_no
 
 TEST(mock_kmt_share_object, refuses_what_the_kernel_refuses)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1127,7 +1127,7 @@ TEST(mock_kmt_share_object, refuses_what_the_kernel_refuses)
 
 TEST(mock_kmt_share_object, hands_out_as_many_handles_as_it_has_and_no_more)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1150,7 +1150,7 @@ TEST(mock_kmt_share_object, hands_out_as_many_handles_as_it_has_and_no_more)
 
 TEST(mock_kmt_create_shared_allocation, mints_an_id_into_the_creators_bytes_and_a_fresh_one_each_time)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1180,7 +1180,7 @@ TEST(mock_kmt_create_shared_allocation, mints_an_id_into_the_creators_bytes_and_
 
 TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1244,7 +1244,7 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
  * wants the id calls create_shared_allocation instead. */
 TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1285,7 +1285,7 @@ TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back
  * carrier is a resource, so only destroy_shared_allocation takes one. */
 TEST(mock_kmt_destroy_shared_allocation, takes_a_carrier_that_destroy_allocation_refuses)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1311,7 +1311,7 @@ TEST(mock_kmt_destroy_shared_allocation, takes_a_carrier_that_destroy_allocation
 /* The mismatch the other way, and the ordinary allocation it must not touch. */
 TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_resource)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
@@ -1356,7 +1356,7 @@ TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_res
  * one, and it is what the opening process must give back. */
 TEST(mock_kmt_destroy_shared_allocation, takes_what_an_open_made)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);

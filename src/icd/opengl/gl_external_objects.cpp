@@ -115,7 +115,7 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t kind, uint32_
     bool memory = false;
     if (!known(kind, memory)) return gl_invalid_value;
     if (handle_type != opaque_win32) {
-        log_.write("rvkgl: an external object handle type this driver does not take");
+        log_.write("avgl: an external object handle type this driver does not take");
         return gl_invalid_operation;
     }
     GlSharedObjectRow *const row = row_of(memory, name);
@@ -128,21 +128,21 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t kind, uint32_
      * and is told neither, so the honest answer is the error the extension
      * has rather than an import that quietly ignores both (research.md §12). */
     if (row->dedicated_ || row->protected_) {
-        log_.write("rvkgl: a memory object asked for dedicated or protected memory, which a shared "
+        log_.write("avgl: a memory object asked for dedicated or protected memory, which a shared "
                    "object cannot be");
         return gl_invalid_operation;
     }
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
     uint64_t       object_id = 0u;
     if (!handles_.resolve(named, object_id)) {
-        log_.write("rvkgl: a Win32 handle this process neither exported nor opened");
+        log_.write("avgl: a Win32 handle this process neither exported nor opened");
         return gl_invalid_operation;
     }
     SharedObjectCall call(wire);
     uint64_t         opened = 0u;
     const uint64_t   asked = memory ? size : 0u;
     if (call.open(object_id, kind, asked, opened) != Status::ok) {
-        log_.write("rvkgl: the device would not open a shared object for this context");
+        log_.write("avgl: the device would not open a shared object for this context");
         return gl_out_of_memory;
     }
     /* A GL name is 32 bits; a device that answered anything else answered no

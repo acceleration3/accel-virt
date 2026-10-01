@@ -16,7 +16,7 @@ LocalContextPlane::~LocalContextPlane()
     AV_SCOPE("LocalContextPlane::~LocalContextPlane");
 }
 
-Status LocalContextPlane::accept(const RvkExecutorOps *executor)
+Status LocalContextPlane::accept(const AvExecutorOps *executor)
 {
     AV_SCOPE("LocalContextPlane::accept");
     return library_.accept(executor);
@@ -133,7 +133,7 @@ uint32_t LocalContextPlane::live() const
     return contexts_.live();
 }
 
-bool LocalContextPlane::export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image)
+bool LocalContextPlane::export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("LocalContextPlane::export_image");
     contexts_.settle_d3d();
@@ -154,7 +154,7 @@ bool LocalContextPlane::reads_frames() const
     return library_.reads_frames();
 }
 
-bool LocalContextPlane::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view)
+bool LocalContextPlane::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
 {
     AV_SCOPE("LocalContextPlane::map_frame");
     return library_.map_frame(gpu_uuid, frame, wait_ms, view);

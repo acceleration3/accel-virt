@@ -3,7 +3,7 @@
  * every descriptor that came with anything else closed, and every wait
  * bounded by the clock. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/isolation/renderer_link.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -32,7 +32,7 @@ public:
     Fixture() : peer_(host_), link_(host_)
     {
         host_.connect_renderer(peer_);
-        static_cast<void>(host_.start_renderer("rvk-renderer"));
+        static_cast<void>(host_.start_renderer("av-renderer"));
     }
 
     MockHost             &host() { return host_; }
@@ -120,7 +120,7 @@ TEST(renderer_link_request, a_renderer_gone_before_the_send_or_during_the_wait_i
   CHECK_STATUS(fixture.create(outcome), Status::not_found);
   CHECK_STATUS(outcome, Status::invalid_state);
   CHECK_EQ(fixture.peer().delivered(), 0u);
-  CHECK_STATUS(fixture.host().start_renderer("rvk-renderer"), Status::ok);
+  CHECK_STATUS(fixture.host().start_renderer("av-renderer"), Status::ok);
   fixture.peer().die_on_next_delivery();
   outcome = Status::ok;
   CHECK_STATUS(fixture.create(outcome), Status::not_found);
@@ -224,7 +224,7 @@ TEST(renderer_link_request, refuses_a_body_it_cannot_frame_without_sending)
  * Ready is decoded whole. */
 TEST(renderer_link_greet, sends_the_hello_and_decodes_the_ready)
 { Fixture fixture;
-  const std::uint32_t kinds[av::ReadyMessage::lanes] = {RVK_BLOB_HOST_POINTER, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+  const std::uint32_t kinds[av::ReadyMessage::lanes] = {AV_BLOB_HOST_POINTER, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
   fixture.peer().ready_with(av::ReadyMessage(1u, 6u, 5u, kinds));
   const std::uint8_t body[4] = {1u, 2u, 3u, 4u};
   av::ReadyMessage   ready;
@@ -236,7 +236,7 @@ TEST(renderer_link_greet, sends_the_hello_and_decodes_the_ready)
   CHECK_EQ(ready.version(), 1u);
   CHECK_EQ(ready.executor_abi(), 6u);
   CHECK_EQ(ready.sub_apis(), 5u);
-  CHECK_EQ(ready.import_kinds(0u), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER)); }
+  CHECK_EQ(ready.import_kinds(0u), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER)); }
 
 TEST(renderer_link_greet, a_silent_gone_or_garbled_renderer_is_refused)
 { { Fixture fixture;

@@ -8,7 +8,7 @@
  * and judged where the answer is certain. Shaders are DXIL as the DDI hands
  * them (tests/fixtures/d3d12/): programs, with signatures as registers.
  *
- * vkd3d-proton is loaded from RVK_D3D_PATH, or build-d3d/lib in this checkout;
+ * vkd3d-proton is loaded from AV_D3D_PATH, or build-d3d/lib in this checkout;
  * a host without one that imports guest memory returns without judging. */
 #include "fixtures/d3d12/fill_cs.hpp"
 #include "fixtures/d3d12/textured_ps.hpp"
@@ -77,7 +77,7 @@ constexpr std::uint32_t quadrant[4] = {0xffff0000u, 0xff00ff00u, 0xff0000ffu, 0x
 
 bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::D3d12HostDevice *&device12)
 {
-    if (std::getenv("RVK_D3D_PATH") == nullptr) setenv("RVK_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     apis.open();
     for (std::uint32_t index = 0u; index < apis.gpu_count(); index++) {
         device11 = apis.d3d11_device(index);
@@ -134,42 +134,42 @@ ResourceDesc texture_of(std::uint32_t width, std::uint32_t flags, std::uint32_t 
 void open_list(av::D3dLoopback &wire, std::uint32_t type, std::uint32_t queue_id, std::uint32_t allocator_id,
                std::uint32_t list_id)
 {
-    CHECK(rvk_d3d12_CreateCommandQueue12(wire, queue_id, type, 0u, 0u));
-    CHECK(rvk_d3d12_CreateCommandAllocator12(wire, allocator_id, type));
-    CHECK(rvk_d3d12_CreateCommandList12(wire, list_id, allocator_id, type, 0u));
+    CHECK(av_d3d12_CreateCommandQueue12(wire, queue_id, type, 0u, 0u));
+    CHECK(av_d3d12_CreateCommandAllocator12(wire, allocator_id, type));
+    CHECK(av_d3d12_CreateCommandList12(wire, list_id, allocator_id, type, 0u));
 }
 
 void make_device(av::D3dLoopback &wire)
 {
     std::uint32_t hresult = 1u;
     Caps12        caps = {};
-    CHECK(rvk_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
+    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
     CHECK_EQ(hresult, 0u);
-    CHECK(rvk_d3d12_CreateFence12(wire, fence, 0u, 0u));
-    CHECK(rvk_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, readback_at));
-    CHECK(rvk_d3d12_CreatePlacedResource12(wire, readback, readback_heap, 0u, buffer_of(query_offset), state_copy_dest,
+    CHECK(av_d3d12_CreateFence12(wire, fence, 0u, 0u));
+    CHECK(av_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, readback_at));
+    CHECK(av_d3d12_CreatePlacedResource12(wire, readback, readback_heap, 0u, buffer_of(query_offset), state_copy_dest,
                                            ClearValue{}, readback_address));
 }
 
 void make_target(av::D3dLoopback &wire)
 {
-    CHECK(rvk_d3d12_CreateCommittedResource12(wire, target, heap_of(heap_default), 0u,
+    CHECK(av_d3d12_CreateCommittedResource12(wire, target, heap_of(heap_default), 0u,
                                               texture_of(size, flag_render_target), state_render_target, ClearValue{},
                                               0u));
-    CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, rtv_heap, descriptors_rtv, 1u, 0u));
+    CHECK(av_d3d12_CreateDescriptorHeap12(wire, rtv_heap, descriptors_rtv, 1u, 0u));
     ViewDesc view = {};
     view.resource = target;
-    CHECK(rvk_d3d12_CreateRenderTargetView12(wire, DescriptorRef{rtv_heap, 0u}, 0u, view));
+    CHECK(av_d3d12_CreateRenderTargetView12(wire, DescriptorRef{rtv_heap, 0u}, 0u, view));
 }
 
 void execute(av::D3dLoopback &wire, std::uint32_t queue_id, std::uint32_t list_id, std::uint64_t value)
 {
-    CHECK(rvk_d3d12_CloseCommandList12(wire, list_id));
+    CHECK(av_d3d12_CloseCommandList12(wire, list_id));
     const std::uint32_t lists[1] = {list_id};
-    CHECK(rvk_d3d12_ExecuteCommandLists12(wire, queue_id, 1u, lists));
-    CHECK(rvk_d3d12_SignalFence12(wire, queue_id, fence, value));
+    CHECK(av_d3d12_ExecuteCommandLists12(wire, queue_id, 1u, lists));
+    CHECK(av_d3d12_SignalFence12(wire, queue_id, fence, value));
     std::uint64_t completed = 0u;
-    CHECK(rvk_d3d12_FenceValue12(wire, fence, 1u, value, &completed));
+    CHECK(av_d3d12_FenceValue12(wire, fence, 1u, value, &completed));
     CHECK(completed >= value);
 }
 
@@ -177,7 +177,7 @@ void execute(av::D3dLoopback &wire, std::uint32_t queue_id, std::uint32_t list_i
 void copy_frame(av::D3dLoopback &wire)
 {
     const Barrier to_copy = {0u, 0u, target, 0xffffffffu, state_render_target, state_copy_source, 0u, 0u};
-    CHECK(rvk_d3d12_ResourceBarrier12(wire, list, 1u, &to_copy));
+    CHECK(av_d3d12_ResourceBarrier12(wire, list, 1u, &to_copy));
     CopyLocation into = {};
     into.resource = readback;
     into.type = 1u;
@@ -188,7 +188,7 @@ void copy_frame(av::D3dLoopback &wire)
     into.row_pitch = row_pitch;
     CopyLocation from = {};
     from.resource = target;
-    CHECK(rvk_d3d12_CopyTextureRegion12(wire, list, into, 0u, 0u, 0u, from, 0u, Box{}));
+    CHECK(av_d3d12_CopyTextureRegion12(wire, list, into, 0u, 0u, 0u, from, 0u, Box{}));
 }
 
 std::uint32_t word_at(const av::D3dLoopback &wire, std::uint64_t offset)
@@ -208,15 +208,15 @@ std::uint32_t pixel(const av::D3dLoopback &wire, std::uint32_t x, std::uint32_t 
  * of a shader-visible heap. */
 void upload_texture(av::D3dLoopback &wire)
 {
-    CHECK(rvk_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, upload_at));
+    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, upload_at));
     for (std::uint32_t y = 0u; y < texels; y++)
         for (std::uint32_t x = 0u; x < texels; x++) {
             const std::uint32_t colour = quadrant[(y / 2u) * 2u + x / 2u];
             std::memcpy(wire.guest(upload_at + y * texel_pitch + x * 4u), &colour, sizeof(colour));
         }
-    CHECK(rvk_d3d12_CreatePlacedResource12(wire, staging, upload_heap, 0u, buffer_of(texel_pitch * texels),
+    CHECK(av_d3d12_CreatePlacedResource12(wire, staging, upload_heap, 0u, buffer_of(texel_pitch * texels),
                                            state_generic_read, ClearValue{}, upload_address));
-    CHECK(rvk_d3d12_CreateCommittedResource12(wire, texture, heap_of(heap_default), 0u, texture_of(texels, 0u),
+    CHECK(av_d3d12_CreateCommittedResource12(wire, texture, heap_of(heap_default), 0u, texture_of(texels, 0u),
                                               state_copy_dest, ClearValue{}, 0u));
     CopyLocation into = {};
     into.resource = texture;
@@ -228,10 +228,10 @@ void upload_texture(av::D3dLoopback &wire)
     from.height = texels;
     from.depth = 1u;
     from.row_pitch = texel_pitch;
-    CHECK(rvk_d3d12_CopyTextureRegion12(wire, list, into, 0u, 0u, 0u, from, 0u, Box{}));
+    CHECK(av_d3d12_CopyTextureRegion12(wire, list, into, 0u, 0u, 0u, from, 0u, Box{}));
     const Barrier to_read = {0u, 0u, texture, 0xffffffffu, state_copy_dest, state_pixel_resource, 0u, 0u};
-    CHECK(rvk_d3d12_ResourceBarrier12(wire, list, 1u, &to_read));
-    CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_view, 2u, heap_shader_visible));
+    CHECK(av_d3d12_ResourceBarrier12(wire, list, 1u, &to_read));
+    CHECK(av_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_view, 2u, heap_shader_visible));
     /* The view as the guest's driver writes it: Texture2D's MostDetailedMip,
      * MipLevels and PlaneSlice. */
     ViewDesc view = {};
@@ -240,7 +240,7 @@ void upload_texture(av::D3dLoopback &wire)
     view.dimension = view_texture2d;
     view.mapping = default_mapping;
     view.args[1] = 1u;
-    CHECK(rvk_d3d12_CreateShaderResourceView12(wire, DescriptorRef{view_heap, 1u}, 1u, view));
+    CHECK(av_d3d12_CreateShaderResourceView12(wire, DescriptorRef{view_heap, 1u}, 1u, view));
 }
 
 /* A root signature of one table (t0) and a point sampler (s0), and the
@@ -254,7 +254,7 @@ void make_textured_pipeline(av::D3dLoopback &wire, std::uint32_t sample_count)
     sampler.comparison = 1u;
     sampler.max_lod = 1000.0f;
     sampler.visibility = visibility_pixel;
-    CHECK(rvk_d3d12_CreateRootSignature12(wire, root, 0u, 1u, &table, 1u, &range, 1u, &sampler));
+    CHECK(av_d3d12_CreateRootSignature12(wire, root, 0u, 1u, &table, 1u, &range, 1u, &sampler));
     GraphicsState state = {};
     for (RenderTargetBlend &blend : state.targets) {
         blend.src_blend = blend.src_blend_alpha = 2u;
@@ -276,7 +276,7 @@ void make_textured_pipeline(av::D3dLoopback &wire, std::uint32_t sample_count)
     std::uint32_t  count = 0u;
     for (const SignatureEntry &entry : textured_vs::signatures) signatures[count++] = entry;
     for (const SignatureEntry &entry : textured_ps::signatures) signatures[count++] = entry;
-    CHECK(rvk_d3d12_CreateGraphicsPipeline12(wire, pipeline, root, state, 0u, nullptr, count, signatures,
+    CHECK(av_d3d12_CreateGraphicsPipeline12(wire, pipeline, root, state, 0u, nullptr, count, signatures,
                                              textured_vs::program, textured_vs::program_bytes, nullptr, 0u, nullptr,
                                              0u, nullptr, 0u, textured_ps::program, textured_ps::program_bytes));
 }
@@ -301,26 +301,26 @@ TEST(d3d12_session_features_device, a_texture_from_guest_memory_is_sampled_throu
     make_target(wire);
     upload_texture(wire);
     make_textured_pipeline(wire, 1u);
-    CHECK(rvk_d3d12_CreateQueryHeap12(wire, queries, query_occlusion, 1u));
+    CHECK(av_d3d12_CreateQueryHeap12(wire, queries, query_occlusion, 1u));
     CHECK_EQ(wire.refused(), 0u);
 
     const DescriptorRef targets[1] = {{rtv_heap, 0u}};
-    CHECK(rvk_d3d12_SetRenderTargets12(wire, list, 1u, targets, 0u, DescriptorRef{}));
+    CHECK(av_d3d12_SetRenderTargets12(wire, list, 1u, targets, 0u, DescriptorRef{}));
     const Viewport viewport = {0.0f, 0.0f, float(size), float(size), 0.0f, 1.0f};
-    CHECK(rvk_d3d12_SetViewports12(wire, list, 1u, &viewport));
+    CHECK(av_d3d12_SetViewports12(wire, list, 1u, &viewport));
     const Rect scissor = {0, 0, int(size), int(size)};
-    CHECK(rvk_d3d12_SetScissorRects12(wire, list, 1u, &scissor));
+    CHECK(av_d3d12_SetScissorRects12(wire, list, 1u, &scissor));
     const std::uint32_t heaps[1] = {view_heap};
-    CHECK(rvk_d3d12_SetDescriptorHeaps12(wire, list, 1u, heaps));
-    CHECK(rvk_d3d12_SetRootSignature12(wire, list, 0u, root));
-    CHECK(rvk_d3d12_SetPipelineState12(wire, list, pipeline));
-    CHECK(rvk_d3d12_SetRootDescriptorTable12(wire, list, 0u, 0u, DescriptorRef{view_heap, 1u}));
-    CHECK(rvk_d3d12_SetTopology12(wire, list, 4u));
-    CHECK(rvk_d3d12_BeginQuery12(wire, list, queries, query_occlusion, 0u));
-    CHECK(rvk_d3d12_DrawInstanced12(wire, list, 3u, 1u, 0u, 0u));
-    CHECK(rvk_d3d12_EndQuery12(wire, list, queries, query_occlusion, 0u));
+    CHECK(av_d3d12_SetDescriptorHeaps12(wire, list, 1u, heaps));
+    CHECK(av_d3d12_SetRootSignature12(wire, list, 0u, root));
+    CHECK(av_d3d12_SetPipelineState12(wire, list, pipeline));
+    CHECK(av_d3d12_SetRootDescriptorTable12(wire, list, 0u, 0u, DescriptorRef{view_heap, 1u}));
+    CHECK(av_d3d12_SetTopology12(wire, list, 4u));
+    CHECK(av_d3d12_BeginQuery12(wire, list, queries, query_occlusion, 0u));
+    CHECK(av_d3d12_DrawInstanced12(wire, list, 3u, 1u, 0u, 0u));
+    CHECK(av_d3d12_EndQuery12(wire, list, queries, query_occlusion, 0u));
     copy_frame(wire);
-    CHECK(rvk_d3d12_ResolveQueryData12(wire, list, queries, query_occlusion, 0u, 1u, readback, query_offset - 8u));
+    CHECK(av_d3d12_ResolveQueryData12(wire, list, queries, query_occlusion, 0u, 1u, readback, query_offset - 8u));
     std::memset(wire.guest(readback_at), 0xcd, query_offset);
     execute(wire, queue, list, 1u);
 
@@ -335,7 +335,7 @@ TEST(d3d12_session_features_device, a_texture_from_guest_memory_is_sampled_throu
     std::memcpy(&passed, wire.guest(readback_at + query_offset - 8u), sizeof(passed));
     CHECK_EQ(passed, std::uint64_t{size} * size);
     std::uint32_t removed = 1u;
-    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK(av_d3d12_Finish12(wire, &removed));
     CHECK_EQ(removed, 0u);
     CHECK_EQ(wire.refused(), 0u);
     CHECK(backend.invariants_hold());
@@ -357,40 +357,40 @@ TEST(d3d12_session_features_device, a_compute_dispatch_writes_through_a_view_wit
     }
     make_device(wire);
     open_list(wire, list_compute, compute_queue, compute_allocator, compute_list);
-    CHECK(rvk_d3d12_CreateCommittedResource12(wire, written, heap_of(heap_default), 0u,
+    CHECK(av_d3d12_CreateCommittedResource12(wire, written, heap_of(heap_default), 0u,
                                               buffer_of(fill_count * 4u, flag_unordered), state_unordered,
                                               ClearValue{}, buffer_address));
-    CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_view, 1u, heap_shader_visible));
+    CHECK(av_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_view, 1u, heap_shader_visible));
     ViewDesc view = {};
     view.resource = written;
     view.dimension = view_buffer;
     view.args[0] = fill_count;
     view.args[1] = 4u; /* StructureByteStride */
-    CHECK(rvk_d3d12_CreateUnorderedAccessView12(wire, DescriptorRef{view_heap, 0u}, 1u, view));
+    CHECK(av_d3d12_CreateUnorderedAccessView12(wire, DescriptorRef{view_heap, 0u}, 1u, view));
     const DescriptorRange range = {range_uav, 1u, 0u, 0u, 0u, 0u};
     const RootParameter   parameters[2] = {{parameter_constants, visibility_all, 0u, 0u, 1u, 0u, 0u, 0u},
                                            {parameter_table, visibility_all, 0u, 0u, 0u, 0u, 1u, 0u}};
-    CHECK(rvk_d3d12_CreateRootSignature12(wire, root, 0u, 2u, parameters, 1u, &range, 0u, nullptr));
-    CHECK(rvk_d3d12_CreateComputePipeline12(wire, pipeline, root, fill_cs::program, fill_cs::program_bytes));
+    CHECK(av_d3d12_CreateRootSignature12(wire, root, 0u, 2u, parameters, 1u, &range, 0u, nullptr));
+    CHECK(av_d3d12_CreateComputePipeline12(wire, pipeline, root, fill_cs::program, fill_cs::program_bytes));
 
     const std::uint32_t heaps[1] = {view_heap};
-    CHECK(rvk_d3d12_SetDescriptorHeaps12(wire, compute_list, 1u, heaps));
-    CHECK(rvk_d3d12_SetRootSignature12(wire, compute_list, 1u, root));
-    CHECK(rvk_d3d12_SetPipelineState12(wire, compute_list, pipeline));
+    CHECK(av_d3d12_SetDescriptorHeaps12(wire, compute_list, 1u, heaps));
+    CHECK(av_d3d12_SetRootSignature12(wire, compute_list, 1u, root));
+    CHECK(av_d3d12_SetPipelineState12(wire, compute_list, pipeline));
     const std::uint32_t base = fill_base;
-    CHECK(rvk_d3d12_SetRootConstants12(wire, compute_list, 1u, 0u, 0u, 1u, &base));
-    CHECK(rvk_d3d12_SetRootDescriptorTable12(wire, compute_list, 1u, 1u, DescriptorRef{view_heap, 0u}));
-    CHECK(rvk_d3d12_Dispatch12(wire, compute_list, fill_count / 64u, 1u, 1u));
+    CHECK(av_d3d12_SetRootConstants12(wire, compute_list, 1u, 0u, 0u, 1u, &base));
+    CHECK(av_d3d12_SetRootDescriptorTable12(wire, compute_list, 1u, 1u, DescriptorRef{view_heap, 0u}));
+    CHECK(av_d3d12_Dispatch12(wire, compute_list, fill_count / 64u, 1u, 1u));
     const Barrier to_copy = {0u, 0u, written, 0xffffffffu, state_unordered, state_copy_source, 0u, 0u};
-    CHECK(rvk_d3d12_ResourceBarrier12(wire, compute_list, 1u, &to_copy));
-    CHECK(rvk_d3d12_CopyBufferRegion12(wire, compute_list, readback, 0u, written, 0u, fill_count * 4u));
+    CHECK(av_d3d12_ResourceBarrier12(wire, compute_list, 1u, &to_copy));
+    CHECK(av_d3d12_CopyBufferRegion12(wire, compute_list, readback, 0u, written, 0u, fill_count * 4u));
     std::memset(wire.guest(readback_at), 0xcd, fill_count * 4u);
     execute(wire, compute_queue, compute_list, 1u);
 
     const std::uint32_t judged[] = {0u, 1u, 63u, 64u, 255u};
     for (const std::uint32_t index : judged) CHECK_EQ(word_at(wire, index * 4u), fill_base + index * 3u);
     std::uint32_t removed = 1u;
-    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK(av_d3d12_Finish12(wire, &removed));
     CHECK_EQ(removed, 0u);
     CHECK_EQ(wire.refused(), 0u);
     CHECK(backend.invariants_hold());
@@ -414,37 +414,37 @@ TEST(d3d12_session_features_device, a_multisampled_target_resolves_into_a_single
     open_list(wire, list_direct, queue, allocator, list);
     make_target(wire);
     std::uint32_t support1 = 0u, support2 = 0u, levels = 0u;
-    CHECK(rvk_d3d12_QueryFormat12(wire, format_b8g8r8a8, samples, &support1, &support2, &levels));
+    CHECK(av_d3d12_QueryFormat12(wire, format_b8g8r8a8, samples, &support1, &support2, &levels));
     if (levels == 0u) {
         std::fprintf(stderr, "no 4x multisampling of B8G8R8A8 here: nothing judged\n");
         backend.shut_down();
         return;
     }
-    CHECK(rvk_d3d12_CreateCommittedResource12(wire, multisampled, heap_of(heap_default), 0u,
+    CHECK(av_d3d12_CreateCommittedResource12(wire, multisampled, heap_of(heap_default), 0u,
                                               texture_of(size, flag_render_target, samples), state_render_target,
                                               ClearValue{}, 0u));
-    CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_rtv, 1u, 0u));
+    CHECK(av_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_rtv, 1u, 0u));
     /* The view as the guest writes one of a multisampled texture: 2DMS. */
     ViewDesc view = {};
     view.resource = multisampled;
     view.format = format_b8g8r8a8;
     view.dimension = 6u;
-    CHECK(rvk_d3d12_CreateRenderTargetView12(wire, DescriptorRef{view_heap, 0u}, 1u, view));
-    CHECK(rvk_d3d12_ClearRenderTargetView12(wire, list, DescriptorRef{view_heap, 0u}, Float4{{1.0f, 0.0f, 1.0f, 1.0f}},
+    CHECK(av_d3d12_CreateRenderTargetView12(wire, DescriptorRef{view_heap, 0u}, 1u, view));
+    CHECK(av_d3d12_ClearRenderTargetView12(wire, list, DescriptorRef{view_heap, 0u}, Float4{{1.0f, 0.0f, 1.0f, 1.0f}},
                                             0u, nullptr));
     const Barrier to_resolve[2] = {
         {0u, 0u, multisampled, 0xffffffffu, state_render_target, state_resolve_source, 0u, 0u},
         {0u, 0u, target, 0xffffffffu, state_render_target, state_resolve_dest, 0u, 0u}};
-    CHECK(rvk_d3d12_ResourceBarrier12(wire, list, 2u, to_resolve));
-    CHECK(rvk_d3d12_ResolveSubresource12(wire, list, target, 0u, multisampled, 0u, format_b8g8r8a8));
+    CHECK(av_d3d12_ResourceBarrier12(wire, list, 2u, to_resolve));
+    CHECK(av_d3d12_ResolveSubresource12(wire, list, target, 0u, multisampled, 0u, format_b8g8r8a8));
     const Barrier back = {0u, 0u, target, 0xffffffffu, state_resolve_dest, state_render_target, 0u, 0u};
-    CHECK(rvk_d3d12_ResourceBarrier12(wire, list, 1u, &back));
+    CHECK(av_d3d12_ResourceBarrier12(wire, list, 1u, &back));
     copy_frame(wire);
     execute(wire, queue, list, 1u);
     CHECK_EQ(pixel(wire, 0u, 0u), 0xffff00ffu);
     CHECK_EQ(pixel(wire, size - 1u, size - 1u), 0xffff00ffu);
     std::uint32_t removed = 1u;
-    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK(av_d3d12_Finish12(wire, &removed));
     CHECK_EQ(removed, 0u);
     CHECK_EQ(wire.refused(), 0u);
     backend.shut_down();

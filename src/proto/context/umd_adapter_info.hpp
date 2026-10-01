@@ -1,4 +1,4 @@
-/* What rvkgpu.sys answers a user-mode driver's UMDRIVERPRIVATE query with:
+/* What avgpu.sys answers a user-mode driver's UMDRIVERPRIVATE query with:
  * which adapter the runtime opened, and what the device under it offers the
  * user-mode driver beyond the capset. A user-mode driver from before the
  * features asks for the first two words and gets them; one that asks for all
@@ -35,7 +35,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint64_t tag = 0x44494C554B5652ull;   /* "RVKULID" */
+    static constexpr uint64_t tag = 0x0044494C555641ull;   /* "AVULID" */
 
     uint64_t luid_;
     uint64_t features_;

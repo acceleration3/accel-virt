@@ -108,7 +108,7 @@ DXVK's queue through its interop interface.
 
 `SharedSurfaces` is a system class. There is one per device, which is one
 adapter and so one id space. It lives in whichever process runs the device's
-contexts: QEMU's for the local plane, `rvk-renderer`'s for the isolated one.
+contexts: QEMU's for the local plane, `av-renderer`'s for the isolated one.
 The plane owns it beside `HostSharedObjects`, which it absorbs (§4, step 4).
 
 It is injected into every API backend of every context of the device, and into

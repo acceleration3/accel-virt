@@ -35,7 +35,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x594B5652u;  /* "RVKY" */
+    static constexpr uint32_t magic = 0x00595641u;  /* "AVY" */
 
     ReplyHeader(uint32_t status, uint64_t fence_id, uint32_t size, uint32_t required);
     bool fields_valid() const;

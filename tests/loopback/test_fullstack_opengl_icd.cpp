@@ -7,7 +7,7 @@
  * lands in a texture of the application's own. A host without OpenGL has
  * nothing here to judge, and the test returns without checking. */
 #include "core/trace/state_writer.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "guest/suite/gl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "harness/guest/directory_image_sink.hpp"
@@ -58,7 +58,7 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libz\n"
            "leak:libLLVM\n"
            "leak:libgallium\n"
-           "leak:librvk_executor\n";
+           "leak:libav_executor\n";
 }
 
 using av::DdiKmt;
@@ -142,9 +142,9 @@ private:
 /* GL_RENDERER as the executor answers it with no guest in between: the host
  * GPU's own name, which the ICD must hand the application unchanged. The reply
  * is a present flag, a length and the bytes. */
-bool host_renderer(const RvkExecutorOps &ops, const std::uint8_t *uuid, char *out)
+bool host_renderer(const AvExecutorOps &ops, const std::uint8_t *uuid, char *out)
 {
-    RvkExecutor *const executor = ops.create(ops.opaque, RVK_EXECUTOR_SUB_API_OPENGL, uuid);
+    AvExecutor *const executor = ops.create(ops.opaque, AV_EXECUTOR_SUB_API_OPENGL, uuid);
     if (executor == nullptr) return false;
     const std::uint8_t name[] = {0x81u, 0x3Eu};
     std::uint8_t       reply[renderer_bytes] = {};
@@ -152,7 +152,7 @@ bool host_renderer(const RvkExecutorOps &ops, const std::uint8_t *uuid, char *ou
     const std::uint32_t ran = ops.execute(ops.opaque, executor, av::glproto::kCmd_glGetString, name, sizeof name,
                                           reply, sizeof reply, &length);
     ops.destroy(ops.opaque, executor);
-    if (ran != RVK_EXECUTED || length < 2u || reply[0] != 1u || reply[1] >= 0x80u) return false;
+    if (ran != AV_EXECUTED || length < 2u || reply[0] != 1u || reply[1] >= 0x80u) return false;
     const std::size_t text = reply[1];
     if (2u + text > length) return false;
     std::memcpy(out, reply + 2u, text);
@@ -186,7 +186,7 @@ bool version_of(const char *version, unsigned &major, unsigned &minor)
 
 TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_through_the_arena)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -274,7 +274,7 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
  * once. */
 TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -369,7 +369,7 @@ TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_th
  * the device holding no context once the process is gone. */
 TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -379,7 +379,7 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
   { GlProcess process(rig.kmt());
     CHECK(process.opengl32().load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);
     av::Opengl32GlEntry gl(process.opengl32(), process.threads(), process.dc(), window_side, window_side);
-    av::GuestReport     report("rvkglprobe");
+    av::GuestReport     report("avglprobe");
     av::DirectoryImageSink images(AV_IMAGE_DIR);
     av::GlProbe         probe(rig.kmt(), report, gl, images);
     probe.run();

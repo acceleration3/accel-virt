@@ -10,9 +10,9 @@ ClContextRig::ClContextRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), send_lock_(trace_, 'S'), log_(), connection_(kmt_),
       handles_lock_(trace_, 'H'), handles_(kmt_, handles_lock_)
 {
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-    kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+    kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     /* The transport watches the reply slot for a budget of the guest's clock
      * before it asks the kernel to wait, and a command no answer was queued
      * for is one it would watch for ever on a clock that never moves. */

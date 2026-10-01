@@ -2,7 +2,7 @@
 """The OpenCL samples (samples/opencl) on the host and in the guest, side by side.
 
 Runs the same program twice - natively on the host through its own OpenCL, and
-in the running guest through the Khronos loader, rvkcl.dll, the device and the
+in the running guest through the Khronos loader, avcl.dll, the device and the
 executor - and writes an HTML report: each sample's output from both (a picture,
 a buffer, or both), how they differ, and how fast each ran.
 
@@ -10,7 +10,7 @@ a buffer, or both), how they differ, and how fast each ran.
     tools/opencl_report.py --host-only -o build-samples/opencl-report
 
 The guest must already be running a build of this tree (run_guest_suite.py
---keep), so that its rvkcl.dll is the one these samples were written against.
+--keep), so that its avcl.dll is the one these samples were written against.
 Both runs compile the same OpenCL C on the same host GPU, so a picture or a
 buffer that differs is a difference the driver made.
 """
@@ -30,10 +30,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from d3d11_report import compare, guest_shell, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GUEST_DIR = "C:\\rvk\\clsamples"
-GUEST_EXE = GUEST_DIR + "\\rvkclsamples.exe"
+GUEST_DIR = "C:\\av\\clsamples"
+GUEST_EXE = GUEST_DIR + "\\avclsamples.exe"
 
-BUFFER_MAGIC = 0x424B5652  # "RVKB"
+BUFFER_MAGIC = 0x00425641  # "AVB"
 ELEMENTS = {1: "I", 2: "f", 3: "i"}
 # A float that differs by less than this, relative or absolute, is the same
 # answer computed in another order; the same device and compiler give none.
@@ -42,11 +42,11 @@ ABSOLUTE_TOLERANCE = 1e-6
 
 
 def build(args):
-    targets = ["rvkclsamples_host"]
+    targets = ["avclsamples_host"]
     if args.loopback:
-        targets.append("rvkclsamples_loopback")
+        targets.append("avclsamples_loopback")
     elif not args.host_only:
-        targets.append("rvktest")
+        targets.append("avtest")
     for target in targets:
         subprocess.run(["cmake", "--build", str(args.build), "--target", target], check=True,
                        stdout=subprocess.DEVNULL)
@@ -59,26 +59,26 @@ def run_guest(args, out):
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out | Out-Null")
     # The loader beside the program, where Windows looks first: the run is the
-    # cross-built Khronos loader's, finding rvkcl.dll through the adapter.
+    # cross-built Khronos loader's, finding avcl.dll through the adapter.
     guest_shell(work, "push", str(guest / "OpenCL.dll"), GUEST_DIR + "\\OpenCL.dll")
-    guest_shell(work, "push", str(guest / "rvkclsamples.exe"), GUEST_EXE)
+    guest_shell(work, "push", str(guest / "avclsamples.exe"), GUEST_EXE)
     print("guest: running", flush=True)
     only = f" --only {args.only}" if args.only else ""
     command = (f"{GUEST_EXE} --out {GUEST_DIR}\\out --frames {args.frames} --warmup {args.warmup}{only} "
                f"> {GUEST_DIR}\\run.txt 2>&1")
-    # The user's interactive session: with more than one rvkgpu adapter the ICD
+    # The user's interactive session: with more than one avgpu adapter the ICD
     # takes the one the primary display is on, and the agent's session has no
     # display to ask - there it would take whichever the kernel lists first.
     output = guest_shell(work, "ps", f"""
-Unregister-ScheduledTask -TaskName rvkclsamples -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName avclsamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c cd /d {GUEST_DIR} && {command}'
 $p = New-ScheduledTaskPrincipal -UserId '{args.guest_user}' -LogonType Interactive -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-Register-ScheduledTask -TaskName rvkclsamples -Action $a -Principal $p -Settings $s | Out-Null
-Start-ScheduledTask -TaskName rvkclsamples
+Register-ScheduledTask -TaskName avclsamples -Action $a -Principal $p -Settings $s | Out-Null
+Start-ScheduledTask -TaskName avclsamples
 Start-Sleep 2
-while ((Get-ScheduledTask rvkclsamples).State -eq 'Running') {{ Start-Sleep 1 }}
-'exit: ' + (Get-ScheduledTaskInfo rvkclsamples).LastTaskResult
+while ((Get-ScheduledTask avclsamples).State -eq 'Running') {{ Start-Sleep 1 }}
+'exit: ' + (Get-ScheduledTaskInfo avclsamples).LastTaskResult
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
@@ -118,14 +118,14 @@ $writer.Close()""")
 
 
 def run_loopback(args, out):
-    """The guest's path without a guest: rvkcl's core, the driver, the device
+    """The guest's path without a guest: avcl's core, the driver, the device
     core and the executor library in one host process (the L4 rig), in the
     VM's column. What it shows is whether the ICD carries every sample right;
     its speed is the sanitized single-process rig's, not a VM's."""
     print("loopback: running", flush=True)
     shutil.rmtree(out / "guest", ignore_errors=True)
     (out / "guest").mkdir(parents=True)
-    command = [str(args.build / "rvkclsamples_loopback"), "--out", str(out / "guest"), "--frames", str(args.frames),
+    command = [str(args.build / "avclsamples_loopback"), "--out", str(out / "guest"), "--frames", str(args.frames),
                "--warmup", str(args.warmup)]
     if args.only:
         command += ["--only", args.only]
@@ -139,7 +139,7 @@ def run_host(args, out):
     print("host: running", flush=True)
     shutil.rmtree(out / "host", ignore_errors=True)
     (out / "host").mkdir(parents=True)
-    command = [str(args.build / "rvkclsamples_host"), "--out", str(out / "host"), "--frames", str(args.frames),
+    command = [str(args.build / "avclsamples_host"), "--out", str(out / "host"), "--frames", str(args.frames),
                "--warmup", str(args.warmup), "--device", str(args.device)]
     if args.only:
         command += ["--only", args.only]
@@ -293,7 +293,7 @@ th {{ color:var(--muted); font-weight:500; }}
 <div class="muted">{html.escape(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))}
 &middot; {args.warmup} warm-up iterations (at least 1 s), then blocks of {args.frames} iterations with a clFinish each, for at least 1 s
 &middot; host: {html.escape(device or "the host's OpenCL")}
-&middot; {vm}: {html.escape(vm_device or "not run")} ({"rvkcl&apos;s core, the driver, the device core and the executor in one host process" if args.loopback else "Khronos loader &rarr; rvkcl &rarr; virtio-gpu-rvk &rarr; the host&apos;s OpenCL"})</div>
+&middot; {vm}: {html.escape(vm_device or "not run")} ({"avcl&apos;s core, the driver, the device core and the executor in one host process" if args.loopback else "Khronos loader &rarr; avcl &rarr; virtio-gpu-av &rarr; the host&apos;s OpenCL"})</div>
 <div class="summary">
 <div class="stat"><span class="muted">samples</span><b>{len(rows)}</b></div>
 <div class="stat"><span class="muted">correct on the host</span><b>{ok_host} / {len(rows)}</b></div>
@@ -326,7 +326,7 @@ def sample_section(r, label, tone, vm):
     if r["has_image"]:
         section.append(f"""<div class="images">
 <figure><img src="img/{name}-host.png" alt="host"><figcaption>host (native OpenCL)</figcaption></figure>
-<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>{vm} (rvkcl)</figcaption></figure>
+<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>{vm} (avcl)</figcaption></figure>
 <figure><img src="img/{name}-diff.png" alt="difference"><figcaption>difference, largest channel &times;8</figcaption></figure>
 </div>""")
     section.append(f"""<div class="wrap"><table>
@@ -352,7 +352,7 @@ def main():
     parser.add_argument("--work", type=pathlib.Path, default=ROOT / "build-guest-render",
                         help="the running guest's work directory")
     parser.add_argument("--build", type=pathlib.Path, default=ROOT / "build",
-                        help="the build tree holding rvkclsamples_host and guest/rvkclsamples.exe")
+                        help="the build tree holding avclsamples_host and guest/avclsamples.exe")
     parser.add_argument("-o", "--out", type=pathlib.Path, default=ROOT / "build-samples" / "opencl-report")
     parser.add_argument("--frames", type=int, default=20, help="iterations per timed block")
     parser.add_argument("--warmup", type=int, default=10)
@@ -364,7 +364,7 @@ def main():
     parser.add_argument("--host-only", action="store_true", help="run nothing in the guest; report the host alone")
     parser.add_argument("--loopback", action="store_true",
                         help="no guest: run the suite through the ICD, driver, device and executor in one host "
-                             "process (rvkclsamples_loopback) and report it in the VM's column")
+                             "process (avclsamples_loopback) and report it in the VM's column")
     args = parser.parse_args()
     if not args.no_build:
         build(args)

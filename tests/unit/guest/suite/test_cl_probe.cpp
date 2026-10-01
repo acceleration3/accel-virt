@@ -1,6 +1,6 @@
 /* The CL probe over a scripted OpenCL (feature 052, T029): every step's line
  * as tools/guest/run_guest_suite.py reads it, the platform picked out of the
- * ones a loader lists by its RVK suffix, the device's LUID, the compiler's log
+ * ones a loader lists by its AV suffix, the device's LUID, the compiler's log
  * when a build fails, and a vector add read back and compared with what the
  * inputs add to - the scripted ClEntry really adds them, so the sum step
  * judges arithmetic rather than itself. A failure at each call is reported and
@@ -65,7 +65,7 @@ public:
      * its deadline in forty reads rather than in real time. */
     static constexpr std::uint64_t clock_step = MockKmt::ticks_per_second / 8u;
 
-    ProbeRig() : report_("rvkclprobe") { kmt_.reads_clock(nullptr, clock_step); }
+    ProbeRig() : report_("avclprobe") { kmt_.reads_clock(nullptr, clock_step); }
     ~ProbeRig()
     {
         /* Nothing was released twice, and nothing the run made up. */
@@ -100,7 +100,7 @@ TEST(cl_probe, every_step_passes_on_an_opencl_that_does_what_it_is_asked)
                                          "ok opencl.platform 1\n"
                                          "ok opencl.device_ids\n"
                                          "ok opencl.device 1\n"
-                                         "note opencl.device_name scripted rvkgpu\n"
+                                         "note opencl.device_name scripted avgpu\n"
                                          "ok opencl.luid 4660\n"
                                          "ok opencl.context\n"
                                          "ok opencl.queue\n"
@@ -122,7 +122,7 @@ TEST(cl_probe, every_step_passes_on_an_opencl_that_does_what_it_is_asked)
                                          "ok opencl.wait\n"
                                          "ok opencl.callback 1\n"
                                          "ok opencl.release\n"
-                                         "rvkclprobe: 26 passed, 0 failed\n") == 0);
+                                         "avclprobe: 26 passed, 0 failed\n") == 0);
   /* One dispatch of the vector add, the three buffers it ran over given back,
    * and the shared allocation freed. */
   CHECK_EQ(rig.cl().calls(Call::run_kernel), 1u);
@@ -134,21 +134,21 @@ TEST(cl_probe, every_step_passes_on_an_opencl_that_does_what_it_is_asked)
   CHECK_EQ(rig.cl().calls(Call::release_event), 1u);
   CHECK_EQ(rig.cl().live_objects(), 0u); }
 
-TEST(cl_probe, the_platform_taken_is_the_one_whose_icd_suffix_is_rvk)
+TEST(cl_probe, the_platform_taken_is_the_one_whose_icd_suffix_is_av)
 { ProbeRig rig;
   /* What a machine with three vendors' ICDs installed lists, this driver's
    * last. */
   rig.cl().set_platform_suffix(0u, "INTEL");
   rig.cl().add_platform("AMD");
-  rig.cl().add_platform("RVK");
+  rig.cl().add_platform("AV");
   rig.run();
   CHECK(rig.holds("ok opencl.platform 3\n"));
-  CHECK(std::strcmp(rig.cl().asked_devices_of(), "RVK") == 0);
+  CHECK(std::strcmp(rig.cl().asked_devices_of(), "AV") == 0);
   CHECK(rig.holds("ok opencl.sum 0\n"));
   CHECK_EQ(rig.cl().live_objects(), 0u); }
 
-TEST(cl_probe, no_platform_with_the_rvk_suffix_ends_the_run)
-{ const char *const suffixes[] = {"INTEL", "RVKX", "rvk", "RV", ""};
+TEST(cl_probe, no_platform_with_the_av_suffix_ends_the_run)
+{ const char *const suffixes[] = {"INTEL", "AVX", "av", "RV", ""};
   for (const char *const suffix : suffixes) {
     ProbeRig rig;
     rig.cl().set_platform_suffix(0u, suffix);
@@ -157,13 +157,13 @@ TEST(cl_probe, no_platform_with_the_rvk_suffix_ends_the_run)
                                            "ok opencl.platforms\n"
                                            "FAIL opencl.platform status=3 1\n"
                                             "ok opencl.release\n"
-                                           "rvkclprobe: 3 passed, 1 failed\n") == 0);
+                                           "avclprobe: 3 passed, 1 failed\n") == 0);
     CHECK_EQ(rig.cl().calls(Call::create_context), 0u);
   }
   /* The suffix among others still ends the search on itself. */
   ProbeRig found;
-  found.cl().set_platform_suffix(0u, "RVKX");
-  found.cl().add_platform("RVK");
+  found.cl().set_platform_suffix(0u, "AVX");
+  found.cl().add_platform("AV");
   found.run();
   CHECK(found.holds("ok opencl.platform 2\n")); }
 
@@ -210,7 +210,7 @@ TEST(cl_probe, a_build_that_failed_reports_what_the_compiler_said)
   CHECK(rig.holds("note opencl.build_log vector_add.cl:5:9: error: no matching function\n"));
   CHECK(rig.holds("FAIL opencl.build status=7 4294967285\n"));
   /* Nothing past the build can run. */
-  CHECK(rig.holds("rvkclprobe: 13 passed, 1 failed\n"));
+  CHECK(rig.holds("avclprobe: 13 passed, 1 failed\n"));
   CHECK_EQ(rig.cl().calls(Call::create_kernel), 0u);
   /* A build that failed and a log that cannot be read: the failure is still
    * reported, with no note. */
@@ -265,7 +265,7 @@ TEST(cl_probe, a_device_that_offers_no_shared_memory_is_noted_rather_than_failed
   CHECK(!rig.holds("FAIL opencl.svm"));
   CHECK_EQ(rig.cl().calls(Call::set_kernel_svm), 0u);
   /* Everything else still passes: the run is one step shorter, not failed. */
-  CHECK(rig.holds("rvkclprobe: 25 passed, 0 failed\n"));
+  CHECK(rig.holds("avclprobe: 25 passed, 0 failed\n"));
   CHECK_EQ(rig.cl().live_objects(), 0u);
   /* A device that offers shared memory and then will not allocate it, and one
    * that will not take the pointer as an argument: both fail the step, and
@@ -381,17 +381,17 @@ TEST(cl_probe, a_failure_at_any_call_of_the_run_is_reported_where_it_happened)
   counted.run();
   CHECK(std::strcmp(counted.report().text(), "FAIL opencl.platform_count status=7 4294967266\n"
                                             "ok opencl.release\n"
-                                             "rvkclprobe: 1 passed, 1 failed\n") == 0);
+                                             "avclprobe: 1 passed, 1 failed\n") == 0);
   ProbeRig listed;
   listed.cl().fail_at(Call::platforms, 1u, ScriptedCl::refused);
   listed.run();
   CHECK(std::strcmp(listed.report().text(), "ok opencl.platform_count\n"
                                             "FAIL opencl.platforms status=7 4294967266\n"
                                             "ok opencl.release\n"
-                                            "rvkclprobe: 2 passed, 1 failed\n") == 0);
+                                            "avclprobe: 2 passed, 1 failed\n") == 0);
   /* A platform whose suffix cannot be read is one the search walks past. */
   ProbeRig silent;
-  silent.cl().add_platform("RVK");
+  silent.cl().add_platform("AV");
   silent.cl().fail_at(Call::platform_text, 1u, ScriptedCl::refused);
   silent.run();
   CHECK(silent.holds("ok opencl.platform 2\n"));
@@ -411,7 +411,7 @@ TEST(cl_probe, a_failure_at_any_call_of_the_run_is_reported_where_it_happened)
 TEST(cl_probe, what_the_icds_thread_calls_counts_deliveries_rather_than_the_last_one)
 { MockKmt     kmt;
   ScriptedCl  cl;
-  GuestReport report("rvkclprobe");
+  GuestReport report("avclprobe");
   ClProbe     probe(kmt, report, cl);
   /* The entry the ICD's own thread reaches, which is why it is public and why
    * what it writes into is a member: it may be called after the step that
@@ -427,13 +427,13 @@ TEST(cl_probe, what_the_icds_thread_calls_counts_deliveries_rather_than_the_last
 /* The platform this driver owns is found by its ICD suffix, and a machine may
  * have others: the loader lists them all, and a suffix that merely starts the
  * same way is not this one. */
-TEST(cl_probe, a_platform_whose_suffix_is_not_rvk_is_not_this_driver)
+TEST(cl_probe, a_platform_whose_suffix_is_not_av_is_not_this_driver)
 { ProbeRig rig;
   /* One that shares the first letter, one that shares two, and one that is
-   * RVK with more after it - none of them is this driver's. */
+   * AV with more after it - none of them is this driver's. */
   rig.cl().set_platform_suffix(0u, "RXY");
   rig.cl().add_platform("RVX");
-  rig.cl().add_platform("RVKX");
+  rig.cl().add_platform("AVX");
   rig.run();
   CHECK(rig.holds("FAIL opencl.platform status=3 3\n"));
   CHECK_EQ(rig.cl().live_objects(), 0u);
@@ -456,7 +456,7 @@ TEST(cl_probe, a_platform_whose_suffix_is_not_rvk_is_not_this_driver)
   ProbeRig among;
   among.cl().set_platform_suffix(0u, "RXY");
   among.cl().add_platform("RVX");
-  among.cl().add_platform("RVK");
+  among.cl().add_platform("AV");
   among.run();
   CHECK(among.holds("ok opencl.platform 3\n"));
   CHECK_EQ(among.cl().live_objects(), 0u); }
@@ -466,7 +466,7 @@ TEST(cl_probe, a_platform_whose_suffix_is_not_rvk_is_not_this_driver)
 TEST(cl_probe, a_platform_that_will_not_say_what_it_is_is_skipped)
 { ProbeRig rig;
   rig.cl().set_platform_suffix(0u, "RXY");
-  rig.cl().add_platform("RVK");
+  rig.cl().add_platform("AV");
   /* The first platform's suffix query is refused; the second answers. */
   rig.cl().fail_at(Call::platform_text, 1u, ScriptedCl::refused);
   rig.run();

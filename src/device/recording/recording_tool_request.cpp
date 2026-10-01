@@ -59,7 +59,7 @@ RecordingToolRequest::RecordingToolRequest()
 Status RecordingToolRequest::parse(int count, const char *const *arguments, RecordingFilter &filter)
 {
     AV_SCOPE("RecordingToolRequest::parse");
-    if (count < 3 || arguments == nullptr) return refuse("usage: rvkrecord print|replay <recording> ...");
+    if (count < 3 || arguments == nullptr) return refuse("usage: avrecord print|replay <recording> ...");
     if (same(arguments[1], "print")) action_ = Action::print;
     else if (same(arguments[1], "replay")) action_ = Action::replay;
     else return refuse("the first argument is print or replay");

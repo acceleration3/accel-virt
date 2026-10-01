@@ -1,6 +1,6 @@
 """The generated Vulkan and OpenCL clients end every synchronous call on its
-transport (tools/codegen/rvk_codegen/emit/client_dispatch.py and
-tools/codegen/rvk_codegen/opencl/emit.py, feature 045 T046).
+transport (tools/codegen/av_codegen/emit/client_dispatch.py and
+tools/codegen/av_codegen/opencl/emit.py, feature 045 T046).
 
 A synchronous call's reply is decoded from the transport's reply slot after
 send_sync returns, so the transport has to learn when the decode is over: the
@@ -19,12 +19,12 @@ from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "codegen"))
 
-from rvk_codegen.emit import client_dispatch  # noqa: E402
-from rvk_codegen.ir import Command, CType, Param, Registry  # noqa: E402
-from rvk_codegen.opencl import emit as opencl_emit  # noqa: E402
-from rvk_codegen.opencl import model as opencl_model  # noqa: E402
+from av_codegen.emit import client_dispatch  # noqa: E402
+from av_codegen.ir import Command, CType, Param, Registry  # noqa: E402
+from av_codegen.opencl import emit as opencl_emit  # noqa: E402
+from av_codegen.opencl import model as opencl_model  # noqa: E402
 
-SCOPE = "const ::av::SyncCallScope rvk_call{t};"
+SCOPE = "const ::av::SyncCallScope av_call{t};"
 
 
 def vk_param(name, base, pointer_depth=0, is_const=False, direction="in"):
@@ -33,7 +33,7 @@ def vk_param(name, base, pointer_depth=0, is_const=False, direction="in"):
 
 
 def function_body(source, name):
-    match = re.search(r"\brvk_" + name + r"\(.*?\) \{\n(.*?)\n\}\n", source, re.S)
+    match = re.search(r"\bav_" + name + r"\(.*?\) \{\n(.*?)\n\}\n", source, re.S)
     assert match is not None, name
     return match.group(1)
 

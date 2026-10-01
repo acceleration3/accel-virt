@@ -47,7 +47,7 @@ void HostFeasibility::log(const char *probe, const ProbeResult &result)
     AV_SCOPE("HostFeasibility::log");
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("virtio-gpu-rvk: probe ");
+    line.append("virtio-gpu-av: probe ");
     line.append(probe);
     line.append(": ");
     result.describe(line);

@@ -74,7 +74,7 @@ std::uint32_t Opengl32GlEntry::make_current_elsewhere(void *context)
 std::int32_t Opengl32GlEntry::force_fault()
 {
     using Force = std::int32_t (APIENTRY *)();
-    const auto hook = reinterpret_cast<Force>(opengl32_.get_proc_address("rvkForceContextFault"));
+    const auto hook = reinterpret_cast<Force>(opengl32_.get_proc_address("avForceContextFault"));
     return hook != nullptr ? hook() : -1;
 }
 

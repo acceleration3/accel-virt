@@ -8,7 +8,7 @@
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/display/vblank_record.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 namespace av {
 
@@ -41,8 +41,8 @@ Status DeviceVblank::attach(VirtioGpuDevice &device)
     AV_SCOPE("DeviceVblank::attach");
     platform_.require_irql_at_most(Irql::passive, "DeviceVblank::attach");
     if (page_.address() == 0u) return Status::invalid_state;
-    uint8_t          request[RvkRequestWriter::max_request_size] = {};
-    RvkRequestWriter writer(request, sizeof request);
+    uint8_t          request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter writer(request, sizeof request);
     static_cast<void>(writer.display_clock(page_.address()));
     uint8_t      answer[response_bytes] = {};
     uint32_t     written = 0u;
@@ -130,7 +130,7 @@ void DeviceVblank::tick(uint64_t now, bool latching)
     phase_.observe(blank.sequence(), now, blank.period_ns());
     if (reporting_) {
         if (report(sources_.shown(target, latching ? blank.latched() : 0u)) == Status::ok) reported_++;
-        else platform_.log("rvkgpu: a vsync was refused");
+        else platform_.log("avgpu: a vsync was refused");
     }
     if (blanks_ >= blanks_per_report) report_rate(now);
 }
@@ -158,7 +158,7 @@ void DeviceVblank::report_rate(uint64_t now)
     AV_SCOPE("DeviceVblank::report_rate");
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: vsync ");
+    line.append("avgpu: vsync ");
     line.append_decimal(blanks_);
     line.append(" blanks in ");
     line.append_decimal(static_cast<uint32_t>(now - window_start_));

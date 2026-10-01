@@ -7,7 +7,7 @@
 #define AV_CONTEXT_PLANE_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "proto/context/sub_api.hpp"
 
 #include <stdint.h>
@@ -24,7 +24,7 @@ class ContextPlane {
 public:
     /* The executor library's table: invalid_parameter for one this ABI does
      * not accept. */
-    [[nodiscard]] virtual Status accept(const RvkExecutorOps *executor) = 0;
+    [[nodiscard]] virtual Status accept(const AvExecutorOps *executor) = 0;
     /* The locks the contexts share: no_memory when the host has none. */
     [[nodiscard]] virtual Status initialize() = 0;
     /* Where the contexts run is made ready for GPU `gpu_uuid` and a capset
@@ -62,14 +62,14 @@ public:
     virtual void renderer_lost() = 0;
 
     /* After every Direct3D stream has run what it published. */
-    virtual bool export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) = 0;
+    virtual bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) = 0;
     virtual bool read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                             uint32_t height) = 0;
     /* Any thread: whether a present snapshot a Direct3D session took can be
      * read here, and the one under `key` mapped and let go
      * (ExecutorLibrary::map_frame). */
     virtual bool reads_frames() const = 0;
-    virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view) = 0;
+    virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) = 0;
     virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
 
     virtual void report(StateWriter &writer) = 0;

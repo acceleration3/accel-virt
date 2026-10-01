@@ -1,5 +1,5 @@
 /* The far end of MockHost's renderer socket: what a test puts where
- * rvk-renderer would be. Each datagram the device sends is delivered with
+ * av-renderer would be. Each datagram the device sends is delivered with
  * descriptors of the peer's own - duplicates, as SCM_RIGHTS makes them - which
  * the peer closes. Each receive asks the peer for its next datagram; a peer
  * with none is a renderer that did not answer in time. */

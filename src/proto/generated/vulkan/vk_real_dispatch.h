@@ -12,7 +12,7 @@ namespace av::vkproto {
 // Concrete ServerDispatch that forwards every command into the host
 // Vulkan loader. Use this when the server should drive a real GPU.
 // VkAllocationCallbacks parameters are always replaced with nullptr
-// — the RVK protocol does not forward the client's allocator.
+// — the AV protocol does not forward the client's allocator.
 class RealVulkanDispatch : public ServerDispatch {
 public:
     void on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks*) override {

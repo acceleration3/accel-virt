@@ -1,7 +1,7 @@
 #include "device/memory/host_shared_object.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/host/host.hpp"
 
 namespace av {
@@ -18,12 +18,12 @@ Status HostSharedObject::take(uint64_t object_id, uint32_t kind, uint32_t handle
     AV_SCOPE("HostSharedObject::take");
     if (live()) return Status::invalid_state;
     if (object_id == 0u || descriptor < 0) return Status::invalid_parameter;
-    if (kind < RVK_SHARED_MEMORY || kind > RVK_SHARED_NATIVE_FENCE) return Status::invalid_parameter;
+    if (kind < AV_SHARED_MEMORY || kind > AV_SHARED_NATIVE_FENCE) return Status::invalid_parameter;
     /* Memory is a length the importer allocates; a semaphore is not a length
      * at all, so one that claims to be is a guest describing something the
      * host cannot make. */
-    if ((kind == RVK_SHARED_MEMORY) != (size != 0u)) return Status::invalid_parameter;
-    if (handle_kind != RVK_SHARED_HANDLE_OPAQUE_FD && handle_kind != RVK_SHARED_HANDLE_DMA_BUF) return Status::invalid_parameter;
+    if ((kind == AV_SHARED_MEMORY) != (size != 0u)) return Status::invalid_parameter;
+    if (handle_kind != AV_SHARED_HANDLE_OPAQUE_FD && handle_kind != AV_SHARED_HANDLE_DMA_BUF) return Status::invalid_parameter;
     id_ = object_id;
     kind_ = kind;
     handle_kind_ = handle_kind;
@@ -114,9 +114,9 @@ bool HostSharedObject::invariants_hold() const
     AV_SCOPE("HostSharedObject::invariants_hold");
     if (!live())
         return kind_ == 0u && handle_kind_ == 0u && size_ == 0u && descriptor_ < 0 && holders_ == 0u;
-    if (kind_ < RVK_SHARED_MEMORY || kind_ > RVK_SHARED_NATIVE_FENCE) return false;
-    if (handle_kind_ != RVK_SHARED_HANDLE_OPAQUE_FD && handle_kind_ != RVK_SHARED_HANDLE_DMA_BUF) return false;
-    if ((kind_ == RVK_SHARED_MEMORY) != (size_ != 0u)) return false;
+    if (kind_ < AV_SHARED_MEMORY || kind_ > AV_SHARED_NATIVE_FENCE) return false;
+    if (handle_kind_ != AV_SHARED_HANDLE_OPAQUE_FD && handle_kind_ != AV_SHARED_HANDLE_DMA_BUF) return false;
+    if ((kind_ == AV_SHARED_MEMORY) != (size_ != 0u)) return false;
     return descriptor_ >= 0 && holders_ != 0u;
 }
 

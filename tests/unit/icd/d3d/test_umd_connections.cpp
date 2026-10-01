@@ -1,4 +1,4 @@
-/* The rvkgpu adapters a process holds, one connection per adapter a runtime
+/* The avgpu adapters a process holds, one connection per adapter a runtime
  * opened: a guest has one per host GPU, and an application choosing among
  * them opens each. */
 #include "core/trace/state_writer.hpp"
@@ -21,18 +21,18 @@ using av::d3d::UmdConnections;
 
 namespace {
 
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 constexpr std::uint64_t first_luid = 0x0000000200001234ull;
 constexpr std::uint64_t second_luid = 0x0000000300005678ull;
 
-/* `count` rvkgpu adapters, the first two under the LUIDs above and the rest
+/* `count` avgpu adapters, the first two under the LUIDs above and the rest
  * under first_luid + index. */
 void add_adapters(MockKmt &kmt, std::uint32_t count)
 {
     for (std::uint32_t index = 0u; index < count; index++) {
-        kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+        kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
         kmt.set_adapter_luid(index, index == 0u ? first_luid : index == 1u ? second_luid : first_luid + index);
     }
 }

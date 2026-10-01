@@ -11,9 +11,9 @@ ClIcdRig::ClIcdRig()
       root_(platform_, kmt_, lock_, send_lock_, log_, watcher_, gl_share_, clicd::cl_icd_binding),
       loader_(root_)
 {
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-    kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+    kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);
     /* The transport watches the reply slot for a budget of the guest's clock
      * before it asks the kernel to wait, and a command no answer was queued

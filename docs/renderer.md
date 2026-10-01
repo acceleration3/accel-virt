@@ -3,7 +3,7 @@
 The host GPU stack - DXVK, vkd3d-proton, the Vulkan, OpenGL and OpenCL
 drivers - runs guest-supplied shaders and command streams. A crash inside it
 used to take QEMU, and the VM, with it. With `renderer=` set, the device runs
-that stack in a separate process, `rvk-renderer`: a crash there loses the
+that stack in a separate process, `av-renderer`: a crash there loses the
 device's contexts, which the guest sees as a device loss it already recovers
 from, and QEMU starts a new renderer.
 

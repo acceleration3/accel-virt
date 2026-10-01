@@ -42,7 +42,7 @@ using av::WireRecorder;
 
 namespace {
 
-constexpr const char *path = "print.rvk";
+constexpr const char *path = "print.av";
 constexpr std::size_t widest = 8192u;
 constexpr std::size_t most_lines = 96u;
 

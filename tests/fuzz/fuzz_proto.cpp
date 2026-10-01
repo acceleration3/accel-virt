@@ -1,4 +1,4 @@
-/* Every rvk protocol decoder, fed attacker-chosen bytes. The first byte picks
+/* Every av protocol decoder, fed attacker-chosen bytes. The first byte picks
  * the target. A decoder may reject anything; what it accepts must re-encode to
  * exactly the bytes it read, and the trackers must stay consistent whatever
  * sequence of snapshots they see. */

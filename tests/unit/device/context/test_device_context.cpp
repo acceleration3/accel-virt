@@ -100,7 +100,7 @@ ContextSetup setup(std::uint32_t doorbell = 3u, std::uint32_t reply_id = 0u)
 class Fixture {
 public:
     Fixture()
-        : blobs_(host_), shared_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
+        : blobs_(host_), shared_(host_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
           shares_(host_, library_), recorder_(host_), ordering_(host_),
           context_(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
     {
@@ -383,12 +383,12 @@ TEST(device_context_bind, an_opengl_setups_options_reach_the_executor_it_makes)
   /* Counted once the create has returned, so everything it recorded is there. */
   for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().created() == 0u; spins++) sched_yield();
   CHECK_EQ(fixture.ops().option_creates(), 1u);
-  const RvkContextOptions asked = fixture.ops().last_options();
+  const AvContextOptions asked = fixture.ops().last_options();
   CHECK_EQ(asked.major, 4u);
   CHECK_EQ(asked.minor, 5u);
-  CHECK_EQ(asked.profile, RVK_CONTEXT_PROFILE_COMPATIBILITY);
-  CHECK_EQ(asked.flags, RVK_CONTEXT_FLAG_ROBUST_ACCESS);
-  CHECK_EQ(fixture.ops().last_sub_api(), RVK_EXECUTOR_SUB_API_OPENGL);
+  CHECK_EQ(asked.profile, AV_CONTEXT_PROFILE_COMPATIBILITY);
+  CHECK_EQ(asked.flags, AV_CONTEXT_FLAG_ROBUST_ACCESS);
+  CHECK_EQ(fixture.ops().last_sub_api(), AV_EXECUTOR_SUB_API_OPENGL);
   CHECK(fixture.ops().last_share() == nullptr); }
 
 TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
@@ -396,8 +396,8 @@ TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
   av::BlobTable          blobs(host);
   av::HostSharedObjects  shared(host);
   av::FenceInterrupts    interrupts(host);
-  av::MockExecutorOps    ops(RVK_EXECUTOR_SUB_API_OPENGL);
-  ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
+  av::MockExecutorOps    ops(AV_EXECUTOR_SUB_API_OPENGL);
+  ops.editable().abi_version = AV_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().create_with_options = nullptr;
   av::ExecutorLibrary    old;
   CHECK_STATUS(old.accept(&ops.table()), Status::ok);
@@ -416,13 +416,13 @@ TEST(device_context_bind, records_the_setup_it_bound_and_nothing_for_a_bind_it_r
 { Fixture fixture;
   GuestRing guest = fixture.guest();
   static_cast<void>(guest);
-  CHECK_STATUS(fixture.recorder().open("setup.rvk", 0u, "setup", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(fixture.recorder().open("setup.av", 0u, "setup", av::AtCeiling::stop, av::GpuIdentity(),
                                        av::ProtocolVersion(1u, 1u)),
                Status::ok);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
   /* A second bind of a bound context is refused and leaves no second record. */
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
-  av::RecordedFile    file(fixture.host(), "setup.rvk");
+  av::RecordedFile    file(fixture.host(), "setup.av");
   av::RecordHeader    record;
   const std::uint8_t *payload = file.expect(av::RecordKind::context_setup, record);
   CHECK(payload != nullptr);

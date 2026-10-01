@@ -35,13 +35,13 @@ constexpr std::uintptr_t object_base = 0x5300u;
 
 ScriptedCl::ScriptedCl()
     : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), overstating_(false), devices_(1u),
-      device_name_("scripted rvkgpu"), device_extensions_(""), build_log_(""), asked_devices_of_(""), luid_(default_luid),
+      device_name_("scripted avgpu"), device_extensions_(""), build_log_(""), asked_devices_of_(""), luid_(default_luid),
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), defers_callbacks_(false), deferred_(nullptr),
       objects_{}, live_(0u), misuses_(0u), exported_handle_(nullptr), exported_words_{},
       shared_{}, shared_live_(false), shared_argument_(nullptr)
 {
-    suffixes_[0] = "RVK";
+    suffixes_[0] = "AV";
 }
 
 void ScriptedCl::fail_at(Call call, std::uint32_t nth, std::int32_t error)

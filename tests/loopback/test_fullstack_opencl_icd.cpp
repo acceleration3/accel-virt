@@ -15,7 +15,7 @@
  * exactly: after this call, this many turns, with this answer. The one place a
  * second thread is the point - a user event set from off the application's
  * thread - uses a real one, and hands the ICD over rather than sharing it. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -71,7 +71,7 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libz\n"
            "leak:libLLVM\n"
            "leak:libgallium\n"
-           "leak:librvk_executor\n";
+           "leak:libav_executor\n";
 }
 
 /* An ABI boundary C requires: a signal handler is handed a number and nothing
@@ -179,8 +179,8 @@ const cl_icd_dispatch *table_of(const void *object)
  * transport can run the generated client. */
 class HostClDevice {
 public:
-    HostClDevice(const RvkExecutorOps &ops, const std::uint8_t *uuid)
-        : ops_(ops), executor_(ops.create(ops.opaque, RVK_EXECUTOR_SUB_API_OPENCL, uuid))
+    HostClDevice(const AvExecutorOps &ops, const std::uint8_t *uuid)
+        : ops_(ops), executor_(ops.create(ops.opaque, AV_EXECUTOR_SUB_API_OPENCL, uuid))
     {
     }
     ~HostClDevice()
@@ -225,7 +225,7 @@ private:
         std::uint8_t reply[512] = {};
         std::size_t  length = 0u;
         if (ops_.execute(ops_.opaque, executor_, command, frame, ask.offset(), reply, sizeof reply,
-                         &length) != RVK_EXECUTED) {
+                         &length) != AV_EXECUTED) {
             return false;
         }
         WireReader   read(reply, length);
@@ -250,7 +250,7 @@ private:
         std::uint8_t reply[1024] = {};
         std::size_t  length = 0u;
         if (ops_.execute(ops_.opaque, executor_, av::clproto::kCmd_clGetDeviceInfo, frame,
-                         ask.offset(), reply, sizeof reply, &length) != RVK_EXECUTED) {
+                         ask.offset(), reply, sizeof reply, &length) != AV_EXECUTED) {
             return false;
         }
         WireReader    read(reply, length);
@@ -263,8 +263,8 @@ private:
         return true;
     }
 
-    const RvkExecutorOps &ops_;
-    RvkExecutor          *executor_;
+    const AvExecutorOps &ops_;
+    AvExecutor          *executor_;
 };
 
 /* The probe's US1 steps as one object, in ClProbe's own order: a device, a
@@ -544,12 +544,12 @@ void CL_CALLBACK callback_arrived(cl_event, cl_int status, void *user_data)
 }  // namespace
 
 /* T031, US1: the loader's own seven steps find this ICD, its one device is the
- * rvkgpu adapter's by LUID and vendor and the host GPU's by name - the same
+ * avgpu adapter's by LUID and vendor and the host GPU's by name - the same
  * bytes the executor answers with no guest in between - and a kernel built
  * from source on it adds two vectors the guest wrote and reads them back. */
 TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_runs_a_kernel_on_it)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) {
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
       std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
       return;
   }
@@ -570,7 +570,7 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
      * before an application has asked for anything. */
     CHECK(loader.load() == FakeClLoader::Load::kept);
     CHECK_EQ(loader.platforms(), 1u);
-    CHECK(std::strcmp(loader.suffix(), "RVK") == 0);
+    CHECK(std::strcmp(loader.suffix(), "AV") == 0);
 
     ClVectorAdd run(loader);
     if (!run.make()) return;
@@ -584,7 +584,7 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
     CHECK(std::strcmp(name, expected_name) == 0);
     CHECK_EQ(bytes, std::strlen(expected_name) + 1u);
 
-    /* And the identity is the rvkgpu adapter's, not the host GPU's. */
+    /* And the identity is the avgpu adapter's, not the host GPU's. */
     cl_uint vendor = 0u;
     CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_VENDOR_ID, sizeof vendor, &vendor, nullptr),
              CL_SUCCESS);
@@ -627,7 +627,7 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
  * feature records as not built. */
 TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_is_an_argument)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -730,7 +730,7 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
  * that from a hang into a failure. */
 TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_this_thread_sets_completes)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -787,7 +787,7 @@ TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_this_thread
  * that made it. */
 TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_another_thread_sets_completes)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -837,7 +837,7 @@ TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_another_thr
  * says outright that none was held while it ran. */
 TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_wait)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
   const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
@@ -904,7 +904,7 @@ TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_
  * without blocking answers it with whatever its decode arena last held. */
 TEST(fullstack_opencl_icd, a_blocking_read_answers_with_the_bytes_the_kernel_wrote)
 { const WidestHostGpu &gpu = widest_gpu();
-  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) {
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
       std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
       return;
   }

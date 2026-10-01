@@ -8,7 +8,7 @@
 #ifndef AV_OPENGL_BACKEND_HPP
 #define AV_OPENGL_BACKEND_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/gl_error_tally.hpp"
@@ -34,7 +34,7 @@ public:
      * False for a null display - a GPU the host serves no OpenGL on - options
      * no OpenGL has, a share with no context on this display, or a context the
      * driver will not make. */
-    [[nodiscard]] bool initialize(const GlDisplay *display, const RvkContextOptions *options,
+    [[nodiscard]] bool initialize(const GlDisplay *display, const AvContextOptions *options,
                                   const OpenGlBackend *share);
     /* The context whose objects another shares: an OpenGL context's share
      * lists, or an OpenCL context's vehicle under cl_khr_gl_sharing. */

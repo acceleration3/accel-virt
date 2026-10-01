@@ -120,7 +120,7 @@ def thunks(table):
         declared = ", ".join(f"{kind} {label}" for kind, label in zip(parameters, names))
         arguments = ", ".join(names[1:])
         keyword = "" if ret == "void" else "return "
-        lines.append(f"extern \"C\" {ret_type(ret)} APIENTRY rvkumd_d3d11_{name[3:]}({declared})")
+        lines.append(f"extern \"C\" {ret_type(ret)} APIENTRY avumd_d3d11_{name[3:]}({declared})")
         if name in ROOT_SLOTS:
             lines.append(f"{{ {keyword}d3d::umd_binding.root().{ROOT_SLOTS[name]}(device.pDrvPrivate); }}")
             lines.append("")
@@ -129,7 +129,7 @@ def thunks(table):
         lines.append("")
     lines += ["}  // namespace", "", f"void fill_device_funcs({TABLE} &table)", "{", '    AV_SCOPE("fill_device_funcs");']
     for name, _pfn, _ret, _parameters in table:
-        lines.append(f"    table.{name} = &rvkumd_d3d11_{name[3:]};")
+        lines.append(f"    table.{name} = &avumd_d3d11_{name[3:]};")
     lines += ["}", "", "}  // namespace av::d3d11", ""]
     return "\n".join(lines)
 

@@ -20,7 +20,7 @@ bool ClBlockingWait::settled(ClientTransport &wire, const uint64_t *events, uint
     for (uint32_t index = 0u; index < count; ++index) {
         cl_int       status = CL_QUEUED;
         size_t       answered = 0u;
-        const cl_int asked = av::clproto::rvk_clGetEventInfo(
+        const cl_int asked = av::clproto::av_clGetEventInfo(
             wire, events[index], CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
             &answered);
         if (asked != CL_SUCCESS) {
@@ -65,7 +65,7 @@ cl_int ClBlockingWait::until_queued_completes(ClientTransport &wire, uint64_t qu
 {
     AV_SCOPE("ClBlockingWait::until_queued_completes");
     if (queue == 0u || event == 0u) return CL_INVALID_VALUE;
-    const cl_int flushed = av::clproto::rvk_clFlush(wire, queue);
+    const cl_int flushed = av::clproto::av_clFlush(wire, queue);
     if (flushed != CL_SUCCESS) return flushed;
     return until_complete(wire, &event, 1u, icd::SlicedWait::forever);
 }

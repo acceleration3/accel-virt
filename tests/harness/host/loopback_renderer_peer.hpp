@@ -1,9 +1,9 @@
-/* rvk-renderer's half of the device, in the test's own process: the real
+/* av-renderer's half of the device, in the test's own process: the real
  * RendererService over a MockHost of its own - the renderer's host, whose main
  * loop is the test thread as QEMU's MockHost's is - with MockRendererResources
  * mapping each guest region to the pointer the QEMU side registered, and the
  * renderer's host resolving guest extents through the GuestMemoryTable those
- * regions fill, as rvk-renderer's does. Every datagram the device sends is
+ * regions fill, as av-renderer's does. Every datagram the device sends is
  * carried out at once and its answer queued for the device's next receive,
  * so a test drives both processes' code on one thread with nothing in
  * between but the bytes and descriptors. Each start after the first that
@@ -31,7 +31,7 @@ public:
     static constexpr std::uint32_t max_answers = 16u;
 
     /* `qemu` is the device's host, whose guest regions this renderer maps. */
-    LoopbackRendererPeer(MockHost &qemu, const RvkExecutorOps &executor);
+    LoopbackRendererPeer(MockHost &qemu, const AvExecutorOps &executor);
     ~LoopbackRendererPeer();
 
     void started() override;
@@ -56,9 +56,9 @@ public:
     MockHost              &host();
 
 private:
-    /* One rvk-renderer process's state. */
+    /* One av-renderer process's state. */
     struct Process {
-        Process(MockHost &qemu, const RvkExecutorOps &executor);
+        Process(MockHost &qemu, const AvExecutorOps &executor);
         ~Process();
         Process(const Process &) = delete;
         Process &operator=(const Process &) = delete;
@@ -84,7 +84,7 @@ private:
     };
 
     MockHost               &qemu_;
-    const RvkExecutorOps   &executor_;
+    const AvExecutorOps   &executor_;
     ObjectStorage<Process>  process_;
     Answer                  answers_[max_answers];
     std::uint32_t           first_;

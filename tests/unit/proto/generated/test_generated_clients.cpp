@@ -27,7 +27,7 @@ TEST(generated_clients, the_vulkan_client_creates_an_instance_and_reads_it_back)
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  const VkResult result = av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance);
+  const VkResult result = av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance);
   CHECK(result == VK_SUCCESS);
   CHECK_EQ(instance, 0xABCDEFull);
   CHECK_EQ(transport.sends(), 1u);
@@ -46,7 +46,7 @@ TEST(generated_clients, the_opencl_client_enumerates_platforms)
 
   std::uint64_t platforms[4] = {};
   cl_uint       count = 0u;
-  const cl_int  result = av::clproto::rvk_clGetPlatformIDs(transport, 4u, platforms, &count);
+  const cl_int  result = av::clproto::av_clGetPlatformIDs(transport, 4u, platforms, &count);
   CHECK(result == CL_SUCCESS);
   CHECK_EQ(platforms[0], 0x1111ull);
   CHECK_EQ(count, 2u);
@@ -60,7 +60,7 @@ TEST(generated_clients, a_failed_send_returns_the_apis_error)
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  CHECK(av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
+  CHECK(av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
   CHECK_EQ(transport.end_calls(), 1u); }
 
 /* A reply cut short is a failed call, and the call still ends once: the
@@ -72,16 +72,16 @@ TEST(generated_clients, a_short_reply_ends_the_call_once)
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  CHECK(av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
+  CHECK(av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
   CHECK_EQ(transport.end_calls(), 1u);
   transport.set_reply(reply, 0u);
   cl_uint count = 0u;
-  CHECK(av::clproto::rvk_clGetPlatformIDs(transport, 0u, nullptr, &count) != CL_SUCCESS);
+  CHECK(av::clproto::av_clGetPlatformIDs(transport, 0u, nullptr, &count) != CL_SUCCESS);
   CHECK_EQ(transport.end_calls(), 2u); }
 
 /* A recorded command answers nothing, so it opens no call to end. */
 TEST(generated_clients, an_async_command_ends_no_call)
 { MockTransport transport;
-  av::vkproto::rvk_vkCmdDraw(transport, nullptr, 3u, 1u, 0u, 0u);
+  av::vkproto::av_vkCmdDraw(transport, nullptr, 3u, 1u, 0u, 0u);
   CHECK_EQ(transport.sends(), 1u);
   CHECK_EQ(transport.end_calls(), 0u); }

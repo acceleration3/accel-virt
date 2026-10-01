@@ -1,4 +1,4 @@
-/* One runtime's open instance of an rvkgpu adapter (contracts/umd_interface.md).
+/* One runtime's open instance of an avgpu adapter (contracts/umd_interface.md).
  * A process holds one per OpenAdapter call: the D3D10/11 runtime and D3D12Core
  * each open their own, and two opens of one adapter are separate objects over
  * one connection. The connection is the adapter the runtime opened, and every

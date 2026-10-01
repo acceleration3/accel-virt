@@ -2,7 +2,7 @@
 
 Target: build a **paravirtualized WDDM 3.2 display miniport driver** for a
 Windows guest on QEMU/KVM. The guest driver speaks virtio-gpu to a custom
-in-process QEMU device, `virtio-gpu-rvk-pci`, which executes Vulkan/GL/CL on
+in-process QEMU device, `virtio-gpu-av-pci`, which executes Vulkan/GL/CL on
 the host GPU. `render-server` supplies only the generated command
 serialization. No ivshmem, no separate host process.
 

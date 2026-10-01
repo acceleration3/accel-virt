@@ -65,7 +65,7 @@ void ClPlatform::cap_version(uint32_t major, uint32_t minor)
     }
     major_ = major;
     minor_ = minor;
-    /* "OpenCL <major>.<minor> rvkgpu", which is the shape the specification
+    /* "OpenCL <major>.<minor> avgpu", which is the shape the specification
      * fixes: the word, a space, the version, a space, and whatever the
      * vendor cares to say. */
     const char prefix[] = "OpenCL ";
@@ -74,7 +74,7 @@ void ClPlatform::cap_version(uint32_t major, uint32_t minor)
     version_[at++] = static_cast<char>('0' + static_cast<char>(major_ % 10u));
     version_[at++] = '.';
     version_[at++] = static_cast<char>('0' + static_cast<char>(minor_ % 10u));
-    const char tail[] = " rvkgpu";
+    const char tail[] = " avgpu";
     for (size_t index = 0u; tail[index] != '\0'; ++index) version_[at++] = tail[index];
     version_[at] = '\0';
 }

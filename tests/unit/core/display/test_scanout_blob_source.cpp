@@ -267,7 +267,7 @@ TEST(scanout_blob_source_refresh, a_primary_with_a_page_missing_is_refused_and_r
   CHECK_EQ(control.respond_all(ok_nodata), 0u);
   const std::uint32_t said = fixture.platform().logged();
   CHECK(said != 0u);
-  CHECK(fixture.platform().logged_line("rvkgpu: scanout blob 0"));
+  CHECK(fixture.platform().logged_line("avgpu: scanout blob 0"));
   /* The same address again says nothing more: a desktop that cannot be carried
    * must not be the reason the log fills. */
   CHECK_STATUS(fixture.scanout().refresh(0x40000000u, fixture.frame().pages(), true),

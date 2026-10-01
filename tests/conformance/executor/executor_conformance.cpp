@@ -23,9 +23,9 @@ struct ApiBit {
     std::uint32_t commands;
 };
 
-constexpr ApiBit api_bits[] = {{RVK_EXECUTOR_SUB_API_VULKAN, 1u},
-                               {RVK_EXECUTOR_SUB_API_OPENGL, 3u},
-                               {RVK_EXECUTOR_SUB_API_OPENCL, 2u}};
+constexpr ApiBit api_bits[] = {{AV_EXECUTOR_SUB_API_VULKAN, 1u},
+                               {AV_EXECUTOR_SUB_API_OPENGL, 3u},
+                               {AV_EXECUTOR_SUB_API_OPENCL, 2u}};
 
 /* A bit no sub-API has, which no library may accept in create. */
 constexpr std::uint32_t unclaimed_sub_api = 0x40u;
@@ -71,8 +71,8 @@ const char   *ExecutorConformance::skip(std::uint32_t index) const
 
 bool ExecutorConformance::defined_result(std::uint32_t result) const
 {
-    return result == RVK_EXECUTED || result == RVK_UNKNOWN || result == RVK_UNDECODABLE ||
-           result == RVK_DEVICE_LOST;
+    return result == AV_EXECUTED || result == AV_UNKNOWN || result == AV_UNDECODABLE ||
+           result == AV_DEVICE_LOST;
 }
 
 std::uint32_t ExecutorConformance::impossible_id(std::uint32_t api) const
@@ -110,12 +110,12 @@ bool ExecutorConformance::run(const char *path)
         return false;
     }
     auto *const answer =
-        reinterpret_cast<RvkExecutorOpsFunction>(dlsym(library_, RVK_EXECUTOR_OPS_SYMBOL));
-    require(answer != nullptr, "the library exports no rvk_executor_ops");
+        reinterpret_cast<AvExecutorOpsFunction>(dlsym(library_, AV_EXECUTOR_OPS_SYMBOL));
+    require(answer != nullptr, "the library exports no av_executor_ops");
     if (answer == nullptr) return false;
 
     ops_ = answer();
-    require(ops_ != nullptr, "rvk_executor_ops answered no table");
+    require(ops_ != nullptr, "av_executor_ops answered no table");
     if (ops_ == nullptr) return false;
 
     check_table();
@@ -128,8 +128,8 @@ bool ExecutorConformance::run(const char *path)
 
 void ExecutorConformance::check_table()
 {
-    require(ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_MINIMUM &&
-                ops_->abi_version <= RVK_EXECUTOR_ABI_VERSION,
+    require(ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_MINIMUM &&
+                ops_->abi_version <= AV_EXECUTOR_ABI_VERSION,
             "the table's abi_version is one this device does not know");
     require(ops_->sub_apis != nullptr && ops_->create != nullptr && ops_->destroy != nullptr &&
                 ops_->execute != nullptr,
@@ -156,26 +156,26 @@ void ExecutorConformance::check_create_with_options()
 {
     const std::uint32_t   offered = ops_->sub_apis(ops_->opaque);
     const std::uint8_t   *gpu = real_gpu_ ? gpu_ : no_such_gpu;
-    const RvkContextOptions core_46 = {4u, 6u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
-    const RvkContextOptions gl_50 = {5u, 0u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+    const AvContextOptions core_46 = {4u, 6u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
+    const AvContextOptions gl_50 = {5u, 0u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
     require(ops_->create_with_options(ops_->opaque, unclaimed_sub_api, gpu, nullptr, nullptr) == nullptr,
             "create_with_options answered an executor for a sub-API nobody defined");
     for (const ApiBit &api : api_bits) {
         if ((offered & api.sub_api) == 0u) continue;
-        RvkExecutor *const plain = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, nullptr);
+        AvExecutor *const plain = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, nullptr);
         if (plain == nullptr) {
             skipped_because("an offered sub-API made no executor with no options; its options went unchecked");
             continue;
         }
-        if (api.sub_api != RVK_EXECUTOR_SUB_API_OPENGL) {
+        if (api.sub_api != AV_EXECUTOR_SUB_API_OPENGL) {
             require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr) == nullptr,
                     "create_with_options made a context with OpenGL options for another sub-API");
             require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, plain) == nullptr,
                     "create_with_options shared an executor of a sub-API that shares nothing");
         } else if (real_gpu_) {
-            RvkExecutor *const core = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr);
+            AvExecutor *const core = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr);
             require(core != nullptr, "create_with_options refused an OpenGL 4.6 core context on a real GPU");
-            RvkExecutor *const shared = core != nullptr
+            AvExecutor *const shared = core != nullptr
                                             ? ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, core)
                                             : nullptr;
             require(core == nullptr || shared != nullptr,
@@ -223,7 +223,7 @@ void ExecutorConformance::check_create_and_destroy()
                     "create answered an executor for a sub-API sub_apis does not offer");
             continue;
         }
-        RvkExecutor *const executor =
+        AvExecutor *const executor =
             ops_->create(ops_->opaque, api.sub_api, real_gpu_ ? gpu_ : no_such_gpu);
         if (executor == nullptr) {
             /* Refusing a GPU nobody has is correct for a library that binds
@@ -238,7 +238,7 @@ void ExecutorConformance::check_create_and_destroy()
         check_workload(executor, api.sub_api);
         check_reply_capacity(executor, api.commands);
         if (ops_->abi_version >= memory_channel_version) check_memory_channel(executor);
-        if (ops_->abi_version >= imported_handle_version && api.sub_api == RVK_EXECUTOR_SUB_API_VULKAN)
+        if (ops_->abi_version >= imported_handle_version && api.sub_api == AV_EXECUTOR_SUB_API_VULKAN)
             check_imported_handle(executor);
         ops_->destroy(ops_->opaque, executor);
     }
@@ -246,7 +246,7 @@ void ExecutorConformance::check_create_and_destroy()
         skipped_because("no sub-API this library offers made an executor on this host");
 }
 
-void ExecutorConformance::check_execute(RvkExecutor *executor, std::uint32_t api)
+void ExecutorConformance::check_execute(AvExecutor *executor, std::uint32_t api)
 {
     const std::uint8_t payload[8] = {1, 2, 3, 4, 5, 6, 7, 8};
     std::size_t        produced = 0xDEADu;
@@ -257,7 +257,7 @@ void ExecutorConformance::check_execute(RvkExecutor *executor, std::uint32_t api
         ops_->execute(ops_->opaque, executor, impossible_id(api), payload, sizeof payload, nullptr,
                       0u, &produced);
     require(defined_result(no_reply), "execute answered a result the ABI does not define");
-    require(no_reply == RVK_UNKNOWN,
+    require(no_reply == AV_UNKNOWN,
             "execute faulted on a command id no profile can carry instead of skipping it");
 
     /* An empty payload is a frame a guest can send; it must decide, not crash. */
@@ -268,7 +268,7 @@ void ExecutorConformance::check_execute(RvkExecutor *executor, std::uint32_t api
     require(defined_result(empty), "execute answered a result the ABI does not define");
 }
 
-void ExecutorConformance::check_reply_capacity(RvkExecutor *executor, std::uint32_t api)
+void ExecutorConformance::check_reply_capacity(AvExecutor *executor, std::uint32_t api)
 {
     /* A guard byte past the capacity: an answer that does not fit writes
      * nothing, and one that does must not write past what it was given. */
@@ -283,12 +283,12 @@ void ExecutorConformance::check_reply_capacity(RvkExecutor *executor, std::uint3
     /* An answer shorter than the capacity must not have written past what it
      * says it wrote; a longer one may leave a prefix, which the device
      * discards. */
-    require(result != RVK_EXECUTED || produced >= capacity ||
+    require(result != AV_EXECUTED || produced >= capacity ||
                 reply[produced] == 0xABu,
             "an answer wrote more than the length it reported");
 }
 
-void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api)
+void ExecutorConformance::check_workload(AvExecutor *executor, uint32_t sub_api)
 {
     std::uint8_t frame[1024] = {};
     std::uint8_t reply[512] = {};
@@ -296,7 +296,7 @@ void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api
     std::uint32_t command = 0u;
     std::size_t   length = 0u;
 
-    if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) {
+    if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) {
         /* The first command of every Vulkan program there has ever been. */
         av::WireWriter writer(frame, sizeof frame);
         VkApplicationInfo application = {};
@@ -309,7 +309,7 @@ void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api
         av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
         command = av::vkproto::kCmd_vkCreateInstance;
         length = writer.offset();
-    } else if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) {
+    } else if (sub_api == AV_EXECUTOR_SUB_API_OPENCL) {
         av::WireWriter writer(frame, sizeof frame);
         writer.write_pod<std::uint32_t>(0u);
         writer.write_pod<std::uint8_t>(0u);
@@ -331,7 +331,7 @@ void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api
         ops_->execute(ops_->opaque, executor, command, frame, length, reply, sizeof reply,
                       &produced);
     require(defined_result(result), "a workload answered a result the ABI does not define");
-    if (result == RVK_UNKNOWN) {
+    if (result == AV_UNKNOWN) {
         /* A library that offers a sub-API and carries none of its commands is
          * a stub rather than a wrong implementation - the echo library is
          * exactly that, on purpose - and the device treats it as one: every
@@ -340,42 +340,42 @@ void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api
                         "carry: a stub rather than an implementation");
         return;
     }
-    require(result == RVK_EXECUTED,
+    require(result == AV_EXECUTED,
             "a library that offers a sub-API could not run that sub-API's simplest command");
-    if (result == RVK_EXECUTED) worked_++;
+    if (result == AV_EXECUTED) worked_++;
 }
 
-void ExecutorConformance::check_memory_channel(RvkExecutor *executor)
+void ExecutorConformance::check_memory_channel(AvExecutor *executor)
 {
     /* Release is idempotent: the device may release an id whose import failed,
      * and a library that faults on one is a library that hangs a teardown. */
     ops_->release_blob(ops_->opaque, executor, 0xFFFFFFFFu);
     require(true, "release_blob tolerated an id that was never imported");
 
-    RvkBlobHandle refused = {};
+    AvBlobHandle refused = {};
     refused.kind = 0u;
     refused.fd = -1;
     refused.size = 0u;
-    require(ops_->import_blob(ops_->opaque, executor, 1u, &refused) == RVK_UNDECODABLE,
+    require(ops_->import_blob(ops_->opaque, executor, 1u, &refused) == AV_UNDECODABLE,
             "import_blob accepted a handle of no kind and no size");
 
-    RvkBlobHandle two_kinds = {};
-    two_kinds.kind = RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF;
+    AvBlobHandle two_kinds = {};
+    two_kinds.kind = AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF;
     two_kinds.fd = -1;
     two_kinds.size = 4096u;
-    require(ops_->import_blob(ops_->opaque, executor, 2u, &two_kinds) == RVK_UNDECODABLE,
+    require(ops_->import_blob(ops_->opaque, executor, 2u, &two_kinds) == AV_UNDECODABLE,
             "import_blob accepted a handle that is two kinds at once");
 
-    RvkBlobHandle short_page = {};
-    short_page.kind = RVK_BLOB_HOST_POINTER;
+    AvBlobHandle short_page = {};
+    short_page.kind = AV_BLOB_HOST_POINTER;
     short_page.pointer = this;
     short_page.fd = -1;
     short_page.size = 1u;
-    require(ops_->import_blob(ops_->opaque, executor, 3u, &short_page) == RVK_UNDECODABLE,
+    require(ops_->import_blob(ops_->opaque, executor, 3u, &short_page) == AV_UNDECODABLE,
             "import_blob accepted a size that is not a whole number of pages");
 }
 
-std::uint32_t ExecutorConformance::send(RvkExecutor *executor, std::uint32_t command, std::size_t length)
+std::uint32_t ExecutorConformance::send(AvExecutor *executor, std::uint32_t command, std::size_t length)
 {
     produced_ = 0u;
     return ops_->execute(ops_->opaque, executor, command, frame_, length, reply_, sizeof reply_, &produced_);
@@ -397,7 +397,7 @@ std::uint64_t ExecutorConformance::answered_handle() const
     return returned == VK_SUCCESS ? handle : 0u;
 }
 
-bool ExecutorConformance::make_device(RvkExecutor *executor, std::uint64_t &instance, std::uint64_t &device)
+bool ExecutorConformance::make_device(AvExecutor *executor, std::uint64_t &instance, std::uint64_t &device)
 {
     av::WireWriter    writer(frame_, sizeof frame_);
     VkApplicationInfo application = {};
@@ -407,7 +407,7 @@ bool ExecutorConformance::make_device(RvkExecutor *executor, std::uint64_t &inst
     create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create.pApplicationInfo = &application;
     av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
-    instance = send(executor, av::vkproto::kCmd_vkCreateInstance, writer.offset()) == RVK_EXECUTED
+    instance = send(executor, av::vkproto::kCmd_vkCreateInstance, writer.offset()) == AV_EXECUTED
                    ? answered_handle()
                    : 0u;
     if (instance == 0u) return false;
@@ -416,7 +416,7 @@ bool ExecutorConformance::make_device(RvkExecutor *executor, std::uint64_t &inst
     listing.write_pod(instance);
     listing.write_pod<std::uint8_t>(1u);
     listing.write_pod<std::uint32_t>(1u);
-    if (send(executor, av::vkproto::kCmd_vkEnumeratePhysicalDevices, listing.offset()) != RVK_EXECUTED) return false;
+    if (send(executor, av::vkproto::kCmd_vkEnumeratePhysicalDevices, listing.offset()) != AV_EXECUTED) return false;
     av::WireReader listed(reply_, produced_ < sizeof reply_ ? produced_ : 0u);
     std::int32_t   returned = -1;
     std::uint32_t  count = 0u;
@@ -438,12 +438,12 @@ bool ExecutorConformance::make_device(RvkExecutor *executor, std::uint64_t &inst
     device_create.pQueueCreateInfos = &queue;
     making.write_pod(physical);
     av::vkproto::serialize_VkDeviceCreateInfo(making, device_create);
-    device = send(executor, av::vkproto::kCmd_vkCreateDevice, making.offset()) == RVK_EXECUTED ? answered_handle()
+    device = send(executor, av::vkproto::kCmd_vkCreateDevice, making.offset()) == AV_EXECUTED ? answered_handle()
                                                                                                 : 0u;
     return device != 0u;
 }
 
-std::uint64_t ExecutorConformance::make_buffer(RvkExecutor *executor, std::uint64_t device)
+std::uint64_t ExecutorConformance::make_buffer(AvExecutor *executor, std::uint64_t device)
 {
     av::WireWriter                   writer(frame_, sizeof frame_);
     VkExternalMemoryBufferCreateInfo external = {};
@@ -456,15 +456,15 @@ std::uint64_t ExecutorConformance::make_buffer(RvkExecutor *executor, std::uint6
     create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     writer.write_pod(device);
     av::vkproto::serialize_VkBufferCreateInfo(writer, create);
-    return send(executor, av::vkproto::kCmd_vkCreateBuffer, writer.offset()) == RVK_EXECUTED ? answered_handle() : 0u;
+    return send(executor, av::vkproto::kCmd_vkCreateBuffer, writer.offset()) == AV_EXECUTED ? answered_handle() : 0u;
 }
 
-std::uint32_t ExecutorConformance::buffer_types(RvkExecutor *executor, std::uint64_t device, std::uint64_t buffer)
+std::uint32_t ExecutorConformance::buffer_types(AvExecutor *executor, std::uint64_t device, std::uint64_t buffer)
 {
     av::WireWriter writer(frame_, sizeof frame_);
     writer.write_pod(device);
     writer.write_pod(buffer);
-    if (send(executor, av::vkproto::kCmd_vkGetBufferMemoryRequirements, writer.offset()) != RVK_EXECUTED) return 0u;
+    if (send(executor, av::vkproto::kCmd_vkGetBufferMemoryRequirements, writer.offset()) != AV_EXECUTED) return 0u;
     std::uint8_t         block[256];
     av::WireArena        arena(block, sizeof block);
     av::WireReader       read(reply_, produced_ < sizeof reply_ ? produced_ : 0u);
@@ -475,25 +475,25 @@ std::uint32_t ExecutorConformance::buffer_types(RvkExecutor *executor, std::uint
     return requirements.size <= page_bytes ? requirements.memoryTypeBits : 0u;
 }
 
-std::uint64_t ExecutorConformance::import_page(RvkExecutor *executor, void *page, std::uint32_t types)
+std::uint64_t ExecutorConformance::import_page(AvExecutor *executor, void *page, std::uint32_t types)
 {
     for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++) {
         if (((types >> type) & 1u) == 0u) continue;
-        RvkBlobHandle handle = {};
-        handle.kind = RVK_BLOB_HOST_POINTER;
+        AvBlobHandle handle = {};
+        handle.kind = AV_BLOB_HOST_POINTER;
         handle.reserved = type;
         handle.pointer = page;
         handle.fd = -1;
         handle.size = page_bytes;
         /* A type the executor will not import this pointer into is refused
          * and the id stays free, so the next type is asked under the same id. */
-        if (ops_->import_blob(ops_->opaque, executor, imported_blob, &handle) == RVK_EXECUTED)
+        if (ops_->import_blob(ops_->opaque, executor, imported_blob, &handle) == AV_EXECUTED)
             return ops_->imported_handle(ops_->opaque, executor, imported_blob);
     }
     return 0u;
 }
 
-void ExecutorConformance::destroy_handle(RvkExecutor *executor, std::uint32_t command, std::uint64_t parent,
+void ExecutorConformance::destroy_handle(AvExecutor *executor, std::uint32_t command, std::uint64_t parent,
                                          std::uint64_t handle)
 {
     av::WireWriter writer(frame_, sizeof frame_);
@@ -502,7 +502,7 @@ void ExecutorConformance::destroy_handle(RvkExecutor *executor, std::uint32_t co
     (void)send(executor, command, writer.offset());
 }
 
-void ExecutorConformance::check_imported_handle(RvkExecutor *executor)
+void ExecutorConformance::check_imported_handle(AvExecutor *executor)
 {
     require(ops_->imported_handle(ops_->opaque, executor, imported_blob) == 0u,
             "imported_handle answered a handle for an id that was never imported");
@@ -526,7 +526,7 @@ void ExecutorConformance::check_imported_handle(RvkExecutor *executor)
         writer.write_pod(memory);
         writer.write_pod<std::uint64_t>(0u);
         const std::uint32_t bound = send(executor, av::vkproto::kCmd_vkBindBufferMemory, writer.offset());
-        require(bound == RVK_EXECUTED && answered_result() == VK_SUCCESS,
+        require(bound == AV_EXECUTED && answered_result() == VK_SUCCESS,
                 "execute did not accept an imported handle back in vkBindBufferMemory");
         destroy_handle(executor, av::vkproto::kCmd_vkDestroyBuffer, device, buffer);
         ops_->release_blob(ops_->opaque, executor, imported_blob);

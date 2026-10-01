@@ -45,7 +45,7 @@ using av::SubApi;
 
 namespace {
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
 constexpr std::uint64_t imported_memory = 0x0000600000000077ull;
 constexpr std::uint32_t refused = 0xC0000001u;
@@ -61,7 +61,7 @@ public:
           transport_(connection_, SubApi::opengl, 12u, reply_bytes, staging_, sizeof staging_),
           arena_(connection_, transport_)
     {
-        kmt_.add_adapter(rvk, 3200u);
+        kmt_.add_adapter(av, 3200u);
         std::uint32_t count = 0u;
         CHECK_STATUS(kmt_.enumerate_adapters(&adapter_, 1u, count), Status::ok);
         CHECK_STATUS(connection_.open(adapter_), Status::ok);

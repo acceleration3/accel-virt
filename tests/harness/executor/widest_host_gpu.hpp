@@ -19,7 +19,7 @@ public:
 
     /* Its Vulkan device UUID; all zero when there is none. */
     const std::uint8_t *uuid() const;
-    /* The RVK_EXECUTOR_SUB_API_* bits it runs. */
+    /* The AV_EXECUTOR_SUB_API_* bits it runs. */
     std::uint32_t       sub_apis() const;
 
 private:

@@ -9,7 +9,7 @@
  * host for as long as the device lives, and one that deleted the memory object
  * first would pull the storage out from under a live cl_mem.
  */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/cl_shared_objects.hpp"
 #include "harness/framework/test_registry.hpp"
 

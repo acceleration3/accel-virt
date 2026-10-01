@@ -1,6 +1,6 @@
 /* One process's OpenGL device link and the pieces a GuestGlContext is made
  * over, for the tests of the context classes below GlIcdRoot: MockKmt with
- * the rvkgpu adapter, the host played through ScriptedHost, the send lock's
+ * the avgpu adapter, the host played through ScriptedHost, the send lock's
  * trace and the log. */
 #ifndef AV_GL_CONTEXT_RIG_HPP
 #define AV_GL_CONTEXT_RIG_HPP

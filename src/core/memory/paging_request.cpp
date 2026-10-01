@@ -93,7 +93,7 @@ NtStatus PagingRequest::refuse()
     if (budget_.allows()) {
         char       bytes[64];
         TextBuffer line(bytes, sizeof bytes);
-        line.append("rvkgpu: paging operation ");
+        line.append("avgpu: paging operation ");
         line.append_decimal(static_cast<uint64_t>(request_.Operation));
         line.append(" refused");
         platform_.log(line.text());
@@ -108,7 +108,7 @@ void PagingRequest::log_aperture(const char *operation, uint32_t segment, uint64
     if (!budget_.allows()) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: aperture ");
+    line.append("avgpu: aperture ");
     line.append(operation);
     line.append(" segment ");
     line.append_decimal(segment);

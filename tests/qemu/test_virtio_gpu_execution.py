@@ -16,12 +16,12 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, batch_header,
+from av_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, batch_header,
                          IMPORT_BLOB, LOSE_DEVICE, NOP, PAGE, PEEK, POKE, REAL_EXECUTOR, RELEASE_BLOB,
                          SUB_API_OPENGL, SUB_API_VULKAN, setup_with_options,
                          RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID, RESP_OK_NODATA, UNDECODABLE,
                          RESP_OK_MAP_INFO, GuestRing, command, create_context, guest_blob, guest_blob_pages,
-                         header, host_blob, map_blob, response_type, rvk_device, setup, submit, unref)
+                         header, host_blob, map_blob, response_type, av_device, setup, submit, unref)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 RENDERER = os.environ.get("AV_RENDERER", "")
@@ -29,7 +29,7 @@ CMD_RESOURCE_UNMAP_BLOB = 0x0209
 SHM_ID_HOST_VISIBLE = 1
 HOSTMEM = 64 << 20
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
-REPLY_MAGIC = 0x594B5652
+REPLY_MAGIC = 0x00595641
 STATUS_OK, STATUS_TOO_LARGE = 0, 1
 HANDLE_BIT = 0x4000000000000000
 IMPORTED, REFUSED_REQUEST, UNKNOWN_RESOURCE, OUTSIDE_BLOB, UNMAPPABLE_PAGES, EXECUTOR_REFUSED = range(6)
@@ -124,8 +124,8 @@ class VirtioGpuContextOptions(unittest.TestCase):
     """Feature 050: an OpenGL context's options and share context reach the executor library."""
 
     def open(self, **environment):
-        EchoEnvironment(self, RVK_ECHO_OPENGL="1", **environment)
-        qtest = virtio_qtest.Qtest(BUILD, rvk_device(), False)
+        EchoEnvironment(self, AV_ECHO_OPENGL="1", **environment)
+        qtest = virtio_qtest.Qtest(BUILD, av_device(), False)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, WANTED)
 
@@ -155,7 +155,7 @@ class VirtioGpuContextOptions(unittest.TestCase):
                 answer=RESP_ERR_INVALID_PARAMETER)
 
     def test_a_version_3_library_makes_only_default_contexts(self):
-        gpu = self.open(RVK_ECHO_ABI_VERSION_3="1")
+        gpu = self.open(AV_ECHO_ABI_VERSION_3="1")
         Context(self, gpu, 1, 0, options=(SUB_API_OPENGL, 4, 6, PROFILE_CORE, 0, 0),
                 answer=RESP_ERR_INVALID_PARAMETER)
         plain = Context(self, gpu, 2, 1, options=(SUB_API_OPENGL, 0, 0, 0, 0, 0))
@@ -164,7 +164,7 @@ class VirtioGpuContextOptions(unittest.TestCase):
 
 @unittest.skipUnless(BUILD and EXECUTOR, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuExecution(unittest.TestCase):
-    def open(self, device=rvk_device(), shared_ram=False):
+    def open(self, device=av_device(), shared_ram=False):
         qtest = virtio_qtest.Qtest(BUILD, device, shared_ram)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, WANTED)
@@ -211,7 +211,7 @@ class VirtioGpuExecution(unittest.TestCase):
 
     @unittest.skipUnless(REAL_EXECUTOR, "needs this project's executor library")
     def test_a_nop_is_answered_the_same_under_the_real_executor(self):
-        gpu = self.open(rvk_device(executor=REAL_EXECUTOR))
+        gpu = self.open(av_device(executor=REAL_EXECUTOR))
         context = Context(self, gpu, 1, 1)
         self.assertTrue(context.run(command(0x0000FFFF, b"skipped"), command(NOP, b"", GENERATE_REPLY)))
         self.assertEqual(context.answer(), ((STATUS_OK, 1, 0, 0), b""))
@@ -253,11 +253,11 @@ class VirtioGpuExecution(unittest.TestCase):
         wrong for one context only, so that losing that context can be told
         apart from losing the device (feature 040, US3 and US4). The executors
         are created in the order their contexts are set up."""
-        os.environ["RVK_ECHO_ONLY_NTH"], os.environ["RVK_ECHO_FAULT_AFTER"] = "2", "1"
+        os.environ["AV_ECHO_ONLY_NTH"], os.environ["AV_ECHO_FAULT_AFTER"] = "2", "1"
         try:
             gpu = self.open()
         finally:
-            del os.environ["RVK_ECHO_ONLY_NTH"], os.environ["RVK_ECHO_FAULT_AFTER"]
+            del os.environ["AV_ECHO_ONLY_NTH"], os.environ["AV_ECHO_FAULT_AFTER"]
         healthy = Context(self, gpu, 1, 7)
         faulting = Context(self, gpu, 2, 8, reply_bytes=0)
         self.assertFalse(faulting.run(command(ECHO)))
@@ -266,11 +266,11 @@ class VirtioGpuExecution(unittest.TestCase):
         self.assertEqual(healthy.answer()[1], b"unaffected")
 
     def test_a_context_whose_executor_cannot_be_created_consumes_nothing(self):
-        os.environ["RVK_ECHO_FAIL_CREATE"] = "1"
+        os.environ["AV_ECHO_FAIL_CREATE"] = "1"
         try:
             gpu = self.open()
         finally:
-            del os.environ["RVK_ECHO_FAIL_CREATE"]
+            del os.environ["AV_ECHO_FAIL_CREATE"]
         context = Context(self, gpu, 1, 6)
         self.assertFalse(context.run(command(ECHO)))
         self.assertTrue(wait_for(lambda: "executor could not be created" in gpu.qtest.printed()))
@@ -349,7 +349,7 @@ class VirtioGpuExecution(unittest.TestCase):
 
     def host_chunk_imports(self, renderer):
         options = f",hostmem={HOSTMEM}" + (f",renderer={RENDERER}" if renderer else "")
-        gpu = self.open(rvk_device(options), shared_ram=True)
+        gpu = self.open(av_device(options), shared_ram=True)
         context = Context(self, gpu, 1, 14)
         resource, window = self.host_chunk(gpu, context, 3, 5 * PAGE)
         gpu.qtest.write_bytes(window + PAGE, bytes([0xB1]) * PAGE)
@@ -419,11 +419,11 @@ class VirtioGpuExecution(unittest.TestCase):
         self.expect(gpu, unref(resource), RESP_OK_NODATA)   # a refused import holds nothing
 
     def test_a_version_1_library_is_refused_the_import_and_runs_on(self):
-        os.environ["RVK_ECHO_ABI_VERSION_1"] = "1"
+        os.environ["AV_ECHO_ABI_VERSION_1"] = "1"
         try:
             gpu = self.open(shared_ram=True)
         finally:
-            del os.environ["RVK_ECHO_ABI_VERSION_1"]
+            del os.environ["AV_ECHO_ABI_VERSION_1"]
         context = Context(self, gpu, 1, 13)
         resource, _ = self.chunk(gpu, context, 1)
         self.assertEqual(self.imported(context, resource, 0, PAGE), (EXECUTOR_REFUSED, 0))

@@ -3,8 +3,8 @@
 **Version**: 3.0.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-30
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
-display miniport (`rvkgpu.sys`), a custom in-process QEMU device
-(`virtio-gpu-rvk-pci`), and the shared wire protocol between them. Command
+display miniport (`avgpu.sys`), a custom in-process QEMU device
+(`virtio-gpu-av-pci`), and the shared wire protocol between them. Command
 serialization is generated here from the Khronos registries, by the generator
 vendored in `tools/codegen/`; this project owns all of it.
 
@@ -61,21 +61,21 @@ receive no context, so they reach the driver's root through the single pointer
 glue cannot hold a C++ object, so the device module keeps its devices in a
 `DeviceModule` in the ABI translation unit's static storage
 (`src/device/abi/entry_points.cpp`), handing the glue opaque handles; the
-executor library's `rvk_executor_ops()` takes no argument, so its root lives in
+executor library's `av_executor_ops()` takes no argument, so its root lives in
 that entry point's translation unit (`src/device/shim/executor_ops.cpp`); and the
 Windows Vulkan loader calls `vk_icdGetInstanceProcAddr(NULL, ...)` with no
 context, so the Vulkan ICD's root lives in its exports' translation unit
-(`src/um/vulkan/rvkvk_exports.cpp`, feature 045), and the generated wrappers'
+(`src/um/vulkan/avvk_exports.cpp`, feature 045), and the generated wrappers'
 hooks and the ICD's own entry points, which are handed no context either, reach
 it through the single pointer `IcdBinding` holds (`src/icd/vulkan/icd_hooks.cpp`);
 and `opengl32.dll` calls the OpenGL ICD's `Drv*` exports with no ICD context, so
 that root lives in its exports' translation unit
-(`src/um/opengl/rvkgl_exports.cpp`, feature 050), and the generated OpenGL
+(`src/um/opengl/avgl_exports.cpp`, feature 050), and the generated OpenGL
 hooks reach it through the single pointer `GlIcdBinding` holds
 (`src/icd/opengl/gl_hooks.cpp`); and the Direct3D runtimes resolve
 `OpenAdapter10_2` and `OpenAdapter12` by name and then call a table of bare
 function pointers, none of them handed a context, so the D3D user-mode driver's
-root lives in its exports' translation unit (`src/um/d3d/rvkumd_exports.cpp`,
+root lives in its exports' translation unit (`src/um/d3d/avumd_exports.cpp`,
 feature 055) and the table's thunks reach it through the single pointer
 `UmdBinding` holds (`src/icd/d3d/umd_binding.cpp`);
 and every function opens a trace scope (`AV_SCOPE`, docs/trace.md) that no
@@ -83,7 +83,7 @@ caller can hand the binary's trace table, so each binary's table - owned by
 that binary's root above - is reached through the single pointer
 `scope_binding` holds (`src/core/trace/scope_binding.cpp`), bound once the root
 exists and unbound only when no thread can still be inside the binary. A
-Windows binary's tracing is started from that root's storage; `rvktest.exe`,
+Windows binary's tracing is started from that root's storage; `avtest.exe`,
 which has no other root, keeps its `ProcessTrace` in one `ObjectStorage` in
 its entry's translation unit (`src/um/program_entry.cpp`), because its
 unhandled-exception filter is handed no context either. The QEMU device
@@ -227,7 +227,7 @@ device exists.
   write one. RAII is not a style preference here: it removes cleanup branches,
   which is what makes Principle IV's 100% branch coverage affordable.
   The QEMU device is C++ behind a C ABI, exactly as QEMU already links
-  `rutabaga_gfx`: `src/device` builds `librvk_device.a` with `rvk_device.h`, and
+  `rutabaga_gfx`: `src/device` builds `libav_device.a` with `av_device.h`, and
   only the glue in `src/device/qemu/` - copied into QEMU's `hw/display/` by
   `tools/build_qemu.sh` - is C, because QEMU's meson builds no C++ in modules.
 - **Toolchain**: clang/LLVM. Native tests and fuzzing with the host clang;
@@ -240,7 +240,7 @@ device exists.
 - **Sanitizers**: the native test build runs ASan + UBSan by default. A test
   suite that cannot run clean under both does not merge.
 - **No dependency** may be added to `src/core` or `src/km`. `src/device` may
-  depend only on QEMU's own headers and `librvk_codec`'s C ABI.
+  depend only on QEMU's own headers and `libav_codec`'s C ABI.
 
 ## Definition of done
 

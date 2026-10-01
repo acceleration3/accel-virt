@@ -5,7 +5,7 @@
  *
  * Input: u8 flags (bit 0: the context has a reply slot), then the payload. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/batch_executor.hpp"
 #include "device/execution/context_shared_objects.hpp"
 #include "device/memory/host_shared_objects.hpp"
@@ -58,7 +58,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     guest.write_batch(1u, data + 1, length);
 
     av::MockHost        host;
-    av::MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+    av::MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
     av::ExecutorLibrary library;
     if (library.accept(&ops.table()) != av::Status::ok) __builtin_trap();
     av::ExecutorShares  shares(host, library);

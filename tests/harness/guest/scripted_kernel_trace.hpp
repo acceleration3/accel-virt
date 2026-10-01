@@ -1,4 +1,4 @@
-/* The driver's side of rvkinspect.exe's trace escapes, as a test plays it: a
+/* The driver's side of avinspect.exe's trace escapes, as a test plays it: a
  * table and a state dump served a window at a time, with the misbehaviours a
  * reader must refuse - a window cut short, a total that changes, a refusal,
  * an answer to another request - at the Nth answer. */

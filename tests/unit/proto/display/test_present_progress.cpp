@@ -27,7 +27,7 @@ T field_at(const std::uint8_t *bytes, std::size_t offset)
 TEST(present_progress, the_counts_sit_where_the_page_documents_them)
 { std::uint8_t bytes[PresentProgress::encoded_size] = {};
   CHECK_STATUS(PresentProgress(0x100000002u, 3u).encode(bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(field_at<std::uint32_t>(bytes, 0u), 0x504B5652u);
+  CHECK_EQ(field_at<std::uint32_t>(bytes, 0u), 0x00505641u);
   CHECK_EQ(field_at<std::uint32_t>(bytes, 4u), 1u);
   CHECK_EQ(field_at<std::uint64_t>(bytes, PresentProgress::completed_at), 0x100000002u);
   CHECK_EQ(field_at<std::uint64_t>(bytes, PresentProgress::refused_at), 3u);

@@ -1,6 +1,6 @@
 /* One application OpenGL context (data-model.md): the options and pixel format
  * it was created with, the thread it is current on, and - once made - its own
- * rvk OpenGL context on the process's device (a KmtTransport of SubApi::opengl
+ * av OpenGL context on the process's device (a KmtTransport of SubApi::opengl
  * behind the send lock, and a blob arena its bulk data crosses in), with the
  * guest-side state the generated client asks about and the host's strings.
  *
@@ -75,7 +75,7 @@ public:
     GuestGlContext &operator=(const GuestGlContext &) = delete;
 
     /* Makes the host context: invalid_state unless created; not_supported with
-     * no rvkgpu device; no_memory when the staging cannot be had;
+     * no avgpu device; no_memory when the staging cannot be had;
      * invalid_parameter when the driver or the host refused the options -
      * nothing held after any of them. A blob arena the device cannot give is
      * logged, and bulk data then crosses inline. */

@@ -28,7 +28,7 @@ using av::Status;
 
 namespace {
 
-constexpr char        executor_path[] = "/opt/rvk/librvk_executor.so";
+constexpr char        executor_path[] = "/opt/av/libav_executor.so";
 constexpr std::size_t datagram_capacity = RendererMessageHeader::encoded_size + 4096u + 256u;
 
 /* The hello QEMU sends a new renderer: protocol 1, the bound GPU's UUID, the
@@ -74,7 +74,7 @@ TEST(renderer_loopback, a_hello_loads_the_executor_and_is_answered_ready)
   MockExecutorOps executor(static_cast<std::uint32_t>(av::SubApi::vulkan));
   LoopbackRendererPeer peer(qemu, executor.table());
   qemu.connect_renderer(peer);
-  CHECK_STATUS(qemu.start_renderer("rvk-renderer"), Status::ok);
+  CHECK_STATUS(qemu.start_renderer("av-renderer"), Status::ok);
   std::uint8_t datagram[datagram_capacity] = {};
   const std::size_t length = hello(datagram, 9u);
   CHECK_STATUS(qemu.send_renderer(datagram, length, nullptr, 0u), Status::ok);
@@ -95,7 +95,7 @@ TEST(renderer_loopback, a_hello_loads_the_executor_and_is_answered_ready)
   av::ReadyMessage ready;
   CHECK_STATUS(ready.decode(answer + RendererMessageHeader::encoded_size, header.body_length(), 0u), Status::ok);
   CHECK_EQ(ready.version(), av::RendererService::protocol_version);
-  CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(RVK_EXECUTOR_ABI_VERSION));
+  CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(AV_EXECUTOR_ABI_VERSION));
   CHECK_EQ(ready.sub_apis(), static_cast<std::uint32_t>(av::SubApi::vulkan));
   /* One hello, one answer: the next receive has nothing to take. */
   CHECK_STATUS(qemu.receive_renderer(answer, sizeof answer, answered, nullptr, 0u, count, 100u),
@@ -116,7 +116,7 @@ TEST(renderer_loopback, a_guest_region_maps_to_the_bytes_qemu_registered)
   MockExecutorOps executor(static_cast<std::uint32_t>(av::SubApi::vulkan));
   LoopbackRendererPeer peer(qemu, executor.table());
   qemu.connect_renderer(peer);
-  CHECK_STATUS(qemu.start_renderer("rvk-renderer"), Status::ok);
+  CHECK_STATUS(qemu.start_renderer("av-renderer"), Status::ok);
   std::uint8_t datagram[datagram_capacity] = {};
   CHECK_STATUS(qemu.send_renderer(datagram, hello(datagram, 1u), nullptr, 0u), Status::ok);
   std::uint8_t  answer[datagram_capacity] = {};
@@ -153,7 +153,7 @@ TEST(renderer_loopback, a_datagram_before_the_hello_is_refused_and_its_descripto
   MockExecutorOps executor(static_cast<std::uint32_t>(av::SubApi::vulkan));
   LoopbackRendererPeer peer(qemu, executor.table());
   qemu.connect_renderer(peer);
-  CHECK_STATUS(qemu.start_renderer("rvk-renderer"), Status::ok);
+  CHECK_STATUS(qemu.start_renderer("av-renderer"), Status::ok);
   std::uint8_t ram[0x1000] = {};
   qemu.add_guest_region(0u, ram, sizeof ram);
   std::uint32_t number = 0u;

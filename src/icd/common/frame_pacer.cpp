@@ -22,7 +22,7 @@ void FramePacer::wait()
         blanks_++;
         return;
     }
-    if (failures_++ == 0u) log_.write("rvkvk: FIFO present unpaced: the adapter's vertical blank wait failed");
+    if (failures_++ == 0u) log_.write("avvk: FIFO present unpaced: the adapter's vertical blank wait failed");
 }
 
 /* A schedule of its own, a refresh apart from whenever the first frame came,

@@ -3,7 +3,7 @@
 gives each one its own guest adapter (docs/kb/11-implementation-plan.md, "One
 adapter per host GPU").
 
-Each host GPU becomes one virtio-gpu-rvk-pci device bound by its Vulkan device
+Each host GPU becomes one virtio-gpu-av-pci device bound by its Vulkan device
 UUID, which, unlike enumeration order, survives reboots and driver updates.
 With no GPU, llvmpipe is listed as a CPU device, so there is always one.
 
@@ -68,13 +68,13 @@ class Gpu:
             self.pci_address = f"{domain & 0xFFFF:04x}:{bus & 0xFF:02x}:{device & 0x1F:02x}.{function & 0x7:x}"
 
     def device_argument(self):
-        return f"virtio-gpu-rvk-pci,host-gpu={self.uuid},max_outputs=1"
+        return f"virtio-gpu-av-pci,host-gpu={self.uuid},max_outputs=1"
 
     def adapter_name(self, sysfs=SYSFS_PCI):
         """What Windows would call the adapter: AMD's own product table first,
         then, for an integrated GPU (which RADV names after its processor),
         the PCI ID database's product name; else the Vulkan name, trimmed.
-        The same choice the device makes (virtio-gpu-rvk-host.c)."""
+        The same choice the device makes (virtio-gpu-av-host.c)."""
         vendor, device, revision = self.pci_identity(sysfs)
         name = amdgpu_name(vendor, device, revision)
         if name is None and self.kind == "integrated":

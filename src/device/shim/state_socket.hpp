@@ -1,5 +1,5 @@
 /* The unix socket a host binary answers its state dump on (docs/trace.md):
- * /dev/shm/rvk-state-<module>-<pid>.sock, where a client sends `state\n` and
+ * /dev/shm/av-state-<module>-<pid>.sock, where a client sends `state\n` and
  * reads the dump, or one error line, until the binary closes the connection.
  * The accept is marked as a wait, so its thread reads as waiting, not stuck.
  * One per binary; its thread runs for the life of the process. */

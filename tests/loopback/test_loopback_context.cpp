@@ -1,12 +1,12 @@
-/* L4: the guest core's rvk objects against the device core in one process.
+/* L4: the guest core's av objects against the device core in one process.
  * Requests travel as bytes, doorbell stores ring the device's worker, and the
  * test serves each fence interrupt as the driver's DPC would. */
-#include "core/rvk/capset_query.hpp"
-#include "core/rvk/device_identity.hpp"
-#include "core/rvk/context_memory.hpp"
+#include "core/av/capset_query.hpp"
+#include "core/av/device_identity.hpp"
+#include "core/av/context_memory.hpp"
 #include "proto/resources/guest_page_list.hpp"
-#include "core/rvk/context_pages.hpp"
-#include "core/rvk/guest_context.hpp"
+#include "core/av/context_pages.hpp"
+#include "core/av/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/module/driver_status.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -22,7 +22,7 @@
 #include "proto/submission/reply_header.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -39,7 +39,7 @@ using av::GuestRing;
 using av::LoopbackRig;
 using av::ProtocolVersion;
 using av::ReplyHeader;
-using av::RvkRequestWriter;
+using av::AvRequestWriter;
 using av::Status;
 using av::SubApi;
 
@@ -50,7 +50,7 @@ constexpr std::size_t   capset_major_offset = 28u;
 constexpr std::uint32_t large_batch = 1024u;
 
 /* One request straight to the device: the type it answered. */
-std::uint32_t answer_type(LoopbackRig &rig, const RvkRequestWriter &writer, const std::uint8_t *request)
+std::uint32_t answer_type(LoopbackRig &rig, const AvRequestWriter &writer, const std::uint8_t *request)
 {
     std::uint8_t      answer[256] = {};
     const std::size_t answered = rig.device().exchange(request, writer.length(), answer, sizeof answer);
@@ -92,8 +92,8 @@ TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
 { LoopbackRig rig;
   ContextMemory memory(rig.platform());
   CHECK_STATUS(memory.allocate(LoopbackRig::ring_order, LoopbackRig::reply_bytes), Status::ok);
-  std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(request, sizeof request);
+  std::uint8_t     request[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(request, sizeof request);
   CHECK_STATUS(writer.create_context(5u, CapsetInfo::capset_id), Status::ok);
   CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
   /* The rig's pages lie one after another, so each block is one run. */

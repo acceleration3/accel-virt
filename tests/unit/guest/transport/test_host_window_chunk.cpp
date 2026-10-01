@@ -41,7 +41,7 @@ using av::SubApi;
 
 namespace {
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
 constexpr std::uint64_t window_bytes = 256u * mib;
 constexpr std::uint32_t reply_bytes = 4096u;
@@ -56,7 +56,7 @@ public:
         : adapter_(0u), connection_(kmt_), staging_{},
           transport_(connection_, SubApi::vulkan, 12u, reply_bytes, staging_, sizeof staging_)
     {
-        kmt_.add_adapter(rvk, 3200u);
+        kmt_.add_adapter(av, 3200u);
         std::uint32_t count = 0u;
         CHECK_STATUS(kmt_.enumerate_adapters(&adapter_, 1u, count), Status::ok);
         CHECK_STATUS(connection_.open(adapter_), Status::ok);

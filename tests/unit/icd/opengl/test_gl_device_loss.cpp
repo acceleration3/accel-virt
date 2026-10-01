@@ -3,13 +3,13 @@
  * robust context's reset status, otherwise GL_OUT_OF_MEMORY once from
  * glGetError - and every other call on it reaches no Kmt at all; it is deleted
  * without the host, and a new context opens a new device. The probe's
- * rvkForceContextFault faults the calling thread's context on purpose. */
+ * avForceContextFault faults the calling thread's context on purpose. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/submission/command_header.hpp"
 
 #include "gl_protocol_ids.h"
@@ -156,7 +156,7 @@ TEST(gl_device_loss, a_robust_context_reports_an_unknown_reset)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
   CHECK(loss.robust_on(1u) != nullptr);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().flags(), static_cast<std::uint8_t>(av::GlContextOptions::robust_access |
                                                                 av::GlContextOptions::lose_context_on_reset));
@@ -239,14 +239,14 @@ TEST(gl_device_loss, a_lost_context_made_current_again_stays_lost)
   CHECK(rig.opengl32().delete_context(context));
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* The probe's fault: rvkForceContextFault sends the calling thread's context
+/* The probe's fault: avForceContextFault sends the calling thread's context
  * a glGetString it cannot decode and answers whether the context is now
  * lost; with nothing current it answers 0 with ERROR_INVALID_OPERATION, and on
  * a lost context 1 with nothing sent. */
 TEST(gl_device_loss, the_probe_forces_a_fault_on_the_current_context)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
-  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().driver_proc_address("rvkForceContextFault"));
+  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().driver_proc_address("avForceContextFault"));
   CHECK(force != nullptr);
   rig.threads().switch_to(3u);
   CHECK_EQ(force(), 0);
@@ -272,7 +272,7 @@ TEST(gl_device_loss, a_host_that_answers_the_forced_fault_leaves_the_context_wor
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
   CHECK(loss.made_on(1u) != nullptr);
-  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().driver_proc_address("rvkForceContextFault"));
+  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().driver_proc_address("avForceContextFault"));
   rig.host().gl_string("answered");
   CHECK_EQ(force(), 0);
   CHECK_EQ(rig.log().holding("the host answered the forced fault"), 1u);

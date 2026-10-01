@@ -1,4 +1,4 @@
-/* The escape record a process sends to learn where the driver mapped its rvk
+/* The escape record a process sends to learn where the driver mapped its av
  * context's ring and reply slot (docs/protocol.md, "Context memory"). The
  * kernel decodes it from memory the process wrote, so every field is judged as
  * hostile input, and the kernel's answer is encoded back into the same 32
@@ -39,7 +39,7 @@ private:
 TEST(context_views_record, a_request_round_trips_and_names_no_address)
 { Bytes bytes{ContextViewsRecord()};
   CHECK_STATUS(bytes.status(), Status::ok);
-  const std::uint8_t expected[8] = {'R', 'V', 'K', 'V', 1u, 0u, 0u, 0u};
+  const std::uint8_t expected[8] = {'A', 'V', 'V', 0, 1u, 0u, 0u, 0u};
   CHECK(std::memcmp(bytes.data(), expected, sizeof expected) == 0);
   for (std::size_t at = 8u; at < ContextViewsRecord::encoded_size; at++) CHECK_EQ(bytes.data()[at], 0u);
   ContextViewsRecord decoded;
@@ -64,7 +64,7 @@ TEST(context_views_record, an_answer_carries_both_addresses_and_is_no_request)
 TEST(context_views_record, every_field_is_judged)
 { struct Case { const char *what; std::size_t at; std::uint8_t width; std::uint64_t value; };
   const Case cases[] = {
-      {"magic", 0u, 4u, 0x574B5652u},   /* RVKW, the window's */
+      {"magic", 0u, 4u, 0x00575641u},   /* AVW, the window's */
       {"version 0", 4u, 2u, 0u},
       {"version 2", 4u, 2u, 2u},
       {"reserved half", 6u, 2u, 1u},
@@ -141,5 +141,5 @@ TEST(context_views_record, accept_answer_refuses_what_no_driver_answers)
   }
   ContextViewsRecord request;
   Bytes              wrong(request.answered(ring, reply));
-  wrong.put(0u, 4u, 0x574B5652u);
+  wrong.put(0u, 4u, 0x00575641u);
   CHECK_STATUS(request.accept_answer(wrong.data(), ContextViewsRecord::encoded_size), Status::malformed); }

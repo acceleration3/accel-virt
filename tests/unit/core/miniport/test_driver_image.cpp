@@ -77,13 +77,13 @@ TEST(driver_image_enter, registers_the_miniport_table_and_binds_the_root)
   CHECK_EQ(platform.logged(), 1u); }   /* DriverEntry; no trace table was asked for */
 
 /* The table is up before the miniport exists, its address is where the host
- * reads it from (docs/trace.md's line, which tools/mcp/rvk_inspect.py parses),
+ * reads it from (docs/trace.md's line, which tools/mcp/av_inspect.py parses),
  * and it is gone once the image is left. */
 TEST(driver_image_enter, lays_the_trace_table_out_first_and_logs_where_it_is)
 { Entered entered;
   CHECK_EQ(entered.enter_traced(), 0);
   MockPlatform &platform = entered.image().platform();
-  CHECK(platform.logged_line("rvkgpu: trace table at physical 0x0000000100000000 bytes 52832\n"));
+  CHECK(platform.logged_line("avgpu: trace table at physical 0x0000000100000000 bytes 52832\n"));
   CHECK(av::scope_binding.table() != nullptr);
   CHECK(!platform.bugcheck_registered());
   entered.image().leave();
@@ -184,10 +184,10 @@ TEST(driver_image_bugcheck, writes_the_table_through_the_registered_routine)
   CHECK_EQ(platform.bugcheck_bytes(), 52832u);
   CHECK(platform.bugcheck_buffer() == static_cast<const void *>(av::scope_binding.table()->region()));
   CHECK(platform.bugcheck());
-  CHECK(platform.bugcheck_line("rvkgpu: trace module=rvkgpu pid=0 slots=64\n"));
-  CHECK(platform.bugcheck_line("rvkgpu: thread 100 active depth=2 "));
-  CHECK(platform.bugcheck_line("rvkgpu:   #0 DriverImage::bugcheck irql=0 for_ms=0\n"));
-  CHECK(platform.bugcheck_line("rvkgpu:   #1 DriverTrace::bugcheck irql=0 for_ms=0\n"));
+  CHECK(platform.bugcheck_line("avgpu: trace module=avgpu pid=0 slots=64\n"));
+  CHECK(platform.bugcheck_line("avgpu: thread 100 active depth=2 "));
+  CHECK(platform.bugcheck_line("avgpu:   #0 DriverImage::bugcheck irql=0 for_ms=0\n"));
+  CHECK(platform.bugcheck_line("avgpu:   #1 DriverTrace::bugcheck irql=0 for_ms=0\n"));
   CHECK_EQ(platform.bugcheck_lines(), 4u);
   entered.image().leave();
   bugchecking = nullptr; }

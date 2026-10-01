@@ -11,7 +11,7 @@ namespace av {
 
 namespace {
 
-/* Header, "RVK" product 1 of 2026, version 1.3, digital input, then (after the
+/* Header, "AV" product 1 of 2026, version 1.3, digital input, then (after the
  * size in centimetres) gamma 2.2, RGB colour with sRGB primaries and a
  * preferred timing, the sRGB chromaticity, 640x480, 800x600 and 1024x768 at
  * 60 Hz established, and no standard timings. */

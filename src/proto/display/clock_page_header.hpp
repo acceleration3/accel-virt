@@ -36,7 +36,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x434B5652u;   /* "RVKC" */
+    static constexpr uint32_t magic = 0x00435641u;   /* "AVC" */
     static constexpr uint32_t version = 1u;
     static constexpr size_t   reserved_bytes = 20u;
 

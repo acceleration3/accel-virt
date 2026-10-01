@@ -1,9 +1,9 @@
 /* A Windows guest's whole path in one Linux process (docs/testing.md, L4): the
- * registered driver image, started by a fake dxgkrnl on virtio-gpu-rvk-pci's
+ * registered driver image, started by a fake dxgkrnl on virtio-gpu-av-pci's
  * PCI function, whose notify region, doorbell pages and interrupts are served
  * by the real device core over the guest's own MockPlatform memory, with
  * DdiKmt as the D3DKMT a guest process calls. The function is set up the way
- * tools/guest/run_guest_suite.py starts QEMU: rvk's subsystem, the doorbell
+ * tools/guest/run_guest_suite.py starts QEMU: av's subsystem, the doorbell
  * region, a hostmem region as large as the device core's, and eleven MSI-X
  * messages. Its device core runs MockExecutorOps, or - built with an executor
  * table and a host GPU - that executor, the real library's root in process
@@ -31,7 +31,7 @@ public:
     /* run_guest_suite.py's FENCE_VECTORS: three sources and eight messages the
      * fence queues share. */
     static constexpr std::uint32_t message_interrupts = 11u;
-    static constexpr std::uint16_t rvk_subsystem = 0x5256u;
+    static constexpr std::uint16_t av_subsystem = 0x5256u;
     /* The function presents a host GPU's IDs, as it does on any host whose
      * GPU sits on PCI: this project's RX 9070 XT. */
     static constexpr std::uint16_t host_vendor = 0x1002u;
@@ -47,7 +47,7 @@ public:
     static constexpr std::uint64_t worker_clock_step_ns = 1000u;
 
     FullStackRig();
-    FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *gpu);
+    FullStackRig(const AvExecutorOps &executor, const std::uint8_t *gpu);
     ~FullStackRig();
     FullStackRig(const FullStackRig &) = delete;
     FullStackRig &operator=(const FullStackRig &) = delete;

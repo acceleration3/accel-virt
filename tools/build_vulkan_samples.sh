@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the Vulkan samples (samples/vulkan) for the host, the guest, or both:
 #   tools/build_vulkan_samples.sh [host|guest|all] [-jN]
-# host  -> build-vulkan-samples/host/rvkvksamples       (the host's Vulkan loader)
-# guest -> build-vulkan-samples/guest/rvkvksamples.exe  (MinGW, the pinned vulkan-1.dll)
+# host  -> build-vulkan-samples/host/avvksamples       (the host's Vulkan loader)
+# guest -> build-vulkan-samples/guest/avvksamples.exe  (MinGW, the pinned vulkan-1.dll)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -13,7 +13,7 @@ tools/fetch_vulkan_samples.sh
 configure_and_build() {
     local dir=$1; shift
     cmake -S samples/vulkan -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release "$@" >/dev/null
-    cmake --build "$dir" --target rvkvksamples -- "$jobs"
+    cmake --build "$dir" --target avvksamples -- "$jobs"
 }
 
 case $which in

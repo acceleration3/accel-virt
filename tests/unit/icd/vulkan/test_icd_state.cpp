@@ -1,4 +1,4 @@
-/* The Vulkan ICD's state dump (docs/trace.md): what rvkinspect.exe shows of a
+/* The Vulkan ICD's state dump (docs/trace.md): what avinspect.exe shows of a
  * process's connections and handles, read by the state service's thread
  * without waiting on the thread that may be hung. */
 #include "core/support/text_buffer.hpp"

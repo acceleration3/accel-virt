@@ -15,7 +15,7 @@ enum class LockRank : uint16_t {
     hw_queue_table = 80u,     /* HwQueueTable, which looks contexts up in ContextTable */
     context_table = 90u,      /* ContextTable, which looks devices up in DeviceTable */
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
-    rvk_control_requests = 105u, /* wait mutex: an rvk context's setup, teardown or chunk request sequence,
+    av_control_requests = 105u, /* wait mutex: an av context's setup, teardown or chunk request sequence,
                                     which resolves its allocations in AllocationTable */
     host_window = 107u,        /* HostWindow's page map: a leaf, taken inside a window chunk's request sequence */
     allocation_table = 110u,
@@ -26,10 +26,10 @@ enum class LockRank : uint16_t {
     present_queue = 118u,      /* wait mutex: PresentQueue's next ticket and its payloads, held while one
                                   present is written and sent, never while it is moved */
     control_exchanges = 120u,  /* wait mutex: one control request and its answer at a time, whoever
-                                  asks - a present's copy beside an rvk context's request sequence */
+                                  asks - a present's copy beside an av context's request sequence */
     dpc = 150u,                /* spin lock: the adapter's DPC, which KeInsertQueueDpc may run on two
                                   processors at once; completions must reach dxgkrnl one at a time, in order */
-    rvk_context_slots = 190u,  /* spin lock: which rvk contexts are live, around a submission and the DPC's serve */
+    av_context_slots = 190u,  /* spin lock: which av contexts are live, around a submission and the DPC's serve */
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
     hw_queue_contexts = 205u,  /* spin lock: what each hardware queue runs on, read at DISPATCH (feature 049) */
     hw_queue_submissions = 210u, /* spin lock: SubmitCommandToHwQueue, DestroyHwQueue, ResetHwEngine and the DPC */
@@ -37,7 +37,7 @@ enum class LockRank : uint16_t {
                                   refresh, which sends under it */
     control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
     cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
-    rvk_context = 240u,        /* spin lock: an rvk context's submission, answers and the DPC's serve */
+    av_context = 240u,        /* spin lock: an av context's submission, answers and the DPC's serve */
     log_budget = 250u,         /* spin lock: a leaf, taken while the DPC already holds the locks above */
 };
 

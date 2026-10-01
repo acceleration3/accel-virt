@@ -6,13 +6,13 @@
 #            signing certificate and test signing, kernel crash dumps, verbose
 #            device-install logging, and nothing that interrupts a run - fast
 #            startup, sleep, automatic updates, maintenance, boot repair
-#   sign     name every present virtio-gpu-rvk-pci in the INF (below), trust a
+#   sign     name every present virtio-gpu-av-pci in the INF (below), trust a
 #            self-signed test certificate, catalog and sign the package, turn
 #            test signing on
-#   install  install the package on virtio-gpu-rvk-pci, Driver Verifier's
-#            standard checks on rvkgpu.sys - or, with -NoVerifier, without
+#   install  install the package on virtio-gpu-av-pci, Driver Verifier's
+#            standard checks on avgpu.sys - or, with -NoVerifier, without
 #            them, for a run measuring what the verifier itself changes
-#   check    every rvkgpu adapter started on rvkgpu with no problem code; the
+#   check    every avgpu adapter started on avgpu with no problem code; the
 #            verifier's settings
 #   adapters what Windows says each display adapter is, one line per adapter
 #            and source, '|'-separated: "wmi|<PNPDeviceID>|<AdapterRAM>|
@@ -33,14 +33,14 @@
 #   timeouts  the event 4101s in the System log, which is dxgkrnl saying it
 #            reset a display driver that stopped responding, one "timeout:"
 #            line each and a count
-#   collect  diagnostics into C:\rvk\diag, then one "file <path>" or
+#   collect  diagnostics into C:\av\diag, then one "file <path>" or
 #            "dump <path>" line per file for the runner to pull
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'adapters', 'modes', 'setmode', 'extend', 'monitortimeout',
                  'sleepstates', 'hibernate', 'cycle', 'upgrade', 'timeouts', 'pageheap', 'heapchecks',
                  'collect')][string]$Stage,
-    [string]$Package = 'C:\rvk\package',
+    [string]$Package = 'C:\av\package',
     [int]$Width = 0,
     [int]$Height = 0,
     [int]$Minutes = 0,
@@ -52,18 +52,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $RebootRequired = 3010
 $Subject = 'CN=accel-virt test signing'
-# virtio-gpu-rvk-pci presents its host GPU's vendor, device and revision
+# virtio-gpu-av-pci presents its host GPU's vendor, device and revision
 # (docs/protocol.md), which differ from host to host; its subsystem, 1af4:5256,
 # is always this device's. virtio-gpu's own 1af4:1050 is what it keeps when its
 # GPU has no PCI function, and the one ID the INF names statically.
-$RvkHardwareId = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
+$AvHardwareId = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
 $StockHardwareId = 'PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4'
 # What the runner knows each host GPU is called: "<vendor>`t<device>`t<name>"
 # a line, hex in lowercase. Absent, a generated model is named as the static one.
-$AdapterNames = 'C:\rvk\adapters.txt'
+$AdapterNames = 'C:\av\adapters.txt'
 # The end of every INF line WriteModels wrote, so signing again replaces them.
 $GeneratedMark = '; provision.ps1: a host GPU'
-$Diagnostics = 'C:\rvk\diag'
+$Diagnostics = 'C:\av\diag'
 # The package's files and their SHA-256, as the runner built and pushed them
 # (run_guest_suite.py's PACKAGE_MANIFEST), in sha256sum's form.
 $Manifest = 'package.sha256'
@@ -129,17 +129,17 @@ function NoDriverUpdates {
     Remove-Item 'C:\Windows\SoftwareDistribution\Download\*' -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-function RvkDevices {
-    @(Get-PnpDevice -PresentOnly | Where-Object { @($_.HardwareID | Where-Object { $_ -match $RvkHardwareId }).Count })
+function AvDevices {
+    @(Get-PnpDevice -PresentOnly | Where-Object { @($_.HardwareID | Where-Object { $_ -match $AvHardwareId }).Count })
 }
 
-function RvkDevice {
-    RvkDevices | Select-Object -First 1
+function AvDevice {
+    AvDevices | Select-Object -First 1
 }
 
-# The four-part hardware ID of every present virtio-gpu-rvk-pci, once each.
-function RvkHardwareIds {
-    @(RvkDevices | ForEach-Object { $_.HardwareID } | Where-Object { $_ -match $RvkHardwareId } |
+# The four-part hardware ID of every present virtio-gpu-av-pci, once each.
+function AvHardwareIds {
+    @(AvDevices | ForEach-Object { $_.HardwareID } | Where-Object { $_ -match $AvHardwareId } |
         ForEach-Object { $_.ToUpperInvariant() } | Sort-Object -Unique)
 }
 
@@ -152,18 +152,18 @@ function AdapterName($Vendor, $Device) {
     return $null
 }
 
-# One model line in the INF for each present virtio-gpu-rvk-pci whose IDs are
+# One model line in the INF for each present virtio-gpu-av-pci whose IDs are
 # its host GPU's: no static INF can list them, and PnP matches no ID made of a
 # subsystem alone. Written before the catalog, which is what signs the INF.
 # A host GPU the runner named gets its own DeviceDesc, which is what Device
-# Manager, WMI and DXGI show until rvkgpu.sys writes the same name at
+# Manager, WMI and DXGI show until avgpu.sys writes the same name at
 # StartDevice; the rest are named as the static model is.
 function WriteModels($Inf) {
     $lines = [System.Collections.Generic.List[string]]@(Get-Content $Inf | Where-Object { -not $_.EndsWith($GeneratedMark) })
     $models = @()
     $strings = @()
-    foreach ($id in RvkHardwareIds) {
-        if ($id -eq $StockHardwareId -or -not ($id -match $RvkHardwareId)) { continue }
+    foreach ($id in AvHardwareIds) {
+        if ($id -eq $StockHardwareId -or -not ($id -match $AvHardwareId)) { continue }
         $vendor = $Matches[1]
         $device = $Matches[2]
         $key = "HostGpu_${vendor}_${device}"
@@ -173,11 +173,11 @@ function WriteModels($Inf) {
             $description = "%$key%"
             $strings += "$key = `"$($name.Replace('"', '""').Replace('%', '%%'))`" $GeneratedMark"
         }
-        $models += "$description = Rvkgpu_Install, $id $GeneratedMark"
+        $models += "$description = Avgpu_Install, $id $GeneratedMark"
         Write-Output "sign: $id named $(if ($name) { $name } else { 'as the static model' })"
     }
-    $section = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Rvkgpu\.NTamd64\.10\.0\.\.\.26100\]' })
-    if ($section -lt 0) { throw "$Inf has no [Rvkgpu.NTamd64.10.0...26100] section" }
+    $section = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Avgpu\.NTamd64\.10\.0\.\.\.26100\]' })
+    if ($section -lt 0) { throw "$Inf has no [Avgpu.NTamd64.10.0...26100] section" }
     $lines.InsertRange($section + 1, [string[]]$models)
     $stringsAt = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Strings\]' })
     if ($stringsAt -lt 0) { throw "$Inf has no [Strings] section" }
@@ -188,9 +188,9 @@ function WriteModels($Inf) {
 }
 
 # Each file the manifest names, as the host built it. A guest that bugchecked
-# mid-push kept rvkumd.dll's size and lost its bytes, and three upgrades
+# mid-push kept avumd.dll's size and lost its bytes, and three upgrades
 # installed it: every Direct3D 11 device failed and DWM restarted in a loop.
-# Before sign changes rvkgpu.sys and the INF, every byte is still the host's.
+# Before sign changes avgpu.sys and the INF, every byte is still the host's.
 # Both checks write with Write-Host: what a function outputs is what it returns.
 function PackageMatchesManifest {
     $path = Join-Path $Package $Manifest
@@ -216,7 +216,7 @@ function PackageMatchesManifest {
 function StoreMatchesPackage {
     $path = Join-Path $Package $Manifest
     if (-not (Test-Path $path)) { return $true }
-    $device = RvkDevice
+    $device = AvDevice
     if (-not $device) { Write-Host 'installed: the adapter is absent'; return $false }
     $key = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_Driver).Data
     $names = @((Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$key").UserModeDriverName |
@@ -407,7 +407,7 @@ switch ($Stage) {
         bcdedit /set '{current}' recoveryenabled No | Out-Null
         bcdedit /set '{current}' bootstatuspolicy IgnoreAllFailures | Out-Null
         try {
-            Add-MpPreference -ExclusionPath 'C:\rvk'
+            Add-MpPreference -ExclusionPath 'C:\av'
         } catch {
             Write-Output "prepare: no Defender exclusion: $($_.Exception.Message)"
         }
@@ -417,12 +417,12 @@ switch ($Stage) {
     }
     'sign' {
         if (-not (PackageMatchesManifest)) { exit 1 }
-        WriteModels "$Package\rvkgpu.inf"
+        WriteModels "$Package\avgpu.inf"
         $certificate = SigningCertificate
-        Sign "$Package\rvkgpu.sys" $certificate
-        Remove-Item "$Package\rvkgpu.cat" -ErrorAction SilentlyContinue
-        New-FileCatalog -Path $Package -CatalogFilePath "$Package\rvkgpu.cat" -CatalogVersion 2.0 | Out-Null
-        Sign "$Package\rvkgpu.cat" $certificate
+        Sign "$Package\avgpu.sys" $certificate
+        Remove-Item "$Package\avgpu.cat" -ErrorAction SilentlyContinue
+        New-FileCatalog -Path $Package -CatalogFilePath "$Package\avgpu.cat" -CatalogVersion 2.0 | Out-Null
+        Sign "$Package\avgpu.cat" $certificate
         if (EnableTestSigning) { exit $RebootRequired }
         exit 0
     }
@@ -440,31 +440,31 @@ switch ($Stage) {
             SetDword $key Enabled 1
             SetDword $key AllowExperimental 1
         }
-        pnputil /add-driver "$Package\rvkgpu.inf" /install
+        pnputil /add-driver "$Package\avgpu.inf" /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
         if (-not (StoreMatchesPackage)) { exit 1 }
         if ($NoVerifier) {
             # Driver Verifier interposes on every DDI call, so a run that is
             # trying to find out whether the verifier is the thing refusing a
             # call has to be able to take it away (feature 053).
-            Write-Output 'verifier: skipped, rvkgpu.sys installed with no Driver Verifier checks'
+            Write-Output 'verifier: skipped, avgpu.sys installed with no Driver Verifier checks'
         } else {
-            verifier /standard /driver rvkgpu.sys | Out-Null
-            Write-Output 'verifier: standard checks on rvkgpu.sys'
+            verifier /standard /driver avgpu.sys | Out-Null
+            Write-Output 'verifier: standard checks on avgpu.sys'
         }
         exit $RebootRequired
     }
     'check' {
         verifier /querysettings
-        $devices = @(RvkDevices)
+        $devices = @(AvDevices)
         if ($devices.Count -eq 0) { Write-Output 'device: absent'; exit 1 }
         # The desktop's compositor, and every driver bound to a display: feature
-        # 038 asks for rvkgpu alone with dwm.exe composited on it.
+        # 038 asks for avgpu alone with dwm.exe composited on it.
         $dwm = @(Get-Process -Name dwm -ErrorAction SilentlyContinue).Count
         $displays = (Get-PnpDevice -Class Display -Status OK -ErrorAction SilentlyContinue |
             ForEach-Object { (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Service).Data }) -join ','
         # One monitor per output each adapter reports, which is what US4 asks.
-        # Only the ones an rvkgpu adapter is the parent of: an image that has
+        # Only the ones an avgpu adapter is the parent of: an image that has
         # run another display driver keeps its monitors.
         $instances = @($devices | ForEach-Object { $_.InstanceId })
         $monitors = @(Get-PnpDevice -Class Monitor -Status OK -ErrorAction SilentlyContinue | Where-Object {
@@ -479,7 +479,7 @@ switch ($Stage) {
             $status = '0x{0:X8}' -f [uint32](& $property DEVPKEY_Device_ProblemStatus)
             $service = & $property DEVPKEY_Device_Service
             Write-Output "device: $($device.InstanceId) status=$($device.Status) problem=$problem problem-status=$status service=$service"
-            if ($device.Status -ne 'OK' -or $service -ne 'rvkgpu') { $failed = $true }
+            if ($device.Status -ne 'OK' -or $service -ne 'avgpu') { $failed = $true }
         }
         if ($failed) { exit 1 }
         exit 0
@@ -521,7 +521,7 @@ switch ($Stage) {
         # an update would arrive: no reboot, and the adapter running on the new
         # version afterwards (feature 040, US2). The catalog is signed again
         # because the INF it covers changed.
-        $inf = "$Package\rvkgpu.inf"
+        $inf = "$Package\avgpu.inf"
         $text = Get-Content $inf -Raw
         $match = [regex]::Match($text, 'DriverVer\s*=\s*([0-9/]+),([0-9.]+)')
         if (-not $match.Success) { Write-Output 'upgrade: no DriverVer in the package'; exit 1 }
@@ -530,12 +530,12 @@ switch ($Stage) {
         $version = $parts -join '.'
         Set-Content $inf ($text -replace 'DriverVer\s*=\s*[0-9/]+,[0-9.]+', "DriverVer   = $($match.Groups[1].Value),$version")
         $certificate = SigningCertificate
-        Remove-Item "$Package\rvkgpu.cat" -ErrorAction SilentlyContinue
-        New-FileCatalog -Path $Package -CatalogFilePath "$Package\rvkgpu.cat" -CatalogVersion 2.0 | Out-Null
-        Sign "$Package\rvkgpu.cat" $certificate
+        Remove-Item "$Package\avgpu.cat" -ErrorAction SilentlyContinue
+        New-FileCatalog -Path $Package -CatalogFilePath "$Package\avgpu.cat" -CatalogVersion 2.0 | Out-Null
+        Sign "$Package\avgpu.cat" $certificate
         pnputil /add-driver $inf /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
-        $device = RvkDevice
+        $device = AvDevice
         if (-not $device) { Write-Output 'upgrade: the adapter is absent'; exit 1 }
         $running = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_DriverVersion).Data
         $problem = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_ProblemCode).Data
@@ -550,7 +550,7 @@ switch ($Stage) {
         # the adapter and enable it again, checking it came back each time
         # (feature 040, US2). A cycle that leaves the device with a problem code
         # stops the loop where it happened.
-        $device = RvkDevice
+        $device = AvDevice
         if (-not $device) { Write-Output 'cycle: the adapter is absent'; exit 1 }
         for ($cycle = 1; $cycle -le $Minutes; $cycle++) {
             Disable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false -ErrorAction Stop
@@ -601,7 +601,7 @@ switch ($Stage) {
         exit $LASTEXITCODE
     }
     'timeouts' {
-        # 4101: "Display driver rvkgpu stopped responding and has successfully
+        # 4101: "Display driver avgpu stopped responding and has successfully
         # recovered" - what dxgkrnl logs once it has reset the engine
         # (feature 040, US3).
         $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 4101 } -ErrorAction SilentlyContinue)
@@ -661,22 +661,22 @@ switch ($Stage) {
         Copy-Item 'C:\Windows\INF\setupapi.dev.log' "$Diagnostics\setupapi.dev.log" -ErrorAction SilentlyContinue
         # The Vulkan ICD's log, one file per process that loaded it (feature
         # 045, FR-007); none when nothing did.
-        Copy-Item 'C:\ProgramData\rvk\*.log' $Diagnostics -ErrorAction SilentlyContinue
+        Copy-Item 'C:\ProgramData\av\*.log' $Diagnostics -ErrorAction SilentlyContinue
         # What a traced program left when it crashed (docs/trace.md), and what
-        # Windows Error Reporting recorded for any rvk program, traced or not:
+        # Windows Error Reporting recorded for any av program, traced or not:
         # a probe that faulted before its table existed shows only there.
-        Copy-Item 'C:\ProgramData\rvk\crash-*.txt' $Diagnostics -ErrorAction SilentlyContinue
+        Copy-Item 'C:\ProgramData\av\crash-*.txt' $Diagnostics -ErrorAction SilentlyContinue
         Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Windows Error Reporting' } `
                 -MaxEvents 50 -ErrorAction SilentlyContinue |
-            Where-Object { $_.Message -match 'rvk' } |
+            Where-Object { $_.Message -match 'av' } |
             Format-List TimeCreated, Message | Out-File "$Diagnostics\application-crashes.txt" -Encoding utf8
         & {
             Get-PnpDevice -Class Display | Format-List FriendlyName, InstanceId, Status, Problem
-            $device = RvkDevice
+            $device = AvDevice
             if ($device) {
                 Get-PnpDeviceProperty -InstanceId $device.InstanceId | Format-Table KeyName, Data -AutoSize -Wrap
             }
-            sc.exe query rvkgpu
+            sc.exe query avgpu
         } *>&1 | Out-File "$Diagnostics\device.txt" -Encoding utf8 -Width 400
         verifier /query *>&1 | Out-File "$Diagnostics\verifier.txt" -Encoding utf8 -Width 400
         Get-ChildItem $Diagnostics -File | ForEach-Object { "file $($_.FullName)" }

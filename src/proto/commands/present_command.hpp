@@ -30,7 +30,7 @@ public:
     void write(WireWriter &writer) const;
 
 private:
-    static constexpr uint32_t magic = 0x504B5652u;   /* "RVKP" */
+    static constexpr uint32_t magic = 0x00505641u;   /* "AVP" */
 
     PresentOperation operation_;
     uint32_t         color_;

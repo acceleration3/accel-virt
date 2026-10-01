@@ -54,7 +54,7 @@ TEST(cl_platform, answers_the_suffix_the_loader_cannot_do_without)
 { ClPlatform platform;
   char text[64] = {};
   CHECK(reads_back(platform, CL_PLATFORM_ICD_SUFFIX_KHR, text, sizeof text));
-  CHECK_EQ(std::strcmp(text, "RVK"), 0);
+  CHECK_EQ(std::strcmp(text, "AV"), 0);
   CHECK(platform.invariants_hold()); }
 
 TEST(cl_platform, answers_its_profile_name_and_vendor)
@@ -63,7 +63,7 @@ TEST(cl_platform, answers_its_profile_name_and_vendor)
   CHECK(reads_back(platform, CL_PLATFORM_PROFILE, text, sizeof text));
   CHECK_EQ(std::strcmp(text, "FULL_PROFILE"), 0);
   CHECK(reads_back(platform, CL_PLATFORM_NAME, text, sizeof text));
-  CHECK(std::strstr(text, "rvkgpu") != nullptr);
+  CHECK(std::strstr(text, "avgpu") != nullptr);
   CHECK(reads_back(platform, CL_PLATFORM_VENDOR, text, sizeof text));
   CHECK(std::strlen(text) > 0u); }
 

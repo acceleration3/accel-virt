@@ -14,7 +14,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -36,8 +36,8 @@ using namespace av::clproto;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 constexpr std::uint32_t elements = OpenClScenario::elements;
 /* The commands a whole run sends before its first release. */
@@ -52,8 +52,8 @@ class Rig {
 public:
     Rig() : search_(kmt_), host_(kmt_)
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }
@@ -163,7 +163,7 @@ TEST(opencl_scenario, vector_add_runs_on_the_host_and_everything_is_released_in_
       WireReader body = rig.body(first_release + index);
       CHECK_EQ(body.read_u64(), released[index]);
   }
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::opencl);
   CHECK(report.invariants_hold());

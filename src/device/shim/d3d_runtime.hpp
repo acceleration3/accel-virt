@@ -3,7 +3,7 @@
  *
  * Loaded rather than linked because they are optional: a host without them
  * serves every other sub-API, and a configuration that never built them still
- * links the executor library. Found in the directory RVK_D3D_PATH names, or
+ * links the executor library. Found in the directory AV_D3D_PATH names, or
  * by the loader's own search when it names none.
  *
  * DXVK's native build must be told which window system it runs under even

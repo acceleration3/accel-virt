@@ -107,7 +107,7 @@ TEST(table_host, forwards_where_a_gpu_sits_on_pci_and_the_files_the_host_reads)
  * are both a host that read nothing. */
 TEST(table_host, a_missing_or_overlong_file_reader_reads_nothing)
 { MockHost mock; MockHostOps ops(mock);
-  RvkHostOps table = ops.table();
+  AvHostOps table = ops.table();
   table.read_file = nullptr;
   TableHost without(table);
   char        bytes[8] = {};
@@ -379,7 +379,7 @@ TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
   CHECK_EQ(refused, -1);
 
   /* A table with the slot empty, as one built before the op has it. */
-  RvkHostOps older = ops.table();
+  AvHostOps older = ops.table();
   older.dmabuf_over_guest = nullptr;
   older.close_dmabuf = nullptr;
   TableHost before(older);
@@ -392,14 +392,14 @@ TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
 TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *file = nullptr;
-  CHECK_STATUS(host.create_recording("run.rvk", file), Status::ok);
+  CHECK_STATUS(host.create_recording("run.av", file), Status::ok);
   CHECK(file != nullptr);
   const std::uint8_t bytes[] = {1u, 2u, 3u, 4u};
   CHECK_STATUS(host.append_recording(file, bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(mock.recording_length("run.rvk"), sizeof bytes);
-  CHECK_EQ(mock.recording_bytes("run.rvk")[2], 3u);
+  CHECK_EQ(mock.recording_length("run.av"), sizeof bytes);
+  CHECK_EQ(mock.recording_bytes("run.av")[2], 3u);
   CHECK_STATUS(host.truncate_recording(file), Status::ok);
-  CHECK_EQ(mock.recording_length("run.rvk"), 0u);
+  CHECK_EQ(mock.recording_length("run.av"), 0u);
   mock.fail_recording_append_at(1u);
   CHECK_STATUS(host.append_recording(file, bytes, sizeof bytes), Status::no_space);
   mock.fail_recording_truncate_at(1u);
@@ -407,10 +407,10 @@ TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
   host.close_recording(file);
   CHECK_EQ(mock.live_recordings(), 0u);
   /* The bytes outlive the close, as a file does. */
-  CHECK(mock.recording_bytes("run.rvk") != nullptr);
+  CHECK(mock.recording_bytes("run.av") != nullptr);
   mock.fail_recording_create_at(1u);
   void *refused = &mock;
-  CHECK_STATUS(host.create_recording("again.rvk", refused), Status::no_memory);
+  CHECK_STATUS(host.create_recording("again.av", refused), Status::no_memory);
   CHECK(refused == nullptr); }
 /* The four display operations, over the same C table. What the guest sends is
  * geometry; what the glue is handed is one plane with a DRM fourcc and a
@@ -470,7 +470,7 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
 
   /* A table from before these four: the display shows nothing, which is the
    * same answer a host with no GL display gives. */
-  RvkHostOps older = ops.table();
+  AvHostOps older = ops.table();
   older.display_takes_dmabuf = nullptr;
   older.show_scanout = nullptr;
   older.update_scanout = nullptr;
@@ -635,7 +635,7 @@ TEST(table_host_host_memory, a_dma_buf_over_host_memory_is_the_glues_or_not_supp
   CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0u, 0x1000u, refused), Status::not_supported);
   CHECK_EQ(refused, -1);
   CHECK_EQ(mock.host_dmabufs(), 1u);
-  RvkHostOps older = ops.table();
+  AvHostOps older = ops.table();
   older.dmabuf_over_host_memory = nullptr;
   TableHost before(older);
   int none = 7;
@@ -655,10 +655,10 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   const std::uint8_t datagram[] = {0x11u, 0x22u};
   CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, nullptr, 0u), Status::not_found);  /* none started */
   mock.fail_renderer_start_at(1u);
-  CHECK_STATUS(host.start_renderer("/opt/rvk-renderer"), Status::not_found);
+  CHECK_STATUS(host.start_renderer("/opt/av-renderer"), Status::not_found);
   CHECK(!mock.renderer_running());
-  CHECK_STATUS(host.start_renderer("/opt/rvk-renderer"), Status::ok);
-  CHECK(std::strcmp(mock.started_renderer(), "/opt/rvk-renderer") == 0);
+  CHECK_STATUS(host.start_renderer("/opt/av-renderer"), Status::ok);
+  CHECK(std::strcmp(mock.started_renderer(), "/opt/av-renderer") == 0);
   CHECK_EQ(mock.renderer_starts(), 1u);
 
   const int sent = mock.open_descriptor();
@@ -707,7 +707,7 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   CHECK_EQ(mock.renderer_kills(), 1u);
   CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, nullptr, 0u), Status::not_found);
   CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::not_found);
-  CHECK_STATUS(host.start_renderer("/opt/rvk-renderer"), Status::ok);
+  CHECK_STATUS(host.start_renderer("/opt/av-renderer"), Status::ok);
   mock.renderer_gone();
   CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::not_found);
   CHECK_EQ(mock.renderer_datagrams(), 1u); }
@@ -716,7 +716,7 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
  * with nothing to hand a renderer and no renderer to start. */
 TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
 { MockHost mock; MockHostOps ops(mock);
-  RvkHostOps older = ops.table();
+  AvHostOps older = ops.table();
   older.event_descriptor = nullptr;
   older.fence_interrupt_descriptor = nullptr;
   older.guest_region_count = nullptr;
@@ -747,7 +747,7 @@ TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
   before.close_descriptor(kept);
   CHECK(mock.descriptor_open(kept));
   mock.close_descriptor(kept);
-  CHECK_STATUS(before.start_renderer("/opt/rvk-renderer"), Status::not_supported);
+  CHECK_STATUS(before.start_renderer("/opt/av-renderer"), Status::not_supported);
   CHECK_STATUS(before.send_renderer(ram, 1u, nullptr, 0u), Status::not_supported);
   std::size_t   length = 9u;
   std::uint32_t count = 9u;
@@ -772,7 +772,7 @@ TEST(table_host, a_directory_is_listed_through_the_glue_or_not_at_all)
   CHECK(std::memcmp(names, "card1-DP-2\ncard1\n", 17u) == 0);
   CHECK_STATUS(host.list_directory("/sys/absent", names, sizeof names, length), Status::not_found);
   CHECK_EQ(length, 0u);
-  RvkHostOps table = ops.table();
+  AvHostOps table = ops.table();
   table.list_directory = nullptr;
   TableHost without(table);
   CHECK_STATUS(without.list_directory("/sys/class/drm", names, sizeof names, length), Status::not_found);
@@ -811,7 +811,7 @@ TEST(table_host, wait_event_until_answers_whether_the_signal_or_the_deadline_cam
 TEST(table_host_scanout, show_image_goes_through_the_table_or_is_not_supported)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.add_display_heads(1u);
-  RvkExportedImage image = {};
+  AvExportedImage image = {};
   image.fd = 7;
   image.width = 320u;
   CHECK_STATUS(host.show_image(0u, image), Status::ok);
@@ -819,7 +819,7 @@ TEST(table_host_scanout, show_image_goes_through_the_table_or_is_not_supported)
   CHECK_EQ(mock.last_image(0u).fd, 7);
   CHECK_EQ(mock.last_image(0u).width, 320u);
   CHECK_STATUS(host.show_image(1u, image), Status::not_supported);
-  RvkHostOps older = ops.table();
+  AvHostOps older = ops.table();
   older.show_image = nullptr;
   TableHost old_host(older);
   CHECK_STATUS(old_host.show_image(0u, image), Status::not_supported);

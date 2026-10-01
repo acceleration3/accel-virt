@@ -25,7 +25,7 @@ TEST(debug_report_write, lays_out_magic_format_state_features_and_node_progress_
   const DebugReport report(platform, true, false, 0x0000000100000018ull, node);
   CHECK_EQ(report.write(buffer.data(), DebugReport::report_bytes), DebugReport::report_bytes);
   const std::uint8_t expected[DebugReport::report_bytes] = {
-      'R', 'V', 'K', 'D', 2, 0, 1, 0, 0x18, 0, 0, 0, 1, 0, 0, 0,
+      'A', 'V', 'D', 0, 2, 0, 1, 0, 0x18, 0, 0, 0, 1, 0, 0, 0,
       3, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x01, 0, 0, 0, 0, 0, 0,
       1, 0, 0, 0, 0, 0, 0, 0};
   CHECK(std::memcmp(buffer.data(), expected, sizeof expected) == 0);

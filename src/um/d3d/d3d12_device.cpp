@@ -89,8 +89,8 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     }
     uint32_t           hresult = 1u;
     d3d12proto::Caps12 host = {};
-    if (!d3d12proto::rvk_d3d12_OpenDevice12(channel_.object(), 0u, &hresult, &host) || hresult != 0u) {
-        log_.write("rvkumd: the host made no Direct3D 12 device");
+    if (!d3d12proto::av_d3d12_OpenDevice12(channel_.object(), 0u, &hresult, &host) || hresult != 0u) {
+        log_.write("avumd: the host made no Direct3D 12 device");
         channel_.destroy();
         session_.leave();
         return E_FAIL;
@@ -105,7 +105,7 @@ void D3d12Device::refused(const char *slot, uint32_t hresult)
     AV_SCOPE("D3d12Device::refused");
     char       line[128] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: Direct3D 12 ");
+    text.append("avumd: Direct3D 12 ");
     text.append(slot);
     text.append(" refused, HRESULT ");
     text.append_hex(hresult, 8u);
@@ -136,7 +136,7 @@ void D3d12Device::unsupported(const char *slot)
     word |= mask;
     char       line[128] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: Direct3D 12 slot not implemented: ");
+    text.append("avumd: Direct3D 12 slot not implemented: ");
     text.append(slot);
     log_.write(text.text());
 }
@@ -160,7 +160,7 @@ void D3d12Device::lost(const char *what)
     lost_ = true;
     char       line[128] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: Direct3D 12 device lost: ");
+    text.append("avumd: Direct3D 12 device lost: ");
     text.append(what);
     log_.write(text.text());
     if (core_ != nullptr) core_->pfnSetErrorCb(runtime_, D3DDDIERR_DEVICEREMOVED);
@@ -324,11 +324,11 @@ HRESULT D3d12Device::create_command_queue(const D3D12DDIARG_CREATECOMMANDQUEUE_0
     context.NodeOrdinal = 0u;
     context.EngineAffinity = 1u;
     if (FAILED(core_->pfnCreateContextVirtualCb(runtime, &context))) {
-        log_.write("rvkumd: the kernel refused a Direct3D 12 queue's context");
+        log_.write("avumd: the kernel refused a Direct3D 12 queue's context");
         return E_OUTOFMEMORY;
     }
     queue.context = context.hContext;
-    if (!sent(d3d12proto::rvk_d3d12_CreateCommandQueue12(wire(), queue.header.id, queue.type, 0u, 0u),
+    if (!sent(d3d12proto::av_d3d12_CreateCommandQueue12(wire(), queue.header.id, queue.type, 0u, 0u),
               "CreateCommandQueue12"))
         return E_OUTOFMEMORY;
     return S_OK;
@@ -340,7 +340,7 @@ VOID D3d12Device::destroy_command_queue(D3D12DDI_HCOMMANDQUEUE handle)
     QueueRecord &queue = *static_cast<QueueRecord *>(handle.pDrvPrivate);
     /* The queue's context is D3D12Core's to destroy with the queue: its
      * device-level DestroyContextCb refuses a queue's context. */
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), queue.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), queue.header.id), "Destroy12"));
     queue = QueueRecord{};
 }
 
@@ -353,7 +353,7 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
         uint32_t ids[most_lists] = {};
         const UINT batch = count - first < most_lists ? count - first : most_lists;
         for (UINT index = 0u; index < batch; index++) ids[index] = id_of(lists[first + index].pDrvPrivate);
-        if (!sent(d3d12proto::rvk_d3d12_ExecuteCommandLists12(wire(), queue.header.id, batch, ids),
+        if (!sent(d3d12proto::av_d3d12_ExecuteCommandLists12(wire(), queue.header.id, batch, ids),
                   "ExecuteCommandLists12"))
             return;
     }
@@ -371,7 +371,7 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
      * and then rather than every execute, because asking is a round trip. */
     if (queue.executed % verdict_every != 0u) return;
     uint32_t removed = 0u;
-    if (!sent(d3d12proto::rvk_d3d12_Finish12(wire(), &removed), "Finish12")) return;
+    if (!sent(d3d12proto::av_d3d12_Finish12(wire(), &removed), "Finish12")) return;
     if (removed != 0u) lost("the host removed the device");
 }
 
@@ -424,7 +424,7 @@ VOID D3d12Device::destroy_command_pool(D3D12DDI_HCOMMANDPOOL_0040 handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_pool");
     PoolRecord &pool = *static_cast<PoolRecord *>(handle.pDrvPrivate);
-    if (pool.made != 0u) static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), pool.header.id), "Destroy12"));
+    if (pool.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), pool.header.id), "Destroy12"));
     pool = PoolRecord{};
 }
 
@@ -433,7 +433,7 @@ VOID D3d12Device::reset_command_pool(D3D12DDI_HCOMMANDPOOL_0040 handle)
     AV_SCOPE("D3d12Device::reset_command_pool");
     const PoolRecord &pool = *static_cast<const PoolRecord *>(handle.pDrvPrivate);
     if (pool.made == 0u) return;
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_ResetCommandAllocator12(wire(), pool.header.id),
+    static_cast<void>(sent(d3d12proto::av_d3d12_ResetCommandAllocator12(wire(), pool.header.id),
                            "ResetCommandAllocator12"));
 }
 
@@ -494,7 +494,7 @@ VOID D3d12Device::destroy_command_list(D3D12DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_list");
     ListRecord &list = *static_cast<ListRecord *>(handle.pDrvPrivate);
-    if (list.made != 0u) static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), list.header.id), "Destroy12"));
+    if (list.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), list.header.id), "Destroy12"));
     list = ListRecord{};
 }
 
@@ -538,7 +538,7 @@ HRESULT D3d12Device::create_query_heap(const D3D12DDIARG_CREATE_QUERY_HEAP_0001 
     heap = ObjectRecord{};
     stamp(heap.header, ObjectRecord::tag, next_id());
     heap.kind = static_cast<uint32_t>(args->Type);
-    if (!sent(d3d12proto::rvk_d3d12_CreateQueryHeap12(wire(), heap.header.id, heap.kind, args->Count),
+    if (!sent(d3d12proto::av_d3d12_CreateQueryHeap12(wire(), heap.header.id, heap.kind, args->Count),
               "CreateQueryHeap12"))
         return E_OUTOFMEMORY;
     return S_OK;
@@ -548,7 +548,7 @@ VOID D3d12Device::destroy_query_heap(D3D12DDI_HQUERYHEAP handle)
 {
     AV_SCOPE("D3d12Device::destroy_query_heap");
     ObjectRecord &heap = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
     heap = ObjectRecord{};
 }
 

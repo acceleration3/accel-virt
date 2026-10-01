@@ -1253,7 +1253,7 @@ TEST(ddi_scenario, a_refused_release_is_logged_until_the_budget_is_spent)
       CHECK_EQ(device.released(), line + 1u);
       CHECK_EQ(runtime.destroy_device(0u), 0);
   }
-  CHECK(std::strstr(driver.platform().last_log(), "rvkgpu: a shared object's release") != nullptr);
+  CHECK(std::strstr(driver.platform().last_log(), "avgpu: a shared object's release") != nullptr);
   CHECK_EQ(driver.platform().logged(), logged);   /* the last refusal, past the budget, said nothing */
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
@@ -1404,12 +1404,12 @@ TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc
   CHECK_EQ(device.start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0u), 0);
-    std::uint8_t command[32] = {0x52, 0x56, 0x4B, 0x53};
+    std::uint8_t command[32] = {0x41, 0x56, 0x53, 0x00};
     for (int packet = 0; packet < 3; packet++) {
         CHECK_EQ(vidsch.render(command, sizeof command, 8u, 0xC0002000 + static_cast<std::int64_t>(packet)), 0);
         CHECK_EQ(vidsch.submit(), 0);
     }
-    CHECK_EQ(vidsch.dma()[0], 0x52u);
+    CHECK_EQ(vidsch.dma()[0], 0x41u);
     CHECK_EQ(vidsch.dma()[8], 0x02u);
     CHECK_EQ(vidsch.dma()[9], 0x20u);
     CHECK_EQ(vidsch.completed(), 0u);
@@ -1783,7 +1783,7 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   request.Operation = 12;
   std::memcpy(request.Reserved, &flush, sizeof flush);
   CHECK_EQ(build(adapter, &request), 0);
-  CHECK_EQ(paging[0], 0x52u);
+  CHECK_EQ(paging[0], 0x41u);
   CHECK_EQ(paging[4], 1u);
   CHECK(request.pDmaBuffer == paging + 40);
 
@@ -2025,7 +2025,7 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
 
 /* The five doorbell DDIs through the table dxgkrnl registered. A doorbell names
  * the device page its queue's *context* was bound to, so a context that is not
- * an rvk context - which every context in this scenario is, because binding one
+ * an av context - which every context in this scenario is, because binding one
  * needs the device and its allocations - has no page and is refused. What the
  * successful path does is test_doorbell_table's and the full-stack rig's. */
 TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)

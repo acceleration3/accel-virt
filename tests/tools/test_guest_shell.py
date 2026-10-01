@@ -41,12 +41,12 @@ class GuestShell(unittest.TestCase):
 
     def test_exec_passes_its_arguments_and_push_and_pull_move_files(self):
         peer = self.peer([answer({"pid": 4}), answer({"exited": True, "exitcode": 0, "out-data": ""})])
-        self.assertEqual(self.shell("exec", "C:\\rvk\\rvktest.exe", "-x").returncode, 0)
+        self.assertEqual(self.shell("exec", "C:\\av\\avtest.exe", "-x").returncode, 0)
         self.assertEqual(peer.requests[2]["arguments"]["arg"], ["-x"])
-        local = self.work / "rvkgpu.sys"
+        local = self.work / "avgpu.sys"
         local.write_bytes(b"driver")
         peer = self.peer([answer(7), answer({"count": 6}), answer({})])
-        self.assertEqual(self.shell("push", local, "C:\\rvk\\package\\rvkgpu.sys").returncode, 0)
+        self.assertEqual(self.shell("push", local, "C:\\av\\package\\avgpu.sys").returncode, 0)
         self.assertEqual(base64.b64decode(peer.requests[3]["arguments"]["buf-b64"]), b"driver")
         self.peer([answer(7), answer({"count": 4, "buf-b64": output(b"dump"), "eof": True}), answer({})])
         pulled = self.shell("pull", "C:\\Windows\\MEMORY.DMP", self.work / "MEMORY.DMP")

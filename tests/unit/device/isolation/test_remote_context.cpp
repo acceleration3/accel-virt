@@ -57,7 +57,7 @@ public:
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
         host_.connect_renderer(peer_);
-        static_cast<void>(host_.start_renderer("rvk-renderer"));
+        static_cast<void>(host_.start_renderer("av-renderer"));
         events_ = host_.live_events();
     }
 

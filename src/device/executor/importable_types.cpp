@@ -1,7 +1,7 @@
 #include "device/executor/importable_types.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 namespace av {
 
@@ -22,7 +22,7 @@ void ImportableTypes::learn(uint64_t physical, uint32_t by_dmabuf, uint32_t by_p
     AV_SCOPE("ImportableTypes::learn");
     physical_ = physical;
     mask_ = by_dmabuf != 0u ? by_dmabuf : by_pointer;
-    kind_ = by_dmabuf != 0u ? RVK_BLOB_DMA_BUF : RVK_BLOB_HOST_POINTER;
+    kind_ = by_dmabuf != 0u ? AV_BLOB_DMA_BUF : AV_BLOB_HOST_POINTER;
 }
 
 uint32_t ImportableTypes::kind() const
@@ -54,7 +54,7 @@ bool ImportableTypes::invariants_hold() const
 {
     AV_SCOPE("ImportableTypes::invariants_hold");
     if (physical_ == 0u) return mask_ == 0u;
-    return kind_ == RVK_BLOB_DMA_BUF || kind_ == RVK_BLOB_HOST_POINTER;
+    return kind_ == AV_BLOB_DMA_BUF || kind_ == AV_BLOB_HOST_POINTER;
 }
 
 }  // namespace av

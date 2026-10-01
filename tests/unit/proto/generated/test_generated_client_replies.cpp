@@ -54,8 +54,8 @@ using av::WireWriter;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 constexpr std::uint8_t  untouched = 0xC3u;
 constexpr std::uint32_t never_reported = 77u;
 /* A Vulkan reply's result and count, before its elements. */
@@ -67,8 +67,8 @@ public:
     explicit Rig(SubApi sub_api)
         : search_(kmt_), host_(kmt_), steps_(kmt_, report_, "replies"), link_(kmt_, search_, steps_, sub_api)
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av), Status::ok);
         CHECK_STATUS(link_.open(), Status::ok);
     }
 
@@ -117,7 +117,7 @@ TEST(generated_client_replies, vulkan_devices_listed_past_the_callers_array_are_
   rig.host().vk_physical_devices(0, 3u);
   Destination devices(2u * sizeof(std::uint64_t));
   std::uint32_t count = 2u;
-  CHECK(av::vkproto::rvk_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
+  CHECK(av::vkproto::av_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
                                                     devices.as<std::uint64_t>()) == VK_ERROR_DEVICE_LOST);
   CHECK_EQ(count, 2u);
   CHECK(devices.untouched_from(0u)); }
@@ -130,14 +130,14 @@ TEST(generated_client_replies, vulkan_devices_filling_at_most_the_room_given_are
   rig.host().vk_physical_devices(0, 2u);
   { Destination devices(2u * sizeof(std::uint64_t));
     std::uint32_t count = 2u;
-    CHECK(av::vkproto::rvk_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
+    CHECK(av::vkproto::av_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
                                                       devices.as<std::uint64_t>()) == VK_SUCCESS);
     CHECK_EQ(count, 2u);
     CHECK_EQ(devices.as<std::uint64_t>()[1], ScriptedHost::vk_physical_device + 1u);
     CHECK(devices.untouched_from(2u * sizeof(std::uint64_t))); }
   { Destination devices(3u * sizeof(std::uint64_t));
     std::uint32_t count = 3u;
-    CHECK(av::vkproto::rvk_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
+    CHECK(av::vkproto::av_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
                                                       devices.as<std::uint64_t>()) == VK_SUCCESS);
     CHECK_EQ(count, 2u);
     CHECK_EQ(devices.as<std::uint64_t>()[0], ScriptedHost::vk_physical_device);
@@ -153,7 +153,7 @@ TEST(generated_client_replies, vulkan_a_device_list_cut_short_fails_and_keeps_th
   rig.host().vk_physical_devices(0, 2u);
   Destination devices(3u * sizeof(std::uint64_t));
   std::uint32_t count = 3u;
-  CHECK(av::vkproto::rvk_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
+  CHECK(av::vkproto::av_vkEnumeratePhysicalDevices(rig.transport(), instance(), &count,
                                                     devices.as<std::uint64_t>()) == VK_ERROR_DEVICE_LOST);
   CHECK_EQ(count, 3u);
   CHECK_EQ(devices.as<std::uint64_t>()[0], ScriptedHost::vk_physical_device);
@@ -168,13 +168,13 @@ TEST(generated_client_replies, vulkan_structures_listed_past_the_callers_array_a
   rig.host().vk_queue_families(1u);
   { Destination families(sizeof(VkQueueFamilyProperties));
     std::uint32_t count = 1u;
-    av::vkproto::rvk_vkGetPhysicalDeviceQueueFamilyProperties(rig.transport(), physical_device(), &count,
+    av::vkproto::av_vkGetPhysicalDeviceQueueFamilyProperties(rig.transport(), physical_device(), &count,
                                                               families.as<VkQueueFamilyProperties>());
     CHECK_EQ(count, 1u);
     CHECK(families.untouched_from(0u)); }
   { Destination families(sizeof(VkQueueFamilyProperties));
     std::uint32_t count = 1u;
-    av::vkproto::rvk_vkGetPhysicalDeviceQueueFamilyProperties(rig.transport(), physical_device(), &count,
+    av::vkproto::av_vkGetPhysicalDeviceQueueFamilyProperties(rig.transport(), physical_device(), &count,
                                                               families.as<VkQueueFamilyProperties>());
     CHECK_EQ(count, 1u);
     CHECK_EQ(families.as<VkQueueFamilyProperties>()->queueCount, 1u);
@@ -187,7 +187,7 @@ TEST(generated_client_replies, opencl_platforms_listed_past_num_entries_are_refu
   rig.host().cl_ids(0, ids, 3u, 3u);
   Destination platforms(2u * sizeof(std::uint64_t));
   cl_uint total = never_reported;
-  CHECK_EQ(av::clproto::rvk_clGetPlatformIDs(rig.transport(), 2u, platforms.as<std::uint64_t>(), &total),
+  CHECK_EQ(av::clproto::av_clGetPlatformIDs(rig.transport(), 2u, platforms.as<std::uint64_t>(), &total),
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(total, never_reported);
   CHECK(platforms.untouched_from(0u)); }
@@ -199,14 +199,14 @@ TEST(generated_client_replies, opencl_devices_are_bounded_by_num_entries_and_rea
   rig.host().cl_ids(0, ids, 1u, 2u);
   { Destination devices(sizeof(std::uint64_t));
     cl_uint total = never_reported;
-    CHECK_EQ(av::clproto::rvk_clGetDeviceIDs(rig.transport(), ScriptedHost::cl_gpu_platform, CL_DEVICE_TYPE_GPU, 1u,
+    CHECK_EQ(av::clproto::av_clGetDeviceIDs(rig.transport(), ScriptedHost::cl_gpu_platform, CL_DEVICE_TYPE_GPU, 1u,
                                              devices.as<std::uint64_t>(), &total),
              CL_OUT_OF_RESOURCES);
     CHECK_EQ(total, never_reported);
     CHECK(devices.untouched_from(0u)); }
   { Destination devices(sizeof(std::uint64_t));
     cl_uint total = never_reported;
-    CHECK_EQ(av::clproto::rvk_clGetDeviceIDs(rig.transport(), ScriptedHost::cl_gpu_platform, CL_DEVICE_TYPE_GPU, 1u,
+    CHECK_EQ(av::clproto::av_clGetDeviceIDs(rig.transport(), ScriptedHost::cl_gpu_platform, CL_DEVICE_TYPE_GPU, 1u,
                                              devices.as<std::uint64_t>(), &total),
              CL_SUCCESS);
     CHECK_EQ(total, 2u);
@@ -221,13 +221,13 @@ TEST(generated_client_replies, opencl_a_read_answering_more_bytes_than_its_size_
   rig.host().cl_read(0, values, 5u);
   rig.host().cl_read(0, values, 4u);
   { Destination output(4u * sizeof(float));
-    CHECK_EQ(av::clproto::rvk_clEnqueueReadBuffer(rig.transport(), ScriptedHost::cl_queue, ScriptedHost::cl_buffer,
+    CHECK_EQ(av::clproto::av_clEnqueueReadBuffer(rig.transport(), ScriptedHost::cl_queue, ScriptedHost::cl_buffer,
                                                   CL_TRUE, 0u, 4u * sizeof(float), output.as<float>(), 0u,
                                                   nullptr, nullptr),
              CL_OUT_OF_RESOURCES);
     CHECK(output.untouched_from(0u)); }
   { Destination output(4u * sizeof(float));
-    CHECK_EQ(av::clproto::rvk_clEnqueueReadBuffer(rig.transport(), ScriptedHost::cl_queue, ScriptedHost::cl_buffer,
+    CHECK_EQ(av::clproto::av_clEnqueueReadBuffer(rig.transport(), ScriptedHost::cl_queue, ScriptedHost::cl_buffer,
                                                   CL_TRUE, 0u, 4u * sizeof(float), output.as<float>(), 0u,
                                                   nullptr, nullptr),
              CL_SUCCESS);
@@ -242,7 +242,7 @@ TEST(generated_client_replies, opencl_an_info_answer_longer_than_its_room_is_ref
   rig.host().cl_info(0, vendor, sizeof vendor);
   Destination value(8u);
   std::size_t reported = never_reported;
-  CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(rig.transport(), ScriptedHost::cl_device, CL_DEVICE_VENDOR, 8u,
+  CHECK_EQ(av::clproto::av_clGetDeviceInfo(rig.transport(), ScriptedHost::cl_device, CL_DEVICE_VENDOR, 8u,
                                             value.as<char>(), &reported),
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(reported, static_cast<std::size_t>(never_reported));
@@ -261,7 +261,7 @@ TEST(generated_client_replies, opencl_a_reply_cut_short_is_a_failed_call_not_its
   for (std::uint32_t attempt = 0u; attempt < 2u; attempt++) {
       Destination platforms(3u * sizeof(std::uint64_t));
       cl_uint total = never_reported;
-      CHECK_EQ(av::clproto::rvk_clGetPlatformIDs(rig.transport(), 3u, platforms.as<std::uint64_t>(), &total),
+      CHECK_EQ(av::clproto::av_clGetPlatformIDs(rig.transport(), 3u, platforms.as<std::uint64_t>(), &total),
                CL_OUT_OF_RESOURCES);
       CHECK_EQ(total, never_reported);
       CHECK(platforms.untouched_from(attempt == 0u ? 0u : 2u * sizeof(std::uint64_t)));
@@ -388,7 +388,7 @@ TEST(generated_client_replies, vulkan_pipeline_binaries_fill_the_callers_array_u
   const VkPipelineBinaryCreateInfoKHR create = binary_create();
   Destination array(3u * sizeof(std::uint64_t));
   VkPipelineBinaryHandlesInfoKHR binaries = binary_handles(2u, array.as<std::uint64_t>());
-  CHECK(av::vkproto::rvk_vkCreatePipelineBinariesKHR(link, device(), &create, nullptr, &binaries) == VK_INCOMPLETE);
+  CHECK(av::vkproto::av_vkCreatePipelineBinariesKHR(link, device(), &create, nullptr, &binaries) == VK_INCOMPLETE);
   CHECK_EQ(driver.room(), 2u);
   CHECK_EQ(binaries.pipelineBinaryCount, 2u);
   CHECK(binaries.pPipelineBinaries == array.as<VkPipelineBinaryKHR>());
@@ -402,7 +402,7 @@ TEST(generated_client_replies, vulkan_pipeline_binaries_with_no_array_are_counte
   ServedTransport    link(driver);
   const VkPipelineBinaryCreateInfoKHR create = binary_create();
   VkPipelineBinaryHandlesInfoKHR binaries = binary_handles(0u, nullptr);
-  CHECK(av::vkproto::rvk_vkCreatePipelineBinariesKHR(link, device(), &create, nullptr, &binaries) == VK_SUCCESS);
+  CHECK(av::vkproto::av_vkCreatePipelineBinariesKHR(link, device(), &create, nullptr, &binaries) == VK_SUCCESS);
   CHECK_EQ(driver.room(), 0u);
   CHECK_EQ(binaries.pipelineBinaryCount, binaries_made);
   CHECK(binaries.pPipelineBinaries == nullptr); }
@@ -423,7 +423,7 @@ TEST(generated_client_replies, vulkan_host_image_copy_layouts_in_a_chain_fill_th
   VkPhysicalDeviceProperties2 properties = {};
   properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   properties.pNext = &copy;
-  av::vkproto::rvk_vkGetPhysicalDeviceProperties2(link, physical_device(), &properties);
+  av::vkproto::av_vkGetPhysicalDeviceProperties2(link, physical_device(), &properties);
   CHECK(properties.pNext == &copy);
   CHECK_EQ(copy.copySrcLayoutCount, 2u);
   CHECK(copy.pCopySrcLayouts == sources.as<VkImageLayout>());
@@ -450,7 +450,7 @@ TEST(generated_client_replies, vulkan_a_binary_count_the_caller_gave_no_room_for
       transport.set_reply(reply, binaries_reply(reply, sizeof reply, answer));
       Destination array(2u * sizeof(std::uint64_t));
       VkPipelineBinaryHandlesInfoKHR binaries = binary_handles(2u, array.as<std::uint64_t>());
-      CHECK(av::vkproto::rvk_vkCreatePipelineBinariesKHR(transport, device(), &create, nullptr, &binaries) ==
+      CHECK(av::vkproto::av_vkCreatePipelineBinariesKHR(transport, device(), &create, nullptr, &binaries) ==
             VK_ERROR_DEVICE_LOST);
       CHECK_EQ(binaries.pipelineBinaryCount, 2u);
       CHECK(binaries.pPipelineBinaries == array.as<VkPipelineBinaryKHR>());
@@ -458,7 +458,7 @@ TEST(generated_client_replies, vulkan_a_binary_count_the_caller_gave_no_room_for
   }
   transport.set_reply(reply, binaries_reply(reply, sizeof reply, binary_handles(1u, host)));
   VkPipelineBinaryHandlesInfoKHR unasked = binary_handles(0u, nullptr);
-  CHECK(av::vkproto::rvk_vkCreatePipelineBinariesKHR(transport, device(), &create, nullptr, &unasked) ==
+  CHECK(av::vkproto::av_vkCreatePipelineBinariesKHR(transport, device(), &create, nullptr, &unasked) ==
         VK_ERROR_DEVICE_LOST);
   CHECK(unasked.pPipelineBinaries == nullptr); }
 
@@ -490,7 +490,7 @@ TEST(generated_client_replies, vulkan_layouts_past_the_callers_room_leave_its_co
   VkPhysicalDeviceProperties2 properties = {};
   properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   properties.pNext = &copy;
-  av::vkproto::rvk_vkGetPhysicalDeviceProperties2(transport, physical_device(), &properties);
+  av::vkproto::av_vkGetPhysicalDeviceProperties2(transport, physical_device(), &properties);
   CHECK_EQ(copy.copySrcLayoutCount, 2u);
   CHECK(copy.pCopySrcLayouts == sources.as<VkImageLayout>());
   CHECK(sources.untouched_from(0u)); }
@@ -518,21 +518,21 @@ TEST(generated_client_replies, opencl_a_successful_info_size_past_its_buffer_is_
   { answer(4u, 9u);
     Destination value(8u);
     std::size_t reported = never_reported;
-    CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 8u,
+    CHECK_EQ(av::clproto::av_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 8u,
                                               value.as<char>(), &reported),
              CL_OUT_OF_RESOURCES);
     CHECK_EQ(reported, static_cast<std::size_t>(never_reported)); }
   { answer(4u, 8u);
     Destination value(8u);
     std::size_t reported = never_reported;
-    CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 8u,
+    CHECK_EQ(av::clproto::av_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 8u,
                                               value.as<char>(), &reported),
              CL_SUCCESS);
     CHECK_EQ(reported, 8u);
     CHECK(value.untouched_from(4u)); }
   { answer(0u, 64u);
     std::size_t reported = never_reported;
-    CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 0u, nullptr,
+    CHECK_EQ(av::clproto::av_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 0u, nullptr,
                                               &reported),
              CL_SUCCESS);
     CHECK_EQ(reported, 64u); } }
@@ -553,7 +553,7 @@ TEST(generated_client_replies, vulkan_memory_types_counted_past_their_array_are_
       transport.set_reply(reply, writer.offset());
       VkPhysicalDeviceMemoryProperties properties = {};
       properties.memoryHeapCount = 2u;
-      av::vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(transport, physical_device(), &properties);
+      av::vkproto::av_vkGetPhysicalDeviceMemoryProperties(transport, physical_device(), &properties);
       const bool fits = types <= VK_MAX_MEMORY_TYPES;
       CHECK_EQ(properties.memoryTypeCount, fits ? types : 0u);
       CHECK_EQ(properties.memoryHeapCount, fits ? 1u : 2u);
@@ -574,7 +574,7 @@ TEST(generated_client_replies, vulkan_an_extension_name_filling_its_array_is_ter
   transport.set_reply(reply, writer.offset());
   Destination extensions(sizeof(VkExtensionProperties));
   std::uint32_t count = 1u;
-  CHECK(av::vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device(), nullptr, &count,
+  CHECK(av::vkproto::av_vkEnumerateDeviceExtensionProperties(transport, physical_device(), nullptr, &count,
                                                               extensions.as<VkExtensionProperties>()) == VK_SUCCESS);
   CHECK_EQ(count, 1u);
   const VkExtensionProperties &read = *extensions.as<VkExtensionProperties>();

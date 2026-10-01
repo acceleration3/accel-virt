@@ -16,7 +16,7 @@ The kernel driver owns the window. VidMm never places anything in it.
    and destroys chunks should keep reusing one small part of the window.
 2. **Backing.** For each chunk, the driver makes a host blob
    (RESOURCE_CREATE_BLOB, HOST3D, mappable). Its resource id is one of the
-   rvk context's chunk slots. The driver then places the blob at the chosen
+   av context's chunk slots. The driver then places the blob at the chosen
    offset with MAP_BLOB and waits for the answer. When the escape returns,
    the window range is backed.
 3. **Mapping.** The driver maps the BAR pages of that range into the calling
@@ -33,7 +33,7 @@ The kernel driver owns the window. VidMm never places anything in it.
    placed over a mapping QEMU still holds.
 
 All of this runs in one escape, `HostWindowRecord`, which a process sends on
-its rvk context. There is an `open` (bytes → resource, address) and a `close`
+its av context. There is an `open` (bytes → resource, address) and a `close`
 (resource). A context that is destroyed closes every chunk it still holds. If
 the owning process has already exited, its view is gone, and only the host
 side is released.

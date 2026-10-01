@@ -42,8 +42,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 constexpr std::int32_t  vk_timeout = 2;
 constexpr std::int32_t  vk_error_out_of_device_memory = -2;
 constexpr std::int32_t  vk_error_device_lost = -4;
@@ -93,8 +93,8 @@ class Rig {
 public:
     Rig() : search_(kmt_), host_(kmt_), gpu_(kmt_, 0u)
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(rvk), Status::ok);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        CHECK_STATUS(search_.find(av), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }

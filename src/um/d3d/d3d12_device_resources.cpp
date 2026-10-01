@@ -138,7 +138,7 @@ uint64_t D3d12Device::allocation_bytes(const d3d12proto::ResourceDesc &desc, uin
     alignment = buffer_alignment;
     if (desc.dimension == buffer_dimension) return (desc.width + buffer_alignment - 1u) & ~(buffer_alignment - 1u);
     uint64_t bytes = refused_size;
-    if (!sent(d3d12proto::rvk_d3d12_ResourceAllocation12(wire(), desc, &bytes, &alignment), "ResourceAllocation12"))
+    if (!sent(d3d12proto::av_d3d12_ResourceAllocation12(wire(), desc, &bytes, &alignment), "ResourceAllocation12"))
         return refused_size;
     /* The runtime hands an application this size as it is, and one that sizes
      * a heap by it gets E_INVALIDARG from CreateHeap with no word of why. */
@@ -151,7 +151,7 @@ void D3d12Device::log_unsized(const d3d12proto::ResourceDesc &desc)
     AV_SCOPE("D3d12Device::log_unsized");
     char       line[192] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: the host sizes no resource: dimension ");
+    text.append("avumd: the host sizes no resource: dimension ");
     text.append_decimal(desc.dimension);
     text.append(" format ");
     text.append_decimal(desc.format);
@@ -189,7 +189,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     if (heap.type != heap_default) {
         if (heaps_.place(args.ByteSize, heap.arena_offset) != Status::ok) {
             heap.arena_offset = HeapRecord::no_arena;
-            log_.write("rvkumd: no room in the session arena for an upload or readback heap");
+            log_.write("avumd: no room in the session arena for an upload or readback heap");
             return E_OUTOFMEMORY;
         }
     } else if (committed) {
@@ -198,7 +198,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
         return S_OK;
     }
     const uint64_t at = heap.arena_offset == HeapRecord::no_arena ? 0u : heap.arena_offset;
-    if (!sent(d3d12proto::rvk_d3d12_CreateHeap12(wire(), heap.header.id, properties_of(heap.type), heap.flags,
+    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.id, properties_of(heap.type), heap.flags,
                                                  heap.size, args.Alignment, at),
               "CreateHeap12"))
         return E_OUTOFMEMORY;
@@ -235,12 +235,12 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
     resource.placed_in = &heap;
     resource.heap_offset = offset;
     if (heap.made == 0u) {
-        made = d3d12proto::rvk_d3d12_CreateCommittedResource12(wire(), resource.header.id, properties_of(heap_default),
+        made = d3d12proto::av_d3d12_CreateCommittedResource12(wire(), resource.header.id, properties_of(heap_default),
                                                                heap.flags & heap_shared, desc, state, value,
                                                                resource.address);
     } else {
         resource.heap = heap.header.id;
-        made = d3d12proto::rvk_d3d12_CreatePlacedResource12(wire(), resource.header.id, heap.header.id, offset, desc,
+        made = d3d12proto::av_d3d12_CreatePlacedResource12(wire(), resource.header.id, heap.header.id, offset, desc,
                                                              state, value, resource.address);
     }
     return sent(made, "CreateResource12") ? S_OK : E_OUTOFMEMORY;
@@ -336,13 +336,13 @@ VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI
     if (handle.pDrvPrivate != nullptr) {
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
         if (resource.header.magic == ResourceRecord::tag)
-            static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), resource.header.id), "Destroy12"));
+            static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), resource.header.id), "Destroy12"));
         resource = ResourceRecord{};
     }
     if (heap_handle.pDrvPrivate == nullptr) return;
     HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
     if (heap.header.magic != HeapRecord::tag) return;
-    if (heap.made != 0u) static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
+    if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
     if (heap.arena_offset != HeapRecord::no_arena) static_cast<void>(heaps_.remove(heap.arena_offset));
     heap = HeapRecord{};
 }

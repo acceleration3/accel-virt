@@ -23,7 +23,7 @@ TEST(cl_icd_loader_sequence, a_loader_walking_its_own_steps_keeps_this_driver)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   CHECK_EQ(rig.loader().platforms(), 1u);
-  CHECK_EQ(std::strcmp(rig.loader().suffix(), "RVK"), 0);
+  CHECK_EQ(std::strcmp(rig.loader().suffix(), "AV"), 0);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_icd_loader_sequence, deciding_whether_to_keep_the_driver_opens_nothing)
@@ -84,11 +84,11 @@ TEST(cl_icd_loader_sequence, the_suffix_is_the_one_query_that_may_not_fail)
   std::size_t bytes = 0u;
   CHECK_EQ(rig.root().platform_info(nullptr, CL_PLATFORM_ICD_SUFFIX_KHR, 0u, nullptr, &bytes),
            CL_SUCCESS);
-  CHECK_EQ(bytes, 4u);
+  CHECK_EQ(bytes, 3u);
   char text[8] = {};
   CHECK_EQ(rig.root().platform_info(nullptr, CL_PLATFORM_ICD_SUFFIX_KHR, bytes, text, nullptr),
            CL_SUCCESS);
-  CHECK_EQ(std::strcmp(text, "RVK"), 0); }
+  CHECK_EQ(std::strcmp(text, "AV"), 0); }
 
 TEST(cl_icd_loader_sequence, every_object_the_icd_hands_out_carries_the_same_table)
 { ClIcdRig rig;

@@ -110,14 +110,14 @@ int32_t WindowsD3d11Entry::read_back(uint8_t *pixels, uint32_t bytes)
     return asked;
 }
 
-/* RVK_PROBE_HOLD=<frames> keeps the window presenting, a colour a frame at
+/* AV_PROBE_HOLD=<frames> keeps the window presenting, a colour a frame at
  * vsync, so the frames can be watched on the guest's screen. */
 int32_t WindowsD3d11Entry::present()
 {
     AV_SCOPE("WindowsD3d11Entry::present");
     const HRESULT first = swapchain_->Present(0u, 0u);
     wchar_t value[16] = {};
-    const DWORD length = GetEnvironmentVariableW(L"RVK_PROBE_HOLD", value, 16u);
+    const DWORD length = GetEnvironmentVariableW(L"AV_PROBE_HOLD", value, 16u);
     uint32_t frames = 0u;
     for (DWORD index = 0u; index < length && value[index] >= L'0' && value[index] <= L'9'; index++)
         frames = frames * 10u + static_cast<uint32_t>(value[index] - L'0');

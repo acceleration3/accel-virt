@@ -41,7 +41,7 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
         if (started != Status::ok) {
             registrations_[slot].give_up();
             --held_;
-            log_.write("rvkcl: no thread to watch events on");
+            log_.write("avcl: no thread to watch events on");
             return CL_OUT_OF_RESOURCES;
         }
     }
@@ -53,7 +53,7 @@ bool ClEventWatcher::completed(const ClWatchedEvent &registration, cl_int &statu
     AV_SCOPE("ClEventWatcher::completed");
     cl_int      execution = CL_QUEUED;
     size_t      answered = 0u;
-    const cl_int asked = av::clproto::rvk_clGetEventInfo(
+    const cl_int asked = av::clproto::av_clGetEventInfo(
         *registration.transport(), registration.wire(), CL_EVENT_COMMAND_EXECUTION_STATUS,
         sizeof execution, &execution, &answered);
     if (asked != CL_SUCCESS) {

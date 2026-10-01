@@ -94,7 +94,7 @@ bool D3d12Presentation::connect()
     if (!device12_->export_fence(made, fd) || !device11_->vulkan().import_timeline(fd, waited_)) {
         if (fd >= 0) close(fd);
         made->Release();
-        fprintf(stderr, "virtio-gpu-rvk: d3d12: no timeline shared with DXVK; presents cannot be shown\n");
+        fprintf(stderr, "virtio-gpu-av: d3d12: no timeline shared with DXVK; presents cannot be shown\n");
         return false;
     }
     fence_ = made;

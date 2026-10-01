@@ -1,5 +1,5 @@
 /* The named section a process's trace table lives in (docs/trace.md):
- * `Global\rvk-trace-<module>-<pid>`, or `Local\` where the process may not
+ * `Global\av-trace-<module>-<pid>`, or `Local\` where the process may not
  * create a global object, with room for 128 slots. The view stays mapped for
  * the process's life - a thread may be inside a scope until the process ends.
  * Translation only. */

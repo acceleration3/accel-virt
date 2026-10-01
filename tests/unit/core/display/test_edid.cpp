@@ -43,7 +43,7 @@ TEST(edid_copy, the_whole_block_is_edid_1_3_with_a_valid_checksum)
   CHECK_EQ(block.status, 0u);
   const std::uint8_t header[] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
   CHECK(std::memcmp(block.bytes, header, sizeof header) == 0);
-  CHECK_EQ(block.bytes[8], 0x4Au);    /* "RVK" */
+  CHECK_EQ(block.bytes[8], 0x4Au);    /* "AV" */
   CHECK_EQ(block.bytes[9], 0xCBu);
   CHECK_EQ(block.bytes[18], 1u);
   CHECK_EQ(block.bytes[19], 3u);

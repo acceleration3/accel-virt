@@ -58,16 +58,16 @@ Status DisplayHeads::show(uint32_t head, uint32_t blob, const ScanoutFramebuffer
     host_.require_main_loop("DisplayHeads::show");
     if (head >= max_heads) return Status::invalid_parameter;
     if (!takes_dmabuf() || !host_.display_takes_dmabuf(head)) {
-        say_once(said_no_display_, "virtio-gpu-rvk: this display shows no dma-buf on the head asked for");
+        say_once(said_no_display_, "virtio-gpu-av: this display shows no dma-buf on the head asked for");
         return Status::not_supported;
     }
     const Status shown = binding(head).show(blob, framebuffer);
     if (shown == Status::not_supported)
-        say_once(said_no_descriptor_, "virtio-gpu-rvk: this host makes no dma-buf over a blob's memory");
+        say_once(said_no_descriptor_, "virtio-gpu-av: this host makes no dma-buf over a blob's memory");
     /* The first frame a head shows, once: it is the moment the guest stopped
      * copying, and a run that never reaches it says nothing at all. */
     if (shown == Status::ok)
-        say_once(said_showing_, "virtio-gpu-rvk: a head shows a guest blob; no frame is copied any more");
+        say_once(said_showing_, "virtio-gpu-av: a head shows a guest blob; no frame is copied any more");
     return shown;
 }
 

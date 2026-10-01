@@ -105,7 +105,7 @@ public:
 
     void draw(std::uint32_t vertices)
     {
-        rvk_vkCmdDraw(batch_, command_buffer, vertices, 1u, 0u, 0u);
+        av_vkCmdDraw(batch_, command_buffer, vertices, 1u, 0u, 0u);
         CHECK(batch_.invariants_hold());
     }
 
@@ -173,7 +173,7 @@ TEST(command_batch, a_command_that_asks_for_an_answer_is_refused_and_not_recorde
   CHECK_EQ(reply.remaining(), 0u);
   CHECK(rig.batch().invariants_hold());
   /* Through the generated client: the call fails as a lost device would. */
-  CHECK_EQ(rvk_vkGetFenceStatus(rig.batch(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(av_vkGetFenceStatus(rig.batch(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
   rig.batch().end_call();
   CHECK(rig.batch().invariants_hold());
   rig.draw(2u);
@@ -220,7 +220,7 @@ TEST(command_batch, a_full_block_the_connection_refuses_answers_no_memory_at_end
   std::uint64_t instance = 0u;
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  CHECK_EQ(rvk_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(av_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   rig.draw(draws_per_batch);
   rig.draw(0xFFFFu);
@@ -253,7 +253,7 @@ TEST(command_batch, the_block_goes_with_the_batch)
   const std::uint32_t baseline = rig.platform().live_allocations();
   {
       CommandBatch batch(rig.platform(), connection);
-      rvk_vkCmdDraw(batch, command_buffer, 3u, 1u, 0u, 0u);
+      av_vkCmdDraw(batch, command_buffer, 3u, 1u, 0u, 0u);
       CHECK(batch.invariants_hold());
       CHECK_EQ(rig.platform().live_allocations(), baseline + 1u);
   }
@@ -284,7 +284,7 @@ TEST(command_batch, a_connection_refusing_the_batch_answers_invalid_state_and_dr
   std::uint64_t instance = 0u;
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  CHECK_EQ(rvk_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(av_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
   CHECK(rig.connection().faulted());
   rig.draw(1u);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);

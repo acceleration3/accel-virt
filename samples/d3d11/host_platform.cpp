@@ -69,7 +69,7 @@ bool create_device(ID3D11Device **device, ID3D11DeviceContext **context)
 {
     setenv("DXVK_WSI_DRIVER", "SDL3", 0);
     setenv("DXVK_LOG_PATH", "none", 0);
-    const char *directory = getenv("RVK_D3D_PATH");
+    const char *directory = getenv("AV_D3D_PATH");
     char path[1024] = {};
     // dxgi first, global: d3d11 needs it and it is not on the library path.
     snprintf(path, sizeof path, "%s/libdxvk_dxgi.so", directory != nullptr ? directory : "build-d3d/lib");

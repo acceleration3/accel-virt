@@ -95,7 +95,7 @@ void SharedObjectProbe::opencl_steps(void *handle)
      * running when the bytes were never written: a read judged against memory
      * nobody filled would pass or fail on whatever was there. */
     if (cl_ == nullptr || !filled_) return;
-    /* The device this process's OpenCL shows, which is the rvkgpu adapter's:
+    /* The device this process's OpenCL shows, which is the avgpu adapter's:
      * the ICD shows one platform and one device, so the first of each is it. */
     void    *platforms[4] = {};
     uint32_t written = 0u;
@@ -313,10 +313,10 @@ void SharedObjectProbe::carrier_size_steps(uint32_t device)
 void SharedObjectProbe::carrier_steps()
 {
     AV_SCOPE("SharedObjectProbe::carrier_steps");
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
     AdapterSearch     search(kmt_);
-    if (steps_.check("carrier_adapter", search.find(rvkgpu)) != Status::ok) return;
+    if (steps_.check("carrier_adapter", search.find(avgpu)) != Status::ok) return;
     uint32_t device = 0u;
     if (steps_.check("carrier_device", kmt_.create_device(search.adapter(), device)) != Status::ok) return;
 
@@ -371,13 +371,13 @@ void SharedObjectProbe::carrier_steps()
 void SharedObjectProbe::run()
 {
     AV_SCOPE("SharedObjectProbe::run");
-    /* The rvkgpu adapter's own physical device: an export on anybody else's
+    /* The avgpu adapter's own physical device: an export on anybody else's
      * would prove nothing about this driver. */
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
     AdapterSearch     search(kmt_);
     uint64_t          luid = 0u;
-    Status            found = search.find(rvkgpu);
+    Status            found = search.find(avgpu);
     if (found == Status::ok) found = kmt_.adapter_luid(search.adapter(), luid);
     if (steps_.check("adapter", found) != Status::ok) return;
 

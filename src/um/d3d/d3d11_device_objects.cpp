@@ -131,7 +131,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);
     }
-    if (!d3dproto::rvk_d3d_CreateResource(wire(), resource.id, desc, resource.shared_key)) {
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.id, desc, resource.shared_key)) {
         set_error(E_OUTOFMEMORY);
         return;
     }
@@ -190,7 +190,7 @@ void D3d11Device::publish_shared(const ResourceRecord &resource)
     if (call.share(resource.shared_key, SharedObjectKind::memory, bytes, resource.id) == Status::ok) return;
     char       line[128] = {};
     TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: a shared texture of format ");
+    text.append("avumd: a shared texture of format ");
     text.append_decimal(resource.format);
     text.append(" cannot be opened by OpenGL or Vulkan, status ");
     text.append_decimal(call.device_status());
@@ -225,11 +225,11 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     constexpr uint32_t open_attempts = 64u;
     bool sent = key != 0u;
     for (uint32_t attempt = 0u; sent && found == 0u && attempt < open_attempts; attempt++)
-        sent = d3dproto::rvk_d3d_OpenResource(wire(), resource.id, key, &found, &desc);
+        sent = d3dproto::av_d3d_OpenResource(wire(), resource.id, key, &found, &desc);
     if (!sent || found == 0u) {
         char line[160] = {};
         TextBuffer text(line, sizeof(line));
-        text.append("rvkumd: a shared resource no Direct3D session on the host made: key 0x");
+        text.append("avumd: a shared resource no Direct3D session on the host made: key 0x");
         text.append_hex(static_cast<uint32_t>(key >> 32u), 8u);
         text.append_hex(static_cast<uint32_t>(key), 8u);
         text.append(" allocations 0x");
@@ -348,7 +348,7 @@ VOID D3d11Device::create_shader_resource_view(const D3DWDDM2_0DDIARG_CREATESHADE
         desc.args[3] = args->TexCube.NumCubes;
         break;
     }
-    if (!d3dproto::rvk_d3d_CreateShaderResourceView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateShaderResourceView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_shader_resource_view(D3D10DDI_HSHADERRESOURCEVIEW handle)
@@ -415,7 +415,7 @@ VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERT
         break;
     }
     }
-    if (!d3dproto::rvk_d3d_CreateRenderTargetView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateRenderTargetView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_render_target_view(D3D10DDI_HRENDERTARGETVIEW handle)
@@ -460,7 +460,7 @@ VOID D3d11Device::create_depth_stencil_view(const D3D11DDIARG_CREATEDEPTHSTENCIL
         desc.args[1] = args->Tex2D.FirstArraySlice;
         desc.args[2] = args->Tex2D.ArraySize;
     }
-    if (!d3dproto::rvk_d3d_CreateDepthStencilView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateDepthStencilView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_depth_stencil_view(D3D10DDI_HDEPTHSTENCILVIEW handle)
@@ -515,7 +515,7 @@ VOID D3d11Device::create_unordered_access_view(const D3DWDDM2_0DDIARG_CREATEUNOR
         desc.args[2] = args->Tex2D.ArraySize;
         break;
     }
-    if (!d3dproto::rvk_d3d_CreateUnorderedAccessView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateUnorderedAccessView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_unordered_access_view(D3D11DDI_HUNORDEREDACCESSVIEW handle)
@@ -567,8 +567,8 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHAD
     /* The second token is the stream's length in tokens. */
     const size_t bytes = static_cast<size_t>(code[1]) * sizeof(UINT);
     if (bytes > d3d::D3dCommandStream::command_room / 2u && !wire().make_room_for(bytes))
-        log_.write("rvkumd: a shader larger than the arena");
-    if (!d3dproto::rvk_d3d_CreateShader(wire(), record_of.id, stage, counts[0], signatures[0], counts[1],
+        log_.write("avumd: a shader larger than the arena");
+    if (!d3dproto::av_d3d_CreateShader(wire(), record_of.id, stage, counts[0], signatures[0], counts[1],
                                         signatures[1], counts[2], signatures[2], declared, declaration, strides_count,
                                         strides, rasterized, code, bytes))
         set_error(E_OUTOFMEMORY);
@@ -697,7 +697,7 @@ VOID D3d11Device::create_element_layout(const D3D10DDIARG_CREATEELEMENTLAYOUT *a
                                                  static_cast<uint32_t>(element.InputSlotClass),
                                                  element.InstanceDataStepRate, element.InputRegister};
     }
-    if (!d3dproto::rvk_d3d_CreateInputLayout(wire(), layout.id, count, elements)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateInputLayout(wire(), layout.id, count, elements)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_element_layout(D3D10DDI_HELEMENTLAYOUT handle)
@@ -733,7 +733,7 @@ VOID D3d11Device::create_blend_state(const D3D11_1_DDI_BLEND_DESC *args, D3D10DD
             static_cast<uint32_t>(in.DestBlendAlpha),      static_cast<uint32_t>(in.BlendOpAlpha),
             static_cast<uint32_t>(in.LogicOp),             in.RenderTargetWriteMask};
     }
-    if (!d3dproto::rvk_d3d_CreateBlendState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateBlendState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_blend_state(D3D10DDI_HBLENDSTATE handle)
@@ -772,7 +772,7 @@ VOID D3d11Device::create_depth_stencil_state(const D3D10_DDI_DEPTH_STENCIL_DESC 
                                     static_cast<uint32_t>(args->BackFace.StencilDepthFailOp),
                                     static_cast<uint32_t>(args->BackFace.StencilPassOp),
                                     static_cast<uint32_t>(args->BackFace.StencilFunc)};
-    if (!d3dproto::rvk_d3d_CreateDepthStencilState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateDepthStencilState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_depth_stencil_state(D3D10DDI_HDEPTHSTENCILSTATE handle)
@@ -808,7 +808,7 @@ VOID D3d11Device::create_rasterizer_state(const D3DWDDM2_0DDI_RASTERIZER_DESC *a
                                            static_cast<uint32_t>(args->AntialiasedLineEnable != FALSE),
                                            args->ForcedSampleCount,
                                            static_cast<uint32_t>(args->ConservativeRasterizationMode)};
-    if (!d3dproto::rvk_d3d_CreateRasterizerState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateRasterizerState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_rasterizer_state(D3D10DDI_HRASTERIZERSTATE handle)
@@ -842,7 +842,7 @@ VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HS
     for (uint32_t index = 0u; index < 4u; index++) desc.border_color[index] = args->BorderColor[index];
     desc.min_lod = args->MinLOD;
     desc.max_lod = args->MaxLOD;
-    if (!d3dproto::rvk_d3d_CreateSampler(wire(), sampler.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateSampler(wire(), sampler.id, desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_sampler(D3D10DDI_HSAMPLER handle)
@@ -875,7 +875,7 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
         set_error(E_INVALIDARG);
         return;
     }
-    if (!d3dproto::rvk_d3d_CreateQuery(wire(), query.id, type, args->MiscFlags)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateQuery(wire(), query.id, type, args->MiscFlags)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_query(D3D10DDI_HQUERY handle)

@@ -7,7 +7,7 @@ namespace av {
 /* The thread procedure. An ABI boundary C requires: CreateThread takes a bare
  * function and one argument, so the object is the argument and this forwards
  * straight into it. */
-extern "C" DWORD WINAPI rvk_service_thread_run(LPVOID service)
+extern "C" DWORD WINAPI av_service_thread_run(LPVOID service)
 {
     static_cast<WindowsServiceThread *>(service)->run();
     return 0u;
@@ -30,7 +30,7 @@ Status WindowsServiceThread::start(icd::ServiceLoop &loop)
     if (thread_ != nullptr) return Status::invalid_state;
     loop_ = &loop;
     InterlockedExchange(&stopping_, 0);
-    thread_ = CreateThread(nullptr, 0u, &rvk_service_thread_run, this, 0u, nullptr);
+    thread_ = CreateThread(nullptr, 0u, &av_service_thread_run, this, 0u, nullptr);
     if (thread_ == nullptr) {
         loop_ = nullptr;
         return Status::no_memory;

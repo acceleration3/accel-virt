@@ -1,8 +1,8 @@
 # The desktop on Direct3D: design
 
-What it takes for DWM, and Direct3D 11 and 12 applications, to run on rvkgpu
+What it takes for DWM, and Direct3D 11 and 12 applications, to run on avgpu
 with their pixels rendered and shown by the host GPU. Written after the first
-boots where DWM ran on `rvkumd.dll`, from three sources of evidence, each kept
+boots where DWM ran on `avumd.dll`, from three sources of evidence, each kept
 beside this note:
 
 - **What the guest did** - live runs on the Win11 26100 guest, the driver's
@@ -20,7 +20,7 @@ Where it disagrees with older notes, the evidence here is newer.
 
 ## 1. What is true now
 
-DWM composes on `rvkumd.dll` (the INF names it as a `%13%` path) over one host
+DWM composes on `avumd.dll` (the INF names it as a `%13%` path) over one host
 session per process (`D3d11Session`), and the guest boots to a desktop that is
 partly right. The failures that remain, and what each one is:
 
@@ -110,7 +110,7 @@ width, height, pitch, format), and the UMD's `OpenResource` recognises it
   that context: a signal the runtime queues next waits for the host. DWM
   composing a frame rendered on another adapter signals such a fence on its
   device there, and waited forever before.
-- **One adapter per open.** A process may open several rvkgpu adapters - an
+- **One adapter per open.** A process may open several avgpu adapters - an
   application choosing among host GPUs opens each - and the driver holds one
   kernel adapter per LUID the runtime named (`UmdConnections`): a device made
   on the second reaches the second's kernel adapter, where the runtime makes
@@ -212,7 +212,7 @@ unit test walks the filled tables and fails on a null slot, or on an
 
 ### 3.8 Capacity
 
-Measured at the desktop: 7 processes load `rvkumd.dll`; each holds one session
+Measured at the desktop: 7 processes load `avumd.dll`; each holds one session
 (one doorbell of the adapter's 64), a 4 MiB ring and a 64 MiB blob arena. The
 arena is guest memory the host imports: 7 × 64 MiB is 448 MiB of a 4 GiB
 guest. The arena drops to 32 MiB, and an upload larger than half of it crosses

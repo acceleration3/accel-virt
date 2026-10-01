@@ -1,5 +1,5 @@
 // THIS FILE IS GENERATED. DO NOT EDIT.
-// Regenerate with: python -m rvk_codegen.opengl --xml gl.xml --wgl wgl.xml
+// Regenerate with: python -m av_codegen.opengl --xml gl.xml --wgl wgl.xml
 //                  --profile tools/codegen/profiles/opengl.toml --out ...
 
 #include "gl_command_names.h"

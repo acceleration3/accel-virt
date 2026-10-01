@@ -16,7 +16,7 @@
 #define AV_BLOB_IMPORTS_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <stdint.h>
 
@@ -82,7 +82,7 @@ private:
     [[nodiscard]] Status hand_over_pointer(const HeldBlob &held, uint64_t offset, uint64_t size,
                                            uint32_t memory_type, uint64_t blob_id, uint32_t slot);
     /* The executor given one handle under `blob_id`, with what it made kept. */
-    [[nodiscard]] Status offer(const RvkBlobHandle &handle, uint64_t blob_id, uint32_t slot);
+    [[nodiscard]] Status offer(const AvBlobHandle &handle, uint64_t blob_id, uint32_t slot);
 
     Host            &host_;
     BlobTable       &blobs_;

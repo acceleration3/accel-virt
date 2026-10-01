@@ -1,4 +1,4 @@
-/* rvk-renderer: the process QEMU starts to run a device's contexts
+/* av-renderer: the process QEMU starts to run a device's contexts
  * (docs/renderer.md). It holds the guest memory QEMU mapped into it, the
  * doorbells QEMU offered, the host the device core runs over, and the service
  * that carries out QEMU's messages; this is its control loop. */

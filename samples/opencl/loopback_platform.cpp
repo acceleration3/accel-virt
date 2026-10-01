@@ -1,5 +1,5 @@
 // The loopback build's platform: the guest's whole OpenCL path in this one Linux
-// process - rvkcl's core, the driver, the device core and the executor library
+// process - avcl's core, the driver, the device core and the executor library
 // on this machine's GPU, the L4 rig the full-stack tests run on
 // (tests/harness/fullstack) - so the suite runs through the ICD with no VM. What
 // it measures is the rig's speed, which is sanitized and single-threaded, not
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
 {
     // Found before the executor library opens its own displays, as the full-stack tests do.
     const av::WidestHostGpu gpu;
-    if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) {
+    if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
         fprintf(stderr, "this host's widest GPU runs no OpenCL\n");
         return 2;
     }
@@ -247,7 +247,7 @@ int main(int argc, char **argv)
         samples::icd = &root;
         code = samples::run(argc, argv);
         for (std::uint32_t line = 0; line < icd_log.lines() && line < av::RecordingLog::max_lines; line++)
-            fprintf(stderr, "rvkcl: %s\n", icd_log.line(line));
+            fprintf(stderr, "avcl: %s\n", icd_log.line(line));
         samples::icd = nullptr;
     }
     return code;

@@ -1,4 +1,4 @@
-/* The host behind the rvk scenarios, played over MockKmt: each answer queued
+/* The host behind the av scenarios, played over MockKmt: each answer queued
  * for the wait that will find it, encoded as the generated server dispatch
  * writes it - a Vulkan result as an int32 before its outputs, handles as
  * uint64, structures through vk_serialize.h; an OpenCL result or error as a

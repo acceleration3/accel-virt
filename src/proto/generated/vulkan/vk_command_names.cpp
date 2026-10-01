@@ -1,6 +1,6 @@
 // THIS FILE IS GENERATED. DO NOT EDIT.
 // Regenerate with: cmake --build build --target regenerate-vulkan
-//                  (or: python -m rvk_codegen --xml ... --out generated/)
+//                  (or: python -m av_codegen --xml ... --out generated/)
 
 
 #include "vk_command_names.h"

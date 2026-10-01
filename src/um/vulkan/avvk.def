@@ -1,0 +1,4 @@
+LIBRARY avvk.dll
+EXPORTS
+vk_icdNegotiateLoaderICDInterfaceVersion
+vk_icdGetInstanceProcAddr

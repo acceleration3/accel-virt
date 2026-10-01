@@ -2,7 +2,7 @@
  * own answer is not asserted - these pass on a machine with no OpenCL at all,
  * where every command still decodes and the platform count is zero. */
 #include "device/executor/imported_blob.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/cl_event_signals.hpp"
 #include "device/executor/host_svm_ranges.hpp"
 #include "device/executor/opencl_backend.hpp"
@@ -54,10 +54,10 @@ constexpr std::size_t block_bytes = 65536u;
 alignas(4096) std::uint8_t arena_region[2u * 4096u];
 alignas(4096) std::uint8_t second_arena_region[4096];
 
-RvkBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
+AvBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
 {
-    RvkBlobHandle handle = {};
-    handle.kind = RVK_BLOB_HOST_POINTER;
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_HOST_POINTER;
     handle.pointer = base;
     handle.fd = -1;
     handle.size = bytes;
@@ -177,8 +177,8 @@ TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_
 TEST(opencl_backend, a_dma_buf_is_not_memory_a_buffer_can_be_made_over)
 { OpenClBackend backend;
   av::ImportedBlob blob;
-  RvkBlobHandle    handle = {};
-  handle.kind = RVK_BLOB_DMA_BUF;
+  AvBlobHandle    handle = {};
+  handle.kind = AV_BLOB_DMA_BUF;
   handle.fd = 7;
   handle.size = 4096u;
   CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
@@ -275,7 +275,7 @@ public:
     { host_.open();
       for (std::uint32_t i = 0u; i < host_.gpu_count() && device_ == nullptr; i++) {
           device_ = host_.opencl_device(i);
-          CHECK_EQ(device_ != nullptr, (host_.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENCL) != 0u);
+          CHECK_EQ(device_ != nullptr, (host_.sub_apis(i) & AV_EXECUTOR_SUB_API_OPENCL) != 0u);
           host_.gpu_uuid(i, uuid_);
       } }
     ~HostOpenCl() { host_.close(); }
@@ -355,7 +355,7 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
   /* Nothing is opened into it, and the extension it would have been opened
    * through is not shown. */
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
   CHECK_EQ(made, 0u);
   char   answered[4096] = {};
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),

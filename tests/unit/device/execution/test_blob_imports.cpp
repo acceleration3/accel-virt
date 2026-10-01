@@ -5,7 +5,7 @@
  * over ImportRig - real file-backed guest pages, the device's blob table and a
  * version 3 mock executor on the context's one worker. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/blob_imports.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -72,8 +72,8 @@ std::uint64_t read_u64(const std::uint8_t *bytes)
  * the host GPU would see, which is what every byte assertion here is about. */
 class Handed {
 public:
-    explicit Handed(const RvkBlobHandle &handle)
-        : bytes_(nullptr), length_(handle.size), mapped_(handle.kind == RVK_BLOB_DMA_BUF)
+    explicit Handed(const AvBlobHandle &handle)
+        : bytes_(nullptr), length_(handle.size), mapped_(handle.kind == AV_BLOB_DMA_BUF)
     {
         if (!mapped_) {
             bytes_ = static_cast<std::uint8_t *>(handle.pointer);
@@ -124,11 +124,11 @@ TEST(blob_imports_import, a_chunk_is_aliased_and_the_executor_is_handed_the_rang
   CHECK_EQ(rig.host().live_ranges(), 1u);
   CHECK_EQ(rig.host().live_aliases(), 3u);   /* 9 | 3-4 | 20 */
   CHECK_STATUS(rig.blobs().release(rig.chunk(0u)), Status::invalid_state);   /* the executor has its pages */
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
   /* A dma-buf, because the host makes one: the guest's pages reach a GPU that
    * refuses a file-backed userptr only that way. */
-  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_DMA_BUF});
+  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_DMA_BUF});
   CHECK_EQ(handed.reserved, 5u);
   CHECK(handed.fd >= 0);
   CHECK(handed.pointer == nullptr);
@@ -154,9 +154,9 @@ TEST(blob_imports_import, a_host_that_makes_no_dma_buf_hands_a_pointer_into_the_
   std::uint64_t device_memory = 0u;
   CHECK_STATUS(import(rig, rig.chunk(0u), page, 2u * page, 5u, device_memory), Status::ok);
   CHECK_EQ(rig.host().live_dmabufs(), 0u);
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_HOST_POINTER});
   CHECK_EQ(handed.reserved, 5u);
   CHECK_EQ(handed.fd, -1);
   CHECK_EQ(handed.size, 2u * page);
@@ -182,8 +182,8 @@ TEST(blob_imports_import, imports_through_one_chunk_share_its_alias_until_the_la
   CHECK(first != second);
   CHECK_EQ(rig.host().live_ranges(), 1u);
   CHECK_EQ(rig.host().live_aliases(), 1u);
-  RvkBlobHandle one = {};
-  RvkBlobHandle two = {};
+  AvBlobHandle one = {};
+  AvBlobHandle two = {};
   CHECK(rig.ops().import_of(1u, one) && rig.ops().import_of(2u, two));
   /* One alias, two dma-bufs: each names its own page of the same blob. */
   CHECK(one.fd != two.fd);
@@ -257,9 +257,9 @@ TEST(blob_imports_import, a_host_chunk_is_handed_as_a_dma_buf_over_its_own_memor
   CHECK(rig.host().last_host_dmabuf().memory == memory);
   CHECK_EQ(rig.host().last_host_dmabuf().offset, page);
   CHECK_EQ(rig.host().last_host_dmabuf().size, 2u * page);
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_DMA_BUF});
+  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_DMA_BUF});
   CHECK_EQ(handed.reserved, 4u);
   CHECK(handed.fd >= 0);
   CHECK(handed.pointer == nullptr);
@@ -284,9 +284,9 @@ TEST(blob_imports_import, a_host_chunk_a_library_takes_only_as_a_pointer_is_hand
   std::uint64_t device_memory = 0u;
   CHECK_STATUS(import(rig, rig.chunk(2u), page, page, 2u, device_memory), Status::ok);
   CHECK_EQ(rig.host().live_dmabufs(), 0u);   /* the refused one was closed */
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_HOST_POINTER});
   CHECK_EQ(handed.fd, -1);
   CHECK_EQ(handed.size, page);
   CHECK(handed.pointer == view + page);
@@ -323,14 +323,14 @@ TEST(blob_imports_import, records_the_bytes_behind_a_host_chunk)
 { ImportRig rig;
   CHECK_STATUS(rig.blobs().create_host(rig.chunk(4u), 2u * page), Status::ok);
   host_view(rig, rig.chunk(4u))[page] = 0x7Au;
-  CHECK_STATUS(rig.recorder().open("host-chunk.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(rig.recorder().open("host-chunk.av", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
                                    av::ProtocolVersion(1u, 1u)),
                Status::ok);
   std::uint64_t device_memory = 0u;
   rig.on_worker([&] {
       CHECK_STATUS(rig.imports().import(rig.chunk(4u), page, page, 0u, device_memory), Status::ok);
   });
-  av::RecordedFile file(rig.host(), "host-chunk.rvk");
+  av::RecordedFile file(rig.host(), "host-chunk.av");
   av::RecordHeader record;
   CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
   const std::uint8_t *const payload = file.expect(av::RecordKind::blob_bytes, record);
@@ -385,9 +385,9 @@ TEST(blob_imports_import, a_library_that_refuses_the_dma_buf_is_handed_the_point
   CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 3u, device_memory), Status::ok);
   CHECK_EQ(rig.imports().imports(), 1u);
   CHECK_EQ(rig.host().live_dmabufs(), 0u);   /* the one it refused was closed */
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_HOST_POINTER});
   CHECK_EQ(handed.reserved, 3u);
   CHECK(handed.pointer != nullptr);
   CHECK_EQ(rig.ops().live_imports(), 1u); }
@@ -474,7 +474,7 @@ TEST(blob_imports_import, a_held_chunk_is_not_released_and_its_successor_is_impo
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(6u), new_pages, 1u), Status::ok);
   std::uint64_t device_memory = 0u;
   CHECK_STATUS(import(rig, rig.chunk(6u), 0u, page, 0u, device_memory), Status::ok);
-  RvkBlobHandle handed = {};
+  AvBlobHandle handed = {};
   CHECK(rig.ops().import_of(2u, handed));
   Handed successor(handed);
   CHECK(successor.bytes() != nullptr);
@@ -561,7 +561,7 @@ TEST(blob_imports_import, records_the_blob_it_handed_over_and_the_bytes_behind_i
 { ImportRig rig;
   const std::uint32_t pages[] = {7u, 8u};
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(3u), pages, 2u), Status::ok);
-  CHECK_STATUS(rig.recorder().open("imports.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(rig.recorder().open("imports.av", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
                                    av::ProtocolVersion(1u, 1u)),
                Status::ok);
   std::uint64_t device_memory = 0u;
@@ -569,7 +569,7 @@ TEST(blob_imports_import, records_the_blob_it_handed_over_and_the_bytes_behind_i
       CHECK_STATUS(rig.imports().import(rig.chunk(3u), page, page, 5u, device_memory), Status::ok);
   });
   CHECK(rig.imports().invariants_hold());
-  av::RecordedFile    file(rig.host(), "imports.rvk");
+  av::RecordedFile    file(rig.host(), "imports.av");
   av::RecordHeader    record;
   const std::uint8_t *payload = file.expect(av::RecordKind::blob, record);
   CHECK(payload != nullptr);
@@ -601,7 +601,7 @@ TEST(blob_imports_import, records_the_blob_it_handed_over_and_the_bytes_behind_i
   CHECK_EQ(file.remaining(), 0u);
 
   rig.on_worker([&] { rig.imports().release(device_memory); });
-  av::RecordedFile    after(rig.host(), "imports.rvk");
+  av::RecordedFile    after(rig.host(), "imports.av");
   av::RecordHeader    released;
   const std::uint8_t *last = after.expect(av::RecordKind::blob, released);
   CHECK(after.expect(av::RecordKind::blob_bytes, released) != nullptr);
@@ -620,7 +620,7 @@ TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_o
 { ImportRig rig;
   const std::uint32_t pages[] = {7u};
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
-  CHECK_STATUS(rig.recorder().open("lifetimes.rvk", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(rig.recorder().open("lifetimes.av", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
                                    av::ProtocolVersion(1u, 1u)),
                Status::ok);
   std::uint64_t device_memory = 0u;
@@ -628,7 +628,7 @@ TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_o
       CHECK_STATUS(rig.imports().import(rig.chunk(4u), 0u, page, 0u, device_memory), Status::ok);
       rig.imports().release(device_memory);
   });
-  av::RecordedFile    file(rig.host(), "lifetimes.rvk");
+  av::RecordedFile    file(rig.host(), "lifetimes.av");
   av::RecordHeader    record;
   const std::uint8_t *imported = file.expect(av::RecordKind::blob, record);
   CHECK(imported != nullptr);
@@ -651,7 +651,7 @@ TEST(blob_imports_import, an_import_the_executor_refuses_records_nothing)
   rig.host().refuse_dmabufs();
   const std::uint32_t pages[] = {7u};
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(5u), pages, 1u), Status::ok);
-  CHECK_STATUS(rig.recorder().open("refused.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+  CHECK_STATUS(rig.recorder().open("refused.av", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
                                    av::ProtocolVersion(1u, 1u)),
                Status::ok);
   rig.ops().refuse_import_at(1u);
@@ -659,5 +659,5 @@ TEST(blob_imports_import, an_import_the_executor_refuses_records_nothing)
   rig.on_worker([&] {
       CHECK_STATUS(rig.imports().import(rig.chunk(5u), 0u, page, 0u, device_memory), Status::not_supported);
   });
-  CHECK_EQ(av::RecordedFile(rig.host(), "refused.rvk").remaining(), 0u);
+  CHECK_EQ(av::RecordedFile(rig.host(), "refused.av").remaining(), 0u);
   rig.recorder().close(); }

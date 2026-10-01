@@ -1,4 +1,4 @@
-/* The Windows rvkinspect.exe reads, as a test scripts it: processes with their
+/* The Windows avinspect.exe reads, as a test scripts it: processes with their
  * paths, named sections holding bytes, state services that answer (or not),
  * and every file written kept for the test to read back. Each object name
  * asked for is journalled, so a test sees Global tried before Local. */

@@ -26,7 +26,7 @@ uint32_t D3d12Driver::slot_of(uint32_t kmt_adapter)
     for (uint32_t slot = 0u; slot < max_adapters; slot++) {
         if (caps_[slot].learned()) continue;
         if (!caps_[slot].learn(kmt_, kmt_adapter)) {
-            log_.write("rvkumd: the host answers no Direct3D 12 on this adapter");
+            log_.write("avumd: the host answers no Direct3D 12 on this adapter");
             return max_adapters;
         }
         adapters_[slot] = kmt_adapter;
@@ -64,7 +64,7 @@ void D3d12Driver::note(const char *what, uint64_t value)
     AV_SCOPE("D3d12Driver::note");
     char       line[128] = {};
     TextBuffer text(line, sizeof line);
-    text.append("rvkumd: ");
+    text.append("avumd: ");
     text.append(what);
     text.append(" ");
     text.append_decimal(value);

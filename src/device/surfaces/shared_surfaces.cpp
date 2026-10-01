@@ -70,7 +70,7 @@ void SharedSurfaces::abandon(const SurfacePoint &frame)
     unlock();
 }
 
-bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view)
+bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
 {
     AV_SCOPE("SharedSurfaces::map");
     if (!frame.names()) return false;
@@ -86,7 +86,7 @@ bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, RvkFrameVi
 /* A frame not kept is one of three things: its writer has not reached it,
  * is staging it now, or passed it without staging - the last is a blt asking
  * for a surface nobody knew one would, which it now is. */
-SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, RvkFrameView &view)
+SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView &view)
 {
     AV_SCOPE("SharedSurfaces::look");
     lock();

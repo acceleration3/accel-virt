@@ -6,7 +6,7 @@
  * executor ABI requires - a call on the wrong thread is a HostViolation the
  * mock records and the test fails on. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/context_shared_objects.hpp"
 #include "device/memory/host_shared_objects.hpp"
 #include "harness/executor/shared_object_rig.hpp"
@@ -48,7 +48,7 @@ Status publish(SharedObjectRig &rig, std::uint64_t id)
 {
     Status answered = Status::invalid_state;
     rig.first().on_worker(
-        [&] { answered = rig.first().objects().publish(id, RVK_SHARED_MEMORY, made_by_guest, size); });
+        [&] { answered = rig.first().objects().publish(id, AV_SHARED_MEMORY, made_by_guest, size); });
     return answered;
 }
 
@@ -56,7 +56,7 @@ Status open_second(SharedObjectRig &rig, std::uint64_t id, std::uint64_t &wire_h
 {
     Status answered = Status::invalid_state;
     rig.second().on_worker(
-        [&] { answered = rig.second().objects().open(id, RVK_SHARED_MEMORY, size, wire_handle); });
+        [&] { answered = rig.second().objects().open(id, AV_SHARED_MEMORY, size, wire_handle); });
     return answered;
 }
 
@@ -96,8 +96,8 @@ TEST(context_shared_objects, the_second_context_opens_what_the_first_published)
   std::uint64_t imported_size = 0u;
   int           fd = -1;
   CHECK(rig.ops().object_of(opened, kind, handle_kind, imported_size, fd));
-  CHECK_EQ(kind, RVK_SHARED_MEMORY);
-  CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+  CHECK_EQ(kind, AV_SHARED_MEMORY);
+  CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
   CHECK_EQ(imported_size, size); }
 
 TEST(context_shared_objects, the_object_outlives_the_context_that_published_it)
@@ -130,13 +130,13 @@ TEST(context_shared_objects_publish, refuses_a_different_handle_under_an_id_it_a
   CHECK_STATUS(publish(rig, 7u), Status::ok);
   Status answered = Status::ok;
   rig.first().on_worker([&] {
-      answered = rig.first().objects().publish(7u, RVK_SHARED_MEMORY, made_by_guest + 1u, size);
+      answered = rig.first().objects().publish(7u, AV_SHARED_MEMORY, made_by_guest + 1u, size);
   });
   CHECK_STATUS(answered, Status::conflict);
   check(rig);
   /* And a different kind under the same id, which is the dangerous one. */
   rig.first().on_worker([&] {
-      answered = rig.first().objects().publish(7u, RVK_SHARED_NATIVE_FENCE, made_by_guest, 0u);
+      answered = rig.first().objects().publish(7u, AV_SHARED_NATIVE_FENCE, made_by_guest, 0u);
   });
   CHECK_STATUS(answered, Status::conflict);
   check(rig);
@@ -147,7 +147,7 @@ TEST(context_shared_objects_publish, refuses_an_id_another_context_already_publi
   CHECK_STATUS(publish(rig, 7u), Status::ok);
   Status answered = Status::ok;
   rig.second().on_worker([&] {
-      answered = rig.second().objects().publish(7u, RVK_SHARED_MEMORY, made_by_guest, size);
+      answered = rig.second().objects().publish(7u, AV_SHARED_MEMORY, made_by_guest, size);
   });
   CHECK_STATUS(answered, Status::conflict);
   check(rig);
@@ -173,7 +173,7 @@ TEST(context_shared_objects_publish, propagates_a_context_with_no_executor_at_al
 { SharedObjectRig rig(false);
   Status answered = Status::ok;
   rig.second().on_worker([&] {
-      answered = rig.second().objects().publish(7u, RVK_SHARED_MEMORY, made_by_guest, size);
+      answered = rig.second().objects().publish(7u, AV_SHARED_MEMORY, made_by_guest, size);
   });
   CHECK_STATUS(answered, Status::invalid_state);
   check(rig);
@@ -194,12 +194,12 @@ TEST(context_shared_objects_open, refuses_a_kind_or_a_size_that_disagrees_with_t
   Status        answered = Status::ok;
   std::uint64_t opened = 9u;
   rig.second().on_worker(
-      [&] { answered = rig.second().objects().open(7u, RVK_SHARED_NATIVE_FENCE, 0u, opened); });
+      [&] { answered = rig.second().objects().open(7u, AV_SHARED_NATIVE_FENCE, 0u, opened); });
   CHECK_STATUS(answered, Status::invalid_parameter);
   check(rig);
   CHECK_EQ(opened, 0u);
   rig.second().on_worker(
-      [&] { answered = rig.second().objects().open(7u, RVK_SHARED_MEMORY, size + 4096u, opened); });
+      [&] { answered = rig.second().objects().open(7u, AV_SHARED_MEMORY, size + 4096u, opened); });
   CHECK_STATUS(answered, Status::invalid_parameter);
   check(rig);
   CHECK_EQ(rig.second().objects().held(), 0u);
@@ -223,7 +223,7 @@ TEST(context_shared_objects_open, refuses_an_id_this_context_already_holds)
   Status answered = Status::ok;
   std::uint64_t theirs = 9u;
   rig.first().on_worker(
-      [&] { answered = rig.first().objects().open(7u, RVK_SHARED_MEMORY, size, theirs); });
+      [&] { answered = rig.first().objects().open(7u, AV_SHARED_MEMORY, size, theirs); });
   CHECK_STATUS(answered, Status::conflict);
   check(rig); }
 
@@ -351,13 +351,13 @@ TEST(context_shared_objects_invariants, refuses_a_row_with_no_handle_no_kind_or_
   ContextSharedObjects &table = rig.first().objects();
   CHECK(table.invariants_hold());
 
-  av::ContextSharedObjectsProbe::place(table, 0u, av::ContextSharedObjectSlot{7u, 0u, RVK_SHARED_MEMORY, false});
+  av::ContextSharedObjectsProbe::place(table, 0u, av::ContextSharedObjectSlot{7u, 0u, AV_SHARED_MEMORY, false});
   CHECK(!table.invariants_hold());
   av::ContextSharedObjectsProbe::place(table, 0u, av::ContextSharedObjectSlot{7u, 5u, 0u, false});
   CHECK(!table.invariants_hold());
-  av::ContextSharedObjectsProbe::place(table, 0u, av::ContextSharedObjectSlot{7u, 5u, RVK_SHARED_MEMORY, false});
+  av::ContextSharedObjectsProbe::place(table, 0u, av::ContextSharedObjectSlot{7u, 5u, AV_SHARED_MEMORY, false});
   CHECK(table.invariants_hold());
-  av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{7u, 6u, RVK_SHARED_MEMORY, false});
+  av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{7u, 6u, AV_SHARED_MEMORY, false});
   CHECK(!table.invariants_hold());
 
   /* An empty row that still remembers something is a row a release did not
@@ -366,7 +366,7 @@ TEST(context_shared_objects_invariants, refuses_a_row_with_no_handle_no_kind_or_
   CHECK(table.invariants_hold());
   av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{0u, 6u, 0u, false});
   CHECK(!table.invariants_hold());
-  av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{0u, 0u, RVK_SHARED_MEMORY, false});
+  av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{0u, 0u, AV_SHARED_MEMORY, false});
   CHECK(!table.invariants_hold());
   av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{0u, 0u, 0u, true});
   CHECK(!table.invariants_hold());
@@ -386,7 +386,7 @@ TEST(context_shared_objects_publish, refuses_an_id_this_context_opened_rather_th
   CHECK_STATUS(open_second(rig, 7u, opened), Status::ok);
   Status answered = Status::ok;
   rig.second().on_worker([&] {
-      answered = rig.second().objects().publish(7u, RVK_SHARED_MEMORY, made_by_guest, size);
+      answered = rig.second().objects().publish(7u, AV_SHARED_MEMORY, made_by_guest, size);
   });
   CHECK_STATUS(answered, Status::conflict);
   check(rig);
@@ -403,7 +403,7 @@ TEST(context_shared_objects_open, has_no_space_once_the_context_holds_all_it_can
   /* The opener fills its own table with one of its own and the rest opened. */
   Status answered = Status::invalid_state;
   rig.second().on_worker([&] {
-      answered = rig.second().objects().publish(0xF00Du, RVK_SHARED_MEMORY, made_by_guest, size);
+      answered = rig.second().objects().publish(0xF00Du, AV_SHARED_MEMORY, made_by_guest, size);
   });
   CHECK_STATUS(answered, Status::ok);
   for (std::uint64_t id = 1u; id < ContextSharedObjects::max_objects; id++) {

@@ -72,7 +72,7 @@ TEST(generated_vulkan, a_struct_that_points_at_things_round_trips)
   sent.pNext = nullptr;
   sent.pApplicationName = "accel-virt";
   sent.applicationVersion = 3u;
-  sent.pEngineName = "rvk";
+  sent.pEngineName = "av";
   sent.engineVersion = 4u;
   constexpr std::uint32_t api_version_1_3 = (1u << 22) | (3u << 12);
   sent.apiVersion = api_version_1_3;
@@ -87,7 +87,7 @@ TEST(generated_vulkan, a_struct_that_points_at_things_round_trips)
   CHECK_EQ(received.sType, VK_STRUCTURE_TYPE_APPLICATION_INFO);
   CHECK(received.pApplicationName != nullptr);
   CHECK(std::strcmp(received.pApplicationName, "accel-virt") == 0);
-  CHECK(std::strcmp(received.pEngineName, "rvk") == 0);
+  CHECK(std::strcmp(received.pEngineName, "av") == 0);
   CHECK_EQ(received.applicationVersion, 3u);
   CHECK_EQ(received.engineVersion, 4u);
   CHECK_EQ(received.apiVersion, api_version_1_3);
@@ -102,7 +102,7 @@ TEST(generated_vulkan, a_decode_with_no_room_fails_instead_of_overrunning)
   VkApplicationInfo sent = {};
   sent.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   sent.pApplicationName = "a name longer than the block it will be given";
-  sent.pEngineName = "rvk";
+  sent.pEngineName = "av";
   av::vkproto::serialize_VkApplicationInfo(writer, sent);
   CHECK_STATUS(writer.status(), av::Status::ok);
 

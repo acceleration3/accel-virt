@@ -11,7 +11,7 @@ namespace av::vkicd::generated {
 // Wrapper functions matching the application-facing Vulkan signatures.
 // Each one looks up the per-VkInstance Connection (or opens a fresh
 // one in vkCreateInstance), unwraps dispatchable handles, calls the
-// generated rvk_vk* dispatch over that Connection's transport, and
+// generated av_vk* dispatch over that Connection's transport, and
 // wraps any returned dispatchable handles back into the wrappers
 // the handle registry hands out, carrying the same Connection.
 

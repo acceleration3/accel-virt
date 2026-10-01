@@ -7,7 +7,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/display_timing_request.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 #include <cstdint>
@@ -15,7 +15,7 @@
 
 using av::PageRequest;
 using av::DisplayTimingRequest;
-using av::RvkRequestWriter;
+using av::AvRequestWriter;
 using av::Status;
 using av::WireReader;
 
@@ -31,8 +31,8 @@ std::uint32_t type_of(const std::uint8_t *bytes)
 }  // namespace
 
 TEST(display_clock_request, the_writer_s_request_decodes_to_its_page)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0x1234567000u), Status::ok);
   CHECK_EQ(writer.length(), PageRequest::encoded_size);
   CHECK_EQ(type_of(bytes), PageRequest::display_clock);
@@ -44,8 +44,8 @@ TEST(display_clock_request, the_writer_s_request_decodes_to_its_page)
 
 /* The present engine's page travels as the clock's does, under its own type. */
 TEST(display_clock_request, the_present_engine_s_page_is_named_under_its_own_type)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.present_engine(0x7654321000u), Status::ok);
   CHECK_EQ(writer.length(), PageRequest::encoded_size);
   CHECK_EQ(type_of(bytes), 0x02F6u);
@@ -54,12 +54,12 @@ TEST(display_clock_request, the_present_engine_s_page_is_named_under_its_own_typ
   PageRequest page;
   CHECK_STATUS(page.decode(reader), Status::ok);
   CHECK_EQ(page.address(), 0x7654321000u);
-  RvkRequestWriter small(bytes, PageRequest::encoded_size - 1u);
+  AvRequestWriter small(bytes, PageRequest::encoded_size - 1u);
   CHECK_STATUS(small.present_engine(0x1000u), Status::too_large); }
 
 TEST(display_clock_request, no_page_is_a_request_to_stop)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0u), Status::ok);
   WireReader reader(bytes, writer.length());
   PageRequest clock;
@@ -67,8 +67,8 @@ TEST(display_clock_request, no_page_is_a_request_to_stop)
   CHECK_EQ(clock.address(), 0u); }
 
 TEST(display_clock_request, an_address_off_a_page_or_a_short_request_is_malformed)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0x5000u), Status::ok);
   WireReader short_reader(bytes, PageRequest::encoded_size - 1u);
   PageRequest short_clock;
@@ -91,8 +91,8 @@ TEST(display_clock_request, an_address_off_a_page_or_a_short_request_is_malforme
   CHECK_EQ(high.address() >> 56u, 0x80u); }
 
 TEST(display_timing_request, the_writer_s_request_decodes_to_its_head_and_rate)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_timing(3u, 143998u), Status::ok);
   CHECK_EQ(writer.length(), DisplayTimingRequest::encoded_size);
   CHECK_EQ(type_of(bytes), DisplayTimingRequest::type);
@@ -104,8 +104,8 @@ TEST(display_timing_request, the_writer_s_request_decodes_to_its_head_and_rate)
   CHECK_EQ(reader.offset(), DisplayTimingRequest::encoded_size); }
 
 TEST(display_timing_request, the_rate_s_bounds_are_inclusive_and_past_them_is_malformed)
-{ std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+{ std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
+  AvRequestWriter writer(bytes, sizeof bytes);
   struct Case {
       std::uint32_t millihz;
       Status        expected;
@@ -129,7 +129,7 @@ TEST(display_timing_request, the_rate_s_bounds_are_inclusive_and_past_them_is_ma
 
 TEST(display_clock_request, a_writer_too_small_writes_neither)
 { std::uint8_t bytes[PageRequest::encoded_size - 1u] = {};
-  RvkRequestWriter writer(bytes, sizeof bytes);
+  AvRequestWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(writer.display_clock(0x1000u), Status::too_large);
   CHECK_EQ(writer.length(), 0u);
   CHECK_STATUS(writer.display_timing(0u, 60000u), Status::too_large);

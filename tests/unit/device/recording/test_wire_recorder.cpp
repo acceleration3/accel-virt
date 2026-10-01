@@ -38,7 +38,7 @@ using av::WireRecorder;
 
 namespace {
 
-constexpr const char *path = "run.rvk";
+constexpr const char *path = "run.av";
 
 const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u,
                                                     9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u};
@@ -240,10 +240,10 @@ TEST(wire_recorder_open, refuses_a_second_recording_on_one_device)
 { MockHost host; WireRecorder recorder(host);
   CHECK_STATUS(recorder.open(path, 0u, nullptr, AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
                Status::ok);
-  CHECK_STATUS(recorder.open("other.rvk", 0u, nullptr, AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
+  CHECK_STATUS(recorder.open("other.av", 0u, nullptr, AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
                Status::invalid_state);
   CHECK(recorder.recording());
-  CHECK_EQ(host.recording_length("other.rvk"), 0u);
+  CHECK_EQ(host.recording_length("other.av"), 0u);
   recorder.close(); }
 
 TEST(wire_recorder_open, a_host_that_cannot_make_the_file_leaves_recording_off_and_says_so)

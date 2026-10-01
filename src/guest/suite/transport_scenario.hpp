@@ -1,4 +1,4 @@
-/* A command crosses the rvk transport and its answer comes back (features 043
+/* A command crosses the av transport and its answer comes back (features 043
  * and 044): a connection on the adapter the search found, one context's
  * transport of the sub-API asked for - its setup is the host opening that API's
  * backend on its GPU - and a synchronous transport no-op the device answers

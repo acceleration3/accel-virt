@@ -38,7 +38,7 @@ public:
      * which releases it again when that succeeded: 0 then, GetLastError
      * there otherwise. */
     virtual uint32_t make_current_elsewhere(void *context) = 0;
-    /* The ICD's probe-only rvkForceContextFault through wglGetProcAddress:
+    /* The ICD's probe-only avForceContextFault through wglGetProcAddress:
      * what it answers, or -1 when the ICD has no such hook. */
     virtual int32_t  force_fault() = 0;
     /* glGetGraphicsResetStatus through wglGetProcAddress; 0 without it. */

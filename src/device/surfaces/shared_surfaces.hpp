@@ -18,7 +18,7 @@
 #ifndef AV_SHARED_SURFACES_HPP
 #define AV_SHARED_SURFACES_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "proto/resources/surface_point.hpp"
 
 #include <pthread.h>
@@ -57,7 +57,7 @@ public:
      * for its writer to reach it and the GPU to copy it. False at once for a
      * point its writer passed without staging - this surface is a blt's from
      * now on - and for a frame being read already. */
-    [[nodiscard]] bool map(const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view);
+    [[nodiscard]] bool map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     /* `frame` let go, mapped or not: its staging goes back to its pool. */
     void               unmap(const SurfacePoint &frame);
     /* The guest let go of `surface` everywhere; 0 for every surface, as a
@@ -94,7 +94,7 @@ private:
      * none is free; null when every one is. What it held is `evicted`. */
     Slot    *room(StagedFrame *&evicted);
     /* One look for `frame`, taking and giving back the lock itself. */
-    Look     look(const SurfacePoint &frame, RvkFrameView &view);
+    Look     look(const SurfacePoint &frame, AvFrameView &view);
     /* Under the lock: whether `surface`'s writer has passed `point`, points
      * counting on past 2^32 as their difference does. */
     bool     passed(const Surface &surface, uint32_t point) const;

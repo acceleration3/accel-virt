@@ -35,7 +35,7 @@ TEST(trace_escape_record, encodes_the_documented_layout)
   const TraceEscapeRecord request(Kind::state, 0x1122334455667788ull, 64u);
   CHECK_STATUS(request.encode(bytes, sizeof bytes), Status::ok);
   const std::uint8_t expected[40] = {
-      'R', 'V', 'K', 'D', 1, 0, 2, 0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+      'A', 'V', 'D', 0, 1, 0, 2, 0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       64, 0, 0, 0, 0, 0, 0, 0};
   CHECK(std::memcmp(bytes, expected, sizeof expected) == 0);

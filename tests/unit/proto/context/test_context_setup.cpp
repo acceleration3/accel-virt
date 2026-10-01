@@ -66,7 +66,7 @@ TEST(context_setup_encode, places_every_field_at_its_offset)
 { Encoded encoded(sample());
   CHECK_STATUS(encoded.status(), Status::ok);
   const ByteLayout layout(encoded.bytes(), ContextSetup::base_size);
-  CHECK(layout.at(0u, 4u) == 0x434B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00435641u);
   CHECK(layout.at(4u, 2u) == 1u);
   CHECK(layout.at(6u, 2u) == 0u);
   CHECK(layout.at(8u, 4u) == 2u);

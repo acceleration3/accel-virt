@@ -60,7 +60,7 @@ Status RendererContextPlane::configure(const char *renderer, const char *executo
 
 /* The renderer loads the library, not QEMU: a table given here is a device
  * that asked for both, which is refused. */
-Status RendererContextPlane::accept(const RvkExecutorOps *executor)
+Status RendererContextPlane::accept(const AvExecutorOps *executor)
 {
     AV_SCOPE("RendererContextPlane::accept");
     return executor == nullptr ? Status::ok : Status::invalid_parameter;
@@ -284,7 +284,7 @@ void RendererContextPlane::blob_created(uint32_t id)
      * renderer is not ended over it, which a relaunch would only repeat. */
     if (status == Status::invalid_parameter || status == Status::not_supported) {
         mirrored_count_--;
-        host_.log("virtio-gpu-rvk: a blob outside the renderer's memory is not given to it");
+        host_.log("virtio-gpu-av: a blob outside the renderer's memory is not given to it");
         return;
     }
     give_up();
@@ -395,7 +395,7 @@ void RendererContextPlane::give_up()
 {
     AV_SCOPE("RendererContextPlane::give_up");
     if (!alive_) return;
-    host_.log("virtio-gpu-rvk: the renderer did not answer; it is ended and its contexts lost");
+    host_.log("virtio-gpu-av: the renderer did not answer; it is ended and its contexts lost");
     host_.kill_renderer();
     renderer_lost();
 }
@@ -423,10 +423,10 @@ void RendererContextPlane::renderer_lost()
     for (ObjectStorage<RemoteContext> &slot : slots_)
         if (slot.constructed()) slot.object().lose();
     if (!may_restart()) {
-        host_.log("virtio-gpu-rvk: the renderer keeps dying; it is not started again");
+        host_.log("virtio-gpu-av: the renderer keeps dying; it is not started again");
         return;
     }
-    if (launch() != Status::ok) host_.log("virtio-gpu-rvk: the renderer could not be started again");
+    if (launch() != Status::ok) host_.log("virtio-gpu-av: the renderer could not be started again");
 }
 
 /* The display holds its own import of whatever was shown; a new renderer's
@@ -440,7 +440,7 @@ void RendererContextPlane::drop_images()
     }
 }
 
-bool RendererContextPlane::export_image(const uint8_t *, uint64_t key, RvkExportedImage &image)
+bool RendererContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("RendererContextPlane::export_image");
     host_.require_main_loop("RendererContextPlane::export_image");
@@ -497,7 +497,7 @@ bool RendererContextPlane::reads_frames() const
     return false;
 }
 
-bool RendererContextPlane::map_frame(const uint8_t *, const SurfacePoint &, uint32_t, RvkFrameView &)
+bool RendererContextPlane::map_frame(const uint8_t *, const SurfacePoint &, uint32_t, AvFrameView &)
 {
     AV_SCOPE("RendererContextPlane::map_frame");
     return false;

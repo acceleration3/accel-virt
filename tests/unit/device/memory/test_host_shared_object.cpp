@@ -4,7 +4,7 @@
  * but when the last holder lets go. Every test here asks the kernel whether
  * the descriptor is still open rather than trusting a counter. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/memory/host_shared_object.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -66,14 +66,14 @@ TEST(host_shared_object_take, keeps_the_descriptor_and_counts_the_publisher_as_t
   const int fd = rig.descriptor();
   CHECK(fd >= 0);
   HostSharedObject object;
-  CHECK_STATUS(object.take(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK_STATUS(object.take(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
   rig.check(object);
   CHECK(object.live());
   CHECK(object.holds(7u));
   CHECK(!object.holds(8u));
   CHECK_EQ(object.id(), 7u);
-  CHECK_EQ(object.kind(), RVK_SHARED_MEMORY);
-  CHECK_EQ(object.handle_kind(), RVK_SHARED_HANDLE_DMA_BUF);
+  CHECK_EQ(object.kind(), AV_SHARED_MEMORY);
+  CHECK_EQ(object.handle_kind(), AV_SHARED_HANDLE_DMA_BUF);
   CHECK_EQ(object.size(), size);
   CHECK_EQ(object.descriptor(), fd);
   CHECK_EQ(object.holders(), 1u);
@@ -86,15 +86,15 @@ TEST(host_shared_object_take, keeps_the_descriptor_and_counts_the_publisher_as_t
 TEST(host_shared_object_take, refuses_every_field_no_object_can_have_and_keeps_the_descriptor_the_callers)
 { struct Case { std::uint64_t id; std::uint32_t kind; std::uint32_t handle_kind; std::uint64_t size; bool fd; };
   const Case cases[] = {
-      {0u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, true},          /* no id */
-      {7u, 0u, RVK_SHARED_HANDLE_DMA_BUF, size, true},                         /* no kind */
-      {7u, RVK_SHARED_NATIVE_FENCE + 1u, RVK_SHARED_HANDLE_DMA_BUF, size, true},
-      {7u, 0xFFFFFFFFu, RVK_SHARED_HANDLE_DMA_BUF, size, true},
-      {7u, RVK_SHARED_MEMORY, 0u, size, true},                        /* no blob kind */
-      {7u, RVK_SHARED_MEMORY, 3u, size, true},
-      {7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0u, true},            /* memory with no length */
-      {7u, RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, size, true},  /* a fence with one */
-      {7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, false},         /* no descriptor */
+      {0u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, true},          /* no id */
+      {7u, 0u, AV_SHARED_HANDLE_DMA_BUF, size, true},                         /* no kind */
+      {7u, AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, size, true},
+      {7u, 0xFFFFFFFFu, AV_SHARED_HANDLE_DMA_BUF, size, true},
+      {7u, AV_SHARED_MEMORY, 0u, size, true},                        /* no blob kind */
+      {7u, AV_SHARED_MEMORY, 3u, size, true},
+      {7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0u, true},            /* memory with no length */
+      {7u, AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, size, true},  /* a fence with one */
+      {7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, false},         /* no descriptor */
   };
   for (const Case &c : cases) {
       Fixture   rig;
@@ -116,9 +116,9 @@ TEST(host_shared_object_take, refuses_a_slot_already_live_without_disturbing_wha
   const int first = rig.descriptor();
   const int second = rig.descriptor();
   HostSharedObject object;
-  CHECK_STATUS(object.take(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, first), Status::ok);
+  CHECK_STATUS(object.take(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, first), Status::ok);
   rig.check(object);
-  CHECK_STATUS(object.take(9u, RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, 0u, second),
+  CHECK_STATUS(object.take(9u, AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 0u, second),
                Status::invalid_state);
   rig.check(object);
   CHECK_EQ(object.id(), 7u);
@@ -131,7 +131,7 @@ TEST(host_shared_object_drop, closes_the_descriptor_only_when_the_last_holder_le
 { Fixture   rig;
   const int fd = rig.descriptor();
   HostSharedObject object;
-  CHECK_STATUS(object.take(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK_STATUS(object.take(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
   rig.check(object);
   object.hold();
   rig.check(object);
@@ -170,7 +170,7 @@ TEST(host_shared_object_give_back, drops_every_holder_at_once_because_a_reset_le
 { Fixture   rig;
   const int fd = rig.descriptor();
   HostSharedObject object;
-  CHECK_STATUS(object.take(4u, RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, 0u, fd), Status::ok);
+  CHECK_STATUS(object.take(4u, AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 0u, fd), Status::ok);
   object.hold();
   object.hold();
   rig.check(object);
@@ -182,18 +182,18 @@ TEST(host_shared_object_give_back, drops_every_holder_at_once_because_a_reset_le
   CHECK_EQ(rig.host().live_dmabufs(), 0u);
   /* And a slot given back takes another object without complaint. */
   const int again = rig.descriptor();
-  CHECK_STATUS(object.take(5u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, again), Status::ok);
+  CHECK_STATUS(object.take(5u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, again), Status::ok);
   rig.check(object);
   object.give_back(rig.host()); }
 
 TEST(host_shared_object, every_kind_and_every_handle_kind_the_abi_has_is_taken)
-{ const std::uint32_t kinds[] = {RVK_SHARED_MEMORY, RVK_SHARED_MONITORED_FENCE, RVK_SHARED_NATIVE_FENCE};
-  const std::uint32_t blobs[] = {RVK_SHARED_HANDLE_OPAQUE_FD, RVK_SHARED_HANDLE_DMA_BUF};
+{ const std::uint32_t kinds[] = {AV_SHARED_MEMORY, AV_SHARED_MONITORED_FENCE, AV_SHARED_NATIVE_FENCE};
+  const std::uint32_t blobs[] = {AV_SHARED_HANDLE_OPAQUE_FD, AV_SHARED_HANDLE_DMA_BUF};
   for (const std::uint32_t kind : kinds)
       for (const std::uint32_t blob : blobs) {
           Fixture          rig;
           HostSharedObject object;
-          const std::uint64_t bytes = kind == RVK_SHARED_MEMORY ? 4096u : 0u;
+          const std::uint64_t bytes = kind == AV_SHARED_MEMORY ? 4096u : 0u;
           CHECK_STATUS(object.take(1u, kind, blob, bytes, rig.descriptor()), Status::ok);
           rig.check(object);
           CHECK_EQ(object.kind(), kind);
@@ -205,31 +205,31 @@ TEST(host_shared_object_invariants, refuse_every_state_a_take_never_leaves_behin
 { Fixture          rig;
   const int        fd = rig.descriptor();
   HostSharedObject object;
-  CHECK_STATUS(object.take(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK_STATUS(object.take(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
   CHECK(object.invariants_hold());
 
   using Probe = av::HostSharedObjectProbe;
   Probe::set_kind(object, 0u);
   CHECK(!object.invariants_hold());
-  Probe::set_kind(object, RVK_SHARED_NATIVE_FENCE + 1u);
+  Probe::set_kind(object, AV_SHARED_NATIVE_FENCE + 1u);
   CHECK(!object.invariants_hold());
-  Probe::set_kind(object, RVK_SHARED_MEMORY);
+  Probe::set_kind(object, AV_SHARED_MEMORY);
   CHECK(object.invariants_hold());
 
   Probe::set_handle_kind(object, 0u);
   CHECK(!object.invariants_hold());
   Probe::set_handle_kind(object, 3u);
   CHECK(!object.invariants_hold());
-  Probe::set_handle_kind(object, RVK_SHARED_HANDLE_OPAQUE_FD);
+  Probe::set_handle_kind(object, AV_SHARED_HANDLE_OPAQUE_FD);
   CHECK(object.invariants_hold());
 
   /* Memory with no length, and a fence with one. */
   Probe::set_size(object, 0u);
   CHECK(!object.invariants_hold());
   Probe::set_size(object, size);
-  Probe::set_kind(object, RVK_SHARED_MONITORED_FENCE);
+  Probe::set_kind(object, AV_SHARED_MONITORED_FENCE);
   CHECK(!object.invariants_hold());
-  Probe::set_kind(object, RVK_SHARED_MEMORY);
+  Probe::set_kind(object, AV_SHARED_MEMORY);
   CHECK(object.invariants_hold());
 
   Probe::set_descriptor(object, -1);

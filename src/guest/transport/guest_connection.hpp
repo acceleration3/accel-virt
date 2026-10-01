@@ -1,8 +1,8 @@
 /* The device and paging queue a process shares across its per-sub-API
- * transports, on the rvk adapter (docs/protocol.md; feature 043). The adapter
+ * transports, on the av adapter (docs/protocol.md; feature 043). The adapter
  * is found and owned by the caller - D3DKMT enumerates every adapter in the
  * guest, Microsoft Basic Render among them, and only a PCI identity says which
- * is rvk. Each KmtTransport a process then creates - one per sub-API context -
+ * is av. Each KmtTransport a process then creates - one per sub-API context -
  * runs its allocations and context on this device and makes them resident
  * through this queue. All the D3DKMT calls go through the injected Kmt, so a
  * test drives it over MockKmt. */

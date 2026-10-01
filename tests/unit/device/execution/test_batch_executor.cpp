@@ -4,7 +4,7 @@
  * answer asked for written to the reply slot, and every stream no producer
  * could frame refused. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/batch_executor.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -116,7 +116,7 @@ public:
     explicit Fixture(std::uint32_t slot_bytes = 32u + reply_bytes)
         : ring_bytes_{}, ring_pointer_(ring_bytes_), ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, 12u),
           reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), page_{}, page_pointer_(page_),
-          page_length_(sizeof page_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
+          page_length_(sizeof page_), ops_(AV_EXECUTOR_SUB_API_VULKAN), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
           objects_(host_), recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u),
           shared_(objects_, executor_), staging_(host_), interrupts_(host_),
           fences_(host_, interrupts_, recorder_, 1u),
@@ -290,7 +290,7 @@ TEST(batch_executor_run, a_nop_asking_for_an_answer_gets_an_empty_one_and_never_
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK_EQ(fixture.ops().executed(), 0u);
   const ReplyHeader header = fixture.reply_header();
-  CHECK_EQ(fixture.reply()[0], 0x52u);   /* "RVKY" */
+  CHECK_EQ(fixture.reply()[0], 0x41u);   /* "AVY" */
   CHECK(!header.too_large());
   CHECK_EQ(header.fence_id(), 5u);
   CHECK_EQ(header.size(), 0u);
@@ -390,10 +390,10 @@ TEST(batch_executor_run, an_answer_larger_than_the_slot_says_what_it_needed)
 TEST(batch_executor_run, an_answer_past_four_gigabytes_is_reported_as_the_largest_it_can_say)
 { Fixture fixture;
   MockExecutorOps &ops = fixture.ops();
-  ops.editable().execute = [](void *, RvkExecutor *, std::uint32_t, const std::uint8_t *, std::size_t, std::uint8_t *,
+  ops.editable().execute = [](void *, AvExecutor *, std::uint32_t, const std::uint8_t *, std::size_t, std::uint8_t *,
                               std::size_t, std::size_t *reply_size) -> std::uint32_t {
       *reply_size = std::size_t{1} << 33;
-      return RVK_EXECUTED;
+      return AV_EXECUTED;
   };
   Commands commands;
   commands.add(0x10001u, 0u, CommandHeader::generate_reply);
@@ -586,11 +586,11 @@ TEST(batch_executor_run, a_blob_command_framed_with_the_wrong_body_faults_the_co
 
 TEST(batch_executor_run, records_the_batch_before_a_command_runs_and_its_answer_after)
 { Fixture fixture;
-  fixture.record_to("batches.rvk");
+  fixture.record_to("batches.av");
   Commands commands;
   commands.add(0x10001u, 4u, CommandHeader::generate_reply, 0x11u).add(0x10002u, 6u, 0u, 0x22u);
   CHECK_STATUS(fixture.run(7u, commands), Status::ok);
-  av::RecordedFile   file(fixture.host(), "batches.rvk");
+  av::RecordedFile   file(fixture.host(), "batches.av");
   av::RecordHeader   record;
   const std::uint8_t *payload = file.expect(av::RecordKind::batch, record);
   CHECK(payload != nullptr);
@@ -609,12 +609,12 @@ TEST(batch_executor_run, records_the_batch_before_a_command_runs_and_its_answer_
 
 TEST(batch_executor_run, records_the_fault_of_a_batch_that_did_not_complete)
 { Fixture fixture;
-  fixture.record_to("faults.rvk");
+  fixture.record_to("faults.av");
   Commands commands;
   commands.add(MockExecutorOps::undecodable_id, 4u);
   CHECK_STATUS(fixture.run(3u, commands), Status::malformed);
   CHECK(fixture.batches().fault() == FaultCode::undecodable);
-  av::RecordedFile   file(fixture.host(), "faults.rvk");
+  av::RecordedFile   file(fixture.host(), "faults.av");
   av::RecordHeader   record;
   CHECK(file.expect(av::RecordKind::batch, record) != nullptr);
   const std::uint8_t *payload = file.expect(av::RecordKind::fault, record);
@@ -639,21 +639,21 @@ TEST(batch_executor_run, with_recording_off_it_asks_the_host_for_no_recording_at
   CHECK_STATUS(fixture.run(7u, commands), Status::ok);
   CHECK(!fixture.recorder().recording());
   CHECK(fixture.recorder().records() == 0u);
-  CHECK_EQ(fixture.host().recording_length("batches.rvk"), 0u); }
+  CHECK_EQ(fixture.host().recording_length("batches.av"), 0u); }
 
 /* US1 scenario 3: a host driver that takes the process down with it must leave
  * the batch it was given behind. Held inside the executor's first command, the
  * recording already holds the whole batch and nothing of its answer. */
 TEST(batch_executor_run, the_batch_is_on_the_recording_while_its_first_command_is_still_running)
 { Fixture fixture;
-  fixture.record_to("crash.rvk");
+  fixture.record_to("crash.av");
   Commands commands;
   commands.add(0x10001u, 4u, CommandHeader::generate_reply, 0x11u);
   fixture.ops().hold();
   Fixture::Running running;
   fixture.begin(running, 11u, commands);
   while (fixture.ops().waiting() == 0u) { }
-  { av::RecordedFile   file(fixture.host(), "crash.rvk");
+  { av::RecordedFile   file(fixture.host(), "crash.av");
     av::RecordHeader   record;
     const std::uint8_t *payload = file.expect(av::RecordKind::batch, record);
     CHECK(payload != nullptr);

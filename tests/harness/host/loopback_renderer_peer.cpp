@@ -9,7 +9,7 @@
 
 namespace av {
 
-LoopbackRendererPeer::Process::Process(MockHost &qemu, const RvkExecutorOps &executor)
+LoopbackRendererPeer::Process::Process(MockHost &qemu, const AvExecutorOps &executor)
     : host(), resources(qemu, executor), memory(), doorbells(), service(host, resources, memory, doorbells), regions{},
       region_count(0u)
 {
@@ -47,7 +47,7 @@ void LoopbackRendererPeer::Process::remember_region(const std::uint8_t *bytes, s
     regions[region_count++] = region.region();
 }
 
-LoopbackRendererPeer::LoopbackRendererPeer(MockHost &qemu, const RvkExecutorOps &executor)
+LoopbackRendererPeer::LoopbackRendererPeer(MockHost &qemu, const AvExecutorOps &executor)
     : qemu_(qemu), executor_(executor), process_(), answers_{}, first_(0u), queued_(0u), last_outcome_(Status::ok),
       delivered_(0u), generation_(1u), spoken_to_(false), silent_(false)
 {

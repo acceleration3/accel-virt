@@ -4,7 +4,7 @@
  * give: whether an id is carried at all, and whether a frame decoded. The
  * driver's own answer is deliberately not asserted - these must pass on a
  * machine with no GPU, where every command decodes and every VkResult says so. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/host_gpu.hpp"
@@ -200,8 +200,8 @@ TEST(vulkan_backend, a_command_the_arena_will_not_hold_is_refused_and_counted)
 TEST(vulkan_backend, a_kind_it_does_not_offer_is_not_adopted)
 { VulkanBackend backend;
   av::ImportedBlob blob;
-  RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_DMA_BUF;
+  AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_DMA_BUF;
   handle.fd = 3;
   handle.size = av::ImportedBlob::page_bytes;
   CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
@@ -216,8 +216,8 @@ TEST(vulkan_backend, without_a_device_nothing_is_adopted)
 { VulkanBackend backend;
   av::ImportedBlob blob;
   alignas(4096) static std::uint8_t page[av::ImportedBlob::page_bytes];
-  RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_HOST_POINTER;
+  AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
   handle.pointer = page;
   handle.fd = -1;
   handle.size = sizeof page;
@@ -553,7 +553,7 @@ TEST(vulkan_backend, a_bound_context_lists_its_gpu_alone)
  * are shown nothing - an empty list and no group - rather than some other GPU. */
 TEST(vulkan_backend, a_context_whose_gpu_is_not_listed_lists_nothing)
 { av::MockHostApis apis;
-  apis.add_gpu(nobody_s_gpu, RVK_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.add_gpu(nobody_s_gpu, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
   av::HostGpu gpu;
   gpu.describe(apis, 0u);
   VulkanBackend bound;
@@ -657,15 +657,15 @@ TEST(vulkan_backend, a_backend_with_no_device_exports_imports_and_releases_nothi
 { VulkanBackend backend;
   std::uint32_t handle_kind = 9u;
   int           fd = 9;
-  CHECK(!backend.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK(!backend.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
   CHECK_EQ(handle_kind, 0u);
   CHECK_EQ(fd, -1);
-  CHECK(!backend.export_object(RVK_SHARED_MONITORED_FENCE, 0x40u, handle_kind, fd));
+  CHECK(!backend.export_object(AV_SHARED_MONITORED_FENCE, 0x40u, handle_kind, fd));
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, 3, 0u, made));
+  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, made));
   /* And a release does nothing at all, with or without a handle. */
-  backend.release_object(RVK_SHARED_MEMORY, 0x40u);
-  backend.release_object(RVK_SHARED_MONITORED_FENCE, 0u); }
+  backend.release_object(AV_SHARED_MEMORY, 0x40u);
+  backend.release_object(AV_SHARED_MONITORED_FENCE, 0u); }

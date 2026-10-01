@@ -41,7 +41,7 @@ void HostPciIdentity::read(uint32_t gpu_index)
     report(address);
 }
 
-bool HostPciIdentity::presented(RvkPciIdentity &identity) const
+bool HostPciIdentity::presented(AvPciIdentity &identity) const
 {
     AV_SCOPE("HostPciIdentity::presented");
     if (!present_) return false;
@@ -93,7 +93,7 @@ void HostPciIdentity::report(const PciAddress &address)
     AV_SCOPE("HostPciIdentity::report");
     char       bytes[message_bytes] = {};
     TextBuffer message(bytes, sizeof bytes);
-    message.append("virtio-gpu-rvk: pci identity ");
+    message.append("virtio-gpu-av: pci identity ");
     message.append_lower_hex(vendor_id_, 4u);
     message.append(":");
     message.append_lower_hex(device_id_, 4u);

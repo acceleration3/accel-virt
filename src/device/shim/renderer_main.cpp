@@ -1,4 +1,4 @@
-/* rvk-renderer's entry point: the process root and its control loop
+/* av-renderer's entry point: the process root and its control loop
  * (docs/renderer.md). */
 #include "core/support/object_storage.hpp"
 #include "device/shim/renderer_process.hpp"

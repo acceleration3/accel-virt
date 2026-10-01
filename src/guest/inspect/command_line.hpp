@@ -1,7 +1,7 @@
-/* A Windows command line as rvkinspect.exe gets it from GetCommandLineW: the
+/* A Windows command line as avinspect.exe gets it from GetCommandLineW: the
  * program's name, then arguments split at spaces and tabs, a double-quoted
  * run kept whole. Every argument must be printable ASCII - the commands, the
- * numbers and the C:\rvk paths the runner passes - and anything else refuses
+ * numbers and the C:\av paths the runner passes - and anything else refuses
  * the whole line. */
 #ifndef AV_COMMAND_LINE_HPP
 #define AV_COMMAND_LINE_HPP

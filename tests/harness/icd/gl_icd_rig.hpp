@@ -1,4 +1,4 @@
-/* A GlIcdRoot as opengl32 finds it, over MockKmt with the rvkgpu adapter
+/* A GlIcdRoot as opengl32 finds it, over MockKmt with the avgpu adapter
  * present: the host played through ScriptedHost, the root's and the send
  * lock's order in one trace, a window and a memory DC declared, threads played
  * by name, and FakeOpengl32 driving the ICD's exports and standing in for the

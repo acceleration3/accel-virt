@@ -3,7 +3,7 @@
  * back and judged, and a bitmap of the frame.
  *
  * What it proves is vkd3d-proton's d3d12.dll on the guest's Vulkan loader on
- * this ICD on rvkgpu. The pixels are judged here rather than by the layer. */
+ * this ICD on avgpu. The pixels are judged here rather than by the layer. */
 #ifndef AV_D3D12_WORK_HPP
 #define AV_D3D12_WORK_HPP
 

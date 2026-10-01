@@ -4,9 +4,9 @@
  * every object that touches floating point names (the OpenCL client's
  * cl_float arguments) and which only says the floating-point support is linked.
  *
- * With no C runtime there is no argv: what rvktest takes - the seconds of fence
+ * With no C runtime there is no argv: what avtest takes - the seconds of fence
  * stress to run, 0 for none, the word `tdr` for a run of the timeout scenario
- * alone and the word `rvk` for the rvk scenarios alone - is read from the
+ * alone and the word `av` for the av scenarios alone - is read from the
  * command line itself, which is the last run of digits in it and whether one of
  * those words is in it. */
 #include "core/trace/function_scope.hpp"
@@ -14,9 +14,9 @@
 
 #include <windows.h>
 
-static uint32_t rvktest_stress_seconds(const wchar_t *line)
+static uint32_t avtest_stress_seconds(const wchar_t *line)
 {
-    AV_SCOPE("rvktest_stress_seconds");
+    AV_SCOPE("avtest_stress_seconds");
     uint32_t seconds = 0u;
     bool         reading = false;
 
@@ -32,37 +32,38 @@ static uint32_t rvktest_stress_seconds(const wchar_t *line)
 }
 
 /* Whether the command line asks for the timeout scenario (feature 040, US3),
- * the rvk scenarios (feature 044) or the round-trip timing (`trip`) instead of
+ * the av scenarios (feature 044) or the round-trip timing (`trip`) instead of
  * the suite. */
-static av::GuestProgram::Run rvktest_run(const wchar_t *line)
+static av::GuestProgram::Run avtest_run(const wchar_t *line)
 {
-    AV_SCOPE("rvktest_run");
+    AV_SCOPE("avtest_run");
     for (; *line != L'\0'; line++) {
         if (line[0] == L' ' && line[1] == L't' && line[2] == L'd' && line[3] == L'r')
             return av::GuestProgram::Run::timeout;
-        if (line[0] == L' ' && line[1] == L'r' && line[2] == L'v' && line[3] == L'k')
-            return av::GuestProgram::Run::rvk;
+        if (line[0] == L' ' && line[1] == L'a' && line[2] == L'v' &&
+            (line[3] == L'\0' || line[3] == L' '))
+            return av::GuestProgram::Run::av;
         if (line[0] == L' ' && line[1] == L't' && line[2] == L'r' && line[3] == L'i' && line[4] == L'p')
             return av::GuestProgram::Run::round_trip;
     }
     return av::GuestProgram::Run::suite;
 }
 
-/* rvktest's trace root: the one piece of process-lifetime state this program
+/* avtest's trace root: the one piece of process-lifetime state this program
  * has, since its unhandled-exception filter is handed no context
  * (constitution III). */
-static constinit av::ObjectStorage<av::ProcessTrace> rvktest_trace;
+static constinit av::ObjectStorage<av::ProcessTrace> avtest_trace;
 
-static long WINAPI rvktest_crashed(void *pointers)
+static long WINAPI avtest_crashed(void *pointers)
 {
-    AV_SCOPE("rvktest_crashed");
-    return rvktest_trace.object().crashed(pointers);
+    AV_SCOPE("avtest_crashed");
+    return avtest_trace.object().crashed(pointers);
 }
 
-extern "C" void rvktest_entry()
+extern "C" void avtest_entry()
 {
     const wchar_t *const line = GetCommandLineW();
-    ExitProcess(av::GuestProgram(rvktest_stress_seconds(line), rvktest_run(line), rvktest_trace, &rvktest_crashed).run());
+    ExitProcess(av::GuestProgram(avtest_stress_seconds(line), avtest_run(line), avtest_trace, &avtest_crashed).run());
 }
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }

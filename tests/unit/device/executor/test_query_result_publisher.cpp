@@ -169,7 +169,7 @@ struct Published {
 Published publish_an_event_query()
 {
     Published seen = {};
-    if (std::getenv("RVK_D3D_PATH") == nullptr) setenv("RVK_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::D3dRuntime runtime;
     std::uint8_t   uuid[VK_UUID_SIZE] = {};
     if (!runtime.open() || !first_gpu(uuid)) return seen;

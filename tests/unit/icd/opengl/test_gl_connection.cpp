@@ -1,4 +1,4 @@
-/* The process's links to the rvkgpu adapter (US3): the first context made
+/* The process's links to the avgpu adapter (US3): the first context made
  * opens a device, the rest share it, the last closes it; a device lost is
  * retired - the contexts on it keep their link until they go, and the next
  * context opens a new device beside it. The adapter is found by enumeration
@@ -147,7 +147,7 @@ TEST(gl_connection, every_link_lost_and_held_leaves_no_room)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
 
-TEST(gl_connection, no_rvkgpu_adapter_or_no_device_is_not_supported_with_nothing_open)
+TEST(gl_connection, no_avgpu_adapter_or_no_device_is_not_supported_with_nothing_open)
 { GlContextRig rig;
   std::uint32_t link = 3u;
   rig.kmt().fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter);
@@ -171,7 +171,7 @@ TEST(gl_connection, no_rvkgpu_adapter_or_no_device_is_not_supported_with_nothing
   rig.connection().release(first);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-TEST(gl_connection, other_adapters_are_not_the_rvkgpu_one)
+TEST(gl_connection, other_adapters_are_not_the_avgpu_one)
 { av::MockKmt kmt;
   kmt.add_adapter(av::PciIdentity(0x8086u, 0x46A6u, 0u, 0u), 3200u);
   av::icd::IcdConnection connection(kmt);

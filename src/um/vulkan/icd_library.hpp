@@ -1,7 +1,7 @@
-/* rvkvk.dll's ICD root and what it is constructed over: the process heap, the
+/* avvk.dll's ICD root and what it is constructed over: the process heap, the
  * thread locks, the log file, D3DKMT through gdi32, and the windows' GDI
  * surfaces and DXGI chains. One per process, in
- * the exports' storage (rvkvk_exports.cpp), constructed on the loader's first
+ * the exports' storage (avvk_exports.cpp), constructed on the loader's first
  * call rather than at DLL attach, where the loader lock forbids opening a file
  * or an event. Translation only: what the root decides is in src/icd. */
 #ifndef AV_UM_ICD_LIBRARY_HPP

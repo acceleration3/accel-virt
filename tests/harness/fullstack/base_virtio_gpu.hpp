@@ -1,4 +1,4 @@
-/* What QEMU's base virtio-gpu device answers for the requests virtio-gpu-rvk's
+/* What QEMU's base virtio-gpu device answers for the requests virtio-gpu-av's
  * device core leaves to it (virtio 1.2 5.7.6; virtio_gpu_simple_process_cmd):
  * display info for its one enabled scanout, success for the 2D resource and
  * scanout requests, and ERR_UNSPEC for a request too short to have a header

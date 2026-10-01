@@ -1,4 +1,4 @@
-/* rvkinspect.exe (docs/trace.md): reads a process's trace table or state
+/* avinspect.exe (docs/trace.md): reads a process's trace table or state
  * dump, or the driver's, and writes it to the file --out names. Every answer
  * is a file; the exit code says only whether the command was understood and
  * the file written. */
@@ -46,7 +46,7 @@ private:
     Exit state(uint32_t pid, const char *module, const char *out);
     Exit kernel(TraceEscapeRecord::Kind kind, const char *out);
     Exit dump_file(SnapshotFile &file, const char *section);
-    /* `<prefix>rvk-<kind>-<module>-<pid>`. */
+    /* `<prefix>av-<kind>-<module>-<pid>`. */
     void name(TextBuffer &out, const char *prefix, const char *kind, const char *module, uint32_t pid) const;
     bool module_name(const char *module) const;
     /* The table in `bytes` as a kind 1 file, or the reason it is none as kind 3. */

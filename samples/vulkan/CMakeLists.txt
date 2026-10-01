@@ -8,7 +8,7 @@
 #
 #   tools/build_vulkan_samples.sh host|guest
 cmake_minimum_required(VERSION 3.20)
-project(rvkvksamples CXX C)
+project(avvksamples CXX C)
 
 set(VKS_TREE "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/vulkan-samples" CACHE PATH "tools/fetch_vulkan_samples.sh's tree")
 set(VKS_UPSTREAM "${VKS_TREE}/Vulkan-Samples")
@@ -63,7 +63,7 @@ foreach(SAMPLE ${VKS_SAMPLES})
 endforeach()
 configure_file(registry.cpp.in "${VKS_GENERATED}/registry.cpp" @ONLY)
 
-add_executable(rvkvksamples
+add_executable(avvksamples
   runner.cpp
   "${VKS_GENERATED}/registry.cpp"
   ${VKS_WRAPPERS}
@@ -73,29 +73,29 @@ add_executable(rvkvksamples
 # The upstream tree's root, then its base: a sample's own includes resolve as
 # they would in upstream's build; this directory first for the headless swap
 # chain the patched vulkanswapchain.hpp includes.
-target_include_directories(rvkvksamples PRIVATE
+target_include_directories(avvksamples PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${VKS_UPSTREAM}"
   "${VKS_UPSTREAM}/base"
   "${VKS_UPSTREAM}/external"
   "${VKS_UPSTREAM}/external/glm"
   "${VKS_UPSTREAM}/external/gli")
-target_compile_definitions(rvkvksamples PRIVATE VK_EXAMPLE_HEADLESS NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(avvksamples PRIVATE VK_EXAMPLE_HEADLESS NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 # Their code, their warnings: none of it is the driver's.
-target_compile_options(rvkvksamples PRIVATE -O2 -w -fpermissive)
-target_link_libraries(rvkvksamples PRIVATE assimp)
+target_compile_options(avvksamples PRIVATE -O2 -w -fpermissive)
+target_link_libraries(avvksamples PRIVATE assimp)
 
 if(WIN32)
   # The loader the guest runs, the one the report pushes beside the program.
   set(VKS_VULKAN_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/vulkan-runtime/vulkan-1.dll" CACHE FILEPATH "")
-  target_compile_definitions(rvkvksamples PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+  target_compile_definitions(avvksamples PRIVATE VK_USE_PLATFORM_WIN32_KHR)
   # One file to push: the C and C++ runtimes and winpthreads linked in.
-  target_link_options(rvkvksamples PRIVATE -static -static-libgcc -static-libstdc++ -mconsole -s)
-  target_link_libraries(rvkvksamples PRIVATE "${VKS_VULKAN_DLL}")
-  set_target_properties(rvkvksamples PROPERTIES SUFFIX ".exe")
+  target_link_options(avvksamples PRIVATE -static -static-libgcc -static-libstdc++ -mconsole -s)
+  target_link_libraries(avvksamples PRIVATE "${VKS_VULKAN_DLL}")
+  set_target_properties(avvksamples PROPERTIES SUFFIX ".exe")
 else()
   find_package(Threads REQUIRED)
   find_library(VKS_XCB xcb REQUIRED)
-  target_compile_definitions(rvkvksamples PRIVATE VK_USE_PLATFORM_XCB_KHR)
-  target_link_libraries(rvkvksamples PRIVATE vulkan ${VKS_XCB} Threads::Threads)
+  target_compile_definitions(avvksamples PRIVATE VK_USE_PLATFORM_XCB_KHR)
+  target_link_libraries(avvksamples PRIVATE vulkan ${VKS_XCB} Threads::Threads)
 endif()

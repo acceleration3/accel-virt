@@ -1,4 +1,4 @@
-/* rvkinspect.exe as one object on the entry's stack: the process heap, D3DKMT
+/* avinspect.exe as one object on the entry's stack: the process heap, D3DKMT
  * and the Windows host under InspectProgram, and the usage text written to
  * standard output when the command was not understood. Translation only. */
 #ifndef AV_UM_INSPECT_SESSION_HPP

@@ -5,7 +5,7 @@
 # accel-virt
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 display miniport
-(`rvkgpu.sys`), a custom in-process QEMU device (`virtio-gpu-rvk-pci`), and the
+(`avgpu.sys`), a custom in-process QEMU device (`virtio-gpu-av-pci`), and the
 wire protocol between them. Serialization is generated here from the Khronos
 registries, by the generator vendored in `tools/codegen/`; what it writes is
 committed under `src/proto/generated/` and never hand-edited.
@@ -30,16 +30,16 @@ adapter behind the context pointer (or, for AddDevice and Unload, the root
 registered in `MiniportBinding`), and the `extern "C"` entry points that
 libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer,
 the kernel shim's static storage for the root, the device module's
-`DeviceModule`, the executor library's root behind `rvk_executor_ops()`, the
+`DeviceModule`, the executor library's root behind `av_executor_ops()`, the
 Vulkan ICD's root behind `vk_icdGetInstanceProcAddr` and `IcdBinding`'s pointer to
 it, `scope_binding`'s pointer to the binary's trace table (with the device
-module's `DeviceTraceRoot` beside `DeviceModule`), rvktest.exe's
+module's `DeviceTraceRoot` beside `DeviceModule`), avtest.exe's
 `ProcessTrace` in `src/um/program_entry.cpp`'s storage, and the OpenGL ICD's
-root behind the `Drv*` exports (`src/um/opengl/rvkgl_exports.cpp`) and
+root behind the `Drv*` exports (`src/um/opengl/avgl_exports.cpp`) and
 `GlIcdBinding`'s pointer to it (`src/icd/opengl/gl_hooks.cpp`), and the D3D
 user-mode driver's root behind `OpenAdapter10_2` and `OpenAdapter12`
-(`src/um/d3d/rvkumd_exports.cpp`) with `UmdBinding`'s pointer to it
-(`src/icd/d3d/umd_binding.cpp`), and rvk-renderer's `RendererProcess` behind its
+(`src/um/d3d/avumd_exports.cpp`) with `UmdBinding`'s pointer to it
+(`src/icd/d3d/umd_binding.cpp`), and av-renderer's `RendererProcess` behind its
 `main` (`src/device/shim/renderer_main.cpp`) are the only
 process-lifetime state (constitution III). Each is a C entry point with
 nowhere to put a `this`, and each is one `ObjectStorage` in the single

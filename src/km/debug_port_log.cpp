@@ -138,7 +138,7 @@ void DebugPortLog::report_dropped(uint64_t lines)
     AV_SCOPE("DebugPortLog::report_dropped");
     char       bytes[80];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: ");
+    line.append("avgpu: ");
     line.append_decimal(lines);
     line.append(" log lines dropped: the queue was full");
     write_now(line.text());

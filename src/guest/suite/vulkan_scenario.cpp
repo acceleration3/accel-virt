@@ -35,13 +35,13 @@ Status VulkanScenario::bind_buffer()
     buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer       buffer = VK_NULL_HANDLE;
-    const VkResult created = vkproto::rvk_vkCreateBuffer(transport, chain_.device(), &buffer_info, nullptr, &buffer);
+    const VkResult created = vkproto::av_vkCreateBuffer(transport, chain_.device(), &buffer_info, nullptr, &buffer);
     const Status   buffered = steps_.check_result("buffer", created);
     if (buffered != Status::ok) return buffered;
     buffer_ = buffer;
     const Status allocated = allocate_memory();
     if (allocated != Status::ok) return allocated;
-    const VkResult bound = vkproto::rvk_vkBindBufferMemory(transport, chain_.device(), buffer_, memory_, 0u);
+    const VkResult bound = vkproto::av_vkBindBufferMemory(transport, chain_.device(), buffer_, memory_, 0u);
     return steps_.check_result("bind", bound);
 }
 
@@ -51,7 +51,7 @@ Status VulkanScenario::allocate_memory()
     KmtTransport        &transport = link_.transport();
     const VkDevice       device = chain_.device();
     VkMemoryRequirements requirements = {};
-    vkproto::rvk_vkGetBufferMemoryRequirements(transport, device, buffer_, &requirements);
+    vkproto::av_vkGetBufferMemoryRequirements(transport, device, buffer_, &requirements);
     /* The call answers no result, and a buffer always has somewhere to live:
      * no memory type at all means the answer never came. */
     if (requirements.memoryTypeBits == 0u) return steps_.check_measured("memory", Status::not_found, 0u);
@@ -61,7 +61,7 @@ Status VulkanScenario::allocate_memory()
     allocate.memoryTypeIndex = static_cast<uint32_t>(__builtin_ctz(requirements.memoryTypeBits));
     VkDeviceMemory memory = VK_NULL_HANDLE;
     const Status   allocated =
-        steps_.check_result("memory", vkproto::rvk_vkAllocateMemory(transport, device, &allocate, nullptr, &memory));
+        steps_.check_result("memory", vkproto::av_vkAllocateMemory(transport, device, &allocate, nullptr, &memory));
     if (allocated == Status::ok) memory_ = memory;
     return allocated;
 }
@@ -74,8 +74,8 @@ Status VulkanScenario::destroy()
     KmtTransport  &transport = link_.transport();
     const VkDevice device = chain_.device();
     if (device != VK_NULL_HANDLE) {
-        vkproto::rvk_vkFreeMemory(transport, device, memory_, nullptr);
-        vkproto::rvk_vkDestroyBuffer(transport, device, buffer_, nullptr);
+        vkproto::av_vkFreeMemory(transport, device, memory_, nullptr);
+        vkproto::av_vkDestroyBuffer(transport, device, buffer_, nullptr);
     }
     chain_.destroy();
     memory_ = VK_NULL_HANDLE;

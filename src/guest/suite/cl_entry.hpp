@@ -3,7 +3,7 @@
  *
  * In the guest this is the Khronos loader the runner pushes beside the probe -
  * which is the whole point of the probe, because it is the loader's discovery
- * of OpenCLDriverName on the rvkgpu adapter that SC-001 is about. On the
+ * of OpenCLDriverName on the avgpu adapter that SC-001 is about. On the
  * full-stack rig it is the ICD's dispatch table reached the way a loader
  * reaches it; in the probe's own unit tests, a scripted OpenCL. Virtual for
  * the reason Platform is. */

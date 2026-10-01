@@ -41,7 +41,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x444B5652u; /* "RVKD" */
+    static constexpr uint32_t magic = 0x00445641u; /* "AVD" */
 
     RecordKind kind_;
     uint32_t   context_;

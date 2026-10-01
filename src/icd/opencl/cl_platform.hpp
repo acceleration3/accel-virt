@@ -27,8 +27,8 @@ class ClPlatform {
 public:
     /* What the loader appends to a suffixed extension function's name to
      * route it here. */
-    static constexpr const char *suffix = "RVK";
-    static constexpr const char *name = "rvkgpu OpenCL";
+    static constexpr const char *suffix = "AV";
+    static constexpr const char *name = "avgpu OpenCL";
     static constexpr const char *vendor = "accel-virt";
     /* A full profile, which is what a platform backed by a real GPU is; the
      * embedded profile is for devices that may leave parts of the language
@@ -73,7 +73,7 @@ private:
 
     /* First, and it stays first: the loader reads this word. */
     const cl_icd_dispatch *dispatch_;
-    /* "OpenCL <major>.<minor> rvkgpu", built when the version is capped. */
+    /* "OpenCL <major>.<minor> avgpu", built when the version is capped. */
     char                   version_[32];
     uint32_t               major_;
     uint32_t               minor_;

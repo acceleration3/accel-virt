@@ -51,7 +51,7 @@ TEST(allocation_descriptor_encode, places_every_field_at_its_offset)
 { GuardedBuffer bytes(AllocationDescriptor::encoded_size);
   CHECK_STATUS(primary.encode(bytes.data(), AllocationDescriptor::encoded_size), Status::ok);
   const ByteLayout layout(bytes.data(), AllocationDescriptor::encoded_size);
-  CHECK(layout.at(0u, 4u) == 0x414B5652u);
+  CHECK(layout.at(0u, 4u) == 0x00415641u);
   CHECK(layout.at(4u, 2u) == 1u);
   CHECK(layout.at(6u, 2u) == 1u);
   CHECK(layout.at(8u, 4u) == 1024u);
@@ -165,7 +165,7 @@ TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_rou
   const std::uint32_t acceptable = 32u + 96u + 64u + 1u + 11u + 2u + 62u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
-/* The page an rvk context is named by: nothing is ever kept in it - the
+/* The page an av context is named by: nothing is ever kept in it - the
  * context runs on the driver's memory (docs/protocol.md, "Context memory") - so
  * it is one page, exactly, and never a surface. */
 TEST(allocation_descriptor_decode, a_context_s_name_is_one_page_and_no_surface)

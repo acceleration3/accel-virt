@@ -7,7 +7,7 @@
  * again - unless they keep dying. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/context/local_context_plane.hpp"
 #include "device/control/control_request.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -62,9 +62,9 @@ using av::RendererServiceProbe;
 
 namespace {
 
-constexpr std::uint32_t both = RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENGL;
-constexpr char          renderer_path[] = "/usr/libexec/rvk-renderer";
-constexpr char          executor_path[] = "/opt/rvk/librvk_executor.so";
+constexpr std::uint32_t both = AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENGL;
+constexpr char          renderer_path[] = "/usr/libexec/av-renderer";
+constexpr char          executor_path[] = "/opt/av/libav_executor.so";
 constexpr std::uint8_t  uuid[av::GpuIdentity::uuid_bytes] = {0x42u, 7u};
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::uint64_t ram_size = 0x10000u;
@@ -76,15 +76,15 @@ constexpr std::uint32_t lines = 64u;
  * sets. */
 struct Published {
     bool             found;
-    RvkExportedImage image;
+    AvExportedImage image;
 };
 Published published = {};
 
-std::uint32_t export_published(void *, const std::uint8_t *, std::uint64_t key, RvkExportedImage *image)
+std::uint32_t export_published(void *, const std::uint8_t *, std::uint64_t key, AvExportedImage *image)
 {
-    if (!published.found || key != 0x77u) return RVK_UNKNOWN;
+    if (!published.found || key != 0x77u) return AV_UNKNOWN;
     *image = published.image;
-    return RVK_EXECUTED;
+    return AV_EXECUTED;
 }
 
 int fresh_descriptor()
@@ -250,7 +250,7 @@ TEST(renderer_context_plane_accept, takes_no_executor_table_of_its_own)
  * RAM - QEMU's own duplicate closed again - before any context. */
 TEST(renderer_context_plane_start, starts_greets_and_hands_over_guest_memory)
 { Fixture fixture;
-  fixture.ops().set_import_kinds(RVK_BLOB_HOST_POINTER);
+  fixture.ops().set_import_kinds(AV_BLOB_HOST_POINTER);
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK(fixture.plane().alive());
   CHECK_EQ(fixture.plane().epoch(), 1u);
@@ -262,8 +262,8 @@ TEST(renderer_context_plane_start, starts_greets_and_hands_over_guest_memory)
   CHECK_EQ(fixture.qemu().live_dmabufs(), 0u);
   /* What the Ready said, by the sub-API's own lane. */
   CHECK_EQ(fixture.plane().sub_apis(), both);
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER));
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::opengl, uuid), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER));
+  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));
+  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::opengl, uuid), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));
   CHECK_EQ(fixture.plane().import_kinds(av::SubApi::opencl, uuid), 0u);
   CHECK_EQ(fixture.plane().import_kinds(static_cast<av::SubApi>(3u), uuid), 0u);
   CHECK_EQ(fixture.plane().import_kinds(static_cast<av::SubApi>(0x100u), uuid), 0u);
@@ -794,11 +794,11 @@ TEST(renderer_context_plane_interrupts, follows_the_guests_interrupts_on_and_off
 TEST(renderer_context_plane_export_image, keeps_each_slots_dma_buf_until_the_image_changes)
 { Fixture fixture;
   fixture.ops().editable().export_image = &export_published;
-  RvkExportedImage image = {};
+  AvExportedImage image = {};
   CHECK(!fixture.plane().export_image(uuid, 0x77u, image));   /* no renderer */
   CHECK_STATUS(fixture.start(), Status::ok);
   const int executor_image = fresh_descriptor();
-  published = Published{true, RvkExportedImage{executor_image, 0u, 64u, 32u, 256u, 16u, 0x34325258u, 0u, 5u}};
+  published = Published{true, AvExportedImage{executor_image, 0u, 64u, 32u, 256u, 16u, 0x34325258u, 0u, 5u}};
   CHECK(fixture.plane().export_image(uuid, 0x77u, image));
   CHECK(image.fd >= 0);
   CHECK(image.fd != executor_image);
@@ -812,7 +812,7 @@ TEST(renderer_context_plane_export_image, keeps_each_slots_dma_buf_until_the_ima
   CHECK_EQ(image.modifier, 5u);
   CHECK_EQ(fixture.qemu().live_dmabufs(), 1u);
   const int held = image.fd;
-  RvkExportedImage again = {};
+  AvExportedImage again = {};
   CHECK(fixture.plane().export_image(uuid, 0x77u, again));
   CHECK_EQ(again.fd, held);
   CHECK_EQ(fixture.qemu().live_dmabufs(), 1u);
@@ -867,7 +867,7 @@ TEST(renderer_context_plane_export_image, a_garbled_answer_or_an_image_never_sen
                    .encode(datagram + av::RendererMessageHeader::encoded_size, av::ExportedImageMessage::encoded_size),
                Status::ok);
   peer.queue(datagram, sizeof datagram, 0u);
-  RvkExportedImage image = {};
+  AvExportedImage image = {};
   CHECK(!plane.export_image(uuid, 0x77u, image));
   CHECK_EQ(qemu.renderer_kills(), 0u);
   /* The same answer with a descriptor it does not announce: export 4. */
@@ -916,7 +916,7 @@ TEST(renderer_context_plane, reads_no_staged_frame)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK(!fixture.plane().reads_frames());
-  RvkFrameView view = {};
+  AvFrameView view = {};
   CHECK(!fixture.plane().map_frame(uuid, av::SurfacePoint(9u, 1u), 1u, view));
   CHECK(view.pixels == nullptr);
   fixture.plane().unmap_frame(uuid, av::SurfacePoint(9u, 1u)); }

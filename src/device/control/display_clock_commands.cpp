@@ -42,7 +42,7 @@ void DisplayClockCommands::register_page(ControlRequest &request)
     if (attached != Status::ok) {
         char       line[112] = {};
         TextBuffer text(line, sizeof line);
-        text.append("virtio-gpu-rvk: the display clock's page was refused, status ");
+        text.append("virtio-gpu-av: the display clock's page was refused, status ");
         text.append_decimal(static_cast<uint32_t>(attached));
         host_.log(text.text());
     }

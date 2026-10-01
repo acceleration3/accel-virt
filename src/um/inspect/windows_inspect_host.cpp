@@ -8,7 +8,7 @@
 /* tlhelp32.h is not in the pinned SDK subset; the process entry and the three
  * calls as that header declares them (SDK 10.0.26100, um/tlhelp32.h). */
 extern "C" {
-struct RvkProcessEntry32W {
+struct AvProcessEntry32W {
     DWORD     dwSize;
     DWORD     cntUsage;
     DWORD     th32ProcessID;
@@ -21,8 +21,8 @@ struct RvkProcessEntry32W {
     WCHAR     szExeFile[MAX_PATH];
 };
 HANDLE WINAPI CreateToolhelp32Snapshot(DWORD flags, DWORD process);
-BOOL WINAPI   Process32FirstW(HANDLE snapshot, RvkProcessEntry32W *entry);
-BOOL WINAPI   Process32NextW(HANDLE snapshot, RvkProcessEntry32W *entry);
+BOOL WINAPI   Process32FirstW(HANDLE snapshot, AvProcessEntry32W *entry);
+BOOL WINAPI   Process32NextW(HANDLE snapshot, AvProcessEntry32W *entry);
 }
 
 namespace av {
@@ -45,7 +45,7 @@ uint32_t WindowsInspectHost::processes(uint32_t *pids, uint32_t capacity)
     AV_SCOPE("WindowsInspectHost::processes");
     HANDLE snapshot = CreateToolhelp32Snapshot(snapshot_processes, 0u);
     if (snapshot == INVALID_HANDLE_VALUE) return 0u;
-    RvkProcessEntry32W entry = {};
+    AvProcessEntry32W entry = {};
     entry.dwSize = sizeof entry;
     uint32_t count = 0u;
     for (BOOL more = Process32FirstW(snapshot, &entry); more && count < capacity; more = Process32NextW(snapshot, &entry))

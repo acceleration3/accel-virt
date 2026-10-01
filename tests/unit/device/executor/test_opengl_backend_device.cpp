@@ -4,7 +4,7 @@
  * that one is current on another thread, and the imported region a pixel read
  * lands in. A host with no OpenGL returns without judging. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/opengl_backend.hpp"
@@ -92,8 +92,8 @@ public:
         for (std::uint32_t i = 0u; i < host_.gpu_count(); i++) {
             const av::GlDisplay *const display = host_.gl_display(i);
             /* Where OpenGL runs its context imports a host pointer as its region. */
-            CHECK_EQ(host_.import_kinds(i, RVK_EXECUTOR_SUB_API_OPENGL),
-                     display != nullptr ? std::uint32_t{RVK_BLOB_HOST_POINTER} : 0u);
+            CHECK_EQ(host_.import_kinds(i, AV_EXECUTOR_SUB_API_OPENGL),
+                     display != nullptr ? std::uint32_t{AV_BLOB_HOST_POINTER} : 0u);
             if (display != nullptr) displays_[count_++] = display;
         }
     }
@@ -120,14 +120,14 @@ int integer(OpenGlBackend &backend, unsigned name)
 TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_made_with)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
-      const RvkContextOptions core_46 = {4u, 6u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+      const AvContextOptions core_46 = {4u, 6u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
       OpenGlBackend newest;
       CHECK(newest.initialize(displays.at(index), &core_46, nullptr));
       CHECK_EQ(integer(newest, gl_major_version), 4);
       CHECK_EQ(integer(newest, gl_minor_version), 6);
       CHECK_EQ(integer(newest, gl_context_profile_mask) & gl_core_profile_bit, gl_core_profile_bit);
       newest.shut_down();
-      const RvkContextOptions core_33 = {3u, 3u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+      const AvContextOptions core_33 = {3u, 3u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
       OpenGlBackend older;
       CHECK(older.initialize(displays.at(index), &core_33, nullptr));
       const int version = integer(older, gl_major_version) * 10 + integer(older, gl_minor_version);
@@ -135,9 +135,9 @@ TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_mad
       CHECK_EQ(integer(older, gl_context_profile_mask) & gl_core_profile_bit, gl_core_profile_bit);
       older.shut_down();
       /* No OpenGL has these, and EGL is not asked for them. */
-      const RvkContextOptions refused[] = {{4u, 7u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u},
-                                           {5u, 0u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u}};
-      for (const RvkContextOptions &options : refused) {
+      const AvContextOptions refused[] = {{4u, 7u, AV_CONTEXT_PROFILE_CORE, 0u, 0u},
+                                           {5u, 0u, AV_CONTEXT_PROFILE_CORE, 0u, 0u}};
+      for (const AvContextOptions &options : refused) {
           OpenGlBackend none;
           CHECK(!none.initialize(displays.at(index), &options, nullptr));
           CHECK_EQ(none.resolved(), 0u);
@@ -151,7 +151,7 @@ TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_mad
 TEST(opengl_backend_device, a_compatibility_context_is_made_where_the_host_has_one)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
-      const RvkContextOptions compatibility_46 = {4u, 6u, RVK_CONTEXT_PROFILE_COMPATIBILITY, 0u, 0u};
+      const AvContextOptions compatibility_46 = {4u, 6u, AV_CONTEXT_PROFILE_COMPATIBILITY, 0u, 0u};
       OpenGlBackend backend;
       if (!backend.initialize(displays.at(index), &compatibility_46, nullptr)) {
           std::fprintf(stderr, "display %u grants no 4.6 compatibility context\n", index);
@@ -175,13 +175,13 @@ TEST(opengl_backend_device, a_compatibility_context_is_made_where_the_host_has_o
 TEST(opengl_backend_device, debug_and_robust_contexts_report_their_flags)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
-      const RvkContextOptions debug = {4u, 3u, RVK_CONTEXT_PROFILE_CORE, RVK_CONTEXT_FLAG_DEBUG, 0u};
+      const AvContextOptions debug = {4u, 3u, AV_CONTEXT_PROFILE_CORE, AV_CONTEXT_FLAG_DEBUG, 0u};
       OpenGlBackend debugging;
       CHECK(debugging.initialize(displays.at(index), &debug, nullptr));
       CHECK_EQ(integer(debugging, gl_context_flags) & gl_context_flag_debug, gl_context_flag_debug);
       debugging.shut_down();
-      const RvkContextOptions robust = {4u, 3u, RVK_CONTEXT_PROFILE_CORE,
-                                        RVK_CONTEXT_FLAG_ROBUST_ACCESS | RVK_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET, 0u};
+      const AvContextOptions robust = {4u, 3u, AV_CONTEXT_PROFILE_CORE,
+                                        AV_CONTEXT_FLAG_ROBUST_ACCESS | AV_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET, 0u};
       OpenGlBackend robustly;
       CHECK(robustly.initialize(displays.at(index), &robust, nullptr));
       CHECK_EQ(integer(robustly, gl_reset_notification_strategy), static_cast<int>(gl_lose_context_on_reset));
@@ -249,7 +249,7 @@ TEST(opengl_backend_device, a_sharing_context_sees_a_texture_made_on_another_thr
       pthread_t thread;
       CHECK_EQ(pthread_create(&thread, nullptr, hold_current, &holder), 0);
       await(holder, 1);
-      const RvkContextOptions core = {4u, 3u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+      const AvContextOptions core = {4u, 3u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
       OpenGlBackend second;
       CHECK(second.initialize(displays.at(index), &core, &first));
       const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(second);
@@ -281,8 +281,8 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
-      RvkBlobHandle handle = {};
-      handle.kind = RVK_BLOB_HOST_POINTER;
+      AvBlobHandle handle = {};
+      handle.kind = AV_BLOB_HOST_POINTER;
       handle.pointer = region;
       handle.fd = -1;
       handle.size = sizeof region;
@@ -345,7 +345,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t memory = 9u;
-      if (!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                  av::ProbeDmaBuf::page_size, memory)) {
           std::fprintf(stderr, "display %u imports no memory object from a descriptor\n", index);
           CHECK_EQ(memory, 0u);
@@ -357,35 +357,35 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * imported again, which is what a second context opening one object
        * does. */
       std::uint64_t again = 0u;
-      CHECK(backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                   av::ProbeDmaBuf::page_size, again));
       CHECK(again != 0u);
       CHECK(again != memory);
 
       /* A name this context did not import, and one no GL name could be, are
        * released by nobody. */
-      backend.release_object(RVK_SHARED_MEMORY, memory + again + 1u);
-      backend.release_object(RVK_SHARED_MEMORY, 0x1'0000'0000ull | memory);
-      backend.release_object(RVK_SHARED_MONITORED_FENCE, memory);
-      backend.release_object(RVK_SHARED_MEMORY, memory);
-      backend.release_object(RVK_SHARED_MEMORY, memory);
+      backend.release_object(AV_SHARED_MEMORY, memory + again + 1u);
+      backend.release_object(AV_SHARED_MEMORY, 0x1'0000'0000ull | memory);
+      backend.release_object(AV_SHARED_MONITORED_FENCE, memory);
+      backend.release_object(AV_SHARED_MEMORY, memory);
+      backend.release_object(AV_SHARED_MEMORY, memory);
 
       /* A semaphore is the other name space, and one number can be both. Both
        * guest fence kinds are that one host semaphore, so both are imported:
        * a driver told the wrong one would make a second object nobody would
        * ever release. */
       std::uint64_t fence = 0u;
-      if (backend.import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      if (backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                 0u, fence)) {
           CHECK(fence != 0u);
           /* Either guest fence kind is the one host semaphore. */
-          backend.release_object(RVK_SHARED_NATIVE_FENCE, fence);
+          backend.release_object(AV_SHARED_NATIVE_FENCE, fence);
       }
       std::uint64_t native = 0u;
-      if (backend.import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      if (backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                 4096u, native)) {
           CHECK(native != 0u);
-          backend.release_object(RVK_SHARED_NATIVE_FENCE, native);
+          backend.release_object(AV_SHARED_NATIVE_FENCE, native);
       }
       /* Whatever is left is deleted by the shut down, while the context can
        * still delete it. */
@@ -395,7 +395,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * nothing, which is the one refusal on this path the wire's answer
        * depends on and no argument can force. */
       std::uint64_t after = 9u;
-      CHECK(!backend.import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_DMA_BUF,
+      CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF,
                                    descriptor.handle(), 0u, after));
       CHECK_EQ(after, 0u);
   } }
@@ -410,16 +410,16 @@ TEST(opengl_backend_device, a_context_full_of_imports_makes_no_object_it_cannot_
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t made = 0u;
-      if (!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                  av::ProbeDmaBuf::page_size, made)) {
           backend.shut_down();
           continue;
       }
       for (std::uint32_t i = 1u; i < av::GlSharedObjects::max_objects; i++)
-          CHECK(backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+          CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                       av::ProbeDmaBuf::page_size, made));
       std::uint64_t past = 9u;
-      CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                    av::ProbeDmaBuf::page_size, past));
       CHECK_EQ(past, 0u);
       backend.shut_down();

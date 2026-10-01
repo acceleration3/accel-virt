@@ -49,7 +49,7 @@ HRESULT D3d12Device::create_descriptor_heap(const D3D12DDIARG_CREATE_DESCRIPTOR_
         const DescriptorSlot slot = {heap.header.id, index};
         __builtin_memcpy(slots + static_cast<size_t>(index) * descriptor_bytes, &slot, sizeof(slot));
     }
-    if (!sent(d3d12proto::rvk_d3d12_CreateDescriptorHeap12(wire(), heap.header.id, heap.type, heap.count, heap.flags),
+    if (!sent(d3d12proto::av_d3d12_CreateDescriptorHeap12(wire(), heap.header.id, heap.type, heap.count, heap.flags),
               "CreateDescriptorHeap12"))
         return E_OUTOFMEMORY;
     return S_OK;
@@ -59,7 +59,7 @@ VOID D3d12Device::destroy_descriptor_heap(D3D12DDI_HDESCRIPTORHEAP handle)
 {
     AV_SCOPE("D3d12Device::destroy_descriptor_heap");
     DescriptorHeapRecord &heap = *static_cast<DescriptorHeapRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
     heap = DescriptorHeapRecord{};
 }
 
@@ -217,7 +217,7 @@ VOID D3d12Device::create_shader_resource_view(const D3D12DDIARG_CREATE_SHADER_RE
         unsupported("a shader resource view of this dimension");
         return;
     }
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CreateShaderResourceView12(wire(), descriptor(at), 1u, view),
+    static_cast<void>(sent(d3d12proto::av_d3d12_CreateShaderResourceView12(wire(), descriptor(at), 1u, view),
                            "CreateShaderResourceView12"));
 }
 
@@ -242,7 +242,7 @@ VOID D3d12Device::create_unordered_access_view(const D3D12DDIARG_CREATE_UNORDERE
         unsupported("an unordered access view of this dimension");
         return;
     }
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CreateUnorderedAccessView12(wire(), descriptor(at), 1u, view),
+    static_cast<void>(sent(d3d12proto::av_d3d12_CreateUnorderedAccessView12(wire(), descriptor(at), 1u, view),
                            "CreateUnorderedAccessView12"));
 }
 
@@ -263,7 +263,7 @@ VOID D3d12Device::create_render_target_view(const D3D12DDIARG_CREATE_RENDER_TARG
         unsupported("a render target view of this dimension");
         return;
     }
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CreateRenderTargetView12(wire(), descriptor(at), 1u, view),
+    static_cast<void>(sent(d3d12proto::av_d3d12_CreateRenderTargetView12(wire(), descriptor(at), 1u, view),
                            "CreateRenderTargetView12"));
 }
 
@@ -292,7 +292,7 @@ VOID D3d12Device::create_depth_stencil_view(const D3D12DDIARG_CREATE_DEPTH_STENC
         for (uint32_t index = 0u; index < 3u; index++) view.args[index] = in[index];
     }
     if (!array) view.args[1] = view.args[2] = 0u;
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CreateDepthStencilView12(wire(), descriptor(at), 1u, view),
+    static_cast<void>(sent(d3d12proto::av_d3d12_CreateDepthStencilView12(wire(), descriptor(at), 1u, view),
                            "CreateDepthStencilView12"));
 }
 
@@ -301,7 +301,7 @@ VOID D3d12Device::create_constant_buffer_view(const D3D12DDI_CONSTANT_BUFFER_VIE
 {
     AV_SCOPE("D3d12Device::create_constant_buffer_view");
     if (args == nullptr) return;
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CreateConstantBufferView12(wire(), descriptor(at), args->BufferLocation,
+    static_cast<void>(sent(d3d12proto::av_d3d12_CreateConstantBufferView12(wire(), descriptor(at), args->BufferLocation,
                                                                             args->SizeInBytes),
                            "CreateConstantBufferView12"));
 }
@@ -322,7 +322,7 @@ VOID D3d12Device::create_sampler(const D3D12DDIARG_CREATE_SAMPLER_0096 *args, D3
     for (uint32_t channel = 0u; channel < 4u; channel++) desc.border_color[channel] = in.FloatBorderColor[channel];
     desc.min_lod = in.MinLOD;
     desc.max_lod = in.MaxLOD;
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CreateSampler12(wire(), descriptor(at), desc), "CreateSampler12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_CreateSampler12(wire(), descriptor(at), desc), "CreateSampler12"));
 }
 
 VOID D3d12Device::copy_descriptors_simple(UINT count, D3D12DDI_CPU_DESCRIPTOR_HANDLE destination,
@@ -330,7 +330,7 @@ VOID D3d12Device::copy_descriptors_simple(UINT count, D3D12DDI_CPU_DESCRIPTOR_HA
 {
     AV_SCOPE("D3d12Device::copy_descriptors_simple");
     if (count == 0u) return;
-    static_cast<void>(sent(d3d12proto::rvk_d3d12_CopyDescriptors12(wire(), descriptor(destination), descriptor(source),
+    static_cast<void>(sent(d3d12proto::av_d3d12_CopyDescriptors12(wire(), descriptor(destination), descriptor(source),
                                                                    count),
                            "CopyDescriptors12"));
 }

@@ -55,7 +55,7 @@ Status OpenClScenario::find_device()
     KmtTransport &transport = link_.transport();
     uint64_t      platforms[max_platforms] = {};
     cl_uint       count = 0u;
-    const cl_int  listed = clproto::rvk_clGetPlatformIDs(transport, max_platforms, platforms, &count);
+    const cl_int  listed = clproto::av_clGetPlatformIDs(transport, max_platforms, platforms, &count);
     if (listed != CL_SUCCESS) return steps_.check_result("platform", listed);
     const Status any = steps_.check_measured("platform", count != 0u ? Status::ok : Status::not_found, count);
     if (any != Status::ok) return any;
@@ -63,7 +63,7 @@ Status OpenClScenario::find_device()
     cl_int        found = CL_DEVICE_NOT_FOUND;
     for (cl_uint index = 0u; index < searched && found != CL_SUCCESS; index++) {
         cl_uint devices = 0u;
-        found = clproto::rvk_clGetDeviceIDs(transport, platforms[index], CL_DEVICE_TYPE_GPU, 1u, &device_, &devices);
+        found = clproto::av_clGetDeviceIDs(transport, platforms[index], CL_DEVICE_TYPE_GPU, 1u, &device_, &devices);
     }
     return steps_.check_result("device", found);
 }
@@ -73,11 +73,11 @@ Status OpenClScenario::make_queue()
     AV_SCOPE("OpenClScenario::make_queue");
     KmtTransport &transport = link_.transport();
     cl_int        error = unanswered;
-    context_ = clproto::rvk_clCreateContext(transport, nullptr, 1u, &device_, &error);
+    context_ = clproto::av_clCreateContext(transport, nullptr, 1u, &device_, &error);
     const Status made = steps_.check_result("context", error);
     if (made != Status::ok) return made;
     error = unanswered;
-    queue_ = clproto::rvk_clCreateCommandQueueWithProperties(transport, context_, device_, nullptr, &error);
+    queue_ = clproto::av_clCreateCommandQueueWithProperties(transport, context_, device_, nullptr, &error);
     return steps_.check_result("queue", error);
 }
 
@@ -93,7 +93,7 @@ Status OpenClScenario::make_buffers()
     for (uint32_t index = 0u; index < buffer_count && error == CL_SUCCESS; index++) {
         const bool input = index < input_count;
         error = unanswered;
-        buffers_[index] = clproto::rvk_clCreateBuffer(
+        buffers_[index] = clproto::av_clCreateBuffer(
             transport, context_, input ? copied_input : written_output,
             sizeof output_, input ? inputs_[index] : nullptr, &error);
     }
@@ -106,12 +106,12 @@ Status OpenClScenario::make_kernel()
     KmtTransport &transport = link_.transport();
     const char   *sources[] = {vector_add_source};
     cl_int        error = unanswered;
-    program_ = clproto::rvk_clCreateProgramWithSource(transport, context_, 1u, sources, nullptr, &error);
-    if (error == CL_SUCCESS) error = clproto::rvk_clBuildProgram(transport, program_, 1u, &device_, nullptr);
+    program_ = clproto::av_clCreateProgramWithSource(transport, context_, 1u, sources, nullptr, &error);
+    if (error == CL_SUCCESS) error = clproto::av_clBuildProgram(transport, program_, 1u, &device_, nullptr);
     const Status built = steps_.check_result("program", error);
     if (built != Status::ok) return built;
     error = unanswered;
-    kernel_ = clproto::rvk_clCreateKernel(transport, program_, vector_add_name, &error);
+    kernel_ = clproto::av_clCreateKernel(transport, program_, vector_add_name, &error);
     return steps_.check_result("kernel", error);
 }
 
@@ -123,16 +123,16 @@ Status OpenClScenario::compute()
     KmtTransport &transport = link_.transport();
     cl_int        ran = CL_SUCCESS;
     for (cl_uint index = 0u; index < buffer_count && ran == CL_SUCCESS; index++)
-        ran = clproto::rvk_clSetKernelArg(transport, kernel_, index, sizeof buffers_[index], &buffers_[index]);
+        ran = clproto::av_clSetKernelArg(transport, kernel_, index, sizeof buffers_[index], &buffers_[index]);
     const size_t global = elements;
     if (ran == CL_SUCCESS)
-        ran = clproto::rvk_clEnqueueNDRangeKernel(transport, queue_, kernel_, 1u, nullptr, &global, nullptr, 0u,
+        ran = clproto::av_clEnqueueNDRangeKernel(transport, queue_, kernel_, 1u, nullptr, &global, nullptr, 0u,
                                                   nullptr, nullptr);
-    if (ran == CL_SUCCESS) ran = clproto::rvk_clFinish(transport, queue_);
+    if (ran == CL_SUCCESS) ran = clproto::av_clFinish(transport, queue_);
     const Status judged = steps_.check_result("run", ran);
     if (judged != Status::ok) return judged;
     for (float &element : output_) element = 0.0f;
-    const cl_int read = clproto::rvk_clEnqueueReadBuffer(transport, queue_, buffers_[output_index], CL_TRUE, 0u,
+    const cl_int read = clproto::av_clEnqueueReadBuffer(transport, queue_, buffers_[output_index], CL_TRUE, 0u,
                                                          sizeof output_, output_, 0u, nullptr, nullptr);
     const Status readback = steps_.check_result("read", read);
     if (readback != Status::ok) return readback;
@@ -148,11 +148,11 @@ void OpenClScenario::release()
 {
     AV_SCOPE("OpenClScenario::release");
     release_error_ = CL_SUCCESS;
-    release_object(&clproto::rvk_clReleaseKernel, kernel_);
-    release_object(&clproto::rvk_clReleaseProgram, program_);
-    for (uint32_t index = buffer_count; index-- > 0u;) release_object(&clproto::rvk_clReleaseMemObject, buffers_[index]);
-    release_object(&clproto::rvk_clReleaseCommandQueue, queue_);
-    release_object(&clproto::rvk_clReleaseContext, context_);
+    release_object(&clproto::av_clReleaseKernel, kernel_);
+    release_object(&clproto::av_clReleaseProgram, program_);
+    for (uint32_t index = buffer_count; index-- > 0u;) release_object(&clproto::av_clReleaseMemObject, buffers_[index]);
+    release_object(&clproto::av_clReleaseCommandQueue, queue_);
+    release_object(&clproto::av_clReleaseContext, context_);
     device_ = 0u;
 }
 

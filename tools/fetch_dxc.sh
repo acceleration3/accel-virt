@@ -2,7 +2,7 @@
 # Fetch Microsoft's DirectX Shader Compiler - dxcompiler.dll and dxil.dll, the
 # x64 Windows release - into third_party/dxc/. The D3D12 samples
 # (samples/d3d12) compile their HLSL to DXIL with it: in the guest, pushed
-# beside rvkd3d12samples.exe by tools/d3d12_report.py, and on this machine
+# beside avd3d12samples.exe by tools/d3d12_report.py, and on this machine
 # under wine, which is how the host half gets the same bytecode without a
 # guest (samples/d3d12/README in the report's docstring). dxil.dll beside
 # dxcompiler.dll is what signs the DXIL, which Windows' D3D12 requires.

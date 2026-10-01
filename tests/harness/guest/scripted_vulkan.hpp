@@ -94,7 +94,7 @@ public:
     /* Submissions complete nothing: their fences are never signalled. */
     void          hold_fences();
     void          misdraw();
-    /* What vkRvkForceContextFault answers, and what the device answers to
+    /* What vkAvForceContextFault answers, and what the device answers to
      * vkDeviceWaitIdle after it. */
     void          answer_fault(VkResult fault, VkResult idle_after);
     /* The window a present draws on, as the driver's blit would: every pixel

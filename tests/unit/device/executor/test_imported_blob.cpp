@@ -1,7 +1,7 @@
 /* One guest blob inside one host API. Everything in the handle came from the
  * device, and the device built it from what a guest asked for, so every rule
  * the ABI states is checked before any host API sees it. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/imported_blob.hpp"
 #include "harness/executor/imported_blob_probe.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -16,17 +16,17 @@ namespace {
 
 std::uint8_t backing[2 * ImportedBlob::page_bytes];
 
-RvkBlobHandle host_pointer(std::uint64_t size)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_HOST_POINTER;
+AvBlobHandle host_pointer(std::uint64_t size)
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
   handle.pointer = backing;
   handle.fd = -1;
   handle.size = size;
   return handle; }
 
-RvkBlobHandle dma_buf(int fd, std::uint64_t size)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_DMA_BUF;
+AvBlobHandle dma_buf(int fd, std::uint64_t size)
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_DMA_BUF;
   handle.fd = fd;
   handle.size = size;
   return handle; }
@@ -40,7 +40,7 @@ TEST(imported_blob, takes_a_host_pointer_and_answers_what_it_holds)
   CHECK(blob.live());
   CHECK(blob.holds(7u));
   CHECK(!blob.holds(8u));
-  CHECK_EQ(blob.kind(), std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(blob.kind(), std::uint32_t{AV_BLOB_HOST_POINTER});
   CHECK_EQ(blob.size(), ImportedBlob::page_bytes);
   CHECK(blob.pointer() == backing);
   CHECK_EQ(blob.descriptor(), -1);
@@ -49,7 +49,7 @@ TEST(imported_blob, takes_a_host_pointer_and_answers_what_it_holds)
 TEST(imported_blob, takes_a_dma_buf)
 { ImportedBlob blob;
   CHECK_STATUS(blob.take(3u, dma_buf(11, 2u * ImportedBlob::page_bytes)), Status::ok);
-  CHECK_EQ(blob.kind(), std::uint32_t{RVK_BLOB_DMA_BUF});
+  CHECK_EQ(blob.kind(), std::uint32_t{AV_BLOB_DMA_BUF});
   CHECK_EQ(blob.descriptor(), 11);
   CHECK(blob.pointer() == nullptr);
   CHECK(blob.invariants_hold()); }
@@ -72,15 +72,15 @@ TEST(imported_blob, a_size_that_is_not_whole_pages_is_refused)
  * object is about to be made, and none means it decided nothing. */
 TEST(imported_blob, a_handle_that_is_no_kind_or_two_is_refused)
 { ImportedBlob blob;
-  RvkBlobHandle none = host_pointer(ImportedBlob::page_bytes);
+  AvBlobHandle none = host_pointer(ImportedBlob::page_bytes);
   none.kind = 0u;
   CHECK_STATUS(blob.take(1u, none), Status::invalid_parameter);
 
-  RvkBlobHandle both = host_pointer(ImportedBlob::page_bytes);
-  both.kind = RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF;
+  AvBlobHandle both = host_pointer(ImportedBlob::page_bytes);
+  both.kind = AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF;
   CHECK_STATUS(blob.take(1u, both), Status::invalid_parameter);
 
-  RvkBlobHandle invented = host_pointer(ImportedBlob::page_bytes);
+  AvBlobHandle invented = host_pointer(ImportedBlob::page_bytes);
   invented.kind = 4u;
   CHECK_STATUS(blob.take(1u, invented), Status::invalid_parameter);
   CHECK(!blob.live()); }
@@ -89,15 +89,15 @@ TEST(imported_blob, a_handle_that_is_no_kind_or_two_is_refused)
  * both is one nobody can say the meaning of. */
 TEST(imported_blob, a_kind_carrying_the_other_kind_s_field_is_refused)
 { ImportedBlob blob;
-  RvkBlobHandle pointer_with_fd = host_pointer(ImportedBlob::page_bytes);
+  AvBlobHandle pointer_with_fd = host_pointer(ImportedBlob::page_bytes);
   pointer_with_fd.fd = 4;
   CHECK_STATUS(blob.take(1u, pointer_with_fd), Status::invalid_parameter);
 
-  RvkBlobHandle pointer_without_pointer = host_pointer(ImportedBlob::page_bytes);
+  AvBlobHandle pointer_without_pointer = host_pointer(ImportedBlob::page_bytes);
   pointer_without_pointer.pointer = nullptr;
   CHECK_STATUS(blob.take(1u, pointer_without_pointer), Status::invalid_parameter);
 
-  RvkBlobHandle descriptor_with_pointer = dma_buf(4, ImportedBlob::page_bytes);
+  AvBlobHandle descriptor_with_pointer = dma_buf(4, ImportedBlob::page_bytes);
   descriptor_with_pointer.pointer = backing;
   CHECK_STATUS(blob.take(1u, descriptor_with_pointer), Status::invalid_parameter);
 
@@ -112,14 +112,14 @@ TEST(imported_blob, a_handle_carries_the_memory_type_it_was_asked_into)
 { constexpr std::uint32_t types[] = {0u, 4u, 31u, 32u, 0xFFFFFFFFu};
   for (const std::uint32_t type : types) {
       ImportedBlob pointer;
-      RvkBlobHandle handle = host_pointer(ImportedBlob::page_bytes);
+      AvBlobHandle handle = host_pointer(ImportedBlob::page_bytes);
       handle.reserved = type;
       CHECK_STATUS(pointer.take(1u, handle), Status::ok);
       CHECK_EQ(pointer.memory_type(), type);
       CHECK(pointer.invariants_hold());
 
       ImportedBlob shared;
-      RvkBlobHandle descriptor = dma_buf(11, ImportedBlob::page_bytes);
+      AvBlobHandle descriptor = dma_buf(11, ImportedBlob::page_bytes);
       descriptor.reserved = type;
       CHECK_STATUS(shared.take(1u, descriptor), Status::ok);
       CHECK_EQ(shared.memory_type(), type);
@@ -135,7 +135,7 @@ TEST(imported_blob, a_slot_already_holding_one_is_not_overwritten)
 TEST(imported_blob, giving_it_back_leaves_nothing_behind)
 { ImportedBlob blob;
   CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
-  RvkBlobHandle typed = host_pointer(ImportedBlob::page_bytes);
+  AvBlobHandle typed = host_pointer(ImportedBlob::page_bytes);
   typed.reserved = 3u;
   blob.give_back();
   CHECK_STATUS(blob.take(1u, typed), Status::ok);
@@ -175,7 +175,7 @@ TEST(imported_blob, remembers_what_the_host_api_made_of_it_and_what_the_guest_na
  * back. One field at a time, on a slot that never held anything. */
 TEST(imported_blob_invariants, an_empty_slot_with_a_kind_breaks_them)
 { ImportedBlob blob;
-  ImportedBlobProbe(blob).set_kind(RVK_BLOB_HOST_POINTER);
+  ImportedBlobProbe(blob).set_kind(AV_BLOB_HOST_POINTER);
   CHECK(!blob.invariants_hold()); }
 
 TEST(imported_blob_invariants, an_empty_slot_with_a_size_breaks_them)
@@ -264,5 +264,5 @@ TEST(imported_blob_invariants, a_dma_buf_blob_with_no_descriptor_breaks_them)
 TEST(imported_blob_invariants, a_live_blob_of_a_kind_nobody_defined_breaks_them)
 { ImportedBlob blob;
   CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
-  ImportedBlobProbe(blob).set_kind(RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF);
+  ImportedBlobProbe(blob).set_kind(AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF);
   CHECK(!blob.invariants_hold()); }

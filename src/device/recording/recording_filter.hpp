@@ -1,6 +1,6 @@
 /* Which of a recording's records a reader is being shown: a context, a
  * sub-API, a fence range and a fragment of a command's name, each of which
- * keeps everything until it is set (contracts/rvkrecord.md). */
+ * keeps everything until it is set (contracts/avrecord.md). */
 #ifndef AV_RECORDING_FILTER_HPP
 #define AV_RECORDING_FILTER_HPP
 

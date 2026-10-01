@@ -14,7 +14,7 @@ takes nothing under 100 pixels on an edge; the driver leaves such sizes out.
     tools/vm_resolution.py host               # the host monitors' modes again
 
 Before the VM starts, give the same text on QEMU's command line:
-    -device virtio-gpu-rvk-pci,...,modes=2560x1440,1920x1080
+    -device virtio-gpu-av-pci,...,modes=2560x1440,1920x1080
 """
 import argparse
 import json

@@ -2,11 +2,11 @@
 # hash. What is pinned is source: Khronos publishes no binary for this loader -
 # its GitHub releases carry no assets at all - so unlike the Vulkan runtime
 # there is nothing prebuilt to pin, and the build cross-compiles OpenCL.dll for
-# the guest with the same clang-cl toolchain that builds rvkgpu.sys (feature
+# the guest with the same clang-cl toolchain that builds avgpu.sys (feature
 # 052, research §2).
 #
 # It is a test artifact. It is never committed, and the driver package ships no
-# loader: rvkcl.dll is found through the adapter's OpenCLDriverName, and which
+# loader: avcl.dll is found through the adapter's OpenCLDriverName, and which
 # loader the guest has is the guest's business.
 #
 # The URL names a tag, never a branch: a loader that moved under a guest run is

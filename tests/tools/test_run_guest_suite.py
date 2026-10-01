@@ -22,19 +22,19 @@ sys.path.insert(0, str(ROOT / "tools" / "guest"))
 from run_guest_suite import Screendump, StepFailed, describe_panic, luid_low_part, vulkaninfo_devices  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tools" / "mcp"))
-import rvk_inspect  # noqa: E402
+import av_inspect  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tools"))
 from fetch_opencl_loader import CMAKE_CONFIG, WANTED  # noqa: E402
 
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
-ONE_MONITOR = "display: dwm=1 services=rvkgpu monitors=1\n"
+ONE_MONITOR = "display: dwm=1 services=avgpu monitors=1\n"
 """What the check stage says about a guest with one output."""
-PASSING_REPORT = "ok adapter.find\nrvktest: 23 passed, 0 failed\n"
+PASSING_REPORT = "ok adapter.find\navtest: 23 passed, 0 failed\n"
 SLEEP_STATES = "sleep: standby=yes hibernate=yes\n"
 """What a machine that offers both says (feature 040, US1)."""
-COLLECTED = "file C:\\rvk\\diag\\system.txt\r\ndump C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp\r\n"
+COLLECTED = "file C:\\av\\diag\\system.txt\r\ndump C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp\r\n"
 
 
 def live_dump(code):
@@ -48,24 +48,24 @@ def live_dump(code):
 
 BLACK_SCREEN = live_dump(0x1A8)
 """VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP: expected until something renders."""
-GUEST_FILES = {"C:\\rvk\\diag\\system.txt": "System events\n",
+GUEST_FILES = {"C:\\av\\diag\\system.txt": "System events\n",
                "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": BLACK_SCREEN,
                "C:\\Windows\\MEMORY.DMP": live_dump(0xD1)}
 """What a suite that wrote a pattern through a mapped view reports (feature 041)."""
-TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver rvkgpu stopped responding and has successfully "\
+TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver avgpu stopped responding and has successfully "\
                  "recovered.\r\ntimeouts: 1\r\n"
 """What the guest says event 4101 looks like (feature 040, US3)."""
 WITH_MEMORY_DUMP = COLLECTED + "dump C:\\Windows\\MEMORY.DMP\r\n"
 ADAPTER_LUID = 0xD3A1
-"""The rvkgpu adapter's LUID LowPart in these scripts; vulkaninfo prints the
+"""The avgpu adapter's LUID LowPart in these scripts; vulkaninfo prints the
 LUID structure's eight bytes, LowPart first and little-endian."""
 
 
-VULKAN_PICTURES = ("C:\\rvk\\vulkan-draw.bmp", "C:\\rvk\\vulkan-present.bmp", "C:\\rvk\\vulkan-resized.bmp")
+VULKAN_PICTURES = ("C:\\av\\vulkan-draw.bmp", "C:\\av\\vulkan-present.bmp", "C:\\av\\vulkan-resized.bmp")
 GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated", "opengl-compat")
 
 
-def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="rvk (NVIDIA GeForce RTX 4090)"):
+def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="av (NVIDIA GeForce RTX 4090)"):
     """One physical device as vulkaninfo's full text output prints it
     (Vulkan-Tools DumpGpu and DumpVkPhysicalDeviceIDProperties): a GPUn header,
     then its property structures, the LUID only while deviceLUIDValid."""
@@ -80,29 +80,29 @@ def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="rvk (NVIDIA GeFo
 
 VULKANINFO_HEAD = ("==========\r\nVULKANINFO\r\n==========\r\n\r\nVulkan Instance Version: 1.4.357\r\n\r\n"
                    "Device Groups:\r\n==============\r\nGroup 0:\r\n\tProperties:\r\n"
-                   "\t\tphysicalDevices: count = 1\r\n\t\t\trvk (ID: 0)\r\n\r\n"
+                   "\t\tphysicalDevices: count = 1\r\n\t\t\tav (ID: 0)\r\n\r\n"
                    "Device Properties and Extensions:\r\n=================================\r\n")
 VULKANINFO = VULKANINFO_HEAD + vulkaninfo_gpu(0)
 PROBE_REPORT = (f"ok vulkan.instance\r\nok vulkan.adapter_luid {ADAPTER_LUID}\r\n"
                 f"ok vulkan.physical_device {ADAPTER_LUID}\r\nok vulkan.device\r\nok vulkan.compute\r\n"
                 "ok vulkan.draw\r\nok vulkan.lost\r\nok vulkan.recreated\r\nok vulkan.surface 4096\r\n"
                 "ok vulkan.present 4096\r\nok vulkan.pacing 60\r\nok vulkan.resized 9216\r\n"
-                "rvkvkprobe: 12 passed, 0 failed\r\n")
-"""What rvkvkprobe.exe prints when every step of features 045 and 046 passed."""
+                "avvkprobe: 12 passed, 0 failed\r\n")
+"""What avvkprobe.exe prints when every step of features 045 and 046 passed."""
 D3D_REPORTS = {
     "9": ("ok d3d9.device\r\nok d3d9.adapter_ids\r\nok d3d9.clear\r\nok d3d9.readback\r\n"
-          "ok d3d9.pixels 4096\r\nok d3d9.present\r\nrvkd3d9probe: 6 passed, 0 failed\r\n"),
+          "ok d3d9.pixels 4096\r\nok d3d9.present\r\navd3d9probe: 6 passed, 0 failed\r\n"),
     "11": ("ok d3d11.device\r\nok d3d11.feature_level 45056\r\nok d3d11.adapter_luid\r\nok d3d11.target\r\n"
            "ok d3d11.readback\r\nok d3d11.pixels 4096\r\nok d3d11.present\r\n"
-           "rvkd3d11probe: 7 passed, 0 failed\r\n"),
+           "avd3d11probe: 7 passed, 0 failed\r\n"),
     "12": ("ok d3d12.device\r\nok d3d12.feature_level 49152\r\nok d3d12.adapter_luid\r\nok d3d12.queue\r\n"
            "ok d3d12.target\r\nok d3d12.clear\r\nok d3d12.fence\r\nok d3d12.readback\r\n"
-           "ok d3d12.pixels 4096\r\nrvkd3d12probe: 9 passed, 0 failed\r\n"),
+           "ok d3d12.pixels 4096\r\navd3d12probe: 9 passed, 0 failed\r\n"),
 }
 """What each D3D probe prints when every step of feature 047's US1 and US2 passed."""
-D3D_PICTURES = ("C:\\rvk\\d3d9-clear.bmp", "C:\\rvk\\d3d11-clear.bmp", "C:\\rvk\\d3d12-clear.bmp")
+D3D_PICTURES = ("C:\\av\\d3d9-clear.bmp", "C:\\av\\d3d11-clear.bmp", "C:\\av\\d3d12-clear.bmp")
 KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or value.\r\n"
-ICD_LOG = "C:\\ProgramData\\rvk\\rvkvk-4242.log"
+ICD_LOG = "C:\\ProgramData\\av\\avvk-4242.log"
 
 
 def host_gpu(index, uuid, vendor, device, kind, name, bus):
@@ -123,9 +123,9 @@ HOST_GPUS = (host_gpu(0, RADEON_UUID, "0x1002", "0x7550", "DISCRETE_GPU", "AMD R
                         "AMD Radeon Graphics (RADV RAPHAEL_MENDOCINO)", 123)
              + host_gpu(2, "6d657361-3231-2e31-2e30-000000000000", "0x10005", "0x0000", "CPU",
                         "llvmpipe (LLVM 21.1.0, 256 bits)", None))
-TWO_ADAPTERS = "display: dwm=1 services=rvkgpu,rvkgpu monitors=2 adapters=2\n" \
-               "device: PCI\\VEN_1002 status=OK problem=0 service=rvkgpu\n"
-"""What the check stage says of two rvkgpu adapters with one output each."""
+TWO_ADAPTERS = "display: dwm=1 services=avgpu,avgpu monitors=2 adapters=2\n" \
+               "device: PCI\\VEN_1002 status=OK problem=0 service=avgpu\n"
+"""What the check stage says of two avgpu adapters with one output each."""
 WINDOWS_ADAPTERS = (
     "wmi|PCI\\VEN_1002&DEV_7550&SUBSYS_52561AF4&REV_C0\\3&11583659&0&10|4293918720|accel-virt|"
     "AMD Radeon RX 9070 XT|AMD Radeon RX 9070 XT\r\n"
@@ -145,15 +145,15 @@ class GuestSuiteRun(unittest.TestCase):
         self.image = self.scratch / "windows.qcow2"
         self.image.write_bytes(b"prepared image")
         self.os_stat = os.stat(self.image)
-        for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
-                     "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkcl.dll", "rvkclprobe.exe",
-                     "OpenCL.dll", "rvkumd.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
-                     "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd", "rvkvk32.json"):
+        for name in ("avgpu.sys", "avgpu.pdb", "avvk.dll", "avvk.json", "avtest.exe", "avvkprobe.exe",
+                     "avinspect.exe", "avgl.dll", "avglprobe.exe", "avcl.dll", "avclprobe.exe",
+                     "OpenCL.dll", "avumd.dll", "avd3d9probe.exe", "avd3d11probe.exe",
+                     "avd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd", "avvk32.json"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         # The 32-bit drivers, from a directory of their own as a build makes them.
         self.drivers32 = self.scratch / "guest32"
         self.drivers32.mkdir()
-        for name in ("rvkvk32.dll", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll"):
+        for name in ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll"):
             (self.drivers32 / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
@@ -163,22 +163,22 @@ class GuestSuiteRun(unittest.TestCase):
     def script(self, **behaviour):
         behaviour.setdefault("stages", {"sign": [3010], "install": [3010], "check": [0]})
         behaviour.setdefault("outputs", {"check": ONE_MONITOR +
-                                                  "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                                                  "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                                          "sleepstates": SLEEP_STATES,
-                                         "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                                         "avtest": PASSING_REPORT, "collect": COLLECTED})
         behaviour.setdefault("files", GUEST_FILES)
         (self.scratch / "script.json").write_text(json.dumps(behaviour))
 
     def run_suite(self, *extra, environment=None, stdin=""):
         arguments = ["--image", self.image, "--work", self.work, "--power-poll", "0.1",
                      "--qemu", FAKES / "fake_qemu.py",
-                     "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
-                     "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
-                     "--inspect", self.scratch / "rvkinspect.exe",
-                     "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
-                     "--gl-icd", self.scratch / "rvkgl.dll", "--cl-icd", self.scratch / "rvkcl.dll",
-                     "--umd", self.scratch / "rvkumd.dll", "--drivers32", self.drivers32,
-                     "--icd32-manifest", self.scratch / "rvkvk32.json",
+                     "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/libav_echo_executor.so",
+                     "--driver", self.scratch / "avgpu.sys", "--test", self.scratch / "avtest.exe",
+                     "--inspect", self.scratch / "avinspect.exe",
+                     "--icd", self.scratch / "avvk.dll", "--icd-manifest", self.scratch / "avvk.json",
+                     "--gl-icd", self.scratch / "avgl.dll", "--cl-icd", self.scratch / "avcl.dll",
+                     "--umd", self.scratch / "avumd.dll", "--drivers32", self.drivers32,
+                     "--icd32-manifest", self.scratch / "avvk32.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -203,7 +203,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
         argv = lines[0]
-        self.assertIn("virtio-gpu-rvk-pci,id=gpu,host-gpu=auto,executor=/nowhere/librvk_echo_executor.so,"
+        self.assertIn("virtio-gpu-av-pci,id=gpu,host-gpu=auto,executor=/nowhere/libav_echo_executor.so,"
                       "max_outputs=1,vectors=11", argv)
         self.assertIn("isa-debugcon,iobase=0x402,chardev=debugcon", argv)
         self.assertIn("name=org.qemu.guest_agent.0", argv)
@@ -220,38 +220,38 @@ class GuestSuiteRun(unittest.TestCase):
                           "sleepstates", "check", "collect"])
         self.assertEqual(events.count("file"), 15)
         self.assertEqual(events.count("pull"), 2)
-        self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
-        self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
+        self.assertIn("file C:\\av\\package\\avgpu.sys 900", lines)
+        self.assertIn("file C:\\av\\package\\avgpu.inf", "\n".join(lines))
         # The INF names the ICD whatever the run is for, and pnputil refuses a
         # package missing a file it names (feature 045).
-        self.assertIn("file C:\\rvk\\package\\rvkvk.dll 900", lines)
-        self.assertIn("file C:\\rvk\\package\\rvkvk.json 1000", lines)
+        self.assertIn("file C:\\av\\package\\avvk.dll 800", lines)
+        self.assertIn("file C:\\av\\package\\avvk.json 900", lines)
         # The OpenGL ICD is in the package too, which names it (feature 050).
-        self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
+        self.assertIn("file C:\\av\\package\\avgl.dll 800", lines)
         # And the Direct3D user-mode driver, which the software key names four
         # times over (feature 055).
-        self.assertIn("file C:\\rvk\\package\\rvkumd.dll 1000", lines)
+        self.assertIn("file C:\\av\\package\\avumd.dll 900", lines)
         # And the 32-bit drivers the *Wow values name, with the 32-bit Vulkan
         # manifest, for a WoW64 process.
-        for name in ("rvkvk32.dll", "rvkgl32.dll", "rvkcl32.dll", "rvkumd32.dll"):
-            self.assertIn(f"file C:\\rvk\\package\\{name} {len(name) * 100}", lines)
-        self.assertIn("file C:\\rvk\\package\\rvkvk32.json 1200", lines)
+        for name in ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll"):
+            self.assertIn(f"file C:\\av\\package\\{name} {len(name) * 100}", lines)
+        self.assertIn("file C:\\av\\package\\avvk32.json 1100", lines)
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
-        self.assertIn("file C:\\rvk\\rvkinspect.exe 1400", lines)
+        self.assertIn("file C:\\av\\avinspect.exe 1300", lines)
         self.assertNotIn("vulkaninfo", "\n".join(lines))
         order = [line for line in lines
-                 if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "rvktest" in line))]
+                 if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "avtest" in line))]
         self.assertEqual([o if o in ("reboot", "powerdown") else o.split()[-1] for o in order],
                          ["sign", "reboot", "install", "reboot", "check", "modes", "768", "1600", "800",
-                          "1", "0", "sleepstates", "check", "C:\\rvk\\rvktest.exe", "collect", "powerdown"])
+                          "1", "0", "sleepstates", "check", "C:\\av\\avtest.exe", "collect", "powerdown"])
         self.assertEqual((self.work / "report.txt").read_text(), PASSING_REPORT)
-        self.assertIn("service=rvkgpu", (self.work / "device.txt").read_text())
-        self.assertIn("rvkgpu: DriverEntry", (self.work / "rvkgpu.log").read_text())
+        self.assertIn("service=avgpu", (self.work / "device.txt").read_text())
+        self.assertIn("avgpu: DriverEntry", (self.work / "avgpu.log").read_text())
         self.assertEqual((self.work / "diag" / "system.txt").read_text(), "System events\n")
         self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_bytes(), BLACK_SCREEN.encode("latin-1"))
         self.assertIn("guest: dumps ok: 1 live dump(s), every one VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP", result.stdout)
-        self.assertEqual(sorted(p.name for p in (self.work / "symbols").iterdir()), ["rvkgpu.pdb", "rvkgpu.sys"])
+        self.assertEqual(sorted(p.name for p in (self.work / "symbols").iterdir()), ["avgpu.pdb", "avgpu.sys"])
         self.assertIn("guest: report ok: 23 passed", result.stdout)
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
         self.assertIn("guest: collect: 2 files in", result.stdout)
@@ -265,7 +265,7 @@ class GuestSuiteRun(unittest.TestCase):
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              # The guest ends its lines the Windows way.
                              "cycle": "cycle: 50 done\r\npool: Current Pool Allocations: 0\r\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--power-cycles", "50")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("cycle -Minutes 50", self.stage_calls())
@@ -280,9 +280,9 @@ class GuestSuiteRun(unittest.TestCase):
         where the switch is, and the run says which driver it is measuring."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
-                             "install": "verifier: skipped, rvkgpu.sys installed with no Driver Verifier "
+                             "install": "verifier: skipped, avgpu.sys installed with no Driver Verifier "
                                         "checks\r\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--no-verifier")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("install -NoVerifier", self.stage_calls())
@@ -293,7 +293,7 @@ class GuestSuiteRun(unittest.TestCase):
         """The default is unchanged: nothing is passed, so the stage installs it."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("install", self.stage_calls())
@@ -315,7 +315,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "upgrade": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "upgrade": "upgrade: installed 0.35.1.0 running 0.35.1.0 problem 0\r\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--upgrades", "1")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("upgrade -Minutes 1", self.stage_calls())
@@ -327,7 +327,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "upgrade": [1]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "upgrade": "upgrade: installed 0.35.1.0 running 0.35.0.0 problem 0\r\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--upgrades", "1")
         self.assertEqual(result.returncode, 1)
         self.assertIn("upgrade failed", result.stdout)
@@ -337,7 +337,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "cycle": [1]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "cycle": "cycle: 7 of 50 left problem 43\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--power-cycles", "50")
         self.assertEqual(result.returncode, 1)
         self.assertIn("cycle failed", result.stdout)
@@ -348,14 +348,14 @@ class GuestSuiteRun(unittest.TestCase):
         executor is told to from outside - no rebuild, no test-only command in
         the protocol (FR-006)."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
-                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS})
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS})
         result = self.run_suite("--stall-ms", "5000", "--fault-after", "3", "--stall-context", "2")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         environment = json.loads((self.work / "environment.json").read_text())
-        self.assertEqual(environment.get("RVK_ECHO_STALL_MS"), "5000")
-        self.assertEqual(environment.get("RVK_ECHO_FAULT_AFTER"), "3")
-        self.assertEqual(environment.get("RVK_ECHO_ONLY_NTH"), "2")
+        self.assertEqual(environment.get("AV_ECHO_STALL_MS"), "5000")
+        self.assertEqual(environment.get("AV_ECHO_FAULT_AFTER"), "3")
+        self.assertEqual(environment.get("AV_ECHO_ONLY_NTH"), "2")
         self.assert_clean()
 
     def test_s3_suspends_through_the_agent_and_wakes_through_qmp(self):
@@ -372,7 +372,7 @@ class GuestSuiteRun(unittest.TestCase):
 
     def test_a_machine_that_offers_no_s3_is_skipped_with_its_reason(self):
         self.script(outputs={"check": ONE_MONITOR, "sleepstates": "sleep: standby=no hibernate=no\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--hibernate")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: suspend skipped: this machine offers no S3", result.stdout)
@@ -395,7 +395,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_every_resume_runs_the_suite_again(self):
-        """SC-001 asks for five S4 resumes with a passing rvktest, not five
+        """SC-001 asks for five S4 resumes with a passing avtest, not five
         machines that come back: the suite runs after each one."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "hibernate": [0],
                             "sleepstates": [0]})
@@ -408,33 +408,33 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.stdout.count("guest: report ok: 23 passed"), 4)
         self.assert_clean()
 
-    def test_an_rvk_run_asks_for_the_rvk_scenarios_and_records_its_executor_and_latency(self):
-        """Feature 044: the rvk scenarios run instead of the suite, and the verdict
+    def test_an_av_run_asks_for_the_av_scenarios_and_records_its_executor_and_latency(self):
+        """Feature 044: the av scenarios run instead of the suite, and the verdict
         says which executor did the work and what a no-op cost."""
-        report = "ok transport.nop\nok transport.latency 812\nok vulkan.instance\nrvktest: 12 passed, 0 failed\n"
-        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": report, "collect": COLLECTED})
-        result = self.run_suite("--rvk")
+        report = "ok transport.nop\nok transport.latency 812\nok vulkan.instance\navtest: 12 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": report, "collect": COLLECTED})
+        result = self.run_suite("--av")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("guest: rvk: executor /nowhere/librvk_echo_executor.so, host-gpu auto", result.stdout)
-        self.assertIn("guest: rvk ok: 12 passed", result.stdout)
-        self.assertIn("guest: rvk latency: a transport no-op round trip took 812 us", result.stdout)
+        self.assertIn("guest: av: executor /nowhere/libav_echo_executor.so, host-gpu auto", result.stdout)
+        self.assertIn("guest: av ok: 12 passed", result.stdout)
+        self.assertIn("guest: av latency: a transport no-op round trip took 812 us", result.stdout)
         self.assertNotIn("guest: report ok", result.stdout)
         self.assertNotIn("guest: display ok", result.stdout)
-        self.assertIn("rvktest.exe rvk", self.journal.read_text())
-        self.assertIn("rvk latency", (self.work / "verdict.txt").read_text())
+        self.assertIn("avtest.exe av", self.journal.read_text())
+        self.assertIn("av latency", (self.work / "verdict.txt").read_text())
 
-    def test_an_rvk_run_on_a_named_host_gpu_binds_the_device_to_it_and_says_so(self):
+    def test_an_av_run_on_a_named_host_gpu_binds_the_device_to_it_and_says_so(self):
         """Feature 045, T020: the host-visible import is proven on each host GPU,
         so a run can name the one the device binds to; auto stays the default."""
-        report = "ok transport.nop\nrvktest: 2 passed, 0 failed\n"
-        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": report, "collect": COLLECTED})
+        report = "ok transport.nop\navtest: 2 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": report, "collect": COLLECTED})
         uuid = "7b7ad2c5-4219-8c80-c4fd-a64b8775aedb"
-        result = self.run_suite("--rvk", "--host-gpu", uuid)
+        result = self.run_suite("--av", "--host-gpu", uuid)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(f"host-gpu={uuid}", self.journal.read_text())
-        self.assertIn(f"guest: rvk: executor /nowhere/librvk_echo_executor.so, host-gpu {uuid}", result.stdout)
+        self.assertIn(f"guest: av: executor /nowhere/libav_echo_executor.so, host-gpu {uuid}", result.stdout)
 
     def all_gpus_run(self, adapters=WINDOWS_ADAPTERS, check=TWO_ADAPTERS):
         """A quick --all-gpus run on HOST_GPUS, with sysfs describing only the
@@ -444,7 +444,7 @@ class GuestSuiteRun(unittest.TestCase):
             (sysfs / "0000:03:00.0").mkdir(parents=True, exist_ok=True)
             (sysfs / "0000:03:00.0" / name).write_text(value + "\n")
         (self.scratch / "vulkaninfo.txt").write_text(HOST_GPUS)
-        self.script(outputs={"check": check, "adapters": adapters, "rvktest": PASSING_REPORT,
+        self.script(outputs={"check": check, "adapters": adapters, "avtest": PASSING_REPORT,
                              "collect": COLLECTED})
         return self.run_suite("--quick", "--all-gpus", "--vulkaninfo", self.scratch / "vulkaninfo.txt",
                               "--sysfs", sysfs)
@@ -453,15 +453,15 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.all_gpus_run()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         argv = self.journal_lines()[0]
-        self.assertIn(f"virtio-gpu-rvk-pci,id=gpu,host-gpu={RADEON_UUID},", argv)
-        self.assertIn(f"virtio-gpu-rvk-pci,id=gpu1,host-gpu={RAPHAEL_UUID},", argv)
-        self.assertEqual(argv.count("virtio-gpu-rvk-pci"), 2)   # llvmpipe is not a GPU a guest is shown
+        self.assertIn(f"virtio-gpu-av-pci,id=gpu,host-gpu={RADEON_UUID},", argv)
+        self.assertIn(f"virtio-gpu-av-pci,id=gpu1,host-gpu={RAPHAEL_UUID},", argv)
+        self.assertEqual(argv.count("virtio-gpu-av-pci"), 2)   # llvmpipe is not a GPU a guest is shown
         self.assertIn("host gpu: 00000000-0300-0000-0000-000000000000 1002:7550 rev c0 'AMD Radeon RX 9070 XT'",
                       result.stdout)
         self.assertIn("host gpu: 00000000-7b00-0000-0000-000000000000 1af4:1050 rev 01 'AMD Radeon Graphics'",
                       result.stdout)
         # provision.ps1 names each model in the INF from what the runner pushed.
-        self.assertIn("file C:\\rvk\\adapters.txt", "\n".join(self.journal_lines()))
+        self.assertIn("file C:\\av\\adapters.txt", "\n".join(self.journal_lines()))
         self.assertEqual(self.stage_calls()[:4], ["sign", "install", "check", "adapters"])
         self.assertIn("guest: adapters: WMI 'AMD Radeon RX 9070 XT' "
                       "PCI\\VEN_1002&DEV_7550&SUBSYS_52561AF4&REV_C0\\3&11583659&0&10, AdapterRAM 4293918720",
@@ -491,11 +491,11 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("adapters failed: DXGI could not list adapters: CreateDXGIFactory1 0x887A0001", result.stdout)
 
     def test_all_gpus_needs_every_device_started_with_its_monitor(self):
-        result = self.all_gpus_run(check=ONE_MONITOR + "device: PCI\\VEN_1002 status=OK problem=0 service=rvkgpu\n")
+        result = self.all_gpus_run(check=ONE_MONITOR + "device: PCI\\VEN_1002 status=OK problem=0 service=avgpu\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("check failed: the guest has 1 monitors, not 2", result.stdout)
-        result = self.all_gpus_run(check="display: dwm=1 services=rvkgpu monitors=2 adapters=1\n")
-        self.assertIn("check failed: the guest has 1 rvkgpu adapters, not 2", result.stdout)
+        result = self.all_gpus_run(check="display: dwm=1 services=avgpu monitors=2 adapters=1\n")
+        self.assertIn("check failed: the guest has 1 avgpu adapters, not 2", result.stdout)
 
     def test_all_gpus_is_refused_with_a_named_host_gpu_or_a_host_with_no_gpu(self):
         self.script()
@@ -517,7 +517,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script()
         result = self.run_suite("--quick")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.journal_lines()[0].count("virtio-gpu-rvk-pci"), 1)
+        self.assertEqual(self.journal_lines()[0].count("virtio-gpu-av-pci"), 1)
         self.assertNotIn("adapters", self.stage_calls())
         self.assertNotIn("adapters.txt", "\n".join(self.journal_lines()))
 
@@ -533,31 +533,31 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("guest: monitortimeout", result.stdout)
         self.assertNotIn("guest: sleepstates", result.stdout)
 
-    def test_an_rvk_run_whose_no_op_is_past_the_threshold_fails(self):
+    def test_an_av_run_whose_no_op_is_past_the_threshold_fails(self):
         """SC-002: a transport that has stopped being interrupt-driven passes every
         step and is still a regression."""
-        report = "ok transport.nop\nok transport.latency 60000\nrvktest: 2 passed, 0 failed\n"
-        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": report, "collect": COLLECTED})
-        result = self.run_suite("--rvk")
+        report = "ok transport.nop\nok transport.latency 60000\navtest: 2 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": report, "collect": COLLECTED})
+        result = self.run_suite("--av")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("guest: rvk failed: a no-op took 60000 us, past the 50000 us threshold", result.stdout)
+        self.assertIn("guest: av failed: a no-op took 60000 us, past the 50000 us threshold", result.stdout)
 
-    def rvk_run(self, *extra, median="ok transport.warm_median 640\n"):
-        """An rvk run whose transport scenario timed its warm rounds."""
-        report = "ok transport.nop\nok transport.latency 812\n" + median + "rvktest: 12 passed, 0 failed\n"
-        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": report, "collect": COLLECTED})
-        return self.run_suite("--rvk", *extra)
+    def av_run(self, *extra, median="ok transport.warm_median 640\n"):
+        """An av run whose transport scenario timed its warm rounds."""
+        report = "ok transport.nop\nok transport.latency 812\n" + median + "avtest: 12 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": report, "collect": COLLECTED})
+        return self.run_suite("--av", *extra)
 
-    def test_two_rvk_runs_make_the_cost_of_a_recording_a_number(self):
+    def test_two_av_runs_make_the_cost_of_a_recording_a_number(self):
         """SC-002: the first boot can only keep its own round trip, and the one
         that completes the pair is the one that says what a recording cost."""
-        first = self.rvk_run()
+        first = self.av_run()
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertIn("guest: recording cost: a no-op round trip took 640 us with recording off; the same run "
                       f"with --record completes SC-002's pair in {self.work / 'recording-cost.txt'}", first.stdout)
-        second = self.rvk_run("--record", median="ok transport.warm_median 712\n")
+        second = self.av_run("--record", median="ok transport.warm_median 712\n")
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
         self.assertIn("guest: recording cost ok: a no-op round trip took 640 us with recording off and 712 us "
                       "with it on; a recording costs 72 us", second.stdout)
@@ -569,18 +569,18 @@ class GuestSuiteRun(unittest.TestCase):
         """The two boots are minutes apart on a machine doing other things, so
         the run with the recording on comes out faster often enough that
         printing a negative cost would be printing noise as a measurement."""
-        self.assertEqual(self.rvk_run("--record", median="ok transport.warm_median 640\n").returncode, 0)
-        result = self.rvk_run(median="ok transport.warm_median 700\n")
+        self.assertEqual(self.av_run("--record", median="ok transport.warm_median 640\n").returncode, 0)
+        result = self.av_run(median="ok transport.warm_median 700\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: recording cost ok: a no-op round trip took 700 us with recording off and 640 us "
                       "with it on; a recording costs nothing this pair could measure", result.stdout)
 
-    def test_an_rvk_run_that_timed_no_warm_round_trip_measures_no_cost(self):
+    def test_an_av_run_that_timed_no_warm_round_trip_measures_no_cost(self):
         """A run whose warm rounds failed reported a latency and nothing to
         compare; it must not keep the cold round trip as if it were one."""
-        result = self.rvk_run(median="")
+        result = self.av_run(median="")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("guest: recording cost skipped: the rvk run timed no warm round trip", result.stdout)
+        self.assertIn("guest: recording cost skipped: the av run timed no warm round trip", result.stdout)
         self.assertFalse((self.work / "recording-cost.txt").exists())
 
     def test_a_cost_record_that_is_not_two_round_trips_fails_the_run(self):
@@ -588,26 +588,26 @@ class GuestSuiteRun(unittest.TestCase):
         overwrote it would take the comparison with it."""
         self.work.mkdir(parents=True, exist_ok=True)
         (self.work / "recording-cost.txt").write_text("off 640\noff 700\n")
-        result = self.rvk_run()
+        result = self.av_run()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("guest: recording.cost failed", result.stdout)
         self.assertIn("a second `off`; the record holds one of each", result.stdout)
         self.assertEqual((self.work / "recording-cost.txt").read_text(), "off 640\noff 700\n")
 
-    def test_an_rvk_run_with_a_failed_step_fails(self):
-        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": "FAIL opencl.sum status=4 63\nrvktest: 11 passed, 1 failed\n",
-                             "collect": COLLECTED}, rvktest=1)
-        result = self.run_suite("--rvk")
+    def test_an_av_run_with_a_failed_step_fails(self):
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": "FAIL opencl.sum status=4 63\navtest: 11 passed, 1 failed\n",
+                             "collect": COLLECTED}, avtest=1)
+        result = self.run_suite("--av")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("guest: rvk failed: 1 step(s) failed, exit 1; see rvk.txt", result.stdout)
+        self.assertIn("guest: av failed: 1 step(s) failed, exit 1; see av.txt", result.stdout)
 
-    def test_an_rvk_run_whose_program_prints_no_summary_fails(self):
-        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": "", "collect": COLLECTED})
-        result = self.run_suite("--rvk")
+    def test_an_av_run_whose_program_prints_no_summary_fails(self):
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": "", "collect": COLLECTED})
+        result = self.run_suite("--av")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("guest: rvk failed: no summary line", result.stdout)
+        self.assertIn("guest: av failed: no summary line", result.stdout)
 
     def vulkan_runtime(self, **contents):
         """A fetched runtime and the pins it was fetched by, as
@@ -624,17 +624,17 @@ class GuestSuiteRun(unittest.TestCase):
                 (runtime / name).write_bytes(replaced)
         (self.scratch / "pins.txt").write_text("\n".join(pins) + "\n")
         return ("--vulkan-runtime", runtime, "--vulkan-pins", self.scratch / "pins.txt",
-                "--probe", self.scratch / "rvkvkprobe.exe")
+                "--probe", self.scratch / "avvkprobe.exe")
 
     def vulkan_script(self, **behaviour):
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                   "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "rvkvkprobe": PROBE_REPORT,
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                   "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "avvkprobe": PROBE_REPORT,
                    "collect": COLLECTED + f"file {ICD_LOG}\r\n"}
         outputs.update(behaviour.pop("outputs", {}))
         exits = {"reg": 1}
         exits.update(behaviour.pop("exits", {}))
         pictures = behaviour.pop("pictures", {name: "BM vulkan" for name in VULKAN_PICTURES})
-        self.script(outputs=outputs, files=dict(GUEST_FILES, **{ICD_LOG: "rvkvk: loader interface negotiation\r\n"},
+        self.script(outputs=outputs, files=dict(GUEST_FILES, **{ICD_LOG: "avvk: loader interface negotiation\r\n"},
                                                 **pictures),
                     **exits, **behaviour)
 
@@ -644,18 +644,18 @@ class GuestSuiteRun(unittest.TestCase):
         into has nowhere to run it, and a task that never finishes is a failure
         naming itself rather than a run that hangs."""
         self.vulkan_script(console_user="")
-        nobody = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        nobody = self.run_suite("--vulkan", "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(nobody.returncode, 1)
         self.assertIn("guest: console failed: no one is logged into the console session", nobody.stdout)
-        self.assertNotIn("rvkconsole", "".join(self.journal_lines()))
+        self.assertNotIn("avconsole", "".join(self.journal_lines()))
         self.assert_clean()
         self.vulkan_script(console_running=1000)
-        stuck = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime(),
+        stuck = self.run_suite("--vulkan", "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime(),
                                "--step-timeout", "1")
         self.assertEqual(stuck.returncode, 1)
-        self.assertIn("guest: rvkvkprobe failed: rvkconsole was still running after 1.0 s", stuck.stdout)
+        self.assertIn("guest: avvkprobe failed: avconsole was still running after 1.0 s", stuck.stdout)
         # Whatever it answered, the task is not left behind on the machine.
-        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn rvkconsole /f", self.journal_lines())
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn avconsole /f", self.journal_lines())
         self.assert_clean()
 
     def test_a_vulkan_run_finds_the_icd_through_the_adapter_alone_and_runs_the_probe(self):
@@ -663,35 +663,35 @@ class GuestSuiteRun(unittest.TestCase):
         exactly the one device whose LUID is the adapter's, the probe's steps
         all pass, and the ICD's log is in diag/."""
         self.vulkan_script()
-        result = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        result = self.run_suite("--vulkan", "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
-        for pushed in ("C:\\rvk\\vulkan-1.dll 600", "C:\\rvk\\vulkaninfo.exe 700", "C:\\rvk\\rvkvkprobe.exe 1400",
-                       "C:\\rvk\\package\\rvkvk.dll 900", "C:\\rvk\\package\\rvkvk.json 1000"):
+        for pushed in ("C:\\av\\vulkan-1.dll 600", "C:\\av\\vulkaninfo.exe 700", "C:\\av\\avvkprobe.exe 1300",
+                       "C:\\av\\package\\avvk.dll 800", "C:\\av\\package\\avvk.json 900"):
             self.assertIn(f"file {pushed}", lines)
         programs = [line.split()[1] for line in lines if line.startswith("exec") and "powershell" not in line]
         self.assertEqual(programs, ["C:\\Windows\\System32\\reg.exe", "C:\\Windows\\System32\\cmd.exe",
-                                    "C:\\rvk\\vulkaninfo.exe",
+                                    "C:\\av\\vulkaninfo.exe",
                                     "C:\\Windows\\System32\\schtasks.exe", "C:\\Windows\\System32\\schtasks.exe",
-                                    "C:\\rvk\\rvkvkprobe.exe", "C:\\Windows\\System32\\schtasks.exe",
+                                    "C:\\av\\avvkprobe.exe", "C:\\Windows\\System32\\schtasks.exe",
                                     "C:\\Windows\\System32\\schtasks.exe"])
         # The probe's window has to be made where a window can be seen: the
         # agent's own session has no visible desktop, so the probe runs in the
         # console session through a scheduled task with /it (feature 046).
-        self.assertIn("file C:\\rvk\\console.cmd 59", lines)
-        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /create /tn rvkconsole /tr C:\\rvk\\console.cmd "
+        self.assertIn("file C:\\av\\console.cmd 56", lines)
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /create /tn avconsole /tr C:\\av\\console.cmd "
                       "/sc once /st 23:59 /ru guest\\tester /it /f", lines)
-        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /run /tn rvkconsole", lines)
-        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn rvkconsole /f", lines)
-        self.assertIn("pull C:\\rvk\\vulkan.txt", lines)
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /run /tn avconsole", lines)
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn avconsole /f", lines)
+        self.assertIn("pull C:\\av\\vulkan.txt", lines)
         # vulkaninfo's full listing is written to a guest file and pulled: the
         # agent's captured output stalled the program on a live guest.
-        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\vulkaninfo.exe "
-                      "> C:\\rvk\\vulkaninfo.txt 2>&1", lines)
-        self.assertIn("pull C:\\rvk\\vulkaninfo.txt", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\av\\vulkaninfo.exe "
+                      "> C:\\av\\vulkaninfo.txt 2>&1", lines)
+        self.assertIn("pull C:\\av\\vulkaninfo.txt", lines)
         self.assertIn("exec C:\\Windows\\System32\\reg.exe query HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
-        self.assertIn("guest: vulkan: executor /nowhere/librvk_executor.so, host-gpu auto", result.stdout)
+        self.assertIn("guest: vulkan: executor /nowhere/libav_executor.so, host-gpu auto", result.stdout)
         self.assertIn("guest: khronos ok: no HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers key", result.stdout)
         self.assertIn(f"guest: vulkaninfo ok: one physical device, LUID LowPart {ADAPTER_LUID}", result.stdout)
         self.assertIn("guest: vulkan ok: 12 passed", result.stdout)
@@ -705,31 +705,31 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual((self.work / "images" / "vulkan-present.bmp").read_text(), "BM vulkan")
         self.assertEqual((self.work / "images" / "vulkan-resized.bmp").read_text(), "BM vulkan")
         self.assertIn(f"guest: vulkan.images ok: 3 in {self.work / 'images'}", result.stdout)
-        self.assertEqual((self.work / "diag" / "rvkvk-4242.log").read_text(newline=""),
-                         "rvkvk: loader interface negotiation\r\n")
+        self.assertEqual((self.work / "diag" / "avvk-4242.log").read_text(newline=""),
+                         "avvk: loader interface negotiation\r\n")
         self.assertIn("vulkaninfo ok", (self.work / "verdict.txt").read_text())
         self.assert_clean()
 
-    def test_a_khronos_key_that_lists_no_rvk_driver_is_left_alone(self):
+    def test_a_khronos_key_that_lists_no_av_driver_is_left_alone(self):
         listed = ("\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Khronos\\Vulkan\\Drivers\r\n"
                   "    C:\\Windows\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64\\nv-vk64.json"
                   "    REG_DWORD    0x0\r\n")
         self.vulkan_script(outputs={"reg": listed}, exits={"reg": 0})
         result = self.run_suite("--vulkan", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("guest: khronos ok: the key lists no rvk driver", result.stdout)
+        self.assertIn("guest: khronos ok: the key lists no av driver", result.stdout)
 
-    def test_an_rvk_driver_in_the_global_khronos_key_fails_before_vulkaninfo_runs(self):
+    def test_an_av_driver_in_the_global_khronos_key_fails_before_vulkaninfo_runs(self):
         """FR-001: a global value would make the loader list the device twice,
         and would hide whether the adapter's own value works."""
         listed = ("\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Khronos\\Vulkan\\Drivers\r\n"
-                  "    C:\\Windows\\System32\\DriverStore\\FileRepository\\rvkgpu.inf_amd64_1\\rvkvk.json"
+                  "    C:\\Windows\\System32\\DriverStore\\FileRepository\\avgpu.inf_amd64_1\\avvk.json"
                   "    REG_DWORD    0x0\r\n")
         self.vulkan_script(outputs={"reg": listed}, exits={"reg": 0})
         result = self.run_suite("--vulkan", *self.vulkan_runtime())
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("guest: khronos failed: the global key lists C:\\Windows\\System32\\DriverStore\\"
-                      "FileRepository\\rvkgpu.inf_amd64_1\\rvkvk.json", result.stdout)
+                      "FileRepository\\avgpu.inf_amd64_1\\avvk.json", result.stdout)
         self.assertNotIn("vulkaninfo.exe", "\n".join(line for line in self.journal_lines() if line.startswith("exec")))
         self.assertIn("collect", self.stage_calls())
 
@@ -767,7 +767,7 @@ class GuestSuiteRun(unittest.TestCase):
                        .replace("12 passed, 0", "11 passed, 1"), 1,
                        "vulkan failed: 1 step(s) failed, exit 1; see vulkan.txt"),
             "exit": (PROBE_REPORT, 3, "vulkan failed: 0 step(s) failed, exit 3; see vulkan.txt"),
-            "summary": (PROBE_REPORT.replace("rvkvkprobe: 12 passed, 0 failed\r\n", ""), 0,
+            "summary": (PROBE_REPORT.replace("avvkprobe: 12 passed, 0 failed\r\n", ""), 0,
                         "vulkan failed: no summary line (exit 0)"),
             "skipped": (PROBE_REPORT.replace("ok vulkan.lost\r\nok vulkan.recreated\r\n", "")
                         .replace("12 passed", "10 passed"), 0,
@@ -775,7 +775,7 @@ class GuestSuiteRun(unittest.TestCase):
             "no present": (PROBE_REPORT.replace("ok vulkan.present 4096\r\nok vulkan.pacing 60\r\n", "")
                            .replace("12 passed", "10 passed"), 0,
                            "vulkan failed: the probe reported no present, pacing; see vulkan.txt"),
-            "rvktest": (PROBE_REPORT.replace("rvkvkprobe:", "rvktest:"), 0, "vulkan failed: no summary line"),
+            "avtest": (PROBE_REPORT.replace("avvkprobe:", "avtest:"), 0, "vulkan failed: no summary line"),
             "mismatch": (PROBE_REPORT.replace(f"physical_device {ADAPTER_LUID}", "physical_device 7"), 0,
                          f"luid failed: the probe's physical device has LUID LowPart 7, not the adapter's "
                          f"{ADAPTER_LUID}"),
@@ -784,7 +784,7 @@ class GuestSuiteRun(unittest.TestCase):
         }
         for case, (report, code, reason) in cases.items():
             with self.subTest(case):
-                self.vulkan_script(outputs={"rvkvkprobe": report}, exits={"rvkvkprobe": code})
+                self.vulkan_script(outputs={"avvkprobe": report}, exits={"avvkprobe": code})
                 result = self.run_suite("--vulkan", *self.vulkan_runtime())
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"guest: {reason}", result.stdout)
@@ -793,61 +793,61 @@ class GuestSuiteRun(unittest.TestCase):
     DISCOVERY = ("discovery register_class ok value=0x000000000000C0DE error=0\r\n"
                  "discovery open_adapter_from_hdc ok value=0x0000000000006431 error=0\r\n"
                  "discovery set_pixel_format ok value=0x0000000000000001 error=0\r\n"
-                 "discovery rvkgl_loaded yes value=0x0000000000000000 error=0\r\n"
-                 "discovery loaded rvkgl.dll value=0x00007FFA10000000 error=0\r\n")
+                 "discovery avgl_loaded yes value=0x0000000000000000 error=0\r\n"
+                 "discovery loaded avgl.dll value=0x00007FFA10000000 error=0\r\n")
 
     def discovery_script(self, **behaviour):
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                   "rvkglprobe": self.DISCOVERY,
-                   "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkgl-4242.log\r\n"}
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                   "avglprobe": self.DISCOVERY,
+                   "collect": COLLECTED + "file C:\\ProgramData\\av\\avgl-4242.log\r\n"}
         outputs.update(behaviour.pop("outputs", {}))
         self.script(outputs=outputs,
-                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log":
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\av\\avgl-4242.log":
                                                "DrvValidateVersion 0x0000000000000002\r\n"}),
                     **behaviour)
 
     def test_an_opengl_discovery_run_records_what_opengl32_did_and_the_icd_log(self):
         """Feature 050, T008: the probe runs through the system opengl32.dll with
         its report written to a guest file and pulled; the run records which ICD
-        loaded and the adapter the window's DC opened, and keeps rvkgl's log."""
+        loaded and the adapter the window's DC opened, and keeps avgl's log."""
         self.discovery_script()
-        result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
-        self.assertIn("file C:\\rvk\\rvkglprobe.exe 1400", lines)
-        self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
-        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\rvkglprobe.exe --discovery "
-                      "> C:\\rvk\\discovery.txt 2>&1", lines)
-        self.assertIn("pull C:\\rvk\\discovery.txt", lines)
+        self.assertIn("file C:\\av\\avglprobe.exe 1300", lines)
+        self.assertIn("file C:\\av\\package\\avgl.dll 800", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\av\\avglprobe.exe --discovery "
+                      "> C:\\av\\discovery.txt 2>&1", lines)
+        self.assertIn("pull C:\\av\\discovery.txt", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertEqual((self.work / "discovery.txt").read_text(newline=""), self.DISCOVERY)
-        self.assertIn("guest: discovery ok: rvkgl.dll loaded, the DC opened an adapter (LUID 0x6431)", result.stdout)
-        self.assertEqual((self.work / "diag" / "rvkgl-4242.log").read_text(newline=""),
+        self.assertIn("guest: discovery ok: avgl.dll loaded, the DC opened an adapter (LUID 0x6431)", result.stdout)
+        self.assertEqual((self.work / "diag" / "avgl-4242.log").read_text(newline=""),
                          "DrvValidateVersion 0x0000000000000002\r\n")
-        self.assertNotIn("rvkvkprobe", "\n".join(lines))
+        self.assertNotIn("avvkprobe", "\n".join(lines))
         self.assert_clean()
 
     def test_an_opengl_discovery_run_reports_another_icd_or_a_refused_open_and_fails_only_without_a_report(self):
         other = ("discovery open_adapter_from_hdc failed value=0x0000000000000000 error=3221225485\r\n"
-                 "discovery rvkgl_loaded no value=0x0000000000000000 error=0\r\n")
-        self.discovery_script(outputs={"rvkglprobe": other})
-        result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+                 "discovery avgl_loaded no value=0x0000000000000000 error=0\r\n")
+        self.discovery_script(outputs={"avglprobe": other})
+        result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("guest: discovery ok: rvkgl.dll not loaded, the DC opened no adapter (status 0xC000000D)",
+        self.assertIn("guest: discovery ok: avgl.dll not loaded, the DC opened no adapter (status 0xC000000D)",
                       result.stdout)
-        self.discovery_script(outputs={"rvkglprobe": ""})
-        silent = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.discovery_script(outputs={"avglprobe": ""})
+        silent = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(silent.returncode, 1)
-        self.assertIn("guest: discovery failed: the probe reported no rvkgl_loaded line", silent.stdout)
-        self.discovery_script(rvkglprobe=1)
-        failed = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertIn("guest: discovery failed: the probe reported no avgl_loaded line", silent.stdout)
+        self.discovery_script(avglprobe=1)
+        failed = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(failed.returncode, 1)
         self.assertIn("guest: discovery failed: the probe exited 1 (its window could not be made); "
                       "see discovery.txt", failed.stdout)
 
     def test_opengl_discovery_is_its_own_boot(self):
         self.discovery_script()
-        for other in ("--rvk", "--vulkan", "--opengl"):
+        for other in ("--av", "--vulkan", "--opengl"):
             refused = self.run_suite("--opengl-discovery", other)
             self.assertEqual(refused.returncode, 2)
             self.assertIn("--opengl-discovery is its own boot", refused.stderr)
@@ -869,23 +869,23 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opengl.attribs 8342\r\n"
                  "ok opengl.lost 33365\r\n"
                  "ok opengl.recreated 4096\r\n"
-                 "rvkglprobe: 12 passed, 0 failed\r\n")
+                 "avglprobe: 12 passed, 0 failed\r\n")
 
     def opengl_script(self, report=None, code=0, pictures=None):
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                   "rvkglprobe": self.GL_REPORT if report is None else report,
-                   "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkgl-4242.log\r\n"}
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                   "avglprobe": self.GL_REPORT if report is None else report,
+                   "collect": COLLECTED + "file C:\\ProgramData\\av\\avgl-4242.log\r\n"}
         if pictures is None:
-            pictures = {f"C:\\rvk\\{name}.bmp": f"BM {name}" for name in GL_PICTURES}
-        self.script(outputs=outputs, rvkglprobe=code,
-                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log": ""}, **pictures))
+            pictures = {f"C:\\av\\{name}.bmp": f"BM {name}" for name in GL_PICTURES}
+        self.script(outputs=outputs, avglprobe=code,
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\av\\avgl-4242.log": ""}, **pictures))
 
     CL_REPORT = ("ok opencl.platform_count 1\r\n"
                  "ok opencl.platforms 1\r\n"
                  "ok opencl.platform 1\r\n"
                  "ok opencl.device_ids 1\r\n"
                  "ok opencl.device 1\r\n"
-                 "note opencl.device_name rvk (NVIDIA GeForce RTX 4090)\r\n"
+                 "note opencl.device_name av (NVIDIA GeForce RTX 4090)\r\n"
                  "ok opencl.luid\r\n"
                  "ok opencl.context\r\n"
                  "ok opencl.queue\r\n"
@@ -907,8 +907,8 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opencl.wait\r\n"
                  "ok opencl.callback 1\r\n"
                  "ok opencl.release\r\n"
-                 "rvkclprobe: 26 passed, 0 failed\r\n")
-    """What rvkclprobe.exe prints when every step of feature 052 passed, in the
+                 "avclprobe: 26 passed, 0 failed\r\n")
+    """What avclprobe.exe prints when every step of feature 052 passed, in the
     probe's own order (src/guest/suite/cl_probe.cpp)."""
 
     def opencl_loader(self, pinned=True, missing=()):
@@ -932,14 +932,14 @@ class GuestSuiteRun(unittest.TestCase):
             marker.unlink(missing_ok=True)
         (self.scratch / "cl_pins.txt").write_text(f"loader file:///nowhere/opencl-loader.tar.gz {digest}\n")
         return ("--opencl-loader", into, "--opencl-pins", self.scratch / "cl_pins.txt",
-                "--cl-probe", self.scratch / "rvkclprobe.exe")
+                "--cl-probe", self.scratch / "avclprobe.exe")
 
     def opencl_script(self, report=None, code=0):
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                   "rvkclprobe": self.CL_REPORT if report is None else report,
-                   "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkcl-4242.log\r\n"}
-        self.script(outputs=outputs, rvkclprobe=code,
-                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkcl-4242.log": ""}))
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                   "avclprobe": self.CL_REPORT if report is None else report,
+                   "collect": COLLECTED + "file C:\\ProgramData\\av\\avcl-4242.log\r\n"}
+        self.script(outputs=outputs, avclprobe=code,
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\av\\avcl-4242.log": ""}))
 
     def d3d_layers(self, files=("d3d9.dll", "d3d11.dll", "dxgi.dll"),
                    vkd3d=("d3d12.dll", "d3d12core.dll"), missing=(), empty_pins=False, no_files=False):
@@ -972,14 +972,14 @@ class GuestSuiteRun(unittest.TestCase):
                 text = "\n".join(pins) + "\n"
             (tools / f"{layer.replace('-', '_')}_pins.txt").write_text(text)
         return ("--layers", layers, "--layer-pins", tools,
-                "--d3d9-probe", self.scratch / "rvkd3d9probe.exe",
-                "--d3d11-probe", self.scratch / "rvkd3d11probe.exe",
-                "--d3d12-probe", self.scratch / "rvkd3d12probe.exe")
+                "--d3d9-probe", self.scratch / "avd3d9probe.exe",
+                "--d3d11-probe", self.scratch / "avd3d11probe.exe",
+                "--d3d12-probe", self.scratch / "avd3d12probe.exe")
 
     def d3d_script(self, **behaviour):
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                   "rvkd3d9probe": D3D_REPORTS["9"], "rvkd3d11probe": D3D_REPORTS["11"],
-                   "rvkd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED}
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                   "avd3d9probe": D3D_REPORTS["9"], "avd3d11probe": D3D_REPORTS["11"],
+                   "avd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED}
         outputs.update(behaviour.pop("outputs", {}))
         pictures = behaviour.pop("pictures", {name: "BM d3d" for name in D3D_PICTURES})
         self.script(outputs=outputs, files=dict(GUEST_FILES, **pictures), **behaviour)
@@ -989,24 +989,24 @@ class GuestSuiteRun(unittest.TestCase):
         the layers' DLLs beside them, every step of each report passes, and the
         frame each cleared is pulled back as a picture."""
         self.d3d_script()
-        result = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+        result = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                 *self.vulkan_runtime(), *self.d3d_layers())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
         # The layers' DLLs and the loader they call, beside the probes.
         for name in ("d3d9.dll", "d3d11.dll", "dxgi.dll", "d3d12.dll", "d3d12core.dll"):
-            self.assertTrue(any(line.startswith(f"file C:\\rvk\\{name} ") for line in lines),
+            self.assertTrue(any(line.startswith(f"file C:\\av\\{name} ") for line in lines),
                             f"{name} was not pushed: {lines}")
-        self.assertTrue(any(line.startswith("file C:\\rvk\\vulkan-1.dll ") for line in lines))
+        self.assertTrue(any(line.startswith("file C:\\av\\vulkan-1.dll ") for line in lines))
         for api in ("9", "11", "12"):
-            self.assertTrue(any(line.startswith(f"file C:\\rvk\\rvkd3d{api}probe.exe ") for line in lines))
-            self.assertIn(f"pull C:\\rvk\\d3d{api}.txt", lines)
+            self.assertTrue(any(line.startswith(f"file C:\\av\\avd3d{api}probe.exe ") for line in lines))
+            self.assertIn(f"pull C:\\av\\d3d{api}.txt", lines)
             self.assertEqual((self.work / f"d3d{api}.txt").read_text(newline=""), D3D_REPORTS[api])
         self.assertIn("guest: d3d9 ok: 6 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d11 ok: 7 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d12 ok: 9 passed through vkd3d-proton", result.stdout)
         # It ran in the console session, as a window needs.
-        self.assertTrue(any("schtasks.exe /create /tn rvkconsole" in line for line in lines))
+        self.assertTrue(any("schtasks.exe /create /tn avconsole" in line for line in lines))
         for picture in ("d3d9-clear", "d3d11-clear", "d3d12-clear"):
             self.assertEqual((self.work / "images" / f"{picture}.bmp").read_text(), "BM d3d")
         self.assertIn(f"guest: d3d.images ok: 3 in {self.work / 'images'}", result.stdout)
@@ -1020,19 +1020,19 @@ class GuestSuiteRun(unittest.TestCase):
         self.d3d_script(stages={"sign": [3010], "install": [3010], "check": [0], "pageheap": [0],
                                 "heapchecks": [0]},
                         outputs={"check": ONE_MONITOR +
-                                          "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                                 "rvkd3d9probe": D3D_REPORTS["9"], "rvkd3d11probe": D3D_REPORTS["11"],
-                                 "rvkd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED,
-                                 "pageheap": "pageheap: rvkd3d9probe.exe on\r\n",
+                                          "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                                 "avd3d9probe": D3D_REPORTS["9"], "avd3d11probe": D3D_REPORTS["11"],
+                                 "avd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED,
+                                 "pageheap": "pageheap: avd3d9probe.exe on\r\n",
                                  "heapchecks": "heapchecks: 0\r\n"})
-        result = self.run_suite("--d3d", "--page-heap", "--executor", "/nowhere/librvk_executor.so",
+        result = self.run_suite("--d3d", "--page-heap", "--executor", "/nowhere/libav_executor.so",
                                 *self.vulkan_runtime(), *self.d3d_layers())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: pageheap on: 3 program(s)", result.stdout)
         self.assertIn("guest: heapchecks ok: no heap event under page heap", result.stdout)
         self.assertIn("guest: pageheap off: 3 program(s)", result.stdout)
         # On, then off: the machine is left as it was found.
-        programs = "rvkd3d9probe.exe,rvkd3d11probe.exe,rvkd3d12probe.exe"
+        programs = "avd3d9probe.exe,avd3d11probe.exe,avd3d12probe.exe"
         self.assertEqual(self.stage_calls(),
                          ["sign", "install", "check", f"pageheap -Programs {programs} -Enable",
                           f"pageheap -Programs {programs}", "heapchecks", "collect"])
@@ -1044,16 +1044,16 @@ class GuestSuiteRun(unittest.TestCase):
         self.d3d_script(stages={"sign": [3010], "install": [3010], "check": [0], "pageheap": [0],
                                 "heapchecks": [0]},
                         outputs={"check": ONE_MONITOR +
-                                          "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                                 "rvkd3d9probe": D3D_REPORTS["9"], "rvkd3d11probe": D3D_REPORTS["11"],
-                                 "rvkd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED,
-                                 "pageheap": "pageheap: rvkd3d9probe.exe on\r\n",
-                                 "heapchecks": ("heapcheck: 1000 Faulting application rvkd3d11probe.exe "
+                                          "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                                 "avd3d9probe": D3D_REPORTS["9"], "avd3d11probe": D3D_REPORTS["11"],
+                                 "avd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED,
+                                 "pageheap": "pageheap: avd3d9probe.exe on\r\n",
+                                 "heapchecks": ("heapcheck: 1000 Faulting application avd3d11probe.exe "
                                                 "exception code 0xc0000374\r\nheapchecks: 1\r\n")})
-        result = self.run_suite("--d3d", "--page-heap", "--executor", "/nowhere/librvk_executor.so",
+        result = self.run_suite("--d3d", "--page-heap", "--executor", "/nowhere/libav_executor.so",
                                 *self.vulkan_runtime(), *self.d3d_layers())
         self.assertEqual(result.returncode, 1)
-        self.assertIn("guest: heapcheck: event 1000: Faulting application rvkd3d11probe.exe", result.stdout)
+        self.assertIn("guest: heapcheck: event 1000: Faulting application avd3d11probe.exe", result.stdout)
         self.assertIn("heapchecks failed: 1 heap event(s) while the probes ran under page heap", result.stdout)
         self.assertTrue(any(call.startswith("pageheap") and not call.endswith("-Enable")
                             for call in self.stage_calls()),
@@ -1063,7 +1063,7 @@ class GuestSuiteRun(unittest.TestCase):
         """It is what the D3D probes run under; on its own it would turn a flag
         on and run nothing."""
         self.d3d_script()
-        result = self.run_suite("--page-heap", "--executor", "/nowhere/librvk_executor.so")
+        result = self.run_suite("--page-heap", "--executor", "/nowhere/libav_executor.so")
         self.assertEqual(result.returncode, 1)
         self.assertIn("--page-heap is what the D3D probes run under: it needs --d3d", result.stdout)
         self.assertEqual(self.journal_lines(), [])
@@ -1072,7 +1072,7 @@ class GuestSuiteRun(unittest.TestCase):
         """The layers are two archives and their hashes; a run that cannot have
         them says which fetch to run and boots nothing."""
         self.d3d_script()
-        empty = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+        empty = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                *self.vulkan_runtime(), *self.d3d_layers(empty_pins=True))
         self.assertEqual(empty.returncode, 1)
         # The pins file in the repository is comments alone, which is what this
@@ -1081,14 +1081,14 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines(), [])
 
         self.d3d_script()
-        nameless = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+        nameless = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                   *self.vulkan_runtime(), *self.d3d_layers(no_files=True))
         self.assertEqual(nameless.returncode, 1)
         self.assertIn("its pins name no files: run tools/fetch_layers.py dxvk", nameless.stdout)
         self.assertEqual(self.journal_lines(), [])
 
         self.d3d_script()
-        gone = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+        gone = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                               *self.vulkan_runtime(), *self.d3d_layers(missing=("d3d11.dll",)))
         self.assertEqual(gone.returncode, 1)
         self.assertIn("--d3d needs the pinned dxvk", gone.stdout)
@@ -1099,7 +1099,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.d3d_script()
         layers = self.d3d_layers()
         (self.scratch / "layers" / "dxvk" / "d3d9.dll").write_bytes(b"something else")
-        tampered = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+        tampered = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                   *self.vulkan_runtime(), *layers)
         self.assertEqual(tampered.returncode, 1)
         self.assertIn("d3d9.dll sha256", tampered.stdout)
@@ -1109,24 +1109,24 @@ class GuestSuiteRun(unittest.TestCase):
         """What a layer that half works looks like: a failed step, a step the
         probe never printed, and a report with no summary at all."""
         cases = {
-            "failed step": ({"rvkd3d11probe": D3D_REPORTS["11"].replace(
+            "failed step": ({"avd3d11probe": D3D_REPORTS["11"].replace(
                 "ok d3d11.pixels 4096", "FAIL d3d11.pixels status=6 0").replace(
                 "7 passed, 0 failed", "6 passed, 1 failed")},
                 "d3d11 failed: 1 step(s) failed, exit 0; see d3d11.txt"),
-            "missing step": ({"rvkd3d12probe": D3D_REPORTS["12"].replace("ok d3d12.fence\r\n", "").replace(
+            "missing step": ({"avd3d12probe": D3D_REPORTS["12"].replace("ok d3d12.fence\r\n", "").replace(
                 "9 passed", "8 passed")},
                 "d3d12 failed: the probe reported no fence; see d3d12.txt"),
-            "no summary": ({"rvkd3d9probe": D3D_REPORTS["9"].replace(
-                "rvkd3d9probe: 6 passed, 0 failed\r\n", "")},
+            "no summary": ({"avd3d9probe": D3D_REPORTS["9"].replace(
+                "avd3d9probe: 6 passed, 0 failed\r\n", "")},
                 "d3d9 failed: no summary line (exit 0); see d3d9.txt"),
-            "another probe's summary": ({"rvkd3d9probe": D3D_REPORTS["9"].replace(
-                "rvkd3d9probe: 6 passed, 0 failed", "rvkd3d11probe: 6 passed, 0 failed")},
+            "another probe's summary": ({"avd3d9probe": D3D_REPORTS["9"].replace(
+                "avd3d9probe: 6 passed, 0 failed", "avd3d11probe: 6 passed, 0 failed")},
                 "d3d9 failed: no summary line (exit 0); see d3d9.txt"),
         }
         for case, (outputs, reason) in cases.items():
             with self.subTest(case):
                 self.d3d_script(outputs=outputs)
-                result = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                result = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                         *self.vulkan_runtime(), *self.d3d_layers())
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(reason, result.stdout)
@@ -1152,17 +1152,17 @@ class GuestSuiteRun(unittest.TestCase):
     def cts_script(self, logs=None, **behaviour):
         # What deqp-vk prints is what the caselist redirection captures: the
         # runner asks the guest's own build what cases there are.
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                    "deqp-vk": CTS_CASELIST, "collect": COLLECTED}
         outputs.update(behaviour.pop("outputs", {}))
-        files = dict(logs or {"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+        files = dict(logs or {"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Pass"),
                                                               ("dEQP-VK.memory.budget.query", "Pass"))})
         files.update(behaviour.pop("files", {}))
         self.script(outputs=outputs, files=dict(GUEST_FILES, **files), **behaviour)
 
     def run_cts(self, *extra, **kwargs):
-        return self.run_suite("--cts", "--executor", "/nowhere/librvk_executor.so",
+        return self.run_suite("--cts", "--executor", "/nowhere/libav_executor.so",
                               *self.vulkan_runtime(), *self.cts_build(**kwargs), *extra)
 
     def test_a_cts_run_runs_what_the_subset_names_of_what_the_cts_listed(self):
@@ -1171,11 +1171,11 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
         # The build and the loader beside it, in a directory of its own.
-        self.assertTrue(any(line.startswith("file C:\\rvk\\cts\\deqp-vk.exe ") for line in lines))
-        self.assertTrue(any(line.startswith("file C:\\rvk\\cts\\vulkan-1.dll ") for line in lines))
+        self.assertTrue(any(line.startswith("file C:\\av\\cts\\deqp-vk.exe ") for line in lines))
+        self.assertTrue(any(line.startswith("file C:\\av\\cts\\vulkan-1.dll ") for line in lines))
         # The case list came from the guest's own build.
         self.assertTrue(any("--deqp-runmode=stdout-caselist" in line for line in lines))
-        self.assertIn("pull C:\\rvk\\cts\\caselist.txt", lines)
+        self.assertIn("pull C:\\av\\cts\\caselist.txt", lines)
         # The three cases the subset names, and not the one it does not.
         cases = (self.work / "cts" / "cases.txt").read_text()
         self.assertIn("dEQP-VK.api.smoke.triangle", cases)
@@ -1192,9 +1192,9 @@ class GuestSuiteRun(unittest.TestCase):
         caused it; the run continues from the next one, and the case that died
         is recorded rather than dropped."""
         self.cts_script(logs={
-            "C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"), ended=False) +
+            "C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"), ended=False) +
                                         "#beginTestCaseResult dEQP-VK.api.smoke.create_sampler\r\n",
-            "C:\\rvk\\cts\\shard0.r1.qpa": qpa(("dEQP-VK.memory.budget.query", "Pass")),
+            "C:\\av\\cts\\shard0.r1.qpa": qpa(("dEQP-VK.memory.budget.query", "Pass")),
         })
         result = self.run_cts("--cts-shard", "8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1202,7 +1202,7 @@ class GuestSuiteRun(unittest.TestCase):
         lines = self.journal_lines()
         # The second run was given the case after the one that died, and never
         # the one that died.
-        self.assertTrue(any(line.startswith("file C:\\rvk\\cts\\shard0.r1.cases.txt ") for line in lines),
+        self.assertTrue(any(line.startswith("file C:\\av\\cts\\shard0.r1.cases.txt ") for line in lines),
                         lines)
         resumed = (self.work / "cts" / "shard0.r1.qpa").read_text()
         self.assertIn("dEQP-VK.memory.budget.query", resumed)
@@ -1216,18 +1216,18 @@ class GuestSuiteRun(unittest.TestCase):
         by a guest that keeps dying - and then what it did not run is named
         rather than counted as passed."""
         dying = qpa(ended=False) + "#beginTestCaseResult dEQP-VK.api.smoke.triangle\r\n"
-        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": dying})
+        self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": dying})
         result = self.run_cts("--cts-shard", "8", "--cts-restarts", "0")
         self.assertEqual(result.returncode, 1)
         self.assertIn("cts.shard0 failed: died in a case 1 time(s) with 2 case(s) unrun", result.stdout)
 
     def test_a_run_that_lost_a_case_the_guest_used_to_pass_fails(self):
-        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+        self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
                                                               ("dEQP-VK.memory.budget.query", "Pass"))})
         extra = self.cts_build()
         (self.scratch / "cts_ratchet.txt").write_text("dEQP-VK.api.smoke.create_sampler\n")
-        result = self.run_suite("--cts", "--executor", "/nowhere/librvk_executor.so",
+        result = self.run_suite("--cts", "--executor", "/nowhere/libav_executor.so",
                                 *self.vulkan_runtime(), *extra, "--cts-shard", "8")
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: cts: dEQP-VK.api.smoke.create_sampler passed before and does not now",
@@ -1237,7 +1237,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_the_verdict_is_the_comparison_with_the_hosts_run(self):
         """FR-002: a case that passes on the host and not in the guest fails the
         run; one that fails on both does not."""
-        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+        self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
                                                               ("dEQP-VK.memory.budget.query", "Fail"))})
         host = self.scratch / "host.qpa"
@@ -1255,7 +1255,7 @@ class GuestSuiteRun(unittest.TestCase):
         host.write_text(qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                             ("dEQP-VK.api.smoke.create_sampler", "Fail"),
                             ("dEQP-VK.memory.budget.query", "Fail")))
-        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+        self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
                                                               ("dEQP-VK.memory.budget.query", "Fail"))})
         passed = self.run_cts("--cts-shard", "8", "--cts-host", host)
@@ -1293,7 +1293,7 @@ class GuestSuiteRun(unittest.TestCase):
         references = self.scratch / "references"
         references.mkdir()
         result = self.run_suite("--vulkan", "--frames", "--references", references,
-                                "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+                                "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: frames: no reference committed for vulkan", result.stdout)
         captured = self.work / "frames" / "vulkan.ppm"
@@ -1310,7 +1310,7 @@ class GuestSuiteRun(unittest.TestCase):
         # pixels.
         (references / "vulkan.ppm").write_bytes(b"P6\n1280 800\n255\n" + bytes(1280 * 800 * 3))
         result = self.run_suite("--vulkan", "--frames", "--references", references,
-                                "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+                                "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 1)
         self.assertIn("pixel(s) outside a step of 2", result.stdout)
         self.assertTrue((self.work / "frames" / "vulkan-difference.ppm").exists())
@@ -1321,34 +1321,34 @@ class GuestSuiteRun(unittest.TestCase):
         references.mkdir()
         (references / "vulkan.ppm").write_bytes(b"P6\n4 2\n255\n" + bytes(4 * 2 * 3))
         result = self.run_suite("--vulkan", "--frames", "--references", references,
-                                "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+                                "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 1)
         self.assertIn("the capture is 1280x800 and the reference is 4x2", result.stdout)
 
     def test_an_opengl_run_proves_every_step_through_the_system_opengl32(self):
         """Feature 050, T043: the probe runs with its report written to a guest
         file and pulled; every one of the nine steps passes, the renderer is a
-        GPU's, and rvkgl's log is kept."""
+        GPU's, and avgl's log is kept."""
         self.opengl_script()
-        result = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
-                                "--gl-probe", self.scratch / "rvkglprobe.exe")
+        result = self.run_suite("--opengl", "--executor", "/nowhere/libav_executor.so",
+                                "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
-        self.assertIn("file C:\\rvk\\rvkglprobe.exe 1400", lines)
-        self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
-        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\rvkglprobe.exe "
-                      "> C:\\rvk\\opengl.txt 2>&1", lines)
-        self.assertIn("pull C:\\rvk\\opengl.txt", lines)
+        self.assertIn("file C:\\av\\avglprobe.exe 1300", lines)
+        self.assertIn("file C:\\av\\package\\avgl.dll 800", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\av\\avglprobe.exe "
+                      "> C:\\av\\opengl.txt 2>&1", lines)
+        self.assertIn("pull C:\\av\\opengl.txt", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertEqual((self.work / "opengl.txt").read_text(newline=""), self.GL_REPORT)
         self.assertIn("guest: opengl ok: 12 passed, renderer Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2), "
                       "version 4.6 (Compatibility Profile) Mesa 26.2.2", result.stdout)
         self.assertIn("opengl ok", (self.work / "verdict.txt").read_text())
-        self.assertTrue((self.work / "diag" / "rvkgl-4242.log").exists())
+        self.assertTrue((self.work / "diag" / "avgl-4242.log").exists())
         # The renders the probe judged, as pictures a person can open.
         for name in GL_PICTURES:
             self.assertEqual((self.work / "images" / f"{name}.bmp").read_text(), f"BM {name}")
-            self.assertIn(f"pull C:\\rvk\\{name}.bmp", lines)
+            self.assertIn(f"pull C:\\av\\{name}.bmp", lines)
         self.assertIn(f"guest: opengl.images ok: {len(GL_PICTURES)} in {self.work / 'images'}", result.stdout)
         self.assertNotIn("--discovery", "\n".join(lines))
         self.assert_clean()
@@ -1361,7 +1361,7 @@ class GuestSuiteRun(unittest.TestCase):
                 "opengl failed: 1 step(s) failed, exit 1; see opengl.txt"),
             "missing step": (report.replace("ok opengl.busy 170\r\n", "").replace("12 passed", "11 passed"), 0,
                              "opengl failed: the probe reported no busy; see opengl.txt"),
-            "no summary": (report.replace("rvkglprobe: 12 passed, 0 failed\r\n", ""), 0,
+            "no summary": (report.replace("avglprobe: 12 passed, 0 failed\r\n", ""), 0,
                            "opengl failed: no summary in the probe's report, exit 0; see opengl.txt"),
             "software": (report.replace("Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)", "llvmpipe (LLVM 19.1.0)"), 0,
                          "opengl failed: the renderer llvmpipe (LLVM 19.1.0) is not a host GPU"),
@@ -1372,29 +1372,29 @@ class GuestSuiteRun(unittest.TestCase):
         for case, (text, code, reason) in cases.items():
             with self.subTest(case):
                 self.opengl_script(text, code)
-                result = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
-                                        "--gl-probe", self.scratch / "rvkglprobe.exe")
+                result = self.run_suite("--opengl", "--executor", "/nowhere/libav_executor.so",
+                                        "--gl-probe", self.scratch / "avglprobe.exe")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"guest: {reason}", result.stdout)
 
     def test_a_passing_probe_without_its_pictures_fails(self):
         """A probe that judged a render wrote its picture; a missing one means
         the pixels were judged from something no one can look at."""
-        self.opengl_script(pictures={"C:\\rvk\\opengl-draw.bmp": "BM"})
-        result = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
-                                "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.opengl_script(pictures={"C:\\av\\opengl-draw.bmp": "BM"})
+        result = self.run_suite("--opengl", "--executor", "/nowhere/libav_executor.so",
+                                "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("guest: opengl.images failed: guest agent error: no file C:\\rvk\\opengl-share.bmp",
+        self.assertIn("guest: opengl.images failed: guest agent error: no file C:\\av\\opengl-share.bmp",
                       result.stdout)
         self.vulkan_script(pictures={})
-        result = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        result = self.run_suite("--vulkan", "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("guest: vulkan.images failed: guest agent error: no file C:\\rvk\\vulkan-draw.bmp",
+        self.assertIn("guest: vulkan.images failed: guest agent error: no file C:\\av\\vulkan-draw.bmp",
                       result.stdout)
 
     def test_an_opengl_run_needs_the_probe(self):
         self.opengl_script()
-        missing = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
+        missing = self.run_suite("--opengl", "--executor", "/nowhere/libav_executor.so",
                                  "--gl-probe", self.scratch / "noprobe.exe")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
@@ -1405,25 +1405,25 @@ class GuestSuiteRun(unittest.TestCase):
         passes, and the device it named is a host GPU's rather than a CPU
         runtime's."""
         self.opencl_script()
-        result = self.run_suite("--opencl", "--executor", "/nowhere/librvk_executor.so", *self.opencl_loader())
+        result = self.run_suite("--opencl", "--executor", "/nowhere/libav_executor.so", *self.opencl_loader())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
         # The loader the guest loads is the cross-built one beside the probe,
         # never the pinned source tree it was built from.
-        self.assertIn("file C:\\rvk\\OpenCL.dll 1000", lines)
-        self.assertIn("file C:\\rvk\\rvkclprobe.exe 1400", lines)
-        self.assertIn("file C:\\rvk\\package\\rvkcl.dll 900", lines)
-        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\rvkclprobe.exe "
-                      "> C:\\rvk\\opencl.txt 2>&1", lines)
-        self.assertIn("pull C:\\rvk\\opencl.txt", lines)
+        self.assertIn("file C:\\av\\OpenCL.dll 1000", lines)
+        self.assertIn("file C:\\av\\avclprobe.exe 1300", lines)
+        self.assertIn("file C:\\av\\package\\avcl.dll 800", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\av\\avclprobe.exe "
+                      "> C:\\av\\opencl.txt 2>&1", lines)
+        self.assertIn("pull C:\\av\\opencl.txt", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertEqual((self.work / "opencl.txt").read_text(newline=""), self.CL_REPORT)
-        self.assertIn("guest: opencl ok: 26 passed, device rvk (NVIDIA GeForce RTX 4090)", result.stdout)
+        self.assertIn("guest: opencl ok: 26 passed, device av (NVIDIA GeForce RTX 4090)", result.stdout)
         self.assertIn("opencl ok", (self.work / "verdict.txt").read_text())
-        self.assertTrue((self.work / "diag" / "rvkcl-4242.log").exists())
+        self.assertTrue((self.work / "diag" / "avcl-4242.log").exists())
         # The probe renders nothing, so no picture is asked of it.
         self.assertFalse((self.work / "images").exists())
-        self.assertNotIn("rvkglprobe", "\n".join(lines))
+        self.assertNotIn("avglprobe", "\n".join(lines))
         self.assert_clean()
 
     def test_an_opencl_run_fails_a_failed_missing_or_software_step(self):
@@ -1434,17 +1434,17 @@ class GuestSuiteRun(unittest.TestCase):
                 "opencl failed: 1 step(s) failed, exit 1; see opencl.txt"),
             "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("26 passed", "25 passed"), 0,
                              "opencl failed: the probe reported no unmap; see opencl.txt"),
-            "no summary": (report.replace("rvkclprobe: 26 passed, 0 failed\r\n", ""), 0,
+            "no summary": (report.replace("avclprobe: 26 passed, 0 failed\r\n", ""), 0,
                            "opencl failed: no summary in the probe's report, exit 0; see opencl.txt"),
-            "software": (report.replace("rvk (NVIDIA GeForce RTX 4090)", "Intel(R) Core(TM) i9, SwiftShader"), 0,
+            "software": (report.replace("av (NVIDIA GeForce RTX 4090)", "Intel(R) Core(TM) i9, SwiftShader"), 0,
                          "opencl failed: the device Intel(R) Core(TM) i9, SwiftShader is not a host GPU"),
-            "no device": (report.replace("note opencl.device_name rvk (NVIDIA GeForce RTX 4090)\r\n", ""), 0,
+            "no device": (report.replace("note opencl.device_name av (NVIDIA GeForce RTX 4090)\r\n", ""), 0,
                           "opencl failed: the probe named no device"),
         }
         for case, (text, code, reason) in cases.items():
             with self.subTest(case):
                 self.opencl_script(text, code)
-                result = self.run_suite("--opencl", "--executor", "/nowhere/librvk_executor.so",
+                result = self.run_suite("--opencl", "--executor", "/nowhere/libav_executor.so",
                                         *self.opencl_loader())
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"guest: {reason}", result.stdout)
@@ -1468,7 +1468,7 @@ class GuestSuiteRun(unittest.TestCase):
         (self.scratch / "cl_pins.txt").write_text("loader file:///nowhere/loader.tar.gz\n")
         malformed = self.run_suite("--opencl", "--opencl-loader", self.scratch / "opencl-loader",
                                    "--opencl-pins", self.scratch / "cl_pins.txt",
-                                   "--cl-probe", self.scratch / "rvkclprobe.exe")
+                                   "--cl-probe", self.scratch / "avclprobe.exe")
         self.assertEqual(malformed.returncode, 1)
         self.assertIn("guest: prepare failed: --opencl: ", malformed.stdout)
         (self.scratch / "OpenCL.dll").unlink()
@@ -1502,22 +1502,22 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines(), [])
         self.assert_clean()
 
-    def real_executor_script(self, rvk_report=None, gl_report=None):
-        """One boot's answers for --rvk --vulkan --opengl together."""
-        rvk = rvk_report or "ok transport.nop\nok transport.latency 812\nrvktest: 12 passed, 0 failed\n"
-        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                   "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "rvkvkprobe": PROBE_REPORT, "rvktest": rvk,
-                   "rvkglprobe": gl_report or self.GL_REPORT, "collect": COLLECTED}
+    def real_executor_script(self, av_report=None, gl_report=None):
+        """One boot's answers for --av --vulkan --opengl together."""
+        av = av_report or "ok transport.nop\nok transport.latency 812\navtest: 12 passed, 0 failed\n"
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                   "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "avvkprobe": PROBE_REPORT, "avtest": av,
+                   "avglprobe": gl_report or self.GL_REPORT, "collect": COLLECTED}
         pictures = {name: "BM vulkan" for name in VULKAN_PICTURES}
-        pictures.update({f"C:\\rvk\\{name}.bmp": f"BM {name}" for name in GL_PICTURES})
+        pictures.update({f"C:\\av\\{name}.bmp": f"BM {name}" for name in GL_PICTURES})
         self.script(outputs=outputs, reg=1, files=dict(GUEST_FILES, **pictures))
 
     def real_executor_run(self):
-        return self.run_suite("--rvk", "--vulkan", "--opengl", "--executor", "/nowhere/librvk_executor.so",
-                              *self.vulkan_runtime(), "--gl-probe", self.scratch / "rvkglprobe.exe")
+        return self.run_suite("--av", "--vulkan", "--opengl", "--executor", "/nowhere/libav_executor.so",
+                              *self.vulkan_runtime(), "--gl-probe", self.scratch / "avglprobe.exe")
 
     def test_the_real_executor_scenarios_share_one_boot(self):
-        """The rvk scenarios, the Vulkan ICD and the OpenGL ICD all need the real
+        """The av scenarios, the Vulkan ICD and the OpenGL ICD all need the real
         executor and none needs a fresh machine, so the gate runs them in one
         boot: one install, each scenario in turn."""
         self.real_executor_script()
@@ -1525,28 +1525,28 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         order = [line.split(": ", 1)[1] for line in result.stdout.splitlines()
-                 if line.startswith(("guest: rvk ok", "guest: vulkan ok", "guest: opengl ok"))]
-        self.assertEqual(list(dict.fromkeys(entry.split(" ok")[0] for entry in order)), ["rvk", "vulkan", "opengl"])
+                 if line.startswith(("guest: av ok", "guest: vulkan ok", "guest: opengl ok"))]
+        self.assertEqual(list(dict.fromkeys(entry.split(" ok")[0] for entry in order)), ["av", "vulkan", "opengl"])
         lines = self.journal_lines()
-        for pushed in ("C:\\rvk\\rvkvkprobe.exe", "C:\\rvk\\rvkglprobe.exe", "C:\\rvk\\vulkaninfo.exe"):
+        for pushed in ("C:\\av\\avvkprobe.exe", "C:\\av\\avglprobe.exe", "C:\\av\\vulkaninfo.exe"):
             self.assertTrue(any(line.startswith(f"file {pushed} ") for line in lines), pushed)
-        self.assertTrue((self.work / "rvk.txt").exists())
+        self.assertTrue((self.work / "av.txt").exists())
         self.assertTrue((self.work / "vulkan.txt").exists())
         self.assertTrue((self.work / "opengl.txt").exists())
         self.assert_clean()
 
     def test_a_failed_scenario_in_the_shared_boot_still_runs_the_others(self):
-        self.real_executor_script(rvk_report="FAIL vulkan.instance\nrvktest: 11 passed, 1 failed\n")
+        self.real_executor_script(av_report="FAIL vulkan.instance\navtest: 11 passed, 1 failed\n")
         result = self.real_executor_run()
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("guest: rvk failed: 1 step(s) failed", result.stdout)
+        self.assertIn("guest: av failed: 1 step(s) failed", result.stdout)
         self.assertIn("guest: vulkan ok: 12 passed", result.stdout)
         self.assertIn("guest: opengl ok: 12 passed", result.stdout)
-        self.assertIn("guest: scenarios failed: 1 of 3 failed: rvk", result.stdout)
-        self.assertIn("rvk failed", (self.work / "verdict.txt").read_text())
+        self.assertIn("guest: scenarios failed: 1 of 3 failed: av", result.stdout)
+        self.assertIn("av failed", (self.work / "verdict.txt").read_text())
 
     def test_opengl_discovery_cannot_share_a_boot(self):
-        result = self.run_suite("--rvk", "--opengl-discovery")
+        result = self.run_suite("--av", "--opengl-discovery")
         self.assertEqual(result.returncode, 2)
         self.assertIn("--opengl-discovery is its own boot", result.stderr)
 
@@ -1555,8 +1555,8 @@ class GuestSuiteRun(unittest.TestCase):
         measuring the stall, so the run asks the guest for the timeout scenario
         and wants dxgkrnl's own 4101 beside the guest's verdict."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
-                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED,
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED,
                              "timeouts": TIMEOUT_EVENTS})
         result = self.run_suite("--stall-ms", "5000")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1566,14 +1566,14 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("guest: report ok", result.stdout)
         self.assertNotIn("guest: vsync ok", result.stdout)
         environment = json.loads((self.work / "environment.json").read_text())
-        self.assertEqual(environment.get("RVK_ECHO_ONLY_NTH"), "1")
+        self.assertEqual(environment.get("AV_ECHO_ONLY_NTH"), "1")
 
     def test_a_stall_that_dxgkrnl_never_timed_out_fails_the_run(self):
         """Without event 4101 nothing was reset, and whatever the guest saw was
         about something else."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
-                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED, "timeouts": "timeouts: 0\r\n"})
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED, "timeouts": "timeouts: 0\r\n"})
         result = self.run_suite("--stall-ms", "5000")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the System log holds no event 4101", (self.work / "verdict.txt").read_text())
@@ -1584,8 +1584,8 @@ class GuestSuiteRun(unittest.TestCase):
         dumps = dict(GUEST_FILES)
         dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = live_dump(0x141)
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
-                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS},
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS},
                     files=dumps)
         result = self.run_suite("--stall-ms", "5000")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1604,11 +1604,11 @@ class GuestSuiteRun(unittest.TestCase):
         """Feature 039 US3: a long run is asked for in minutes, spent in the
         guest, and what it saw comes back on the report's own lines."""
         stressed = ("ok adapter.find\nok stress.fences 74210\nok stress.worst_wait_us 812\n"
-                    "rvktest: 30 passed, 0 failed\n")
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": stressed, "collect": COLLECTED})
+                    "avtest: 30 passed, 0 failed\n")
+        self.script(outputs={"check": ONE_MONITOR, "avtest": stressed, "collect": COLLECTED})
         result = self.run_suite("--stress-minutes", "0.5")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("C:\\rvk\\rvktest.exe 30", "\n".join(self.journal_lines()))
+        self.assertIn("C:\\av\\avtest.exe 30", "\n".join(self.journal_lines()))
         self.assertIn("guest: stress ok: 74210 fences awaited, worst wait 812 us", result.stdout)
         self.assert_clean()
 
@@ -1617,8 +1617,8 @@ class GuestSuiteRun(unittest.TestCase):
         own lines, and what the record holds is their ratio."""
         measured = ("ok adapter.find\nnote submit.doorbell connected\r\nok submit.doorbell_ns 400\r\n"
                     "ok submit.kernel_ns 1800\r\nok submit.ratio 450\r\n"
-                    "rvktest: 30 passed, 0 failed\n")
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+                    "avtest: 30 passed, 0 failed\n")
+        self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
         # Nothing recorded: the run passes and says the line that would record it.
         empty = self.scratch / "submit_ratchet.txt"
         empty.write_text("# nothing yet\n")
@@ -1631,14 +1631,14 @@ class GuestSuiteRun(unittest.TestCase):
         # A record this run keeps, and one it falls below.
         kept = self.scratch / "kept.txt"
         kept.write_text("ratio 400\n")
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
         result = self.run_suite("--submit-ratchet", str(kept))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("submit.ratchet ok: 4.00x kept, 0.50x gained; commit `ratio 450`", result.stdout)
 
         lost = self.scratch / "lost.txt"
         lost.write_text("ratio 600\n")
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
         result = self.run_suite("--submit-ratchet", str(lost))
         self.assertEqual(result.returncode, 1)
         self.assertIn("submit.ratchet failed: the doorbell path is worth 4.50x the kernel one here and "
@@ -1647,7 +1647,7 @@ class GuestSuiteRun(unittest.TestCase):
         # A record that is not a ratio stops the run rather than being ignored.
         broken = self.scratch / "broken.txt"
         broken.write_text("four hundred\n")
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
         result = self.run_suite("--submit-ratchet", str(broken))
         self.assertEqual(result.returncode, 1)
         self.assertIn("is not a `ratio <hundredths>` line", result.stdout)
@@ -1658,24 +1658,24 @@ class GuestSuiteRun(unittest.TestCase):
         and nothing is judged against the record."""
         only_kernel = ("ok adapter.find\nnote submit.doorbell none\r\nok submit.doorbell_ns 0\r\n"
                        "ok submit.kernel_ns 1800\r\nok submit.ratio 0\r\n"
-                       "rvktest: 30 passed, 0 failed\n")
+                       "avtest: 30 passed, 0 failed\n")
         held = self.scratch / "held.txt"
         held.write_text("ratio 600\n")
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": only_kernel, "collect": COLLECTED})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": only_kernel, "collect": COLLECTED})
         result = self.run_suite("--submit-ratchet", str(held))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("submit skipped: this machine gave the adapter no hardware queue", result.stdout)
         self.assert_clean()
 
     def test_a_suite_that_measured_no_submission_cost_says_so(self):
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("submit skipped: the suite measured no submission cost", result.stdout)
         self.assert_clean()
 
     def test_a_run_that_asked_for_stress_and_got_none_fails(self):
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--stress-minutes", "0.5")
         self.assertEqual(result.returncode, 1)
         self.assertIn("stress failed: the suite ran no fence stress", result.stdout)
@@ -1693,7 +1693,7 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: install failed: exited 1: pnputil: no match", result.stdout)
-        self.assertFalse(any(line.startswith("exec C:\\rvk\\rvktest.exe") for line in self.journal_lines()))
+        self.assertFalse(any(line.startswith("exec C:\\av\\avtest.exe") for line in self.journal_lines()))
         self.assertEqual(self.stage_calls(), ["sign", "install", "collect"])
         self.assertIn("guest: collect: 0 files in", result.stdout)
         self.assertEqual(self.journal_lines()[-1], "powerdown")
@@ -1706,20 +1706,20 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("guest: collect failed: exited 5", result.stdout)
         self.script(stages={"sign": [0], "install": [0], "check": [0]},
-                    outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT,
-                             "collect": "file C:\\rvk\\diag\\absent.txt\n"})
+                    outputs={"check": ONE_MONITOR, "avtest": PASSING_REPORT,
+                             "collect": "file C:\\av\\diag\\absent.txt\n"})
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("guest: collect.pull failed: guest agent error: no file C:\\rvk\\diag\\absent.txt", result.stdout)
+        self.assertIn("guest: collect.pull failed: guest agent error: no file C:\\av\\diag\\absent.txt", result.stdout)
         self.assert_clean()
 
     def test_a_report_with_failures_or_without_its_summary_fails_the_run(self):
-        self.script(rvktest=2, outputs={"check": ONE_MONITOR, "rvktest": "FAIL submission.wait\nrvktest: 21 passed, 2 failed\n"})
+        self.script(avtest=2, outputs={"check": ONE_MONITOR, "avtest": "FAIL submission.wait\navtest: 21 passed, 2 failed\n"})
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: report failed: 2 step(s) failed, exit 2", result.stdout)
         self.assert_clean()
-        self.script(outputs={"check": ONE_MONITOR, "rvktest": "ok adapter.find\n"})
+        self.script(outputs={"check": ONE_MONITOR, "avtest": "ok adapter.find\n"})
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: report failed: no summary line (exit 0)", result.stdout)
@@ -1749,11 +1749,11 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_bugcheck_is_named_and_its_kernel_dump_pulled_after_the_guest_reboots(self):
-        self.script(panic={"during": "rvktest", "code": 0xD1},
-                    outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": WITH_MEMORY_DUMP})
+        self.script(panic={"during": "avtest", "code": 0xD1},
+                    outputs={"check": ONE_MONITOR, "avtest": PASSING_REPORT, "collect": WITH_MEMORY_DUMP})
         result = self.run_suite("--memory-dump")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("guest: rvktest failed: timed out waiting for an answer", result.stdout)
+        self.assertIn("guest: avtest failed: timed out waiting for an answer", result.stdout)
         named = "bugcheck 0xd1 DRIVER_IRQL_NOT_LESS_OR_EQUAL (0x10, 0x2, 0x0, 0xfffff80)"
         self.assertIn(f"guest: panic: {named}", result.stdout)
         self.assertEqual((self.work / "panic.txt").read_text(), named + "\n")
@@ -1772,12 +1772,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: check failed: timed out waiting for an answer", result.stdout)
         self.assertIn("guest: panic: bugcheck 0x3b SYSTEM_SERVICE_EXCEPTION", result.stdout)
         self.assertIn("guest: collect.agent failed: the guest panicked while booting", result.stdout)
-        self.assertIn("guest: rescue: booting the overlay without virtio-gpu-rvk-pci", result.stdout)
+        self.assertIn("guest: rescue: booting the overlay without virtio-gpu-av-pci", result.stdout)
         launches = [line for line in self.journal_lines() if line.startswith("argv")]
         self.assertEqual(len(launches), 2)
-        self.assertIn("virtio-gpu-rvk-pci", launches[0])
-        self.assertNotIn("virtio-gpu-rvk-pci", launches[1])
-        self.assertIn("rvkgpu-rescue.log", launches[1])
+        self.assertIn("virtio-gpu-av-pci", launches[0])
+        self.assertNotIn("virtio-gpu-av-pci", launches[1])
+        self.assertIn("avgpu-rescue.log", launches[1])
         self.assertTrue((self.work / "qemu-rescue.log").exists())
         self.assertIn("guest: rescue.boot ok", result.stdout)
         self.assertEqual((self.work / "diag" / "dumps" / "MEMORY.DMP").read_bytes(), live_dump(0xD1).encode("latin-1"))
@@ -1789,8 +1789,8 @@ class GuestSuiteRun(unittest.TestCase):
         guest it outlasts the step timeout and the failing pull takes the rest of
         the manifest with it. Four bring-up runs of feature 037 lost their
         minidumps that way; the kernel dump is now opt-in."""
-        self.script(panic={"during": "rvktest", "code": 0xD1},
-                    outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        self.script(panic={"during": "avtest", "code": 0xD1},
+                    outputs={"check": ONE_MONITOR, "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertEqual(self.stage_calls()[-1], "collect")
@@ -1808,7 +1808,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_pausing_on_a_panic_leaves_the_guest_at_the_bugcheck_uncollected(self):
-        self.script(panic={"during": "rvktest", "code": 0x116})
+        self.script(panic={"during": "avtest", "code": 0x116})
         result = self.run_suite("--on-panic", "pause")
         self.assertEqual(result.returncode, 1)
         self.assertIn("-action panic=pause", self.journal_lines()[0])
@@ -1825,7 +1825,7 @@ class GuestSuiteRun(unittest.TestCase):
                          "bugcheck 0x1234 unnamed (0x0, 0x0, 0x0, 0x0)")
 
     def test_holding_a_failed_guest_waits_for_enter_then_powers_it_off_with_debugging_attached(self):
-        self.script(rvktest=1, outputs={"rvktest": "FAIL x\nrvktest: 0 passed, 1 failed\n"})
+        self.script(avtest=1, outputs={"avtest": "FAIL x\navtest: 0 passed, 1 failed\n"})
         result = self.run_suite("--hold", "--gdb", "1234", "--vnc", "7", "--trace", "virtio_gpu_*", stdin="\n")
         self.assertEqual(result.returncode, 1)
         argv = self.journal_lines()[0]
@@ -1846,7 +1846,7 @@ class GuestSuiteRun(unittest.TestCase):
         lines = self.journal_lines()
         self.assertIn(f"file={self.image} ", lines[0])
         self.assertNotIn("overlay.qcow2", lines[0])
-        self.assertEqual([line.split()[1] for line in lines if line.startswith("file")], ["C:\\rvk\\provision.ps1"])
+        self.assertEqual([line.split()[1] for line in lines if line.startswith("file")], ["C:\\av\\provision.ps1"])
         self.assertEqual(self.stage_calls(), ["prepare", "prepare"])
         self.assertEqual(lines[-1], "powerdown")
         self.assertIn("guest: prepare.reboot ok", result.stdout)
@@ -1897,13 +1897,13 @@ class GuestSuiteRun(unittest.TestCase):
         """run_suite's command, left running for a test to act on the guest meanwhile."""
         arguments = ["--image", self.image, "--work", self.work, "--power-poll", "0.1",
                      "--qemu", FAKES / "fake_qemu.py",
-                     "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
-                     "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
-                     "--inspect", self.scratch / "rvkinspect.exe",
-                     "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
-                     "--gl-icd", self.scratch / "rvkgl.dll",
-                     "--umd", self.scratch / "rvkumd.dll", "--drivers32", self.drivers32,
-                     "--icd32-manifest", self.scratch / "rvkvk32.json",
+                     "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/libav_echo_executor.so",
+                     "--driver", self.scratch / "avgpu.sys", "--test", self.scratch / "avtest.exe",
+                     "--inspect", self.scratch / "avinspect.exe",
+                     "--icd", self.scratch / "avvk.dll", "--icd-manifest", self.scratch / "avvk.json",
+                     "--gl-icd", self.scratch / "avgl.dll",
+                     "--umd", self.scratch / "avumd.dll", "--drivers32", self.drivers32,
+                     "--icd32-manifest", self.scratch / "avvk32.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,
@@ -1920,7 +1920,7 @@ class GuestSuiteRun(unittest.TestCase):
             time.sleep(0.05)
 
     def test_the_agent_relay_serves_the_guest_while_the_run_holds_its_agent(self):
-        """docs/trace.md: tools/mcp/rvk_inspect.py reaches a guest a run holds
+        """docs/trace.md: tools/mcp/av_inspect.py reaches a guest a run holds
         through <work>/agent-relay.sock, one answer per request line, without
         disturbing the run's own exchanges."""
         self.script(hang="check", reg=7, answer_delay=0.02)
@@ -1958,7 +1958,7 @@ class GuestSuiteRun(unittest.TestCase):
         dropped.connect(str(relay))
         dropped.sendall(json.dumps({"execute": "guest-ping"}).encode() + b"\n")
         dropped.close()
-        guest = rvk_inspect.Guest(self.work)
+        guest = av_inspect.Guest(self.work)
         self.assertEqual(guest.via, "relay")
         self.assertEqual(guest.agent.execute("guest-ping"), {})
         guest.close()
@@ -1973,17 +1973,17 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_held_guest_gives_its_agent_socket_back_and_the_relay_goes(self):
-        self.script(rvktest=1, outputs={"rvktest": "FAIL x\nrvktest: 0 passed, 1 failed\n"})
+        self.script(avtest=1, outputs={"avtest": "FAIL x\navtest: 0 passed, 1 failed\n"})
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), "--image", str(self.image),
                                    "--work", str(self.work), "--power-poll", "0.1",
                                    "--qemu", str(FAKES / "fake_qemu.py"), "--qemu-img", str(FAKES / "fake_qemu_img.py"),
-                                   "--executor", "/nowhere/librvk_echo_executor.so",
-                                   "--driver", str(self.scratch / "rvkgpu.sys"),
-                                   "--test", str(self.scratch / "rvktest.exe"),
-                                   "--inspect", str(self.scratch / "rvkinspect.exe"),
-                                   "--icd", str(self.scratch / "rvkvk.dll"),
-                                   "--gl-icd", str(self.scratch / "rvkgl.dll"),
-                                   "--icd-manifest", str(self.scratch / "rvkvk.json"),
+                                   "--executor", "/nowhere/libav_echo_executor.so",
+                                   "--driver", str(self.scratch / "avgpu.sys"),
+                                   "--test", str(self.scratch / "avtest.exe"),
+                                   "--inspect", str(self.scratch / "avinspect.exe"),
+                                   "--icd", str(self.scratch / "avvk.dll"),
+                                   "--gl-icd", str(self.scratch / "avgl.dll"),
+                                   "--icd-manifest", str(self.scratch / "avvk.json"),
                                    "--firmware", str(self.scratch / "OVMF_CODE.fd"),
                                    "--firmware-vars", str(self.scratch / "OVMF_VARS.fd"),
                                    "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", "--hold"],
@@ -1998,7 +1998,7 @@ class GuestSuiteRun(unittest.TestCase):
             if "press Enter" in line:
                 break
         self.assertFalse((self.work / "agent-relay.sock").exists())
-        guest = rvk_inspect.Guest(self.work)
+        guest = av_inspect.Guest(self.work)
         self.assertEqual(guest.via, "agent")
         self.assertEqual(guest.agent.execute("guest-ping"), {})
         guest.close()
@@ -2076,8 +2076,8 @@ class GuestSuiteRun(unittest.TestCase):
         """US3: a waiter in the guest cannot see the driver's rate - the blank
         is a pulse it can miss - so the line the driver logs is read here."""
         self.script(screendump=[1280, 800],
-                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: vsync 600 periods in 200000000 ticks, 600 reported, enabled 0 times"])
+                    driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "avgpu: vsync 600 periods in 200000000 ticks, 600 reported, enabled 0 times"])
         result = self.run_suite("--vsync-wait", "0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the driver reports 30.00 vertical blanks a second, not 60 within 5%",
@@ -2085,7 +2085,7 @@ class GuestSuiteRun(unittest.TestCase):
 
     def test_a_driver_that_logged_no_vertical_blank_window_fails_the_run(self):
         self.script(screendump=[1280, 800],
-                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0"])
+                    driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0"])
         result = self.run_suite("--vsync-wait", "0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the driver logged no vertical blank window", (self.work / "verdict.txt").read_text())
@@ -2094,9 +2094,9 @@ class GuestSuiteRun(unittest.TestCase):
         """A window dxgkrnl turned the blanks off in is slower than the driver's
         period; the fastest window says what the period is."""
         self.script(screendump=[1280, 800],
-                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times",
-                                "rvkgpu: vsync 120 periods in 20000000 ticks, 120 reported, enabled 0 times"])
+                    driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "avgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times",
+                                "avgpu: vsync 120 periods in 20000000 ticks, 120 reported, enabled 0 times"])
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
@@ -2107,9 +2107,9 @@ class GuestSuiteRun(unittest.TestCase):
         through. The run waits for one at the period rather than judging the
         log the instant the suite ends (feature 040, US1)."""
         self.script(screendump=[1280, 800],
-                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times"],
-                    driver_log_late=["rvkgpu: vsync 120 periods in 20000000 ticks, 120 reported, enabled 120 times"],
+                    driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "avgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times"],
+                    driver_log_late=["avgpu: vsync 120 periods in 20000000 ticks, 120 reported, enabled 120 times"],
                     driver_log_late_seconds=1.5)
         result = self.run_suite("--vsync-wait", "20")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -2145,8 +2145,8 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_guest_with_the_wrong_monitor_count_fails_the_run(self):
         """US4: Windows attaches a monitor to every output the device reports."""
         self.script(screendump=[1280, 800],
-                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                    outputs={"check": "display: dwm=1 services=avgpu monitors=2\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the guest has 2 monitors, not 1", (self.work / "verdict.txt").read_text())
@@ -2154,7 +2154,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_check_stage_that_counted_no_monitors_fails_the_run(self):
         self.script(screendump=[1280, 800],
                     outputs={"check": "device: PCI\\VEN_1AF4 status=OK\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("did not count the guest's monitors", (self.work / "verdict.txt").read_text())
@@ -2163,8 +2163,8 @@ class GuestSuiteRun(unittest.TestCase):
         """US4: with max_outputs=2 the desktop is extended and each head shows
         the committed size."""
         self.script(screendump=[1280, 800],
-                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                    outputs={"check": "display: dwm=1 services=avgpu monitors=2\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--outputs", "2")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("extend ok: the desktop is across 2 displays", result.stdout)
@@ -2177,8 +2177,8 @@ class GuestSuiteRun(unittest.TestCase):
         """A guest that refuses the topology for a reason of its own is a
         failure; only the console session's access is not."""
         self.script(screendump=[1280, 800],
-                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n", "extend": "extend: -1\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                    outputs={"check": "display: dwm=1 services=avgpu monitors=2\n", "extend": "extend: -1\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--outputs", "2")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the guest answered '-1' extending the desktop", (self.work / "verdict.txt").read_text())
@@ -2187,8 +2187,8 @@ class GuestSuiteRun(unittest.TestCase):
         """No user is logged in, so SetDisplayConfig answers ERROR_ACCESS_DENIED
         and the displays past the first stay dark - the run says so."""
         self.script(screendump=[1280, 800],
-                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n", "extend": "extend: 5\n",
-                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                    outputs={"check": "display: dwm=1 services=avgpu monitors=2\n", "extend": "extend: 5\n",
+                             "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--outputs", "2")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("not a session 0 service's to change", result.stdout)
@@ -2203,7 +2203,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("power ok: the display went dark and came back at 1280x800", result.stdout)
         self.assertIn("input-send-event", self.journal_lines())
         self.assertIn("exec C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile "
-                      "-ExecutionPolicy Bypass -File C:\\rvk\\provision.ps1 -Stage monitortimeout -Minutes 0",
+                      "-ExecutionPolicy Bypass -File C:\\av\\provision.ps1 -Stage monitortimeout -Minutes 0",
                       self.journal_lines())
 
     def test_a_display_that_never_goes_dark_fails_the_run(self):
@@ -2229,18 +2229,18 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_primary_with_no_recorded_pages_fails_the_run(self):
         """Without DXGK_OPERATION_MAP_APERTURE_SEGMENT the driver has no pages
         to attach, and the host reads whatever sits at the aperture address."""
-        self.script(screendump=[1280, 800], driver_log=["rvkgpu: DriverEntry"])
+        self.script(screendump=[1280, 800], driver_log=["avgpu: DriverEntry"])
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("aperture pages were never recorded", (self.work / "verdict.txt").read_text())
 
     def test_a_refused_frame_fails_the_run(self):
         self.script(screendump=[1280, 800],
-                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: scanout 0 address 0x00000000c0000000 pages 0 runs 0 needs 1000 status 1"])
+                    driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "avgpu: scanout 0 address 0x00000000c0000000 pages 0 runs 0 needs 1000 status 1"])
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("a frame was not carried: rvkgpu: scanout 0", (self.work / "verdict.txt").read_text())
+        self.assertIn("a frame was not carried: avgpu: scanout 0", (self.work / "verdict.txt").read_text())
 
     def test_the_device_is_given_a_host_window_and_the_driver_sets_it_up(self):
         """docs/host-window.md: the device has a window by default, and the
@@ -2320,9 +2320,9 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite("--record", "--record-limit", "1048576")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         device = self.journal_lines()[0]
-        self.assertIn(f"record={self.work / 'recording.rvk'}", device)
+        self.assertIn(f"record={self.work / 'recording.av'}", device)
         self.assertIn("record-limit=1048576", device)
-        self.assertIn(f"guest: recording what crosses the wire into {self.work / 'recording.rvk'}",
+        self.assertIn(f"guest: recording what crosses the wire into {self.work / 'recording.av'}",
                       result.stdout)
         self.assert_clean()
 
@@ -2375,12 +2375,12 @@ class VulkaninfoListing(unittest.TestCase):
     def test_lines_that_only_mention_a_gpu_are_not_devices(self):
         """Device groups and presentable surfaces name devices by id; a device
         section header is the name alone on its line."""
-        listing = ("Presentable Surfaces:\r\n\tGPU id : 0 (rvk) :\r\n\tGPU0 (rvk) (ID: 0)\r\n"
+        listing = ("Presentable Surfaces:\r\n\tGPU id : 0 (av) :\r\n\tGPU0 (av) (ID: 0)\r\n"
                    "\tdeviceLUIDValid = true\r\n" + vulkaninfo_gpu(0))
         self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"]})
 
     def test_a_device_named_twice_is_one_device(self):
-        listing = VULKANINFO + "Devices:\r\n========\r\nGPU0:\r\n\tdeviceName = rvk\r\n"
+        listing = VULKANINFO + "Devices:\r\n========\r\nGPU0:\r\n\tdeviceName = av\r\n"
         self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"]})
 
     def test_a_luid_is_eight_bytes_lowpart_first(self):

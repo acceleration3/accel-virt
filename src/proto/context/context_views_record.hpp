@@ -1,4 +1,4 @@
-/* The escape record a process sends, once its rvk context exists, to learn
+/* The escape record a process sends, once its av context exists, to learn
  * where the driver mapped the context's ring and reply slot into it
  * (docs/protocol.md, "Context memory"). The memory is the driver's: a
  * process's allocation would move whenever VidMm evicted it, under a device
@@ -23,7 +23,7 @@ public:
     /* dxgkrnl hands a private escape this short to no driver; the size of
      * the other escape records does get through. */
     static constexpr size_t   encoded_size = 32u;
-    static constexpr uint32_t magic        = 0x564B5652u;  /* "RVKV" */
+    static constexpr uint32_t magic        = 0x00565641u;  /* "AVV" */
 
     ContextViewsRecord();
     /* The process's address of the ring - its header, then its data - and of

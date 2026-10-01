@@ -2,8 +2,8 @@
  * first whose PCI subsystem matches is kept, every other handle is closed at
  * once. The kept adapter is closed by close() or the destructor.
  *
- * Only the subsystem is compared: virtio-gpu-rvk-pci presents its host GPU's
- * vendor and device (docs/protocol.md), so an rvkgpu adapter reads as
+ * Only the subsystem is compared: virtio-gpu-av-pci presents its host GPU's
+ * vendor and device (docs/protocol.md), so an avgpu adapter reads as
  * 1002:7550 on one host and 10de:2684 on the next, and its subsystem
  * 1af4:5256 is the one part of its identity that is always this device's. */
 #ifndef AV_ADAPTER_SEARCH_HPP
@@ -31,7 +31,7 @@ public:
      * adapter matches. */
     [[nodiscard]] Status find(const PciIdentity &identity);
     /* The matching adapter whose LUID is `luid`: the one a Direct3D runtime
-     * opened, where a guest has one rvkgpu adapter per host GPU. A `luid` of 0
+     * opened, where a guest has one avgpu adapter per host GPU. A `luid` of 0
      * takes the first match. */
     [[nodiscard]] Status find(const PciIdentity &identity, uint64_t luid);
     /* Closes the kept adapter, if any. */

@@ -168,11 +168,11 @@ private:
         WNDCLASSW type = {};
         type.lpfnWndProc = &ProbeWindow::procedure;
         type.hInstance = GetModuleHandleW(nullptr);
-        type.lpszClassName = L"rvkwgcprobe";
+        type.lpszClassName = L"avwgcprobe";
         RegisterClassW(&type);
         RECT r = {0, 0, width, height};
         AdjustWindowRectEx(&r, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_TOPMOST);
-        self->hwnd_ = CreateWindowExW(WS_EX_TOPMOST, L"rvkwgcprobe", L"rvk wgc probe", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        self->hwnd_ = CreateWindowExW(WS_EX_TOPMOST, L"avwgcprobe", L"av wgc probe", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                       100, 100, r.right - r.left, r.bottom - r.top, nullptr, nullptr, type.hInstance,
                                       nullptr);
         CreateThread(nullptr, 0, &ProbeWindow::animate_thread, self, 0, nullptr);

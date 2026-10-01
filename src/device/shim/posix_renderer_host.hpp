@@ -47,7 +47,7 @@ public:
     void                 offer_host_memory(int descriptor) override;
     void                 take_interrupt_lines(const int *descriptors, uint32_t count) override;
     void                 drop_interrupt_lines() override;
-    [[nodiscard]] Status load_executor(const char *path, uint32_t length, const RvkExecutorOps *&ops) override;
+    [[nodiscard]] Status load_executor(const char *path, uint32_t length, const AvExecutorOps *&ops) override;
 
     void log(const char *message) override;
     void require_main_loop(const char *function) override;
@@ -124,7 +124,7 @@ public:
 
     bool                 display_takes_dmabuf(uint32_t head) override;
     [[nodiscard]] Status show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
-    [[nodiscard]] Status show_image(uint32_t head, const RvkExportedImage &image) override;
+    [[nodiscard]] Status show_image(uint32_t head, const AvExportedImage &image) override;
     void                 update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width,
                                         uint32_t height) override;
     void                 hide_scanout(uint32_t head) override;

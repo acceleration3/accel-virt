@@ -34,7 +34,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic     = 0x424B5652u;  /* "RVKB" */
+    static constexpr uint32_t magic     = 0x00425641u;  /* "AVB" */
     static constexpr uint64_t alignment = 8u;
 
     uint32_t length_;

@@ -16,7 +16,7 @@ namespace av {
 class InterruptLinesMessage {
 public:
     static constexpr size_t   encoded_size = 16u;
-    /* One fence line per doorbell page (RVK_DEVICE_DOORBELLS). */
+    /* One fence line per doorbell page (AV_DEVICE_DOORBELLS). */
     static constexpr uint32_t max_lines = 64u;
 
     InterruptLinesMessage();

@@ -8,7 +8,7 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t window_class[] = L"rvkglprobe";
+constexpr wchar_t window_class[] = L"avglprobe";
 
 LRESULT CALLBACK probe_window_procedure(HWND window, UINT message, WPARAM wide, LPARAM lengthy)
 {
@@ -50,7 +50,7 @@ bool ProbeWindow::create()
 {
     AV_SCOPE("ProbeWindow::create");
     SetLastError(0u);
-    window_ = CreateWindowExW(0u, window_class, L"rvkglprobe", WS_POPUP | WS_VISIBLE, 0, 0, static_cast<int>(side),
+    window_ = CreateWindowExW(0u, window_class, L"avglprobe", WS_POPUP | WS_VISIBLE, 0, 0, static_cast<int>(side),
                               static_cast<int>(side), nullptr, nullptr, static_cast<HINSTANCE>(instance_), nullptr);
     last_error_ = GetLastError();
     return window_ != nullptr;

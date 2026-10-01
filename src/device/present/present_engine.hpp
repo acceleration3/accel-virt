@@ -49,7 +49,7 @@ public:
      * error when refused - a refusal completes in its turn all the same, but
      * without a page there is no turn to take. */
     uint32_t             queue(ControlRequest &request);
-    /* The thread's body, entered through RvkPresentEngineRun. */
+    /* The thread's body, entered through AvPresentEngineRun. */
     void                 run();
 
     bool invariants_hold() const;

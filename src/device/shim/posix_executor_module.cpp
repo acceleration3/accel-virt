@@ -21,15 +21,15 @@ Status PosixExecutorModule::open(const char *path)
     void *const library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     if (library == nullptr) return Status::not_found;
     library_ = library;
-    void *const symbol = dlsym(library, RVK_EXECUTOR_OPS_SYMBOL);
+    void *const symbol = dlsym(library, AV_EXECUTOR_OPS_SYMBOL);
     if (symbol == nullptr) return Status::not_supported;
-    RvkExecutorOpsFunction answer = nullptr;
+    AvExecutorOpsFunction answer = nullptr;
     __builtin_memcpy(&answer, &symbol, sizeof answer);
     ops_ = answer();
     return ops_ != nullptr ? Status::ok : Status::not_supported;
 }
 
-const RvkExecutorOps *PosixExecutorModule::ops() const
+const AvExecutorOps *PosixExecutorModule::ops() const
 {
     AV_SCOPE("PosixExecutorModule::ops");
     return ops_;

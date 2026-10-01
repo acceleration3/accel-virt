@@ -75,7 +75,7 @@ public:
     void isolate_textures();
     /* A context current here may be made current on another thread too. */
     void let_other_threads_take_contexts();
-    /* No rvkForceContextFault; the fault leaves the context working; a lost
+    /* No avForceContextFault; the fault leaves the context working; a lost
      * robust context reports no reset; a loss is never reported by
      * glGetError, or reported by every call. */
     void hide_fault_hook();

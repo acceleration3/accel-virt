@@ -38,7 +38,7 @@ RendererService::RendererService(Host &host, RendererResources &resources, Guest
       entries_{}
 {
     AV_SCOPE("RendererService::RendererService");
-    for (RvkExportedImage &sent : sent_) sent.fd = -1;
+    for (AvExportedImage &sent : sent_) sent.fd = -1;
 }
 
 RendererService::~RendererService()
@@ -108,7 +108,7 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     if (ready_ || hello.decode(body, header.body_length(), count) != Status::ok ||
         hello.version() != protocol_version || capset_.decode(hello.capset(), hello.capset_length()) != Status::ok)
         return Status::malformed;
-    const RvkExecutorOps *ops = nullptr;
+    const AvExecutorOps *ops = nullptr;
     const Status loaded = resources_.load_executor(hello.executor_path(), hello.executor_path_length(), ops);
     if (loaded != Status::ok) return loaded;
     if (plane_.accept(ops) != Status::ok || ops == nullptr) return Status::not_supported;
@@ -279,11 +279,11 @@ Status RendererService::export_image(const RendererMessageHeader &header, const 
     AV_SCOPE("RendererService::export_image");
     ExportImageMessage request;
     if (request.decode(body, header.body_length(), count) != Status::ok) return Status::malformed;
-    RvkExportedImage     image = {};
+    AvExportedImage     image = {};
     ExportedImageMessage exported;
     if (plane_.export_image(capset_.gpu().uuid(), request.key(), image) && image.fd >= 0 &&
         image.slot < image_slots) {
-        RvkExportedImage &sent = sent_[image.slot];
+        AvExportedImage &sent = sent_[image.slot];
         const bool        fresh = sent.fd != image.fd || sent.width != image.width || sent.height != image.height ||
                            sent.stride != image.stride || sent.offset != image.offset || sent.fourcc != image.fourcc ||
                            sent.modifier != image.modifier;

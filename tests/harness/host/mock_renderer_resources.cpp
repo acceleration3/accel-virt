@@ -8,7 +8,7 @@
 
 namespace av {
 
-MockRendererResources::MockRendererResources(MockHost &qemu, const RvkExecutorOps &executor)
+MockRendererResources::MockRendererResources(MockHost &qemu, const AvExecutorOps &executor)
     : qemu_(qemu), executor_(executor), descriptors_(0u), mappings_(0u), offered_(-1), lines_{},
       refuse_executor_(false), loads_(0u), path_{}
 {
@@ -83,7 +83,7 @@ void MockRendererResources::drop_interrupt_lines()
     }
 }
 
-Status MockRendererResources::load_executor(const char *path, std::uint32_t length, const RvkExecutorOps *&ops)
+Status MockRendererResources::load_executor(const char *path, std::uint32_t length, const AvExecutorOps *&ops)
 {
     ops = nullptr;
     loads_++;

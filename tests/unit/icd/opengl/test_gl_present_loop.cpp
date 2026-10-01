@@ -82,7 +82,7 @@ struct Rig {
     /* A batch sent, and the mark of it. */
     BatchMark sent()
     {
-        av::glproto::rvk_glFlush(*context.wire());
+        av::glproto::av_glFlush(*context.wire());
         context.flush();
         return context.mark();
     }

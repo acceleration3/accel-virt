@@ -1,6 +1,6 @@
 #include "harness/executor/vulkan_backend_probe.hpp"
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 namespace av {
 

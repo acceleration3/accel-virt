@@ -74,7 +74,7 @@ private:
         bool    copy(ID3D12CommandQueue *queue, ID3D12Resource *source, const void *footprint, uint32_t width,
                      uint32_t height, bool resolve);
         void    drop();
-        Reading read(RvkFrameView &view) override;
+        Reading read(AvFrameView &view) override;
         void    release() override;
 
     private:

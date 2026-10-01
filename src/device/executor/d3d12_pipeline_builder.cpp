@@ -192,7 +192,7 @@ bool D3d12PipelineBuilder::layout(const d3d12proto::InputElement *elements, uint
             semantic = names.semantic_of(as11, false, semantic_index);
         }
         if (semantic == nullptr) {
-            semantic = "RVK";
+            semantic = "AV";
             semantic_index = element.input_register * 4u;
         }
         out[index] = {semantic,

@@ -2,7 +2,7 @@
  * dxgi.dll, loaded the first time a chain is asked for, so a process that
  * never presents through one never loads them.
  *
- * One Direct3D 11 device per adapter, on rvkumd as any application's is, and
+ * One Direct3D 11 device per adapter, on avumd as any application's is, and
  * per window a flip chain of two buffers and up to max_slots shared textures,
  * all of the slot layout's channel order - R8G8B8A8, or B8G8R8A8 for a
  * blue-first Vulkan image. A slot's object id is the key the miniport minted

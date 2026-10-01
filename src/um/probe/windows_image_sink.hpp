@@ -1,4 +1,4 @@
-/* A probe's pictures as C:\rvk\<name>.bmp, beside the probe, for the runner
+/* A probe's pictures as C:\av\<name>.bmp, beside the probe, for the runner
  * to pull into the run's directory. */
 #ifndef AV_WINDOWS_IMAGE_SINK_HPP
 #define AV_WINDOWS_IMAGE_SINK_HPP

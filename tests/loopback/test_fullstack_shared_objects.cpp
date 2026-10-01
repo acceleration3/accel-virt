@@ -1,4 +1,4 @@
-/* Two rvk contexts of one adapter naming one host object (feature 053, US3,
+/* Two av contexts of one adapter naming one host object (feature 053, US3,
  * T041): the real driver, the real device core and the whole channel an
  * identity crosses on - the miniport mints it into a carrier's private driver
  * data, the creating context publishes it, an NT handle carries those bytes to
@@ -56,7 +56,7 @@ constexpr std::uint32_t memory_kind = SharedObjectKind::memory;
  * any handle it is given, so the number stands for a VkDeviceMemory. */
 constexpr std::uint64_t published_handle = 0x7001u;
 
-/* One guest process's context: its D3DKMT device and the rvk context on it. */
+/* One guest process's context: its D3DKMT device and the av context on it. */
 class GuestContext {
 public:
     explicit GuestContext(DdiKmt &kmt) : connection_(kmt),
@@ -74,7 +74,7 @@ public:
         live_ = true;
         return Status::ok;
     }
-    /* The rvk context goes, and every reference it held on a shared object
+    /* The av context goes, and every reference it held on a shared object
      * with it. The D3DKMT device stays: a process may lose its context - to a
      * fault, or to the API being torn down - while its allocations live. */
     void close_context()

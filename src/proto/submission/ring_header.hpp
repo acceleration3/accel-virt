@@ -30,7 +30,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x524B5652u;  /* "RVKR" */
+    static constexpr uint32_t magic = 0x00525641u;  /* "AVR" */
 
     uint8_t  order_;
     uint64_t tail_;

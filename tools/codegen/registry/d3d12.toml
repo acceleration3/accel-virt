@@ -1,4 +1,4 @@
-# The Direct3D 12 commands the user-mode driver (rvkumd.dll's OpenAdapter12
+# The Direct3D 12 commands the user-mode driver (avumd.dll's OpenAdapter12
 # half) sends and the executor runs on the host's vkd3d-proton.
 #
 # The same wire as d3d.toml - the same api number, the same session, the same

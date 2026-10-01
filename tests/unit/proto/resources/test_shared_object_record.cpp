@@ -54,7 +54,7 @@ TEST(shared_object_record_encode, lays_out_the_magic_version_and_every_field_wit
   std::memset(bytes, 0xEE, sizeof bytes);
   encode(valid(), bytes);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x534B5652u);                 /* "RVKS" */
+  CHECK(layout.at(0u, 4u) == 0x00535641u);                 /* "AVS" */
   CHECK(layout.at(4u, 4u) == 1u);
   CHECK(layout.at(8u, 8u) == 0x0123456789ABCDEFu);
   CHECK(layout.at(16u, 4u) == SharedObjectKind::memory);

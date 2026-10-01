@@ -77,7 +77,7 @@ Status QueuedPresent::move_regions(RegionMover &mover)
 Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move_snapshot");
-    RvkFrameView view = {};
+    AvFrameView view = {};
     if (!snapshots.map(present_.image(), view)) return Status::not_found;
     ScopeExit       unmap([this, &snapshots] { snapshots.unmap(present_.image()); });
     void *const     pixels = const_cast<uint8_t *>(view.pixels);

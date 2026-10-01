@@ -152,10 +152,10 @@ void VulkanProbe::resized_step(PresentWork &present)
 uint64_t VulkanProbe::blank_ticks()
 {
     AV_SCOPE("VulkanProbe::blank_ticks");
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
     AdapterSearch     search(kmt_);
-    if (search.find(rvkgpu) != Status::ok) return 0u;
+    if (search.find(avgpu) != Status::ok) return 0u;
     uint32_t device = 0u;
     uint64_t ticks = 0u;
     if (kmt_.create_device(search.adapter(), device) == Status::ok) {
@@ -180,10 +180,10 @@ uint64_t VulkanProbe::counter() const
 Status VulkanProbe::adapter_step()
 {
     AV_SCOPE("VulkanProbe::adapter_step");
-    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
     AdapterSearch     search(kmt_);
-    Status            found = search.find(rvkgpu);
+    Status            found = search.find(avgpu);
     if (found == Status::ok) found = kmt_.adapter_luid(search.adapter(), adapter_luid_);
     return steps_.check_measured("adapter_luid", found, low_part(adapter_luid_));
 }

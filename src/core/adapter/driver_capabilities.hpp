@@ -18,7 +18,7 @@ struct DxgkargControlModeBehaviorRecord;
 class DriverCapabilities {
 public:
     /* What a process stores to ring this device's doorbell: four bytes at
-     * offset 0 of the page (rvk_device.h). */
+     * offset 0 of the page (av_device.h). */
     static constexpr uint32_t doorbell_store_bytes = 4u;
     /* Two nodes: node 0 is the one VidSch schedules packets on, and node 1 is
      * the hardware-scheduled one a process holds queues and doorbells on. The

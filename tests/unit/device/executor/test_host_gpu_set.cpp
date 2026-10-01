@@ -1,6 +1,6 @@
 /* Every host GPU this process found. The device names one by its Vulkan device
  * UUID, because enumeration order does not survive a reboot. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/host_gpu_set.hpp"
 #include "harness/executor/mock_host_apis.hpp"
 #include "harness/executor/host_gpu_probe.hpp"
@@ -23,22 +23,22 @@ constexpr std::uint8_t nvidia[16] = {0x7b, 0x7a, 0xd2, 0xc5, 0x42, 0x19, 0x8c, 0
 constexpr std::uint8_t absent[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                                      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 constexpr std::uint32_t all_three =
-    RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENGL | RVK_EXECUTOR_SUB_API_OPENCL;
+    AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENGL | AV_EXECUTOR_SUB_API_OPENCL;
 
 void fill(MockHostApis &apis, std::uint32_t how_many)
 { std::uint8_t uuid[16] = {};
   for (std::uint32_t i = 0u; i < how_many; i++) {
       uuid[0] = static_cast<std::uint8_t>(i + 1u);
-      apis.add_gpu(uuid, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+      apis.add_gpu(uuid, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   } }
 
 }  // namespace
 
 TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF, RVK_BLOB_DMA_BUF,
-               RVK_BLOB_DMA_BUF);
-  apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF, AV_BLOB_DMA_BUF,
+               AV_BLOB_DMA_BUF);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
@@ -47,12 +47,12 @@ TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
   const HostGpu *const first = set.find(intel);
   CHECK(first != nullptr);
   CHECK_EQ(first->index(), 0u);
-  CHECK_EQ(first->import_kinds(RVK_EXECUTOR_SUB_API_OPENCL), std::uint32_t{RVK_BLOB_DMA_BUF});
+  CHECK_EQ(first->import_kinds(AV_EXECUTOR_SUB_API_OPENCL), std::uint32_t{AV_BLOB_DMA_BUF});
 
   const HostGpu *const second = set.find(nvidia);
   CHECK(second != nullptr);
   CHECK_EQ(second->index(), 1u);
-  CHECK_EQ(second->import_kinds(RVK_EXECUTOR_SUB_API_OPENCL), 0u);
+  CHECK_EQ(second->import_kinds(AV_EXECUTOR_SUB_API_OPENCL), 0u);
   CHECK(set.invariants_hold()); }
 
 TEST(host_gpu_set, a_uuid_no_gpu_has_is_not_found)
@@ -81,8 +81,8 @@ TEST(host_gpu_set, a_host_with_no_gpu_is_empty_and_offers_nothing)
  * one GPU and one API and the capset carries the union. */
 TEST(host_gpu_set, offers_the_union_of_what_its_gpus_run)
 { MockHostApis apis;
-  apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
-  apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_OPENGL, 0u, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_OPENGL, 0u, 0u, 0u);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
@@ -122,10 +122,10 @@ TEST(host_gpu_set_invariants, a_count_past_the_array_breaks_them)
 /* The set answers the capset from its GPUs, so one broken GPU is a broken set. */
 TEST(host_gpu_set_invariants, a_gpu_that_breaks_its_own_breaks_them)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, RVK_BLOB_HOST_POINTER, 0u, RVK_BLOB_DMA_BUF);
-  apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER, 0u, AV_BLOB_DMA_BUF);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
-  HostGpuProbe(HostGpuSetProbe(set).gpu_at(0u)).set_sub_apis(RVK_EXECUTOR_SUB_API_VULKAN);
+  HostGpuProbe(HostGpuSetProbe(set).gpu_at(0u)).set_sub_apis(AV_EXECUTOR_SUB_API_VULKAN);
   CHECK(!set.invariants_hold()); }

@@ -13,14 +13,14 @@ using av::Status;
 TEST(snapshot_file, writes_the_documented_header_then_the_payload)
 { MockInspectHost host;
   av::InspectHost &seam = host;
-  SnapshotFile file(seam, "C:\\rvk\\out.bin");
+  SnapshotFile file(seam, "C:\\av\\out.bin");
   const std::uint8_t payload[] = {1, 2, 3};
   CHECK_STATUS(file.write(SnapshotFile::Kind::table, 0x1122334455667788ull, payload, sizeof payload), Status::ok);
-  const std::uint8_t expected[] = {'R', 'V', 'K', 'S', 'N', 'A', 'P', '1', 0x88, 0x77, 0x66, 0x55, 0x44, 0x33,
+  const std::uint8_t expected[] = {'A', 'V', 'S', 'N', 'A', 'P', '1', 0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33,
                                    0x22, 0x11, 1, 0, 0, 0, 3, 0, 0, 0, 1, 2, 3};
   CHECK_EQ(host.written_size(), sizeof expected);
   CHECK(std::memcmp(host.written(), expected, sizeof expected) == 0);
-  CHECK(std::strcmp(host.written_path(), "C:\\rvk\\out.bin") == 0); }
+  CHECK(std::strcmp(host.written_path(), "C:\\av\\out.bin") == 0); }
 
 TEST(snapshot_file, an_error_file_carries_its_text)
 { MockInspectHost host;

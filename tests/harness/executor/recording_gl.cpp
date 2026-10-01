@@ -258,7 +258,7 @@ void RecordingGl::set_level_extent(GLint width, GLint height, GLint depth)
 }
 
 void RecordingGl::forget_state_queries() { table_.glGetIntegerv = nullptr; }
-void RecordingGl::be_core() { table_.rvk_fixed_function = false; }
+void RecordingGl::be_core() { table_.av_fixed_function = false; }
 std::uint32_t RecordingGl::capability_queries() const { return capability_queries_; }
 
 std::uint32_t RecordingGl::reads() const { return reads_; }

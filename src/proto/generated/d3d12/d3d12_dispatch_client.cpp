@@ -1,5 +1,5 @@
 // THIS FILE IS GENERATED. DO NOT EDIT.
-// Regenerate with: python -m rvk_codegen.d3d --xml tools/codegen/registry/d3d12.toml --out ...
+// Regenerate with: python -m av_codegen.d3d --xml tools/codegen/registry/d3d12.toml --out ...
 
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
@@ -74,8 +74,8 @@ bool abandon(::av::ClientTransport& t) {
 
 }  // namespace
 
-bool rvk_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult, Caps12* caps) {
-    AV_SCOPE("rvk_d3d12_OpenDevice12");
+bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult, Caps12* caps) {
+    AV_SCOPE("av_d3d12_OpenDevice12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(flags);
     const ::av::SyncCallScope call{t};
@@ -90,8 +90,8 @@ bool rvk_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* 
     return r.remaining() == 0u;
 }
 
-bool rvk_d3d12_QueryFormat12(::av::ClientTransport& t, uint32_t format, uint32_t samples, uint32_t* support1, uint32_t* support2, uint32_t* quality_levels) {
-    AV_SCOPE("rvk_d3d12_QueryFormat12");
+bool av_d3d12_QueryFormat12(::av::ClientTransport& t, uint32_t format, uint32_t samples, uint32_t* support1, uint32_t* support2, uint32_t* quality_levels) {
+    AV_SCOPE("av_d3d12_QueryFormat12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(format);
     b.write_pod<uint32_t>(samples);
@@ -110,15 +110,15 @@ bool rvk_d3d12_QueryFormat12(::av::ClientTransport& t, uint32_t format, uint32_t
     return r.remaining() == 0u;
 }
 
-bool rvk_d3d12_Destroy12(::av::ClientTransport& t, uint32_t object) {
-    AV_SCOPE("rvk_d3d12_Destroy12");
+bool av_d3d12_Destroy12(::av::ClientTransport& t, uint32_t object) {
+    AV_SCOPE("av_d3d12_Destroy12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(object);
     return t.send_async(kCmd_Destroy12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult) {
-    AV_SCOPE("rvk_d3d12_Finish12");
+bool av_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult) {
+    AV_SCOPE("av_d3d12_Finish12");
     ::av::WireWriter b = t.request_writer();
     const ::av::SyncCallScope call{t};
     ::av::WireReader r{nullptr, 0u};
@@ -129,8 +129,8 @@ bool rvk_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult) {
     return r.remaining() == 0u;
 }
 
-bool rvk_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) {
-    AV_SCOPE("rvk_d3d12_CreateHeap12");
+bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) {
+    AV_SCOPE("av_d3d12_CreateHeap12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(heap);
     b.write_pod(properties);
@@ -141,8 +141,8 @@ bool rvk_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapP
     return t.send_async(kCmd_CreateHeap12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
-    AV_SCOPE("rvk_d3d12_CreateCommittedResource12");
+bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
+    AV_SCOPE("av_d3d12_CreateCommittedResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod(properties);
@@ -154,16 +154,16 @@ bool rvk_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t reso
     return t.send_async(kCmd_CreateCommittedResource12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key) {
-    AV_SCOPE("rvk_d3d12_ShareResource12");
+bool av_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key) {
+    AV_SCOPE("av_d3d12_ShareResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint64_t>(key);
     return t.send_async(kCmd_ShareResource12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
-    AV_SCOPE("rvk_d3d12_CreatePlacedResource12");
+bool av_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
+    AV_SCOPE("av_d3d12_CreatePlacedResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint32_t>(heap);
@@ -175,8 +175,8 @@ bool rvk_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resourc
     return t.send_async(kCmd_CreatePlacedResource12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc& desc, uint64_t* size, uint64_t* alignment) {
-    AV_SCOPE("rvk_d3d12_ResourceAllocation12");
+bool av_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc& desc, uint64_t* size, uint64_t* alignment) {
+    AV_SCOPE("av_d3d12_ResourceAllocation12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(desc);
     const ::av::SyncCallScope call{t};
@@ -191,8 +191,8 @@ bool rvk_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc
     return r.remaining() == 0u;
 }
 
-bool rvk_d3d12_CreateDescriptorHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) {
-    AV_SCOPE("rvk_d3d12_CreateDescriptorHeap12");
+bool av_d3d12_CreateDescriptorHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) {
+    AV_SCOPE("av_d3d12_CreateDescriptorHeap12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(heap);
     b.write_pod<uint32_t>(type);
@@ -201,8 +201,8 @@ bool rvk_d3d12_CreateDescriptorHeap12(::av::ClientTransport& t, uint32_t heap, u
     return t.send_async(kCmd_CreateDescriptorHeap12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateShaderResourceView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
-    AV_SCOPE("rvk_d3d12_CreateShaderResourceView12");
+bool av_d3d12_CreateShaderResourceView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
+    AV_SCOPE("av_d3d12_CreateShaderResourceView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(at);
     b.write_pod<uint32_t>(has_desc);
@@ -210,8 +210,8 @@ bool rvk_d3d12_CreateShaderResourceView12(::av::ClientTransport& t, const Descri
     return t.send_async(kCmd_CreateShaderResourceView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateUnorderedAccessView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
-    AV_SCOPE("rvk_d3d12_CreateUnorderedAccessView12");
+bool av_d3d12_CreateUnorderedAccessView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
+    AV_SCOPE("av_d3d12_CreateUnorderedAccessView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(at);
     b.write_pod<uint32_t>(has_desc);
@@ -219,8 +219,8 @@ bool rvk_d3d12_CreateUnorderedAccessView12(::av::ClientTransport& t, const Descr
     return t.send_async(kCmd_CreateUnorderedAccessView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateRenderTargetView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
-    AV_SCOPE("rvk_d3d12_CreateRenderTargetView12");
+bool av_d3d12_CreateRenderTargetView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
+    AV_SCOPE("av_d3d12_CreateRenderTargetView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(at);
     b.write_pod<uint32_t>(has_desc);
@@ -228,8 +228,8 @@ bool rvk_d3d12_CreateRenderTargetView12(::av::ClientTransport& t, const Descript
     return t.send_async(kCmd_CreateRenderTargetView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateDepthStencilView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
-    AV_SCOPE("rvk_d3d12_CreateDepthStencilView12");
+bool av_d3d12_CreateDepthStencilView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) {
+    AV_SCOPE("av_d3d12_CreateDepthStencilView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(at);
     b.write_pod<uint32_t>(has_desc);
@@ -237,8 +237,8 @@ bool rvk_d3d12_CreateDepthStencilView12(::av::ClientTransport& t, const Descript
     return t.send_async(kCmd_CreateDepthStencilView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateConstantBufferView12(::av::ClientTransport& t, const DescriptorRef& at, uint64_t address, uint32_t size) {
-    AV_SCOPE("rvk_d3d12_CreateConstantBufferView12");
+bool av_d3d12_CreateConstantBufferView12(::av::ClientTransport& t, const DescriptorRef& at, uint64_t address, uint32_t size) {
+    AV_SCOPE("av_d3d12_CreateConstantBufferView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(at);
     b.write_pod<uint64_t>(address);
@@ -246,16 +246,16 @@ bool rvk_d3d12_CreateConstantBufferView12(::av::ClientTransport& t, const Descri
     return t.send_async(kCmd_CreateConstantBufferView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateSampler12(::av::ClientTransport& t, const DescriptorRef& at, const SamplerDesc& desc) {
-    AV_SCOPE("rvk_d3d12_CreateSampler12");
+bool av_d3d12_CreateSampler12(::av::ClientTransport& t, const DescriptorRef& at, const SamplerDesc& desc) {
+    AV_SCOPE("av_d3d12_CreateSampler12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(at);
     b.write_pod(desc);
     return t.send_async(kCmd_CreateSampler12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CopyDescriptors12(::av::ClientTransport& t, const DescriptorRef& destination, const DescriptorRef& source, uint32_t count) {
-    AV_SCOPE("rvk_d3d12_CopyDescriptors12");
+bool av_d3d12_CopyDescriptors12(::av::ClientTransport& t, const DescriptorRef& destination, const DescriptorRef& source, uint32_t count) {
+    AV_SCOPE("av_d3d12_CopyDescriptors12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod(destination);
     b.write_pod(source);
@@ -263,8 +263,8 @@ bool rvk_d3d12_CopyDescriptors12(::av::ClientTransport& t, const DescriptorRef& 
     return t.send_async(kCmd_CopyDescriptors12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateRootSignature12(::av::ClientTransport& t, uint32_t root, uint32_t flags, uint32_t parameter_count, const RootParameter* parameters, uint32_t range_count, const DescriptorRange* ranges, uint32_t sampler_count, const StaticSampler* samplers) {
-    AV_SCOPE("rvk_d3d12_CreateRootSignature12");
+bool av_d3d12_CreateRootSignature12(::av::ClientTransport& t, uint32_t root, uint32_t flags, uint32_t parameter_count, const RootParameter* parameters, uint32_t range_count, const DescriptorRange* ranges, uint32_t sampler_count, const StaticSampler* samplers) {
+    AV_SCOPE("av_d3d12_CreateRootSignature12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(root);
     b.write_pod<uint32_t>(flags);
@@ -280,8 +280,8 @@ bool rvk_d3d12_CreateRootSignature12(::av::ClientTransport& t, uint32_t root, ui
     return t.send_async(kCmd_CreateRootSignature12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments) {
-    AV_SCOPE("rvk_d3d12_CreateCommandSignature12");
+bool av_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments) {
+    AV_SCOPE("av_d3d12_CreateCommandSignature12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(signature);
     b.write_pod<uint32_t>(root);
@@ -292,8 +292,8 @@ bool rvk_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signa
     return t.send_async(kCmd_CreateCommandSignature12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size) {
-    AV_SCOPE("rvk_d3d12_CreateGraphicsPipeline12");
+bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size) {
+    AV_SCOPE("av_d3d12_CreateGraphicsPipeline12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(pipeline);
     b.write_pod<uint32_t>(root);
@@ -312,8 +312,8 @@ bool rvk_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipel
     return t.send_async(kCmd_CreateGraphicsPipeline12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateComputePipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const void* cs, uint64_t cs_size) {
-    AV_SCOPE("rvk_d3d12_CreateComputePipeline12");
+bool av_d3d12_CreateComputePipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const void* cs, uint64_t cs_size) {
+    AV_SCOPE("av_d3d12_CreateComputePipeline12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(pipeline);
     b.write_pod<uint32_t>(root);
@@ -321,8 +321,8 @@ bool rvk_d3d12_CreateComputePipeline12(::av::ClientTransport& t, uint32_t pipeli
     return t.send_async(kCmd_CreateComputePipeline12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateCommandQueue12(::av::ClientTransport& t, uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags) {
-    AV_SCOPE("rvk_d3d12_CreateCommandQueue12");
+bool av_d3d12_CreateCommandQueue12(::av::ClientTransport& t, uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags) {
+    AV_SCOPE("av_d3d12_CreateCommandQueue12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(queue);
     b.write_pod<uint32_t>(type);
@@ -331,23 +331,23 @@ bool rvk_d3d12_CreateCommandQueue12(::av::ClientTransport& t, uint32_t queue, ui
     return t.send_async(kCmd_CreateCommandQueue12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateCommandAllocator12(::av::ClientTransport& t, uint32_t allocator, uint32_t type) {
-    AV_SCOPE("rvk_d3d12_CreateCommandAllocator12");
+bool av_d3d12_CreateCommandAllocator12(::av::ClientTransport& t, uint32_t allocator, uint32_t type) {
+    AV_SCOPE("av_d3d12_CreateCommandAllocator12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(allocator);
     b.write_pod<uint32_t>(type);
     return t.send_async(kCmd_CreateCommandAllocator12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ResetCommandAllocator12(::av::ClientTransport& t, uint32_t allocator) {
-    AV_SCOPE("rvk_d3d12_ResetCommandAllocator12");
+bool av_d3d12_ResetCommandAllocator12(::av::ClientTransport& t, uint32_t allocator) {
+    AV_SCOPE("av_d3d12_ResetCommandAllocator12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(allocator);
     return t.send_async(kCmd_ResetCommandAllocator12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateCommandList12(::av::ClientTransport& t, uint32_t list, uint32_t allocator, uint32_t type, uint32_t pipeline) {
-    AV_SCOPE("rvk_d3d12_CreateCommandList12");
+bool av_d3d12_CreateCommandList12(::av::ClientTransport& t, uint32_t list, uint32_t allocator, uint32_t type, uint32_t pipeline) {
+    AV_SCOPE("av_d3d12_CreateCommandList12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(allocator);
@@ -356,8 +356,8 @@ bool rvk_d3d12_CreateCommandList12(::av::ClientTransport& t, uint32_t list, uint
     return t.send_async(kCmd_CreateCommandList12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ResetCommandList12(::av::ClientTransport& t, uint32_t list, uint32_t allocator, uint32_t pipeline) {
-    AV_SCOPE("rvk_d3d12_ResetCommandList12");
+bool av_d3d12_ResetCommandList12(::av::ClientTransport& t, uint32_t list, uint32_t allocator, uint32_t pipeline) {
+    AV_SCOPE("av_d3d12_ResetCommandList12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(allocator);
@@ -365,15 +365,15 @@ bool rvk_d3d12_ResetCommandList12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_ResetCommandList12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CloseCommandList12(::av::ClientTransport& t, uint32_t list) {
-    AV_SCOPE("rvk_d3d12_CloseCommandList12");
+bool av_d3d12_CloseCommandList12(::av::ClientTransport& t, uint32_t list) {
+    AV_SCOPE("av_d3d12_CloseCommandList12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     return t.send_async(kCmd_CloseCommandList12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t initial, uint32_t flags) {
-    AV_SCOPE("rvk_d3d12_CreateFence12");
+bool av_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t initial, uint32_t flags) {
+    AV_SCOPE("av_d3d12_CreateFence12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(fence);
     b.write_pod<uint64_t>(initial);
@@ -381,8 +381,8 @@ bool rvk_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t 
     return t.send_async(kCmd_CreateFence12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, uint32_t count, const uint32_t* lists) {
-    AV_SCOPE("rvk_d3d12_ExecuteCommandLists12");
+bool av_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, uint32_t count, const uint32_t* lists) {
+    AV_SCOPE("av_d3d12_ExecuteCommandLists12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(queue);
     b.write_pod<uint32_t>(count);
@@ -391,8 +391,8 @@ bool rvk_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, u
     return t.send_async(kCmd_ExecuteCommandLists12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t point) {
-    AV_SCOPE("rvk_d3d12_PresentResource12");
+bool av_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t point) {
+    AV_SCOPE("av_d3d12_PresentResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(queue);
     b.write_pod<uint32_t>(resource);
@@ -400,8 +400,8 @@ bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint3
     return t.send_async(kCmd_PresentResource12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
-    AV_SCOPE("rvk_d3d12_SignalFence12");
+bool av_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
+    AV_SCOPE("av_d3d12_SignalFence12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(queue);
     b.write_pod<uint32_t>(fence);
@@ -409,8 +409,8 @@ bool rvk_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t 
     return t.send_async(kCmd_SignalFence12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_WaitFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
-    AV_SCOPE("rvk_d3d12_WaitFence12");
+bool av_d3d12_WaitFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
+    AV_SCOPE("av_d3d12_WaitFence12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(queue);
     b.write_pod<uint32_t>(fence);
@@ -418,8 +418,8 @@ bool rvk_d3d12_WaitFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fe
     return t.send_async(kCmd_WaitFence12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_FenceValue12(::av::ClientTransport& t, uint32_t fence, uint32_t wait, uint64_t value, uint64_t* completed) {
-    AV_SCOPE("rvk_d3d12_FenceValue12");
+bool av_d3d12_FenceValue12(::av::ClientTransport& t, uint32_t fence, uint32_t wait, uint64_t value, uint64_t* completed) {
+    AV_SCOPE("av_d3d12_FenceValue12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(fence);
     b.write_pod<uint32_t>(wait);
@@ -433,16 +433,16 @@ bool rvk_d3d12_FenceValue12(::av::ClientTransport& t, uint32_t fence, uint32_t w
     return r.remaining() == 0u;
 }
 
-bool rvk_d3d12_PublishFence12(::av::ClientTransport& t, uint32_t fence, uint64_t offset) {
-    AV_SCOPE("rvk_d3d12_PublishFence12");
+bool av_d3d12_PublishFence12(::av::ClientTransport& t, uint32_t fence, uint64_t offset) {
+    AV_SCOPE("av_d3d12_PublishFence12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(fence);
     b.write_pod<uint64_t>(offset);
     return t.send_async(kCmd_PublishFence12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CreateQueryHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count) {
-    AV_SCOPE("rvk_d3d12_CreateQueryHeap12");
+bool av_d3d12_CreateQueryHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count) {
+    AV_SCOPE("av_d3d12_CreateQueryHeap12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(heap);
     b.write_pod<uint32_t>(type);
@@ -450,8 +450,8 @@ bool rvk_d3d12_CreateQueryHeap12(::av::ClientTransport& t, uint32_t heap, uint32
     return t.send_async(kCmd_CreateQueryHeap12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ResourceBarrier12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Barrier* barriers) {
-    AV_SCOPE("rvk_d3d12_ResourceBarrier12");
+bool av_d3d12_ResourceBarrier12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Barrier* barriers) {
+    AV_SCOPE("av_d3d12_ResourceBarrier12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(count);
@@ -460,16 +460,16 @@ bool rvk_d3d12_ResourceBarrier12(::av::ClientTransport& t, uint32_t list, uint32
     return t.send_async(kCmd_ResourceBarrier12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetPipelineState12(::av::ClientTransport& t, uint32_t list, uint32_t pipeline) {
-    AV_SCOPE("rvk_d3d12_SetPipelineState12");
+bool av_d3d12_SetPipelineState12(::av::ClientTransport& t, uint32_t list, uint32_t pipeline) {
+    AV_SCOPE("av_d3d12_SetPipelineState12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(pipeline);
     return t.send_async(kCmd_SetPipelineState12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetRootSignature12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t root) {
-    AV_SCOPE("rvk_d3d12_SetRootSignature12");
+bool av_d3d12_SetRootSignature12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t root) {
+    AV_SCOPE("av_d3d12_SetRootSignature12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(compute);
@@ -477,8 +477,8 @@ bool rvk_d3d12_SetRootSignature12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_SetRootSignature12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetDescriptorHeaps12(::av::ClientTransport& t, uint32_t list, uint32_t count, const uint32_t* heaps) {
-    AV_SCOPE("rvk_d3d12_SetDescriptorHeaps12");
+bool av_d3d12_SetDescriptorHeaps12(::av::ClientTransport& t, uint32_t list, uint32_t count, const uint32_t* heaps) {
+    AV_SCOPE("av_d3d12_SetDescriptorHeaps12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(count);
@@ -487,8 +487,8 @@ bool rvk_d3d12_SetDescriptorHeaps12(::av::ClientTransport& t, uint32_t list, uin
     return t.send_async(kCmd_SetDescriptorHeaps12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetRootDescriptorTable12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t parameter, const DescriptorRef& base) {
-    AV_SCOPE("rvk_d3d12_SetRootDescriptorTable12");
+bool av_d3d12_SetRootDescriptorTable12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t parameter, const DescriptorRef& base) {
+    AV_SCOPE("av_d3d12_SetRootDescriptorTable12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(compute);
@@ -497,8 +497,8 @@ bool rvk_d3d12_SetRootDescriptorTable12(::av::ClientTransport& t, uint32_t list,
     return t.send_async(kCmd_SetRootDescriptorTable12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetRootConstants12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t parameter, uint32_t first, uint32_t count, const uint32_t* values) {
-    AV_SCOPE("rvk_d3d12_SetRootConstants12");
+bool av_d3d12_SetRootConstants12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t parameter, uint32_t first, uint32_t count, const uint32_t* values) {
+    AV_SCOPE("av_d3d12_SetRootConstants12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(compute);
@@ -510,8 +510,8 @@ bool rvk_d3d12_SetRootConstants12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_SetRootConstants12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetRootView12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t parameter, uint32_t kind, uint64_t address) {
-    AV_SCOPE("rvk_d3d12_SetRootView12");
+bool av_d3d12_SetRootView12(::av::ClientTransport& t, uint32_t list, uint32_t compute, uint32_t parameter, uint32_t kind, uint64_t address) {
+    AV_SCOPE("av_d3d12_SetRootView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(compute);
@@ -521,16 +521,16 @@ bool rvk_d3d12_SetRootView12(::av::ClientTransport& t, uint32_t list, uint32_t c
     return t.send_async(kCmd_SetRootView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetTopology12(::av::ClientTransport& t, uint32_t list, uint32_t topology) {
-    AV_SCOPE("rvk_d3d12_SetTopology12");
+bool av_d3d12_SetTopology12(::av::ClientTransport& t, uint32_t list, uint32_t topology) {
+    AV_SCOPE("av_d3d12_SetTopology12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(topology);
     return t.send_async(kCmd_SetTopology12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetVertexBuffers12(::av::ClientTransport& t, uint32_t list, uint32_t start, uint32_t count, const VertexBufferView* views) {
-    AV_SCOPE("rvk_d3d12_SetVertexBuffers12");
+bool av_d3d12_SetVertexBuffers12(::av::ClientTransport& t, uint32_t list, uint32_t start, uint32_t count, const VertexBufferView* views) {
+    AV_SCOPE("av_d3d12_SetVertexBuffers12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(start);
@@ -540,8 +540,8 @@ bool rvk_d3d12_SetVertexBuffers12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_SetVertexBuffers12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetIndexBuffer12(::av::ClientTransport& t, uint32_t list, uint64_t address, uint32_t size, uint32_t format) {
-    AV_SCOPE("rvk_d3d12_SetIndexBuffer12");
+bool av_d3d12_SetIndexBuffer12(::av::ClientTransport& t, uint32_t list, uint64_t address, uint32_t size, uint32_t format) {
+    AV_SCOPE("av_d3d12_SetIndexBuffer12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint64_t>(address);
@@ -550,8 +550,8 @@ bool rvk_d3d12_SetIndexBuffer12(::av::ClientTransport& t, uint32_t list, uint64_
     return t.send_async(kCmd_SetIndexBuffer12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetViewports12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Viewport* viewports) {
-    AV_SCOPE("rvk_d3d12_SetViewports12");
+bool av_d3d12_SetViewports12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Viewport* viewports) {
+    AV_SCOPE("av_d3d12_SetViewports12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(count);
@@ -560,8 +560,8 @@ bool rvk_d3d12_SetViewports12(::av::ClientTransport& t, uint32_t list, uint32_t 
     return t.send_async(kCmd_SetViewports12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetScissorRects12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Rect* rects) {
-    AV_SCOPE("rvk_d3d12_SetScissorRects12");
+bool av_d3d12_SetScissorRects12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Rect* rects) {
+    AV_SCOPE("av_d3d12_SetScissorRects12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(count);
@@ -570,8 +570,8 @@ bool rvk_d3d12_SetScissorRects12(::av::ClientTransport& t, uint32_t list, uint32
     return t.send_async(kCmd_SetScissorRects12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetRenderTargets12(::av::ClientTransport& t, uint32_t list, uint32_t count, const DescriptorRef* targets, uint32_t has_depth, const DescriptorRef& depth) {
-    AV_SCOPE("rvk_d3d12_SetRenderTargets12");
+bool av_d3d12_SetRenderTargets12(::av::ClientTransport& t, uint32_t list, uint32_t count, const DescriptorRef* targets, uint32_t has_depth, const DescriptorRef& depth) {
+    AV_SCOPE("av_d3d12_SetRenderTargets12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(count);
@@ -582,24 +582,24 @@ bool rvk_d3d12_SetRenderTargets12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_SetRenderTargets12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetBlendFactor12(::av::ClientTransport& t, uint32_t list, const Float4& factor) {
-    AV_SCOPE("rvk_d3d12_SetBlendFactor12");
+bool av_d3d12_SetBlendFactor12(::av::ClientTransport& t, uint32_t list, const Float4& factor) {
+    AV_SCOPE("av_d3d12_SetBlendFactor12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod(factor);
     return t.send_async(kCmd_SetBlendFactor12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetStencilRef12(::av::ClientTransport& t, uint32_t list, uint32_t reference) {
-    AV_SCOPE("rvk_d3d12_SetStencilRef12");
+bool av_d3d12_SetStencilRef12(::av::ClientTransport& t, uint32_t list, uint32_t reference) {
+    AV_SCOPE("av_d3d12_SetStencilRef12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(reference);
     return t.send_async(kCmd_SetStencilRef12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ClearRenderTargetView12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& view, const Float4& color, uint32_t rect_count, const Rect* rects) {
-    AV_SCOPE("rvk_d3d12_ClearRenderTargetView12");
+bool av_d3d12_ClearRenderTargetView12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& view, const Float4& color, uint32_t rect_count, const Rect* rects) {
+    AV_SCOPE("av_d3d12_ClearRenderTargetView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod(view);
@@ -610,8 +610,8 @@ bool rvk_d3d12_ClearRenderTargetView12(::av::ClientTransport& t, uint32_t list, 
     return t.send_async(kCmd_ClearRenderTargetView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ClearDepthStencilView12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& view, uint32_t flags, float depth, uint32_t stencil, uint32_t rect_count, const Rect* rects) {
-    AV_SCOPE("rvk_d3d12_ClearDepthStencilView12");
+bool av_d3d12_ClearDepthStencilView12(::av::ClientTransport& t, uint32_t list, const DescriptorRef& view, uint32_t flags, float depth, uint32_t stencil, uint32_t rect_count, const Rect* rects) {
+    AV_SCOPE("av_d3d12_ClearDepthStencilView12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod(view);
@@ -624,8 +624,8 @@ bool rvk_d3d12_ClearDepthStencilView12(::av::ClientTransport& t, uint32_t list, 
     return t.send_async(kCmd_ClearDepthStencilView12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_DrawInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t vertex_count, uint32_t instance_count, uint32_t start_vertex, uint32_t start_instance) {
-    AV_SCOPE("rvk_d3d12_DrawInstanced12");
+bool av_d3d12_DrawInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t vertex_count, uint32_t instance_count, uint32_t start_vertex, uint32_t start_instance) {
+    AV_SCOPE("av_d3d12_DrawInstanced12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(vertex_count);
@@ -635,8 +635,8 @@ bool rvk_d3d12_DrawInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t
     return t.send_async(kCmd_DrawInstanced12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_DrawIndexedInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t index_count, uint32_t instance_count, uint32_t start_index, int32_t base_vertex, uint32_t start_instance) {
-    AV_SCOPE("rvk_d3d12_DrawIndexedInstanced12");
+bool av_d3d12_DrawIndexedInstanced12(::av::ClientTransport& t, uint32_t list, uint32_t index_count, uint32_t instance_count, uint32_t start_index, int32_t base_vertex, uint32_t start_instance) {
+    AV_SCOPE("av_d3d12_DrawIndexedInstanced12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(index_count);
@@ -647,8 +647,8 @@ bool rvk_d3d12_DrawIndexedInstanced12(::av::ClientTransport& t, uint32_t list, u
     return t.send_async(kCmd_DrawIndexedInstanced12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_Dispatch12(::av::ClientTransport& t, uint32_t list, uint32_t x, uint32_t y, uint32_t z) {
-    AV_SCOPE("rvk_d3d12_Dispatch12");
+bool av_d3d12_Dispatch12(::av::ClientTransport& t, uint32_t list, uint32_t x, uint32_t y, uint32_t z) {
+    AV_SCOPE("av_d3d12_Dispatch12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(x);
@@ -657,8 +657,8 @@ bool rvk_d3d12_Dispatch12(::av::ClientTransport& t, uint32_t list, uint32_t x, u
     return t.send_async(kCmd_Dispatch12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CopyBufferRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes) {
-    AV_SCOPE("rvk_d3d12_CopyBufferRegion12");
+bool av_d3d12_CopyBufferRegion12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint64_t destination_offset, uint32_t source, uint64_t source_offset, uint64_t bytes) {
+    AV_SCOPE("av_d3d12_CopyBufferRegion12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(destination);
@@ -669,8 +669,8 @@ bool rvk_d3d12_CopyBufferRegion12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_CopyBufferRegion12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CopyTextureRegion12(::av::ClientTransport& t, uint32_t list, const CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const CopyLocation& source, uint32_t has_box, const Box& box) {
-    AV_SCOPE("rvk_d3d12_CopyTextureRegion12");
+bool av_d3d12_CopyTextureRegion12(::av::ClientTransport& t, uint32_t list, const CopyLocation& destination, uint32_t x, uint32_t y, uint32_t z, const CopyLocation& source, uint32_t has_box, const Box& box) {
+    AV_SCOPE("av_d3d12_CopyTextureRegion12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod(destination);
@@ -683,8 +683,8 @@ bool rvk_d3d12_CopyTextureRegion12(::av::ClientTransport& t, uint32_t list, cons
     return t.send_async(kCmd_CopyTextureRegion12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_CopyResource12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t source) {
-    AV_SCOPE("rvk_d3d12_CopyResource12");
+bool av_d3d12_CopyResource12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t source) {
+    AV_SCOPE("av_d3d12_CopyResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(destination);
@@ -692,8 +692,8 @@ bool rvk_d3d12_CopyResource12(::av::ClientTransport& t, uint32_t list, uint32_t 
     return t.send_async(kCmd_CopyResource12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ResolveSubresource12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) {
-    AV_SCOPE("rvk_d3d12_ResolveSubresource12");
+bool av_d3d12_ResolveSubresource12(::av::ClientTransport& t, uint32_t list, uint32_t destination, uint32_t destination_subresource, uint32_t source, uint32_t source_subresource, uint32_t format) {
+    AV_SCOPE("av_d3d12_ResolveSubresource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(destination);
@@ -704,8 +704,8 @@ bool rvk_d3d12_ResolveSubresource12(::av::ClientTransport& t, uint32_t list, uin
     return t.send_async(kCmd_ResolveSubresource12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_BeginQuery12(::av::ClientTransport& t, uint32_t list, uint32_t heap, uint32_t type, uint32_t index) {
-    AV_SCOPE("rvk_d3d12_BeginQuery12");
+bool av_d3d12_BeginQuery12(::av::ClientTransport& t, uint32_t list, uint32_t heap, uint32_t type, uint32_t index) {
+    AV_SCOPE("av_d3d12_BeginQuery12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(heap);
@@ -714,8 +714,8 @@ bool rvk_d3d12_BeginQuery12(::av::ClientTransport& t, uint32_t list, uint32_t he
     return t.send_async(kCmd_BeginQuery12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_EndQuery12(::av::ClientTransport& t, uint32_t list, uint32_t heap, uint32_t type, uint32_t index) {
-    AV_SCOPE("rvk_d3d12_EndQuery12");
+bool av_d3d12_EndQuery12(::av::ClientTransport& t, uint32_t list, uint32_t heap, uint32_t type, uint32_t index) {
+    AV_SCOPE("av_d3d12_EndQuery12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(heap);
@@ -724,8 +724,8 @@ bool rvk_d3d12_EndQuery12(::av::ClientTransport& t, uint32_t list, uint32_t heap
     return t.send_async(kCmd_EndQuery12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ResolveQueryData12(::av::ClientTransport& t, uint32_t list, uint32_t heap, uint32_t type, uint32_t first, uint32_t count, uint32_t destination, uint64_t offset) {
-    AV_SCOPE("rvk_d3d12_ResolveQueryData12");
+bool av_d3d12_ResolveQueryData12(::av::ClientTransport& t, uint32_t list, uint32_t heap, uint32_t type, uint32_t first, uint32_t count, uint32_t destination, uint64_t offset) {
+    AV_SCOPE("av_d3d12_ResolveQueryData12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(heap);
@@ -737,8 +737,8 @@ bool rvk_d3d12_ResolveQueryData12(::av::ClientTransport& t, uint32_t list, uint3
     return t.send_async(kCmd_ResolveQueryData12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_BeginEvent12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size) {
-    AV_SCOPE("rvk_d3d12_BeginEvent12");
+bool av_d3d12_BeginEvent12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size) {
+    AV_SCOPE("av_d3d12_BeginEvent12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(metadata);
@@ -746,15 +746,15 @@ bool rvk_d3d12_BeginEvent12(::av::ClientTransport& t, uint32_t list, uint32_t me
     return t.send_async(kCmd_BeginEvent12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_EndEvent12(::av::ClientTransport& t, uint32_t list) {
-    AV_SCOPE("rvk_d3d12_EndEvent12");
+bool av_d3d12_EndEvent12(::av::ClientTransport& t, uint32_t list) {
+    AV_SCOPE("av_d3d12_EndEvent12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     return t.send_async(kCmd_EndEvent12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_SetMarker12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size) {
-    AV_SCOPE("rvk_d3d12_SetMarker12");
+bool av_d3d12_SetMarker12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size) {
+    AV_SCOPE("av_d3d12_SetMarker12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(metadata);
@@ -762,8 +762,8 @@ bool rvk_d3d12_SetMarker12(::av::ClientTransport& t, uint32_t list, uint32_t met
     return t.send_async(kCmd_SetMarker12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_ExecuteIndirect12(::av::ClientTransport& t, uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) {
-    AV_SCOPE("rvk_d3d12_ExecuteIndirect12");
+bool av_d3d12_ExecuteIndirect12(::av::ClientTransport& t, uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) {
+    AV_SCOPE("av_d3d12_ExecuteIndirect12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(signature);

@@ -4,7 +4,7 @@
 #include "core/scheduling/hw_queue.hpp"
 #include "core/platform/mutex_guard.hpp"
 #include "core/platform/mutex_try_guard.hpp"
-#include "core/rvk/ring_submitter.hpp"
+#include "core/av/ring_submitter.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 

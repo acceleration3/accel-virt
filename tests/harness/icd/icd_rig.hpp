@@ -1,4 +1,4 @@
-/* An IcdRoot as the loader finds it, over MockKmt with the rvkgpu adapter
+/* An IcdRoot as the loader finds it, over MockKmt with the avgpu adapter
  * present under IcdRig::adapter_luid: the test plays the host through ScriptedHost, the root's two locks
  * record their order in one trace, and its log is kept. The root binds itself
  * for the rig's life, so the generated wrappers' hooks reach it. The rig reaches
@@ -24,7 +24,7 @@ namespace av {
 
 class IcdRig {
 public:
-    /* The rvkgpu adapter's LUID: both halves non-zero and different, so a half
+    /* The avgpu adapter's LUID: both halves non-zero and different, so a half
      * dropped or swapped shows. */
     static constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 

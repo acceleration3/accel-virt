@@ -1,6 +1,6 @@
 /* Feature 040, US3: what a guest sees when the host stops answering one
  * context. Two devices, each with a context of its own, submit; the host has
- * been told to hold the first (RVK_ECHO_ONLY_NTH with a stall longer than
+ * been told to hold the first (AV_ECHO_ONLY_NTH with a stall longer than
  * TdrDelay), so dxgkrnl times that node out, resets the engine and reports the
  * context lost - and the claim is that the reset took one context and not the
  * adapter: the other context's work still completes.

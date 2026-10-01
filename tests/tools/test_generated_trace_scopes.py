@@ -1,6 +1,6 @@
 """Generated code opens one trace scope per API call (docs/trace.md): the ICD
 entry the application calls (`vkDestroyInstance`), the client function that
-sends the command (`rvk_vkDestroyInstance`) and the server's handling of one
+sends the command (`av_vkDestroyInstance`) and the server's handling of one
 decoded command (`server:vkDestroyInstance`). The serializers those call run
 once per struct member and carry no scope.
 
@@ -18,10 +18,10 @@ from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "codegen"))
 
-from rvk_codegen.emit import client_dispatch, icd_entries, server_dispatch  # noqa: E402
-from rvk_codegen.ir import Command, CType, Param, Registry  # noqa: E402
-from rvk_codegen.opencl import emit as opencl_emit  # noqa: E402
-from rvk_codegen.opencl import model as opencl_model  # noqa: E402
+from av_codegen.emit import client_dispatch, icd_entries, server_dispatch  # noqa: E402
+from av_codegen.ir import Command, CType, Param, Registry  # noqa: E402
+from av_codegen.opencl import emit as opencl_emit  # noqa: E402
+from av_codegen.opencl import model as opencl_model  # noqa: E402
 
 INCLUDE = '#include "core/trace/function_scope.hpp"'
 GENERATED = ROOT / "src" / "proto" / "generated"
@@ -80,9 +80,9 @@ class VulkanEmittersOpenOneScopePerCall(unittest.TestCase):
         self.assertEqual(self.entries.count("AV_SCOPE("), 2)
         self.assertIn(INCLUDE, self.entries)
 
-    def test_each_client_function_opens_its_rvk_name_first(self):
+    def test_each_client_function_opens_its_av_name_first(self):
         for name in ("vkCmdDraw", "vkDeviceWaitIdle"):
-            self.assertEqual(first_line_after(self.client, r"\brvk_" + name + r"\("), f'AV_SCOPE("rvk_{name}");')
+            self.assertEqual(first_line_after(self.client, r"\bav_" + name + r"\("), f'AV_SCOPE("av_{name}");')
         self.assertEqual(self.client.count("AV_SCOPE("), 2)
         self.assertIn(INCLUDE, self.client)
 
@@ -113,7 +113,7 @@ class OpenClEmittersOpenOneScopePerCall(unittest.TestCase):
         shutil.rmtree(cls.out)
 
     def test_the_client_and_the_decoder_each_open_one_scope(self):
-        self.assertEqual(first_line_after(self.client, r"\brvk_clFinish\("), 'AV_SCOPE("rvk_clFinish");')
+        self.assertEqual(first_line_after(self.client, r"\bav_clFinish\("), 'AV_SCOPE("av_clFinish");')
         self.assertEqual(first_line_after(self.server, r"static bool decode_clFinish\("),
                          'AV_SCOPE("server:clFinish");')
         self.assertEqual(self.client.count("AV_SCOPE("), 1)
@@ -138,16 +138,16 @@ class CommittedTreesMarkEveryCall(unittest.TestCase):
         self.assertIn(INCLUDE, source)
 
     def test_opengl(self):
-        self.scopes_of("opengl/gl_dispatch_client.cpp", r"^\S.* rvk_(gl\w+)\(", "rvk_{}")
+        self.scopes_of("opengl/gl_dispatch_client.cpp", r"^\S.* av_(gl\w+)\(", "av_{}")
         self.scopes_of("opengl/gl_dispatch_server.cpp", r"^static bool decode_(gl\w+)\(", "server:{}")
         self.scopes_of("opengl/gl_icd_entries.cpp", r"^\S.* APIENTRY Wrap_(gl\w+)\(", "{}")
 
     def test_opencl(self):
-        self.scopes_of("opencl/cl_dispatch_client.cpp", r"^\S.* rvk_(cl\w+)\(", "rvk_{}")
+        self.scopes_of("opencl/cl_dispatch_client.cpp", r"^\S.* av_(cl\w+)\(", "av_{}")
         self.scopes_of("opencl/cl_dispatch_server.cpp", r"^static bool decode_(cl\w+)\(", "server:{}")
 
     def test_vulkan(self):
-        self.scopes_of("vulkan/vk_dispatch_client.cpp", r"^\S.* rvk_(vk\w+)\(", "rvk_{}")
+        self.scopes_of("vulkan/vk_dispatch_client.cpp", r"^\S.* av_(vk\w+)\(", "av_{}")
         self.scopes_of("vulkan/vk_icd_entries.cpp", r"^VKAPI_ATTR .* Wrap_(vk\w+)\(", "{}")
         self.scopes_of("vulkan/vk_dispatch_server.cpp", r"^    case ::av::vkproto::kCmd_(vk\w+): \{", "server:{}")
 

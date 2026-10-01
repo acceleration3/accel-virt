@@ -163,7 +163,7 @@ TEST(miniport_add_device, logs_the_device_it_added_and_the_one_it_refused)
 { MockPlatform platform; Miniport miniport(platform);
   int pdo = 0; void *context = nullptr;
   CHECK_STATUS(miniport.add_device(&pdo, context), Status::ok);
-  CHECK(std::strcmp(platform.last_log(), "rvkgpu: AddDevice") == 0);
+  CHECK(std::strcmp(platform.last_log(), "avgpu: AddDevice") == 0);
   void *contexts[Miniport::max_adapters] = {};
   for (std::uint32_t i = 1u; i < Miniport::max_adapters; i++)
       CHECK_STATUS(miniport.add_device(&pdo, contexts[i]), Status::ok);

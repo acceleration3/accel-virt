@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 namespace av {
 
@@ -26,7 +26,7 @@ Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t resource_id, ui
     if (resource_ != 0u) return Status::invalid_state;
     if (resource_id == 0u || bytes == 0u || (bytes & (page_bytes - 1u)) != 0u)
         return Status::invalid_parameter;
-    RvkRequestWriter writer(request_, sizeof request_);
+    AvRequestWriter writer(request_, sizeof request_);
     static_cast<void>(writer.host_blob(resource_id, bytes));
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);
@@ -40,7 +40,7 @@ Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)
     AV_SCOPE("HostVisibleBlob::map");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::map");
     if (resource_ == 0u || mapped_) return Status::invalid_state;
-    RvkRequestWriter writer(request_, sizeof request_);
+    AvRequestWriter writer(request_, sizeof request_);
     static_cast<void>(writer.map_blob(resource_, offset));
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);
@@ -58,7 +58,7 @@ Status HostVisibleBlob::unmap(VirtioGpuDevice &device)
     AV_SCOPE("HostVisibleBlob::unmap");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::unmap");
     if (resource_ == 0u || !mapped_) return Status::invalid_state;
-    RvkRequestWriter writer(request_, sizeof request_);
+    AvRequestWriter writer(request_, sizeof request_);
     static_cast<void>(writer.unmap_blob(resource_));
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);
@@ -77,7 +77,7 @@ Status HostVisibleBlob::destroy(VirtioGpuDevice &device)
         const Status unmapped = unmap(device);
         if (unmapped != Status::ok) return unmapped;
     }
-    RvkRequestWriter writer(request_, sizeof request_);
+    AvRequestWriter writer(request_, sizeof request_);
     static_cast<void>(writer.unref(resource_));
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);

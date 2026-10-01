@@ -1,4 +1,4 @@
-# Cross-compiles rvktest.exe, the in-guest suite, and the user-mode drivers for
+# Cross-compiles avtest.exe, the in-guest suite, and the user-mode drivers for
 # Windows user mode with clang-cl and lld-link against the kit's um header
 # closure. No C runtime: each program has its own entry point and imports only
 # what src/um/imports names from gdi32, kernel32 and ntdll.

@@ -247,7 +247,7 @@ TEST(doorbell_table, a_doorbell_with_no_memory_behind_it_is_refused)
   CHECK(held.table().invariants_hold());
   CHECK_STATUS(held.table().create(held.first(), 1u, made), Status::ok); }
 
-/* What rvk-inspect reads out of a running driver (docs/trace.md): a line for
+/* What av-inspect reads out of a running driver (docs/trace.md): a line for
  * the table and one per doorbell, and nothing but `busy` while another thread
  * holds it - a report must never wait on the path a submission takes. */
 TEST(doorbell_table_report, writes_each_doorbell_and_says_when_it_cannot)

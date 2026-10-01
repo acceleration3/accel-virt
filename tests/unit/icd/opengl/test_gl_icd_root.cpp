@@ -1,4 +1,4 @@
-/* rvkgl.dll as opengl32 drives it (contracts/icd_interface.md), through
+/* avgl.dll as opengl32 drives it (contracts/icd_interface.md), through
  * FakeOpengl32 over MockKmt and a scripted host: the load, pixel formats,
  * contexts made at their first make-current, every refusal and the error it
  * sets, GL calls through the proc table, and the WGL extension functions. */
@@ -11,7 +11,7 @@
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 
 #include "gl_protocol_ids.h"
 
@@ -766,7 +766,7 @@ TEST(gl_icd_root, a_create_with_attributes_makes_the_context_and_opengl32s_hglrc
   void *const context = create(rig.dc(), nullptr, attributes);
   CHECK(context != nullptr);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().major(), 4u);
   CHECK_EQ(record.options().minor(), 5u);
@@ -795,7 +795,7 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
   using Probe = av::glicd::GlIcdRootProbe;
   CHECK(!Probe::context(rig.root(), rig.opengl32().driver_context(first))->shadows().trusted());
   CHECK(!Probe::context(rig.root(), rig.opengl32().driver_context(second))->shadows().trusted());
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.options().share_context() != 0u);
   CHECK_EQ(record.options().major(), 1u);
@@ -912,7 +912,7 @@ TEST(gl_icd_root, reports_busy_when_its_lock_is_held_and_everything_otherwise)
 TEST(gl_icd_root, a_dropped_command_is_logged_and_sync_tokens_count_up)
 { GlIcdRig rig;
   rig.root().note_dropped("gl", "glBufferData", 300000u);
-  CHECK_EQ(rig.log().holding("rvkgl: gl glBufferData not sent: its encoding overflowed at byte 300000"), 1u);
+  CHECK_EQ(rig.log().holding("avgl: gl glBufferData not sent: its encoding overflowed at byte 300000"), 1u);
   CHECK_EQ(rig.root().mint_sync_token(), 1u);
   CHECK_EQ(rig.root().mint_sync_token(), 2u); }
 

@@ -1,4 +1,4 @@
-/* A UmdRoot as a Direct3D runtime finds it, over MockKmt with the rvkgpu
+/* A UmdRoot as a Direct3D runtime finds it, over MockKmt with the avgpu
  * adapter present under UmdRig::adapter_luid. The root's lock records its
  * order in a trace and its log is kept, exactly as IcdRig does for the Vulkan
  * ICD, so a reader moving between the three user-mode drivers reads the same

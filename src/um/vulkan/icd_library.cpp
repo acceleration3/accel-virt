@@ -6,7 +6,7 @@
 namespace av {
 
 IcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), memory_lock(), log(L"rvkvk"), kmt(), windows(), chains_lock(),
+    : heap(), lock(), send_lock(), memory_lock(), log(L"avvk"), kmt(), windows(), chains_lock(),
       chains(kmt, chains_lock, log), root(heap, kmt, lock, send_lock, memory_lock, log, icd::icd_binding, windows, chains),
       trace()
 {
@@ -19,7 +19,7 @@ icd::IcdRoot *IcdLibrary::root()
     AV_SCOPE("IcdLibrary::root");
     if (!seams_.constructed() && !refused_ && seams_.construct() == Status::ok &&
         seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("rvkvk: no D3DKMT wait event, refusing the loader");
+        seams_.object().log.write("avvk: no D3DKMT wait event, refusing the loader");
         seams_.destroy();
         refused_ = true;
         return nullptr;
@@ -27,8 +27,8 @@ icd::IcdRoot *IcdLibrary::root()
     if (seams_.constructed() && !started_trace_) {
         started_trace_ = true;
         Seams &seams = seams_.object();
-        const Status traced = seams.trace.start("rvkvk", seams.root, crashed_);
-        if (traced != Status::ok) seams.log.write("rvkvk: tracing is off: its section, pin or service failed");
+        const Status traced = seams.trace.start("avvk", seams.root, crashed_);
+        if (traced != Status::ok) seams.log.write("avvk: tracing is off: its section, pin or service failed");
     }
     return seams_.constructed() ? &seams_.object().root : nullptr;
 }

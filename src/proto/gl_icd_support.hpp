@@ -35,7 +35,7 @@ bool             skip_active_texture(GLenum texture) noexcept;
 bool             skip_bind_texture(GLenum target, GLuint texture) noexcept;
 bool             skip_bind_sampler(GLuint unit, GLuint sampler) noexcept;
 /* What changes a buffer's bytes on the host, for the guest's copies of them
- * (rvk::glicd::BufferShadows): before the command is sent. */
+ * (av::glicd::BufferShadows): before the command is sent. */
 void             wrote_buffer(GLenum target, GLintptr offset, GLsizeiptr size, const void *data) noexcept;
 void             wrote_named_buffer(GLuint buffer, GLintptr offset, GLsizeiptr size, const void *data) noexcept;
 void             host_writes_target(GLenum target) noexcept;

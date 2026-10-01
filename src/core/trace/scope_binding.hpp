@@ -25,7 +25,7 @@ private:
     TraceTable *table_ = nullptr;
 };
 
-/* Hidden, so a shared object keeps its own: librvk_executor.so is loaded into
+/* Hidden, so a shared object keeps its own: libav_executor.so is loaded into
  * a QEMU that exports its symbols. */
 #if defined(__ELF__)
 [[gnu::visibility("hidden")]]

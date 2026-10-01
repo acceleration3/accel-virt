@@ -9,7 +9,7 @@
  * here refused to a second thread with ERROR_BUSY: the error); attribs (4.7
  * refused with ERROR_INVALID_VERSION_ARB and both profile bits with
  * ERROR_INVALID_PROFILE_ARB); lost (a robust context faulted through the
- * ICD's rvkForceContextFault answers GL_UNKNOWN_CONTEXT_RESET, then
+ * ICD's avForceContextFault answers GL_UNKNOWN_CONTEXT_RESET, then
  * GL_CONTEXT_LOST from glGetError once and nothing after: the reset status);
  * recreated (a context made after the loss passes draw: its pixels). A step
  * that cannot run past a failure ends the run there; every context made is

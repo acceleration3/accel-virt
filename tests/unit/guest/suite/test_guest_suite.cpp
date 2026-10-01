@@ -43,8 +43,8 @@ namespace {
 /* What D3DKMT answers a wait on a context dxgkrnl reset under it. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av_gpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 bool has_line(const GuestReport &report, const char *line)
 {
@@ -56,7 +56,7 @@ bool has_line(const GuestReport &report, const char *line)
 TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
 { MockKmt kmt;
   kmt.add_adapter(PciIdentity(0x1414u, 0x008Cu, 0u, 0u), 3100u);
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   /* The device answering the transport's no-op with nothing. */
   kmt.answer_waits(nullptr, 0u);
   GuestReport report;
@@ -100,7 +100,7 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok transport.warm_median 1000\n"
                     "ok transport.warm_fastest 1000\n"
                     "ok suite.close_adapter\n"
-                    "rvktest: 37 passed, 0 failed\n") == 0);
+                    "avtest: 37 passed, 0 failed\n") == 0);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK(report.invariants_hold()); }
@@ -123,7 +123,7 @@ TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkm
 
 TEST(guest_suite, an_adapter_of_another_wddm_version_or_that_will_not_say_fails_that_step)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3100u);
+  kmt.add_adapter(av_gpu, 3100u);
   GuestReport report;
   AdapterSearch search(kmt);
   AdapterScenario scenario(kmt, report, search);
@@ -145,7 +145,7 @@ TEST(guest_suite, a_refusal_at_any_call_is_reported_and_leaves_nothing_open)
       MockKmt::Call::close_adapter};
   for (MockKmt::Call call : calls) {
       MockKmt kmt;
-      kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+      kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
       kmt.fail_at(call, 1u, 0xC0000001u);
       GuestReport report;
       { GuestSuite suite(kmt, report, 0u);
@@ -156,9 +156,9 @@ TEST(guest_suite, a_refusal_at_any_call_is_reported_and_leaves_nothing_open)
 
 TEST(guest_suite, each_scenario_stops_at_its_first_failure_and_still_tears_down)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   AllocationScenario allocation(kmt, report, search);
   GpuMappingScenario mapping(kmt, report, search);
@@ -199,9 +199,9 @@ TEST(guest_suite, each_scenario_stops_at_its_first_failure_and_still_tears_down)
 
 TEST(vsync_scenario, counts_the_blanks_of_a_window_and_judges_the_rate)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   VsyncScenario vsync(kmt, report, search);
   CHECK_EQ(vsync.rate_centihertz(), 0u);
@@ -228,10 +228,10 @@ TEST(vsync_scenario, an_interval_outside_one_frame_to_two_fails_the_step)
 { const std::uint64_t rates[] = {25u, 120u, 50u, 63u};
   for (const std::uint64_t hertz : rates) {
       MockKmt kmt;
-      kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+      kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
       kmt.set_blank_period(MockKmt::ticks_per_second / hertz);
       AdapterSearch search(kmt);
-      CHECK_STATUS(search.find(rvk), Status::ok);
+      CHECK_STATUS(search.find(av_gpu), Status::ok);
       GuestReport report;
       VsyncScenario vsync(kmt, report, search);
       vsync.run();
@@ -245,10 +245,10 @@ TEST(vsync_scenario, a_refused_or_timed_out_wait_stops_the_count)
 { const std::uint32_t codes[] = {0xC0000001u, 0xC00000B5u};   /* unsuccessful, IO timeout */
   for (const std::uint32_t code : codes) {
       MockKmt kmt;
-      kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+      kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
       kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 5u, code);
       AdapterSearch search(kmt);
-      CHECK_STATUS(search.find(rvk), Status::ok);
+      CHECK_STATUS(search.find(av_gpu), Status::ok);
       GuestReport report;
       VsyncScenario vsync(kmt, report, search);
       vsync.run();
@@ -261,10 +261,10 @@ TEST(vsync_scenario, a_refused_or_timed_out_wait_stops_the_count)
 
 TEST(vsync_scenario, without_a_device_it_counts_nothing)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000001u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
@@ -287,10 +287,10 @@ TEST(vsync_scenario, without_the_adapter_it_calls_nothing)
 /* A clock that does not move cannot say what the rate was. */
 TEST(vsync_scenario, a_clock_that_stood_still_is_no_rate)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.set_blank_period(0u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
@@ -302,11 +302,11 @@ TEST(vsync_scenario, a_clock_that_stood_still_is_no_rate)
  * shortest interval is still one the driver kept. */
 TEST(vsync_scenario, judges_the_shortest_interval_not_the_average)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   /* Every fourth blank comes a frame late, as a missed pulse looks. */
   kmt.slip_every(4u, MockKmt::ticks_per_second / VsyncScenario::expected_hz);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
@@ -319,10 +319,10 @@ TEST(vsync_scenario, judges_the_shortest_interval_not_the_average)
 /* The first blank opens the window; a driver that refuses it counts none. */
 TEST(vsync_scenario, a_refusal_at_the_first_blank_counts_none)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 1u, 0xC0000001u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
@@ -336,10 +336,10 @@ TEST(vsync_scenario, a_refusal_at_the_first_blank_counts_none)
  * interval after it does. */
 TEST(vsync_scenario, a_later_interval_shorter_than_the_first_is_the_one_judged)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.slip_every(2u, MockKmt::ticks_per_second / VsyncScenario::expected_hz);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
@@ -351,11 +351,11 @@ TEST(vsync_scenario, a_later_interval_shorter_than_the_first_is_the_one_judged)
 
 TEST(fence_stress_scenario, runs_until_its_seconds_are_spent_and_reports_what_it_saw)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);   /* a hundredth of a second a fence */
   kmt.set_blank_period(0u);                              /* only the fences spend the run's time */
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
@@ -378,9 +378,9 @@ TEST(fence_stress_scenario, runs_until_its_seconds_are_spent_and_reports_what_it
 /* A stress nobody asked for costs a run nothing. */
 TEST(fence_stress_scenario, no_seconds_is_no_run)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 0u);
   stress.run();
@@ -404,10 +404,10 @@ TEST(fence_stress_scenario, without_an_adapter_it_asks_the_driver_for_nothing)
  * never reached. */
 TEST(fence_stress_scenario, a_device_that_will_not_open_stops_the_run_at_once)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
@@ -421,10 +421,10 @@ TEST(fence_stress_scenario, a_device_that_will_not_open_stops_the_run_at_once)
  * submits: the run is the fences, and there are none. */
 TEST(fence_stress_scenario, a_setup_that_fails_never_reaches_the_fences)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::create_context, 1u, 0xC0000017u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
@@ -439,12 +439,12 @@ TEST(fence_stress_scenario, a_setup_that_fails_never_reaches_the_fences)
 /* A submission the driver refuses stops the run before the wait. */
 TEST(fence_stress_scenario, a_submission_that_fails_stops_the_run)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);
   kmt.set_blank_period(0u);
   kmt.fail_at(MockKmt::Call::submit, 3u, 0xC0000001u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
@@ -458,12 +458,12 @@ TEST(fence_stress_scenario, a_submission_that_fails_stops_the_run)
  * because the masking it drives is what the run is testing. */
 TEST(fence_stress_scenario, a_blank_that_never_comes_ends_the_run)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);
   kmt.set_blank_period(0u);
   kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 1u, 0xC0000001u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
@@ -475,11 +475,11 @@ TEST(fence_stress_scenario, a_blank_that_never_comes_ends_the_run)
 /* A fence that never completes ends the run where it failed, and says so. */
 TEST(fence_stress_scenario, a_wait_that_fails_stops_the_run_and_is_reported)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);
   kmt.fail_at(MockKmt::Call::wait_for_context, 4u, 0xC0000001u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
@@ -494,10 +494,10 @@ TEST(fence_stress_scenario, a_wait_that_fails_stops_the_run_and_is_reported)
  * a wait that fails is the whole point, so the step passes when it does. */
 TEST(timeout_scenario, the_held_context_is_lost_and_the_other_completes)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, device_removed);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
@@ -514,9 +514,9 @@ TEST(timeout_scenario, the_held_context_is_lost_and_the_other_completes)
  * happened: the run says so rather than passing for the wrong reason. */
 TEST(timeout_scenario, a_held_context_that_completes_fails_the_run)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
@@ -529,10 +529,10 @@ TEST(timeout_scenario, a_held_context_that_completes_fails_the_run)
  * problem, and the step that says the other one completed fails. */
 TEST(timeout_scenario, the_other_context_being_lost_fails_the_run)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::wait_for_context, 2u, device_removed);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport report;
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
@@ -544,7 +544,7 @@ TEST(timeout_scenario, the_other_context_being_lost_fails_the_run)
  * that asks for the timeout runs nothing else. */
 TEST(guest_suite, the_timeout_run_is_the_timeout_scenario_and_the_adapter)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, device_removed);
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
@@ -577,10 +577,10 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
   };
   for (const auto &one : cases) {
       MockKmt kmt;
-      kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+      kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
       kmt.fail_at(one.call, one.nth, 0xC0000001u);
       AdapterSearch search(kmt);
-      CHECK_STATUS(search.find(rvk), Status::ok);
+      CHECK_STATUS(search.find(av_gpu), Status::ok);
       GuestReport report;
       TimeoutScenario timeout(kmt, report, search);
       timeout.run();
@@ -595,9 +595,9 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
  * add, the host GPU's copy between two imported chunks (045), an OpenGL context
  * and fault isolation, in that order - and none of the WDDM scenarios the echo
  * run already covers. */
-TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_adapter)
+TEST(guest_suite_run_av, runs_only_the_av_scenarios_in_order_and_closes_the_adapter)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   /* Hardware scheduling on, so the benchmark measures both paths and the
    * doorbell is exercised by a whole suite run (feature 049). */
   kmt.allow_hardware_scheduling();
@@ -624,12 +624,12 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   host.nop();
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  const std::uint32_t failed = suite.run_rvk();
+  const std::uint32_t failed = suite.run_av();
   CHECK_EQ(failed, 0u);
   const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok submit.kernel_ns 0\n", "ok vulkan.bind\n",
                                "ok opencl.sum 64\n", "ok import.copied 1048576\n", "ok import.release\n",
                                "ok opengl.nop 0\n", "ok isolation.relink\n",
-                               "ok suite.close_adapter\n", "rvktest: 85 passed, 0 failed\n"};
+                               "ok suite.close_adapter\n", "avtest: 85 passed, 0 failed\n"};
   const char *at = report.text();
   for (const char *line : order) {
       const char *const found = std::strstr(at, line);
@@ -642,13 +642,13 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* Without the adapter each rvk scenario says so on its first step and asks
+/* Without the adapter each av scenario says so on its first step and asks
  * D3DKMT for nothing. */
-TEST(guest_suite_run_rvk, without_the_adapter_every_rvk_scenario_fails_at_its_first_step)
+TEST(guest_suite_run_av, without_the_adapter_every_av_scenario_fails_at_its_first_step)
 { MockKmt kmt;
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  CHECK_EQ(suite.run_rvk(), 8u);
+  CHECK_EQ(suite.run_av(), 8u);
   const char *const lines[] = {"FAIL adapter.find", "FAIL transport.adapter status=3",
                                "FAIL vulkan.adapter status=3", "FAIL opencl.adapter status=3",
                                "FAIL import.adapter status=3", "FAIL opengl.adapter status=3",
@@ -661,7 +661,7 @@ TEST(guest_suite_run_rvk, without_the_adapter_every_rvk_scenario_fails_at_its_fi
  * timed, and the adapter closed - none of the driver's own scenarios. */
 TEST(guest_suite_run_round_trip, measures_answered_no_ops_on_the_adapter_it_names)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.set_adapter_luid(0u, 0x1234u);
   kmt.answer_waits(nullptr, 0u);
   GuestReport report;
@@ -678,7 +678,7 @@ TEST(guest_suite_run_round_trip, measures_answered_no_ops_on_the_adapter_it_name
 
 TEST(guest_suite_run_round_trip, a_failed_no_op_is_counted_among_the_failures)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.answer_waits(nullptr, 0u);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
   GuestReport report;

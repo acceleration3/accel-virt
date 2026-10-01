@@ -15,17 +15,17 @@ using av::icd::FramePacer;
 
 namespace {
 
-const char *const unpaced = "rvkvk: FIFO present unpaced";
+const char *const unpaced = "avvk: FIFO present unpaced";
 
-av::PciIdentity rvk_identity()
+av::PciIdentity av_identity()
 { return av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                         av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem); }
+                         av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem); }
 
 /* An adapter and a D3DKMT device on it, as the ICD's connection holds. */
 class PacerRig {
 public:
     PacerRig()
-    { kmt_.add_adapter(rvk_identity(), av::AdapterScenario::wddm_3_2);
+    { kmt_.add_adapter(av_identity(), av::AdapterScenario::wddm_3_2);
       std::uint32_t adapters[4] = {};
       std::uint32_t found = 0u;
       CHECK_STATUS(kmt_.enumerate_adapters(adapters, 4u, found), av::Status::ok);

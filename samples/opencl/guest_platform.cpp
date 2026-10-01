@@ -108,7 +108,7 @@ void *cl_entry(const char *name)
 
 }  // namespace samples
 
-extern "C" void rvkclsamples_entry()
+extern "C" void avclsamples_entry()
 {
     // The command line split on spaces outside double quotes, as ASCII:
     // shell32's CommandLineToArgvW would be one more import for this.

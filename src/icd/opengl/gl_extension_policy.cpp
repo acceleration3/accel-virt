@@ -38,7 +38,7 @@ void GlExtensionPolicy::learn(ClientTransport &wire, GlExtensionList &list) cons
     AV_SCOPE("GlExtensionPolicy::learn");
     if (gl_count_ == 0u) return;
     int32_t listed = 0;
-    glproto::rvk_glGetIntegerv(wire, gl_num_extensions, &listed);
+    glproto::av_glGetIntegerv(wire, gl_num_extensions, &listed);
     const uint32_t host_count = listed <= 0 ? 0u
                               : static_cast<uint32_t>(listed) < max_host_names ? static_cast<uint32_t>(listed)
                                                                                 : max_host_names;
@@ -47,7 +47,7 @@ void GlExtensionPolicy::learn(ClientTransport &wire, GlExtensionList &list) cons
     for (uint32_t index = 0u; index < host_count && unfound != 0u; index++) {
         char   name[name_bytes];
         size_t length = 0u;
-        if (!glproto::rvk_glGetStringi(wire, gl_extensions, index, name, sizeof name, &length)) break;
+        if (!glproto::av_glGetStringi(wire, gl_extensions, index, name, sizeof name, &length)) break;
         /* A name longer than the buffer was cut, and is no name a row has. */
         if (length >= sizeof name) continue;
         const uint32_t row = reportable(name);

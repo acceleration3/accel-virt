@@ -201,7 +201,7 @@ void ScanoutResource::report(uint64_t address, const GuestPageList &pages, Statu
     if (!budget_.allows()) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: scanout ");
+    line.append("avgpu: scanout ");
     line.append_decimal(source_);
     line.append(" address 0x");
     line.append_hex(address, 16u);

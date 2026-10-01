@@ -1,7 +1,7 @@
 #include "device/executor/gl_shared_objects.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 namespace av {
 
@@ -13,8 +13,8 @@ GlSharedObjects::GlSharedObjects() : kinds_(), names_(), count_(0u)
 uint32_t GlSharedObjects::space_of(uint32_t kind) const
 {
     AV_SCOPE("GlSharedObjects::space_of");
-    if (kind == RVK_SHARED_MEMORY) return RVK_SHARED_MEMORY;
-    if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) return RVK_SHARED_NATIVE_FENCE;
+    if (kind == AV_SHARED_MEMORY) return AV_SHARED_MEMORY;
+    if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) return AV_SHARED_NATIVE_FENCE;
     return 0u;
 }
 
@@ -70,7 +70,7 @@ bool GlSharedObjects::invariants_hold() const
     if (count_ > max_objects) return false;
     for (uint32_t i = 0u; i < count_; i++) {
         if (names_[i] == 0u) return false;
-        if (kinds_[i] != RVK_SHARED_MEMORY && kinds_[i] != RVK_SHARED_NATIVE_FENCE) return false;
+        if (kinds_[i] != AV_SHARED_MEMORY && kinds_[i] != AV_SHARED_NATIVE_FENCE) return false;
         for (uint32_t j = i + 1u; j < count_; j++)
             if (names_[j] == names_[i] && kinds_[j] == kinds_[i]) return false;
     }

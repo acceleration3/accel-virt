@@ -6,9 +6,9 @@
 #ifndef AV_LOOPBACK_RIG_HPP
 #define AV_LOOPBACK_RIG_HPP
 
-#include "core/rvk/capset_query.hpp"
-#include "core/rvk/context_memory.hpp"
-#include "core/rvk/guest_context.hpp"
+#include "core/av/capset_query.hpp"
+#include "core/av/context_memory.hpp"
+#include "core/av/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/loopback/loopback_device.hpp"
 #include "harness/loopback/loopback_driver.hpp"

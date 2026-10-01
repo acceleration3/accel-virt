@@ -1,4 +1,4 @@
-/* The resource ids one rvk context owns (docs/protocol.md, Context setup): its
+/* The resource ids one av context owns (docs/protocol.md, Context setup): its
  * three transport resources - ring, fence page and reply slot, in that order -
  * then its chunk slots, the host-visible memory the guest binds and imports
  * (feature 045). The driver names a context's resources from its first id; the

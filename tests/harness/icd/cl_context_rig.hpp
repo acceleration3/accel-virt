@@ -1,6 +1,6 @@
 /* One process's OpenCL device link and the pieces a GuestClContext is made
  * over, for the tests of the context classes below ClIcdRoot: MockKmt with the
- * rvkgpu adapter, the host played through ScriptedHost, the send lock's trace
+ * avgpu adapter, the host played through ScriptedHost, the send lock's trace
  * and the log.
  *
  * The OpenGL rig's twin, minus the extension policy: an OpenCL context asks

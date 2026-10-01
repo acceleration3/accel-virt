@@ -5,7 +5,7 @@
 #include <time.h>
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/dxbc_container.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "device/executor/imported_blob.hpp"
@@ -198,9 +198,9 @@ bool D3dBackend::adopt(ImportedBlob &blob)
     if (region_.length() != 0u) return false;
     /* A dma-buf when the device offers one: it is what the host GPU imports
      * guest pages as (D3d12ArenaHeaps). */
-    if (blob.kind() == RVK_BLOB_DMA_BUF) {
+    if (blob.kind() == AV_BLOB_DMA_BUF) {
         if (!region_.take_shared(blob.descriptor(), blob.size())) return false;
-    } else if (blob.kind() == RVK_BLOB_HOST_POINTER) {
+    } else if (blob.kind() == AV_BLOB_HOST_POINTER) {
         region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
     } else {
         return false;
@@ -247,7 +247,7 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
     AV_SCOPE("D3dBackend::export_object");
     handle_kind = 0u;
     fd = -1;
-    if (device11_ == nullptr || kind != RVK_SHARED_MEMORY || wire_handle == 0u || wire_handle > UINT32_MAX)
+    if (device11_ == nullptr || kind != AV_SHARED_MEMORY || wire_handle == 0u || wire_handle > UINT32_MAX)
         return false;
     ID3D11Resource *const resource = object<ID3D11Resource>(static_cast<uint32_t>(wire_handle), D3dObjectKind::resource);
     ID3D11Texture2D *texture = nullptr;
@@ -259,7 +259,7 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
     const bool exported = device11_->export_memory(texture, fd);
     if (locked) device11_->unlock();
     texture->Release();
-    if (exported) handle_kind = RVK_SHARED_HANDLE_DMA_BUF;
+    if (exported) handle_kind = AV_SHARED_HANDLE_DMA_BUF;
     return exported;
 }
 
@@ -749,7 +749,7 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     /* A key the table refuses is one no other process can open: the host log
      * is where the refusal is seen, since the creator is not told. */
     if (shared_key != 0u && !device11_->shared().publish(shared_key, made))
-        fprintf(stderr, "virtio-gpu-rvk: d3d11: shared key 0x%016llx not shared: already shared, or %u of %u held\n",
+        fprintf(stderr, "virtio-gpu-av: d3d11: shared key 0x%016llx not shared: already shared, or %u of %u held\n",
                 static_cast<unsigned long long>(shared_key), device11_->shared().count(), D3dSharedResources::capacity);
     return true;
 }
@@ -763,7 +763,7 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     IUnknown *const shared = device11_->find_shared(shared_key);
     if (shared == nullptr) {
         if (shared_key != missed_key_)
-            fprintf(stderr, "virtio-gpu-rvk: d3d11: no resource shared under key 0x%016llx; %u shared\n",
+            fprintf(stderr, "virtio-gpu-av: d3d11: no resource shared under key 0x%016llx; %u shared\n",
                     static_cast<unsigned long long>(shared_key), device11_->shared().count());
         missed_key_ = shared_key;
         return true;
@@ -972,7 +972,7 @@ bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const
         const d3dproto::InputElement &element = elements[index];
         if (element.format > max_format || element.input_slot >= 32u || element.input_register >= 32u)
             return false;
-        descs[index].SemanticName = "RVK";
+        descs[index].SemanticName = "AV";
         descs[index].SemanticIndex = element.input_register * 4u;
         descs[index].Format = static_cast<DXGI_FORMAT>(element.format);
         descs[index].InputSlot = element.input_slot;

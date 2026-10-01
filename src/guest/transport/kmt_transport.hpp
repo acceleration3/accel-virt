@@ -25,7 +25,7 @@
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
 
@@ -49,7 +49,7 @@ public:
     ~KmtTransport();
 
     /* Creates the context's name and its DMA buffer, creates the virtual
-     * context whose private data - the RvkContextRecord - names it and sizes
+     * context whose private data - the AvContextRecord - names it and sizes
      * its reply slot, and asks the driver where it mapped the ring and reply
      * slot it made with it. invalid_state once set up; invalid_parameter, with
      * nothing asked of the Kmt, for staging with no room past a command header

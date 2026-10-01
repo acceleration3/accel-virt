@@ -51,7 +51,7 @@ bool same_word(const char *text, const char *name, size_t length)
  * it does exactly when its OpenCL made a context against a GL context of the
  * device's own. The context this ICD makes from a GL context is a context of
  * the device's made in that GL context's share group: the OpenGL ICD names
- * the context by its ring (rvkGetShareName), the miniport resolves the name
+ * the context by its ring (avGetShareName), the miniport resolves the name
  * for a context of the same process, and the executor makes the host's
  * context against a GL context sharing the guest one's objects. */
 const ClExtensionPolicy::Row reported_extensions[] = {

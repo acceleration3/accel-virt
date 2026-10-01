@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-struct RvkBlobHandle;
+struct AvBlobHandle;
 
 namespace av {
 
@@ -31,7 +31,7 @@ public:
      * a silent teardown is what a hostile guest would drive at the worst
      * moment - no_space when the table is full, and invalid_parameter for a
      * handle that breaks the ABI's rules. */
-    [[nodiscard]] Status take(uint64_t blob_id, const RvkBlobHandle &handle, ImportedBlob *&taken);
+    [[nodiscard]] Status take(uint64_t blob_id, const AvBlobHandle &handle, ImportedBlob *&taken);
     /* The blob `blob_id` names, or null. */
     ImportedBlob        *find(uint64_t blob_id);
     /* Gives one back, or nothing if that id was never imported: release is

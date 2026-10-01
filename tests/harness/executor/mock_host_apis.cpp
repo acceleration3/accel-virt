@@ -1,6 +1,6 @@
 #include "harness/executor/mock_host_apis.hpp"
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 namespace av {
 
@@ -54,9 +54,9 @@ uint32_t MockHostApis::import_kinds(uint32_t index, uint32_t sub_api)
 {
     questions_++;
     if (index >= count_) return 0u;
-    if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) return gpus_[index].kinds[0];
-    if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL) return gpus_[index].kinds[1];
-    if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) return gpus_[index].kinds[2];
+    if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) return gpus_[index].kinds[0];
+    if (sub_api == AV_EXECUTOR_SUB_API_OPENGL) return gpus_[index].kinds[1];
+    if (sub_api == AV_EXECUTOR_SUB_API_OPENCL) return gpus_[index].kinds[2];
     return 0u;
 }
 

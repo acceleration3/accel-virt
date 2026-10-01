@@ -297,7 +297,7 @@ void Capture::buffer(Element type, const void *elements, uint32_t count)
 {
     const size_t   bytes = 12u + static_cast<size_t>(count) * 4u;
     uint8_t       *file = static_cast<uint8_t *>(allocate(bytes));
-    const uint32_t header[3] = {0x424B5652u, type, count};   // "RVKB"
+    const uint32_t header[3] = {0x00425641u, type, count};   // "AVB"
     copy_bytes(file, header, sizeof header);
     copy_bytes(file + 12, elements, static_cast<size_t>(count) * 4u);
     char where[512] = {};

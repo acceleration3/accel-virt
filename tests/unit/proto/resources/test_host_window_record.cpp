@@ -52,9 +52,9 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t at)
 TEST(host_window_record, an_open_round_trips_and_says_what_it_asks)
 { Bytes bytes(HostWindowRecord(Operation::open, asked, 0u));
   CHECK_STATUS(bytes.status(), Status::ok);
-  /* The layout the guest and the kernel agree on byte for byte: "RVKW",
+  /* The layout the guest and the kernel agree on byte for byte: "AVW",
    * version 1, open, no resource, reserved, the bytes, no address. */
-  const std::uint8_t leading[] = {0x52, 0x56, 0x4B, 0x57, 1u, 0u, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+  const std::uint8_t leading[] = {0x41, 0x56, 0x57, 0x00, 1u, 0u, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
   CHECK(std::memcmp(bytes.data(), leading, sizeof leading) == 0);
   CHECK_EQ(u64_at(bytes.data(), 16u), asked);
   CHECK_EQ(u64_at(bytes.data(), 24u), 0u);
@@ -95,7 +95,7 @@ TEST(host_window_record, an_answer_carries_the_resource_bytes_and_address_and_is
 TEST(host_window_record, every_field_is_judged)
 { struct Case { const char *what; Operation operation; std::size_t at; std::uint8_t width; std::uint64_t value; };
   const Case cases[] = {
-      {"magic", Operation::open, 0u, 4u, 0x484B5652u},          /* RVKH, the chunk binding's */
+      {"magic", Operation::open, 0u, 4u, 0x00485641u},          /* AVH, the chunk binding's */
       {"version 0", Operation::open, 4u, 2u, 0u},
       {"version 2", Operation::open, 4u, 2u, 2u},
       {"operation 0", Operation::open, 6u, 2u, 0u},
@@ -174,7 +174,7 @@ TEST(host_window_record, accept_answer_takes_the_resource_bytes_and_address_the_
 TEST(host_window_record, accept_answer_refuses_what_does_not_answer_the_request)
 { struct Case { const char *what; Operation operation; std::size_t at; std::uint8_t width; std::uint64_t value; };
   const Case cases[] = {
-      {"magic", Operation::open, 0u, 4u, 0x484B5652u},
+      {"magic", Operation::open, 0u, 4u, 0x00485641u},
       {"version", Operation::open, 4u, 2u, 2u},
       {"operation", Operation::open, 6u, 2u, 2u},
       {"no resource", Operation::open, 8u, 4u, 0u},

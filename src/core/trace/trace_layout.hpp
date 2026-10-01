@@ -32,8 +32,8 @@ public:
         waiting_at = 40u, holding_at = 48u,
     };
     enum : uint32_t { name_at = 0u, level_at = 4u, entered_at = 8u, text_at = 16u };
-    /* "RVKTRACE" read as a little-endian u64. */
-    static constexpr uint64_t magic = 0x45434152544B5652ull;
+    /* "AVTRACE" read as a little-endian u64. */
+    static constexpr uint64_t magic = 0x0045434152545641ull;
     static constexpr uint64_t ticks_per_second = 10000000ull;
     static constexpr uint64_t active = 1ull << 63u;
 

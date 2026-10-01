@@ -46,11 +46,11 @@ struct Crashed {
 
     Crashed()
     {
-        CHECK_STATUS(table.initialize(bytes, sizeof bytes, "rvkvk", 42u), Status::ok);
+        CHECK_STATUS(table.initialize(bytes, sizeof bytes, "avvk", 42u), Status::ok);
         host.run_as(0x10u, 7u);
         table.enter(av::ScopeName(names));
         CHECK_STATUS(snapshot.read(bytes, sizeof bytes), Status::ok);
-        modules.add(0x7FF800000000ull, 0x100000u, "rvkvk.dll");
+        modules.add(0x7FF800000000ull, 0x100000u, "avvk.dll");
         modules.add(0x7FFA00000000ull, 0x1000u, "a-module-name-longer-than-sixty-four-characters-is-cut-to-fit.dll");
     }
     av::ImageRange image() const
@@ -77,7 +77,7 @@ void render(CrashReport &report, char *joined, std::size_t capacity)
 TEST(crash_report, writes_the_crash_the_trace_and_the_native_stack)
 { Crashed crashed;
   av::TraceText  text(crashed.snapshot, crashed.image(), 0u);
-  const CrashEvent event("rvkvk", 42u, 0xC0000005u, 0x7FF800001234ull);
+  const CrashEvent event("avvk", 42u, 0xC0000005u, 0x7FF800001234ull);
   const std::uint64_t returns[] = {0x7FF800002000ull, 0x1000u, 0x7FFA00000010ull};
   av::ModuleResolver &modules = crashed.modules;
   CrashReport report(event, text, modules, returns, 3u);
@@ -85,11 +85,11 @@ TEST(crash_report, writes_the_crash_the_trace_and_the_native_stack)
   char joined[2048];
   render(report, joined, sizeof joined);
   const char *const expected =
-      "crash module=rvkvk pid=42 code=0xC0000005 address=0x00007FF800001234 (rvkvk.dll+0x0000000000001234)\n"
-      "trace module=rvkvk pid=42 slots=1\n"
+      "crash module=avvk pid=42 code=0xC0000005 address=0x00007FF800001234 (avvk.dll+0x0000000000001234)\n"
+      "trace module=avvk pid=42 slots=1\n"
       "thread 7 active depth=1 entries=1\n"
       "  #0 WindowsCrash::write irql=0 for_ms=0\n"
-      "native #0 0x00007FF800002000 (rvkvk.dll+0x0000000000002000)\n"
+      "native #0 0x00007FF800002000 (avvk.dll+0x0000000000002000)\n"
       "native #1 0x0000000000001000\n"
       "native #2 0x00007FFA00000010 (a-module-name-longer-than-sixty-four-characters-is-cut-to-fit.d+0x0000000000000010)\n";
   CHECK(std::strcmp(joined, expected) == 0);
@@ -102,12 +102,12 @@ TEST(crash_report, keeps_at_most_forty_eight_frames_and_none_without_an_array)
   std::uint64_t returns[60] = {};
   for (std::uint64_t &address : returns) address = 0x7FF800000010ull;
   av::TraceText  deep_text(crashed.snapshot, crashed.image(), 0u);
-  CrashReport    deep(CrashEvent("rvktest", 1u, 3u, 0u), deep_text, crashed.modules, returns, 60u);
+  CrashReport    deep(CrashEvent("avtest", 1u, 3u, 0u), deep_text, crashed.modules, returns, 60u);
   char           joined[16384];
   render(deep, joined, sizeof joined);
   CHECK(std::strstr(joined, "native #47 ") != nullptr);
   CHECK(std::strstr(joined, "native #48 ") == nullptr);
-  CHECK(std::strstr(joined, "crash module=rvktest pid=1 code=0x00000003 address=0x0000000000000000\n") == joined);
+  CHECK(std::strstr(joined, "crash module=avtest pid=1 code=0x00000003 address=0x0000000000000000\n") == joined);
   av::TraceText  bare_text(crashed.snapshot, crashed.image(), 0u);
   CrashReport    bare(CrashEvent(nullptr, 1u, 3u, 0u), bare_text, crashed.modules, nullptr, 5u);
   render(bare, joined, sizeof joined);
@@ -116,8 +116,8 @@ TEST(crash_report, keeps_at_most_forty_eight_frames_and_none_without_an_array)
   CHECK(bare.invariants_hold()); }
 
 TEST(crash_event, holds_what_the_filter_saw)
-{ const CrashEvent event("rvkgl", 9u, 0x80000003u, 0x1234u);
-  CHECK(std::strcmp(event.module(), "rvkgl") == 0);
+{ const CrashEvent event("avgl", 9u, 0x80000003u, 0x1234u);
+  CHECK(std::strcmp(event.module(), "avgl") == 0);
   CHECK_EQ(event.pid(), 9u);
   CHECK_EQ(event.code(), 0x80000003u);
   CHECK_EQ(event.address(), 0x1234u); }

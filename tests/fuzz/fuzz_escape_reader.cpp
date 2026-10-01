@@ -1,4 +1,4 @@
-/* A hostile driver behind rvkinspect.exe's kernel escapes: each escape is
+/* A hostile driver behind avinspect.exe's kernel escapes: each escape is
  * answered with the next bytes of the input written over the request. Whatever
  * it answers, the read ends, holds nothing unless it succeeded, holds at most
  * 64 MiB, and leaks nothing. */
@@ -46,7 +46,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         av::MockKmt  kmt;
         FuzzedDriver driver(data + 1u, size - 1u);
         kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                        av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
+                                        av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         av::EscapeReader reader(kmt, platform);

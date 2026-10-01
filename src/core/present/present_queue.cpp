@@ -13,7 +13,7 @@
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -51,8 +51,8 @@ Status PresentQueue::start()
             if (payload == nullptr) status = Status::no_memory;
         }
     if (status != Status::ok) return status;
-    uint8_t          request[RvkRequestWriter::max_request_size] = {};
-    RvkRequestWriter writer(request, sizeof request);
+    uint8_t          request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter writer(request, sizeof request);
     static_cast<void>(writer.present_engine(page_.address()));
     uint8_t      answer[answer_bytes] = {};
     uint32_t     written = 0u;

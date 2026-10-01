@@ -3,7 +3,7 @@
 
 Runs the same program twice - natively on the host through the host's own
 OpenGL driver (EGL), and in the running guest through the system opengl32.dll,
-rvkgl.dll, the device and the executor - and writes an HTML report: each
+avgl.dll, the device and the executor - and writes an HTML report: each
 sample's frame from both, the difference between them, and how fast each
 rendered.
 
@@ -15,7 +15,7 @@ pictures is a difference in what reached it. The guest must already be running
 (run_guest_suite.py --keep) with this tree's driver package installed.
 
 With no VM, `--loopback` puts the samples through the same ICD, driver and
-device core on the host instead (build/rvkglsamples_loopback, no guest in
+device core on the host instead (build/avglsamples_loopback, no guest in
 between), which is the ICD's path less the VM:
 
     tools/opengl_report.py --loopback -o build-samples/gl-report
@@ -40,13 +40,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from d3d11_report import compare, guest_shell, metrics, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GUEST_DIR = "C:\\rvk\\glsamples"
-GUEST_EXE = GUEST_DIR + "\\rvkglsamples.exe"
+GUEST_DIR = "C:\\av\\glsamples"
+GUEST_EXE = GUEST_DIR + "\\avglsamples.exe"
 BUILD_JOBS = "8"
 
 
 def build(args):
-    targets = ["rvkglsamples_host"] + (["rvkglsamples_loopback"] if args.loopback else ["rvktest"])
+    targets = ["avglsamples_host"] + (["avglsamples_loopback"] if args.loopback else ["avtest"])
     for target in targets:
         subprocess.run(["cmake", "--build", str(ROOT / "build"), "--target", target, "-j", BUILD_JOBS], check=True,
                        stdout=subprocess.DEVNULL)
@@ -65,7 +65,7 @@ def run_guest(args, out):
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out | Out-Null")
-    guest_shell(work, "push", str(ROOT / "build" / "guest" / "rvkglsamples.exe"), GUEST_EXE)
+    guest_shell(work, "push", str(ROOT / "build" / "guest" / "avglsamples.exe"), GUEST_EXE)
     print("guest: rendering", flush=True)
     # The user's interactive session: opengl32 loads the display driver's ICD
     # for a window on the adapter's desktop.
@@ -73,15 +73,15 @@ def run_guest(args, out):
     command = (f"/c {GUEST_EXE} --out {GUEST_DIR}\\out --frames {args.frames} --warmup {args.warmup} "
                f"--width {args.width} --height {args.height}{only} > {GUEST_DIR}\\run.txt 2>&1")
     output = guest_shell(work, "ps", f"""
-Unregister-ScheduledTask -TaskName rvkglsamples -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName avglsamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '{command}'
 $p = New-ScheduledTaskPrincipal -UserId '{args.guest_user}' -LogonType Interactive -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-Register-ScheduledTask -TaskName rvkglsamples -Action $a -Principal $p -Settings $s | Out-Null
-Start-ScheduledTask -TaskName rvkglsamples
+Register-ScheduledTask -TaskName avglsamples -Action $a -Principal $p -Settings $s | Out-Null
+Start-ScheduledTask -TaskName avglsamples
 Start-Sleep 2
-while ((Get-ScheduledTask rvkglsamples).State -eq 'Running') {{ Start-Sleep 1 }}
-'exit: ' + (Get-ScheduledTaskInfo rvkglsamples).LastTaskResult
+while ((Get-ScheduledTask avglsamples).State -eq 'Running') {{ Start-Sleep 1 }}
+'exit: ' + (Get-ScheduledTaskInfo avglsamples).LastTaskResult
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
@@ -127,7 +127,7 @@ def run_loopback(args, out):
     target.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ, MESA_SHADER_CACHE_DISABLE="true", ASAN_OPTIONS="detect_leaks=0")
     submits = ["--kernel-submits"] if args.kernel_submits else []
-    done = subprocess.run([str(ROOT / "build" / "rvkglsamples_loopback"), *submits, *sample_arguments(args, target)],
+    done = subprocess.run([str(ROOT / "build" / "avglsamples_loopback"), *submits, *sample_arguments(args, target)],
                           capture_output=True, text=True, env=environment, timeout=3600)
     (out / "guest.log").write_text(done.stdout + done.stderr)
     print(done.stdout, flush=True)
@@ -140,7 +140,7 @@ def run_host(args, out):
     arguments = sample_arguments(args, out / "host")
     if args.gpu:
         arguments += ["--gpu", args.gpu]
-    done = subprocess.run([str(ROOT / "build" / "rvkglsamples_host"), *arguments], capture_output=True, text=True,
+    done = subprocess.run([str(ROOT / "build" / "avglsamples_host"), *arguments], capture_output=True, text=True,
                           timeout=1800)
     (out / "host.log").write_text(done.stdout + done.stderr)
     print(done.stdout, flush=True)
@@ -192,8 +192,8 @@ def write_html(args, out, rows, ratios):
     geomean = math.exp(sum(math.log(r) for r in ratios) / len(ratios)) if ratios else None
     matched = sum(1 for r in rows if r["stats"] and verdict(r["stats"])[1] == "good")
     other = "loopback" if args.loopback else "VM"
-    other_path = ("rvkgl &rarr; driver and device core in one host process &rarr; executor"
-                  if args.loopback else "opengl32 &rarr; rvkgl &rarr; virtio-gpu-rvk &rarr; executor")
+    other_path = ("avgl &rarr; driver and device core in one host process &rarr; executor"
+                  if args.loopback else "opengl32 &rarr; avgl &rarr; virtio-gpu-av &rarr; executor")
     host_gl = html.escape(renderer(out / "host.log") or "the host GPU")
     guest_gl = html.escape(renderer(out / "guest.log") or "&ndash;")
     parts = [f"""<!doctype html><meta charset="utf-8"><title>OpenGL samples: host vs {other}</title>
@@ -235,7 +235,7 @@ th {{ color:var(--muted); font-weight:500; }}
 <span class="muted" style="font-size:13px">{other} at {cell(ratio * 100 if ratio else None, "%", 1)} of host speed</span></h2>
 <div class="images">
 <figure><img src="img/{name}-host.png" alt="host"><figcaption>host (native OpenGL)</figcaption></figure>
-<figure><img src="img/{name}-vm.png" alt="{other}"><figcaption>{other} (rvkgl)</figcaption></figure>
+<figure><img src="img/{name}-vm.png" alt="{other}"><figcaption>{other} (avgl)</figcaption></figure>
 <figure><img src="img/{name}-diff.png" alt="difference"><figcaption>difference, largest channel &times;8</figcaption></figure>
 </div><div class="wrap"><table>
 <tr><th></th><th>fps</th><th>ms / frame</th><th>setup ms</th><th>status</th></tr>

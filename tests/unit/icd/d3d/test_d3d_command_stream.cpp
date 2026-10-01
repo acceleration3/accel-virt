@@ -36,7 +36,7 @@ using namespace av::d3dproto;
 
 namespace {
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint8_t  ring_order = 20u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::size_t   staging_bytes = 1024u;
@@ -49,7 +49,7 @@ public:
         : connection_(kmt_), transport_(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes),
           stream_(transport_, block_, block_bytes)
     {
-        kmt_.add_adapter(rvk, 3200u);
+        kmt_.add_adapter(av, 3200u);
         std::uint32_t adapters[1] = {};
         std::uint32_t count = 0u;
         static_cast<void>(kmt_.enumerate_adapters(adapters, 1u, count));
@@ -105,7 +105,7 @@ std::size_t frame_draws(std::uint8_t *bytes, std::size_t count)
  * run of recorded commands - and sends the batch while the host is ready. */
 TEST(d3d_command_stream, an_application_flush_asks_the_host_once_and_sends_the_batch)
 { Fixture fixture;
-  CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   const std::uint64_t drawn = fixture.stream().recorded_total();
   CHECK(drawn != 0u);
   CHECK_STATUS(fixture.stream().application_flush(), Status::ok);
@@ -126,11 +126,11 @@ TEST(d3d_command_stream, an_application_flush_asks_the_host_once_and_sends_the_b
 TEST(d3d_command_stream, a_flush_hint_waits_while_the_host_is_behind)
 { Fixture fixture;
   for (std::uint32_t batch = 0u; batch < 2u; batch++) {
-      CHECK(rvk_d3d_Draw(fixture.stream(), batch, 0u));
+      CHECK(av_d3d_Draw(fixture.stream(), batch, 0u));
       CHECK_STATUS(fixture.stream().flush(), Status::ok);
   }
   const std::uint32_t submits = fixture.submits();
-  CHECK(rvk_d3d_Draw(fixture.stream(), 9u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 9u, 0u));
   const std::size_t pending = fixture.stream().recorded_bytes();
   CHECK(pending != 0u);
   CHECK_STATUS(fixture.stream().flush_hint(), Status::ok);
@@ -152,7 +152,7 @@ TEST(d3d_command_stream, an_idle_host_is_sent_what_is_recorded_once_it_passes_th
   std::size_t last_pending = 0u;
   for (std::uint32_t draw = 0u; draw < 1000u && fixture.submits() == submits; draw++) {
       last_pending = fixture.stream().recorded_bytes();
-      CHECK(rvk_d3d_Draw(fixture.stream(), draw, 0u));
+      CHECK(av_d3d_Draw(fixture.stream(), draw, 0u));
   }
   CHECK_EQ(fixture.submits(), submits + 1u);
   CHECK(last_pending < D3dCommandStream::stream_bytes);
@@ -160,11 +160,11 @@ TEST(d3d_command_stream, an_idle_host_is_sent_what_is_recorded_once_it_passes_th
 
   Fixture behind;
   for (std::uint32_t batch = 0u; batch < 2u; batch++) {
-      CHECK(rvk_d3d_Draw(behind.stream(), batch, 0u));
+      CHECK(av_d3d_Draw(behind.stream(), batch, 0u));
       CHECK_STATUS(behind.stream().flush(), Status::ok);
   }
   const std::uint32_t queued = behind.submits();
-  for (std::uint32_t draw = 0u; draw < 200u; draw++) CHECK(rvk_d3d_Draw(behind.stream(), draw, 0u));
+  for (std::uint32_t draw = 0u; draw < 200u; draw++) CHECK(av_d3d_Draw(behind.stream(), draw, 0u));
   CHECK(behind.stream().recorded_bytes() >= D3dCommandStream::stream_bytes);
   CHECK_EQ(behind.submits(), queued);
   CHECK(fixture.stream().invariants_hold()); }
@@ -176,13 +176,13 @@ TEST(d3d_command_stream, a_recording_is_kept_and_taken_out_whole)
   Recorded block(block_bytes);
   fixture.stream().record(block.recording());
   CHECK(!fixture.stream().blobs().ready());
-  CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
-  CHECK(rvk_d3d_Draw(fixture.stream(), 6u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 6u, 0u));
   CHECK_STATUS(fixture.stream().flush(), Status::ok);
   CHECK_EQ(fixture.submits(), 0u);
   CHECK_EQ(fixture.kmt().commands(), 0u);
   std::uint32_t removed = 0u;
-  CHECK(!rvk_d3d_Finish11(fixture.stream(), &removed));
+  CHECK(!av_d3d_Finish11(fixture.stream(), &removed));
   const std::size_t recorded = fixture.stream().recorded_bytes();
   CHECK_EQ(recorded, 2u * (CommandHeader::encoded_size + 8u));
   std::uint8_t out[64] = {};
@@ -213,11 +213,11 @@ TEST(d3d_command_stream, a_recording_that_outgrows_the_block_is_refused_whole)
   constexpr std::size_t draw = CommandHeader::encoded_size + 8u;
   static_assert(block_bytes % draw == 0u, "the block holds a whole number of draws");
   for (std::size_t index = 0u; index < block_bytes / draw; index++)
-      CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+      CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   CHECK_EQ(fixture.stream().recorded_bytes(), block_bytes);
-  CHECK(!rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(!av_d3d_Draw(fixture.stream(), 3u, 0u));
   /* A command with no body is lent nothing too, and is refused as well. */
-  CHECK(!rvk_d3d_ClearState11(fixture.stream()));
+  CHECK(!av_d3d_ClearState11(fixture.stream()));
   CHECK_EQ(fixture.stream().recorded_bytes(), block_bytes);
   CHECK(fixture.stream().invariants_hold());
   CHECK(!fixture.stream().failed());
@@ -229,7 +229,7 @@ TEST(d3d_command_stream, a_recording_that_outgrows_the_block_is_refused_whole)
   CHECK_EQ(fixture.submits(), 0u);
 
   /* The next recording is whole again. */
-  CHECK(rvk_d3d_Draw(fixture.stream(), 6u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 6u, 0u));
   CHECK_STATUS(fixture.stream().take_recorded(out, sizeof out, length), Status::ok);
   CHECK_EQ(length, draw); }
 
@@ -242,7 +242,7 @@ TEST(d3d_command_stream, a_recording_grows_to_hold_what_is_recorded)
   constexpr std::size_t draw = CommandHeader::encoded_size + 8u;
   constexpr std::size_t draws = 2u * block_bytes / draw;
   for (std::size_t index = 0u; index < draws; index++)
-      CHECK(rvk_d3d_Draw(fixture.stream(), static_cast<std::uint32_t>(index), 0u));
+      CHECK(av_d3d_Draw(fixture.stream(), static_cast<std::uint32_t>(index), 0u));
   CHECK_EQ(fixture.stream().recorded_bytes(), draws * draw);
   CHECK(recorded.recording().capacity() > block_bytes);
   CHECK(fixture.stream().invariants_hold());
@@ -271,12 +271,12 @@ TEST(d3d_command_stream, a_recording_refused_a_larger_block_keeps_its_own_until_
   constexpr std::size_t draw = CommandHeader::encoded_size + 8u;
   /* Every draw is lent a whole command's room until less than that is left. */
   constexpr std::size_t roomy = (block_bytes - CommandHeader::encoded_size - D3dCommandStream::command_room) / draw + 1u;
-  for (std::size_t index = 0u; index < roomy; index++) CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  for (std::size_t index = 0u; index < roomy; index++) CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   CHECK_EQ(recorded.recording().capacity(), block_bytes);
   recorded.platform().fail_allocation_at(1u);
-  CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   CHECK_EQ(recorded.recording().capacity(), block_bytes);
-  CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   CHECK_EQ(recorded.recording().capacity(), 2u * block_bytes);
   static std::uint8_t out[block_bytes];
   std::size_t length = 0u;
@@ -292,10 +292,10 @@ TEST(d3d_command_stream, a_recorded_command_whose_data_does_not_fit_leaves_the_r
   fixture.stream().record(recorded.recording());
   CHECK(fixture.stream().make_room_for(D3dCommandStream::recorded_data));
   CHECK(!fixture.stream().make_room_for(D3dCommandStream::recorded_data + 1u));
-  CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   static std::uint8_t data[D3dCommandStream::command_room];
   const Box box{};
-  CHECK(!rvk_d3d_UpdateSubresource(fixture.stream(), 1u, 0u, 0u, box, 0u, 0u, 0u, data, sizeof data));
+  CHECK(!av_d3d_UpdateSubresource(fixture.stream(), 1u, 0u, 0u, box, 0u, 0u, 0u, data, sizeof data));
   CHECK_EQ(fixture.stream().recorded_bytes(), CommandHeader::encoded_size + 8u);
   static std::uint8_t out[block_bytes];
   std::size_t length = 99u;
@@ -303,7 +303,7 @@ TEST(d3d_command_stream, a_recorded_command_whose_data_does_not_fit_leaves_the_r
   CHECK_EQ(length, 0u);
 
   /* As much as one recorded command carries goes inline whole. */
-  CHECK(rvk_d3d_UpdateSubresource(fixture.stream(), 1u, 0u, 0u, box, 0u, 0u, 0u, data,
+  CHECK(av_d3d_UpdateSubresource(fixture.stream(), 1u, 0u, 0u, box, 0u, 0u, 0u, data,
                                   D3dCommandStream::recorded_data));
   CHECK(fixture.stream().recorded_bytes() > D3dCommandStream::recorded_data);
   CHECK_STATUS(fixture.stream().take_recorded(out, sizeof out, length), Status::ok);
@@ -331,7 +331,7 @@ TEST(d3d_command_stream, recorded_commands_join_the_stream_a_block_of_whole_comm
   /* Larger than the block: the pending draw goes first, then a full block of
    * the list, and the rest waits in the block. */
   constexpr std::size_t draw = CommandHeader::encoded_size + 8u;
-  CHECK(rvk_d3d_Draw(fixture.stream(), 1u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 1u, 0u));
   const std::size_t large = frame_draws(list, block_bytes / draw + 4u);
   CHECK(large > block_bytes);
   const std::uint32_t submits = fixture.submits();
@@ -408,7 +408,7 @@ TEST(d3d_command_stream, a_device_is_selected_only_when_the_speaker_changes)
 /* A batch the kernel refused loses the device: every later call fails. */
 TEST(d3d_command_stream, a_refused_batch_fails_everything_after_it)
 { Fixture fixture;
-  CHECK(rvk_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, refused);
   CHECK_STATUS(fixture.stream().flush(), Status::invalid_state);
   CHECK(fixture.stream().failed());

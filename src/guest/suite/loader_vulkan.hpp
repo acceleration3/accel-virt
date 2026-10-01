@@ -3,7 +3,7 @@
  * own on the full-stack rig - answers vkCreateInstance, and each instance made
  * answers the rest, resolved once as the instance is made. The Vulkan
  * specification has vkGetInstanceProcAddr answer every core command, so those
- * are called as answered; only the ICD's vkRvkForceContextFault, which no
+ * are called as answered; only the ICD's vkAvForceContextFault, which no
  * loader has to know, is looked for. */
 #ifndef AV_LOADER_VULKAN_HPP
 #define AV_LOADER_VULKAN_HPP

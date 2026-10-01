@@ -59,7 +59,7 @@ Status DeviceContext::post(const WorkItem &item)
 Status DeviceContext::refused(const char *step, Status status) const
 {
     AV_SCOPE("DeviceContext::refused");
-    fprintf(stderr, "virtio-gpu-rvk: context %u setup refused at %s, status %d\n", id_, step, static_cast<int>(status));
+    fprintf(stderr, "virtio-gpu-av: context %u setup refused at %s, status %d\n", id_, step, static_cast<int>(status));
     return status;
 }
 
@@ -93,7 +93,7 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     status = worker_.connect_doorbell(setup.doorbell());
     if (status != Status::ok) return refused("doorbell", status);
     ScopeExit disconnect([this] { worker_.disconnect_doorbell(); });
-    status = worker_.post(WorkItem(&RvkRingAttach, nullptr, &ring_));
+    status = worker_.post(WorkItem(&AvRingAttach, nullptr, &ring_));
     if (status != Status::ok) return refused("attach", status);
     disconnect.dismiss();
     withdraw.dismiss();

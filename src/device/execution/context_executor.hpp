@@ -5,7 +5,7 @@
 #define AV_CONTEXT_EXECUTOR_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -63,7 +63,7 @@ public:
      * handle the import became: invalid_state without an executor;
      * not_supported, leaving nothing imported, for a library that cannot name
      * an import, refuses this one or names it nothing. */
-    [[nodiscard]] Status import(uint64_t blob_id, const RvkBlobHandle &handle, uint64_t &device_memory);
+    [[nodiscard]] Status import(uint64_t blob_id, const AvBlobHandle &handle, uint64_t &device_memory);
     /* Worker. Nothing without an executor: destroying it released every import. */
     void                 release(uint64_t blob_id);
 
@@ -90,13 +90,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* render-server's API ids (rvk/wire/api_id.hpp), not the capset's bits. */
+    /* render-server's API ids (av/wire/api_id.hpp), not the capset's bits. */
     static constexpr uint16_t vulkan_commands = 1u;
     static constexpr uint16_t opencl_commands = 2u;
     static constexpr uint16_t opengl_commands = 3u;
     static constexpr uint16_t d3d_commands = 4u;
 
-    RvkExecutor *make() const;
+    AvExecutor *make() const;
 
     Host                  &host_;
     const ExecutorLibrary &library_;
@@ -105,7 +105,7 @@ private:
     ContextSignal         *signal_;
     ExecutorShares        &shares_;
     uint32_t               id_;
-    RvkExecutor           *executor_;
+    AvExecutor           *executor_;
     SubApi                 api_;
     uint8_t                uuid_[uuid_bytes];
     GlContextOptions       options_;

@@ -75,7 +75,7 @@ namespace samples {
 
 namespace {
 
-char shader_directory[260] = "C:\\rvk\\samples12\\shaders";
+char shader_directory[260] = "C:\\av\\samples12\\shaders";
 
 const GUID clsid_dxc_compiler = {0x73e22d93, 0xe6ce, 0x47f3, {0xb5, 0xbf, 0xf0, 0x66, 0x4f, 0x39, 0xc1, 0xb0}};
 const GUID iid_dxc_compiler3 = {0x228b4687, 0x5a6a, 0x4730, {0x90, 0x0c, 0x97, 0x02, 0xb2, 0x20, 0x3f, 0x54}};
@@ -304,7 +304,7 @@ bool create_device(ID3D12Device **device)
 
 }  // namespace samples
 
-extern "C" void rvkd3d12samples_entry()
+extern "C" void avd3d12samples_entry()
 {
     // The command line split on spaces outside double quotes, as ASCII:
     // shell32's CommandLineToArgvW would be one more import for this.
@@ -323,7 +323,7 @@ extern "C" void rvkd3d12samples_entry()
         }
         argv[argc++] = arg;
     }
-    CreateDirectoryA("C:\\rvk\\samples12", nullptr);
-    CreateDirectoryA("C:\\rvk\\samples12\\shaders", nullptr);
+    CreateDirectoryA("C:\\av\\samples12", nullptr);
+    CreateDirectoryA("C:\\av\\samples12\\shaders", nullptr);
     ExitProcess(static_cast<UINT>(samples::run(argc, argv)));
 }

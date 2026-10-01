@@ -45,7 +45,7 @@ namespace samples {
 
 namespace {
 
-char shader_directory[260] = "C:\\rvk\\samples\\shaders";
+char shader_directory[260] = "C:\\av\\samples\\shaders";
 
 using D3DCompileFn = HRESULT(WINAPI *)(LPCVOID, SIZE_T, LPCSTR, const D3D_SHADER_MACRO *, ID3DInclude *, LPCSTR,
                                         LPCSTR, UINT, UINT, ID3DBlob **, ID3DBlob **);
@@ -160,7 +160,7 @@ bool create_device(ID3D11Device **device, ID3D11DeviceContext **context)
 
 }  // namespace samples
 
-extern "C" void rvkd3d11samples_entry()
+extern "C" void avd3d11samples_entry()
 {
     // The command line split on spaces outside double quotes, as ASCII:
     // shell32's CommandLineToArgvW would be one more import for this.
@@ -179,7 +179,7 @@ extern "C" void rvkd3d11samples_entry()
         }
         argv[argc++] = arg;
     }
-    CreateDirectoryA("C:\\rvk\\samples", nullptr);
-    CreateDirectoryA("C:\\rvk\\samples\\shaders", nullptr);
+    CreateDirectoryA("C:\\av\\samples", nullptr);
+    CreateDirectoryA("C:\\av\\samples\\shaders", nullptr);
     ExitProcess(static_cast<UINT>(samples::run(argc, argv)));
 }

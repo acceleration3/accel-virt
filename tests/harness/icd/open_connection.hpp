@@ -1,4 +1,4 @@
-/* An ICD connection opened on MockKmt's rvkgpu adapter, for the classes that
+/* An ICD connection opened on MockKmt's avgpu adapter, for the classes that
  * work over one: its lock records into a trace under 'S', and the host behind
  * its context is played through ScriptedHost. */
 #ifndef AV_OPEN_CONNECTION_HPP

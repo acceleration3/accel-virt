@@ -6,7 +6,7 @@
 #ifndef AV_PRESENT_FRAMES_HPP
 #define AV_PRESENT_FRAMES_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <stdint.h>
 
@@ -30,7 +30,7 @@ public:
     bool readable() const;
     /* Any thread: the snapshot under `key` mapped into `view`; false when
      * none comes in time or none can be read here. */
-    [[nodiscard]] bool map(const SurfacePoint &frame, RvkFrameView &view) const;
+    [[nodiscard]] bool map(const SurfacePoint &frame, AvFrameView &view) const;
     void               unmap(const SurfacePoint &frame) const;
 
 private:

@@ -5,14 +5,14 @@
  * the same ABI. This is the end that answers.
  *
  * There is exactly one of these in a process, in `ObjectStorage` in the
- * translation unit that defines the C entry points, because `rvk_executor_ops()`
+ * translation unit that defines the C entry points, because `av_executor_ops()`
  * takes no argument and so has nowhere to put a `this` (CLAUDE.md). */
 #ifndef AV_EXECUTOR_ROOT_HPP
 #define AV_EXECUTOR_ROOT_HPP
 
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/d3d_backend.hpp"
 #include "device/executor/gpu_clock_hold.hpp"
@@ -50,11 +50,11 @@ public:
     /* Every sub-API some GPU here can run. Zero is an answer: the device then
      * describes no capset at all rather than one it cannot honour. */
     uint32_t sub_apis() const;
-    /* The RVK_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names.
+    /* The AV_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names.
      * Zero for a GPU nobody has, which is also what a null UUID gets. */
     uint32_t import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const;
     /* The host image under `key` on the GPU `gpu_uuid` names, into `pixels`. */
-    bool     export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image);
+    bool     export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image);
     /* The Direct3D surface shared under `object_id` on `gpu_uuid` goes: the
      * guest let go of it everywhere. Main loop. */
     void     release_shared(const uint8_t *gpu_uuid, uint64_t object_id);
@@ -62,7 +62,7 @@ public:
                         uint32_t height);
     /* The present snapshot under `key` on `gpu_uuid`, mapped and let go
      * (D3d11HostDevice::map_frame). Any thread. */
-    bool     map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view);
+    bool     map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame);
 
     /* A session for one context of `sub_api` on the GPU `gpu_uuid` names, or
@@ -78,7 +78,7 @@ public:
      * (feature 050): only OpenGL takes options other than the defaults or a
      * share, which must be a live OpenGL session of this root on the same GPU;
      * anything else is null. */
-    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options = nullptr,
+    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options = nullptr,
                          ContextSession *share = nullptr);
     /* Gives a session's slot and block back. Safe on a null, which is what the
      * device passes if it ever destroys twice. */
@@ -121,7 +121,7 @@ private:
     SessionBackend *backend_in(uint32_t slot, uint32_t sub_api);
     /* Binds the backend of `sub_api` in `slot` to `gpu`, with what the host
      * found for it: false when the host found nothing for this API there. */
-    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const RvkContextOptions *options,
+    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions *options,
                             const OpenGlBackend *share);
     /* The OpenGL backend `share` runs on, when it is a live OpenGL session of
      * this root on `gpu`; null otherwise. */

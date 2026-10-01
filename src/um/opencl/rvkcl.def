@@ -1,4 +1,0 @@
-LIBRARY rvkcl.dll
-EXPORTS
-clGetExtensionFunctionAddress
-clIcdGetPlatformIDsKHR

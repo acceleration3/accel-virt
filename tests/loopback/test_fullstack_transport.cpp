@@ -1,6 +1,6 @@
 /* L4 through the real driver: the 043 transport's round trip with nothing of
  * the miniport's job left in the harness. KmtTransport's calls reach the
- * registered DDI table through DdiKmt; the driver's RvkContextTable publishes
+ * registered DDI table through DdiKmt; the driver's AvContextTable publishes
  * the ring, fence page and reply slot and sets the host context up over the
  * control queue the real device core answers; a submission rings the doorbell
  * page the core's worker waits on, and the fence interrupt it raises reaches
@@ -50,7 +50,7 @@ using av::WireWriter;
 
 namespace {
 
-/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
@@ -98,19 +98,19 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
   CHECK_EQ(rig.added(), 0);
   CHECK_EQ(rig.started(), 0);
   CHECK(rig.fdo().started());
-  CHECK(rig.platform().logged_line("rvkgpu: StartDevice"));
+  CHECK(rig.platform().logged_line("avgpu: StartDevice"));
   /* The capset came from the device core, not from a scripted answer. */
-  CHECK(rig.platform().logged_line("rvkgpu: device capset status 0x00000000"));
+  CHECK(rig.platform().logged_line("avgpu: device capset status 0x00000000"));
   /* The host GPU's name and memory, from that capset, are where Device
    * Manager, WMI and DXGI read an adapter's. */
-  CHECK(rig.platform().logged_line("rvkgpu: adapter description status 0x00000000"));
+  CHECK(rig.platform().logged_line("avgpu: adapter description status 0x00000000"));
   CHECK(rig.platform().described_device() != nullptr);
   CHECK(rig.platform().device_description_is("mock gpu"));
   CHECK(rig.platform().driver_text_is("HardwareInformation.AdapterString", "mock gpu"));
   CHECK_EQ(rig.platform().driver_number("HardwareInformation.qwMemorySize"), 24ull << 30);
   /* The hostmem region is the driver's host window, and nothing is placed in
    * it until a process asks (docs/host-window.md). */
-  CHECK(rig.platform().logged_line("rvkgpu: host window status 0x00000000"));
+  CHECK(rig.platform().logged_line("avgpu: host window status 0x00000000"));
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(rig.bridge().answered_by_core() >= 2u);      /* the capset's two */
   CHECK(rig.bridge().answered_by_base() >= 1u);      /* GET_DISPLAY_INFO */
@@ -181,7 +181,7 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
-  CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 0 message 3 status 0x00000000"));
+  CHECK(rig.platform().logged_line("avgpu: av context on doorbell 0 message 3 status 0x00000000"));
   CHECK_EQ(rig.device().device().contexts(), 1u);
 
   const std::uint32_t executed = rig.device().executor().executed();
@@ -378,7 +378,7 @@ TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_sti
   KmtTransport healthy(connection, SubApi::vulkan, ring_order, reply_bytes, healthy_staging, sizeof healthy_staging);
   CHECK_STATUS(doomed.initialize(), Status::ok);
   CHECK_STATUS(healthy.initialize(), Status::ok);
-  CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 1 message 4 status 0x00000000"));
+  CHECK(rig.platform().logged_line("avgpu: av context on doorbell 1 message 4 status 0x00000000"));
 
   WireWriter request = doomed.request_writer();
   request.write_u64(echo_payload);
@@ -426,7 +426,7 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_EQ(rig.fdo().set_power_state(power_d0), 0);
-  CHECK(rig.platform().logged_line("rvkgpu: SetPowerState D0 done"));
+  CHECK(rig.platform().logged_line("avgpu: SetPowerState D0 done"));
   /* The same device came back with nothing placed in its window. */
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(!echoes(before, echo_payload));
@@ -546,7 +546,7 @@ TEST(fullstack_transport, five_transports_interleave_and_a_freed_doorbell_is_reu
   KmtTransport fifth(connection, SubApi::vulkan, ring_order, reply_bytes, fifth_staging, sizeof fifth_staging);
   KmtTransport *const all[transports] = {&first, &second, &third, &fourth, &fifth};
   for (KmtTransport *transport : all) CHECK_STATUS(transport->initialize(), Status::ok);
-  CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 4 message 7 status 0x00000000"));
+  CHECK(rig.platform().logged_line("avgpu: av context on doorbell 4 message 7 status 0x00000000"));
   CHECK_EQ(rig.device().device().contexts(), transports);
   std::uint32_t returned = 0u;
   for (std::uint32_t round = 0u; round < rounds; round++)

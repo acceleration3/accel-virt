@@ -1,5 +1,5 @@
 /* The pixels a present moves (feature 046). The DMA command a present writes
- * is executed on the host only for a context of the rvk protocol; dxgkrnl's
+ * is executed on the host only for a context of the av protocol; dxgkrnl's
  * own presents - the desktop's - and an application's blt-model present into
  * its window's redirection surface are loopback-completed, so nothing would
  * ever move them. This clips each rectangle to both surfaces and to the

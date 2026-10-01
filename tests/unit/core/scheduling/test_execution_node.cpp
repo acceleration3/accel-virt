@@ -103,7 +103,7 @@ TEST(execution_node_complete, reports_every_pending_fence_in_order_then_the_curr
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u); }
 
-/* Feature 043: an rvk submission is finished by the host, not by the DPC. It
+/* Feature 043: an av submission is finished by the host, not by the DPC. It
  * waits at the head of the node until its context says the host completed the
  * wire fence it carried, and everything queued behind it waits too - dxgkrnl
  * takes a completed fence as the completion of every lower one on the node. */

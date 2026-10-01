@@ -275,7 +275,7 @@ void GlPresentLoop::log_refusal()
     AV_SCOPE("GlPresentLoop::log_refusal");
     if (refusal_logged_) return;
     refusal_logged_ = true;
-    log_.write("rvkgl: a window refused a frame the present thread blitted; later ones are not logged");
+    log_.write("avgl: a window refused a frame the present thread blitted; later ones are not logged");
 }
 
 }  // namespace av::glicd

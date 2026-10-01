@@ -22,7 +22,7 @@ constexpr std::size_t   entry_size = 16u;
 
 /* A rig that cannot make its events, thread or lock has nothing to test with. */
 ImportRig::ImportRig(bool executor)
-    : host_(), ops_(RVK_EXECUTOR_SUB_API_VULKAN), recorder_(host_), library_(), shares_(host_, library_),
+    : host_(), ops_(AV_EXECUTOR_SUB_API_VULKAN), recorder_(host_), library_(), shares_(host_, library_),
       executor_(host_, library_, shares_, 1u), blobs_(host_),
       imports_(host_, blobs_, executor_, recorder_, 1u), start_(nullptr), done_(nullptr), thread_(nullptr), job_(nullptr),
       job_context_(nullptr), stopping_(false)

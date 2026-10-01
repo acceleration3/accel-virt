@@ -1,0 +1,173 @@
+; The driver package for avgpu.sys, the accel-virt WDDM 3.2 display miniport,
+; bound to virtio-gpu-av-pci: a virtio-gpu with subsystem 1af4:5256, so
+; neither stock virtio-gpu-pci nor another virtio-gpu driver is claimed.
+; Test-signed in the guest by tools/guest/provision.ps1, which writes the
+; catalog this file names.
+;
+; The device presents its host GPU's vendor, device and revision as its own
+; (docs/protocol.md), so that Device Manager, WMI and DXGI name the host's GPU:
+; PCI\VEN_1002&DEV_7550&SUBSYS_52561AF4 on a host with a Radeon RX 9070 XT.
+; Those IDs differ from host to host, and PnP matches no ID made of a subsystem
+; alone, so no static line can list them. provision.ps1's sign stage adds one
+; model line for each present PCI\VEN_xxxx&DEV_yyyy&SUBSYS_52561AF4, named with
+; the host GPU's name when the runner supplied it (C:\av\adapters.txt) and
+; with %DeviceName% otherwise, before it makes and signs the catalog; each
+; generated line ends with "; provision.ps1: a host GPU", and signing again
+; replaces them. The one static line is the device on a GPU with no PCI
+; function (llvmpipe), which keeps virtio-gpu's own 1af4:1050. avgpu.sys
+; writes the host GPU's name to the device's DeviceDesc at every start, so a
+; generically named model is the host's name from the next boot on.
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Display
+ClassGuid   = {4d36e968-e325-11ce-bfc1-08002be10318}
+Provider    = %Provider%
+DriverVer   = 09/11/2026,0.35.0.0
+CatalogFile = avgpu.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[SourceDisksFiles]
+avgpu.sys = 1
+avvk.dll = 1
+avvk.json = 1
+avgl.dll = 1
+avcl.dll = 1
+avumd.dll = 1
+avvk32.dll = 1
+avvk32.json = 1
+avgl32.dll = 1
+avcl32.dll = 1
+avumd32.dll = 1
+
+; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
+[Manufacturer]
+%Provider% = Avgpu, NTamd64.10.0...26100
+
+[Avgpu.NTamd64.10.0...26100]
+%DeviceName% = Avgpu_Install, PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4
+
+[Avgpu_Install]
+FeatureScore = F8
+CopyFiles    = Avgpu_Files
+AddReg       = Avgpu_SoftwareSettings, Avgpu_Scheduler
+
+; dxgkrnl refuses the adapter outright without this value. DXGADAPTER::Initialize
+; returns STATUS_OBJECT_NAME_NOT_FOUND when DpiGetAdapterInfo could not read
+; UserModeDriverName from the software key - the key HKR reaches from here, not
+; from .HW - and the adapter does not claim to be compute only. Nothing loads
+; the DLL at adapter start; only the string is read.
+;
+; A REG_MULTI_SZ of four names indexed by KMTUMDVERSION (d3dkmthk.h: DX9, DX10,
+; DX11, DX12): the runtime asks the kernel which file to load for the Direct3D
+; it is, with D3DKMTQueryAdapterInfo(KMTQAITYPE_UMDRIVERNAME). One DLL serves
+; Direct3D 10, 11 and 12. Direct3D 9's entry is "<>", which names no file:
+; avumd exports no OpenAdapter for Direct3D 9, and for an empty or "<>" name
+; the kernel answers STATUS_INVALID_PARAMETER, which d3d9.dll's
+; D3D9RequestsD3D9on12 takes as "no Direct3D 9 driver" and runs Direct3D 9 on
+; 12 (d3d9on12.dll) over this driver's Direct3D 12 instead. Naming avumd.dll
+; there had d3d9.dll load a DLL with no OpenAdapter. %13% paths, because
+; the kernel hands the runtime the string exactly as the registry holds it
+; (ADAPTER_RENDER::GetUMDFileName) and d3d11.dll passes that straight to
+; LoadLibraryExW: a bare name is looked for in System32, never in the driver
+; store, and the runtime answers DXGI_ERROR_UNSUPPORTED - which is what kept
+; every process, the desktop compositor included, on WARP. PostProcessUMDFileName
+; translates only a GPU-PV guest's names. The 32-bit arm, UserModeDriverNameWow,
+; is below with the other Wow values.
+; The scheduler never preempts: this adapter cannot give back a batch the host
+; was handed, so a preemption is answered only once the node has run dry, and a
+; process that keeps it fed would starve the request into a TDR. Off, the node's
+; held packets are bounded by their deadline alone (ExecutionNode::release_overdue).
+[Avgpu_Scheduler]
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers\Scheduler, EnablePreemption, 0x00010001, 0
+
+[Avgpu_SoftwareSettings]
+HKR,, UserModeDriverName, 0x00010000, "<>", "%13%\avumd.dll", "%13%\avumd.dll", "%13%\avumd.dll"
+; The Vulkan ICD, found by the loader through this adapter alone (feature 045):
+; it reads the value with D3DKMTQueryAdapterInfo(KMTQAITYPE_QUERYREGISTRY) as
+; REG_MULTI_SZ or REG_SZ - never REG_EXPAND_SZ - and takes it as an absolute path.
+HKR,, VulkanDriverName, 0x00010000, "%13%\avvk.json"
+; The OpenGL ICD (feature 050): dxgkrnl's DpiGetAdapterInfo reads these for
+; opengl32's KMTQAITYPE_UMOPENGLINFO. Flags 1 has opengl32 ask the ICD for
+; pixel formats instead of describing GDI's own.
+HKR,, OpenGLDriverName, 0x00010000, "%13%\avgl.dll"
+HKR,, OpenGLVersion, 0x00010001, 2
+HKR,, OpenGLFlags, 0x00010001, 1
+; The OpenCL ICD (feature 052, research.md §1): REG_SZ, not the REG_MULTI_SZ the
+; two values above use. The OpenCL loader's first discovery path asks
+; D3DKMTQueryAdapterInfo for this value with value_type = REG_SZ and returns
+; nothing for a value of another type; only its slower SetupAPI fallback
+; tolerates a multi-string. Written multi-string, the ICD is found on one path
+; and silently missed on the other.
+HKR,, OpenCLDriverName, 0x00000000, "%13%\avcl.dll"
+; The same four for a 32-bit process, which each reader looks up under its
+; Wow name: dxgkrnl for the Direct3D and OpenGL values (DpiGetAdapterInfo reads
+; UserModeDriverNameWow, OpenGLDriverNameWow, OpenGLVersionWow and
+; OpenGLFlagsWow for a WoW64 caller), the Vulkan and OpenCL loaders for theirs
+; when IsWow64Process says so. %13% paths again: the driver store is exempt from
+; WoW64's System32 redirection, so a 32-bit process loads the x86 DLLs from the
+; same directory as the 64-bit ones.
+HKR,, UserModeDriverNameWow, 0x00010000, "<>", "%13%\avumd32.dll", "%13%\avumd32.dll", "%13%\avumd32.dll"
+HKR,, VulkanDriverNameWow, 0x00010000, "%13%\avvk32.json"
+HKR,, OpenGLDriverNameWow, 0x00010000, "%13%\avgl32.dll"
+HKR,, OpenGLVersionWow, 0x00010001, 2
+HKR,, OpenGLFlagsWow, 0x00010001, 1
+HKR,, OpenCLDriverNameWow, 0x00000000, "%13%\avcl32.dll"
+; The WDDM features this driver implements and this adapter may use, turned on
+; where the OS stages them off (feature 049, research.md §19). dxgkrnl's
+; ConfigureFeature reads Features\<DXGK_FEATURE_ID in decimal>\Enabled from the
+; adapter's own key, and a feature nobody enabled stays off however the driver
+; answers for it - which is what kept this adapter's doorbells unreachable.
+; 4 is DXGK_FEATURE_USER_MODE_SUBMISSION and 37 is DXGK_FEATURE_NATIVE_FENCE
+; (d3dukmdt.h); both are implemented and tested here.
+HKR, Features\4, Enabled, 0x00010001, 1
+HKR, Features\4, AllowExperimental, 0x00010001, 1
+HKR, Features\37, Enabled, 0x00010001, 1
+HKR, Features\37, AllowExperimental, 0x00010001, 1
+
+[Avgpu_Files]
+avgpu.sys
+avvk.dll
+avvk.json
+avgl.dll
+avcl.dll
+avumd.dll
+avvk32.dll
+avvk32.json
+avgl32.dll
+avcl32.dll
+avumd32.dll
+
+; One message for each of the device's own sources - control, cursor and
+; configuration changes - and eight the av contexts' fence queues share
+; (feature 043); the runner starts the device with as many vectors.
+[Avgpu_Install.HW]
+AddReg = Avgpu_Interrupts
+
+[Avgpu_Interrupts]
+HKR, "Interrupt Management", 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MessageNumberLimit, 0x00010001, 11
+
+[Avgpu_Install.Services]
+AddService = avgpu, 0x00000002, Avgpu_Service
+
+[Avgpu_Service]
+DisplayName   = %ServiceName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %13%\avgpu.sys
+
+[Strings]
+Provider    = "accel-virt"
+DiskName    = "accel-virt driver package"
+DeviceName  = "accel-virt paravirtual GPU"
+ServiceName = "accel-virt WDDM display miniport"

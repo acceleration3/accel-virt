@@ -7,7 +7,7 @@
  * asks for something the device will not do is a guest making a mistake, not
  * an attack on the frame. Every status in data-model.md has a case here. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/shared_object_command.hpp"
 #include "harness/executor/shared_object_rig.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -230,7 +230,7 @@ TEST(shared_object_command_run, an_executor_that_will_not_export_or_import_is_an
 
 TEST(shared_object_command_run, a_library_from_before_the_sharing_version_refuses_every_one_of_them)
 { SharedObjectRig rig;
-  rig.ops().set_abi_version(RVK_EXECUTOR_ABI_VERSION_EVENTS);
+  rig.ops().set_abi_version(AV_EXECUTOR_ABI_VERSION_EVENTS);
   /* The library was accepted at its newest version, so this is the device
    * finding out mid-flight what a real one says at accept: either way the
    * guest is answered, not faulted. */

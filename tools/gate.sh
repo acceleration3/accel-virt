@@ -14,7 +14,7 @@
 #   guest     build-guest/     the in-guest suite in the image $AV_GUEST_IMAGE
 #                              names on the echo executor, skipped when it
 #                              names none
-#   guest real build-guest-real/  one boot on the real executor for the rvk
+#   guest real build-guest-real/  one boot on the real executor for the av
 #                              scenarios, the Vulkan ICD through the Khronos
 #                              loader (when tools/fetch_vulkan_runtime.py has
 #                              run) and the OpenGL ICD through opengl32.dll
@@ -72,15 +72,15 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         exit 1
     fi
     echo "gate: guest scanout passed after $((SECONDS - started)) s"
-    # The rvk scenarios and the three ICDs need the real executor on a host GPU, and
+    # The av scenarios and the three ICDs need the real executor on a host GPU, and
     # the suite's timeout scenario the echo library's stall, so they are a
     # second boot - one for all three, since each is a process of its own that
     # leaves the machine as it found it.
-    if [ ! -f build-qemu/librvk_executor.so ]; then
-        echo "gate: guest real skipped: build-qemu/librvk_executor.so was not built" >&2
+    if [ ! -f build-qemu/libav_executor.so ]; then
+        echo "gate: guest real skipped: build-qemu/libav_executor.so was not built" >&2
         exit 1
     fi
-    real=(--rvk --opengl)
+    real=(--av --opengl)
     if python3 -B tools/fetch_vulkan_runtime.py --check >/dev/null 2>&1; then
         real+=(--vulkan)
     else
@@ -91,9 +91,9 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
     else
         echo "gate: guest opencl skipped: the OpenCL loader is not fetched (tools/fetch_opencl_loader.py)" >&2
     fi
-    echo "== gate: guest real (${real[*]}, build-qemu/librvk_executor.so)"
+    echo "== gate: guest real (${real[*]}, build-qemu/libav_executor.so)"
     if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-real "${real[@]}" \
-            --executor build-qemu/librvk_executor.so; then
+            --executor build-qemu/libav_executor.so; then
         echo "gate: guest real failed" >&2
         exit 1
     fi
@@ -102,9 +102,9 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
     # minutes of scenarios, and it only runs at all when the build is pinned
     # and fetched (feature 048, FR-006).
     if python3 -B tools/fetch_cts.py --check >/dev/null 2>&1; then
-        echo "== gate: guest cts (build-qemu/librvk_executor.so)"
+        echo "== gate: guest cts (build-qemu/libav_executor.so)"
         if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-cts --cts \
-                --executor build-qemu/librvk_executor.so; then
+                --executor build-qemu/libav_executor.so; then
             echo "gate: guest cts failed" >&2
             exit 1
         fi

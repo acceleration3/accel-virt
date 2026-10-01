@@ -6,7 +6,7 @@
 #include "core/scheduling/context.hpp"
 #include "proto/submission/follow_record.hpp"
 #include "core/scheduling/device.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -86,18 +86,18 @@ TEST(context, is_legal_up_to_dispatch)
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
 
-/* Becoming an rvk context is remembering which allocations are its ring, fence
+/* Becoming an av context is remembering which allocations are its ring, fence
  * and reply; a plain context knows none of that (feature 043). */
-TEST(context, becomes_the_guest_half_of_an_rvk_context)
+TEST(context, becomes_the_guest_half_of_an_av_context)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
   Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 4u);
-  CHECK(!context.is_rvk());
-  context.become_rvk(av::RvkContextRecord(av::SubApi::opencl, 14u, 5u, 8192u));
-  CHECK(context.is_rvk());
-  CHECK_EQ(context.rvk_record().sub_api(), av::SubApi::opencl);
-  CHECK_EQ(context.rvk_record().ring_order(), 14u);
-  CHECK_EQ(context.rvk_record().ring(), 5u);
-  CHECK_EQ(context.rvk_record().reply_bytes(), 8192u); }
+  CHECK(!context.is_av());
+  context.become_av(av::AvContextRecord(av::SubApi::opencl, 14u, 5u, 8192u));
+  CHECK(context.is_av());
+  CHECK_EQ(context.av_record().sub_api(), av::SubApi::opencl);
+  CHECK_EQ(context.av_record().ring_order(), 14u);
+  CHECK_EQ(context.av_record().ring(), 5u);
+  CHECK_EQ(context.av_record().reply_bytes(), 8192u); }

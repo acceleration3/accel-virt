@@ -1,7 +1,7 @@
 /* One context's host executor: made and released on the context's worker,
  * running commands there, and every answer a library gives read as a status. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
@@ -40,7 +40,7 @@ constexpr std::uint8_t uuid[16] = {0x5A};
 class Fixture {
 public:
     Fixture()
-        : ops_(RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENGL), library_(), shares_(host_, library_),
+        : ops_(AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENGL), library_(), shares_(host_, library_),
           executor_(host_, library_, shares_, 5u), sharing_(host_, library_, shares_, 6u)
     {
         static_cast<void>(library_.accept(&ops_.table()));
@@ -103,7 +103,7 @@ TEST(context_executor_create, makes_the_configured_executor_on_the_worker_and_re
   CHECK(!fixture.executor().created());
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK_EQ(fixture.ops().destroyed(), 1u);
-  CHECK_EQ(fixture.ops().last_sub_api(), RVK_EXECUTOR_SUB_API_VULKAN);
+  CHECK_EQ(fixture.ops().last_sub_api(), AV_EXECUTOR_SUB_API_VULKAN);
   CHECK_EQ(fixture.ops().last_uuid_byte(), 0x5Au);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
@@ -149,7 +149,7 @@ TEST(context_executor, each_sub_api_names_its_command_api)
 
 TEST(context_executor, an_executor_left_behind_is_released_with_the_context)
 { MockHost host;
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   {
@@ -191,10 +191,10 @@ namespace {
 
 std::uint8_t page_bytes[8192];
 
-RvkBlobHandle host_pointer(std::uint32_t memory_type)
+AvBlobHandle host_pointer(std::uint32_t memory_type)
 {
-    RvkBlobHandle handle = {};
-    handle.kind = RVK_BLOB_HOST_POINTER;
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_HOST_POINTER;
     handle.reserved = memory_type;
     handle.pointer = page_bytes;
     handle.fd = -1;
@@ -214,7 +214,7 @@ TEST(context_executor_import, imports_under_the_devices_id_and_answers_the_handl
       std::uint64_t device_memory = 0u;
       CHECK_STATUS(executor.import(7u, host_pointer(3u), device_memory), Status::ok);
       CHECK_EQ(device_memory, 7u | MockExecutorOps::handle_bit);
-      RvkBlobHandle seen = {};
+      AvBlobHandle seen = {};
       CHECK(fixture.ops().import_of(7u, seen));
       CHECK(seen.pointer == page_bytes);
       CHECK_EQ(seen.reserved, 3u);
@@ -254,8 +254,8 @@ TEST(context_executor_import, a_refusal_or_an_import_named_nothing_leaves_nothin
  * device does not ask it to make an import no guest command can reach. */
 TEST(context_executor_import, a_library_before_version_3_is_not_asked)
 { MockHost host;
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
-  ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_IMPORTS;
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ops.editable().abi_version = AV_EXECUTOR_ABI_VERSION_IMPORTS;
   ops.editable().imported_handle = nullptr;
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
@@ -304,11 +304,11 @@ TEST(context_executor_create, an_opengl_executor_is_made_with_its_options_and_pu
       executor.destroy();
       CHECK_EQ(fixture.shares().published(), 0u);
   });
-  const RvkContextOptions asked = fixture.ops().last_options();
+  const AvContextOptions asked = fixture.ops().last_options();
   CHECK_EQ(asked.major, 4u);
   CHECK_EQ(asked.minor, 6u);
-  CHECK_EQ(asked.profile, RVK_CONTEXT_PROFILE_CORE);
-  CHECK_EQ(asked.flags, RVK_CONTEXT_FLAG_DEBUG | RVK_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET);
+  CHECK_EQ(asked.profile, AV_CONTEXT_PROFILE_CORE);
+  CHECK_EQ(asked.flags, AV_CONTEXT_FLAG_DEBUG | AV_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET);
   CHECK_EQ(asked.reserved, 0u);
   CHECK(fixture.ops().last_share() == nullptr);
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
@@ -364,7 +364,7 @@ TEST(context_executor_create, a_share_context_with_no_executor_makes_none)
  * another cannot share with has no way to say so later. */
 TEST(context_executor_create, an_opengl_executor_that_cannot_be_published_is_given_back)
 { MockHost host;
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   ExecutorShares  unlocked(host, library);
@@ -388,9 +388,9 @@ TEST(context_executor, accepts_options_only_from_a_library_that_makes_them)
   CHECK(fixture.executor().accepts(core_46));
   CHECK(fixture.executor().accepts(GlContextOptions().sharing(2u)));
   MockHost host;
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
-  RvkExecutorOps &table = ops.editable();
-  table.abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
+  AvExecutorOps &table = ops.editable();
+  table.abi_version = AV_EXECUTOR_ABI_VERSION_HANDLES;
   table.create_with_options = nullptr;
   ExecutorLibrary old;
   CHECK_STATUS(old.accept(&table), Status::ok);
@@ -409,33 +409,33 @@ TEST(context_executor_export_object, refuses_without_an_executor_and_on_a_librar
   fixture.on_worker([](ContextExecutor &executor) {
       std::uint32_t handle_kind = 9u;
       int           fd = 9;
-      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::invalid_state);
+      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::invalid_state);
       CHECK_EQ(handle_kind, 0u);
       CHECK_EQ(fd, -1);
       std::uint64_t made = 9u;
-      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
+      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
                    Status::invalid_state);
       CHECK_EQ(made, 0u);
       /* And a release without one does nothing at all. */
-      executor.release_object(RVK_SHARED_MEMORY, 0x40u);
+      executor.release_object(AV_SHARED_MEMORY, 0x40u);
   });
   CHECK_EQ(fixture.ops().released_objects(), 0u); }
 
 TEST(context_executor_export_object, refuses_on_a_library_from_before_the_sharing_version)
 { Fixture fixture;
-  fixture.ops().set_abi_version(RVK_EXECUTOR_ABI_VERSION_EVENTS);
+  fixture.ops().set_abi_version(AV_EXECUTOR_ABI_VERSION_EVENTS);
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
   fixture.on_worker([](ContextExecutor &executor) {
       CHECK_STATUS(executor.create(), Status::ok);
       std::uint32_t handle_kind = 9u;
       int           fd = 9;
-      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
+      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
       CHECK_EQ(fd, -1);
       std::uint64_t made = 9u;
-      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
+      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
                    Status::not_supported);
       CHECK_EQ(made, 0u);
-      executor.release_object(RVK_SHARED_MEMORY, 0x40u);
+      executor.release_object(AV_SHARED_MEMORY, 0x40u);
       executor.destroy();
   });
   CHECK_EQ(fixture.ops().exported_objects(), 0u);
@@ -450,18 +450,18 @@ TEST(context_executor_export_object, exports_imports_and_releases_through_a_libr
       CHECK_STATUS(executor.create(), Status::ok);
       std::uint32_t handle_kind = 0u;
       int           fd = -1;
-      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::ok);
-      CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::ok);
+      CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
       CHECK(fd >= 0);
       std::uint64_t made = 0u;
-      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, handle_kind, fd, 4096u, made), Status::ok);
+      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, handle_kind, fd, 4096u, made), Status::ok);
       CHECK(made != 0u);
-      executor.release_object(RVK_SHARED_MEMORY, made);
+      executor.release_object(AV_SHARED_MEMORY, made);
       /* An executor that refuses is a refusal, not a fault. */
       fixture.ops().refuse_export_at(1u);
-      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
+      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
       fixture.ops().refuse_object_import_at(1u);
-      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made),
+      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made),
                    Status::not_supported);
       CHECK_EQ(made, 0u);
       executor.destroy();

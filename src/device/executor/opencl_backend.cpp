@@ -12,7 +12,7 @@
 
 #include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/cl_event_registration.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "proto/cl_blob_backing.hpp"
@@ -45,7 +45,7 @@ constexpr const char *gl_sharing = "cl_khr_gl_sharing";
  * own. An ABI boundary C requires: the callback is a bare function pointer
  * with nowhere to put a `this`, so the slot is the user data and this
  * forwards straight into it, with no logic of its own. */
-extern "C" void CL_CALLBACK rvk_cl_event_completed(cl_event, cl_int, void *user_data)
+extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_data)
 {
     static_cast<ClEventRegistration *>(user_data)->completed();
 }
@@ -285,7 +285,7 @@ bool OpenClBackend::adopt(ImportedBlob &blob)
      * question this host answers differently on each of its OpenCL platforms.
      * CL_MEM_USE_HOST_PTR needs no extension at all, which is why this half
      * is the one that works everywhere. */
-    if (blob.kind() != RVK_BLOB_HOST_POINTER || arena_.length() != 0u) return false;
+    if (blob.kind() != AV_BLOB_HOST_POINTER || arena_.length() != 0u) return false;
     arena_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
     const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
     blob.record(address, address);
@@ -599,7 +599,7 @@ cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_
     ClEventRegistration *const slot = events_.take();
     if (slot == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int registered =
-        ::clSetEventCallback(event, command_exec_callback_type, &rvk_cl_event_completed, slot);
+        ::clSetEventCallback(event, command_exec_callback_type, &av_cl_event_completed, slot);
     if (registered != CL_SUCCESS) events_.give_back(slot);
     return registered;
 }
@@ -627,7 +627,7 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * OpenCL names through a different extension this host has not got, and an
      * opaque fd is another driver's private handle that OpenGL cannot read
      * (research.md §7). */
-    if (kind != RVK_SHARED_MEMORY || handle_kind != RVK_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u)
+    if (kind != AV_SHARED_MEMORY || handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u)
         return false;
     if (!sharing() || context_ == nullptr) return false;
     if (acquire_queue() == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a command queue"); return false; }

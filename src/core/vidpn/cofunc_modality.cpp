@@ -136,7 +136,7 @@ void CofuncModality::log_path(const D3dkmdtVidPnPresentPathRecord &path,
     if (!budget_.allows()) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: cofunc path ");
+    line.append("avgpu: cofunc path ");
     line.append_decimal(path.VidPnSourceId);
     line.append("->");
     line.append_decimal(path.VidPnTargetId);

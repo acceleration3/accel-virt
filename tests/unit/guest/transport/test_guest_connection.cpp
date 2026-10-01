@@ -27,7 +27,7 @@ struct GuestConnectionProbe {
 
 namespace {
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av_gpu(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 /* STATUS_NO_MEMORY: the driver's own error, told apart from the connection's
  * refusal of adapter 0. */
 constexpr std::uint32_t no_memory = 0xC0000017u;
@@ -56,7 +56,7 @@ std::uint32_t found_adapter(MockKmt &kmt)
 
 TEST(guest_connection, opens_a_device_and_queue_on_the_adapter_it_is_handed)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   const std::uint32_t adapter = found_adapter(kmt);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(adapter), Status::ok);
@@ -74,8 +74,8 @@ TEST(guest_connection, opens_a_device_and_queue_on_the_adapter_it_is_handed)
 
 TEST(guest_connection, opening_again_is_refused_and_keeps_the_first_device)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   std::uint32_t adapters[2] = {};
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 2u, count), Status::ok);
@@ -101,7 +101,7 @@ TEST(guest_connection, adapter_zero_is_refused)
 /* A device that cannot be created leaves nothing open but the caller's adapter. */
 TEST(guest_connection, a_device_failure_leaves_only_the_adapter_open)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   const std::uint32_t adapter = found_adapter(kmt);
   kmt.fail_at(MockKmt::Call::create_device, 1u, no_memory);
   GuestConnection connection(kmt);
@@ -115,7 +115,7 @@ TEST(guest_connection, a_device_failure_leaves_only_the_adapter_open)
 /* A paging queue that cannot be created rolls the device back; the adapter stays. */
 TEST(guest_connection, a_queue_failure_rolls_back_the_device)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   const std::uint32_t adapter = found_adapter(kmt);
   kmt.fail_at(MockKmt::Call::create_paging_queue, 1u, no_memory);
   GuestConnection connection(kmt);
@@ -130,7 +130,7 @@ TEST(guest_connection, a_queue_failure_rolls_back_the_device)
  * the caller closes the adapter itself. */
 TEST(guest_connection, close_leaves_the_adapter_open)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   const std::uint32_t adapter = found_adapter(kmt);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(adapter), Status::ok);

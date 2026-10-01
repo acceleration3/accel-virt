@@ -3,7 +3,7 @@
  * present.
  *
  * What it proves is DXVK's d3d9.dll on the guest's Vulkan loader on this ICD
- * on rvkgpu - the oldest of the three layers and the one whose fixed-function
+ * on avgpu - the oldest of the three layers and the one whose fixed-function
  * paths DXVK emulates most, which is why it is worth running at all. */
 #ifndef AV_D3D9_WORK_HPP
 #define AV_D3D9_WORK_HPP

@@ -15,7 +15,7 @@ class RecordingContextPlane final : public ContextPlane {
 public:
     static constexpr std::uint32_t capacity = 64u;
 
-    Status        accept(const RvkExecutorOps *) override { return Status::ok; }
+    Status        accept(const AvExecutorOps *) override { return Status::ok; }
     Status        initialize() override { return Status::ok; }
     Status        start(const std::uint8_t *, const CapsetInfo &) override { return Status::ok; }
     std::uint32_t sub_apis() const override { return 0u; }
@@ -37,13 +37,13 @@ public:
     }
     void          interrupts_changed(bool connected) override { connected_ = connected; changes_++; }
     void          renderer_lost() override { losses_++; }
-    bool export_image(const std::uint8_t *, std::uint64_t, RvkExportedImage &) override { return false; }
+    bool export_image(const std::uint8_t *, std::uint64_t, AvExportedImage &) override { return false; }
     bool read_image(const std::uint8_t *, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t) override
     { return false; }
     /* One frame served as `frame` from the test's own pixels, as an executor
      * maps one; mapped once, and every unmap counted. */
     bool reads_frames() const override { return served_; }
-    bool map_frame(const std::uint8_t *, const SurfacePoint &frame, std::uint32_t, RvkFrameView &view) override
+    bool map_frame(const std::uint8_t *, const SurfacePoint &frame, std::uint32_t, AvFrameView &view) override
     {
         if (!frame.names() || !(frame == frame_) || snapshot_mapped_) return false;
         snapshot_mapped_ = true;
@@ -57,7 +57,7 @@ public:
         snapshot_mapped_ = false;
         unmaps_++;
     }
-    void serve_frame(const SurfacePoint &frame, const RvkFrameView &view)
+    void serve_frame(const SurfacePoint &frame, const AvFrameView &view)
     {
         frame_ = frame;
         snapshot_ = view;
@@ -82,7 +82,7 @@ public:
 
 private:
     SurfacePoint    frame_;
-    RvkFrameView snapshot_ = {};
+    AvFrameView snapshot_ = {};
     bool            snapshot_mapped_ = false;
     bool            served_ = false;
     std::uint32_t   unmaps_ = 0u;

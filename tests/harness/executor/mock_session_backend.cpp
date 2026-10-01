@@ -1,6 +1,6 @@
 #include "harness/executor/mock_session_backend.hpp"
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 
 #include <unistd.h>
 
@@ -103,7 +103,7 @@ bool MockSessionBackend::export_object(std::uint32_t kind, std::uint64_t wire_ha
     if (::pipe(ends) != 0) return false;
     ::close(ends[1]);
     fd = ends[0];
-    handle_kind = RVK_SHARED_HANDLE_DMA_BUF;
+    handle_kind = AV_SHARED_HANDLE_DMA_BUF;
     exported_objects_++;
     return true;
 }

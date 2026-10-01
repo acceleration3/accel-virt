@@ -8,7 +8,7 @@
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
-#include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
 
 namespace av {
 
@@ -16,7 +16,7 @@ ScanoutBlobSource::ScanoutBlobSource(Platform &platform, LogBudget &budget,
                                      ObjectStorage<VirtioGpuDevice> &device, uint32_t source)
     : platform_(platform), budget_(budget), device_(device), source_(source), width_(0u), height_(0u),
       blob_address_(0u), blob_pages_(0u), reported_address_(0u), reported_(false),
-      create_request_(platform, RvkRequestWriter::guest_blob_fixed_size, RvkRequestWriter::guest_blob_entry_size),
+      create_request_(platform, AvRequestWriter::guest_blob_fixed_size, AvRequestWriter::guest_blob_entry_size),
       created_(false), scanning_out_(false)
       {
           AV_SCOPE("ScanoutBlobSource::ScanoutBlobSource");
@@ -41,7 +41,7 @@ uint32_t ScanoutBlobSource::page_count() const
 Status ScanoutBlobSource::create(VirtioGpuDevice &device, const GuestPageList &pages)
 {
     AV_SCOPE("ScanoutBlobSource::create");
-    RvkRequestWriter writer(create_request_.start(), create_request_.size());
+    AvRequestWriter writer(create_request_.start(), create_request_.size());
     const Status     written = writer.guest_blob_pages(first_resource_id + source_, pages);
     if (written != Status::ok) return written;
     return device.send_control(create_request_.start(), writer.length());
@@ -144,7 +144,7 @@ void ScanoutBlobSource::report(uint64_t address, Status status)
     if (!budget_.allows()) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: scanout blob ");
+    line.append("avgpu: scanout blob ");
     line.append_decimal(source_);
     line.append(" address 0x");
     line.append_hex(address, 16u);

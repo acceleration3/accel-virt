@@ -190,7 +190,7 @@ int32_t WindowsGlEntry::force_fault()
 {
     AV_SCOPE("WindowsGlEntry::force_fault");
     using Force = int(WINAPI *)();
-    const Force hook = named<Force>("rvkForceContextFault");
+    const Force hook = named<Force>("avForceContextFault");
     return hook != nullptr ? hook() : -1;
 }
 

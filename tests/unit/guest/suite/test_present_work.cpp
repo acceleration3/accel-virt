@@ -52,7 +52,7 @@ void *const             module_handle = reinterpret_cast<void *>(0x7771u);
 /* A device on the scripted GPU, a window it presents into, and the work. */
 class PresentRig {
 public:
-    PresentRig() : device_(vulkan_), report_("rvkvkprobe"), steps_(kmt_, report_, "vulkan")
+    PresentRig() : device_(vulkan_), report_("avvkprobe"), steps_(kmt_, report_, "vulkan")
     {
         frames_.set_window(window_handle, side, side);
         vulkan_.present_into(frames_);

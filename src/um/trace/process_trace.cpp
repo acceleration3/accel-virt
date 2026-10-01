@@ -44,8 +44,8 @@ Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter f
     if (status != Status::ok) return status;
     /* Every scope costs the call it opens, thousands a frame on an
      * application's own thread, so the table is bound only when a trace is
-     * asked for: C:\ProgramData\rvk\trace-scopes, or the perfetto flag. */
-    if (GetFileAttributesW(L"C:\\ProgramData\\rvk\\trace-scopes") != INVALID_FILE_ATTRIBUTES ||
+     * asked for: C:\ProgramData\av\trace-scopes, or the perfetto flag. */
+    if (GetFileAttributesW(L"C:\\ProgramData\\av\\trace-scopes") != INVALID_FILE_ATTRIBUTES ||
         events_file_.wanted())
         scope_binding.bind(table_);
     record_events(module, pid);

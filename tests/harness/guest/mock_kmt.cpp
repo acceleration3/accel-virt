@@ -3,7 +3,7 @@
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 
 #include "core/support/nt_status.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
@@ -743,7 +743,7 @@ Status MockKmt::create_context_virtual(std::uint32_t device, const std::uint8_t 
     if (find(Kind::device, device) == nullptr || private_data == nullptr || size == 0u) return misuse();
     private_size_ = size < max_private ? size : max_private;
     for (std::uint32_t i = 0u; i < private_size_; i++) private_[i] = private_data[i];
-    RvkContextRecord    record;
+    AvContextRecord    record;
     const bool          decoded = record.decode(private_data, size) == Status::ok;
     if (!zeroed(Call::create_context_virtual)) context = open(Kind::context, device, 0u, 0u);
     Object *const created = find(Kind::context, context);

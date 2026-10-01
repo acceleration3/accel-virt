@@ -2,7 +2,7 @@
  * offered and each live session's API and GPU, written without waiting. */
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
 #include "harness/executor/executor_root_probe.hpp"
@@ -31,13 +31,13 @@ constexpr std::uint8_t nvidia[16] = {0x7b, 0x7a, 0xd2, 0xc5, 0x42, 0x19, 0x8c, 0
 
 TEST(executor_root_report, names_each_gpu_and_each_live_session)
 { MockHostApis apis;
-  apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
-  apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  ContextSession *const on_intel = root.open(RVK_EXECUTOR_SUB_API_VULKAN, intel);
-  ContextSession *const on_nvidia = root.open(RVK_EXECUTOR_SUB_API_VULKAN, nvidia);
+  ContextSession *const on_intel = root.open(AV_EXECUTOR_SUB_API_VULKAN, intel);
+  ContextSession *const on_nvidia = root.open(AV_EXECUTOR_SUB_API_VULKAN, nvidia);
   CHECK(on_intel != nullptr);
   CHECK(on_nvidia != nullptr);
   root.close(on_intel);
@@ -60,7 +60,7 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
 
 TEST(executor_root_report, names_the_api_of_every_kind_of_session)
 { MockHostApis apis;
-  apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL | RVK_EXECUTOR_SUB_API_OPENGL,
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL | AV_EXECUTOR_SUB_API_OPENGL,
                0u, 0u, 0u);
   RootUnderTest held;
   ExecutorRoot &root = *held;
@@ -68,7 +68,7 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
   av::ExecutorRootProbe probe(root);
   av::MockSessionBackend backends[3];
   std::uint8_t           blocks[3][256];
-  const std::uint32_t    apis_in_slot[3] = {RVK_EXECUTOR_SUB_API_OPENCL, RVK_EXECUTOR_SUB_API_OPENGL, 16u};
+  const std::uint32_t    apis_in_slot[3] = {AV_EXECUTOR_SUB_API_OPENCL, AV_EXECUTOR_SUB_API_OPENGL, 16u};
   for (std::uint32_t slot = 0u; slot < 3u; slot++) {
     CHECK_STATUS(probe.session_at(slot).initialize(backends[slot], blocks[slot], sizeof blocks[slot]), Status::ok);
     probe.remember(slot, apis_in_slot[slot], 0u);

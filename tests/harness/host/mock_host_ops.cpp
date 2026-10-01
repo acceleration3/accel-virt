@@ -20,7 +20,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.opaque = &host;
     table_.log = [](void *opaque, const char *message) { host_of(opaque).log(message); };
     table_.main_loop_held = [](void *opaque) { return host_of(opaque).holds_main_loop() ? 1 : 0; };
-    table_.start_thread = [](void *opaque, RvkHostRoutine entry, void *context) {
+    table_.start_thread = [](void *opaque, AvHostRoutine entry, void *context) {
         void *thread = nullptr;
         return created(host_of(opaque).start_thread(entry, context, thread), thread);
     };
@@ -35,7 +35,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.wait_event_until = [](void *opaque, void *event, std::uint64_t deadline) {
         return host_of(opaque).wait_event_until(event, deadline) ? 1 : 0;
     };
-    table_.show_image = [](void *opaque, std::uint32_t head, const RvkExportedImage *image) {
+    table_.show_image = [](void *opaque, std::uint32_t head, const AvExportedImage *image) {
         return host_of(opaque).show_image(head, *image) == Status::ok ? 0 : 1;
     };
     table_.create_mutex = [](void *opaque) {
@@ -46,13 +46,13 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.lock_mutex = [](void *opaque, void *mutex) { host_of(opaque).lock_mutex(mutex); };
     table_.unlock_mutex = [](void *opaque, void *mutex) { host_of(opaque).unlock_mutex(mutex); };
     table_.try_lock_mutex = [](void *opaque, void *mutex) { return host_of(opaque).try_lock_mutex(mutex) ? 1 : 0; };
-    table_.run_on_main_loop = [](void *opaque, RvkHostRoutine routine, void *context) {
+    table_.run_on_main_loop = [](void *opaque, AvHostRoutine routine, void *context) {
         host_of(opaque).run_on_main_loop(routine, context);
     };
     table_.gpu_count = [](void *opaque) { return host_of(opaque).gpu_count(); };
-    table_.gpu_properties = [](void *opaque, std::uint32_t index, RvkGpuProperties *properties) {
+    table_.gpu_properties = [](void *opaque, std::uint32_t index, AvGpuProperties *properties) {
         const GpuIdentity identity = host_of(opaque).gpu_identity(index);
-        *properties = RvkGpuProperties{identity.vendor_id(), identity.device_id(), identity.device_type(), {},
+        *properties = AvGpuProperties{identity.vendor_id(), identity.device_id(), identity.device_type(), {},
                                        identity.local_memory(), identity.shared_memory(), {}, 0u, 0u, 0u, 0u, 0u};
         std::memcpy(properties->uuid, identity.uuid(), sizeof properties->uuid);
         std::memcpy(properties->name, identity.name(), std::strlen(identity.name()) + 1u);
@@ -157,7 +157,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.display_takes_dmabuf = [](void *opaque, std::uint32_t head) {
         return host_of(opaque).display_takes_dmabuf(head) ? 1 : 0;
     };
-    table_.show_scanout = [](void *opaque, std::uint32_t head, int fd, const RvkScanoutFrame *frame) {
+    table_.show_scanout = [](void *opaque, std::uint32_t head, int fd, const AvScanoutFrame *frame) {
         /* The modifier and the reserved word are the table's promise, not the
          * mock's business; a plane that broke either is a caught ABI change. */
         if (frame == nullptr || frame->reserved != 0u || frame->modifier != 0u) return 1;
@@ -211,7 +211,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     };
 }
 
-const RvkHostOps &MockHostOps::table() const
+const AvHostOps &MockHostOps::table() const
 {
     return table_;
 }

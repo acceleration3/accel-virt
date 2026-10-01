@@ -13,7 +13,7 @@
  * own loaders list, because the two measured disagree about which memory types
  * a host pointer may become. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/extension_list.hpp"
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/host_exported_fds.hpp"
@@ -356,18 +356,18 @@ av::LoaderHostApis &opened_host()
   host.open();
   return host; }
 
-RvkBlobHandle host_pointer(void *pointer, std::uint32_t memory_type, std::uint64_t size = page)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_HOST_POINTER;
+AvBlobHandle host_pointer(void *pointer, std::uint32_t memory_type, std::uint64_t size = page)
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
   handle.reserved = memory_type;
   handle.pointer = pointer;
   handle.fd = -1;
   handle.size = size;
   return handle; }
 
-RvkBlobHandle dma_buf(int fd, std::uint32_t memory_type, std::uint64_t size = page)
-{ RvkBlobHandle handle = {};
-  handle.kind = RVK_BLOB_DMA_BUF;
+AvBlobHandle dma_buf(int fd, std::uint32_t memory_type, std::uint64_t size = page)
+{ AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_DMA_BUF;
   handle.reserved = memory_type;
   handle.pointer = nullptr;
   handle.fd = fd;
@@ -386,7 +386,7 @@ std::uint32_t highest_missing(std::uint32_t mask)
 
 /* vkFreeMemory of `memory` through the wire; whether the backend ran it. */
 bool free_memory(BackendTransport &wire, std::uint64_t device, std::uint64_t memory)
-{ vkproto::rvk_vkFreeMemory(wire, as_handle<VkDevice>(device), as_handle<VkDeviceMemory>(memory), nullptr);
+{ vkproto::av_vkFreeMemory(wire, as_handle<VkDevice>(device), as_handle<VkDeviceMemory>(memory), nullptr);
   return wire.ran(); }
 
 }  // namespace
@@ -410,7 +410,7 @@ TEST(vulkan_backend_device, a_device_that_imports_a_dma_buf_decides_on_it_and_re
       /* Undo what the fixture pinned: this is the decision itself. */
       VulkanBackendProbe deciding(made.backend());
       CHECK_EQ(deciding.decide_import(as_handle<VkPhysicalDevice>(made.physical())),
-               std::uint32_t{RVK_BLOB_DMA_BUF});
+               std::uint32_t{AV_BLOB_DMA_BUF});
 
       ImportedBlob refused;
       CHECK_STATUS(refused.take(1u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
@@ -617,12 +617,12 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
       create.size = page;
       create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
       VkBuffer source = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateBuffer(wire, device, &create, nullptr, &source), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, device, &create, nullptr, &source), VK_SUCCESS);
       create.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
       VkBuffer target = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateBuffer(wire, device, &create, nullptr, &target), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, device, &create, nullptr, &target), VK_SUCCESS);
       VkMemoryRequirements requirements = {};
-      vkproto::rvk_vkGetBufferMemoryRequirements(wire, device, source, &requirements);
+      vkproto::av_vkGetBufferMemoryRequirements(wire, device, source, &requirements);
       CHECK(requirements.size <= page);
       const std::uint32_t type = lowest(made.importable(pages.at(0u)) & requirements.memoryTypeBits);
 
@@ -632,49 +632,49 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
           CHECK(backend.adopt(blobs[b]));
       }
       CHECK_EQ(made.probe().imports_held(), 2u);
-      CHECK_EQ(vkproto::rvk_vkBindBufferMemory(wire, device, source,
+      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, device, source,
                                                as_handle<VkDeviceMemory>(blobs[0].wire_handle()), 0u),
                VK_SUCCESS);
-      CHECK_EQ(vkproto::rvk_vkBindBufferMemory(wire, device, target,
+      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, device, target,
                                                as_handle<VkDeviceMemory>(blobs[1].wire_handle()), 0u),
                VK_SUCCESS);
 
       std::uint64_t queue = 0u;
-      vkproto::rvk_vkGetDeviceQueue(wire, device, 0u, 0u, &queue);
+      vkproto::av_vkGetDeviceQueue(wire, device, 0u, 0u, &queue);
       CHECK(queue != 0u);
       VkCommandPoolCreateInfo pool_create = {};
       pool_create.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
       VkCommandPool pool = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateCommandPool(wire, device, &pool_create, nullptr, &pool), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateCommandPool(wire, device, &pool_create, nullptr, &pool), VK_SUCCESS);
       VkCommandBufferAllocateInfo allocate = {};
       allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
       allocate.commandPool = pool;
       allocate.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
       allocate.commandBufferCount = 1u;
       std::uint64_t commands_raw = 0u;
-      CHECK_EQ(vkproto::rvk_vkAllocateCommandBuffers(wire, device, &allocate, &commands_raw), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateCommandBuffers(wire, device, &allocate, &commands_raw), VK_SUCCESS);
       const VkCommandBuffer commands = as_handle<VkCommandBuffer>(commands_raw);
       VkCommandBufferBeginInfo begin = {};
       begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-      CHECK_EQ(vkproto::rvk_vkBeginCommandBuffer(wire, commands, &begin), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkBeginCommandBuffer(wire, commands, &begin), VK_SUCCESS);
       const VkBufferCopy region = {0u, 0u, page};
-      vkproto::rvk_vkCmdCopyBuffer(wire, commands, source, target, 1u, &region);
+      vkproto::av_vkCmdCopyBuffer(wire, commands, source, target, 1u, &region);
       CHECK(wire.ran());
-      CHECK_EQ(vkproto::rvk_vkEndCommandBuffer(wire, commands), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkEndCommandBuffer(wire, commands), VK_SUCCESS);
       VkSubmitInfo submit = {};
       submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
       submit.commandBufferCount = 1u;
       submit.pCommandBuffers = &commands;
-      CHECK_EQ(vkproto::rvk_vkQueueSubmit(wire, as_handle<VkQueue>(queue), 1u, &submit, VK_NULL_HANDLE),
+      CHECK_EQ(vkproto::av_vkQueueSubmit(wire, as_handle<VkQueue>(queue), 1u, &submit, VK_NULL_HANDLE),
                VK_SUCCESS);
-      CHECK_EQ(vkproto::rvk_vkQueueWaitIdle(wire, as_handle<VkQueue>(queue)), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkQueueWaitIdle(wire, as_handle<VkQueue>(queue)), VK_SUCCESS);
 
       CHECK(std::memcmp(pages.at(1u), pages.at(0u), page) == 0);
       CHECK_EQ(pages.at(1u)[page - 1u], static_cast<std::uint8_t>((page - 1u) * 7u + 1u));
 
-      vkproto::rvk_vkDestroyCommandPool(wire, device, pool, nullptr);
-      vkproto::rvk_vkDestroyBuffer(wire, device, source, nullptr);
-      vkproto::rvk_vkDestroyBuffer(wire, device, target, nullptr);
+      vkproto::av_vkDestroyCommandPool(wire, device, pool, nullptr);
+      vkproto::av_vkDestroyBuffer(wire, device, source, nullptr);
+      vkproto::av_vkDestroyBuffer(wire, device, target, nullptr);
 
       for (std::uint32_t b = 0u; b < 2u; b++) {
           const std::uint64_t memory = blobs[b].wire_handle();
@@ -707,7 +707,7 @@ TEST(vulkan_backend_device, freeing_memory_that_is_not_an_import_frees_it)
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory memory = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
                VK_SUCCESS);
       std::uint64_t raw = 0u;
       std::memcpy(&raw, &memory, sizeof memory);
@@ -900,7 +900,7 @@ TEST(vulkan_backend_device, a_buffer_of_a_destroyed_device_is_refused)
       create.size = page;
       create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
       VkBuffer buffer = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateBuffer(wire, as_handle<VkDevice>(made.device()), &create, nullptr, &buffer),
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, as_handle<VkDevice>(made.device()), &create, nullptr, &buffer),
                VK_SUCCESS);
       std::uint64_t raw = 0u;
       std::memcpy(&raw, &buffer, sizeof buffer);
@@ -987,19 +987,19 @@ bool driver_imports_image(std::uint64_t physical, const VkImageCreateInfo &creat
 std::uint32_t wire_buffer_types(BackendTransport &wire, std::uint64_t device, const VkBufferCreateInfo &create)
 { const VkDevice host = as_handle<VkDevice>(device);
   VkBuffer buffer = VK_NULL_HANDLE;
-  if (vkproto::rvk_vkCreateBuffer(wire, host, &create, nullptr, &buffer) != VK_SUCCESS) return 0u;
+  if (vkproto::av_vkCreateBuffer(wire, host, &create, nullptr, &buffer) != VK_SUCCESS) return 0u;
   VkMemoryRequirements requirements = {};
-  vkproto::rvk_vkGetBufferMemoryRequirements(wire, host, buffer, &requirements);
-  vkproto::rvk_vkDestroyBuffer(wire, host, buffer, nullptr);
+  vkproto::av_vkGetBufferMemoryRequirements(wire, host, buffer, &requirements);
+  vkproto::av_vkDestroyBuffer(wire, host, buffer, nullptr);
   return requirements.memoryTypeBits; }
 
 std::uint32_t wire_image_types(BackendTransport &wire, std::uint64_t device, const VkImageCreateInfo &create)
 { const VkDevice host = as_handle<VkDevice>(device);
   VkImage image = VK_NULL_HANDLE;
-  if (vkproto::rvk_vkCreateImage(wire, host, &create, nullptr, &image) != VK_SUCCESS) return 0u;
+  if (vkproto::av_vkCreateImage(wire, host, &create, nullptr, &image) != VK_SUCCESS) return 0u;
   VkMemoryRequirements requirements = {};
-  vkproto::rvk_vkGetImageMemoryRequirements(wire, host, image, &requirements);
-  vkproto::rvk_vkDestroyImage(wire, host, image, nullptr);
+  vkproto::av_vkGetImageMemoryRequirements(wire, host, image, &requirements);
+  vkproto::av_vkDestroyImage(wire, host, image, nullptr);
   return requirements.memoryTypeBits; }
 
 }  // namespace
@@ -1160,17 +1160,17 @@ TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_d
       CHECK(physical != 0u);
       const VkPhysicalDeviceMemoryProperties driver = driver_memory(physical);
       VkPhysicalDeviceMemoryProperties before = {};
-      vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &before);
+      vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &before);
       check_restricted(before, driver, importable);
 
       VkPhysicalDeviceMemoryProperties2 after = {};
       after.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
       CHECK(guest.create_device(physical) != 0u);
-      vkproto::rvk_vkGetPhysicalDeviceMemoryProperties2(wire, as_handle<VkPhysicalDevice>(physical), &after);
+      vkproto::av_vkGetPhysicalDeviceMemoryProperties2(wire, as_handle<VkPhysicalDevice>(physical), &after);
       check_restricted(after.memoryProperties, driver, importable);
       VkPhysicalDeviceMemoryProperties2 khr = {};
       khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-      vkproto::rvk_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
+      vkproto::av_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
       check_restricted(khr.memoryProperties, driver, importable);
       fresh.shut_down();
   }
@@ -1184,7 +1184,7 @@ TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_d
 TEST(vulkan_backend_device, a_template_the_device_cannot_track_is_refused_before_the_driver)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       GuestDevice made(host, i);
       if (made.device() == 0u) continue;
 
@@ -1220,7 +1220,7 @@ TEST(vulkan_backend_device, a_template_the_device_cannot_track_is_refused_before
 TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       const char *const extensions[] = {"VK_KHR_external_memory_fd"};
       GuestDevice made(host, i, 1u, extensions);
       if (made.device() == 0u) continue;
@@ -1236,14 +1236,14 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
 
       VkMemoryGetFdInfoKHR get = {};
       get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
       get.memory = shared;
       get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
       int fd = -1;
-      if (vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
+      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
       CHECK(fd >= 0);
       CHECK(made.probe().holds_fd(fd));
 
@@ -1256,7 +1256,7 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
       VkMemoryAllocateInfo importing = allocate;
       importing.pNext = &forged;
       VkDeviceMemory imported = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &importing, nullptr, &imported),
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &importing, nullptr, &imported),
                VK_ERROR_INVALID_EXTERNAL_HANDLE);
       CHECK(imported == VK_NULL_HANDLE);
 
@@ -1265,10 +1265,10 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
       VkImportMemoryFdInfoKHR import = forged;
       import.fd = fd;
       importing.pNext = &import;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &importing, nullptr, &imported), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &importing, nullptr, &imported), VK_SUCCESS);
       CHECK(!made.probe().holds_fd(fd));
       VkDeviceMemory again = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &importing, nullptr, &again),
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &importing, nullptr, &again),
                VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
       /* An allocation that imports nothing is untouched by any of it, and one
@@ -1277,11 +1277,11 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
       VkMemoryAllocateInfo alone = {};
       alone.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
       alone.allocationSize = page;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
       VkMemoryAllocateInfo absurd = alone;
       absurd.allocationSize = ~static_cast<VkDeviceSize>(0) / 2u;
       VkDeviceMemory none = VK_NULL_HANDLE;
-      CHECK(vkproto::rvk_vkAllocateMemory(wire, device, &absurd, nullptr, &none) != VK_SUCCESS);
+      CHECK(vkproto::av_vkAllocateMemory(wire, device, &absurd, nullptr, &none) != VK_SUCCESS);
   }
 }
 
@@ -1290,7 +1290,7 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
 TEST(vulkan_backend_device, a_semaphore_import_names_an_fd_this_context_exported)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       const char *const extensions[] = {"VK_KHR_external_semaphore_fd"};
       GuestDevice made(host, i, 1u, extensions);
       if (made.device() == 0u) continue;
@@ -1300,14 +1300,14 @@ TEST(vulkan_backend_device, a_semaphore_import_names_an_fd_this_context_exported
       VkSemaphoreCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       VkSemaphore semaphore = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
       VkImportSemaphoreFdInfoKHR importing = {};
       importing.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
       importing.semaphore = semaphore;
       importing.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
       importing.fd = 4096;
-      CHECK_EQ(vkproto::rvk_vkImportSemaphoreFdKHR(wire, device, &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-      vkproto::rvk_vkDestroySemaphore(wire, device, semaphore, nullptr);
+      CHECK_EQ(vkproto::av_vkImportSemaphoreFdKHR(wire, device, &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      vkproto::av_vkDestroySemaphore(wire, device, semaphore, nullptr);
 
       /* A driver that refuses an export is answered as it stands, and nothing
        * is remembered for it. Neither GPU measured refuses one - both export
@@ -1326,7 +1326,7 @@ TEST(vulkan_backend_device, a_semaphore_import_names_an_fd_this_context_exported
 TEST(vulkan_backend_device, exports_past_what_the_table_holds_are_refused)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       const char *const extensions[] = {"VK_KHR_external_memory_fd"};
       GuestDevice made(host, i, 1u, extensions);
       if (made.device() == 0u) continue;
@@ -1341,20 +1341,20 @@ TEST(vulkan_backend_device, exports_past_what_the_table_holds_are_refused)
       allocate.pNext = &exportable;
       allocate.allocationSize = page;
       VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
 
       VkMemoryGetFdInfoKHR get = {};
       get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
       get.memory = shared;
       get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
       int first = -1;
-      if (vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &first) != VK_SUCCESS) continue;
+      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &first) != VK_SUCCESS) continue;
       for (std::uint32_t taken = 1u; taken < av::HostExportedFds::max_fds; taken++) {
           int more = -1;
-          CHECK_EQ(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &more), VK_SUCCESS);
+          CHECK_EQ(vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &more), VK_SUCCESS);
       }
       int past = -1;
-      CHECK_EQ(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &past), VK_ERROR_TOO_MANY_OBJECTS);
+      CHECK_EQ(vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &past), VK_ERROR_TOO_MANY_OBJECTS);
       /* What the fd the driver answered was is not askable from here - a
        * refused command answers no out parameter through the wire - but the
        * table is what an import consults, and it never learnt one. */
@@ -1365,11 +1365,11 @@ TEST(vulkan_backend_device, exports_past_what_the_table_holds_are_refused)
       VkMemoryAllocateInfo alone = {};
       alone.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
       alone.allocationSize = page;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
       VkMemoryGetFdInfoKHR unshared = get;
       unshared.memory = plain;
       int refused = -1;
-      CHECK(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &unshared, &refused) != VK_SUCCESS);
+      CHECK(vkproto::av_vkGetMemoryFdKHR(wire, device, &unshared, &refused) != VK_SUCCESS);
   }
 }
 
@@ -1382,7 +1382,7 @@ TEST(vulkan_backend_device, a_guest_list_with_no_room_left_is_sent_as_the_guest_
   static char        spelled[av::ExtensionList::capacity][32] = {};
   const char        *names[av::ExtensionList::capacity] = {};
   for (std::uint32_t index = 0u; index < av::ExtensionList::capacity; index++) {
-      std::snprintf(spelled[index], sizeof spelled[index], "VK_RVK_no_such_extension_%u", index);
+      std::snprintf(spelled[index], sizeof spelled[index], "VK_AV_no_such_extension_%u", index);
       names[index] = spelled[index];
   }
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
@@ -1404,7 +1404,7 @@ TEST(vulkan_backend_device, a_guest_list_with_no_room_left_is_sent_as_the_guest_
 TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_pointer_device)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
       GuestDevice made(host, i, 2u, extensions);
       if (made.device() == 0u) continue;
@@ -1420,54 +1420,54 @@ TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
       const std::uint64_t handle = as_wire(shared);
 
       /* A handle this backend never made, and a kind that is not one, are
        * refused before the driver is asked anything. */
       std::uint32_t handle_kind = 9u;
       int           fd = 9;
-      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, handle + 0x1000u, handle_kind, fd));
+      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, handle + 0x1000u, handle_kind, fd));
       CHECK_EQ(handle_kind, 0u);
       CHECK_EQ(fd, -1);
-      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, 0u, handle_kind, fd));
-      CHECK(!made.backend().export_object(RVK_SHARED_NATIVE_FENCE + 1u, handle, handle_kind, fd));
+      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, 0u, handle_kind, fd));
+      CHECK(!made.backend().export_object(AV_SHARED_NATIVE_FENCE + 1u, handle, handle_kind, fd));
 
       /* A device that decided on the host pointer shares no memory. */
       made.probe().import_as_pointer(as_handle<VkPhysicalDevice>(made.physical()));
-      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, handle, handle_kind, fd));
+      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, handle, handle_kind, fd));
       CHECK_EQ(handle_kind, 0u);
       CHECK_EQ(fd, -1);
 
       made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
-      if (!made.backend().export_object(RVK_SHARED_MEMORY, handle, handle_kind, fd)) continue;
-      CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+      if (!made.backend().export_object(AV_SHARED_MEMORY, handle, handle_kind, fd)) continue;
+      CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
       CHECK(fd >= 0);
 
       /* An fd that names nothing, a kind or a size no import can have, and an
        * opaque fd where memory needs a dma-buf, are each refused with nothing
        * made. */
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, handle_kind, -1, page, imported));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, imported));
       CHECK_EQ(imported, 0u);
-      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_OPAQUE_FD, fd, page,
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, fd, page,
                                           imported));
-      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, handle_kind, fd, 0u, imported));
-      CHECK(!made.backend().import_object(RVK_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, imported));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, imported));
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, imported));
 
-      CHECK(made.backend().import_object(RVK_SHARED_MEMORY, handle_kind, fd, page, imported));
+      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, imported));
       CHECK(imported != 0u);
       CHECK(imported != handle);
       /* What an import made is a handle the guest may name, and releasing it
        * takes it back - which is also what frees the memory. */
       CHECK(made.probe().handles().knows(imported));
-      made.backend().release_object(RVK_SHARED_MEMORY, imported);
+      made.backend().release_object(AV_SHARED_MEMORY, imported);
       CHECK(!made.probe().handles().knows(imported));
       /* The descriptor stays the device's: the import duplicated it. */
       CHECK(::fcntl(fd, F_GETFD) != -1);
       /* A handle this backend never made releases nothing. */
-      made.backend().release_object(RVK_SHARED_MEMORY, handle + 0x1000u);
-      made.backend().release_object(RVK_SHARED_MEMORY, 0u);
+      made.backend().release_object(AV_SHARED_MEMORY, handle + 0x1000u);
+      made.backend().release_object(AV_SHARED_MEMORY, 0u);
       ::close(fd);
   }
 }
@@ -1477,7 +1477,7 @@ TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_
 TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_answered_not_invented)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
       GuestDevice made(host, i, 2u, extensions);
       if (made.device() == 0u) continue;
@@ -1490,7 +1490,7 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory plain = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &plain), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &plain), VK_SUCCESS);
 
       /* A descriptor that is not memory at all - a pipe - is a mask of no
        * memory types, which is an import with nothing to be made into. */
@@ -1498,7 +1498,7 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, ends[0], page,
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page,
                                           imported));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
@@ -1506,7 +1506,7 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       /* And memory the guest still holds is freed through a release naming it,
        * which is the path an importer's own memory takes. */
       CHECK(made.probe().handles().knows(as_wire(plain)));
-      made.backend().release_object(RVK_SHARED_MEMORY, as_wire(plain));
+      made.backend().release_object(AV_SHARED_MEMORY, as_wire(plain));
       CHECK(!made.probe().handles().knows(as_wire(plain)));
   }
 }
@@ -1516,7 +1516,7 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
 TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       const char *const extensions[] = {"VK_KHR_external_semaphore_fd"};
       GuestDevice made(host, i, 1u, extensions);
       if (made.device() == 0u) continue;
@@ -1529,8 +1529,8 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       VkSemaphoreCreateInfo plain_create = {};
       plain_create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       VkSemaphore plain = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &plain_create, nullptr, &plain), VK_SUCCESS);
-      made.backend().release_object(RVK_SHARED_MONITORED_FENCE, as_wire(plain));
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &plain_create, nullptr, &plain), VK_SUCCESS);
+      made.backend().release_object(AV_SHARED_MONITORED_FENCE, as_wire(plain));
       CHECK(!made.probe().handles().knows(as_wire(plain)));
 
       std::uint32_t handle_kind = 9u;
@@ -1546,34 +1546,34 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       create.pNext = &timeline;
       VkSemaphore semaphore = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
 
       /* Both fence kinds export the same way: to the host they are one
        * timeline semaphore, and only the guest tells them apart. */
-      if (!made.backend().export_object(RVK_SHARED_NATIVE_FENCE, as_wire(semaphore), handle_kind, fd))
+      if (!made.backend().export_object(AV_SHARED_NATIVE_FENCE, as_wire(semaphore), handle_kind, fd))
           continue;
-      CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_OPAQUE_FD);
+      CHECK_EQ(handle_kind, AV_SHARED_HANDLE_OPAQUE_FD);
       CHECK(fd >= 0);
 
       /* A dma-buf is memory: a fence import naming one is refused before the
        * driver sees it. */
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_DMA_BUF, fd, 0u,
+      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, fd, 0u,
                                           imported));
       CHECK_EQ(imported, 0u);
       /* And a descriptor that is not a semaphore is the driver's refusal. */
       int ends[2] = {-1, -1};
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
-      CHECK(!made.backend().import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, ends[0],
+      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
                                           0u, imported));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
 
-      CHECK(made.backend().import_object(RVK_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, imported));
+      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, imported));
       CHECK(imported != 0u);
       CHECK(made.probe().handles().knows(imported));
-      made.backend().release_object(RVK_SHARED_NATIVE_FENCE, imported);
+      made.backend().release_object(AV_SHARED_NATIVE_FENCE, imported);
       CHECK(!made.probe().handles().knows(imported));
       CHECK(::fcntl(fd, F_GETFD) != -1);
       ::close(fd);
@@ -1587,7 +1587,7 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
 TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_either_way)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
       GuestDevice made(host, i);
       if (made.device() == 0u) continue;
       made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
@@ -1599,18 +1599,18 @@ TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_ei
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory memory = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &memory), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &memory), VK_SUCCESS);
       VkSemaphoreCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       VkSemaphore semaphore = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
 
       std::uint32_t handle_kind = 9u;
       int           fd = 9;
-      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, as_wire(memory), handle_kind, fd));
+      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, as_wire(memory), handle_kind, fd));
       CHECK_EQ(handle_kind, 0u);
       CHECK_EQ(fd, -1);
-      CHECK(!made.backend().export_object(RVK_SHARED_MONITORED_FENCE, as_wire(semaphore), handle_kind, fd));
+      CHECK(!made.backend().export_object(AV_SHARED_MONITORED_FENCE, as_wire(semaphore), handle_kind, fd));
       CHECK_EQ(fd, -1);
 
       /* An import has nothing to import through either, whatever descriptor it
@@ -1619,13 +1619,13 @@ TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_ei
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, ends[0],
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
                                           0u, imported));
       CHECK_EQ(imported, 0u);
       /* Memory is the same answer by a different route: with no entry point
        * to ask, the descriptor's memory types are none, and an import with no
        * type to bind into is refused rather than bound into type 0. */
-      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, ends[0], page,
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page,
                                           imported));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);

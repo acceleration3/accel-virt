@@ -35,7 +35,7 @@ constexpr uint32_t entry_bytes = 32u;
 constexpr uint32_t full_mask = 0xfu;
 constexpr uint32_t dxbc_version = 1u;
 
-const char *const system_names[] = {"RVK",
+const char *const system_names[] = {"AV",
                                     "SV_Position",
                                     "SV_ClipDistance",
                                     "SV_CullDistance",
@@ -138,7 +138,7 @@ const char *DxbcContainer::semantic_of(const d3dproto::SignatureEntry &entry, bo
                                                                                               : "SV_TessFactor";
     if (sv == name_clip_distance || sv == name_cull_distance) index = 0u;
     if (sv < sizeof(system_names) / sizeof(system_names[0])) return system_names[sv];
-    return "RVK";
+    return "AV";
 }
 
 bool DxbcContainer::add_signature(Role role, const d3dproto::SignatureEntry *entries, uint32_t count,

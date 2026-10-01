@@ -19,11 +19,11 @@ uint32_t GuestProgram::run()
     AV_SCOPE("GuestProgram::run");
     /* Tracing is a diagnosis aid: the suite runs, and reports only what it
      * tests, whether or not the section could be made. */
-    if (trace_.construct() == Status::ok) static_cast<void>(trace_.object().start("rvktest", *this, crashed_));
+    if (trace_.construct() == Status::ok) static_cast<void>(trace_.object().start("avtest", *this, crashed_));
     const Status initialized = kmt_.initialize();
     if (initialized == Status::ok) {
         if (run_ == Run::timeout) static_cast<void>(suite_.run_timeout());
-        else if (run_ == Run::rvk) static_cast<void>(suite_.run_rvk());
+        else if (run_ == Run::av) static_cast<void>(suite_.run_av());
         else if (run_ == Run::round_trip) static_cast<void>(suite_.run_round_trip());
         else static_cast<void>(suite_.run());
     } else {
@@ -37,7 +37,7 @@ uint32_t GuestProgram::run()
 void GuestProgram::report(StateWriter &writer)
 {
     AV_SCOPE("GuestProgram::report");
-    constexpr const char *runs[] = {"suite", "timeout", "rvk", "trip"};
+    constexpr const char *runs[] = {"suite", "timeout", "av", "trip"};
     writer.open("program", 0u);
     writer.text("run", runs[static_cast<uint32_t>(run_)]);
     writer.close();

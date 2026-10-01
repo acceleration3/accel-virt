@@ -19,7 +19,7 @@ import os
 import struct
 import unittest
 
-import rvk_context
+import av_context
 import virtio_qtest
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
@@ -84,7 +84,7 @@ def named(command, resource):
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuScanout(unittest.TestCase):
     def open(self):
-        qtest = virtio_qtest.Qtest(BUILD, rvk_context.rvk_device(f",hostmem={HOSTMEM}"))
+        qtest = virtio_qtest.Qtest(BUILD, av_context.av_device(f",hostmem={HOSTMEM}"))
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID |
                                       FEATURE_CONTEXT_INIT)

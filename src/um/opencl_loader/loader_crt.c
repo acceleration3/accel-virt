@@ -4,7 +4,7 @@
  * This is the loader's build, not this driver's: it exists so the guest proof
  * runs against the real Khronos loader rather than a stand-in (feature 052,
  * research §2). Nothing in src/ links it, and the ICD it goes on to find is
- * rvkcl.dll, built the same way and against none of this.
+ * avcl.dll, built the same way and against none of this.
  *
  * Allocation goes through the process heap, not a pool, because this is user
  * mode and the loader frees what it allocates on the same thread it allocated

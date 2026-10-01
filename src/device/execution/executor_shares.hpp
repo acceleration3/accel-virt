@@ -8,7 +8,7 @@
 #define AV_EXECUTOR_SHARES_HPP
 
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "proto/context/sub_api.hpp"
 
 #include <stdint.h>
@@ -35,15 +35,15 @@ public:
     /* Context `id`'s executor on the GPU `uuid` names may be shared from now
      * on. invalid_state before initialize; invalid_parameter for id 0 or no
      * executor; conflict for an id published already; no_space when full. */
-    [[nodiscard]] Status publish(uint32_t id, const uint8_t *uuid, RvkExecutor *executor);
+    [[nodiscard]] Status publish(uint32_t id, const uint8_t *uuid, AvExecutor *executor);
     /* Not any more; returns once no create is using it. */
     void                 withdraw(uint32_t id);
     /* An executor of `api` made with `options` sharing context `share_id`'s
      * OpenGL objects on the same GPU - an OpenGL one sharing lists, an OpenCL
      * one under cl_khr_gl_sharing; null, with nothing asked of the library,
      * when there is no such executor, and null when the library makes none. */
-    RvkExecutor         *create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
-                                        const RvkContextOptions &options);
+    AvExecutor         *create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
+                                        const AvContextOptions &options);
     uint32_t             published();
 
     bool invariants_hold() const;
@@ -61,7 +61,7 @@ private:
     /* One published executor per index: its context, its GPU, itself. */
     uint32_t               ids_[capacity];
     uint8_t                uuids_[capacity][uuid_bytes];
-    RvkExecutor           *executors_[capacity];
+    AvExecutor           *executors_[capacity];
 
     friend struct ExecutorSharesProbe;
 };

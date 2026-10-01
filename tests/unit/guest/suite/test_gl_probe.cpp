@@ -29,13 +29,13 @@ namespace {
 
 class ProbeRig {
 public:
-    explicit ProbeRig(std::uint32_t width = 8u, std::uint32_t height = 4u) : gl_(width, height), report_("rvkglprobe")
+    explicit ProbeRig(std::uint32_t width = 8u, std::uint32_t height = 4u) : gl_(width, height), report_("avglprobe")
     {
-        /* The rvkgpu the probe's own steps find, and the adapter a paced swap
+        /* The avgpu the probe's own steps find, and the adapter a paced swap
          * waits on, as the ICD's does (feature 051). */
-        const av::PciIdentity rvk(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                  av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem);
-        kmt_.add_adapter(rvk, av::AdapterScenario::wddm_3_2);
+        const av::PciIdentity av(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
+                                  av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem);
+        kmt_.add_adapter(av, av::AdapterScenario::wddm_3_2);
         std::uint32_t adapters[2] = {};
         std::uint32_t found = 0u;
         CHECK_STATUS(kmt_.enumerate_adapters(adapters, 2u, found), av::Status::ok);
@@ -55,7 +55,7 @@ public:
 
     ScriptedGl  &gl() { return gl_; }
     MockKmt     &kmt() { return kmt_; }
-    /* The rvkgpu this run can find: without it nothing times a blank. */
+    /* The avgpu this run can find: without it nothing times a blank. */
     void         forget_adapter() { kmt_.fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter); }
     GuestReport &report() { return report_; }
     const ScriptedImageSink &images() const { return images_; }
@@ -95,7 +95,7 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "ok opengl.attribs 8342\n"
                                          "ok opengl.lost 33365\n"
                                          "ok opengl.recreated 32\n"
-                                         "rvkglprobe: 12 passed, 0 failed\n") == 0);
+                                         "avglprobe: 12 passed, 0 failed\n") == 0);
   /* The two draws, the compatibility frame, the interval step's two runs of
    * sixty, and the resize's two (feature 051). */
   CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u + 1u + GlProbe::paced_frames + 2u);
@@ -122,12 +122,12 @@ TEST(gl_probe, no_format_or_no_context_ends_the_run)
       Call          call;
       const char   *expected;
   } cases[] = {
-      {Call::choose_pixel_format, "FAIL opengl.pixel_format status=3 123\nrvkglprobe: 0 passed, 1 failed\n"},
-      {Call::set_pixel_format, "FAIL opengl.pixel_format status=3 123\nrvkglprobe: 0 passed, 1 failed\n"},
+      {Call::choose_pixel_format, "FAIL opengl.pixel_format status=3 123\navglprobe: 0 passed, 1 failed\n"},
+      {Call::set_pixel_format, "FAIL opengl.pixel_format status=3 123\navglprobe: 0 passed, 1 failed\n"},
       {Call::create_context, "ok opengl.pixel_format 3\nFAIL opengl.context status=7 123\n"
-                             "rvkglprobe: 1 passed, 1 failed\n"},
+                             "avglprobe: 1 passed, 1 failed\n"},
       {Call::make_current, "ok opengl.pixel_format 3\nFAIL opengl.context status=7 123\n"
-                           "rvkglprobe: 1 passed, 1 failed\n"},
+                           "avglprobe: 1 passed, 1 failed\n"},
   };
   for (const auto &row : cases) {
     ProbeRig rig;
@@ -379,7 +379,7 @@ TEST(gl_probe, an_adapter_that_cannot_be_timed_ends_the_interval_step)
   CHECK(once.holds("FAIL opengl.interval status=3 0\n")); }
 
 /* A swap the driver refused after the window changed size, and a run with no
- * rvkgpu to time a blank against. */
+ * avgpu to time a blank against. */
 TEST(gl_probe, a_swap_after_the_resize_that_fails_fails_the_step)
 { ProbeRig unswapped;
   /* The draw's, the compatibility frame's, the interval step's sixty, then the
@@ -388,7 +388,7 @@ TEST(gl_probe, a_swap_after_the_resize_that_fails_fails_the_step)
   unswapped.run();
   CHECK(unswapped.holds("FAIL opengl.resized status=7 16\n")); }
 
-TEST(gl_probe, a_run_with_no_rvkgpu_cannot_time_the_interval)
+TEST(gl_probe, a_run_with_no_avgpu_cannot_time_the_interval)
 { ProbeRig lonely;
   lonely.forget_adapter();
   lonely.run();

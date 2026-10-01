@@ -48,13 +48,13 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
         reads_window_ = true;
         const auto width = static_cast<GLsizei>(presenter.width());
         const auto height = static_cast<GLsizei>(presenter.height());
-        glproto::rvk_glBindFramebuffer(wire, gl_framebuffer, presenter.framebuffer());
-        glproto::rvk_glViewport(wire, 0, 0, width, height);
-        glproto::rvk_glScissor(wire, 0, 0, width, height);
+        glproto::av_glBindFramebuffer(wire, gl_framebuffer, presenter.framebuffer());
+        glproto::av_glViewport(wire, 0, 0, width, height);
+        glproto::av_glScissor(wire, 0, 0, width, height);
         return Status::ok;
     }
-    if (moved && draws_window_) glproto::rvk_glBindFramebuffer(wire, gl_draw_framebuffer, presenter.framebuffer());
-    if (moved && reads_window_) glproto::rvk_glBindFramebuffer(wire, gl_read_framebuffer, presenter.framebuffer());
+    if (moved && draws_window_) glproto::av_glBindFramebuffer(wire, gl_draw_framebuffer, presenter.framebuffer());
+    if (moved && reads_window_) glproto::av_glBindFramebuffer(wire, gl_read_framebuffer, presenter.framebuffer());
     return Status::ok;
 }
 
@@ -154,8 +154,8 @@ void WindowFramebuffers::follow(ClientTransport &wire, void *window, const Pixel
      * the deleted one had - the host reuses names - while deleting it bound 0
      * in its place: so a new size rebinds whatever the name. */
     const bool remade = after != before || presenter.width() != width || presenter.height() != height;
-    if (remade && slot == current_ && draws_window_) glproto::rvk_glBindFramebuffer(wire, gl_draw_framebuffer, after);
-    if (remade && slot == current_ && reads_window_) glproto::rvk_glBindFramebuffer(wire, gl_read_framebuffer, after);
+    if (remade && slot == current_ && draws_window_) glproto::av_glBindFramebuffer(wire, gl_draw_framebuffer, after);
+    if (remade && slot == current_ && reads_window_) glproto::av_glBindFramebuffer(wire, gl_read_framebuffer, after);
 }
 
 void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &surface)

@@ -1,4 +1,4 @@
-# Stable command IDs for the OpenCL half of the RVK wire.
+# Stable command IDs for the OpenCL half of the AV wire.
 # Auto-maintained by codegen — do not hand-edit. New commands
 # get appended at the next free ID; existing IDs never move.
 

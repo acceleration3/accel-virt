@@ -34,7 +34,7 @@ using av::DoorbellStatus;
 using av::MockKmt;
 using av::PciIdentity;
 using av::ReplyHeader;
-using av::RvkContextRecord;
+using av::AvContextRecord;
 using av::Status;
 using av::SubApi;
 using av::SubmissionDescriptor;
@@ -59,15 +59,15 @@ using av::KmtTransportProbe;
 
 namespace {
 
-/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+const PciIdentity av_gpu(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 
 
 /* The adapter the connection is opened on: found by the caller, as the suite
- * finds rvk among every adapter D3DKMT enumerates. */
+ * finds av among every adapter D3DKMT enumerates. */
 std::uint32_t found_adapter(MockKmt &kmt)
 {
     std::uint32_t adapters[1] = {};
@@ -78,7 +78,7 @@ std::uint32_t found_adapter(MockKmt &kmt)
 
 class Fixture {
 public:
-    Fixture() : connection_(kmt_) { kmt_.add_adapter(rvk, 3200u); }
+    Fixture() : connection_(kmt_) { kmt_.add_adapter(av_gpu, 3200u); }
     MockKmt         &kmt() { return kmt_; }
     GuestConnection &connection() { return connection_; }
     Status open() { return connection_.open(found_adapter(kmt_)); }
@@ -198,14 +198,14 @@ TEST(kmt_transport, initialize_names_the_context_and_takes_the_driver_s_views)
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
   /* The record was carried as private data. */
-  CHECK_EQ(fixture.kmt().last_private_size(), RvkContextRecord::encoded_size);
+  CHECK_EQ(fixture.kmt().last_private_size(), AvContextRecord::encoded_size);
   /* Two allocations: the page the context is named by, and the DMA buffer a
    * submission names. The ring and reply slot are the driver's. */
   CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::name_allocation(transport)), 17u);
   CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::name_allocation(transport)), 1u);
   CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::dma_allocation(transport)), 16u);
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 0u);
-  RvkContextRecord record;
+  AvContextRecord record;
   CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.ring(), KmtTransportProbe::name_allocation(transport));
   CHECK_EQ(record.ring_order(), 12u);
@@ -238,7 +238,7 @@ TEST(kmt_transport, an_opengl_record_carries_its_options_and_the_ring_is_named)
                                      av::GlContextOptions::debug, 0x4242u);
   CHECK_STATUS(transport.initialize(options), Status::ok);
   CHECK_EQ(transport.ring(), KmtTransportProbe::name_allocation(transport));
-  RvkContextRecord record;
+  AvContextRecord record;
   CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
   const av::GlContextOptions carried = record.options();
   CHECK_EQ(carried.major(), 4u);
@@ -389,7 +389,7 @@ namespace {
 void refuse_setup(MockKmt::Call call, std::uint32_t nth)
 {
     MockKmt kmt;
-    kmt.add_adapter(rvk, 3200u);
+    kmt.add_adapter(av_gpu, 3200u);
     GuestConnection connection(kmt);
     CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
     kmt.fail_at(call, nth, MockKmt::invalid_parameter);
@@ -416,7 +416,7 @@ TEST(kmt_transport, a_failure_at_each_setup_step_leaves_it_unestablished)
  * robust as the allocation count changes. */
 TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t counted_staging[staging_bytes] = {};
@@ -425,7 +425,7 @@ TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
   const std::uint32_t waits = kmt.calls(MockKmt::Call::wait_for_fence);
   counted.teardown();
   MockKmt fresh;
-  fresh.add_adapter(rvk, 3200u);
+  fresh.add_adapter(av_gpu, 3200u);
   GuestConnection other(fresh);
   CHECK_STATUS(other.open(found_adapter(fresh)), Status::ok);
   fresh.fail_at(MockKmt::Call::wait_for_fence, waits, MockKmt::invalid_parameter);
@@ -470,7 +470,7 @@ TEST(kmt_transport, a_torn_down_transport_initializes_again)
  * reply slot at one place - set nothing up, and leave nothing open. */
 TEST(kmt_transport, views_the_driver_could_not_have_answered_are_refused)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   const std::uint64_t answers[][2] = {{0u, 0x2000u}, {0x1000u, 0u}, {0x1000u, 0x1000u}};
@@ -489,7 +489,7 @@ TEST(kmt_transport, views_the_driver_could_not_have_answered_are_refused)
 /* A submission the device refuses fails the send. */
 TEST(kmt_transport, a_refused_submission_fails_the_send)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -504,7 +504,7 @@ TEST(kmt_transport, a_refused_submission_fails_the_send)
  * rather than failing, and fails only when that wait does. */
 TEST(kmt_transport, a_full_fence_table_waits_for_the_host_before_the_next_send)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -524,7 +524,7 @@ TEST(kmt_transport, a_full_fence_table_waits_for_the_host_before_the_next_send)
 
 TEST(kmt_transport, a_full_fence_table_whose_wait_fails_refuses_the_send)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -562,7 +562,7 @@ void fill_the_fence_window(KmtTransport &transport)
  * behind, not gone: it is waited again, and the send goes. */
 TEST(kmt_transport, a_wait_that_times_out_while_the_host_works_is_waited_again)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -580,7 +580,7 @@ TEST(kmt_transport, a_wait_that_times_out_while_the_host_works_is_waited_again)
  * the context is faulted after that one wait, not waited on forever. */
 TEST(kmt_transport, a_wait_that_times_out_with_nothing_taken_gives_up)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -598,7 +598,7 @@ TEST(kmt_transport, a_wait_that_times_out_with_nothing_taken_gives_up)
  * where the first left it, and that is the end. */
 TEST(kmt_transport, a_host_that_stops_taking_batches_is_given_up_on_after_one_silent_wait)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -616,7 +616,7 @@ TEST(kmt_transport, a_host_that_stops_taking_batches_is_given_up_on_after_one_si
  * refused when that wait fails. */
 TEST(kmt_transport, a_full_ring_waits_for_the_host_and_is_refused_when_that_fails)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -644,7 +644,7 @@ TEST(kmt_transport, a_full_ring_waits_for_the_host_and_is_refused_when_that_fail
  * wait, and an answer the device never wrote. */
 TEST(kmt_transport, send_sync_failure_paths)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -664,7 +664,7 @@ TEST(kmt_transport, send_sync_failure_paths)
 /* A device that will not answer the wait fails the call. */
 TEST(kmt_transport, a_wait_the_device_refuses_fails_the_sync)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -703,7 +703,7 @@ TEST(kmt_transport, teardown_leaves_the_connection_as_it_found_it)
 
 TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_name)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -714,7 +714,7 @@ TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_name)
 
 TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -844,7 +844,7 @@ TEST(kmt_transport_limits, a_256_kib_command_crosses_and_one_past_the_staging_is
   KmtTransport transport(fixture.connection(), SubApi::vulkan, icd_ring_order, icd_reply_bytes, staging,
                          sizeof staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
-  RvkContextRecord record;
+  AvContextRecord record;
   CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.ring_order(), icd_ring_order);
   CHECK_EQ(record.reply_bytes(), icd_reply_bytes);

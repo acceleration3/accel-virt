@@ -2,7 +2,7 @@
  * 050): published by the worker that made one, found by the worker making
  * another on the same GPU, and never destroyed while a create is using it. */
 #include "core/support/status.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -38,11 +38,11 @@ namespace {
 
 constexpr std::uint8_t gpu[16] = {0x11};
 constexpr std::uint8_t other_gpu[16] = {0x22};
-const RvkContextOptions core_46 = {4u, 6u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+const AvContextOptions core_46 = {4u, 6u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
 
 class Fixture {
 public:
-    Fixture() : ops_(RVK_EXECUTOR_SUB_API_OPENGL), shares_(host_, library_)
+    Fixture() : ops_(AV_EXECUTOR_SUB_API_OPENGL), shares_(host_, library_)
     {
         static_cast<void>(library_.accept(&ops_.table()));
         CHECK_STATUS(shares_.initialize(), Status::ok);
@@ -82,16 +82,16 @@ TEST(executor_shares, a_published_executor_is_shared_by_a_create_on_the_same_gpu
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();
   fixture.on_worker([&] {
-      RvkExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
+      AvExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
       CHECK_EQ(shares.published(), 1u);
       CHECK(shares.invariants_hold());
-      RvkExecutor *const second = shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46);
+      AvExecutor *const second = shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46);
       CHECK(second != nullptr);
       CHECK(fixture.ops().last_share() == first);
       CHECK(fixture.ops().last_share_live());
       CHECK_EQ(fixture.ops().last_options().major, 4u);
-      CHECK_EQ(fixture.ops().last_sub_api(), RVK_EXECUTOR_SUB_API_OPENGL);
+      CHECK_EQ(fixture.ops().last_sub_api(), AV_EXECUTOR_SUB_API_OPENGL);
       shares.withdraw(3u);
       CHECK_EQ(shares.published(), 0u);
       CHECK(shares.invariants_hold());
@@ -107,7 +107,7 @@ TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();
   fixture.on_worker([&] {
-      RvkExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
+      AvExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
       const std::uint32_t asked = fixture.ops().option_creates();
       CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
@@ -134,7 +134,7 @@ TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
 TEST(executor_shares, a_withdraw_waits_for_a_create_that_is_using_the_executor)
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();
-  RvkExecutor *shared = nullptr;
+  AvExecutor *shared = nullptr;
   std::atomic<bool> published{false};
   std::atomic<bool> withdrawing{false};
   std::atomic<bool> withdrawn{false};
@@ -149,7 +149,7 @@ TEST(executor_shares, a_withdraw_waits_for_a_create_that_is_using_the_executor)
       withdrawn = true;
       fixture.library().destroy(shared);
   };
-  RvkExecutor *made = nullptr;
+  AvExecutor *made = nullptr;
   auto sharer = [&] { made = shares.create_sharing(av::SubApi::opengl, 5u, gpu, core_46); };
   void *const owning = fixture.start(owner);
   while (!published) sched_yield();
@@ -173,11 +173,11 @@ TEST(executor_shares, a_withdraw_waits_for_a_create_that_is_using_the_executor)
 
 TEST(executor_shares, publishing_needs_the_lock_and_a_free_entry)
 { MockHost host;
-  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   static_cast<void>(library.accept(&ops.table()));
   ExecutorShares shares(host, library);
-  RvkExecutor *const fake = static_cast<RvkExecutor *>(static_cast<void *>(&host));
+  AvExecutor *const fake = static_cast<AvExecutor *>(static_cast<void *>(&host));
   CHECK_STATUS(shares.publish(1u, gpu, fake), Status::invalid_state);
   CHECK(shares.create_sharing(av::SubApi::opengl, 1u, gpu, core_46) == nullptr);
   shares.withdraw(1u);
@@ -204,7 +204,7 @@ TEST(executor_shares, invariants_refuse_an_id_twice_or_an_entry_without_an_execu
   ExecutorLibrary library;
   ExecutorShares shares(host, library);
   CHECK_STATUS(shares.initialize(), Status::ok);
-  RvkExecutor *const fake = static_cast<RvkExecutor *>(static_cast<void *>(&host));
+  AvExecutor *const fake = static_cast<AvExecutor *>(static_cast<void *>(&host));
   CHECK_STATUS(shares.publish(1u, gpu, fake), Status::ok);
   CHECK(shares.invariants_hold());
   av::ExecutorSharesProbe::twin(shares);

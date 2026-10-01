@@ -1,7 +1,7 @@
 // The OpenGL samples' framework: what a sample is, what it is handed, and the
 // few services the two platforms give it. Both builds compile the same GLSL
 // with the driver in front of them - the host's own, or the guest's through
-// rvkgl.dll - so a difference in the pictures is a difference in rendering.
+// avgl.dll - so a difference in the pictures is a difference in rendering.
 //
 // The D3D11 suite (samples/d3d11) is the model: the same samples, the same
 // matrices and the same frames. OpenGL is told to take them unchanged:

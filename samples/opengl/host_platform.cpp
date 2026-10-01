@@ -96,7 +96,7 @@ bool read_file(const char *path, Blob &blob)
 // surfaceless display would be whichever GPU Mesa chose.
 bool create_context(const char *gpu)
 {
-    if (gpu == nullptr) gpu = getenv("RVK_GL_GPU");
+    if (gpu == nullptr) gpu = getenv("AV_GL_GPU");
     const auto query = reinterpret_cast<QueryDevices>(eglGetProcAddress("eglQueryDevicesEXT"));
     const auto get_string = reinterpret_cast<GetString>(eglGetProcAddress("glGetString"));
     const auto get_integers = reinterpret_cast<GetIntegers>(eglGetProcAddress("glGetIntegerv"));

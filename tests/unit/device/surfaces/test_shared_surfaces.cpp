@@ -23,7 +23,7 @@ public:
     explicit FakeFrame(std::uint32_t copying = 0u) : copying_(copying), fails_(false), reads_(0u), releases_(0u) {}
 
     void fail() { fails_ = true; }
-    Reading read(RvkFrameView &view) override
+    Reading read(AvFrameView &view) override
     {
         reads_++;
         if (fails_) return Reading::failed;
@@ -31,7 +31,7 @@ public:
             copying_--;
             return Reading::copying;
         }
-        view = RvkFrameView{pixels_, 8u, 2u, 1u, 0u};
+        view = AvFrameView{pixels_, 8u, 2u, 1u, 0u};
         return Reading::mapped;
     }
     void release() override { releases_++; }
@@ -59,7 +59,7 @@ TEST(shared_surfaces, a_surface_is_staged_only_once_a_blt_has_asked_for_it)
 { SharedSurfaces surfaces;
   CHECK(!surfaces.presented(SurfacePoint(surface, 1u)));
   CHECK(!surfaces.presented(SurfacePoint(surface, 2u)));
-  RvkFrameView view = {};
+  AvFrameView view = {};
   CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1000u, view));
   CHECK(view.pixels == nullptr);
   CHECK(surfaces.presented(SurfacePoint(surface, 3u)));
@@ -75,11 +75,11 @@ TEST(shared_surfaces, a_kept_frame_is_read_once_and_given_back_once)
   const SurfacePoint at(surface, 4u);
   static_cast<void>(surfaces.presented(at));
   CHECK(surfaces.keep(at, frame));
-  RvkFrameView view = {};
+  AvFrameView view = {};
   CHECK(surfaces.map(at, 0u, view));
   CHECK(view.pixels == frame.pixels());
   CHECK_EQ(view.width, 2u);
-  RvkFrameView again = {};
+  AvFrameView again = {};
   CHECK(!surfaces.map(at, 0u, again));
   CHECK(again.pixels == nullptr);
   CHECK_EQ(frame.releases(), 0u);
@@ -98,7 +98,7 @@ TEST(shared_surfaces, a_copying_frame_is_waited_for_and_a_failed_one_given_back)
   const SurfacePoint first(surface, 1u);
   static_cast<void>(surfaces.presented(first));
   CHECK(surfaces.keep(first, copying));
-  RvkFrameView view = {};
+  AvFrameView view = {};
   CHECK(surfaces.map(first, 1000u, view));
   CHECK_EQ(copying.reads(), 4u);
   surfaces.unmap(first);
@@ -117,7 +117,7 @@ TEST(shared_surfaces, a_copying_frame_is_waited_for_and_a_failed_one_given_back)
  * than refused, and one it abandoned is refused. */
 TEST(shared_surfaces, a_point_not_reached_or_still_being_staged_is_waited_for)
 { SharedSurfaces surfaces;
-  RvkFrameView   view = {};
+  AvFrameView   view = {};
   static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u)));
   CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1u, view));   /* not reached: waits, then gives up */
   CHECK(!surfaces.presented(SurfacePoint(surface, 2u)));        /* and learned nothing */
@@ -140,7 +140,7 @@ TEST(shared_surfaces, a_point_not_reached_or_still_being_staged_is_waited_for)
 TEST(shared_surfaces, keeping_past_its_slots_evicts_the_oldest_frame_not_being_read)
 { SharedSurfaces surfaces;
   FakeFrame      frames[SharedSurfaces::max_frames + 2u];
-  RvkFrameView   view = {};
+  AvFrameView   view = {};
   for (std::uint32_t index = 0u; index < SharedSurfaces::max_frames; index++)
       CHECK(surfaces.keep(SurfacePoint(surface, index + 1u), frames[index]));
   CHECK(surfaces.map(SurfacePoint(surface, 1u), 0u, view));   /* the oldest, being read */
@@ -167,7 +167,7 @@ TEST(shared_surfaces, keeping_past_its_slots_evicts_the_oldest_frame_not_being_r
 TEST(shared_surfaces, release_gives_back_a_surface_s_frames_and_forgets_it)
 { SharedSurfaces surfaces;
   FakeFrame      kept, reading, other;
-  RvkFrameView   view = {};
+  AvFrameView   view = {};
   static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u)));
   CHECK(!surfaces.map(SurfacePoint(surface, 1u), 0u, view));   /* learned */
   CHECK(surfaces.keep(SurfacePoint(surface, 2u), kept));
@@ -189,7 +189,7 @@ TEST(shared_surfaces, release_gives_back_a_surface_s_frames_and_forgets_it)
  * one, and learns again; one presented since keeps what it learned. */
 TEST(shared_surfaces, past_its_rows_the_surface_presented_longest_ago_is_forgotten)
 { SharedSurfaces surfaces;
-  RvkFrameView   view = {};
+  AvFrameView   view = {};
   static_cast<void>(surfaces.presented(SurfacePoint(1u, 1u)));
   CHECK(!surfaces.map(SurfacePoint(1u, 1u), 0u, view));
   static_cast<void>(surfaces.presented(SurfacePoint(2u, 1u)));
@@ -206,7 +206,7 @@ TEST(shared_surfaces, past_its_rows_the_surface_presented_longest_ago_is_forgott
  * none of the table's business. */
 TEST(shared_surfaces, points_compare_across_the_wrap_and_nothing_names_nothing)
 { SharedSurfaces surfaces;
-  RvkFrameView   view = {};
+  AvFrameView   view = {};
   static_cast<void>(surfaces.presented(SurfacePoint(surface, 0xFFFFFFFFu)));
   static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u)));
   CHECK(!surfaces.map(SurfacePoint(surface, 0xFFFFFFFFu), 1000u, view));

@@ -189,7 +189,7 @@ void ScriptedHost::gl_make_profile(const char *renderer, const char *version, st
                                    std::int32_t minor, std::int32_t mask)
 {
     blob_import(0u, 0x0000600000000077ull);
-    gl_string("rvk host vendor");
+    gl_string("av host vendor");
     gl_string(renderer);
     gl_string(version);
     gl_string("4.60");

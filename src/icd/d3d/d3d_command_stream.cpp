@@ -48,7 +48,7 @@ Status D3dCommandStream::application_flush()
 {
     AV_SCOPE("D3dCommandStream::application_flush");
     if (recorded_ != flushed_at_) {
-        if (!d3dproto::rvk_d3d_Flush11(*this)) return Status::invalid_state;
+        if (!d3dproto::av_d3d_Flush11(*this)) return Status::invalid_state;
         flushed_at_ = recorded_;
     }
     return flush_hint();
@@ -152,7 +152,7 @@ bool D3dCommandStream::make_room_for(size_t bytes)
     /* Every lease handed out so far is read once the host answers a command
      * sent after all of them; Finish is that command. */
     uint32_t removed = 0u;
-    if (!d3dproto::rvk_d3d_Finish11(*this, &removed)) return false;
+    if (!d3dproto::av_d3d_Finish11(*this, &removed)) return false;
     return arena.room() >= bytes;
 }
 
@@ -162,7 +162,7 @@ bool D3dCommandStream::speak_as(uint32_t device)
     /* Device 0 is a Direct3D 12 speaker: its commands name their own objects
      * and read no selected pipeline state, so whoever was selected stays. */
     if (device == 0u || device == speaking_) return !failed_;
-    if (!d3dproto::rvk_d3d_SelectDevice11(*this, device)) return false;
+    if (!d3dproto::av_d3d_SelectDevice11(*this, device)) return false;
     speaking_ = device;
     return true;
 }

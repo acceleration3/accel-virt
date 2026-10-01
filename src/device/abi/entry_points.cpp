@@ -4,7 +4,7 @@
 #include "device/display/display_clock.hpp"
 #include "device/present/present_engine.hpp"
 #include "device/module/device_module.hpp"
-#include "device/module/virtio_gpu_rvk.hpp"
+#include "device/module/virtio_gpu_av.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/shim/device_trace.hpp"
 #include "device/threading/worker.hpp"
@@ -20,75 +20,75 @@ constinit DeviceTraceRoot device_trace;
 extern "C" {
 
 /* The fatal signals' handler: sigaction hands it no context. */
-static void rvk_device_crashed(int signal, siginfo_t *info, void *context)
+static void av_device_crashed(int signal, siginfo_t *info, void *context)
 { av::device_trace.crashed(signal, info, context); }
 
 __attribute__((visibility("default")))
-void rvk_device_trace_start(RvkMainLoopScheduler schedule)
-{ av::device_trace.start(av::device_module, schedule, &rvk_device_crashed); }
+void av_device_trace_start(AvMainLoopScheduler schedule)
+{ av::device_trace.start(av::device_module, schedule, &av_device_crashed); }
 
 __attribute__((visibility("default")))
-RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                             int base_blobs, const RvkRecordingOptions *recording, const char *renderer,
+AvDevice *av_device_create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
+                             int base_blobs, const AvRecordingOptions *recording, const char *renderer,
                              const char *executor_path, char *error, size_t error_size)
-{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, renderer, executor_path, error, error_size)); }
+{ return reinterpret_cast<AvDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, renderer, executor_path, error, error_size)); }
 
 __attribute__((visibility("default")))
-int rvk_device_control(RvkDevice *device, void *request, uint32_t type)
+int av_device_control(AvDevice *device, void *request, uint32_t type)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().control(request, type) ? 1 : 0; }
 
 __attribute__((visibility("default")))
-int rvk_device_export_image(RvkDevice *device, uint64_t key, RvkExportedImage *image)
+int av_device_export_image(AvDevice *device, uint64_t key, AvExportedImage *image)
 { return image != nullptr && reinterpret_cast<av::DeviceInstance *>(device)->device().export_image(key, *image) ? 1 : 0; }
 
-int rvk_device_read_image(RvkDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
+int av_device_read_image(AvDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().read_image(key, pixels, stride, width, height) ? 1 : 0; }
 
 __attribute__((visibility("default")))
-uint32_t rvk_device_capsets(RvkDevice *device)
+uint32_t av_device_capsets(AvDevice *device)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().capsets(); }
 
 __attribute__((visibility("default")))
-int rvk_device_pci_identity(RvkDevice *device, RvkPciIdentity *identity)
+int av_device_pci_identity(AvDevice *device, AvPciIdentity *identity)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().pci_identity(*identity) ? 1 : 0; }
 
 __attribute__((visibility("default")))
-int rvk_device_set_modes(RvkDevice *device, const char *modes, uint32_t *width, uint32_t *height)
+int av_device_set_modes(AvDevice *device, const char *modes, uint32_t *width, uint32_t *height)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().offer_modes(modes, width, height); }
 
 __attribute__((visibility("default")))
-void rvk_device_status(RvkDevice *device, uint8_t status)
+void av_device_status(AvDevice *device, uint8_t status)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().status(status); }
 
 __attribute__((visibility("default")))
-int rvk_device_post_frame(RvkDevice *device, uint32_t head, uint32_t frame, uint64_t key)
+int av_device_post_frame(AvDevice *device, uint32_t head, uint32_t frame, uint64_t key)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().post_frame(head, frame, key) ? 1 : 0; }
 
 __attribute__((visibility("default")))
-void rvk_device_reset(RvkDevice *device)
+void av_device_reset(AvDevice *device)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().reset(); }
 
 __attribute__((visibility("default")))
-void rvk_device_renderer_lost(RvkDevice *device)
+void av_device_renderer_lost(AvDevice *device)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().renderer_lost(); }
 
 __attribute__((visibility("default")))
-int rvk_device_destroy(RvkDevice *device)
+int av_device_destroy(AvDevice *device)
 { return av::device_module.destroy(reinterpret_cast<av::DeviceInstance *>(device)) != av::Status::ok; }
 
-void RvkWorkerRun(void *worker)
+void AvWorkerRun(void *worker)
 { static_cast<av::Worker *>(worker)->run(); }
 
-void RvkRingAttach(void *ring)
+void AvRingAttach(void *ring)
 { static_cast<av::RingConsumer *>(ring)->attach(); }
 
-void RvkDisplayClockRun(void *clock)
+void AvDisplayClockRun(void *clock)
 { static_cast<av::DisplayClock *>(clock)->run(); }
 
-void RvkDisplayFramesShow(void *device)
-{ static_cast<av::VirtioGpuRvk *>(device)->show_latched_frames(); }
+void AvDisplayFramesShow(void *device)
+{ static_cast<av::VirtioGpuAv *>(device)->show_latched_frames(); }
 
-void RvkPresentEngineRun(void *engine)
+void AvPresentEngineRun(void *engine)
 { static_cast<av::PresentEngine *>(engine)->run(); }
 
 }

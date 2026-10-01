@@ -1,7 +1,7 @@
 #include "device/executor/context_session.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/gpu_clock_hold.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/session_backend.hpp"
@@ -89,8 +89,8 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
     answer = 0u;
     /* Once the host device is gone nothing more will run on it, and saying so
      * again is cheaper than finding out again. */
-    if (backend_ == nullptr || faulted_) return RVK_DEVICE_LOST;
-    if (!backend_->knows(command_id)) return RVK_UNKNOWN;
+    if (backend_ == nullptr || faulted_) return AV_DEVICE_LOST;
+    if (!backend_->knows(command_id)) return AV_UNKNOWN;
 
     arena_.reset();
     const size_t refused = arena_.refusals();
@@ -101,34 +101,34 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
         /* The block being too small and the frame being malformed are the same
          * answer on the wire on purpose, and two different problems here. */
         if (arena_.refusals() != refused) starved_++;
-        return RVK_UNDECODABLE;
+        return AV_UNDECODABLE;
     }
     if (backend_->lost()) {
         faulted_ = true;
-        return RVK_DEVICE_LOST;
+        return AV_DEVICE_LOST;
     }
     /* What the answer wanted, not what fitted: an answer longer than the
      * capacity writes nothing and reports its length, so the device can tell
      * the guest what to allocate. */
     answer = writer.wanted();
-    return RVK_EXECUTED;
+    return AV_EXECUTED;
 }
 
-uint32_t ContextSession::import_blob(uint64_t blob_id, const RvkBlobHandle &handle)
+uint32_t ContextSession::import_blob(uint64_t blob_id, const AvBlobHandle &handle)
 {
     AV_SCOPE("ContextSession::import_blob");
-    if (backend_ == nullptr || faulted_) return RVK_UNDECODABLE;
+    if (backend_ == nullptr || faulted_) return AV_UNDECODABLE;
     ImportedBlob *taken = nullptr;
-    if (imports_.take(blob_id, handle, taken) != Status::ok) return RVK_UNDECODABLE;
+    if (imports_.take(blob_id, handle, taken) != Status::ok) return AV_UNDECODABLE;
     if (!backend_->adopt(*taken)) {
         /* An API that cannot take this kind is not a fault: the device is told
          * no and the guest is copied through instead. The slot goes back so a
          * later handle of a kind it can take still fits. */
         (void)imports_.drop(blob_id);
         taken->give_back();
-        return RVK_UNDECODABLE;
+        return AV_UNDECODABLE;
     }
-    return RVK_EXECUTED;
+    return AV_EXECUTED;
 }
 
 bool ContextSession::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)

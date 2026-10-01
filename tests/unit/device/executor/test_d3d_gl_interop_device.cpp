@@ -64,7 +64,7 @@ constexpr unsigned gl_unsigned_byte = 0x1401;
 
 TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_through_direct3d)
 {
-    if (std::getenv("RVK_D3D_PATH") == nullptr) setenv("RVK_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::LoaderHostApis apis;
     apis.open();
     std::uint32_t gpu = apis.gpu_count();
@@ -78,7 +78,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     CHECK(direct3d.initialize(apis.d3d11_device(gpu)));
     av::D3dLoopback wire(direct3d);
     std::uint32_t hresult = 1u, level = 0u;
-    CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     ResourceDesc shared = {};
     shared.dimension = 3u;
     shared.width = size;
@@ -89,17 +89,17 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     shared.sample_count = 1u;
     shared.bind_flags = bind_shader_resource | bind_render_target;
     shared.misc_flags = misc_shared;
-    CHECK(rvk_d3d_CreateResource(wire, 1u, shared, key));
+    CHECK(av_d3d_CreateResource(wire, 1u, shared, key));
     std::uint32_t handle_kind = 0u;
     int           fd = -1;
-    CHECK(direct3d.export_object(RVK_SHARED_MEMORY, 1u, handle_kind, fd));
-    CHECK_EQ(handle_kind, std::uint32_t{RVK_SHARED_HANDLE_DMA_BUF});
+    CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
+    CHECK_EQ(handle_kind, std::uint32_t{AV_SHARED_HANDLE_DMA_BUF});
     CHECK(fd >= 0);
 
     av::OpenGlBackend opengl;
     CHECK(opengl.initialize(apis.gl_display(gpu), nullptr, nullptr));
     std::uint64_t memory = 0u;
-    CHECK(opengl.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, fd, bytes, memory));
+    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, bytes, memory));
     close(fd);
     {
         const av::glproto::RealGl &gl = av::OpenGlBackendProbe::gl(opengl);
@@ -124,7 +124,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     static std::uint8_t pixels[size * size * 4u];
     std::uint32_t row_pitch = 0u, depth_pitch = 0u;
     std::uint64_t read = 0u;
-    CHECK(rvk_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
+    CHECK(av_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
     CHECK_EQ(hresult, 0u);
     /* R8G8B8A8 in memory: red, green, blue, alpha - each texel where GL put it. */
     CHECK_EQ(row_pitch, size * 4u);
@@ -134,7 +134,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
         CHECK_EQ(pixels[at * 4u + 1u], static_cast<std::uint8_t>(at / size));
         CHECK_EQ(pixels[at * 4u + 2u], static_cast<std::uint8_t>(at * 7u));
     }
-    opengl.release_object(RVK_SHARED_MEMORY, memory);
+    opengl.release_object(AV_SHARED_MEMORY, memory);
     opengl.shut_down();
     direct3d.shut_down();
 }

@@ -11,7 +11,7 @@ constexpr uint32_t code_digits = 8u;
 
 }  // namespace
 
-GuestReport::GuestReport() : GuestReport("rvktest")
+GuestReport::GuestReport() : GuestReport("avtest")
 {
     AV_SCOPE("GuestReport::GuestReport");
 }

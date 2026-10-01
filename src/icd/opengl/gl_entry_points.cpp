@@ -156,15 +156,15 @@ GLenum APIENTRY get_graphics_reset_status()
     return gl_icd_binding.root().reset_status();
 }
 
-int32_t APIENTRY rvkForceContextFault()
+int32_t APIENTRY avForceContextFault()
 {
-    AV_SCOPE("rvkForceContextFault");
+    AV_SCOPE("avForceContextFault");
     return gl_icd_binding.root().force_context_fault();
 }
 
-uint32_t APIENTRY rvkGetShareName()
+uint32_t APIENTRY avGetShareName()
 {
-    AV_SCOPE("rvkGetShareName");
+    AV_SCOPE("avGetShareName");
     return gl_icd_binding.root().current_share_name();
 }
 

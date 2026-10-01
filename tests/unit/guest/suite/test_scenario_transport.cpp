@@ -11,7 +11,7 @@
 #include "guest/suite/scenario_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,20 +30,20 @@ using av::SubApi;
 
 namespace {
 
-/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av_gpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 
 }  // namespace
 
 TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
 { MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_STATUS(search.find(av_gpu), Status::ok);
   GuestReport   report;
   ScenarioSteps steps(kmt, report, "probe");
   ScenarioTransport link(kmt, search, steps, SubApi::opencl);
@@ -51,7 +51,7 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
   CHECK(std::strcmp(report.text(), "ok probe.adapter\nok probe.connection\nok probe.initialize\n") == 0);
   CHECK(link.transport().established());
   CHECK_EQ(link.connection().adapter(), search.adapter());
-  av::RvkContextRecord record;
+  av::AvContextRecord record;
   CHECK_STATUS(record.decode(kmt.last_private(), kmt.last_private_size()), Status::ok);
   CHECK(record.sub_api() == SubApi::opencl);
   CHECK_EQ(record.ring_order(), ScenarioTransport::ring_order);
@@ -80,9 +80,9 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
     CHECK(std::strcmp(report.text(), "FAIL probe.adapter status=3 code=0x00000000\n") == 0);
     CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u); }
   { MockKmt kmt;
-    kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+    kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
     AdapterSearch search(kmt);
-    CHECK_STATUS(search.find(rvk), Status::ok);
+    CHECK_STATUS(search.find(av_gpu), Status::ok);
     kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
     GuestReport   report;
     ScenarioSteps steps(kmt, report, "probe");
@@ -92,9 +92,9 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
     CHECK_EQ(kmt.open_objects(), 1u);
     CHECK_STATUS(search.close(), Status::ok); }
   { MockKmt kmt;
-    kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+    kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
     AdapterSearch search(kmt);
-    CHECK_STATUS(search.find(rvk), Status::ok);
+    CHECK_STATUS(search.find(av_gpu), Status::ok);
     kmt.fail_at(MockKmt::Call::create_context_virtual, 1u, 0xC0000017u);
     GuestReport   report;
     ScenarioSteps steps(kmt, report, "probe");

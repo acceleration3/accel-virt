@@ -17,7 +17,7 @@ void PhysicalDeviceView::properties(VkPhysicalDevice physical_device, VkPhysical
 {
     AV_SCOPE("PhysicalDeviceView::properties");
     *answer = VkPhysicalDeviceProperties{};
-    vkproto::rvk_vkGetPhysicalDeviceProperties(transport_, physical_device, answer);
+    vkproto::av_vkGetPhysicalDeviceProperties(transport_, physical_device, answer);
     if (answer->apiVersion > latest_version_) answer->apiVersion = latest_version_;
 }
 
@@ -25,11 +25,11 @@ void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysica
 {
     AV_SCOPE("PhysicalDeviceView::properties2");
     if (!remember(answer)) {
-        log_.write("rvkvk: vkGetPhysicalDeviceProperties2 chain longer than 32 structures, not sent");
+        log_.write("avvk: vkGetPhysicalDeviceProperties2 chain longer than 32 structures, not sent");
         return;
     }
     answer->properties = VkPhysicalDeviceProperties{};
-    vkproto::rvk_vkGetPhysicalDeviceProperties2(transport_, physical_device, answer);
+    vkproto::av_vkGetPhysicalDeviceProperties2(transport_, physical_device, answer);
     restore();
     if (answer->properties.apiVersion > latest_version_) answer->properties.apiVersion = latest_version_;
     write_luid();

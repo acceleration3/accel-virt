@@ -31,7 +31,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x544B5652u;   /* "RVKT" */
+    static constexpr uint32_t magic = 0x00545641u;   /* "AVT" */
 
     uint32_t epoch_;
     uint64_t ticket_;

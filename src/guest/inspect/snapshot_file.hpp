@@ -1,4 +1,4 @@
-/* One file rvkinspect.exe answers with (docs/trace.md): `RVKSNAP1`, the clock
+/* One file avinspect.exe answers with (docs/trace.md): `AVSNAP1`, the clock
  * when the copy was taken, the kind and the payload's length, then the
  * payload. */
 #ifndef AV_SNAPSHOT_FILE_HPP

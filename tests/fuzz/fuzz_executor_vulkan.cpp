@@ -16,7 +16,7 @@
  * index is in their bottom half, in the order the replies first carried them -
  * and it goes on standing for it after the guest destroyed it, which is the
  * point. */
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/decode_arena.hpp"
 #include "device/executor/vulkan_backend.hpp"
@@ -55,8 +55,8 @@ alignas(16) std::uint8_t block[arena_bytes];
 
 bool defined(std::uint32_t result)
 {
-    return result == RVK_EXECUTED || result == RVK_UNKNOWN || result == RVK_UNDECODABLE ||
-           result == RVK_DEVICE_LOST;
+    return result == AV_EXECUTED || result == AV_UNKNOWN || result == AV_UNDECODABLE ||
+           result == AV_DEVICE_LOST;
 }
 
 /* Every handle a reply carried, first time seen. Read at every byte offset
@@ -120,7 +120,7 @@ void run_one(av::ContextSession &session, std::uint32_t command, const std::uint
      * a streaming encoder writes fields until one does not fit - and the
      * device discards it. What may never happen is a length claimed shorter
      * than what was written. */
-    if (result == RVK_EXECUTED && answer < capacity) {
+    if (result == AV_EXECUTED && answer < capacity) {
         for (std::size_t i = answer; i < capacity; i++) {
             if (reply[i] != guard) __builtin_trap();
         }
@@ -141,7 +141,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         if (size - offset < record_header_bytes) break;
         /* Steered into Vulkan's range, because the device filters by API
          * before an executor is ever called and a fuzzer spending its time
-         * outside it would only ever see RVK_UNKNOWN. */
+         * outside it would only ever see AV_UNKNOWN. */
         const std::uint32_t id = (vulkan_api << 16u) | data[offset] |
                                  (static_cast<std::uint32_t>(data[offset + 1u]) << 8u);
         std::size_t length = data[offset + 2u] | (static_cast<std::size_t>(data[offset + 3u]) << 8u);
@@ -157,9 +157,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
 
         std::uint8_t  reply[reply_bytes + 1u];
         std::size_t   answer = 0u;
-        std::uint32_t result = RVK_UNKNOWN;
+        std::uint32_t result = AV_UNKNOWN;
         run_one(session, id, payload, length, capacity, reply, answer, result);
-        if (result == RVK_EXECUTED && answer <= capacity) answered.note(backend, reply, answer);
+        if (result == AV_EXECUTED && answer <= capacity) answered.note(backend, reply, answer);
     }
     session.release();
     /* What the guest never destroyed, which is what a dying context owes. */

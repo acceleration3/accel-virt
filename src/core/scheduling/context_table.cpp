@@ -8,7 +8,7 @@
 #include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/av_context_record.hpp"
 #include "core/support/invariant_scope.hpp"
 
 namespace av {
@@ -27,9 +27,9 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
     InvariantScope<ContextTable> guard(platform_, *this, "create");
     request.hContext = nullptr;
     Device *owner = devices_.find(device);
-    /* Private data is either absent, or exactly the rvk context record - any
+    /* Private data is either absent, or exactly the av context record - any
      * other size is data this driver does not define. */
-    const bool rvk = request.PrivateDriverDataSize == RvkContextRecord::encoded_size;
+    const bool av_context = request.PrivateDriverDataSize == AvContextRecord::encoded_size;
     /* Node 1 is the hardware-scheduled one: dxgkrnl puts a context there only
      * when the process asked for one a queue may run on, and a context that
      * did not ask has no way to submit to it (feature 049, research.md §16). */
@@ -37,11 +37,11 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
         (request.NodeOrdinal == hardware_queue_node && (request.Flags & hw_queue_supported) == 0u) ||
         (request.EngineAffinity & ~known_engines) != 0u ||
         (request.Flags & ~known_flags) != 0u ||
-        (request.PrivateDriverDataSize != 0u && !rvk) ||
+        (request.PrivateDriverDataSize != 0u && !av_context) ||
         (request.Flags & (hw_queue_supported | virtual_addressing)) == hw_queue_supported)
         return Status::invalid_parameter;
-    RvkContextRecord record;
-    if (rvk) {
+    AvContextRecord record;
+    if (av_context) {
         const Status decoded = record.decode(
             static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize);
         if (decoded != Status::ok) return Status::invalid_parameter;
@@ -49,7 +49,7 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
     Context *context = nullptr;
     const Status status = contexts_.create(context, platform_, *owner, geometry_, request.NodeOrdinal, request.Flags);
     if (status != Status::ok) return status;
-    if (rvk) context->become_rvk(record);
+    if (av_context) context->become_av(record);
     context->report_to(request);
     return status;
 }
@@ -78,7 +78,7 @@ Context *ContextTable::followed(const Context &follower, uint32_t ring)
     MutexGuard  lock(mutex_);
     void *const process = follower.device().process();
     return contexts_.find_if([&](const Context &context) {
-        return context.is_rvk() && context.rvk_record().ring() == ring && context.device().process() == process;
+        return context.is_av() && context.av_record().ring() == ring && context.device().process() == process;
     });
 }
 
@@ -104,7 +104,7 @@ void ContextTable::report(StateWriter &writer)
             writer.address("device", &context.device());
             writer.number("node", context.node());
             writer.hex("flags", context.flags());
-            writer.flag("rvk", context.is_rvk());
+            writer.flag("av", context.is_av());
             writer.close();
         });
     }

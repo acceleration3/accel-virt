@@ -16,7 +16,7 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t directory[] = L"C:\\ProgramData\\rvk";
+constexpr wchar_t directory[] = L"C:\\ProgramData\\av";
 constexpr size_t  line_bytes = 512u;
 
 }  // namespace
@@ -45,7 +45,7 @@ void WindowsCrash::write(const char *module, TraceTable &table, TraceHost &host,
 
     static_cast<void>(CreateDirectoryW(directory, nullptr));
     WideName path;
-    path.append("C:\\ProgramData\\rvk\\crash-");
+    path.append("C:\\ProgramData\\av\\crash-");
     path.append(module);
     path.append("-");
     path.append(static_cast<uint32_t>(GetCurrentProcessId()));

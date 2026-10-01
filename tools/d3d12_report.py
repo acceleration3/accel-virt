@@ -2,7 +2,7 @@
 """The D3D12 samples (samples/d3d12) on the host and in the guest, side by side.
 
 Runs the same program twice - natively on the host through vkd3d-proton, and
-in the running guest through the system d3d12.dll, rvkumd.dll's OpenAdapter12,
+in the running guest through the system d3d12.dll, avumd.dll's OpenAdapter12,
 the device and the executor - and writes an HTML report: each sample's frame
 from both, the difference between them, and how fast each rendered.
 
@@ -22,7 +22,7 @@ and renders them on the host.
 
 --layer DIR puts DIR's d3d12.dll and d3d12core.dll (vkd3d-proton's Windows
 build) beside the program in the guest, so D3D12 reaches the host through the
-guest's Vulkan driver instead of rvkumd.dll: the route feature 047's probes
+guest's Vulkan driver instead of avumd.dll: the route feature 047's probes
 take, for comparing the two.
 """
 import argparse
@@ -41,21 +41,21 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from d3d11_report import cell, compare, guest_shell, metrics, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GUEST_DIR = "C:\\rvk\\samples12"
-GUEST_EXE = GUEST_DIR + "\\rvkd3d12samples.exe"
+GUEST_DIR = "C:\\av\\samples12"
+GUEST_EXE = GUEST_DIR + "\\avd3d12samples.exe"
 DXC = ROOT / "third_party" / "dxc"
 DXC_FILES = ("dxcompiler.dll", "dxil.dll")
 # dxcompiler.dll links the Visual C++ runtime, which a clean Windows install
 # lacks: without it the samples find no compiler beside them.
 VC_REDIST = ROOT / "third_party" / "vcredist" / "vc_redist.x64.exe"
 VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-GUEST_EXE_LOCAL = ROOT / "build" / "guest" / "rvkd3d12samples.exe"
-HOST_EXE = ROOT / "build" / "rvkd3d12samples_host"
+GUEST_EXE_LOCAL = ROOT / "build" / "guest" / "avd3d12samples.exe"
+HOST_EXE = ROOT / "build" / "avd3d12samples_host"
 
 
 def build():
     subprocess.run([str(ROOT / "tools" / "fetch_dxc.sh")], check=True, stdout=subprocess.DEVNULL)
-    for target in ("rvktest", "rvkd3d12samples_host"):
+    for target in ("avtest", "avd3d12samples_host"):
         subprocess.run(["cmake", "--build", str(ROOT / "build"), "--target", target], check=True,
                        stdout=subprocess.DEVNULL)
 
@@ -74,9 +74,9 @@ def ensure_vc_runtime(work):
     if not VC_REDIST.exists():
         VC_REDIST.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["curl", "-sSL", "-o", str(VC_REDIST), VC_REDIST_URL], check=True, timeout=600)
-    guest_shell(work, "push", str(VC_REDIST), "C:\\rvk\\vc_redist.x64.exe")
+    guest_shell(work, "push", str(VC_REDIST), "C:\\av\\vc_redist.x64.exe")
     print("guest: installing the Visual C++ runtime", flush=True)
-    guest_shell(work, "ps", "Start-Process -Wait C:\\rvk\\vc_redist.x64.exe -ArgumentList '/install','/quiet','/norestart'",
+    guest_shell(work, "ps", "Start-Process -Wait C:\\av\\vc_redist.x64.exe -ArgumentList '/install','/quiet','/norestart'",
                 timeout=600)
 
 
@@ -98,15 +98,15 @@ def run_guest(args, out):
                + " ".join(sample_arguments(args, f"{GUEST_DIR}\\out", f"{GUEST_DIR}\\shaders"))
                + f" > {GUEST_DIR}\\run.txt 2>&1")
     output = guest_shell(work, "ps", f"""
-Unregister-ScheduledTask -TaskName rvksamples12 -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName avsamples12 -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '{command}'
 $p = New-ScheduledTaskPrincipal -UserId '{args.guest_user}' -LogonType Interactive -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-Register-ScheduledTask -TaskName rvksamples12 -Action $a -Principal $p -Settings $s | Out-Null
-Start-ScheduledTask -TaskName rvksamples12
+Register-ScheduledTask -TaskName avsamples12 -Action $a -Principal $p -Settings $s | Out-Null
+Start-ScheduledTask -TaskName avsamples12
 Start-Sleep 2
-while ((Get-ScheduledTask rvksamples12).State -eq 'Running') {{ Start-Sleep 1 }}
-'exit: ' + (Get-ScheduledTaskInfo rvksamples12).LastTaskResult
+while ((Get-ScheduledTask avsamples12).State -eq 'Running') {{ Start-Sleep 1 }}
+'exit: ' + (Get-ScheduledTaskInfo avsamples12).LastTaskResult
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
@@ -174,7 +174,7 @@ def run_host(args, out):
     print("host: rendering", flush=True)
     shutil.rmtree(out / "host", ignore_errors=True)
     (out / "host").mkdir(parents=True)
-    environment = dict(os.environ, RVK_D3D_PATH=str(args.d3d_runtime))
+    environment = dict(os.environ, AV_D3D_PATH=str(args.d3d_runtime))
     done = subprocess.run([str(HOST_EXE)] + sample_arguments(args, str(out / "host"), str(out / "shaders")),
                           capture_output=True, text=True, env=environment, timeout=1800)
     (out / "host.log").write_text(done.stdout + done.stderr)
@@ -214,8 +214,8 @@ def write_html(args, out, rows, ratios):
     host_fps = [r["host"]["fps"] for r in rows if r["host"] and r["host"]["fps"] > 0]
     host_geomean = math.exp(sum(math.log(f) for f in host_fps) / len(host_fps)) if host_fps else None
     gpu = args.gpu_name
-    vm_route = ("vkd3d-proton's d3d12.dll &rarr; rvkvk.dll &rarr; virtio-gpu-rvk &rarr; the host's Vulkan"
-                if args.layer else "d3d12.dll &rarr; rvkumd &rarr; virtio-gpu-rvk &rarr; vkd3d-proton")
+    vm_route = ("vkd3d-proton's d3d12.dll &rarr; avvk.dll &rarr; virtio-gpu-av &rarr; the host's Vulkan"
+                if args.layer else "d3d12.dll &rarr; avumd &rarr; virtio-gpu-av &rarr; vkd3d-proton")
     parts = [f"""<!doctype html><meta charset="utf-8"><title>D3D12 samples: host vs VM</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -292,7 +292,7 @@ def main():
                         help="a directory holding vkd3d-proton's Windows d3d12.dll and d3d12core.dll, run beside "
                              "the program in the guest instead of the system runtime")
     parser.add_argument("--d3d-runtime", type=pathlib.Path, default=ROOT / "build-d3d" / "lib",
-                        help="where tools/build_d3d_runtime.sh installed vkd3d-proton (RVK_D3D_PATH)")
+                        help="where tools/build_d3d_runtime.sh installed vkd3d-proton (AV_D3D_PATH)")
     parser.add_argument("--gpu-name", default="the host GPU")
     parser.add_argument("--guest-user", default="win11\\winuser", help="the guest's logged-on user")
     args = parser.parse_args()

@@ -43,7 +43,7 @@ struct Rig {
     {
         kmt.add_adapter(av::PciIdentity(0x10DEu, 0x2684u, 0x10DEu, 0x0001u), 1u);
         kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                        av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
+                                        av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         for (std::size_t byte = 0u; byte < sizeof data; byte++) data[byte] = static_cast<std::uint8_t>(byte * 7u + 1u);

@@ -1,5 +1,5 @@
 /* The host driver the root is built over (UmdHostDriver): the Direct3D 11
- * half and the Direct3D 12 half of rvkumd.dll, each asked by the runtime that
+ * half and the Direct3D 12 half of avumd.dll, each asked by the runtime that
  * opened the adapter or made the device. One per process, in the library's
  * storage beside the root. */
 #ifndef AV_UM_UMD_DRIVERS_HPP

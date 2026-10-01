@@ -14,9 +14,9 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, LOSE_DEVICE,
+from av_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, LOSE_DEVICE,
                          PAGE, RESP_OK_NODATA, UNDECODABLE, GuestRing, batch, batch_header, command, create_context,
-                         destroy_context, guest_blob, response_type, ring_header, rvk_device, setup, submit)
+                         destroy_context, guest_blob, response_type, ring_header, av_device, setup, submit)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
@@ -98,7 +98,7 @@ class Context:
 class VirtioGpuFaults(unittest.TestCase):
     def gpu(self, vectors=None, qtest=None):
         if qtest is None:
-            qtest = virtio_qtest.Qtest(BUILD, rvk_device(",vectors=4"))
+            qtest = virtio_qtest.Qtest(BUILD, av_device(",vectors=4"))
             self.addCleanup(qtest.close)
         msix = {}
 
@@ -140,11 +140,11 @@ class VirtioGpuFaults(unittest.TestCase):
                 self.assertIn(f"context faulted, code {code}", gpu.qtest.printed())
 
     def test_an_executor_that_cannot_be_created_faults_before_any_batch(self):
-        os.environ["RVK_ECHO_FAIL_CREATE"] = "1"
+        os.environ["AV_ECHO_FAIL_CREATE"] = "1"
         try:
             gpu, _ = self.gpu()
         finally:
-            del os.environ["RVK_ECHO_FAIL_CREATE"]
+            del os.environ["AV_ECHO_FAIL_CREATE"]
         context = Context(self, gpu, 1, 2)
         context.send(command(ECHO))
         self.assertTrue(context.faulted_with(NO_EXECUTOR))
@@ -178,7 +178,7 @@ class VirtioGpuFaults(unittest.TestCase):
         self.assertEqual(struct.unpack("<QI", context.answer()), (0, 1))   # a new executor
 
     def test_a_reset_releases_faulted_and_healthy_contexts_alike(self):
-        qtest = virtio_qtest.Qtest(BUILD, rvk_device(",vectors=4"))
+        qtest = virtio_qtest.Qtest(BUILD, av_device(",vectors=4"))
         self.addCleanup(qtest.close)
         gpu, _ = self.gpu(qtest=qtest)
         Context(self, gpu, 1, 7).send(command(UNDECODABLE))

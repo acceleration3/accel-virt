@@ -29,7 +29,7 @@ void DeviceMemory::note(const char *what, uint64_t value)
     AV_SCOPE("DeviceMemory::note");
     char       line[line_bytes] = {};
     TextBuffer text(line, sizeof line);
-    text.append("rvkvk: ");
+    text.append("avvk: ");
     text.append(what);
     text.append(" ");
     text.append_decimal(value);
@@ -41,9 +41,9 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     AV_SCOPE("DeviceMemory::learn");
     if (learnt_) return true;
     VkPhysicalDeviceMemoryProperties host = {};
-    vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), physical, &host);
+    vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), physical, &host);
     if (connection_.faulted()) {
-        log_.write("rvkvk: vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
+        log_.write("avvk: vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
         return false;
     }
     const Status built = types_.build(host);
@@ -61,7 +61,7 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
     AV_SCOPE("DeviceMemory::allocate");
     if (!learn(physical)) return refusal();
     if (!types_.host_visible(info.memoryTypeIndex)) {
-        return vkproto::rvk_vkAllocateMemory(connection_.transport(), device, &info, allocator, &memory);
+        return vkproto::av_vkAllocateMemory(connection_.transport(), device, &info, allocator, &memory);
     }
     ChunkPlacement *placed = nullptr;
     const Status    status = chunks_.allocate(info.allocationSize, info.memoryTypeIndex, placed);
@@ -85,7 +85,7 @@ void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocati
     if (memory == VK_NULL_HANDLE) return;
     ChunkPlacement *const placed = chunks_.find(HandleBits(memory).value());
     if (placed == nullptr) {
-        vkproto::rvk_vkFreeMemory(connection_.transport(), device, memory, allocator);
+        vkproto::av_vkFreeMemory(connection_.transport(), device, memory, allocator);
         return;
     }
     const Status released = chunks_.free(*placed);

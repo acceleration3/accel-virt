@@ -1,4 +1,4 @@
-/* What `rvkrecord` was asked to do (contracts/rvkrecord.md), read from the
+/* What `avrecord` was asked to do (contracts/avrecord.md), read from the
  * arguments it was started with: print a recording or replay it, which file,
  * which library, which GPU, how many payload bytes to show, and the filter the
  * flags narrow. Everything it does not understand is a refusal with a reason,

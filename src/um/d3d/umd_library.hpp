@@ -1,6 +1,6 @@
-/* rvkumd.dll's root and what it is constructed over: the process heap, its
+/* avumd.dll's root and what it is constructed over: the process heap, its
  * lock, the log file and D3DKMT through gdi32. One per process, in the exports'
- * storage (rvkumd_exports.cpp), constructed on the first OpenAdapter call
+ * storage (avumd_exports.cpp), constructed on the first OpenAdapter call
  * rather than at DLL attach, where the loader lock forbids opening a file.
  * Translation only: what the root decides is in src/icd/d3d. */
 #ifndef AV_UM_UMD_LIBRARY_HPP

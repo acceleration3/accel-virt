@@ -1,4 +1,4 @@
-/* rvkvkprobe's shared-object steps over a scripted Vulkan (feature 053, US1).
+/* avvkprobe's shared-object steps over a scripted Vulkan (feature 053, US1).
  *
  * The three D3DKMT calls this exercises are reached only through the ICD, so
  * what a unit test can judge is the shape of the run: that the steps happen in
@@ -30,8 +30,8 @@ using av::Status;
 
 namespace {
 
-const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 /* What the probe fills the exportable allocation with before it exports it,
  * which is what its OpenCL read is judged against. */
@@ -40,9 +40,9 @@ void *const             minted_handle = reinterpret_cast<void *>(0x8000000000000
 
 class Rig {
 public:
-    Rig() : report_("rvkvkprobe")
+    Rig() : report_("avvkprobe")
     {
-        kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
+        kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, adapter_luid);
         vulkan_.set_luid(0u, adapter_luid, true);
         /* A driver that reports the extension, which is what lets an
@@ -382,12 +382,12 @@ TEST(shared_object_probe, a_refused_allocation_carries_the_kernels_code_and_stop
   CHECK(!rig.holds("shared.handle"));
   CHECK(rig.report().failed() != 0u); }
 
-/* No rvkgpu adapter at all: the run says so at the first step and does not
+/* No avgpu adapter at all: the run says so at the first step and does not
  * pretend to have made a device. */
 TEST(shared_object_probe, no_adapter_is_the_first_step_and_the_last)
 { MockKmt        kmt;
   ScriptedVulkan vulkan;
-  GuestReport    report("rvkvkprobe");
+  GuestReport    report("avvkprobe");
   SharedObjectProbe probe(kmt, report, vulkan, nullptr);
   probe.run();
   report.finish();

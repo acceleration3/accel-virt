@@ -281,7 +281,7 @@ TEST(allocation_report_to, a_primary_stays_in_the_aperture)
   CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
   CHECK_EQ(info.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */ }
 
-/* Feature 041, US2: the pages an rvk context runs on belong to the device that
+/* Feature 041, US2: the pages an av context runs on belong to the device that
  * made them. A second device asking for the same ring is asking for another
  * process's submissions, and is refused; anything else is shared memory and is
  * not. */

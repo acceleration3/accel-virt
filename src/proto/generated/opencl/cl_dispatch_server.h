@@ -1,5 +1,5 @@
 // THIS FILE IS GENERATED. DO NOT EDIT.
-// Regenerate with: python -m rvk_codegen.opencl --xml cl.xml --out ...
+// Regenerate with: python -m av_codegen.opencl --xml cl.xml --out ...
 
 #pragma once
 

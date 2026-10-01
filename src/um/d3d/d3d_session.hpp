@@ -2,7 +2,7 @@
  * adapter: the Direct3D 11 driver keeps one per adapter, and so does the
  * Direct3D 12 driver, with a larger arena its upload and readback heaps live in.
  *
- * A session costs an rvk context - one of the adapter's doorbells - a ring and
+ * A session costs an av context - one of the adapter's doorbells - a ring and
  * a blob arena, and the desktop's processes make dozens of devices each: one
  * session per device ran the adapter out of doorbells before the shell had
  * started. So the first device a process makes on an adapter opens the

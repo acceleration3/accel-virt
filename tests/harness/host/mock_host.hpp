@@ -7,7 +7,7 @@
 #ifndef AV_MOCK_HOST_HPP
 #define AV_MOCK_HOST_HPP
 
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/host/host.hpp"
 #include "harness/host/host_violation.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -107,7 +107,7 @@ public:
                             std::uint32_t height) override;
     void     hide_scanout(std::uint32_t head) override;
     /* Heads under add_display_heads show it; the rest answer not_supported. */
-    Status   show_image(std::uint32_t head, const RvkExportedImage &image) override;
+    Status   show_image(std::uint32_t head, const AvExportedImage &image) override;
     int      event_descriptor(void *event) override;
     int      fence_interrupt_descriptor(std::uint32_t line) override;
     std::uint32_t guest_region_count() override;
@@ -148,7 +148,7 @@ public:
         std::uint32_t hides;
     };
 
-    /* What the C table's show_scanout lands on, so the RvkScanoutFrame the ABI
+    /* What the C table's show_scanout lands on, so the AvScanoutFrame the ABI
      * carries is asserted as it arrived rather than rebuilt. */
     [[nodiscard]] Status show_scanout_plane(std::uint32_t head, int fd, const Plane &plane);
 
@@ -207,7 +207,7 @@ public:
     bool          wait_for_deadline_after(std::uint64_t after, std::uint32_t milliseconds);
     /* Images show_image put on head `head`, and the last one. */
     std::uint32_t    images_shown(std::uint32_t head) const;
-    RvkExportedImage last_image(std::uint32_t head) const;
+    AvExportedImage last_image(std::uint32_t head) const;
     void refuse_export_at(std::uint32_t nth, std::int32_t host_error);
     void refuse_import_at(std::uint32_t nth, std::int32_t host_error);
     /* The Nth read through an import from now answers bytes the device never
@@ -563,7 +563,7 @@ private:
     std::uint32_t   refuse_scanout_;
     Scanout         scanouts_[max_scanout_heads];
     std::uint32_t   images_shown_[max_scanout_heads];
-    RvkExportedImage last_images_[max_scanout_heads];
+    AvExportedImage last_images_[max_scanout_heads];
     std::uint32_t   update_rects_[max_scanout_heads][4];
     RendererRegion  renderer_regions_[max_renderer_regions];
     std::uint32_t   renderer_region_count_;

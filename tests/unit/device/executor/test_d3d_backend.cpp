@@ -5,7 +5,7 @@
  * backend does with a device is judged on the host GPU in
  * test_d3d_backend_device.cpp. */
 #include "core/support/object_storage.hpp"
-#include "device/abi/rvk_executor.h"
+#include "device/abi/av_executor.h"
 #include "device/executor/d3d_backend.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/query_result_publisher.hpp"
@@ -49,8 +49,8 @@ public:
     /* The session's blob arena: the guest's memory, lent as a host pointer. */
     bool adopt(ImportedBlob &blob)
     {
-        RvkBlobHandle handle = {};
-        handle.kind = RVK_BLOB_HOST_POINTER;
+        AvBlobHandle handle = {};
+        handle.kind = AV_BLOB_HOST_POINTER;
         handle.pointer = guest;
         handle.fd = -1;
         handle.size = sizeof guest;
@@ -259,7 +259,7 @@ struct Selected {
 Selected select_devices()
 {
     Selected seen = {};
-    if (std::getenv("RVK_D3D_PATH") == nullptr) setenv("RVK_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::D3dRuntime      runtime;
     av::D3d11HostDevice device11;
     std::uint8_t        uuid[VK_UUID_SIZE] = {};

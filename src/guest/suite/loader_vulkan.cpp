@@ -79,7 +79,7 @@ constexpr const char *const names[] = {
     "vkQueuePresentKHR",
 };
 
-constexpr const char force_context_fault_name[] = "vkRvkForceContextFault";
+constexpr const char force_context_fault_name[] = "vkAvForceContextFault";
 
 }  // namespace
 
@@ -233,7 +233,7 @@ uint32_t LoaderVulkan::last_kernel_status(VkInstance instance, VkPhysicalDevice 
 {
     AV_SCOPE("LoaderVulkan::last_kernel_status");
     using Ask = VkResult (VKAPI_PTR *)(VkPhysicalDevice, uint32_t *);
-    const auto ask = reinterpret_cast<Ask>(get_instance_proc_addr_(instance, "vkRvkLastKernelStatus"));
+    const auto ask = reinterpret_cast<Ask>(get_instance_proc_addr_(instance, "vkAvLastKernelStatus"));
     uint32_t   status = 0u;
     if (ask == nullptr || ask(physical_device, &status) != VK_SUCCESS) return 0u;
     return status;

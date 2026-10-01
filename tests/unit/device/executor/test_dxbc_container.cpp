@@ -120,7 +120,7 @@ TEST(dxbc_container, writes_a_container_whose_header_chunks_and_checksum_agree)
   CHECK_EQ(chunk_at(buffer, "OSG1") % 4u, 0u); }
 
 /* What the executor names each entry is read back by the reader the pipeline
- * builder uses: RVK and the register's first component for a plain register,
+ * builder uses: AV and the register's first component for a plain register,
  * and an input's mask doubled into the components the shader reads. */
 TEST(dxbc_container, an_input_signature_is_read_back_by_register)
 { std::uint8_t buffer[4096] = {};
@@ -131,10 +131,10 @@ TEST(dxbc_container, an_input_signature_is_read_back_by_register)
   CHECK(reader.found());
   std::uint32_t index = 99u;
   const char *const first = reader.semantic_at(0u, index);
-  CHECK(first != nullptr && std::strcmp(first, "RVK") == 0);
+  CHECK(first != nullptr && std::strcmp(first, "AV") == 0);
   CHECK_EQ(index, 0u);
   const char *const second = reader.semantic_at(1u, index);
-  CHECK(second != nullptr && std::strcmp(second, "RVK") == 0);
+  CHECK(second != nullptr && std::strcmp(second, "AV") == 0);
   CHECK_EQ(index, 4u);   /* register 1, component x */
   CHECK(reader.semantic_at(2u, index) == nullptr);
   const std::size_t isg1 = chunk_at(buffer, "ISG1");
@@ -150,7 +150,7 @@ TEST(dxbc_container_add_layout_signature, names_every_register_the_layout_feeds_
   std::uint32_t index = 0u;
   for (const std::uint32_t reg : registers) {
       const char *const name = reader.semantic_at(reg, index);
-      CHECK(name != nullptr && std::strcmp(name, "RVK") == 0);
+      CHECK(name != nullptr && std::strcmp(name, "AV") == 0);
       CHECK_EQ(index, reg * 4u);
   }
   CHECK(reader.semantic_at(1u, index) == nullptr);
@@ -171,8 +171,8 @@ TEST(dxbc_container_semantic_of, names_system_values_render_targets_depth_and_te
       std::uint32_t index;
   };
   const Case cases[] = {
-      {0u, 2u, 0x4u, false, "RVK", 10u},               /* register 2, component z */
-      {0u, 2u, 0x0u, false, "RVK", 8u},                /* no mask: the register's first */
+      {0u, 2u, 0x4u, false, "AV", 10u},               /* register 2, component z */
+      {0u, 2u, 0x0u, false, "AV", 8u},                /* no mask: the register's first */
       {1u, 0u, 0xFu, false, "SV_Position", 0u},
       {2u, 1u, 0x2u, false, "SV_ClipDistance", 0u},
       {3u, 1u, 0x1u, false, "SV_CullDistance", 0u},
@@ -189,7 +189,7 @@ TEST(dxbc_container_semantic_of, names_system_values_render_targets_depth_and_te
       {20u, 0u, 0x1u, false, "SV_InsideTessFactor", 0u},
       {21u, 0u, 0x1u, false, "SV_TessFactor", 1u},     /* line detail */
       {22u, 0u, 0x1u, false, "SV_TessFactor", 0u},     /* line density */
-      {23u, 5u, 0x1u, false, "RVK", 20u},              /* past the names: a register */
+      {23u, 5u, 0x1u, false, "AV", 20u},              /* past the names: a register */
   };
   for (const Case &c : cases) {
       SignatureEntry entry = {};

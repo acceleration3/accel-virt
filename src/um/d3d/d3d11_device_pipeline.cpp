@@ -34,7 +34,7 @@ constexpr uint32_t whole_buffer = 0u;
 void D3d11Device::set_shader(uint32_t stage, D3D10DDI_HSHADER shader)
 {
     AV_SCOPE("D3d11Device::set_shader");
-    static_cast<void>(d3dproto::rvk_d3d_SetShader(wire(), stage, id_of(shader.pDrvPrivate)));
+    static_cast<void>(d3dproto::av_d3d_SetShader(wire(), stage, id_of(shader.pDrvPrivate)));
 }
 
 void D3d11Device::set_constant_buffers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers,
@@ -47,7 +47,7 @@ void D3d11Device::set_constant_buffers(uint32_t stage, UINT start, UINT count, c
         bound[index] = d3dproto::ConstantBufferBinding{buffers == nullptr ? 0u : id_of(buffers[index].pDrvPrivate),
                                                        first == nullptr ? 0u : first[index],
                                                        counts == nullptr ? whole_buffer : counts[index]};
-    static_cast<void>(d3dproto::rvk_d3d_SetConstantBuffers(wire(), stage, start, used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetConstantBuffers(wire(), stage, start, used, bound));
 }
 
 void D3d11Device::set_shader_resources(uint32_t stage, UINT start, UINT count, const D3D10DDI_HSHADERRESOURCEVIEW *views)
@@ -57,7 +57,7 @@ void D3d11Device::set_shader_resources(uint32_t stage, UINT start, UINT count, c
     const UINT used = count > max_views ? max_views : count;
     for (UINT index = 0u; index < used; index++) bound[index] = views == nullptr ? 0u : id_of(views[index].pDrvPrivate);
     refresh_bound_guest_surfaces(views, used);
-    static_cast<void>(d3dproto::rvk_d3d_SetShaderResources(wire(), stage, start, used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetShaderResources(wire(), stage, start, used, bound));
 }
 
 void D3d11Device::set_samplers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HSAMPLER *samplers)
@@ -67,7 +67,7 @@ void D3d11Device::set_samplers(uint32_t stage, UINT start, UINT count, const D3D
     const UINT used = count > max_samplers ? max_samplers : count;
     for (UINT index = 0u; index < used; index++)
         bound[index] = samplers == nullptr ? 0u : id_of(samplers[index].pDrvPrivate);
-    static_cast<void>(d3dproto::rvk_d3d_SetSamplers(wire(), stage, start, used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetSamplers(wire(), stage, start, used, bound));
 }
 
 VOID D3d11Device::vs_set_shader(D3D10DDI_HSHADER shader)
@@ -266,7 +266,7 @@ VOID D3d11Device::cs_set_unordered_access_views(UINT start, UINT count, const D3
     for (UINT index = 0u; index < used; index++)
         bound[index] = d3dproto::UavBinding{views == nullptr ? 0u : id_of(views[index].pDrvPrivate),
                                             counts == nullptr ? 0xffffffffu : counts[index]};
-    static_cast<void>(d3dproto::rvk_d3d_SetComputeUnorderedAccessViews(wire(), start, used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetComputeUnorderedAccessViews(wire(), start, used, bound));
 }
 
 /* ---------------------------------------------------------------- input assembly, output merger, rasterizer */
@@ -274,7 +274,7 @@ VOID D3d11Device::cs_set_unordered_access_views(UINT start, UINT count, const D3
 VOID D3d11Device::ia_set_input_layout(D3D10DDI_HELEMENTLAYOUT layout)
 {
     AV_SCOPE("D3d11Device::ia_set_input_layout");
-    static_cast<void>(d3dproto::rvk_d3d_SetInputLayout(wire(), id_of(layout.pDrvPrivate)));
+    static_cast<void>(d3dproto::av_d3d_SetInputLayout(wire(), id_of(layout.pDrvPrivate)));
 }
 
 VOID D3d11Device::ia_set_vertex_buffers(UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers, const UINT *strides,
@@ -287,20 +287,20 @@ VOID D3d11Device::ia_set_vertex_buffers(UINT start, UINT count, const D3D10DDI_H
         bound[index] = d3dproto::VertexBufferBinding{buffers == nullptr ? 0u : id_of(buffers[index].pDrvPrivate),
                                                      strides == nullptr ? 0u : strides[index],
                                                      offsets == nullptr ? 0u : offsets[index]};
-    static_cast<void>(d3dproto::rvk_d3d_SetVertexBuffers(wire(), start, used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetVertexBuffers(wire(), start, used, bound));
 }
 
 VOID D3d11Device::ia_set_index_buffer(D3D10DDI_HRESOURCE buffer, DXGI_FORMAT format, UINT offset)
 {
     AV_SCOPE("D3d11Device::ia_set_index_buffer");
     static_cast<void>(
-        d3dproto::rvk_d3d_SetIndexBuffer(wire(), id_of(buffer.pDrvPrivate), static_cast<uint32_t>(format), offset));
+        d3dproto::av_d3d_SetIndexBuffer(wire(), id_of(buffer.pDrvPrivate), static_cast<uint32_t>(format), offset));
 }
 
 VOID D3d11Device::ia_set_topology(D3D10_DDI_PRIMITIVE_TOPOLOGY topology)
 {
     AV_SCOPE("D3d11Device::ia_set_topology");
-    static_cast<void>(d3dproto::rvk_d3d_SetTopology(wire(), static_cast<uint32_t>(topology)));
+    static_cast<void>(d3dproto::av_d3d_SetTopology(wire(), static_cast<uint32_t>(topology)));
 }
 
 VOID D3d11Device::set_render_targets(const D3D10DDI_HRENDERTARGETVIEW *targets, UINT target_count, UINT,
@@ -318,7 +318,7 @@ VOID D3d11Device::set_render_targets(const D3D10DDI_HRENDERTARGETVIEW *targets, 
         views[index] = d3dproto::UavBinding{uavs == nullptr ? 0u : id_of(uavs[index].pDrvPrivate),
                                             counts == nullptr ? 0xffffffffu : counts[index]};
     static_cast<void>(
-        d3dproto::rvk_d3d_SetRenderTargets(wire(), used, bound, id_of(depth.pDrvPrivate), uav_start, viewed, views));
+        d3dproto::av_d3d_SetRenderTargets(wire(), used, bound, id_of(depth.pDrvPrivate), uav_start, viewed, views));
 }
 
 VOID D3d11Device::set_blend_state(D3D10DDI_HBLENDSTATE state, const FLOAT *factor, UINT sample_mask)
@@ -327,19 +327,19 @@ VOID D3d11Device::set_blend_state(D3D10DDI_HBLENDSTATE state, const FLOAT *facto
     d3dproto::Float4 blend = {{1.0f, 1.0f, 1.0f, 1.0f}};
     if (factor != nullptr)
         for (uint32_t index = 0u; index < 4u; index++) blend.v[index] = factor[index];
-    static_cast<void>(d3dproto::rvk_d3d_SetBlendState(wire(), id_of(state.pDrvPrivate), blend, sample_mask));
+    static_cast<void>(d3dproto::av_d3d_SetBlendState(wire(), id_of(state.pDrvPrivate), blend, sample_mask));
 }
 
 VOID D3d11Device::set_depth_stencil_state(D3D10DDI_HDEPTHSTENCILSTATE state, UINT stencil_ref)
 {
     AV_SCOPE("D3d11Device::set_depth_stencil_state");
-    static_cast<void>(d3dproto::rvk_d3d_SetDepthStencilState(wire(), id_of(state.pDrvPrivate), stencil_ref));
+    static_cast<void>(d3dproto::av_d3d_SetDepthStencilState(wire(), id_of(state.pDrvPrivate), stencil_ref));
 }
 
 VOID D3d11Device::set_rasterizer_state(D3D10DDI_HRASTERIZERSTATE state)
 {
     AV_SCOPE("D3d11Device::set_rasterizer_state");
-    static_cast<void>(d3dproto::rvk_d3d_SetRasterizerState(wire(), id_of(state.pDrvPrivate)));
+    static_cast<void>(d3dproto::av_d3d_SetRasterizerState(wire(), id_of(state.pDrvPrivate)));
 }
 
 VOID D3d11Device::set_viewports(UINT count, UINT, const D3D10_DDI_VIEWPORT *viewports)
@@ -350,7 +350,7 @@ VOID D3d11Device::set_viewports(UINT count, UINT, const D3D10_DDI_VIEWPORT *view
     for (UINT index = 0u; index < used; index++)
         bound[index] = d3dproto::Viewport{viewports[index].TopLeftX, viewports[index].TopLeftY, viewports[index].Width,
                                           viewports[index].Height,   viewports[index].MinDepth, viewports[index].MaxDepth};
-    static_cast<void>(d3dproto::rvk_d3d_SetViewports(wire(), used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetViewports(wire(), used, bound));
 }
 
 VOID D3d11Device::set_scissor_rects(UINT count, UINT, const D3D10_DDI_RECT *rects)
@@ -360,7 +360,7 @@ VOID D3d11Device::set_scissor_rects(UINT count, UINT, const D3D10_DDI_RECT *rect
     const UINT used = count > max_viewports ? max_viewports : count;
     for (UINT index = 0u; index < used; index++)
         bound[index] = d3dproto::Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    static_cast<void>(d3dproto::rvk_d3d_SetScissorRects(wire(), used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetScissorRects(wire(), used, bound));
 }
 
 VOID D3d11Device::so_set_targets(UINT count, UINT, const D3D10DDI_HRESOURCE *buffers, const UINT *offsets)
@@ -371,19 +371,19 @@ VOID D3d11Device::so_set_targets(UINT count, UINT, const D3D10DDI_HRESOURCE *buf
     for (UINT index = 0u; index < used; index++)
         bound[index] = d3dproto::StreamOutTarget{buffers == nullptr ? 0u : id_of(buffers[index].pDrvPrivate),
                                                  offsets == nullptr ? 0u : offsets[index]};
-    static_cast<void>(d3dproto::rvk_d3d_SetStreamOutTargets(wire(), used, bound));
+    static_cast<void>(d3dproto::av_d3d_SetStreamOutTargets(wire(), used, bound));
 }
 
 VOID D3d11Device::set_predication(D3D10DDI_HQUERY query, BOOL value)
 {
     AV_SCOPE("D3d11Device::set_predication");
-    static_cast<void>(d3dproto::rvk_d3d_SetPredication(wire(), id_of(query.pDrvPrivate), value != FALSE ? 1u : 0u));
+    static_cast<void>(d3dproto::av_d3d_SetPredication(wire(), id_of(query.pDrvPrivate), value != FALSE ? 1u : 0u));
 }
 
 VOID D3d11Device::set_resource_min_lod(D3D10DDI_HRESOURCE resource, FLOAT lod)
 {
     AV_SCOPE("D3d11Device::set_resource_min_lod");
-    static_cast<void>(d3dproto::rvk_d3d_SetResourceMinLod(wire(), id_of(resource.pDrvPrivate), lod));
+    static_cast<void>(d3dproto::av_d3d_SetResourceMinLod(wire(), id_of(resource.pDrvPrivate), lod));
 }
 
 VOID D3d11Device::shader_resource_view_read_after_write_hazard(D3D10DDI_HSHADERRESOURCEVIEW, D3D10DDI_HRESOURCE)
@@ -401,55 +401,55 @@ VOID D3d11Device::resource_read_after_write_hazard(D3D10DDI_HRESOURCE)
 VOID D3d11Device::draw(UINT vertices, UINT start)
 {
     AV_SCOPE("D3d11Device::draw");
-    static_cast<void>(d3dproto::rvk_d3d_Draw(wire(), vertices, start));
+    static_cast<void>(d3dproto::av_d3d_Draw(wire(), vertices, start));
 }
 
 VOID D3d11Device::draw_indexed(UINT indices, UINT start, INT base)
 {
     AV_SCOPE("D3d11Device::draw_indexed");
-    static_cast<void>(d3dproto::rvk_d3d_DrawIndexed(wire(), indices, start, base));
+    static_cast<void>(d3dproto::av_d3d_DrawIndexed(wire(), indices, start, base));
 }
 
 VOID D3d11Device::draw_instanced(UINT vertices, UINT instances, UINT start, UINT first_instance)
 {
     AV_SCOPE("D3d11Device::draw_instanced");
-    static_cast<void>(d3dproto::rvk_d3d_DrawInstanced(wire(), vertices, instances, start, first_instance));
+    static_cast<void>(d3dproto::av_d3d_DrawInstanced(wire(), vertices, instances, start, first_instance));
 }
 
 VOID D3d11Device::draw_indexed_instanced(UINT indices, UINT instances, UINT start, INT base, UINT first_instance)
 {
     AV_SCOPE("D3d11Device::draw_indexed_instanced");
-    static_cast<void>(d3dproto::rvk_d3d_DrawIndexedInstanced(wire(), indices, instances, start, base, first_instance));
+    static_cast<void>(d3dproto::av_d3d_DrawIndexedInstanced(wire(), indices, instances, start, base, first_instance));
 }
 
 VOID D3d11Device::draw_auto()
 {
     AV_SCOPE("D3d11Device::draw_auto");
-    static_cast<void>(d3dproto::rvk_d3d_DrawAuto(wire()));
+    static_cast<void>(d3dproto::av_d3d_DrawAuto(wire()));
 }
 
 VOID D3d11Device::draw_instanced_indirect(D3D10DDI_HRESOURCE buffer, UINT offset)
 {
     AV_SCOPE("D3d11Device::draw_instanced_indirect");
-    static_cast<void>(d3dproto::rvk_d3d_DrawInstancedIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
+    static_cast<void>(d3dproto::av_d3d_DrawInstancedIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
 }
 
 VOID D3d11Device::draw_indexed_instanced_indirect(D3D10DDI_HRESOURCE buffer, UINT offset)
 {
     AV_SCOPE("D3d11Device::draw_indexed_instanced_indirect");
-    static_cast<void>(d3dproto::rvk_d3d_DrawIndexedInstancedIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
+    static_cast<void>(d3dproto::av_d3d_DrawIndexedInstancedIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
 }
 
 VOID D3d11Device::dispatch(UINT x, UINT y, UINT z)
 {
     AV_SCOPE("D3d11Device::dispatch");
-    static_cast<void>(d3dproto::rvk_d3d_Dispatch(wire(), x, y, z));
+    static_cast<void>(d3dproto::av_d3d_Dispatch(wire(), x, y, z));
 }
 
 VOID D3d11Device::dispatch_indirect(D3D10DDI_HRESOURCE buffer, UINT offset)
 {
     AV_SCOPE("D3d11Device::dispatch_indirect");
-    static_cast<void>(d3dproto::rvk_d3d_DispatchIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
+    static_cast<void>(d3dproto::av_d3d_DispatchIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
 }
 
 /* ---------------------------------------------------------------- clears */
@@ -458,27 +458,27 @@ VOID D3d11Device::clear_render_target_view(D3D10DDI_HRENDERTARGETVIEW view, FLOA
 {
     AV_SCOPE("D3d11Device::clear_render_target_view");
     const d3dproto::Float4 value = {{color[0], color[1], color[2], color[3]}};
-    static_cast<void>(d3dproto::rvk_d3d_ClearRenderTargetView(wire(), id_of(view.pDrvPrivate), value));
+    static_cast<void>(d3dproto::av_d3d_ClearRenderTargetView(wire(), id_of(view.pDrvPrivate), value));
 }
 
 VOID D3d11Device::clear_depth_stencil_view(D3D10DDI_HDEPTHSTENCILVIEW view, UINT flags, FLOAT depth, UINT8 stencil)
 {
     AV_SCOPE("D3d11Device::clear_depth_stencil_view");
-    static_cast<void>(d3dproto::rvk_d3d_ClearDepthStencilView(wire(), id_of(view.pDrvPrivate), flags, depth, stencil));
+    static_cast<void>(d3dproto::av_d3d_ClearDepthStencilView(wire(), id_of(view.pDrvPrivate), flags, depth, stencil));
 }
 
 VOID D3d11Device::clear_unordered_access_view_uint(D3D11DDI_HUNORDEREDACCESSVIEW view, const UINT *values)
 {
     AV_SCOPE("D3d11Device::clear_unordered_access_view_uint");
     const d3dproto::Uint4 value = {{values[0], values[1], values[2], values[3]}};
-    static_cast<void>(d3dproto::rvk_d3d_ClearUnorderedAccessViewUint(wire(), id_of(view.pDrvPrivate), value));
+    static_cast<void>(d3dproto::av_d3d_ClearUnorderedAccessViewUint(wire(), id_of(view.pDrvPrivate), value));
 }
 
 VOID D3d11Device::clear_unordered_access_view_float(D3D11DDI_HUNORDEREDACCESSVIEW view, const FLOAT *values)
 {
     AV_SCOPE("D3d11Device::clear_unordered_access_view_float");
     const d3dproto::Float4 value = {{values[0], values[1], values[2], values[3]}};
-    static_cast<void>(d3dproto::rvk_d3d_ClearUnorderedAccessViewFloat(wire(), id_of(view.pDrvPrivate), value));
+    static_cast<void>(d3dproto::av_d3d_ClearUnorderedAccessViewFloat(wire(), id_of(view.pDrvPrivate), value));
 }
 
 VOID D3d11Device::clear_view(D3D11DDI_HANDLETYPE, void *view, const FLOAT *color, const D3D10_DDI_RECT *rects,
@@ -490,7 +490,7 @@ VOID D3d11Device::clear_view(D3D11DDI_HANDLETYPE, void *view, const FLOAT *color
     const UINT used = rect_count > max_viewports ? max_viewports : rect_count;
     for (UINT index = 0u; index < used; index++)
         bound[index] = d3dproto::Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    static_cast<void>(d3dproto::rvk_d3d_ClearView(wire(), id_of(view), value, used, bound));
+    static_cast<void>(d3dproto::av_d3d_ClearView(wire(), id_of(view), value, used, bound));
 }
 
 VOID D3d11Device::discard(D3D11DDI_HANDLETYPE, void *object, const D3D10_DDI_RECT *rects, UINT rect_count)
@@ -500,7 +500,7 @@ VOID D3d11Device::discard(D3D11DDI_HANDLETYPE, void *object, const D3D10_DDI_REC
     const UINT used = rect_count > max_viewports ? max_viewports : rect_count;
     for (UINT index = 0u; index < used; index++)
         bound[index] = d3dproto::Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    static_cast<void>(d3dproto::rvk_d3d_Discard(wire(), id_of(object), used, bound));
+    static_cast<void>(d3dproto::av_d3d_Discard(wire(), id_of(object), used, bound));
 }
 
 /* ---------------------------------------------------------------- copies */
@@ -509,7 +509,7 @@ VOID D3d11Device::resource_copy(D3D10DDI_HRESOURCE destination, D3D10DDI_HRESOUR
 {
     AV_SCOPE("D3d11Device::resource_copy");
     static_cast<void>(
-        d3dproto::rvk_d3d_CopyResource(wire(), id_of(destination.pDrvPrivate), id_of(source.pDrvPrivate)));
+        d3dproto::av_d3d_CopyResource(wire(), id_of(destination.pDrvPrivate), id_of(source.pDrvPrivate)));
 }
 
 VOID D3d11Device::resource_copy_region(D3D10DDI_HRESOURCE destination, UINT destination_sub, UINT x, UINT y, UINT z,
@@ -521,7 +521,7 @@ VOID D3d11Device::resource_copy_region(D3D10DDI_HRESOURCE destination, UINT dest
         box == nullptr ? d3dproto::Box{} : d3dproto::Box{static_cast<uint32_t>(box->left), static_cast<uint32_t>(box->top), static_cast<uint32_t>(box->front),
                                      static_cast<uint32_t>(box->right), static_cast<uint32_t>(box->bottom),
                                      static_cast<uint32_t>(box->back)};
-    static_cast<void>(d3dproto::rvk_d3d_CopySubresourceRegion(wire(), id_of(destination.pDrvPrivate), destination_sub,
+    static_cast<void>(d3dproto::av_d3d_CopySubresourceRegion(wire(), id_of(destination.pDrvPrivate), destination_sub,
                                                               x, y, z, id_of(source.pDrvPrivate), source_sub,
                                                               box != nullptr ? 1u : 0u, region, flags));
 }
@@ -546,7 +546,7 @@ VOID D3d11Device::resource_resolve_subresource(D3D10DDI_HRESOURCE destination, U
                                                D3D10DDI_HRESOURCE source, UINT source_sub, DXGI_FORMAT format)
 {
     AV_SCOPE("D3d11Device::resource_resolve_subresource");
-    static_cast<void>(d3dproto::rvk_d3d_ResolveSubresource(wire(), id_of(destination.pDrvPrivate), destination_sub,
+    static_cast<void>(d3dproto::av_d3d_ResolveSubresource(wire(), id_of(destination.pDrvPrivate), destination_sub,
                                                            id_of(source.pDrvPrivate), source_sub,
                                                            static_cast<uint32_t>(format)));
 }
@@ -554,14 +554,14 @@ VOID D3d11Device::resource_resolve_subresource(D3D10DDI_HRESOURCE destination, U
 VOID D3d11Device::gen_mips(D3D10DDI_HSHADERRESOURCEVIEW view)
 {
     AV_SCOPE("D3d11Device::gen_mips");
-    static_cast<void>(d3dproto::rvk_d3d_GenerateMips(wire(), id_of(view.pDrvPrivate)));
+    static_cast<void>(d3dproto::av_d3d_GenerateMips(wire(), id_of(view.pDrvPrivate)));
 }
 
 VOID D3d11Device::copy_structure_count(D3D10DDI_HRESOURCE destination, UINT offset, D3D11DDI_HUNORDEREDACCESSVIEW view)
 {
     AV_SCOPE("D3d11Device::copy_structure_count");
     static_cast<void>(
-        d3dproto::rvk_d3d_CopyStructureCount(wire(), id_of(destination.pDrvPrivate), offset, id_of(view.pDrvPrivate)));
+        d3dproto::av_d3d_CopyStructureCount(wire(), id_of(destination.pDrvPrivate), offset, id_of(view.pDrvPrivate)));
 }
 
 /* ---------------------------------------------------------------- queries */
@@ -569,7 +569,7 @@ VOID D3d11Device::copy_structure_count(D3D10DDI_HRESOURCE destination, UINT offs
 VOID D3d11Device::query_begin(D3D10DDI_HQUERY query)
 {
     AV_SCOPE("D3d11Device::query_begin");
-    static_cast<void>(d3dproto::rvk_d3d_BeginQuery(wire(), id_of(query.pDrvPrivate)));
+    static_cast<void>(d3dproto::av_d3d_BeginQuery(wire(), id_of(query.pDrvPrivate)));
 }
 
 VOID D3d11Device::query_end(D3D10DDI_HQUERY query)
@@ -578,7 +578,7 @@ VOID D3d11Device::query_end(D3D10DDI_HQUERY query)
     QueryRecord &record = *static_cast<QueryRecord *>(query.pDrvPrivate);
     record.last_end = session_.query_results().ended();
     record.first_miss = 0u;
-    static_cast<void>(d3dproto::rvk_d3d_EndQuery(wire(), record.id));
+    static_cast<void>(d3dproto::av_d3d_EndQuery(wire(), record.id));
     if (record.waited_on != 0u && wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
@@ -610,7 +610,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
     uint8_t answer[128] = {};
     uint32_t ready = 0u;
     uint64_t answered = 0u;
-    if (!d3dproto::rvk_d3d_GetQueryData(wire(), query.id, flags, &ready, answer, sizeof(answer), &answered)) {
+    if (!d3dproto::av_d3d_GetQueryData(wire(), query.id, flags, &ready, answer, sizeof(answer), &answered)) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return;
     }

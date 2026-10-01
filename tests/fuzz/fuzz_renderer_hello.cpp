@@ -1,4 +1,4 @@
-/* The hello QEMU sends a new rvk-renderer, fed attacker-chosen bytes: the
+/* The hello QEMU sends a new av-renderer, fed attacker-chosen bytes: the
  * first byte is how many descriptors arrived beside it and the rest is its
  * body. What decodes must re-encode to exactly the bytes read and name a path
  * dlopen reads to its end. */

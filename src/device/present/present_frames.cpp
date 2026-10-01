@@ -23,7 +23,7 @@ bool PresentFrames::readable() const
     return plane_ != nullptr && plane_->reads_frames();
 }
 
-bool PresentFrames::map(const SurfacePoint &frame, RvkFrameView &view) const
+bool PresentFrames::map(const SurfacePoint &frame, AvFrameView &view) const
 {
     AV_SCOPE("PresentFrames::map");
     return readable() && plane_->map_frame(gpu_uuid_, frame, wait_ms, view);

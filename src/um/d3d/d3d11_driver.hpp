@@ -1,4 +1,4 @@
-/* The Direct3D 11 half of rvkumd.dll that needs the host: the devices the
+/* The Direct3D 11 half of avumd.dll that needs the host: the devices the
  * runtime makes, each a D3d11Device in this pool, and for each adapter its
  * host capabilities, asked once, and the one session its devices share. One
  * per process, in the library's UmdDrivers beside the Direct3D 12 half; the
