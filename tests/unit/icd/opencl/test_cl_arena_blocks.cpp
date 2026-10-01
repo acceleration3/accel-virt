@@ -25,28 +25,15 @@ namespace av::clicd {
  * arena is a pointer into memory the device never imported, and a row left
  * behind a shrinking count is a block nothing will ever give back. */
 struct ClArenaBlocksProbe {
-    static void count_past_the_table(ClArenaBlocks &blocks)
-    { blocks.count_ = ClArenaBlocks::max_blocks + 1u; }
+    /* The arena shrunk under its blocks: blocks past its end are pointers
+     * into memory the device never imported. */
+    static void blocks_past_the_arena(ClArenaBlocks &blocks) { blocks.bytes_ = 4096u; }
     static void capacity_without_an_arena(ClArenaBlocks &blocks)
     { blocks.base_ = nullptr; blocks.bytes_ = 4096u; }
-    /* The other half of that condition: no arena, no capacity, and rows
-     * still counted - blocks over memory that is gone. */
+    /* The other half of that condition: no arena, no capacity, and blocks
+     * still placed - blocks over memory that is gone. */
     static void blocks_without_an_arena(ClArenaBlocks &blocks)
     { blocks.base_ = nullptr; blocks.bytes_ = 0u; }
-    static void a_block_of_nothing(ClArenaBlocks &blocks) { blocks.sizes_[0] = 0u; }
-    static void blocks_out_of_order(ClArenaBlocks &blocks)
-    { const std::uint64_t first = blocks.offsets_[0];
-      blocks.offsets_[0] = blocks.offsets_[1];
-      blocks.offsets_[1] = first; }
-    static void a_block_past_the_end(ClArenaBlocks &blocks)
-    { blocks.sizes_[0] = blocks.bytes_ + ClArenaBlocks::alignment; }
-    static void an_unaligned_offset(ClArenaBlocks &blocks) { blocks.offsets_[0] += 1u; }
-    static void an_unaligned_size(ClArenaBlocks &blocks) { blocks.sizes_[0] += 1u; }
-    static void a_row_behind_the_count(ClArenaBlocks &blocks)
-    { blocks.offsets_[blocks.count_] = ClArenaBlocks::alignment; }
-    /* The same row's other half: a length left behind with no offset. */
-    static void a_length_behind_the_count(ClArenaBlocks &blocks)
-    { blocks.sizes_[blocks.count_] = ClArenaBlocks::alignment; }
 };
 
 }  // namespace av::clicd
@@ -197,8 +184,9 @@ TEST(cl_arena_blocks, a_new_arena_forgets_every_block_of_the_old_one)
   CHECK(blocks.at(taken, 128u) == nullptr);
   CHECK(blocks.invariants_hold()); }
 
-/* The invariant catches every state the class never builds. Each is checked
- * on its own arena, because one broken row would mask the next. */
+/* The invariant catches every state the class never builds around its blocks;
+ * the rows themselves are RangeTable's (test_range_table.cpp). Each is checked
+ * on its own arena, because one broken state would mask the next. */
 TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
 { const auto broken = [](void (*corrupt)(ClArenaBlocks &)) {
       ClArenaBlocks blocks;
@@ -211,15 +199,8 @@ TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
       corrupt(blocks);
       return blocks.invariants_hold();
   };
-  CHECK(!broken(ClArenaBlocksProbe::count_past_the_table));
+  CHECK(!broken(ClArenaBlocksProbe::blocks_past_the_arena));
   CHECK(!broken(ClArenaBlocksProbe::capacity_without_an_arena));
-  CHECK(!broken(ClArenaBlocksProbe::a_block_of_nothing));
-  CHECK(!broken(ClArenaBlocksProbe::blocks_out_of_order));
-  CHECK(!broken(ClArenaBlocksProbe::a_block_past_the_end));
-  CHECK(!broken(ClArenaBlocksProbe::an_unaligned_offset));
-  CHECK(!broken(ClArenaBlocksProbe::an_unaligned_size));
-  CHECK(!broken(ClArenaBlocksProbe::a_row_behind_the_count));
-  CHECK(!broken(ClArenaBlocksProbe::a_length_behind_the_count));
   CHECK(!broken(ClArenaBlocksProbe::blocks_without_an_arena)); }
 
 TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)

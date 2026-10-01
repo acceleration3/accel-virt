@@ -9,12 +9,13 @@
  * application creates them on - so every range is handed out and given back
  * under the lock this is given, which nothing else takes around a call here.
  *
- * First fit over the ranges in use, kept sorted by offset; a heap given back
- * leaves a gap the next heap that fits reuses. */
+ * First fit (RangeTable); a heap given back leaves a gap the next heap that
+ * fits reuses. */
 #ifndef AV_D3D_D3D12_HEAP_ARENA_HPP
 #define AV_D3D_D3D12_HEAP_ARENA_HPP
 
 #include "core/support/status.hpp"
+#include "icd/common/range_table.hpp"
 
 #include <stdint.h>
 
@@ -50,17 +51,8 @@ public:
     bool invariants_hold() const;
 
 private:
-    uint64_t round_up(uint64_t value) const;
-    /* The first gap of `bytes` and the index the range placed there takes;
-     * false when none. */
-    bool     gap(uint64_t bytes, uint64_t &offset, uint32_t &index) const;
-
-    icd::ThreadLock &lock_;
-    uint64_t         begin_;
-    uint64_t         end_;
-    uint64_t         offsets_[max_heaps];
-    uint64_t         sizes_[max_heaps];
-    uint32_t         count_;
+    icd::ThreadLock                &lock_;
+    icd::RangeTable<max_heaps>      heaps_;
 };
 
 }  // namespace av::d3d

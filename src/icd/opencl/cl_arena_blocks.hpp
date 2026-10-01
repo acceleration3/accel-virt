@@ -13,6 +13,8 @@
 #ifndef AV_CLICD_CL_ARENA_BLOCKS_HPP
 #define AV_CLICD_CL_ARENA_BLOCKS_HPP
 
+#include "icd/common/range_table.hpp"
+
 #include <stdint.h>
 
 namespace av::clicd {
@@ -53,17 +55,10 @@ public:
 private:
     friend struct ClArenaBlocksProbe;
 
-    /* `bytes` rounded up to alignment, or 0 if that would wrap. */
-    uint64_t whole_pages(uint64_t bytes) const;
-    /* Where a block of `want` fits, or `bytes_` when none does. Rows are kept
-     * in offset order so the gaps are what lies between them. */
-    uint64_t gap_for(uint64_t want) const;
-
-    uint8_t *base_;
-    uint64_t bytes_;
-    uint64_t offsets_[max_blocks];
-    uint64_t sizes_[max_blocks];
-    uint32_t count_;
+    uint8_t                         *base_;
+    uint64_t                         bytes_;
+    /* The blocks, first fit over the arena (RangeTable). */
+    icd::RangeTable<max_blocks>      blocks_;
 };
 
 }  // namespace av::clicd

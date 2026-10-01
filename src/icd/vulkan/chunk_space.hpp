@@ -11,6 +11,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/host_window_chunk.hpp"
+#include "icd/common/range_table.hpp"
 
 #include <stdint.h>
 
@@ -59,16 +60,11 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The index the range at `first` would take: the first one after it. */
-    uint32_t hole_before(uint64_t pages, uint64_t &first) const;
-
     Connection                     &connection_;
-    ObjectStorage<HostWindowChunk>        chunk_;
+    ObjectStorage<HostWindowChunk>  chunk_;
     uint64_t                        pages_;
-    uint32_t                        placed_;
-    /* The placed ranges in address order: first page and page count. */
-    uint64_t                        firsts_[max_ranges];
-    uint64_t                        lengths_[max_ranges];
+    /* The placed ranges, in bytes of the chunk, first fit (RangeTable). */
+    RangeTable<max_ranges>          ranges_;
 
     friend struct ChunkSpaceProbe;
 };

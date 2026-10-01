@@ -20,12 +20,7 @@ using av::icd::ChunkSpace;
 namespace av::icd {
 
 struct ChunkSpaceProbe {
-    static void set_range(ChunkSpace &space, std::uint32_t index, std::uint64_t first, std::uint64_t pages)
-    {
-        space.firsts_[index] = first;
-        space.lengths_[index] = pages;
-    }
-    static void set_placed(ChunkSpace &space, std::uint32_t placed) { space.placed_ = placed; }
+    static RangeTable<ChunkSpace::max_ranges> &ranges(ChunkSpace &space) { return space.ranges_; }
     static void set_pages(ChunkSpace &space, std::uint64_t pages) { space.pages_ = pages; }
 };
 
@@ -263,32 +258,31 @@ TEST(chunk_space, a_refused_release_still_closes_it)
   CHECK(space.invariants_hold());
   CHECK_EQ(rig.kmt().ram_chunks(), 1u);   /* the kernel's, until the context goes */ }
 
-TEST(chunk_space, invariants_refuse_ranges_that_overlap_leave_the_chunk_or_hold_nothing)
+/* The ranges themselves are RangeTable's (test_range_table.cpp); what is the
+ * chunk's is that closed holds nothing and open covers exactly its pages. */
+TEST(chunk_space, invariants_refuse_ranges_that_leave_the_chunk_or_outlive_it)
 { OpenConnection rig;
   ChunkSpace     space(rig.connection());
-  ChunkSpaceProbe::set_placed(space, 1u);
-  CHECK(!space.invariants_hold());
-  ChunkSpaceProbe::set_placed(space, 0u);
   CHECK(space.invariants_hold());
+  /* Closed, yet a range placed. */
+  ChunkSpaceProbe::ranges(space).reset(0u, page);
+  CHECK(!space.invariants_hold());
+  std::uint64_t at = 0u;
+  CHECK_STATUS(ChunkSpaceProbe::ranges(space).place(page, at), Status::ok);
+  CHECK(!space.invariants_hold());
+  CHECK_STATUS(ChunkSpaceProbe::ranges(space).remove(at), Status::ok);
+  ChunkSpaceProbe::ranges(space).reset(0u, 0u);
+  CHECK(space.invariants_hold());
+  /* Closed, yet sized. */
   ChunkSpaceProbe::set_pages(space, 1u);
   CHECK(!space.invariants_hold());
   ChunkSpaceProbe::set_pages(space, 0u);
   CHECK_STATUS(space.open(16u), Status::ok);
   CHECK_EQ(place(space, 2u), 0u);
-  CHECK_EQ(place(space, 2u), 2u * page);
-  ChunkSpaceProbe::set_range(space, 1u, 1u, 2u);
-  CHECK(!space.invariants_hold());
-  ChunkSpaceProbe::set_range(space, 1u, 15u, 2u);
-  CHECK(!space.invariants_hold());
-  ChunkSpaceProbe::set_range(space, 1u, 4u, 0u);
-  CHECK(!space.invariants_hold());
-  ChunkSpaceProbe::set_range(space, 1u, ~std::uint64_t{0}, 2u);
-  CHECK(!space.invariants_hold());
-  ChunkSpaceProbe::set_range(space, 1u, 2u, 2u);
   CHECK(space.invariants_hold());
-  ChunkSpaceProbe::set_placed(space, ChunkSpace::max_ranges + 1u);
+  /* Open, and the ranges cover more or fewer pages than the chunk has. */
+  ChunkSpaceProbe::set_pages(space, 8u);
   CHECK(!space.invariants_hold());
-  ChunkSpaceProbe::set_placed(space, 2u);
   ChunkSpaceProbe::set_pages(space, 0u);
   CHECK(!space.invariants_hold());
   ChunkSpaceProbe::set_pages(space, 16u);
