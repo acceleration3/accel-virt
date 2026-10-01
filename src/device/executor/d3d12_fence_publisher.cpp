@@ -23,10 +23,7 @@ uint32_t D3d12FencePublisher::slot_of(uint32_t id) const
 void D3d12FencePublisher::write(uint32_t slot, uint64_t value)
 {
     AV_SCOPE("D3d12FencePublisher::write");
-    uint8_t *const at = region_.at(offsets_[slot], sizeof(uint64_t));
-    if (at == nullptr) return;
-    /* One aligned eight-byte store: the guest reads the word whole, never a half. */
-    __atomic_store_n(reinterpret_cast<uint64_t *>(at), value, __ATOMIC_RELEASE);
+    if (!region_.publish(offsets_[slot], value)) return;
     written_[slot] = value;
 }
 

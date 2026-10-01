@@ -12,6 +12,8 @@
 
 namespace av {
 
+class ImportedBlob;
+
 class GuestRegion {
 public:
     /* Where a region taken as a dma-buf is mapped: a Direct3D 12 heap over
@@ -30,18 +32,36 @@ public:
      * mapping and the descriptor are this region's until give_back. */
     [[nodiscard]] bool take_shared(int descriptor, uint64_t length);
     void give_back();
+    /* A session's blob arena, which is its region: one at a time, since a
+     * second would leave the first unreachable with what was made over it.
+     * The region's address names the import on the wire. False, with the
+     * blob untouched, while a region is held or for a blob that is not a
+     * host pointer - OpenGL and OpenCL import no dma-buf. */
+    [[nodiscard]] bool adopt_pointer(ImportedBlob &blob);
+    /* The same, a dma-buf mapped here too: what Direct3D's sessions import
+     * guest pages as for the host GPU (D3d12ArenaHeaps). */
+    [[nodiscard]] bool adopt_pointer_or_buffer(ImportedBlob &blob);
+    /* The region given back, if `blob` is the one it was adopted as. */
+    void               abandon(ImportedBlob &blob);
     /* The dma-buf the region was taken as; -1 for one taken as a pointer. */
     int  descriptor() const;
 
     /* `bytes` at `offset`, or null: for a region that is not there, an offset
      * past its end, a length past its end, and a sum that would wrap. */
     uint8_t *at(uint64_t offset, uint64_t bytes) const;
+    /* `value` stored at `offset` as one aligned eight-byte store, which the
+     * guest reads whole and never half: an error word, a fence value. False
+     * for a word outside the region or off its alignment. */
+    [[nodiscard]] bool publish(uint64_t offset, uint64_t value);
     uint64_t length() const;
 
     bool invariants_hold() const;
 
 private:
     friend struct GuestRegionProbe;
+
+    /* The region's address recorded as what the blob became. */
+    void record(ImportedBlob &blob) const;
 
     uint8_t *base_;
     uint64_t length_;

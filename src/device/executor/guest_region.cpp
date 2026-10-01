@@ -1,6 +1,8 @@
 #include "device/executor/guest_region.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/abi/av_executor.h"
+#include "device/executor/imported_blob.hpp"
 
 #include <sys/mman.h>
 #include <unistd.h>
@@ -88,6 +90,48 @@ bool GuestRegion::invariants_hold() const
 {
     AV_SCOPE("GuestRegion::invariants_hold");
     return base_ != nullptr || length_ == 0u;
+}
+
+bool GuestRegion::adopt_pointer(ImportedBlob &blob)
+{
+    AV_SCOPE("GuestRegion::adopt_pointer");
+    if (length_ != 0u || blob.kind() != AV_BLOB_HOST_POINTER) return false;
+    take(static_cast<uint8_t *>(blob.pointer()), blob.size());
+    record(blob);
+    return true;
+}
+
+bool GuestRegion::adopt_pointer_or_buffer(ImportedBlob &blob)
+{
+    AV_SCOPE("GuestRegion::adopt_pointer_or_buffer");
+    if (length_ != 0u || blob.kind() != AV_BLOB_DMA_BUF) return adopt_pointer(blob);
+    if (!take_shared(blob.descriptor(), blob.size())) return false;
+    record(blob);
+    return true;
+}
+
+void GuestRegion::record(ImportedBlob &blob) const
+{
+    AV_SCOPE("GuestRegion::record");
+    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base_));
+    blob.record(address, address);
+}
+
+void GuestRegion::abandon(ImportedBlob &blob)
+{
+    AV_SCOPE("GuestRegion::abandon");
+    if (blob.object() == 0u) return;
+    give_back();
+    blob.record(0u, 0u);
+}
+
+bool GuestRegion::publish(uint64_t offset, uint64_t value)
+{
+    AV_SCOPE("GuestRegion::publish");
+    uint8_t *const word = at(offset, sizeof(uint64_t));
+    if (word == nullptr || reinterpret_cast<uintptr_t>(word) % sizeof(uint64_t) != 0u) return false;
+    __atomic_store_n(reinterpret_cast<uint64_t *>(word), value, __ATOMIC_RELEASE);
+    return true;
 }
 
 }  // namespace av

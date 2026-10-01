@@ -285,19 +285,13 @@ bool OpenClBackend::adopt(ImportedBlob &blob)
      * question this host answers differently on each of its OpenCL platforms.
      * CL_MEM_USE_HOST_PTR needs no extension at all, which is why this half
      * is the one that works everywhere. */
-    if (blob.kind() != AV_BLOB_HOST_POINTER || arena_.length() != 0u) return false;
-    arena_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
-    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
-    blob.record(address, address);
-    return true;
+    return arena_.adopt_pointer(blob);
 }
 
 void OpenClBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenClBackend::abandon");
-    if (blob.object() == 0u) return;
-    arena_.give_back();
-    blob.record(0u, 0u);
+    arena_.abandon(blob);
 }
 
 uint8_t *OpenClBackend::guest_bytes(uint64_t offset, uint64_t bytes) const

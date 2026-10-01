@@ -200,19 +200,7 @@ bool D3dBackend::lost() const
 bool D3dBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("D3dBackend::adopt");
-    if (region_.length() != 0u) return false;
-    /* A dma-buf when the device offers one: it is what the host GPU imports
-     * guest pages as (D3d12ArenaHeaps). */
-    if (blob.kind() == AV_BLOB_DMA_BUF) {
-        if (!region_.take_shared(blob.descriptor(), blob.size())) return false;
-    } else if (blob.kind() == AV_BLOB_HOST_POINTER) {
-        region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
-    } else {
-        return false;
-    }
-    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(region_.at(0u, region_.length())));
-    blob.record(address, address);
-    return true;
+    return region_.adopt_pointer_or_buffer(blob);
 }
 
 void D3dBackend::abandon(ImportedBlob &blob)
@@ -220,8 +208,7 @@ void D3dBackend::abandon(ImportedBlob &blob)
     AV_SCOPE("D3dBackend::abandon");
     if (blob.object() == 0u) return;
     published_.unbind();
-    region_.give_back();
-    blob.record(0u, 0u);
+    region_.abandon(blob);
 }
 
 /* A texture the guest shared is made over memory OpenGL and Vulkan can open

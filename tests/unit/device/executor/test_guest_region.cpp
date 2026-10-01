@@ -1,17 +1,21 @@
 /* One context's view of guest memory. Every offset and length asked of it came
  * off the wire, and OpenGL's decoder asks at more than a thousand sites. */
+#include "device/abi/av_executor.h"
 #include "device/executor/guest_region.hpp"
+#include "device/executor/imported_blob.hpp"
 #include "harness/executor/guest_region_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string_view>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
 using av::GuestRegion;
+using av::ImportedBlob;
 using av::GuestRegionProbe;
 
 namespace {
@@ -168,4 +172,103 @@ TEST(guest_region_take_shared, refuses_what_cannot_be_mapped_and_leaves_the_desc
   close(shared);
   close(pipes[0]);
   close(pipes[1]);
+  region.give_back(); }
+
+namespace {
+
+alignas(4096) std::uint8_t arena[2u * ImportedBlob::page_bytes];
+
+/* A blob the device imported: guest pages lent as a host pointer, or a
+ * dma-buf - a memfd stands in. */
+bool pointer_blob(ImportedBlob &blob)
+{
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_HOST_POINTER;
+    handle.pointer = arena;
+    handle.fd = -1;
+    handle.size = sizeof arena;
+    return blob.take(1u, handle) == av::Status::ok;
+}
+
+bool buffer_blob(ImportedBlob &blob, int descriptor)
+{
+    AvBlobHandle handle = {};
+    handle.kind = AV_BLOB_DMA_BUF;
+    handle.pointer = nullptr;
+    handle.fd = descriptor;
+    handle.size = sizeof arena;
+    return blob.take(2u, handle) == av::Status::ok;
+}
+
+}  // namespace
+
+/* A session's arena is its region, one at a time; the region's address is
+ * what names the import on the wire, and abandoning it gives it back. */
+TEST(guest_region_adopt, a_pointer_is_adopted_once_and_given_back_when_abandoned)
+{ GuestRegion  region;
+  ImportedBlob blob;
+  CHECK(pointer_blob(blob));
+  CHECK(region.adopt_pointer(blob));
+  CHECK(region.at(0u, sizeof arena) == arena);
+  CHECK_EQ(blob.object(), static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(arena)));
+  ImportedBlob second;
+  CHECK(pointer_blob(second));
+  CHECK(!region.adopt_pointer(second));
+  CHECK(!region.adopt_pointer_or_buffer(second));
+  CHECK_EQ(second.object(), 0u);
+  /* A blob that was never adopted gives nothing back. */
+  region.abandon(second);
+  CHECK_EQ(region.length(), sizeof arena);
+  region.abandon(blob);
+  CHECK_EQ(region.length(), 0u);
+  CHECK_EQ(blob.object(), 0u);
+  CHECK(region.invariants_hold()); }
+
+/* OpenGL and OpenCL import no dma-buf; Direct3D maps one, and the mapping
+ * is what names it. */
+TEST(guest_region_adopt, only_a_session_that_maps_buffers_adopts_a_dma_buf)
+{ const int shared = memfd_create("guest-region-adopt", 0);
+  CHECK(shared >= 0);
+  CHECK_EQ(ftruncate(shared, sizeof arena), 0);
+  GuestRegion  region;
+  ImportedBlob blob;
+  CHECK(buffer_blob(blob, shared));
+  CHECK(!region.adopt_pointer(blob));
+  CHECK_EQ(region.length(), 0u);
+  CHECK(region.adopt_pointer_or_buffer(blob));
+  CHECK_EQ(region.descriptor(), shared);
+  CHECK_EQ(blob.object(), static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(region.at(0u, 0u))));
+  region.abandon(blob);
+  CHECK_EQ(region.descriptor(), -1);
+  /* One that cannot be mapped - a pipe maps nothing - is refused, and the
+   * blob is not recorded as anything. */
+  int pipes[2] = {-1, -1};
+  CHECK_EQ(pipe(pipes), 0);
+  ImportedBlob unmappable;
+  CHECK(buffer_blob(unmappable, pipes[0]));
+  CHECK(!region.adopt_pointer_or_buffer(unmappable));
+  CHECK_EQ(unmappable.object(), 0u);
+  CHECK_EQ(region.length(), 0u);
+  close(pipes[0]);
+  close(pipes[1]);
+  /* A pointer is still a pointer to a session that maps buffers. */
+  ImportedBlob pointer;
+  CHECK(pointer_blob(pointer));
+  CHECK(region.adopt_pointer_or_buffer(pointer));
+  CHECK(region.at(0u, 1u) == arena);
+  region.abandon(pointer); }
+
+/* An error word or a fence value is stored whole: never outside the region,
+ * never off its alignment. */
+TEST(guest_region_publish, stores_an_aligned_word_inside_the_region_only)
+{ GuestRegion region;
+  CHECK(!region.publish(0u, 1u));
+  region.take(arena, sizeof arena);
+  CHECK(region.publish(8u, 0x1122334455667788ull));
+  std::uint64_t read = 0u;
+  std::memcpy(&read, arena + 8u, sizeof read);
+  CHECK_EQ(read, 0x1122334455667788ull);
+  CHECK(!region.publish(4u, 9u));
+  CHECK(!region.publish(sizeof arena - 4u, 9u));
+  CHECK(region.publish(sizeof arena - 8u, 9u));
   region.give_back(); }

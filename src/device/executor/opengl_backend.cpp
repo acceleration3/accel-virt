@@ -191,8 +191,8 @@ void OpenGlBackend::publish_errors()
         errors_.record(error);
     }
     if (region_.length() < sizeof(uint64_t)) return;
-    uint8_t *const word = region_.at(region_.length() - sizeof(uint64_t), sizeof(uint64_t));
-    if (word != nullptr) __atomic_store_n(reinterpret_cast<uint64_t *>(word), errors_.word(), __ATOMIC_RELEASE);
+    /* A region without the word has nobody reading it. */
+    static_cast<void>(region_.publish(region_.length() - sizeof(uint64_t), errors_.word()));
 }
 
 bool OpenGlBackend::lost() const
@@ -209,19 +209,13 @@ bool OpenGlBackend::lost() const
 bool OpenGlBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    if (blob.kind() != AV_BLOB_HOST_POINTER || region_.length() != 0u) return false;
-    region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
-    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
-    blob.record(address, address);
-    return true;
+    return region_.adopt_pointer(blob);
 }
 
 void OpenGlBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::abandon");
-    if (blob.object() == 0u) return;
-    region_.give_back();
-    blob.record(0u, 0u);
+    region_.abandon(blob);
 }
 
 bool     OpenGlBackend::bind_fence(uint64_t token, void *fence)
