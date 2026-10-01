@@ -88,6 +88,9 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
         made->subresources[index].system_pitch = surface.SysMemPitch;
         made->subresources[index].system_slice_pitch = surface.SysMemSlicePitch;
     }
+    if (args->Flags.VertexBuffer || args->Flags.IndexBuffer)
+        trace("buffer", args->Flags.Value, static_cast<uint32_t>(args->Pool), made->subresources[0].width,
+              made->subresources[0].system != nullptr ? 1u : 0u);
     if (args->Flags.RenderTarget || args->Flags.ZBuffer || args->Flags.Primary)
         trace("resource", args->Flags.Value, static_cast<uint32_t>(args->Format), made->subresources[0].width,
               made->subresources[0].height);
@@ -169,6 +172,9 @@ HRESULT D3d9Device::destroy_resource(HANDLE handle)
     AV_SCOPE("D3d9Device::destroy_resource");
     D3d9Resource *const gone = resource(handle);
     if (gone == nullptr) return E_INVALIDARG;
+    if (gone->flags.RenderTarget || gone->flags.ZBuffer)
+        trace("destroy", gone->flags.Value, static_cast<uint32_t>(gone->format), gone->subresources[0].width,
+              gone->subresources[0].height);
     for (uint32_t stream = 0u; stream < streams; stream++)
         if (streams_[stream].buffer == gone) streams_[stream] = Stream{};
     if (indices_ == gone) indices_ = nullptr;
@@ -298,6 +304,18 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
         return S_OK;
     }
     if (!make_shadow(*locked, subresource)) return E_OUTOFMEMORY;
+    if (subresource.locked && !subresource.lock_flags.ReadOnly) {
+        char       said[160] = {};
+        TextBuffer text(said, sizeof(said));
+        text.append("avumd: a Direct3D 9 resource locked again before its unlock, kind ");
+        text.append_decimal(static_cast<uint32_t>(locked->kind));
+        text.append(" flags 0x");
+        text.append_hex(args->Flags.Value, 4u);
+        text.append(" after 0x");
+        text.append_hex(subresource.lock_flags.Value, 4u);
+        log_once(said_relocked_, said);
+        static_cast<void>(unlock_subresource(*locked, subresource, args->SubResourceIndex));
+    }
     if (locked->kind == D3d9Resource::Kind::surface && !args->Flags.Discard && !args->Flags.WriteOnly) {
         uint32_t pitch = 0u, rows = 0u;
         if (SUCCEEDED(read_surface(*locked, args->SubResourceIndex, pitch, rows)))
@@ -362,6 +380,7 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
 {
     AV_SCOPE("D3d9Device::write_buffer");
     const auto *const from = static_cast<const uint8_t *>(data);
+    written_ += bytes;
     for (uint32_t done = 0u; done < bytes;) {
         const uint32_t piece = bytes - done < write_piece ? bytes - done : static_cast<uint32_t>(write_piece);
         if (piece > inline_limit && !wire().make_room_for(piece)) return lost(__func__);
@@ -410,7 +429,10 @@ HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box
         const d3d9proto::Box part = {box.Left, top, box.Front, box.Right, bottom < box.Bottom ? bottom : box.Bottom,
                                      box.Back};
         const size_t bytes = size_t{count - 1u} * row_pitch + line;
-        const bool room = bytes <= inline_limit || wire().make_room_for(bytes);
+        written_ += bytes;
+        const uint64_t started = microseconds();
+        const bool     room = bytes <= inline_limit || wire().make_room_for(bytes);
+        trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
         if (!room || !d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
                                                        done == 0u ? flags : flags & ~write_discard,
                                                        data + size_t{done} * row_pitch, bytes)) {
@@ -456,9 +478,11 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     if (capacity > inline_limit && !wire().make_room_for(capacity)) return lost(__func__);
     uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
     uint64_t read = 0u;
-    if (!d3d9proto::av_d3d9_ReadSurface9(wire(), id, subresource, &hresult, &width, &height, &format, &pitch,
-                                         readback_, capacity, &read))
-        return lost(__func__);
+    const uint64_t started = microseconds();
+    const bool     sent = d3d9proto::av_d3d9_ReadSurface9(wire(), id, subresource, &hresult, &width, &height, &format, &pitch,
+                                         readback_, capacity, &read);
+    trace_wait("wait-read", started, static_cast<uint32_t>(capacity));
+    if (!sent) return lost(__func__);
     if (hresult != 0u) return static_cast<HRESULT>(hresult);
     rows = pitch == 0u ? 0u : static_cast<uint32_t>(read / pitch);
     return S_OK;
@@ -571,6 +595,7 @@ HRESULT D3d9Device::buf_blt(const D3DDDIARG_BUFFERBLT *args)
     const uint32_t         start = args->SrcRange.Offset;
     if (start >= from.width || args->Offset >= to.width) return E_INVALIDARG;
     uint32_t bytes = args->SrcRange.Size < from.width - start ? args->SrcRange.Size : from.width - start;
+    if (bytes == 0u) log_once(said_empty_blt_, "avumd: a Direct3D 9 BufBlt of no bytes");
     if (bytes > to.width - args->Offset) bytes = to.width - args->Offset;
     if (to.shadow != nullptr) memcpy(to.shadow + args->Offset, from.system + start, bytes);
     return write_buffer(destination->id, args->Offset, from.system + start, bytes, 0u);

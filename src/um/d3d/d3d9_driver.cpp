@@ -1,5 +1,6 @@
 #include "um/d3d/d3d9_driver.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
@@ -35,6 +36,18 @@ uint32_t D3d9Driver::slot_of(uint32_t kmt_adapter)
             return max_adapters;
         }
         adapters_[slot] = kmt_adapter;
+        const D3DCAPS9 &learned = caps_[slot].caps();
+        char            line[160] = {};
+        TextBuffer      text(line, sizeof(line));
+        text.append("avumd: Direct3D 9 caps: DevCaps 0x");
+        text.append_hex(learned.DevCaps, 8u);
+        text.append(" Caps2 0x");
+        text.append_hex(learned.Caps2, 8u);
+        text.append(" VertexProcessingCaps 0x");
+        text.append_hex(learned.VertexProcessingCaps, 8u);
+        text.append(" DevCaps2 0x");
+        text.append_hex(learned.DevCaps2, 8u);
+        log_.write(text.text());
         return slot;
     }
     return max_adapters;

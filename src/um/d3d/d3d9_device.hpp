@@ -115,6 +115,10 @@ private:
      * that place a frame - targets made and bound, viewports, scissors,
      * presents - are logged with their numbers. */
     void                   trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+    /* A round trip that took longer than a frame can spare, traced with its
+     * microseconds; `started` is microseconds() when it began. */
+    uint64_t               microseconds() const;
+    void                   trace_wait(const char *call, uint64_t started, uint32_t detail);
 
     /* Pending render, sampler and stage states sent before what reads them. */
     [[nodiscard]] bool send_states();
@@ -169,6 +173,10 @@ private:
     HRESULT prepare_indices(const void *user, uint32_t index_bytes, uint32_t first_index, uint32_t count,
                             uint32_t &start);
     HRESULT bind(uint32_t stream, const Bound &wanted);
+    /* A buffer a draw reads while it is still locked: d3d9.dll keeps a
+     * dynamic buffer locked across draws (MightDrawFromLocked), so what the
+     * lock wrote so far crosses before the draw, not only at the unlock. */
+    HRESULT send_locked(D3d9Resource &buffer);
     [[nodiscard]] bool ring_write(Ring &ring, bool index_buffer, uint32_t format, const void *data, uint32_t bytes,
                                   uint32_t alignment, uint32_t &offset);
     /* Vertices - or indices - a draw of `primitives` reads. */
@@ -223,7 +231,22 @@ private:
     bool                                 said_present_;
     bool                                 said_lost_;
     bool                                 said_surface_write_;
+    bool                                 said_drawn_locked_;
+    bool                                 said_relocked_;
+    bool                                 said_empty_blt_;
     uint32_t                             traced_;
+    /* While tracing: when the call in progress began, and the time the
+     * device's calls took since the last present, and how many. */
+    uint64_t                             call_began_;
+    uint64_t                             busy_;
+    uint32_t                             calls_;
+    /* While tracing, per frame: draws by DDI (DrawPrimitive, DrawIndexed-
+     * Primitive, their user-pointer twins), draws rebased onto a ring, and
+     * the bytes written into buffers and textures. */
+    uint32_t                             draws_[4];
+    uint32_t                             rebased_;
+    uint32_t                             null_shaders_;
+    uint64_t                             written_;
 };
 
 }  // namespace av::d3d9

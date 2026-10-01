@@ -79,6 +79,20 @@ bool D3d9Device::ring_write(Ring &ring, bool index_buffer, uint32_t format, cons
     return true;
 }
 
+/* Sent as the unlock would, and the lock left open: its discard is spent on
+ * the first send, so what follows only adds to the buffer. */
+HRESULT D3d9Device::send_locked(D3d9Resource &buffer)
+{
+    AV_SCOPE("D3d9Device::send_locked");
+    D3d9Subresource &subresource = buffer.subresources[0];
+    if (!subresource.locked || subresource.lock_flags.ReadOnly || subresource.shadow == nullptr) return S_OK;
+    log_once(said_drawn_locked_, "avumd: a Direct3D 9 draw reads a buffer that is still locked");
+    const HRESULT sent = unlock_subresource(buffer, subresource, 0u);
+    subresource.lock.Flags.Discard = 0u;
+    subresource.lock.Flags.NoOverwrite = 1u;
+    return sent;
+}
+
 HRESULT D3d9Device::bind(uint32_t stream, const Bound &wanted)
 {
     AV_SCOPE("D3d9Device::bind");
@@ -101,6 +115,13 @@ HRESULT D3d9Device::prepare_streams(uint32_t first_vertex, uint32_t vertex_count
         rebased = rebased || source.user != nullptr ||
                   (source.buffer != nullptr && source.buffer->kind == D3d9Resource::Kind::system);
     }
+    if (rebased) rebased_++;
+    for (uint32_t stream = 0u; rebased && stream < streams && rebased_ < 3u; stream++) {
+        const Stream &source = streams_[stream];
+        if (source.user == nullptr && source.buffer == nullptr) continue;
+        trace("stream", stream | (source.user != nullptr ? 0x100u : 0u),
+              source.buffer != nullptr ? static_cast<uint32_t>(source.buffer->kind) : 99u, source.stride, source.offset);
+    }
     for (uint32_t stream = 0u; stream < streams; stream++) {
         const Stream  &source = streams_[stream];
         const uint32_t extra = stream == 0u ? stream0_bytes : 0u;
@@ -115,6 +136,8 @@ HRESULT D3d9Device::prepare_streams(uint32_t first_vertex, uint32_t vertex_count
                 return lost(__func__);
             wanted = Bound{vertex_ring_.id, at, source.stride};
         } else if (source.buffer != nullptr && source.buffer->kind == D3d9Resource::Kind::vertex_buffer) {
+            const HRESULT current = send_locked(*source.buffer);
+            if (FAILED(current)) return current;
             const uint32_t shift = rebased ? first_vertex * source.stride : 0u;
             wanted = Bound{source.buffer->id, source.offset + extra + shift, source.stride};
         }
@@ -137,6 +160,10 @@ HRESULT D3d9Device::prepare_indices(const void *user, uint32_t index_bytes, uint
         memory = indices_->subresources[0].system + size_t{first_index} * index_bytes;
     }
     uint32_t id = indices_ != nullptr && indices_->kind == D3d9Resource::Kind::index_buffer ? indices_->id : 0u;
+    if (id != 0u && memory == nullptr) {
+        const HRESULT current = send_locked(*indices_);
+        if (FAILED(current)) return current;
+    }
     start = first_index;
     if (memory != nullptr) {
         const bool wide = index_bytes != index16_bytes;
@@ -157,6 +184,7 @@ HRESULT D3d9Device::prepare_indices(const void *user, uint32_t index_bytes, uint
 HRESULT D3d9Device::draw_primitive(const D3DDDIARG_DRAWPRIMITIVE *args, const UINT *)
 {
     AV_SCOPE("D3d9Device::draw_primitive");
+    draws_[0]++;
     if (!send_states()) return lost(__func__);
     bool          rebased = false;
     const HRESULT prepared =
@@ -173,6 +201,7 @@ HRESULT D3d9Device::draw_primitive(const D3DDDIARG_DRAWPRIMITIVE *args, const UI
 HRESULT D3d9Device::draw_primitive2(const D3DDDIARG_DRAWPRIMITIVE2 *args)
 {
     AV_SCOPE("D3d9Device::draw_primitive2");
+    draws_[2]++;
     if (!send_states()) return lost(__func__);
     bool          rebased = false;
     const HRESULT prepared = prepare_streams(0u, vertices_of(args->PrimitiveType, args->PrimitiveCount),
@@ -190,6 +219,7 @@ HRESULT D3d9Device::draw_primitive2(const D3DDDIARG_DRAWPRIMITIVE2 *args)
 HRESULT D3d9Device::draw_indexed_primitive(const D3DDDIARG_DRAWINDEXEDPRIMITIVE *args)
 {
     AV_SCOPE("D3d9Device::draw_indexed_primitive");
+    draws_[1]++;
     if (!send_states()) return lost(__func__);
     const int32_t first = args->BaseVertexIndex + static_cast<int32_t>(args->MinIndex);
     bool          rebased = false;
@@ -214,6 +244,7 @@ HRESULT D3d9Device::draw_indexed_primitive2(const D3DDDIARG_DRAWINDEXEDPRIMITIVE
                                             const void *indices, const UINT *)
 {
     AV_SCOPE("D3d9Device::draw_indexed_primitive2");
+    draws_[3]++;
     if (indices == nullptr || (index_bytes != index16_bytes && index_bytes != 4u)) return E_INVALIDARG;
     if (!send_states()) return lost(__func__);
     bool    rebased = false;

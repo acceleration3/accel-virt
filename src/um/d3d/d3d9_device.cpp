@@ -61,7 +61,8 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSi
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), said_unimplemented_(false), said_present_(false), said_lost_(false),
-      said_surface_write_(false), traced_(trace_none)
+      said_surface_write_(false), said_drawn_locked_(false), said_relocked_(false), said_empty_blt_(false), traced_(trace_none),
+      call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
 }
@@ -101,6 +102,10 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     AV_SCOPE("D3d9Device::initialize");
     char set[4] = {};
     traced_ = GetEnvironmentVariableA("AV_D3D9_TRACE", set, sizeof(set)) != 0u ? 0u : trace_none;
+    LARGE_INTEGER now = {};
+    QueryPerformanceCounter(&now);
+    trace("device", static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)), create.Version, create.Flags.Value,
+          static_cast<uint32_t>(now.QuadPart / 10000));
     runtime_ = create.hDevice;
     if (create.pCallbacks == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
     callbacks_ = *create.pCallbacks;
@@ -132,11 +137,16 @@ void D3d9Device::lock_calls()
 {
     AV_SCOPE("D3d9Device::lock_calls");
     lock_.acquire();
+    if (traced_ < trace_most) call_began_ = microseconds();
 }
 
 void D3d9Device::unlock_calls()
 {
     AV_SCOPE("D3d9Device::unlock_calls");
+    if (traced_ < trace_most && call_began_ != 0u) {
+        busy_ += microseconds() - call_began_;
+        calls_++;
+    }
     lock_.release();
 }
 
@@ -173,6 +183,26 @@ void D3d9Device::trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uin
         text.append_decimal(number);
     }
     log_.write(text.text());
+}
+
+uint64_t D3d9Device::microseconds() const
+{
+    AV_SCOPE("D3d9Device::microseconds");
+    LARGE_INTEGER now = {}, frequency = {};
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&frequency);
+    return frequency.QuadPart != 0 ? static_cast<uint64_t>(now.QuadPart) * 1000000u / static_cast<uint64_t>(frequency.QuadPart)
+                                   : 0u;
+}
+
+void D3d9Device::trace_wait(const char *call, uint64_t started, uint32_t detail)
+{
+    AV_SCOPE("D3d9Device::trace_wait");
+    constexpr uint64_t worth_noting = 2000u;
+    if (traced_ >= trace_most) return;
+    const uint64_t took = microseconds() - started;
+    if (took >= worth_noting)
+        trace(call, static_cast<uint32_t>(took), detail, static_cast<uint32_t>(microseconds() / 1000u), 0u);
 }
 
 uint32_t D3d9Device::id_of(HANDLE handle) const
@@ -294,6 +324,7 @@ HRESULT D3d9Device::set_pixel_shader(HANDLE shader)
 HRESULT D3d9Device::set_vertex_shader_func(HANDLE shader)
 {
     AV_SCOPE("D3d9Device::set_vertex_shader_func");
+    if (shader == nullptr) null_shaders_++;
     if (recorded(D3d9StateEntry(Kind::vertex_shader, 0u, shader, 0u, 0u))) return S_OK;
     return d3d9proto::av_d3d9_SetVertexShader9(wire(), id_of(shader)) ? S_OK : lost(__func__);
 }
@@ -324,9 +355,6 @@ HRESULT D3d9Device::set_vertex_shader_const(const D3DDDIARG_SETVERTEXSHADERCONST
 {
     AV_SCOPE("D3d9Device::set_vertex_shader_const");
     const auto *const floats = static_cast<const FLOAT *>(values);
-    if (args->Count != 0u)
-        trace("vsconst", args->Register, args->Count, static_cast<uint32_t>(static_cast<int32_t>(floats[0] * 1000.0f)),
-              static_cast<uint32_t>(static_cast<int32_t>(floats[args->Count * components - 1u] * 1000.0f)));
     bool              kept = false;
     for (UINT index = 0u; index < args->Count; index++)
         kept = recorded(D3d9StateEntry(Kind::constant_f, stage_vertex, args->Register + index,
@@ -626,9 +654,11 @@ HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
     uint8_t  answer[sizeof(D3DDDIDEVINFO_VCACHE)] = {};
     uint32_t hresult = 1u;
     uint64_t answered = 0u;
+    const uint64_t started = microseconds();
     if (!d3d9proto::av_d3d9_GetQueryData9(wire(), query->id, get_data_flush, &hresult, answer, sizeof(answer),
                                           &answered))
         return lost(__func__);
+    trace_wait("wait-query", started, static_cast<uint32_t>(query->type));
     if (hresult != S_OK) return hresult == S_FALSE ? S_FALSE : static_cast<HRESULT>(hresult);
     if (args->pData != nullptr && answered >= query->data_bytes) memcpy(args->pData, answer, query->data_bytes);
     return S_OK;
@@ -712,6 +742,8 @@ HRESULT D3d9Device::state_set(D3DDDIARG_STATESET *args)
     AV_SCOPE("D3d9Device::state_set");
     d3d::D3d9StateBlock *const named =
         args->Operation == stateset_begin ? nullptr : blocks_.find(static_cast<void *>(args->hStateSet));
+    trace("stateset", args->Operation, static_cast<uint32_t>(args->StateBlockType), named != nullptr ? named->count() : 0u,
+          recording_ != nullptr ? recording_->count() : 0u);
     switch (args->Operation) {
     case stateset_begin: {
         if (recording_ != nullptr) return E_INVALIDARG;

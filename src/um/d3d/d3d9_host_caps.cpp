@@ -30,6 +30,14 @@ constexpr DWORD fog_in_fvf = 0x2000u;
 constexpr DWORD line_pattern_rep = 0x4u;          /* D3DPMISCCAPS_LINEPATTERNREP */
 constexpr DWORD no_vsdt_ubyte4 = 0x80u;            /* D3DVTXPCAPS_NO_VSDT_UBYTE4 */
 constexpr DWORD managed_device = 0x40u;            /* D3DCAPS3's "managed device" bit */
+/* d3dhal.h's DevCaps a driver reports and an application never sees: vertex
+ * and index buffers in video memory, and volume locks of a sub-box. Without
+ * the first two, CVertexBuffer::Create and its index twin quietly move every
+ * default-pool buffer to system memory, and every draw copies its vertices
+ * from the guest (d3d9.dll @10048b04). */
+constexpr DWORD hw_vertex_buffer = 0x02000000u;    /* D3DDEVCAPS_HWVERTEXBUFFER */
+constexpr DWORD hw_index_buffer = 0x04000000u;     /* D3DDEVCAPS_HWINDEXBUFFER */
+constexpr DWORD sub_volume_lock = 0x08000000u;     /* D3DDEVCAPS_SUBVOLUMELOCK */
 constexpr DWORD most_render_targets = 4u;
 constexpr uint32_t last_multisample = 16u;
 constexpr uint32_t multisample_bits_from = 1u;      /* D3DMULTISAMPLE_NONMASKABLE */
@@ -96,6 +104,7 @@ void D3d9HostCaps::fix_up()
     caps_.AdapterOrdinal = 0u;
     caps_.Caps2 |= D3DCAPS2_DYNAMICTEXTURES;
     caps_.Caps3 &= ~managed_device;
+    caps_.DevCaps |= hw_vertex_buffer | hw_index_buffer | sub_volume_lock;
     caps_.DevCaps2 |= D3DDEVCAPS2_STREAMOFFSET;
     caps_.RasterCaps |= D3DPRASTERCAPS_SCISSORTEST;
     caps_.PrimitiveMiscCaps = (caps_.PrimitiveMiscCaps | fog_in_fvf) & ~line_pattern_rep;
