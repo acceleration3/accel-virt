@@ -10,4 +10,7 @@ namespace av::glproto {
 
 const char* cmd_id_to_string(uint32_t cmd_id) noexcept;
 
+// Whether the profile carries `cmd_id`: what a session decodes at all.
+bool knows_command(uint32_t cmd_id) noexcept;
+
 }  // namespace av::glproto

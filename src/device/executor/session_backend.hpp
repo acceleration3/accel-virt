@@ -47,6 +47,11 @@ public:
      * finished when they return. A batch completes only once reached passes
      * the mark it left (RingConsumer). */
     virtual void gpu_progress(uint64_t &marked, uint64_t &reached) const = 0;
+    /* What the device gives the library to call when a host thread finishes
+     * work (executor ABI version 5), so the worker polls again rather than
+     * waiting for the next batch. Kept by an API whose work finishes after
+     * its command returns; nothing for one whose work finishes with it. */
+    virtual void bind_signal(void (*signal)(void *context), void *context) = 0;
 
     /* Turns a checked handle into whatever this API holds memory as, recording
      * it on the blob. False for a handle this API cannot take - which is not a

@@ -267,12 +267,9 @@ uint64_t VulkanBackend::template_bytes(VkDescriptorUpdateTemplate made) const
 bool VulkanBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("VulkanBackend::knows");
-    if (command_id >> 16u != vulkan_api) return false;
-    /* The generator writes one name per id it carries and "unknown" for the
-     * rest, which is exactly the question being asked. Deciding it here rather
-     * than by letting the dispatch fall off its switch keeps an id the profile
-     * does not carry a skip instead of a fault. */
-    return strcmp(vkproto::cmd_id_to_string(command_id), "unknown") != 0;
+    /* Asked before the dispatch, so an id the profile does not carry is a
+     * skip instead of a fault. */
+    return vkproto::knows_command(command_id);
 }
 
 bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -661,6 +658,11 @@ bool VulkanBackend::poll()
 {
     AV_SCOPE("VulkanBackend::poll");
     return false;
+}
+
+void VulkanBackend::bind_signal(void (*)(void *context), void *)
+{
+    AV_SCOPE("VulkanBackend::bind_signal");
 }
 
 void VulkanBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const

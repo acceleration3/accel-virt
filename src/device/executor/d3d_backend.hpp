@@ -61,7 +61,7 @@ public:
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
-    void bind_signal(void (*signal)(void *context), void *context);
+    void bind_signal(void (*signal)(void *context), void *context) override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
     /* Direct3D shares through the device's own table (D3dSharedResources),

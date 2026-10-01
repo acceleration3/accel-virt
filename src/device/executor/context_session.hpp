@@ -43,6 +43,9 @@ public:
      * the guest what to allocate and ask again. */
     void     end_batch();
     bool     poll();
+    /* What the device gives the library to call when a host thread finishes
+     * work; nothing without a backend. */
+    void     bind_signal(void (*signal)(void *context), void *context);
     void     gpu_progress(uint64_t &marked, uint64_t &reached) const;
     uint32_t execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                      size_t reply_capacity, size_t &answer);

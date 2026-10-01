@@ -320,3 +320,20 @@ TEST(opengl_backend, an_import_of_the_wrong_shape_never_reaches_a_driver)
   CHECK(!backend.import_object(0u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
   CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 0u, made));
   CHECK_EQ(made, 0u); }
+
+namespace {
+
+void never_called(void *) {}
+
+}  // namespace
+
+/* Its commands finish as they run: a wake is nothing it needs, and binding
+ * one leaves it waiting on no GPU. */
+TEST(opengl_backend, a_signal_changes_nothing_it_waits_on)
+{ OpenGlBackend backend;
+  backend.bind_signal(&never_called, nullptr);
+  CHECK(!backend.poll());
+  std::uint64_t marked = 7u, reached = 7u;
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 0u);
+  CHECK_EQ(reached, 0u); }

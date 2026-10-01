@@ -10,5 +10,7 @@ namespace av::clproto {
 // A static name for a wire id; "unknown" for anything else,
 // never null.
 [[nodiscard]] const char* cmd_id_to_string(uint32_t cmd_id) noexcept;
+// Whether the profile carries `cmd_id`: what a session decodes at all.
+[[nodiscard]] bool knows_command(uint32_t cmd_id) noexcept;
 
 }  // namespace av::clproto

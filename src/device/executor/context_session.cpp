@@ -55,6 +55,12 @@ bool ContextSession::live() const
     return backend_ != nullptr;
 }
 
+void ContextSession::bind_signal(void (*signal)(void *context), void *context)
+{
+    AV_SCOPE("ContextSession::bind_signal");
+    if (backend_ != nullptr) backend_->bind_signal(signal, context);
+}
+
 bool ContextSession::poll()
 {
     AV_SCOPE("ContextSession::poll");

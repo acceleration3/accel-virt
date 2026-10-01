@@ -194,9 +194,7 @@ public:
      * when this context is already watching as many events as it can. */
     cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) override;
 
-    /* What the device gives the library to call when a host thread finishes
-     * work (executor ABI version 5). */
-    void bind_signal(void (*signal)(void *context), void *context);
+    void bind_signal(void (*signal)(void *context), void *context) override;
 
     /* Releases what the guest never did. A context that dies owning a context
      * or a queue must take it with it. */
@@ -206,8 +204,6 @@ public:
 private:
     friend struct OpenClBackendProbe;
 
-    /* Every OpenCL command id carries this in its top 16 bits. */
-    static constexpr uint32_t opencl_api = 2u;
     /* A context property list this device will copy: OpenCL defines a handful
      * and the decoder has already refused every name but one, so a list longer
      * than this is a guest building one to overflow what copies it. Room for

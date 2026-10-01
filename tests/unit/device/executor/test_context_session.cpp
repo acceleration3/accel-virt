@@ -432,3 +432,23 @@ TEST(context_session_hold_clocks, a_session_holding_clocks_runs_its_commands_as_
   bound.session().release();
   CHECK(!bound.session().live());
   CHECK(bound.session().invariants_hold()); }
+
+namespace {
+
+void count_wake(void *context) { ++*static_cast<std::uint32_t *>(context); }
+
+}  // namespace
+
+/* The library's wake reaches the backend that will call it; a session with
+ * no backend has nobody to give it to. */
+TEST(context_session, a_signal_is_given_to_its_backend)
+{ ContextSession unbound;
+  std::uint32_t  woken = 0u;
+  unbound.bind_signal(&count_wake, &woken);
+  Bound bound;
+  CHECK_STATUS(bound.status(), Status::ok);
+  CHECK(!bound.backend().signal());
+  bound.session().bind_signal(&count_wake, &woken);
+  CHECK(bound.backend().signal());
+  CHECK(bound.backend().signal());
+  CHECK_EQ(woken, 2u); }

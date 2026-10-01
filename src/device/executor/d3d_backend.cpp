@@ -176,7 +176,9 @@ bool D3dBackend::poll()
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());
     device11_->unlock();
-    return pending;
+    /* Either still waiting keeps the worker polling: queries all published
+     * say nothing of Direct3D 12's fences. */
+    return pending || fences_pending;
 }
 
 void D3dBackend::bind_signal(void (*signal)(void *context), void *context)

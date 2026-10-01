@@ -124,9 +124,7 @@ void OpenGlBackend::shut_down()
 bool OpenGlBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("OpenGlBackend::knows");
-    if (command_id >> 16u != opengl_api) return false;
-    /* Every id the table has not got answers the one literal id 0 does. */
-    return glproto::cmd_id_to_string(command_id) != glproto::cmd_id_to_string(0u);
+    return glproto::knows_command(command_id);
 }
 
 bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -157,6 +155,11 @@ bool OpenGlBackend::poll()
 {
     AV_SCOPE("OpenGlBackend::poll");
     return false;
+}
+
+void OpenGlBackend::bind_signal(void (*)(void *context), void *)
+{
+    AV_SCOPE("OpenGlBackend::bind_signal");
 }
 
 void OpenGlBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const

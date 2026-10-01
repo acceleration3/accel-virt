@@ -1516,6 +1516,8 @@ def emit_names(reg: Registry, out_dir: Path) -> None:
          "// A static name for a wire id; \"unknown\" for anything else,",
          "// never null.",
          "[[nodiscard]] const char* cmd_id_to_string(uint32_t cmd_id) noexcept;",
+         "// Whether the profile carries `cmd_id`: what a session decodes at all.",
+         "[[nodiscard]] bool knows_command(uint32_t cmd_id) noexcept;",
          "", "}  // namespace av::clproto", ""]
     c = [HEADER, '#include "cl_command_names.h"', "",
          '#include "cl_protocol_ids.h"', "",
@@ -1525,6 +1527,10 @@ def emit_names(reg: Registry, out_dir: Path) -> None:
     for cmd in reg.commands.values():
         c.append(f'        case kCmd_{cmd.name}: return "{cmd.name}";')
     c += ["        default: return \"unknown\";", "    }", "}", "",
+          "bool knows_command(uint32_t cmd_id) noexcept {", "    switch (cmd_id) {"]
+    for cmd in reg.commands.values():
+        c.append(f"        case kCmd_{cmd.name}:")
+    c += ["            return true;", "        default: return false;", "    }", "}", "",
           "}  // namespace av::clproto", ""]
     write(out_dir / "cl_command_names.h", "\n".join(h))
     write(out_dir / "cl_command_names.cpp", "\n".join(c))

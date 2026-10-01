@@ -47,6 +47,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// Returns a static C-string name for a wire command id. Returns",
         "// ``\"unknown\"`` for unknown ids — never null. Cheap (one switch).",
         "[[nodiscard]] const char* cmd_id_to_string(uint32_t cmd_id) noexcept;",
+        "// Whether the profile carries `cmd_id`: what a session decodes at all.",
+        "[[nodiscard]] bool knows_command(uint32_t cmd_id) noexcept;",
         "",
         "}  // namespace av::vkproto",
         "",
@@ -70,6 +72,15 @@ def emit(reg: Registry, out_dir: Path) -> None:
             f'        case 0x{cmd.cmd_id:08X}u: return "{cmd.name}";'
         )
     source.append('        default: return "unknown";')
+    source.append("    }")
+    source.append("}")
+    source.append("")
+    source.append("bool knows_command(uint32_t cmd_id) noexcept {")
+    source.append("    switch (cmd_id) {")
+    for cmd in cmds:
+        source.append(f"        case 0x{cmd.cmd_id:08X}u:")
+    source.append("            return true;")
+    source.append("        default: return false;")
     source.append("    }")
     source.append("}")
     source.append("")

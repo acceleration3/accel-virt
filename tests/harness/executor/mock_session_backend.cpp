@@ -14,7 +14,7 @@ namespace av {
 MockSessionBackend::MockSessionBackend()
     : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), adopts_(true),
       shares_(true), exported_objects_(0u), imported_objects_(0u), released_objects_(0u),
-      descriptor_(-1)
+      descriptor_(-1), signal_(nullptr), signal_context_(nullptr)
 {}
 
 void MockSessionBackend::set_answer_bytes(std::size_t bytes) { answer_bytes_ = bytes; }
@@ -58,6 +58,19 @@ bool MockSessionBackend::lost() const { return lost_; }
 void MockSessionBackend::end_batch() {}
 
 bool MockSessionBackend::poll() { return false; }
+
+void MockSessionBackend::bind_signal(void (*signal)(void *context), void *context)
+{
+    signal_ = signal;
+    signal_context_ = context;
+}
+
+bool MockSessionBackend::signal()
+{
+    if (signal_ == nullptr) return false;
+    signal_(signal_context_);
+    return true;
+}
 
 void MockSessionBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {

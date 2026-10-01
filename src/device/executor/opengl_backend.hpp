@@ -47,6 +47,8 @@ public:
     bool lost() const override;
     void end_batch() override;
     bool poll() override;
+    /* Its commands finish as they run: nothing to wake the worker for. */
+    void bind_signal(void (*signal)(void *context), void *context) override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
@@ -83,10 +85,6 @@ public:
     uint64_t ran() const;
 
 private:
-    /* Every OpenGL command id carries this in its top 16 bits - 3, not the
-     * capset's bit 2, which is a remap worth reading twice. */
-    static constexpr uint32_t opengl_api = 3u;
-
     /* The entry point a kind is destroyed through. */
     void destroy_made(uint32_t kind, uint32_t name);
     /* Whether the context the host made has the fixed-function vertex arrays

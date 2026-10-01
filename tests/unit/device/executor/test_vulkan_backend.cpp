@@ -669,3 +669,20 @@ TEST(vulkan_backend, a_backend_with_no_device_exports_imports_and_releases_nothi
   /* And a release does nothing at all, with or without a handle. */
   backend.release_object(AV_SHARED_MEMORY, 0x40u);
   backend.release_object(AV_SHARED_MONITORED_FENCE, 0u); }
+
+namespace {
+
+void never_called(void *) {}
+
+}  // namespace
+
+/* Its commands finish as they run: a wake is nothing it needs, and binding
+ * one leaves it waiting on no GPU. */
+TEST(vulkan_backend, a_signal_changes_nothing_it_waits_on)
+{ VulkanBackend backend;
+  backend.bind_signal(&never_called, nullptr);
+  CHECK(!backend.poll());
+  std::uint64_t marked = 7u, reached = 7u;
+  backend.gpu_progress(marked, reached);
+  CHECK_EQ(marked, 0u);
+  CHECK_EQ(reached, 0u); }

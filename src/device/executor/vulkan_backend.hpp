@@ -43,6 +43,8 @@ public:
     bool lost() const override;
     void end_batch() override;
     bool poll() override;
+    /* Its commands finish as they run: nothing to wake the worker for. */
+    void bind_signal(void (*signal)(void *context), void *context) override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
 
     /* The two commands whose results this backend keeps: the instance and the
@@ -259,11 +261,6 @@ private:
     /* VK_API_VERSION_1_0, spelled out: the macro is full of C casts this
      * build refuses. Nothing below it is a version at all. */
     static constexpr uint32_t lowest_api_version = 1u << 22;
-
-    /* Every Vulkan command id has this in its top 16 bits; the device filters
-     * by API before calling, so anything else is the device disagreeing with
-     * itself rather than a guest doing something. */
-    static constexpr uint32_t vulkan_api = 1u;
 
     /* VkPhysicalDeviceMemoryProperties::memoryTypeCount's ceiling, which is
      * also how many bits a memory-type mask can have. */

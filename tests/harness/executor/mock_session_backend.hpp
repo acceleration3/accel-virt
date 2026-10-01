@@ -50,6 +50,10 @@ public:
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
+    /* Kept, and called by signal(). */
+    void bind_signal(void (*signal)(void *context), void *context) override;
+    /* The bound signal called as a host thread would; false with none bound. */
+    bool signal();
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
@@ -77,6 +81,8 @@ private:
     std::uint32_t imported_objects_;
     std::uint32_t released_objects_;
     int           descriptor_;
+    void        (*signal_)(void *context);
+    void         *signal_context_;
 };
 
 }  // namespace av

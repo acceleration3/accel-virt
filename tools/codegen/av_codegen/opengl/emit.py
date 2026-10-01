@@ -267,6 +267,8 @@ def emit_names(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n", "#include <stdint.h>\n",
          "namespace av::glproto {\n",
          "const char* cmd_id_to_string(uint32_t cmd_id) noexcept;\n",
+         "// Whether the profile carries `cmd_id`: what a session decodes at all.",
+         "bool knows_command(uint32_t cmd_id) noexcept;\n",
          "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_command_names.h"\n',
          '#include "gl_protocol_ids.h"\n',
@@ -276,6 +278,10 @@ def emit_names(reg: Registry, out_dir: Path) -> None:
     for cmd in reg.commands.values():
         c.append(f'        case kCmd_{cmd.name}: return "{cmd.name}";')
     c += ['        default: return "unknown";', "    }", "}", "",
+          "bool knows_command(uint32_t cmd_id) noexcept {", "    switch (cmd_id) {"]
+    for cmd in reg.commands.values():
+        c.append(f"        case kCmd_{cmd.name}:")
+    c += ["            return true;", "        default: return false;", "    }", "}", "",
           "}  // namespace av::glproto", ""]
     write(out_dir / "gl_command_names.h", "\n".join(h))
     write(out_dir / "gl_command_names.cpp", "\n".join(c))

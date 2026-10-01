@@ -227,12 +227,10 @@ cl_context OpenClBackend::on_clCreateContext(const cl_context_properties *proper
 bool OpenClBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("OpenClBackend::knows");
-    if (command_id >> 16u != opencl_api) return false;
-    /* The generator writes one name per id it carries. An id the profile does
-     * not carry - clGetKernelSuggestedLocalWorkSize is the only one reserved
-     * today - is a skip, not a fault: a guest using a command this build left
-     * out must not have its context stopped for it. */
-    return strcmp(clproto::cmd_id_to_string(command_id), "unknown") != 0;
+    /* An id the profile does not carry - clGetKernelSuggestedLocalWorkSize is
+     * the only one reserved today - is a skip, not a fault: a guest using a
+     * command this build left out must not have its context stopped for it. */
+    return clproto::knows_command(command_id);
 }
 
 bool OpenClBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
