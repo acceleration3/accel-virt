@@ -9,12 +9,12 @@
 #ifndef AV_UM_GL_ICD_LIBRARY_HPP
 #define AV_UM_GL_ICD_LIBRARY_HPP
 
-#include "core/support/object_storage.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/icd/dxgi_window_chains.hpp"
 #include "um/icd/file_log.hpp"
+#include "um/icd/lazy_driver.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/icd/gdi_window_surface.hpp"
@@ -36,10 +36,8 @@ public:
     GlIcdLibrary(const GlIcdLibrary &) = delete;
     GlIcdLibrary &operator=(const GlIcdLibrary &) = delete;
 
-    /* opengl32 calls DrvValidateVersion first, under its own lock, so the
-     * first call's construction is never raced. Every entry of a process whose
-     * D3DKMT event cannot be made answers failure, and opengl32 then takes this
-     * for no driver. */
+    /* Every entry of a process LazyDriver refuses answers failure, and
+     * opengl32 then takes this for no driver. */
     int32_t   validate_version(uint32_t version);
     void      set_callback_procs(int32_t count, void *const *procs);
     int32_t   describe_pixel_format(void *dc, int32_t index, uint32_t bytes, uint8_t *descriptor);
@@ -63,6 +61,10 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
+        /* The D3DKMT wait event the driver's waits need, without which the
+         * process is refused (LazyDriver), then the present thread's events,
+         * without which frames are shown on the swapping thread. */
+        [[nodiscard]] Status initialize();
 
         ProcessHeap       heap;
         SrwLock           lock;
@@ -89,14 +91,10 @@ private:
 
     bool ready();
 
-    ObjectStorage<Seams> seams_;
-    bool                 refused_;
-    bool                 started_trace_ = false;
-    bool                 started_presents_ = false;
-    ProcessTrace::Filter crashed_;
+    LazyDriver<Seams> driver_;
 };
 
-constexpr GlIcdLibrary::GlIcdLibrary(ProcessTrace::Filter crashed) : seams_(), refused_(false), crashed_(crashed) {}
+constexpr GlIcdLibrary::GlIcdLibrary(ProcessTrace::Filter crashed) : driver_("avgl: ", "avgl", crashed) {}
 
 }  // namespace av
 

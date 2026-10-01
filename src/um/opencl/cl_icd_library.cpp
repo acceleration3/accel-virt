@@ -3,20 +3,9 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 
-#include <windows.h>
-
 #include <CL/cl_ext.h>
 
 namespace av {
-
-/* The one-shot's callback. An ABI boundary C requires: InitOnceExecuteOnce
- * takes a bare function and one argument, so the object is the argument and
- * this forwards straight into it. */
-extern "C" BOOL WINAPI avcl_construct_once(PINIT_ONCE, PVOID library, PVOID *)
-{
-    static_cast<ClIcdLibrary *>(library)->construct();
-    return TRUE;
-}
 
 ClIcdLibrary::Seams::Seams()
     : heap(), lock(), send_lock(), log(L"avcl"), kmt(), watcher(), gl_share(),
@@ -26,26 +15,17 @@ ClIcdLibrary::Seams::Seams()
     log.open();
 }
 
-void ClIcdLibrary::construct()
+Status ClIcdLibrary::Seams::initialize()
 {
-    AV_SCOPE("ClIcdLibrary::construct");
-    if (seams_.construct() != Status::ok) return;
-    if (seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("avcl: no D3DKMT wait event, refusing the loader");
-        seams_.destroy();
-        return;
-    }
-    Seams &seams = seams_.object();
-    const Status traced = seams.trace.start("avcl", seams.root, crashed_);
-    if (traced != Status::ok) seams.log.write("avcl: tracing is off: its section, pin or service failed");
+    AV_SCOPE("ClIcdLibrary::Seams::initialize");
+    return kmt.initialize();
 }
 
 clicd::ClIcdRoot *ClIcdLibrary::root()
 {
     AV_SCOPE("ClIcdLibrary::root");
-    if (!InitOnceExecuteOnce(reinterpret_cast<PINIT_ONCE>(&once_), &avcl_construct_once, this, nullptr))
-        return nullptr;
-    return seams_.constructed() ? &seams_.object().root : nullptr;
+    Seams *const seams = driver_.seams();
+    return seams == nullptr ? nullptr : &seams->root;
 }
 
 cl_int ClIcdLibrary::platform_ids(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
@@ -66,7 +46,7 @@ void *ClIcdLibrary::extension_function(const char *name)
 long ClIcdLibrary::crashed(void *pointers)
 {
     AV_SCOPE("ClIcdLibrary::crashed");
-    return seams_.constructed() ? seams_.object().trace.crashed(pointers) : 0;
+    return driver_.crashed(pointers);
 }
 
 }  // namespace av

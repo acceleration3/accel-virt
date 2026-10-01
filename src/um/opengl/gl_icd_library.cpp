@@ -17,32 +17,23 @@ GlIcdLibrary::Seams::Seams()
     log.open();
 }
 
+Status GlIcdLibrary::Seams::initialize()
+{
+    AV_SCOPE("GlIcdLibrary::Seams::initialize");
+    const Status opened = kmt.initialize();
+    if (opened != Status::ok) return opened;
+    if (present_kmt.initialize() != Status::ok || present_handed.initialize() != Status::ok ||
+        present_shown.initialize() != Status::ok) {
+        log.write("avgl: no present thread: its D3DKMT event or wake events could not be made");
+        presents.refuse();
+    }
+    return Status::ok;
+}
+
 bool GlIcdLibrary::ready()
 {
     AV_SCOPE("GlIcdLibrary::ready");
-    if (!seams_.constructed() && !refused_ && seams_.construct() == Status::ok &&
-        seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("avgl: no D3DKMT wait event, refusing opengl32");
-        seams_.destroy();
-        refused_ = true;
-        return false;
-    }
-    if (seams_.constructed() && !started_presents_) {
-        started_presents_ = true;
-        Seams &seams = seams_.object();
-        if (seams.present_kmt.initialize() != Status::ok || seams.present_handed.initialize() != Status::ok ||
-            seams.present_shown.initialize() != Status::ok) {
-            seams.log.write("avgl: no present thread: its D3DKMT event or wake events could not be made");
-            seams.presents.refuse();
-        }
-    }
-    if (seams_.constructed() && !started_trace_) {
-        started_trace_ = true;
-        Seams &seams = seams_.object();
-        const Status traced = seams.trace.start("avgl", seams.root, crashed_);
-        if (traced != Status::ok) seams.log.write("avgl: tracing is off: its section, pin or service failed");
-    }
-    return seams_.constructed();
+    return driver_.seams() != nullptr;
 }
 
 int32_t GlIcdLibrary::validate_version(uint32_t version)
@@ -138,7 +129,7 @@ int32_t GlIcdLibrary::swap_buffers(void *dc)
 long GlIcdLibrary::crashed(void *pointers)
 {
     AV_SCOPE("GlIcdLibrary::crashed");
-    return seams_.constructed() ? seams_.object().trace.crashed(pointers) : 0;
+    return driver_.crashed(pointers);
 }
 
 }  // namespace av

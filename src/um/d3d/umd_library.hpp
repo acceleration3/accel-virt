@@ -6,12 +6,12 @@
 #ifndef AV_UM_UMD_LIBRARY_HPP
 #define AV_UM_UMD_LIBRARY_HPP
 
-#include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/umd_root.hpp"
 #include "um/d3d/umd_drivers.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/icd/file_log.hpp"
+#include "um/icd/lazy_driver.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/trace/process_trace.hpp"
@@ -28,8 +28,8 @@ public:
     UmdLibrary(const UmdLibrary &) = delete;
     UmdLibrary &operator=(const UmdLibrary &) = delete;
 
-    /* The three exports. A process whose log or D3DKMT cannot be opened gets no
-     * root, and the runtime is told this driver cannot serve the adapter. */
+    /* The three exports. A process LazyDriver refuses gets no root, and the
+     * runtime is told this driver cannot serve the adapter. */
     d3d::Hresult open_adapter10_2(void *args);
     d3d::Hresult open_adapter12(void *args);
     d3d::Hresult open_adapter9(void *args);
@@ -41,6 +41,9 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
+        /* The D3DKMT wait event the driver's waits need; without it the
+         * process is refused (LazyDriver). */
+        [[nodiscard]] Status initialize();
 
         ProcessHeap   heap;
         SrwLock       lock;
@@ -53,13 +56,10 @@ private:
 
     d3d::UmdRoot *root();
 
-    ObjectStorage<Seams> seams_;
-    bool                 refused_;
-    bool                 started_trace_ = false;
-    ProcessTrace::Filter crashed_;
+    LazyDriver<Seams> driver_;
 };
 
-constexpr UmdLibrary::UmdLibrary(ProcessTrace::Filter crashed) : seams_(), refused_(false), crashed_(crashed) {}
+constexpr UmdLibrary::UmdLibrary(ProcessTrace::Filter crashed) : driver_("avumd: ", "avumd", crashed) {}
 
 }  // namespace av
 

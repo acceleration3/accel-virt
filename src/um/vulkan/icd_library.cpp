@@ -14,23 +14,17 @@ IcdLibrary::Seams::Seams()
     log.open();
 }
 
+Status IcdLibrary::Seams::initialize()
+{
+    AV_SCOPE("IcdLibrary::Seams::initialize");
+    return kmt.initialize();
+}
+
 icd::IcdRoot *IcdLibrary::root()
 {
     AV_SCOPE("IcdLibrary::root");
-    if (!seams_.constructed() && !refused_ && seams_.construct() == Status::ok &&
-        seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("avvk: no D3DKMT wait event, refusing the loader");
-        seams_.destroy();
-        refused_ = true;
-        return nullptr;
-    }
-    if (seams_.constructed() && !started_trace_) {
-        started_trace_ = true;
-        Seams &seams = seams_.object();
-        const Status traced = seams.trace.start("avvk", seams.root, crashed_);
-        if (traced != Status::ok) seams.log.write("avvk: tracing is off: its section, pin or service failed");
-    }
-    return seams_.constructed() ? &seams_.object().root : nullptr;
+    Seams *const seams = driver_.seams();
+    return seams == nullptr ? nullptr : &seams->root;
 }
 
 VkResult IcdLibrary::negotiate(uint32_t *version)
@@ -50,7 +44,7 @@ PFN_vkVoidFunction IcdLibrary::instance_proc_addr(VkInstance instance, const cha
 long IcdLibrary::crashed(void *pointers)
 {
     AV_SCOPE("IcdLibrary::crashed");
-    return seams_.constructed() ? seams_.object().trace.crashed(pointers) : 0;
+    return driver_.crashed(pointers);
 }
 
 }  // namespace av

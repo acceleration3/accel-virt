@@ -8,11 +8,11 @@
 #ifndef AV_UM_CL_ICD_LIBRARY_HPP
 #define AV_UM_CL_ICD_LIBRARY_HPP
 
-#include "core/support/object_storage.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/opencl/windows_gl_share_source.hpp"
 #include "um/icd/file_log.hpp"
+#include "um/icd/lazy_driver.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/icd/windows_service_thread.hpp"
@@ -32,29 +32,24 @@ public:
     ClIcdLibrary(const ClIcdLibrary &) = delete;
     ClIcdLibrary &operator=(const ClIcdLibrary &) = delete;
 
-    /* Neither entry is serialised for us. The Vulkan loader holds loader_lock
-     * across its driver scan and opengl32 calls DrvValidateVersion first under
-     * its own lock, so those two ICDs construct on a call that cannot race;
-     * the Khronos OpenCL loader promises nothing - khrIcdOsVendorsEnumerate
-     * runs on whichever thread first reached clGetPlatformIDs, with nothing
-     * held, and an application may reach it from several at once (research
-     * 052 §3, gap 2). Hence the one-shot below. A process whose D3DKMT event
-     * cannot be made gets no root, permanently, and the loader is told there
-     * is no platform here. */
+    /* The Khronos loader may reach either from several threads at once:
+     * khrIcdOsVendorsEnumerate runs on whichever first reached
+     * clGetPlatformIDs, with nothing held. A process LazyDriver refuses gets
+     * no root, and the loader is told there is no platform here. */
     cl_int platform_ids(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms);
     void  *extension_function(const char *name);
     /* The process is crashing: the crash file, if tracing started. */
     long   crashed(void *pointers);
 
-    /* The one-shot's body. Public because the callback InitOnceExecuteOnce
-     * requires is handed this and nothing else. */
-    void   construct();
 
 private:
     struct Seams {
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
+        /* The D3DKMT wait event the driver's waits need; without it the
+         * process is refused (LazyDriver). */
+        [[nodiscard]] Status initialize();
 
         ProcessHeap      heap;
         SrwLock          lock;
@@ -71,17 +66,10 @@ private:
 
     clicd::ClIcdRoot *root();
 
-    ObjectStorage<Seams> seams_;
-    /* An INIT_ONCE, which is one pointer and zero when untouched
-     * (INIT_ONCE_STATIC_INIT), kept opaque so windows.h stays out of a header
-     * the tests' include paths also reach. */
-    void                *once_;
-    ProcessTrace::Filter crashed_;
+    LazyDriver<Seams> driver_;
 };
 
-constexpr ClIcdLibrary::ClIcdLibrary(ProcessTrace::Filter crashed)
-    : seams_(), once_(nullptr), crashed_(crashed)
-{}
+constexpr ClIcdLibrary::ClIcdLibrary(ProcessTrace::Filter crashed) : driver_("avcl: ", "avcl", crashed) {}
 
 }  // namespace av
 

@@ -16,23 +16,17 @@ UmdLibrary::Seams::Seams()
     log.open();
 }
 
+Status UmdLibrary::Seams::initialize()
+{
+    AV_SCOPE("UmdLibrary::Seams::initialize");
+    return kmt.initialize();
+}
+
 d3d::UmdRoot *UmdLibrary::root()
 {
     AV_SCOPE("UmdLibrary::root");
-    if (!seams_.constructed() && !refused_ && seams_.construct() == Status::ok &&
-        seams_.object().kmt.initialize() != Status::ok) {
-        seams_.object().log.write("avumd: no D3DKMT wait event, refusing the runtime");
-        seams_.destroy();
-        refused_ = true;
-        return nullptr;
-    }
-    if (seams_.constructed() && !started_trace_) {
-        started_trace_ = true;
-        Seams &seams = seams_.object();
-        const Status traced = seams.trace.start("avumd", seams.root, crashed_);
-        if (traced != Status::ok) seams.log.write("avumd: tracing is off: its section, pin or service failed");
-    }
-    return seams_.constructed() ? &seams_.object().root : nullptr;
+    Seams *const seams = driver_.seams();
+    return seams == nullptr ? nullptr : &seams->root;
 }
 
 d3d::Hresult UmdLibrary::open_adapter10_2(void *args)
@@ -62,7 +56,7 @@ d3d::Hresult UmdLibrary::open_adapter9(void *args)
 long UmdLibrary::crashed(void *pointers)
 {
     AV_SCOPE("UmdLibrary::crashed");
-    return seams_.constructed() ? seams_.object().trace.crashed(pointers) : 0;
+    return driver_.crashed(pointers);
 }
 
 }  // namespace av

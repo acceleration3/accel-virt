@@ -7,11 +7,11 @@
 #ifndef AV_UM_ICD_LIBRARY_HPP
 #define AV_UM_ICD_LIBRARY_HPP
 
-#include "core/support/object_storage.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/icd/dxgi_window_chains.hpp"
 #include "um/icd/file_log.hpp"
+#include "um/icd/lazy_driver.hpp"
 #include "um/icd/gdi_window_surface.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
@@ -31,10 +31,8 @@ public:
     IcdLibrary(const IcdLibrary &) = delete;
     IcdLibrary &operator=(const IcdLibrary &) = delete;
 
-    /* The loader calls both under its loader_lock while it scans drivers
-     * (Vulkan-Loader bde79ad2dd83, loader.c loader_scanned_icd_add), so the
-     * first call's construction is never raced. A process whose D3DKMT event
-     * cannot be made gets no root, and the loader is told this is no driver. */
+    /* A process LazyDriver refuses gets no root, and the loader is told this
+     * is no driver. */
     VkResult           negotiate(uint32_t *version);
     PFN_vkVoidFunction instance_proc_addr(VkInstance instance, const char *name);
     /* The process is crashing: the crash file, if tracing started. */
@@ -45,6 +43,9 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
+        /* The D3DKMT wait event the driver's waits need; without it the
+         * process is refused (LazyDriver). */
+        [[nodiscard]] Status initialize();
 
         ProcessHeap  heap;
         SrwLock      lock;
@@ -62,13 +63,10 @@ private:
 
     icd::IcdRoot *root();
 
-    ObjectStorage<Seams> seams_;
-    bool                 refused_;
-    bool                 started_trace_ = false;
-    ProcessTrace::Filter crashed_;
+    LazyDriver<Seams> driver_;
 };
 
-constexpr IcdLibrary::IcdLibrary(ProcessTrace::Filter crashed) : seams_(), refused_(false), crashed_(crashed) {}
+constexpr IcdLibrary::IcdLibrary(ProcessTrace::Filter crashed) : driver_("avvk: ", "avvk", crashed) {}
 
 }  // namespace av
 
