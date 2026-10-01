@@ -46,7 +46,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), heaps_(heaps), log_(log), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), channel_(), addresses_(),
+    : session_(session), heaps_(heaps), log_(log), refusals_(0u), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, lost_(false), logged_{}
 {
     AV_SCOPE("D3d12Device::D3d12Device");
@@ -58,6 +58,7 @@ D3d12Device::~D3d12Device()
 {
     AV_SCOPE("D3d12Device::~D3d12Device");
     follower_.destroy();
+    residency_.destroy();
     if (!channel_.constructed()) return;
     static_cast<void>(channel_.object().flush());
     channel_.destroy();
@@ -73,6 +74,7 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     if (FAILED(joined)) return joined;
     if (create.pKTCallbacks != nullptr)
         static_cast<void>(follower_.construct(*create.pKTCallbacks, runtime_.handle, session_.transport()));
+    if (core_ != nullptr) static_cast<void>(residency_.construct(*core_, runtime_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
     /* A session no heap lives in yet lends only its first part, whichever
      * device of it arrives first: the arena was just opened, or every heap in
@@ -107,6 +109,16 @@ void D3d12Device::refused(const char *slot, uint32_t hresult)
     text.append(" refused, HRESULT ");
     text.append_hex(hresult, 8u);
     log_.write(text.text());
+}
+
+HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
+{
+    AV_SCOPE("D3d12Device::answered");
+    if (FAILED(hresult) && refusals_ < refusals_logged) {
+        refusals_++;
+        refused(slot, static_cast<uint32_t>(hresult));
+    }
+    return hresult;
 }
 
 void D3d12Device::unsupported(const char *slot)
@@ -271,19 +283,18 @@ HRESULT D3d12Device::set_extended_feature_callbacks(D3D12DDI_TABLE_TYPE, const v
     return S_OK;
 }
 
-/* Everything is resident: a heap's memory is the host's or the arena's for
- * as long as it lives. */
 HRESULT D3d12Device::make_resident(D3D12DDIARG_MAKERESIDENT_0001 *args)
 {
     AV_SCOPE("D3d12Device::make_resident");
-    if (args != nullptr) args->WaitMask = 0u;
-    return S_OK;
+    if (args == nullptr || !residency_.constructed()) return E_INVALIDARG;
+    return residency_.object().make_resident(*args);
 }
 
-HRESULT D3d12Device::evict(const D3D12DDIARG_EVICT *)
+HRESULT D3d12Device::evict(const D3D12DDIARG_EVICT *args)
 {
     AV_SCOPE("D3d12Device::evict");
-    return S_OK;
+    if (args == nullptr || !residency_.constructed()) return E_INVALIDARG;
+    return residency_.object().evict(*args);
 }
 
 /* ---------------------------------------------------------------- queues */

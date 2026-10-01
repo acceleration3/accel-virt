@@ -46,6 +46,11 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
         log_.write("rvkumd: the miniport minted no identity for a swap chain buffer; DWM cannot open it");
         return S_OK;
     }
+    /* The host shows one 2D image of one mip and one sample; D3D9On12 makes
+     * every Direct3D 9 texture shared, mip chains and all, and a share the
+     * host refuses removes the device - Portal's did before its first frame.
+     * Such a texture keeps its kernel allocation, and is not shown. */
+    if (args.MipLevels != 1u || args.DepthOrArraySize != 1u || args.SampleDesc.Count != 1u) return S_OK;
     if (!sent(d3d12proto::rvk_d3d12_ShareResource12(wire(), resource.header.id, key), "ShareResource12"))
         return E_OUTOFMEMORY;
     /* DWM may open it as soon as the kernel hands it the handle, on a stream

@@ -305,7 +305,9 @@ HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_a
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
         const HRESULT   resource_made = make_resource(*args, clear, heap, 0u, resource);
         if (FAILED(resource_made) || !shown) return resource_made;
-        return show(resource, runtime, *args);
+        const HRESULT shown_made = show(resource, runtime, *args);
+        heap.allocation = resource.allocation;
+        return shown_made;
     }
     return place_resource(heap_handle, args, clear, handle);
 }

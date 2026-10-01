@@ -98,7 +98,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandQueueSize(D3D12DDI_HDE
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_queue_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 * a1, D3D12DDI_HCOMMANDQUEUE a2, D3D12DDI_HRTCOMMANDQUEUE a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_command_queue(a1, a2, a3); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandQueue", device.create_command_queue(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyCommandQueue(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDQUEUE a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_queue(a1); }
@@ -107,7 +107,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandPoolSize(D3D12DDI_HDEV
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_pool_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateCommandPool(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 * a1, D3D12DDI_HCOMMANDPOOL_0040 a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_command_pool(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandPool", device.create_command_pool(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyCommandPool(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDPOOL_0040 a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_pool(a1); }
@@ -119,7 +119,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivatePipelineStateSize(D3D12DDI_HD
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_pipeline_state_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0099 * a1, D3D12DDI_HPIPELINESTATE a2, D3D12DDI_HRTPIPELINESTATE a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_pipeline_state(a1, a2, a3); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreatePipelineState", device.create_pipeline_state(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_pipeline_state(a1); }
@@ -128,7 +128,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandListSize(D3D12DDI_HDEV
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_list_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 * a1, D3D12DDI_HCOMMANDLIST a2, D3D12DDI_HRTCOMMANDLIST a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_command_list(a1, a2, a3); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandList", device.create_command_list(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyCommandList(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDLIST a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_list(a1); }
@@ -137,7 +137,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateFenceSize(D3D12DDI_HDEVICE ha
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_fence_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateFence(D3D12DDI_HDEVICE handle, D3D12DDI_HFENCE a1, const D3D12DDIARG_CREATE_FENCE * a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_fence(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateFence", device.create_fence(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyFence(D3D12DDI_HDEVICE handle, D3D12DDI_HFENCE a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_fence(a1); }
@@ -146,7 +146,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateDescriptorHeapSize(D3D12DDI_H
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_descriptor_heap_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_DESCRIPTOR_HEAP_0001 * a1, D3D12DDI_HDESCRIPTORHEAP a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_descriptor_heap(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateDescriptorHeap", device.create_descriptor_heap(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyDescriptorHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HDESCRIPTORHEAP a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_descriptor_heap(a1); }
@@ -182,13 +182,13 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateRootSignatureSize(D3D12DDI_HD
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_root_signature_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateRootSignature(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0100 * a1, D3D12DDI_HROOTSIGNATURE a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_root_signature(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateRootSignature", device.create_root_signature(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyRootSignature(D3D12DDI_HDEVICE handle, D3D12DDI_HROOTSIGNATURE a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_root_signature(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP a1, void ** a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().map_heap(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("MapHeap", device.map_heap(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().unmap_heap(a1); }
@@ -197,16 +197,16 @@ extern "C" D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY rvkumd_d3d12_CalcPrivateHea
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_heap_and_resource_sizes(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 * a1, D3D12DDI_HHEAP a2, D3D12DDI_HRTRESOURCE a3, const D3D12DDIARG_CREATERESOURCE_0109 * a4, const D3D12DDI_CLEAR_VALUES * a5, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a6, D3D12DDI_HRESOURCE a7)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_heap_and_resource(a1, a2, a3, a4, a5, a6, a7); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateHeapAndResource", device.create_heap_and_resource(a1, a2, a3, a4, a5, a6, a7)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP a1, D3D12DDI_HRESOURCE a2)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_heap_and_resource(a1, a2); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_MakeResident(D3D12DDI_HDEVICE handle, D3D12DDIARG_MAKERESIDENT_0001 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().make_resident(a1); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("MakeResident", device.make_resident(a1)); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_Evict(D3D12DDI_HDEVICE handle, const D3D12DDIARG_EVICT * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().evict(a1); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("Evict", device.evict(a1)); }
 
 extern "C" D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY rvkumd_d3d12_CalcPrivateOpenedHeapAndResourceSizes(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 * a1, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a2)
 { static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateOpenedHeapAndResourceSizes"); return D3D12DDI_HEAP_AND_RESOURCE_SIZES{}; }
@@ -224,7 +224,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateQueryHeapSize(D3D12DDI_HDEVIC
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_query_heap_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateQueryHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_QUERY_HEAP_0001 * a1, D3D12DDI_HQUERYHEAP a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_query_heap(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateQueryHeap", device.create_query_heap(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyQueryHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HQUERYHEAP a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_query_heap(a1); }
@@ -233,7 +233,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandSignatureSize(D3D12DDI
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_signature_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateCommandSignature(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 * a1, D3D12DDI_HCOMMANDSIGNATURE a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_command_signature(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandSignature", device.create_command_signature(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyCommandSignature(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDSIGNATURE a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_signature(a1); }
@@ -296,7 +296,7 @@ extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandRecorderSize(D3D12DDI_
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_recorder_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateCommandRecorder(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 * a1, D3D12DDI_HCOMMANDRECORDER_0040 a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_command_recorder(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandRecorder", device.create_command_recorder(a1, a2)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyCommandRecorder(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDRECORDER_0040 a1)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_recorder(a1); }
@@ -314,7 +314,7 @@ extern "C" VOID APIENTRY rvkumd_d3d12_DestroySchedulingGroup(D3D12DDI_HDEVICE ha
 { static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnDestroySchedulingGroup"); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_EnumerateMetaCommands(D3D12DDI_HDEVICE handle, UINT * a1, D3D12DDIARG_META_COMMAND_DESC * a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().enumerate_meta_commands(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("EnumerateMetaCommands", device.enumerate_meta_commands(a1, a2)); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_EnumerateMetaCommandParameters(D3D12DDI_HDEVICE handle, GUID a1, D3D12DDI_META_COMMAND_PARAMETER_STAGE a2, UINT * a3, D3D12DDIARG_META_COMMAND_PARAMETER_DESC * a4)
 { static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnEnumerateMetaCommandParameters"); return E_NOTIMPL; }
@@ -404,16 +404,16 @@ extern "C" VOID APIENTRY rvkumd_d3d12q_WaitForFence(D3D12DDI_HCOMMANDQUEUE handl
 { D3d12RecordHandle(handle.pDrvPrivate).device().wait_for_fence(handle, a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12x_GetSupportedExtendedFeatures(D3D12DDI_HDEVICE handle, D3D12DDI_FEATURE_0020 a1, UINT32 * a2, D3D12DDI_FEATURE_0020 * a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_supported_extended_features(a1, a2, a3); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("GetSupportedExtendedFeatures", device.get_supported_extended_features(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12x_GetSupportedExtendedFeatureVersions(D3D12DDI_HDEVICE handle, D3D12DDI_FEATURE_0020 a1, UINT32 * a2, UINT32 * a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_supported_extended_feature_versions(a1, a2, a3); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("GetSupportedExtendedFeatureVersions", device.get_supported_extended_feature_versions(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12x_EnableExtendedFeature(D3D12DDI_HDEVICE handle, D3D12DDI_FEATURE_0020 a1, UINT32 a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().enable_extended_feature(a1, a2); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("EnableExtendedFeature", device.enable_extended_feature(a1, a2)); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12x_SetExtendedFeatureCallbacks(D3D12DDI_HDEVICE handle, D3D12DDI_TABLE_TYPE a1, const void * a2, SIZE_T a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().set_extended_feature_callbacks(a1, a2, a3); }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("SetExtendedFeatureCallbacks", device.set_extended_feature_callbacks(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12l_CloseCommandList(D3D12DDI_HCOMMANDLIST handle)
 { D3d12RecordHandle(handle.pDrvPrivate).recorder().close_command_list(handle); }

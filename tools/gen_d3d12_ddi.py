@@ -232,7 +232,13 @@ def thunks(tables):
                 if not owned:
                     raise SystemExit(f"{name}: implemented, but its first parameter is {parameters[0]}")
                 call_arguments = ", ".join(names) if table == LIST_TABLE or table == QUEUE_TABLE else arguments
-                lines.append(f"{{ {keyword}{target.format(h='handle')}.{snake(name)}({call_arguments}); }}")
+                if table in (DEVICE_TABLE, EXTENDED_TABLE) and ret == "HRESULT":
+                    # A refusal is logged with the slot's name: most say nothing of why, and the runtime
+                    # hands the bare code to the application.
+                    lines.append(f"{{ D3d12Device &device = {target.format(h='handle')}; "
+                                 f"return device.answered(\"{name[3:]}\", device.{snake(name)}({call_arguments})); }}")
+                else:
+                    lines.append(f"{{ {keyword}{target.format(h='handle')}.{snake(name)}({call_arguments}); }}")
             else:
                 answer = default_return(ret)
                 unused = "".join(f" static_cast<void>({label});" for label in names)

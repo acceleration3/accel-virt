@@ -35,6 +35,7 @@
 #include "um/d3d/d3d12_ddi.hpp"
 #include "um/d3d/d3d12_recorder.hpp"
 #include "um/d3d/d3d12_records.hpp"
+#include "um/d3d/d3d12_residency.hpp"
 
 #include <stdint.h>
 
@@ -73,6 +74,9 @@ public:
     /* A slot this driver has no implementation of was called: logged once. */
     void unsupported(const char *slot);
     void refused(const char *slot, uint32_t hresult);
+    /* `hresult`, what the DDI `slot` answered, logged when it is a refusal
+     * - the first few a device makes. */
+    HRESULT answered(const char *slot, HRESULT hresult);
 
 #include "um/d3d/generated/d3d12_device_ddi.inc"
 
@@ -93,6 +97,7 @@ public:
                                       D3D12DDI_PRESENT_HWQUEUES_0051 *hardware_queues);
 
 private:
+    static constexpr uint32_t refusals_logged = 64u;
     uint32_t next_id();
     void     stamp(RecordHeader &header, uint32_t magic, uint32_t id);
     bool     sent(bool sent_ok, const char *what);
@@ -137,12 +142,16 @@ private:
     d3d::D3dSession                      &session_;
     d3d::D3d12HeapArena                  &heaps_;
     icd::LogSink                         &log_;
+    /* Refusals logged so far; some slots are asked in a loop. */
+    uint32_t                              refusals_;
     const D3d12HostCaps                  &caps_;
     void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
     /* How a queue's context waits for the work the ring carried. */
     ObjectStorage<d3d::BatchFollower>     follower_;
+    /* The kernel allocations shown surfaces own, paged on D3D12Core's queue. */
+    ObjectStorage<D3d12Residency>         residency_;
     ObjectStorage<d3d::D3dDeviceChannel>  channel_;
     d3d::D3d12AddressSpace                addresses_;
     D3d12Recorder                         recorder_;

@@ -43,7 +43,10 @@ struct HeapRecord {
     /* Whether the host has a heap of this id: a committed resource in the
      * GPU's own memory has none, only the resource. */
     uint32_t     made;
-    uint32_t     reserved;
+    /* The kernel allocation of the shown surface committed in it
+     * (D3d12Device::show), which D3D12Core pages in and out by naming the
+     * heap (D3d12Residency); 0 for every other heap. */
+    D3DKMT_HANDLE allocation;
 };
 
 /* A resource and what a view or a copy needs to know of it without asking. */
