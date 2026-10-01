@@ -200,17 +200,33 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
      * saying why; the answer is only ever seen here. */
     if (FAILED(presented) && !present_refused_) {
         present_refused_ = true;
-        char       line[128] = {};
-        TextBuffer text(line, sizeof(line));
-        text.append("rvkumd: the kernel refused a present 0x");
-        text.append_hex(static_cast<uint32_t>(presented), 8u);
-        text.append(" source 0x");
-        text.append_hex(source.allocation, 8u);
-        text.append(" destination 0x");
-        text.append_hex(present.hDstAllocation, 8u);
-        log_.write(text.text());
+        log_present("the kernel refused a present", static_cast<uint32_t>(presented), source);
     }
     return presented;
+}
+
+void D3d11Device::log_present(const char *what, uint32_t value, const ResourceRecord &source)
+{
+    AV_SCOPE("D3d11Device::log_present");
+    char       line[192] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: ");
+    text.append(what);
+    text.append(" 0x");
+    text.append_hex(value, 8u);
+    text.append(" source 0x");
+    text.append_hex(source.allocation, 8u);
+    text.append(" model ");
+    text.append_decimal(static_cast<uint32_t>(source.present_model));
+    text.append(" output ");
+    text.append_decimal(source.vidpn_source);
+    text.append(" ");
+    text.append_decimal(source.width);
+    text.append("x");
+    text.append_decimal(source.height);
+    text.append(" format ");
+    text.append_decimal(source.format);
+    log_.write(text.text());
 }
 
 HRESULT D3d11Device::follow_host()
@@ -235,6 +251,10 @@ HRESULT D3d11Device::present(DXGI_DDI_ARG_PRESENT *args)
     refresh_guest_surfaces();
     ResourceRecord &source = record(args->hSurfaceToPresent);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
+    if (args->Flags.Value != present_flags_) {
+        present_flags_ = args->Flags.Value;
+        log_present("presents are flagged", present_flags_, source);
+    }
     return present_surface(source, args->SrcSubResourceIndex, destination, args->pDXGIContext);
 }
 
@@ -245,6 +265,10 @@ HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
     if (args->SurfacesToPresent == 0u || args->phSurfacesToPresent == nullptr) return E_INVALIDARG;
     ResourceRecord &source = record(args->phSurfacesToPresent[0].hSurface);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
+    if (args->Flags.Value != present_flags_) {
+        present_flags_ = args->Flags.Value;
+        log_present("presents are flagged", present_flags_, source);
+    }
     return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext);
 }
 
@@ -326,7 +350,9 @@ HRESULT D3d11Device::set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
     if (FAILED(published)) return published;
     D3DDDICB_SETDISPLAYMODE mode = {};
     mode.hPrimaryAllocation = resource.allocation;
-    return kernel_->pfnSetDisplayModeCb(runtime_.handle, &mode);
+    const HRESULT set = kernel_->pfnSetDisplayModeCb(runtime_.handle, &mode);
+    log_present("display mode set", static_cast<uint32_t>(set), resource);
+    return set;
 }
 
 HRESULT D3d11Device::query_resource_residency(DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *args)

@@ -34,11 +34,17 @@ class StateWriter;
 
 namespace av::d3d {
 
+class CommandRecording;
+
 class D3dCommandStream final : public ClientTransport {
 public:
     /* The most one command is lent, which bounds inline data too: anything
      * larger goes through the blob arena. */
     static constexpr size_t command_room = 256u * 1024u;
+    /* The most data one recorded command carries: a recording has no arena,
+     * so its data goes inline, and half a command's room leaves the rest for
+     * the command's other fields. */
+    static constexpr size_t recorded_data = command_room / 2u;
     /* What is recorded before an idle host is sent it: a few dozen draws, so
      * a submission's cost is spread over enough of them to stay small. */
     static constexpr size_t stream_bytes = 1024u;
@@ -60,21 +66,27 @@ public:
      * nothing was recorded since it last did - GetData asks for one on every
      * poll. */
     [[nodiscard]] Status application_flush();
-    /* From here on nothing is sent: commands collect in the block for a
+    /* From here on nothing is sent: commands collect in `recording` for a
      * deferred context's command list, carrying their data inline, and a
-     * command that must be answered fails. */
-    void                 record();
+     * command that must be answered fails. Before anything is recorded. */
+    void                 record(CommandRecording &recording);
     /* What was recorded since the last take, copied to `out` (at most
-     * `capacity` bytes) and forgotten. invalid_parameter when it does not fit. */
+     * `capacity` bytes) and forgotten. invalid_parameter when it does not fit;
+     * no_space, with the recording forgotten, when a command was lost from it
+     * - one past the end of the block, or one whose data did not fit. */
     [[nodiscard]] Status take_recorded(uint8_t *out, size_t capacity, size_t &length);
     size_t               recorded_bytes() const;
     /* Bytes recorded since the stream was made: equal twice, nothing came between. */
     uint64_t             recorded_total() const;
-    /* Recorded commands, run in this stream's order: copied in when they fit
-     * the block, sent as a batch of their own after what is pending when not. */
+    /* Recorded commands, run in this stream's order: copied in a block's worth
+     * of whole commands at a time, what is pending sent to make room. malformed
+     * when they are not whole commands; no_space when a recording cannot grow
+     * to hold them. */
     [[nodiscard]] Status append_recorded(const uint8_t *bytes, size_t length);
     /* The blob arena has `bytes` free, retiring every lease with a round trip
-     * when it has not. False when even an empty arena is too small. */
+     * when it has not. False when even an empty arena is too small. A
+     * recording's data goes inline instead: false when `bytes` is more than
+     * one recorded command carries. */
     [[nodiscard]] bool   make_room_for(size_t bytes);
     /* Commands recorded after this run on `device`. False when the selection
      * could not be sent, which fails the stream. Device 0 selects nothing. */
@@ -99,6 +111,14 @@ public:
 
 private:
     [[nodiscard]] TransportResult append(uint32_t command_id, WireWriter &writer, uint8_t flags);
+    /* The block is the recording's, which may have grown. */
+    void                          adopt_recording();
+    /* Room for `wanted` more bytes in the block: a sending stream sends what it
+     * holds, a recording grows. False when neither makes it. */
+    [[nodiscard]] bool            room_for(size_t wanted);
+    /* How many bytes of the commands at `bytes` make a run of whole commands
+     * that fits the block: 0 when not even the first does or is one. */
+    size_t                        whole_commands(const uint8_t *bytes, size_t length) const;
 
     KmtTransport &transport_;
     uint8_t      *block_;
@@ -111,7 +131,13 @@ private:
     /* Never ready: a recording's data goes inline, since the lease an arena
      * hands out is gone before a command list runs, which may be many times. */
     ClientBlobArena no_arena_;
-    bool          recording_;
+    /* What commands collect in instead of being sent; null while sending. */
+    CommandRecording *recording_;
+    /* A writer is lent and its command not yet appended or answered: one the
+     * call ends without was abandoned. */
+    bool          lent_;
+    /* A recorded command was lost: the recording is incomplete. */
+    bool          incomplete_;
     /* The device the host runs recorded commands on; 0 before any. */
     uint32_t      speaking_;
     bool          failed_;

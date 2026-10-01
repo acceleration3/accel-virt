@@ -40,8 +40,8 @@ constexpr uint32_t copy_discard = 0x2u;
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), shadows_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
-      recording_block_(nullptr), context_(nullptr), paging_(), follower_(), feature_level_(0u),
-      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), follow_refused_(false), frame_(1u)
+      recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
+      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), present_flags_(~0u), follow_refused_(false), frame_(1u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }
@@ -52,7 +52,7 @@ D3d11Device::~D3d11Device()
     if (parent_ != nullptr) {
         if (channel_.constructed()) channel_.destroy();
         if (recording_.constructed()) recording_.destroy();
-        if (recording_block_ != nullptr) memory_.release(recording_block_);
+        if (recorded_.constructed()) recorded_.destroy();
         return;
     }
     if (channel_.constructed()) {
@@ -172,11 +172,12 @@ HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_
     core_ = create.p11UMCallbacks;
     kernel_ = parent.kernel_;
     feature_level_ = parent.feature_level_;
-    recording_block_ = static_cast<uint8_t *>(memory_.allocate(recording_bytes, Pool::paged));
-    if (recording_block_ == nullptr) return E_OUTOFMEMORY;
+    static_cast<void>(recorded_.construct(memory_, recording_bytes, most_recording_bytes));
+    if (recorded_.object().initialize() != Status::ok) return E_OUTOFMEMORY;
     const uint32_t device = parent.channel_.object().device();
-    static_cast<void>(recording_.construct(session_.transport(), recording_block_, recording_bytes));
-    recording_.object().record();
+    d3d::CommandRecording &recorded = recorded_.object();
+    static_cast<void>(recording_.construct(session_.transport(), recorded.bytes(), recorded.capacity()));
+    recording_.object().record(recorded);
     /* Recorded for the parent's device, which execution selects first. */
     recording_.object().selected(device);
     static_cast<void>(channel_.construct(recording_.object(), recording_lock_, device));
@@ -320,8 +321,9 @@ void D3d11Device::upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &r
 {
     AV_SCOPE("D3d11Device::upload_buffer_pieces");
     const uint32_t length = static_cast<uint32_t>(region.right - region.left);
-    for (uint32_t done = 0u; done < length; done += static_cast<uint32_t>(upload_piece)) {
-        const uint32_t piece = length - done < upload_piece ? length - done : static_cast<uint32_t>(upload_piece);
+    const uint32_t most = static_cast<uint32_t>(piece_bytes());
+    for (uint32_t done = 0u; done < length; done += most) {
+        const uint32_t piece = length - done < most ? length - done : most;
         D3D10_DDI_BOX part = region;
         part.left = region.left + static_cast<LONG>(done);
         part.right = part.left + static_cast<LONG>(piece);
@@ -341,7 +343,8 @@ void D3d11Device::upload_row_pieces(const ResourceRecord &resource, uint32_t sub
     if (lines == 0u || row_pitch == 0u) return;
     /* Texel rows per stored row: 4 for a block-compressed format, 1 otherwise. */
     const uint32_t texels_per_line = (height + lines - 1u) / lines;
-    const uint32_t lines_per_piece = row_pitch >= upload_piece ? 1u : static_cast<uint32_t>(upload_piece / row_pitch);
+    const size_t   most = piece_bytes();
+    const uint32_t lines_per_piece = row_pitch >= most ? 1u : static_cast<uint32_t>(most / row_pitch);
     bool first = true;
     for (LONG slice = region.front; slice < region.back; slice++) {
         const uint8_t *const plane = data + static_cast<size_t>(slice - region.front) * depth_pitch;
@@ -359,6 +362,14 @@ void D3d11Device::upload_row_pieces(const ResourceRecord &resource, uint32_t sub
             first = false;
         }
     }
+}
+
+/* A deferred context records its uploads inline, so a piece is what one
+ * recorded command carries. */
+size_t D3d11Device::piece_bytes() const
+{
+    AV_SCOPE("D3d11Device::piece_bytes");
+    return parent_ != nullptr ? d3d::D3dCommandStream::recorded_data : upload_piece;
 }
 
 void D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
@@ -537,7 +548,16 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
         set_error(E_INVALIDARG);
         return;
     }
-    if (wire().execute(list.commands, list.length) != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    const Status ran = wire().execute(list.commands, list.length);
+    if (ran == Status::ok) return;
+    char       line[96] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: a command list of ");
+    text.append_decimal(list.length);
+    text.append(" bytes could not be run, status ");
+    text.append_decimal(static_cast<uint32_t>(ran));
+    log_.write(text.text());
+    set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
 /* A context-local handle is a copy of the immediate context's block
@@ -638,10 +658,12 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
         set_error(E_OUTOFMEMORY);
         return;
     }
-    size_t taken = 0u;
-    if (context.wire().take_recorded(commands, bytes, taken) != Status::ok) {
+    size_t       taken = 0u;
+    const Status took = context.wire().take_recorded(commands, bytes, taken);
+    if (took != Status::ok) {
         if (commands != nullptr) memory_.release(commands);
-        set_error(D3DDDIERR_DEVICEREMOVED);
+        if (took == Status::no_space) log_.write("rvkumd: a command list outgrew its deferred context's recording block");
+        set_error(took == Status::no_space ? E_OUTOFMEMORY : D3DDDIERR_DEVICEREMOVED);
         return;
     }
     list = CommandListRecord{CommandListRecord::tag, 0u, commands, taken};

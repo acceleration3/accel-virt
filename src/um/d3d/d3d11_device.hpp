@@ -20,6 +20,7 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
+#include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "um/icd/srw_lock.hpp"
@@ -133,6 +134,7 @@ private:
     void upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &region, const uint8_t *data, uint32_t copy_flags);
     void upload_row_pieces(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX &region,
                            const uint8_t *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
+    size_t piece_bytes() const;
     void upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
                          size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
     /* What the upload of `box` (or the whole subresource) reads at these
@@ -183,6 +185,9 @@ private:
      * signals - waits for the batches the ring carried: the kernel's refusal
      * otherwise, logged the first time. */
     HRESULT follow_host();
+    /* A line naming what the kernel was handed: a refusal, a mode set, a
+     * change in how presents are flagged. */
+    void    log_present(const char *what, uint32_t value, const ResourceRecord &source);
 
     void set_shader(uint32_t stage, D3D10DDI_HSHADER shader);
     void set_constant_buffers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers,
@@ -207,8 +212,10 @@ private:
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
-    /* A deferred context's: the device it records for, and its recording. */
+    /* A deferred context's: the device it records for, and its recording,
+     * which grows from its first size to its largest as a list needs. */
     static constexpr size_t recording_bytes = 4u << 20u;
+    static constexpr size_t most_recording_bytes = 256u << 20u;
     D3d11Device                          *parent_;
     SrwLock                               recording_lock_;
     SrwLock                               calls_;
@@ -218,7 +225,7 @@ private:
     uint32_t                              calls_owner_;
     uint32_t                              calls_depth_;
     ObjectStorage<d3d::D3dCommandStream>  recording_;
-    uint8_t                              *recording_block_;
+    ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;
     ObjectStorage<PagingQueue> paging_;
     ObjectStorage<d3d::BatchFollower> follower_;
@@ -228,6 +235,9 @@ private:
     uint32_t        guest_surface_count_;
     bool            guest_lock_refused_;
     bool            present_refused_;
+    /* The flags of the last present, ~0 before any: a fullscreen change shows
+     * in the log as a change of these. */
+    uint32_t        present_flags_;
     bool            follow_refused_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;

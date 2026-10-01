@@ -14,6 +14,8 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/shipped_batch.hpp"
+#include "harness/platform/mock_platform.hpp"
+#include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/context/sub_api.hpp"
@@ -279,7 +281,10 @@ TEST(d3d_device_channel, a_direct3d_12_speaker_selects_nothing_and_keeps_the_sel
  * stream's, under the lock too. */
 TEST(d3d_device_channel, a_recording_is_counted_and_taken_under_the_lock)
 { Fixture fixture;
-  fixture.stream().record();
+  av::MockPlatform platform;
+  av::d3d::CommandRecording recording(platform, block_bytes, block_bytes);
+  CHECK_STATUS(recording.initialize(), Status::ok);
+  fixture.stream().record(recording);
   CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
   fixture.trace().clear();
   const std::size_t recorded = fixture.a().recorded_bytes();

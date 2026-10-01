@@ -4,7 +4,9 @@
  * UpdateSubresource runs in command order, so a draw recorded before the
  * unmap still reads the old contents - which is what NO_OVERWRITE promises
  * and DISCARD allows. */
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "icd/common/log_sink.hpp"
 #include "um/d3d/d3d11_device.hpp"
 
 namespace av::d3d11 {
@@ -31,6 +33,13 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     uint8_t *const at = resource.shadow + subresource_offset(resource, subresource);
     const size_t bytes = subresource_bytes(resource, subresource);
     if ((type == D3D10_DDI_MAP_READ || type == D3D10_DDI_MAP_READWRITE) && !read_back(resource, subresource, at, bytes)) {
+        char       line[96] = {};
+        TextBuffer text(line, sizeof(line));
+        text.append("rvkumd: a map could not read back ");
+        text.append_decimal(bytes);
+        text.append(" bytes of format ");
+        text.append_decimal(resource.format);
+        log_.write(text.text());
         set_error(D3DDDIERR_DEVICEREMOVED);
         return;
     }
