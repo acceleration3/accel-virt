@@ -28,3 +28,7 @@ third_party/opencl-loader
 third_party/vulkan-samples
 third_party/dxc
 third_party/vcredist
+
+# What vkd3d-proton and DXVK write into the directory a device test runs from.
+/vkd3d-proton.cache*
+/test_*.log
