@@ -146,7 +146,7 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
     if (ran) return true;
-    if (!refusal_.removes(d3dproto::command_name(command_id), reply, selected_device_,
+    if (!refusal_.removes(d3dproto::command_name(command_id), selected_device_,
                           states_.removed_reason(selected_device_) != 0u))
         return false;
     states_.mark_removed(selected_device_, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));

@@ -50,8 +50,6 @@ public:
      * answer has to report back: the device tells the guest the length it
      * needs, and the guest allocates and asks again (feature 042). */
     size_t wanted() const;
-    /* The room it was lent: none for the reply of a command no one waits on. */
-    size_t capacity() const;
 
     bool invariants_hold() const;
 

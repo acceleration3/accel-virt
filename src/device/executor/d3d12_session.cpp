@@ -152,7 +152,7 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
     if (ran) return true;
-    if (!refusal_.removes(d3d12proto::command_name(command_id), reply, only_device, removed_ != 0u)) return false;
+    if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
     removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
     return true;
 }

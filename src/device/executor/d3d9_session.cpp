@@ -72,7 +72,7 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     arena_ = nullptr;
     if (ran) return true;
     const uint32_t device = selected_ == nullptr ? 0u : selected_->id_;
-    if (!refusal_.removes(d3d9proto::command_name(command_id), reply, device,
+    if (!refusal_.removes(d3d9proto::command_name(command_id), device,
                           selected_ != nullptr && selected_->removed_ != 0u))
         return false;
     selected_->removed_ = static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR);

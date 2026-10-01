@@ -68,8 +68,6 @@ Status WireWriter::status() const { return status_; }
 size_t WireWriter::offset() const { return offset_; }
 size_t WireWriter::wanted() const { return wanted_; }
 
-size_t WireWriter::capacity() const { return capacity_; }
-
 bool WireWriter::invariants_hold() const
 {
     return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u);

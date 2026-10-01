@@ -64,11 +64,6 @@ TEST(wire_writer, after_a_failure_every_write_is_ignored)
 TEST(wire_writer, a_null_destination_has_no_capacity)
 { WireWriter writer(nullptr, 64u);
   CHECK(writer.invariants_hold());
-  /* What a session reads to tell a command the guest waits on from one it
-   * does not: only an awaited reply is lent room. */
-  CHECK_EQ(writer.capacity(), 0u);
-  std::uint8_t bytes[8] = {};
-  CHECK_EQ(WireWriter(bytes, sizeof bytes).capacity(), sizeof bytes);
   writer.write_u8(1u);
   CHECK_STATUS(writer.status(), Status::too_large); }
 
