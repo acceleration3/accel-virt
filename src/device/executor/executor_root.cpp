@@ -186,7 +186,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
     case AV_EXECUTOR_SUB_API_D3D:
         return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
-                                     apis_->surfaces(gpu.index()));
+                                     apis_->surfaces(gpu.index()), apis_->d3d9_device(gpu.index()));
     default: vulkan_[slot].initialize(gpu); return true;
     }
 }

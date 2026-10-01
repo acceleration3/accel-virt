@@ -59,7 +59,7 @@ apply_series "$ROOT/third_party/dxvk" "$ROOT"/tools/dxvk-patches/*.patch
 # memory through, and shared textures and fences as fds: tools/vkd3d-proton-patches.
 apply_series "$ROOT/third_party/vkd3d-proton" "$ROOT"/tools/vkd3d-proton-patches/*.patch
 
-# Direct3D 8, 9 and 10 stay out: the guest's user-mode driver serves 11 and 12.
-build dxvk "$ROOT/third_party/dxvk" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
+# Direct3D 8 and 10 stay out: the guest's user-mode driver serves 9, 11 and 12.
+build dxvk "$ROOT/third_party/dxvk" -Denable_d3d8=false -Denable_d3d9=true -Denable_d3d10=false
 build vkd3d-proton "$ROOT/third_party/vkd3d-proton"
 ls -1 "$PREFIX/lib"/*.so

@@ -10,7 +10,7 @@ namespace av {
 
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
-      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, surfaces_{}, extensions_{}, count_(0u),
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, surfaces_{}, extensions_{}, count_(0u),
       opened_(false)
       {
           AV_SCOPE("LoaderHostApis::LoaderHostApis");
@@ -93,6 +93,8 @@ void LoaderHostApis::enumerate()
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
                 if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i])) d3d11_devices_[i].pair(&d3d12_devices_[i]);
+                /* So does Direct3D 9, where DXVK's d3d9 is there too. */
+                static_cast<void>(d3d9_devices_[i].open(d3d_runtime_, uuids_[i]));
             }
     }
     count_ = found;
@@ -134,6 +136,7 @@ void LoaderHostApis::close()
     for (uint32_t i = 0u; i < count_; i++) {
         gl_displays_[i].close();
         d3d12_devices_[i].close();
+        d3d9_devices_[i].close();
         d3d11_devices_[i].close();
         opencl_devices_[i].forget();
     }
@@ -198,6 +201,12 @@ D3d11HostDevice *LoaderHostApis::d3d11_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d11_device");
     return index < count_ && d3d11_devices_[index].opened() ? &d3d11_devices_[index] : nullptr;
+}
+
+D3d9HostDevice *LoaderHostApis::d3d9_device(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::d3d9_device");
+    return index < count_ && d3d9_devices_[index].opened() ? &d3d9_devices_[index] : nullptr;
 }
 
 D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)

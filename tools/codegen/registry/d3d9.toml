@@ -1,0 +1,394 @@
+# The Direct3D 9 commands the user-mode driver (avumd.dll) sends and the
+# executor runs on the host's Direct3D 9 - DXVK's native d3d9.
+#
+# The third registry on the Direct3D sub-API's wire, beside d3d.toml (11) and
+# d3d12.toml (12), and written the same way: values are the Direct3D 9 *API*'s
+# - D3DFORMAT, D3DRENDERSTATETYPE, D3DPOOL, D3DUSAGE - which the guest
+# translates from the DDI's once, and the host judges before DXVK sees them.
+#
+# Objects are named by a 32-bit id the guest chooses, unique within its
+# session and shared with the session's Direct3D 11 and 12 objects; 0 is
+# "none" wherever a binding may be empty. Every object belongs to the device
+# that made it, and a command naming one of another device's is refused.
+#
+# Ids are stable: a command keeps its id for as long as the wire does.
+# 0x2000-0x2fff are Direct3D 9's.
+
+[meta]
+api = 4
+prefix = "d3d9"
+first_id = 0x2000
+last_id = 0x2fff
+
+# ---------------------------------------------------------------- structs
+
+[structs.Rect]
+fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
+
+[structs.Box]
+fields = ["u32 left", "u32 top", "u32 front", "u32 right", "u32 bottom", "u32 back"]
+
+# D3DVIEWPORT9.
+[structs.Viewport]
+fields = ["u32 x", "u32 y", "u32 width", "u32 height", "f32 min_z", "f32 max_z"]
+
+# D3DVERTEXELEMENT9, widened: type is a D3DDECLTYPE, method a D3DDECLMETHOD,
+# usage a D3DDECLUSAGE.
+[structs.VertexElement]
+fields = ["u32 stream", "u32 offset", "u32 type", "u32 method", "u32 usage", "u32 usage_index"]
+
+# D3DMATERIAL9.
+[structs.Material]
+fields = ["f32 diffuse[4]", "f32 ambient[4]", "f32 specular[4]", "f32 emissive[4]", "f32 power"]
+
+# D3DLIGHT9; type is a D3DLIGHTTYPE.
+[structs.Light]
+fields = ["u32 type", "f32 diffuse[4]", "f32 specular[4]", "f32 ambient[4]", "f32 position[3]",
+          "f32 direction[3]", "f32 range", "f32 falloff", "f32 attenuation[3]", "f32 theta", "f32 phi"]
+
+# ---------------------------------------------------------------- device
+
+[[command]]
+name = "CreateDevice9"
+id = 0x2000
+doc = """One of the session's Direct3D 9 devices, on the host's Direct3D 9 for this GPU, named by a non-zero id
+the guest chooses and selected until another is. A device has no window on the host: what it draws reaches the
+screen through the guest's presents, never through a host swap chain. An hresult that is not S_OK makes no
+device."""
+params = ["u32 device", "u32 flags"]
+reply = ["u32 hresult"]
+
+[[command]]
+name = "QueryCaps9"
+id = 0x2004
+doc = """What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter: the D3DCAPS9 structure as its
+bytes, and the adapter's identity. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is
+answered."""
+params = []
+reply = ["u32 hresult", "u32 vendor_id", "u32 device_id", "u32 subsystem_id", "u32 revision",
+         "u32 video_memory_mb", "out_bytes caps"]
+
+[[command]]
+name = "QueryFormats9"
+id = 0x2005
+doc = """What each D3DFORMAT in `formats` can be, as a u32 of bits each answered by IDirect3D9::CheckDeviceFormat
+(or CheckDeviceType for bit 12) against an X8R8G8B8 display: bit 0 a texture, 1 a cube texture, 2 a volume
+texture, 3 a render-target texture, 4 a render-target surface, 5 a depth-stencil surface, 6 a vertex texture,
+7 read as sRGB, 8 written as sRGB, 9 filtered, 10 blended after the pixel shader, 11 mipmaps it makes itself,
+12 a windowed back buffer, 13 an offscreen plain surface, 14 a legacy bump map, 15 a depth texture
+(D3DUSAGE_DEPTHSTENCIL on a texture), 16 a vertex buffer element (D3DUSAGE_QUERY_VERTEXTEXTURE is bit 6);
+and in the next u32 the multisample types (bit n: D3DMULTISAMPLE_TYPE n) it renders at windowed. Two u32s a
+format, in the order asked."""
+params = ["u32 count", "u32 formats[count] max 256"]
+reply = ["out_bytes support"]
+
+[[command]]
+name = "QueryMultisample9"
+id = 0x2006
+doc = """IDirect3D9::CheckDeviceMultiSampleType, windowed: hresult, and the quality levels it offers."""
+params = ["u32 format", "u32 multisample"]
+reply = ["u32 hresult", "u32 quality_levels"]
+
+[[command]]
+name = "Flush9"
+id = 0x2007
+doc = """Ends the scene the selected device is in and begins the next: what it drew so far goes to the GPU."""
+params = []
+
+[[command]]
+name = "SelectDevice9"
+id = 0x2001
+doc = """The device every later Direct3D 9 command runs on, until the next selection."""
+params = ["u32 device"]
+
+[[command]]
+name = "Finish9"
+id = 0x2002
+doc = """Waits until the host has finished every command sent before it. hresult is the selected device's removed
+reason: S_OK while it is not removed."""
+params = []
+reply = ["u32 hresult"]
+
+[[command]]
+name = "Destroy9"
+id = 0x2003
+doc = """Any object these commands made, a device included, by id. A destroyed device takes nothing else with it:
+its objects stay until each is destroyed, and are refused wherever they are named."""
+params = ["u32 object"]
+
+# ---------------------------------------------------------------- resources
+
+[[command]]
+name = "CreateSurface9"
+id = 0x2100
+doc = """A surface of its own: kind 1 a render target, 2 a depth-stencil surface, 3 an offscreen plain surface.
+format is a D3DFORMAT, multisample a D3DMULTISAMPLE_TYPE. flags bit 0: lockable (a render target) or discard
+(a depth-stencil surface)."""
+params = ["u32 surface", "u32 kind", "u32 width", "u32 height", "u32 format", "u32 multisample", "u32 quality",
+          "u32 flags"]
+
+[[command]]
+name = "CreateTexture9"
+id = 0x2102
+doc = """A texture: type 1 2D, 2 cube (height is the edge, depth 1), 3 volume. usage is D3DUSAGE_*, format a
+D3DFORMAT, pool the guest's D3DPOOL. The host places it as it can draw and write it: a render target or
+depth-stencil texture in D3DPOOL_DEFAULT, a dynamic one in D3DPOOL_DEFAULT as dynamic, everything else managed,
+which the guest's writes reach without a staging copy. levels 0 is the whole chain."""
+params = ["u32 texture", "u32 type", "u32 width", "u32 height", "u32 depth", "u32 levels", "u32 usage",
+          "u32 format", "u32 pool"]
+
+[[command]]
+name = "CreateVertexBuffer9"
+id = 0x2103
+doc = """A vertex buffer of `length` bytes, placed as a texture is. fvf is the D3DFVF it was made with, 0 for none."""
+params = ["u32 buffer", "u32 length", "u32 usage", "u32 fvf", "u32 pool"]
+
+[[command]]
+name = "CreateIndexBuffer9"
+id = 0x2104
+doc = """An index buffer of `length` bytes of format D3DFMT_INDEX16 (101) or D3DFMT_INDEX32 (102)."""
+params = ["u32 buffer", "u32 length", "u32 usage", "u32 format", "u32 pool"]
+
+[[command]]
+name = "WriteTexture9"
+id = 0x2105
+doc = """`data` into `box` of subresource `subresource` (face * levels + level for a cube): rows `row_pitch` bytes
+apart, slices `slice_pitch` apart, as many as the box has. flags are the D3DLOCK_* the guest locked with
+(D3DLOCK_DISCARD, D3DLOCK_NOOVERWRITE). A box outside the subresource, or data shorter than it, is refused."""
+params = ["u32 texture", "u32 subresource", "Box box", "u32 row_pitch", "u32 slice_pitch", "u32 flags",
+          "bytes data"]
+
+[[command]]
+name = "WriteBuffer9"
+id = 0x2106
+doc = """`data` at `offset` of a vertex or index buffer; flags as WriteTexture9's."""
+params = ["u32 buffer", "u32 offset", "u32 flags", "bytes data"]
+
+[[command]]
+name = "GenerateMips9"
+id = 0x2107
+doc = """Every level below the top of a texture made with D3DUSAGE_AUTOGENMIPMAP, from the top, filtered with
+`filter` (a D3DTEXTUREFILTERTYPE)."""
+params = ["u32 texture", "u32 filter"]
+
+[[command]]
+name = "ReadSurface9"
+id = 0x2101
+doc = """The pixels of a surface, or of level `subresource` of a texture, as they are once everything sent before
+has run: rows `pitch` bytes apart, as many as fit. hresult is not S_OK for a surface that cannot be read, and then
+nothing is written."""
+params = ["u32 surface", "u32 subresource"]
+reply = ["u32 hresult", "u32 width", "u32 height", "u32 format", "u32 pitch", "out_bytes pixels"]
+
+# ---------------------------------------------------------------- output
+
+[[command]]
+name = "StretchRect9"
+id = 0x2108
+doc = """IDirect3DDevice9::StretchRect from a surface (or texture level) to another of the same device. An empty
+rectangle (right <= left) is the whole surface. filter is a D3DTEXTUREFILTERTYPE."""
+params = ["u32 source", "u32 source_subresource", "Rect source_rect", "u32 destination",
+          "u32 destination_subresource", "Rect destination_rect", "u32 filter"]
+
+[[command]]
+name = "ColorFill9"
+id = 0x2109
+doc = """IDirect3DDevice9::ColorFill of a render-target or offscreen surface (or texture level); an empty
+rectangle is the whole surface."""
+params = ["u32 surface", "u32 subresource", "Rect rect", "u32 color"]
+
+# ---------------------------------------------------------------- shaders
+
+[[command]]
+name = "CreateVertexShader9"
+id = 0x2300
+doc = """A vertex shader from its Direct3D 9 token stream, as IDirect3DDevice9::CreateVertexShader takes it."""
+params = ["u32 shader", "bytes code"]
+
+[[command]]
+name = "CreatePixelShader9"
+id = 0x2301
+params = ["u32 shader", "bytes code"]
+
+[[command]]
+name = "CreateVertexDeclaration9"
+id = 0x2302
+doc = """A vertex declaration; the end element is not sent."""
+params = ["u32 declaration", "u32 count", "VertexElement elements[count] max 64"]
+
+[[command]]
+name = "SetVertexShader9"
+id = 0x2303
+doc = """0 for none: the fixed-function pipeline."""
+params = ["u32 shader"]
+
+[[command]]
+name = "SetPixelShader9"
+id = 0x2304
+params = ["u32 shader"]
+
+[[command]]
+name = "SetVertexDeclaration9"
+id = 0x2305
+params = ["u32 declaration"]
+
+[[command]]
+name = "SetFvf9"
+id = 0x2306
+doc = """A D3DFVF code as the vertex format, in place of a declaration."""
+params = ["u32 fvf"]
+
+[[command]]
+name = "SetConstantsF9"
+id = 0x2307
+doc = """Float constants of stage 0 (vertex) or 1 (pixel) from register `start`, four values a register."""
+params = ["u32 stage", "u32 start", "u32 value_count", "f32 values[value_count] max 1024"]
+
+[[command]]
+name = "SetConstantsI9"
+id = 0x2308
+doc = """Integer constants, four values a register."""
+params = ["u32 stage", "u32 start", "u32 value_count", "i32 values[value_count] max 64"]
+
+[[command]]
+name = "SetConstantsB9"
+id = 0x2309
+doc = """Boolean constants, one value a register."""
+params = ["u32 stage", "u32 start", "u32 value_count", "u32 values[value_count] max 16"]
+
+# ---------------------------------------------------------------- state
+
+[[command]]
+name = "SetRenderStates9"
+id = 0x2400
+doc = """(D3DRENDERSTATETYPE, value) pairs, in order."""
+params = ["u32 value_count", "u32 values[value_count] max 512"]
+
+[[command]]
+name = "SetSamplerStates9"
+id = 0x2401
+doc = """(sampler, D3DSAMPLERSTATETYPE, value) triples, in order; a sampler is 0-15, or D3DDMAPSAMPLER (256) and
+D3DVERTEXTEXTURESAMPLER0-3 (257-260)."""
+params = ["u32 value_count", "u32 values[value_count] max 768"]
+
+[[command]]
+name = "SetTextureStageStates9"
+id = 0x2402
+doc = """(stage, D3DTEXTURESTAGESTATETYPE, value) triples, in order; a stage is 0-7."""
+params = ["u32 value_count", "u32 values[value_count] max 768"]
+
+[[command]]
+name = "SetTexture9"
+id = 0x2403
+doc = """The texture a sampler reads, numbered as SetSamplerStates9's; 0 for none."""
+params = ["u32 sampler", "u32 texture"]
+
+[[command]]
+name = "SetStreamSource9"
+id = 0x2404
+doc = """Vertex stream 0-15; buffer 0 for none."""
+params = ["u32 stream", "u32 buffer", "u32 offset", "u32 stride"]
+
+[[command]]
+name = "SetStreamSourceFreq9"
+id = 0x2405
+doc = """IDirect3DDevice9::SetStreamSourceFreq, D3DSTREAMSOURCE_* bits and all."""
+params = ["u32 stream", "u32 setting"]
+
+[[command]]
+name = "SetIndices9"
+id = 0x2406
+params = ["u32 buffer"]
+
+[[command]]
+name = "SetViewport9"
+id = 0x2407
+params = ["Viewport viewport"]
+
+[[command]]
+name = "SetScissorRect9"
+id = 0x2408
+params = ["Rect rect"]
+
+[[command]]
+name = "SetDepthStencil9"
+id = 0x2409
+doc = """A depth-stencil surface or texture level; 0 for none."""
+params = ["u32 surface", "u32 subresource"]
+
+[[command]]
+name = "SetTransform9"
+id = 0x240a
+doc = """A D3DTRANSFORMSTATETYPE's matrix, row by row."""
+params = ["u32 state", "u32 value_count", "f32 matrix[value_count] max 16"]
+
+[[command]]
+name = "SetMaterial9"
+id = 0x240b
+params = ["Material material"]
+
+[[command]]
+name = "SetLight9"
+id = 0x240c
+params = ["u32 index", "Light light"]
+
+[[command]]
+name = "LightEnable9"
+id = 0x240d
+params = ["u32 index", "u32 enable"]
+
+[[command]]
+name = "SetClipPlane9"
+id = 0x240e
+params = ["u32 index", "u32 value_count", "f32 plane[value_count] max 4"]
+
+# ---------------------------------------------------------------- draws
+
+[[command]]
+name = "DrawPrimitive9"
+id = 0x2500
+doc = """type is a D3DPRIMITIVETYPE."""
+params = ["u32 type", "u32 start_vertex", "u32 primitive_count"]
+
+[[command]]
+name = "DrawIndexedPrimitive9"
+id = 0x2501
+params = ["u32 type", "i32 base_vertex", "u32 min_index", "u32 vertex_count", "u32 start_index",
+          "u32 primitive_count"]
+
+# ---------------------------------------------------------------- queries
+
+[[command]]
+name = "CreateQuery9"
+id = 0x2600
+doc = """A query of D3DQUERYTYPE `type`."""
+params = ["u32 query", "u32 type"]
+
+[[command]]
+name = "IssueQuery9"
+id = 0x2601
+doc = """D3DISSUE_BEGIN (2) or D3DISSUE_END (1)."""
+params = ["u32 query", "u32 flags"]
+
+[[command]]
+name = "GetQueryData9"
+id = 0x2602
+doc = """IDirect3DQuery9::GetData: hresult S_OK with the data, S_FALSE (1) while it is not there yet. flags
+D3DGETDATA_FLUSH (1)."""
+params = ["u32 query", "u32 flags"]
+reply = ["u32 hresult", "out_bytes data"]
+
+# ---------------------------------------------------------------- output
+
+[[command]]
+name = "SetRenderTarget9"
+id = 0x2200
+doc = """Render target `index` (0-3): a surface, or level `subresource` of a texture; 0 unbinds it, which target 0
+never is."""
+params = ["u32 index", "u32 surface", "u32 subresource"]
+
+[[command]]
+name = "Clear9"
+id = 0x2201
+doc = """IDirect3DDevice9::Clear: flags are D3DCLEAR_*, color a D3DCOLOR."""
+params = ["u32 rect_count", "Rect rects[rect_count] max 64", "u32 flags", "u32 color", "f32 z", "u32 stencil"]

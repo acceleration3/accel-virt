@@ -49,7 +49,18 @@ enum class D3dObjectKind : uint8_t {
     list12,
     fence12,
     query_heap12,
-    command_signature12
+    command_signature12,
+    /* Direct3D 9's, in its own session's table. */
+    surface9,
+    texture9,
+    cube_texture9,
+    volume_texture9,
+    vertex_buffer9,
+    index_buffer9,
+    vertex_shader9,
+    pixel_shader9,
+    vertex_declaration9,
+    query9
 };
 
 class D3dObjectTable {

@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "device/shim/physical_device_identity.hpp"
 
 #include <dlfcn.h>
 #include <stdio.h>
@@ -31,8 +32,9 @@ void *D3dRuntime::open_library(const char *name) const
 }
 
 D3dRuntime::D3dRuntime()
-    : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), create_factory_(nullptr),
-      create_device11_(nullptr), get_interface12_(nullptr), open_host_heap_(nullptr), open_dmabuf_heap_(nullptr),
+    : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), d3d9_(nullptr), create_factory_(nullptr),
+      create_device11_(nullptr), get_interface12_(nullptr), create9_(nullptr), open_host_heap_(nullptr),
+      open_dmabuf_heap_(nullptr),
       serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
@@ -79,6 +81,8 @@ bool D3dRuntime::open()
         export_image_ = reinterpret_cast<ExportImage>(dlsym(d3d12core_, "vkd3d_proton_export_image"));
         export_fence_ = reinterpret_cast<ExportFence>(dlsym(d3d12core_, "vkd3d_proton_export_fence"));
     }
+    d3d9_ = open_library("libdxvk_d3d9.so");
+    if (d3d9_ != nullptr) create9_ = reinterpret_cast<Create9>(dlsym(d3d9_, "Direct3DCreate9"));
     return true;
 }
 
@@ -91,6 +95,7 @@ void D3dRuntime::close()
     create_factory_ = nullptr;
     create_device11_ = nullptr;
     get_interface12_ = nullptr;
+    create9_ = nullptr;
     open_host_heap_ = nullptr;
     open_dmabuf_heap_ = nullptr;
     serialize_root_ = nullptr;
@@ -100,6 +105,7 @@ void D3dRuntime::close()
     d3d11_ = nullptr;
     d3d12core_ = nullptr;
     d3d12_ = nullptr;
+    d3d9_ = nullptr;
 }
 
 bool D3dRuntime::has_d3d11() const
@@ -112,6 +118,18 @@ bool D3dRuntime::has_d3d12() const
 {
     AV_SCOPE("D3dRuntime::has_d3d12");
     return get_interface12_ != nullptr;
+}
+
+bool D3dRuntime::has_d3d9() const
+{
+    AV_SCOPE("D3dRuntime::has_d3d9");
+    return create9_ != nullptr;
+}
+
+IDirect3D9 *D3dRuntime::create_d3d9() const
+{
+    AV_SCOPE("D3dRuntime::create_d3d9");
+    return create9_ != nullptr ? create9_(D3D_SDK_VERSION) : nullptr;
 }
 
 IDXGIAdapter1 *D3dRuntime::adapter_for(const uint8_t *uuid) const
@@ -129,21 +147,9 @@ IDXGIAdapter1 *D3dRuntime::adapter_for(const uint8_t *uuid) const
             VkInstance instance = VK_NULL_HANDLE;
             VkPhysicalDevice physical = VK_NULL_HANDLE;
             interop->GetVulkanHandles(&instance, &physical);
-            VkPhysicalDeviceIDProperties identity = {};
-            identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
-            VkPhysicalDeviceProperties2 properties = {};
-            properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-            properties.pNext = &identity;
-            /* Through DXVK's own instance: a physical device is only
-             * meaningful to the instance that enumerated it. */
-            auto query = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
-                vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties2"));
-            if (query != nullptr) {
-                query(physical, &properties);
-                if (memcmp(identity.deviceUUID, uuid, uuid_bytes) == 0) {
-                    found = adapter;
-                    adapter = nullptr;
-                }
+            if (PhysicalDeviceIdentity(instance, physical).is(uuid)) {
+                found = adapter;
+                adapter = nullptr;
             }
             interop->Release();
         }

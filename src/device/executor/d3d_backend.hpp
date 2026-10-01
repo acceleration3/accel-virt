@@ -14,6 +14,7 @@
 #define AV_D3D_BACKEND_HPP
 
 #include "device/executor/d3d12_session.hpp"
+#include "device/executor/d3d9_session.hpp"
 #include "device/executor/d3d_context_states.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/executor/guest_region.hpp"
@@ -34,6 +35,7 @@ namespace av {
 
 class D3d11HostDevice;
 class D3d12HostDevice;
+class D3d9HostDevice;
 class SharedSurfaces;
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
@@ -44,11 +46,11 @@ public:
     D3dBackend();
 
     /* Binds this session to its GPU's Direct3D 11 device and, where it has
-     * one, its Direct3D 12 device, and to the surfaces its presents publish
-     * (SharedSurfaces); all must outlive it. False for a GPU with no Direct3D
-     * 11 device: that is what says Direct3D is served at all. */
+     * them, its Direct3D 12 device and its Direct3D 9, and to the surfaces its
+     * presents publish (SharedSurfaces); all must outlive it. False for a GPU
+     * with no Direct3D 11 device: that is what says Direct3D is served at all. */
     [[nodiscard]] bool initialize(D3d11HostDevice *device11, D3d12HostDevice *device12 = nullptr,
-                                  SharedSurfaces *surfaces = nullptr);
+                                  SharedSurfaces *surfaces = nullptr, D3d9HostDevice *device9 = nullptr);
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;
@@ -225,6 +227,8 @@ private:
     GuestRegion             region_;
     /* Direct3D 12's half of the session, sharing its blob arena. */
     D3d12Session            d3d12_;
+    /* Direct3D 9's, sharing it too. */
+    D3d9Session             d3d9_;
     QueryResultPublisher    published_;
     ConstantRing            constants_;
     /* The last shared key an open found nothing under: the guest asks again

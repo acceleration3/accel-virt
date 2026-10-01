@@ -78,7 +78,8 @@ set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_command_names.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_command_names.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_command_names.cpp)
 set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
@@ -93,7 +94,8 @@ set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_server.cpp
   # Direct3D's, from the registry this project writes (tools/codegen/registry).
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_server.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_server.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_dispatch_server.cpp)
 
 # The OpenGL tree writes its own gl_types.h from the registry and includes it by
 # name, so it needs its own directory on the include path and no external header.
@@ -131,7 +133,8 @@ set(AV_GENERATED_CLIENT_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_client.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_client.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_client.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_dispatch_client.cpp)
 if(AV_GENERATED)
   list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES} ${AV_GENERATED_CLIENT_SOURCES})
 endif()
@@ -484,6 +487,7 @@ foreach(src ${AV_UNIT_TESTS})
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
   if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d12_session_device" OR
      name STREQUAL "test_d3d12_session_features_device" OR name STREQUAL "test_d3d_gl_interop_device" OR
+     name STREQUAL "test_d3d9_session_device" OR
      name STREQUAL "test_d3d_vulkan_interop_device")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;AV_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")

@@ -1,4 +1,4 @@
-/* The host's Direct3D: DXVK's dxgi and d3d11 and vkd3d-proton's d3d12, built
+/* The host's Direct3D: DXVK's dxgi, d3d11 and d3d9 and vkd3d-proton's d3d12, built
  * natively for Linux from third_party/ and loaded into this process.
  *
  * Loaded rather than linked because they are optional: a host without them
@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 
+struct IDirect3D9;
 struct IDXGIAdapter1;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -38,6 +39,7 @@ public:
     void               close();
     bool               has_d3d11() const;
     bool               has_d3d12() const;
+    bool               has_d3d9() const;
 
     /* The DXGI adapter whose Vulkan device has this UUID, with a reference the
      * caller owns; null for none. */
@@ -46,6 +48,8 @@ public:
      * 12_1; the HRESULT, with the device and its immediate context on S_OK. */
     int32_t create_device11(IDXGIAdapter1 *adapter, ID3D11Device *&device, ID3D11DeviceContext *&context,
                             uint32_t &feature_level) const;
+    /* DXVK's Direct3D 9, with a reference the caller owns; null without it. */
+    IDirect3D9 *create_d3d9() const;
     /* A vkd3d-proton device of its own on the Vulkan device with this UUID;
      * `device` is an ID3D12Device, null on failure. */
     int32_t create_device12(const uint8_t *uuid, void *&device) const;
@@ -74,6 +78,7 @@ private:
                                        const uint32_t *levels, uint32_t level_count, uint32_t sdk_version,
                                        ID3D11Device **device, uint32_t *level, ID3D11DeviceContext **context);
     using GetInterface12 = int32_t (*)(const void *clsid, const void *riid, void **object);
+    using Create9 = IDirect3D9 *(*)(uint32_t sdk_version);
     using OpenHostHeap = int32_t (*)(void *device, void *address, uint64_t size, const void *riid, void **heap);
     using OpenDmabufHeap = int32_t (*)(void *device, void *address, int fd, uint64_t size, const void *riid,
                                        void **heap);
@@ -91,9 +96,11 @@ private:
     void *d3d11_;
     void *d3d12core_;
     void *d3d12_;
+    void *d3d9_;
     CreateFactory  create_factory_;
     CreateDevice11 create_device11_;
     GetInterface12 get_interface12_;
+    Create9        create9_;
     OpenHostHeap   open_host_heap_;
     OpenDmabufHeap open_dmabuf_heap_;
     SerializeRoot  serialize_root_;

@@ -78,6 +78,12 @@ D3d11HostDevice *MockHostApis::d3d11_device(uint32_t index)
     return index == d3d11_index_ ? &d3d11_ : nullptr;
 }
 
+D3d9HostDevice *MockHostApis::d3d9_device(uint32_t)
+{
+    questions_++;
+    return nullptr;
+}
+
 D3d12HostDevice *MockHostApis::d3d12_device(uint32_t)
 {
     questions_++;

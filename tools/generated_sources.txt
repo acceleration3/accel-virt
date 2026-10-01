@@ -8,3 +8,4 @@ opencl av_codegen.opencl third_party/khronos/cl.xml src/proto/generated/opencl -
 opengl av_codegen.opengl third_party/khronos/gl.xml src/proto/generated/opengl --wgl @third_party/khronos/wgl.xml --profile @tools/codegen/profiles/opengl.toml --ids @tools/codegen/profiles/opengl_ids.toml --proc-table @tools/codegen/profiles/opengl_proc_table.txt
 d3d av_codegen.d3d tools/codegen/registry/d3d.toml src/proto/generated/d3d
 d3d12 av_codegen.d3d tools/codegen/registry/d3d12.toml src/proto/generated/d3d12
+d3d9 av_codegen.d3d tools/codegen/registry/d3d9.toml src/proto/generated/d3d9

@@ -1,5 +1,5 @@
-/* The Direct3D 11 and DXGI API as DXVK's native build declares it, and the one
- * DXVK interop interface the executor calls - declared here rather than taken
+/* The Direct3D 9, 11 and DXGI API as DXVK's native build declares it, and the
+ * DXVK interop interfaces the executor calls - declared here rather than taken
  * from DXVK's source tree, whose header drags in the whole of DXVK's internals.
  *
  * Included only by translation units that call into DXVK. Its headers define
@@ -9,6 +9,7 @@
 #define AV_D3D_HEADERS_HPP
 
 #include <d3d11_4.h>
+#include <d3d9.h>
 /* vkd3d-proton returns a struct from a COM method through a pointer, as the
  * Windows ABI does (vkd3d_d3d12.idl defines this for itself); the native
  * d3d12.h declares that shape only when asked. Only d3d12.h has such methods. */
@@ -25,6 +26,15 @@ IDXGIVkInteropAdapter : public IUnknown {
     virtual void STDMETHODCALLTYPE GetVulkanHandles(VkInstance *instance, VkPhysicalDevice *physical_device) = 0;
 };
 __CRT_UUID_DECL(IDXGIVkInteropAdapter, 0x3a6d8f2c, 0xb0e8, 0x4ab4, 0xb4, 0xdc, 0x4f, 0xd2, 0x48, 0x91, 0xbf, 0xa5);
+
+/* DXVK's ID3D9VkInteropInterface (src/d3d9/d3d9_interfaces.h): which Vulkan
+ * physical device a Direct3D 9 adapter ordinal is. */
+MIDL_INTERFACE("3461a81b-ce41-485b-b6b5-fcf08ba6a6bd")
+ID3D9VkInteropInterface : public IUnknown {
+    virtual void STDMETHODCALLTYPE GetInstanceHandle(VkInstance *instance) = 0;
+    virtual void STDMETHODCALLTYPE GetPhysicalDeviceHandle(UINT adapter, VkPhysicalDevice *physical_device) = 0;
+};
+__CRT_UUID_DECL(ID3D9VkInteropInterface, 0x3461a81b, 0xce41, 0x485b, 0xb6, 0xb5, 0xfc, 0xf0, 0x8b, 0xa6, 0xa6, 0xbd);
 
 /* ID3D12DeviceFactory (d3d12.h of the Agility SDK, vkd3d-proton's
  * include/vkd3d_d3d12.idl), which DXVK's native d3d12.h predates: how the

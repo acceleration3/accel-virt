@@ -43,6 +43,7 @@ public:
     const OpenClDevice *opencl_device(uint32_t index) override;
     D3d11HostDevice    *d3d11_device(uint32_t index) override;
     D3d12HostDevice    *d3d12_device(uint32_t index) override;
+    D3d9HostDevice     *d3d9_device(uint32_t index) override;
     SharedSurfaces     *surfaces(uint32_t index) override;
 
 private:
