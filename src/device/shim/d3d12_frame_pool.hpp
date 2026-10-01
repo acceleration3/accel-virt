@@ -16,6 +16,8 @@
 #ifndef AV_D3D12_FRAME_POOL_HPP
 #define AV_D3D12_FRAME_POOL_HPP
 
+#include "device/surfaces/frame_claim.hpp"
+#include "device/surfaces/frame_pool.hpp"
 #include "device/surfaces/staged_frame.hpp"
 
 #include <stdint.h>
@@ -31,9 +33,6 @@ namespace av {
 
 class D3d12FramePool {
 public:
-    /* More than SharedSurfaces keeps of one GPU's Direct3D 12 frames at once
-     * is never wanted: past it a present stages nothing and is not shown. */
-    static constexpr uint32_t capacity = 16u;
 
     D3d12FramePool();
     ~D3d12FramePool();
@@ -57,7 +56,8 @@ private:
         Frame();
         ~Frame();
 
-        /* Free to out, atomically; false when it was out. */
+        /* Free and idle to out, atomically; false when it was out or the GPU
+         * is still copying into it. */
         bool    claim();
         /* Whether the GPU has finished the last copy queued into it. */
         bool    idle() const;
@@ -94,14 +94,14 @@ private:
         uint32_t                   row_pitch_;
         uint32_t                   width_;
         uint32_t                   height_;
-        uint32_t                   out_;
+        FrameClaim                 claim_;
     };
 
     /* A free, idle frame, claimed: one already holding `bytes` first. */
     Frame *claim(uint64_t bytes);
 
     ID3D12Device *device_;
-    Frame         frames_[capacity];
+    FramePool<Frame> frames_;
 };
 
 }  // namespace av

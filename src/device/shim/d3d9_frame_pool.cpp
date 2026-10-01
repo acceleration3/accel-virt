@@ -19,29 +19,27 @@ StagedFrame *D3d9FramePool::stage(IDirect3DDevice9 *device, IDirect3DSurface9 *s
                                   uint32_t height, uint32_t format, bool multisampled)
 {
     AV_SCOPE("D3d9FramePool::stage");
-    Frame *chosen = nullptr;
-    for (Frame &frame : frames_) {
-        if (frame.out()) continue;
-        if (frame.fits(device, width, height, format, multisampled)) {
-            chosen = &frame;
-            break;
-        }
-        if (chosen == nullptr) chosen = &frame;
+    Frame *const chosen = frames_.claim(
+        [&](const Frame &frame) { return frame.fits(device, width, height, format, multisampled); });
+    if (chosen == nullptr) return nullptr;
+    if (!chosen->take(device, source, width, height, format, multisampled)) {
+        chosen->release();
+        return nullptr;
     }
-    if (chosen == nullptr || !chosen->take(device, source, width, height, format, multisampled)) return nullptr;
     return chosen;
 }
 
 void D3d9FramePool::clear()
 {
     AV_SCOPE("D3d9FramePool::clear");
-    for (Frame &frame : frames_)
+    frames_.each([](Frame &frame) {
         if (!frame.out()) frame.drop();
+    });
 }
 
 D3d9FramePool::Frame::Frame()
     : device_(nullptr), surface_(nullptr), resolved_(nullptr), copied_(nullptr), width_(0u), height_(0u), format_(0u), mapped_(false),
-      pixels_(nullptr), pitch_(0u), out_(0u)
+      pixels_(nullptr), pitch_(0u), claim_()
 {
     AV_SCOPE("D3d9FramePool::Frame::Frame");
 }
@@ -55,7 +53,13 @@ D3d9FramePool::Frame::~Frame()
 bool D3d9FramePool::Frame::out() const
 {
     AV_SCOPE("D3d9FramePool::Frame::out");
-    return __atomic_load_n(&out_, __ATOMIC_ACQUIRE) != 0u;
+    return claim_.out();
+}
+
+bool D3d9FramePool::Frame::claim()
+{
+    AV_SCOPE("D3d9FramePool::Frame::claim");
+    return claim_.claim();
 }
 
 bool D3d9FramePool::Frame::fits(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format,
@@ -100,7 +104,6 @@ bool D3d9FramePool::Frame::take(IDirect3DDevice9 *device, IDirect3DSurface9 *sou
         return false;
     if (FAILED(device_->GetRenderTargetData(resolved_ != nullptr ? resolved_ : source, surface_))) return false;
     copied_->Issue(D3DISSUE_END);
-    __atomic_store_n(&out_, 1u, __ATOMIC_RELEASE);
     return true;
 }
 
@@ -148,7 +151,7 @@ void D3d9FramePool::Frame::release()
         surface_->UnlockRect();
         mapped_ = false;
     }
-    __atomic_store_n(&out_, 0u, __ATOMIC_RELEASE);
+    claim_.give_back();
 }
 
 }  // namespace av

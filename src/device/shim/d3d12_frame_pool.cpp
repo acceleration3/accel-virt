@@ -22,7 +22,7 @@ void D3d12FramePool::bind(ID3D12Device *device)
 {
     AV_SCOPE("D3d12FramePool::bind");
     if (device == device_) return;
-    for (Frame &frame : frames_) frame.drop();
+    frames_.each([](Frame &frame) { frame.drop(); });
     device_ = device;
 }
 
@@ -71,16 +71,12 @@ StagedFrame *D3d12FramePool::stage(ID3D12CommandQueue *queue, ID3D12Resource *so
 D3d12FramePool::Frame *D3d12FramePool::claim(uint64_t bytes)
 {
     AV_SCOPE("D3d12FramePool::claim");
-    for (Frame &frame : frames_)
-        if (frame.holds(bytes) && frame.idle() && frame.claim()) return &frame;
-    for (Frame &frame : frames_)
-        if (frame.idle() && frame.claim()) return &frame;
-    return nullptr;
+    return frames_.claim([&](const Frame &frame) { return frame.holds(bytes); });
 }
 
 D3d12FramePool::Frame::Frame()
     : buffer_(nullptr), resolved_(nullptr), resolved_format_(0u), mapped_(nullptr), bytes_(0u), allocator_(nullptr), list_(nullptr), fence_(nullptr),
-      value_(0u), offset_(0u), row_pitch_(0u), width_(0u), height_(0u), out_(0u)
+      value_(0u), offset_(0u), row_pitch_(0u), width_(0u), height_(0u), claim_()
 {
     AV_SCOPE("D3d12FramePool::Frame::Frame");
 }
@@ -94,8 +90,7 @@ D3d12FramePool::Frame::~Frame()
 bool D3d12FramePool::Frame::claim()
 {
     AV_SCOPE("D3d12FramePool::Frame::claim");
-    uint32_t free = 0u;
-    return __atomic_compare_exchange_n(&out_, &free, 1u, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    return idle() && claim_.claim();
 }
 
 /* A frame given back before its copy finished - evicted for a newer one -
@@ -270,7 +265,7 @@ StagedFrame::Reading D3d12FramePool::Frame::read(AvFrameView &view)
 void D3d12FramePool::Frame::release()
 {
     AV_SCOPE("D3d12FramePool::Frame::release");
-    __atomic_store_n(&out_, 0u, __ATOMIC_RELEASE);
+    claim_.give_back();
 }
 
 }  // namespace av

@@ -12,6 +12,8 @@
 #ifndef AV_D3D11_FRAME_POOL_HPP
 #define AV_D3D11_FRAME_POOL_HPP
 
+#include "device/surfaces/frame_claim.hpp"
+#include "device/surfaces/frame_pool.hpp"
 #include "device/surfaces/staged_frame.hpp"
 
 #include <stdint.h>
@@ -24,9 +26,6 @@ class D3d11HostDevice;
 
 class D3d11FramePool {
 public:
-    /* More than SharedSurfaces keeps of one GPU's Direct3D 11 frames at once
-     * is never wanted: past it a present stages nothing and is not shown. */
-    static constexpr uint32_t capacity = 16u;
 
     explicit D3d11FramePool(D3d11HostDevice &device);
     ~D3d11FramePool();
@@ -50,6 +49,8 @@ private:
 
         void    bind(D3d11HostDevice &device);
         bool    out() const;
+        /* Taken for a present (FramePool). */
+        bool    claim();
         bool    fits(uint32_t width, uint32_t height, uint32_t format) const;
         /* Under the device's lock: the copy queued into this frame, which is
          * out until given back. False when no texture of that shape is made. */
@@ -67,12 +68,10 @@ private:
         uint32_t         height_;
         uint32_t         format_;
         bool             mapped_;
-        /* 1 from take until release: written by a session and by the
-         * engine's thread, read by both. */
-        uint32_t         out_;
+        FrameClaim       claim_;
     };
 
-    Frame frames_[capacity];
+    FramePool<Frame> frames_;
 };
 
 }  // namespace av

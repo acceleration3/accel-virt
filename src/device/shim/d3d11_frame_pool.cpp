@@ -9,7 +9,7 @@ namespace av {
 D3d11FramePool::D3d11FramePool(D3d11HostDevice &device) : frames_()
 {
     AV_SCOPE("D3d11FramePool::D3d11FramePool");
-    for (Frame &frame : frames_) frame.bind(device);
+    frames_.each([&](Frame &frame) { frame.bind(device); });
 }
 
 D3d11FramePool::~D3d11FramePool()
@@ -21,27 +21,23 @@ StagedFrame *D3d11FramePool::stage(ID3D11Texture2D *source, uint32_t subresource
                                    uint32_t format)
 {
     AV_SCOPE("D3d11FramePool::stage");
-    Frame *chosen = nullptr;
-    for (Frame &frame : frames_) {
-        if (frame.out()) continue;
-        if (frame.fits(width, height, format)) {
-            chosen = &frame;
-            break;
-        }
-        if (chosen == nullptr) chosen = &frame;
+    Frame *const chosen = frames_.claim([&](const Frame &frame) { return frame.fits(width, height, format); });
+    if (chosen == nullptr) return nullptr;
+    if (!chosen->take(source, subresource, width, height, format)) {
+        chosen->release();
+        return nullptr;
     }
-    if (chosen == nullptr || !chosen->take(source, subresource, width, height, format)) return nullptr;
     return chosen;
 }
 
 void D3d11FramePool::clear()
 {
     AV_SCOPE("D3d11FramePool::clear");
-    for (Frame &frame : frames_) frame.drop();
+    frames_.each([](Frame &frame) { frame.drop(); });
 }
 
 D3d11FramePool::Frame::Frame()
-    : device_(nullptr), texture_(nullptr), width_(0u), height_(0u), format_(0u), mapped_(false), out_(0u)
+    : device_(nullptr), texture_(nullptr), width_(0u), height_(0u), format_(0u), mapped_(false), claim_()
 {
     AV_SCOPE("D3d11FramePool::Frame::Frame");
 }
@@ -61,7 +57,13 @@ void D3d11FramePool::Frame::bind(D3d11HostDevice &device)
 bool D3d11FramePool::Frame::out() const
 {
     AV_SCOPE("D3d11FramePool::Frame::out");
-    return __atomic_load_n(&out_, __ATOMIC_ACQUIRE) != 0u;
+    return claim_.out();
+}
+
+bool D3d11FramePool::Frame::claim()
+{
+    AV_SCOPE("D3d11FramePool::Frame::claim");
+    return claim_.claim();
 }
 
 bool D3d11FramePool::Frame::fits(uint32_t width, uint32_t height, uint32_t format) const
@@ -88,7 +90,6 @@ bool D3d11FramePool::Frame::take(ID3D11Texture2D *source, uint32_t subresource, 
     }
     device_->context()->CopySubresourceRegion(texture_, 0u, 0u, 0u, 0u, source, subresource, nullptr);
     device_->context()->Flush();
-    __atomic_store_n(&out_, 1u, __ATOMIC_RELEASE);
     return true;
 }
 
@@ -129,7 +130,7 @@ void D3d11FramePool::Frame::release()
         mapped_ = false;
         device_->unlock();
     }
-    __atomic_store_n(&out_, 0u, __ATOMIC_RELEASE);
+    claim_.give_back();
 }
 
 }  // namespace av

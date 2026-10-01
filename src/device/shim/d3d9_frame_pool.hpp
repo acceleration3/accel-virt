@@ -17,6 +17,8 @@
 #ifndef AV_D3D9_FRAME_POOL_HPP
 #define AV_D3D9_FRAME_POOL_HPP
 
+#include "device/surfaces/frame_claim.hpp"
+#include "device/surfaces/frame_pool.hpp"
 #include "device/surfaces/staged_frame.hpp"
 
 #include <stdint.h>
@@ -29,9 +31,6 @@ namespace av {
 
 class D3d9FramePool {
 public:
-    /* More than SharedSurfaces keeps of one GPU's frames at once is never
-     * wanted: past it a present stages nothing and is not shown. */
-    static constexpr uint32_t capacity = 16u;
 
     D3d9FramePool();
     ~D3d9FramePool();
@@ -54,6 +53,8 @@ private:
         ~Frame();
 
         bool    out() const;
+        /* Taken for a present (FramePool). */
+        bool    claim();
         bool    fits(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format,
                      bool multisampled) const;
         /* The copy queued into this frame, which is out until given back.
@@ -80,12 +81,10 @@ private:
         /* What the lock handed back while mapped. */
         const uint8_t     *pixels_;
         uint32_t           pitch_;
-        /* 1 from take until release: written by a session and by the
-         * engine's thread, read by both. */
-        uint32_t           out_;
+        FrameClaim         claim_;
     };
 
-    Frame frames_[capacity];
+    FramePool<Frame> frames_;
 };
 
 }  // namespace av
