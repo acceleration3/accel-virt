@@ -9,6 +9,8 @@
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/d3d9_host_device.hpp"
 #include "device/shim/loader_host_apis.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -342,3 +344,91 @@ TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK(hresult != 0u);
 }
+
+/* A present's point stages the target as the commands before it left it - a
+ * clear after it never reaches the frame - under the guest's key, mapped once
+ * the GPU has copied it and gone once let go. A point of 0 or a key of 0
+ * stages nothing; a surface of another format is abandoned, and the engine
+ * asking for it is refused at once rather than left waiting. */
+TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_it_drew)
+{
+    av::LoaderHostApis   apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d9HostDevice  *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    constexpr std::uint64_t key = 0x9150u;
+    constexpr std::uint32_t format_r5g6b5 = 23u;
+    av::SharedSurfaces      surfaces;
+    av::D3dBackend          backend;
+    CHECK(backend.initialize(device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend);
+    std::uint32_t   hresult = 1u;
+    CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
+    CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, red, 1.0f, 0u));
+    const Rect right = {static_cast<std::int32_t>(size / 2u), 0, static_cast<std::int32_t>(size),
+                        static_cast<std::int32_t>(size)};
+    CHECK(av_d3d9_Clear9(wire, 1u, &right, clear_target, blue, 1.0f, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 1u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, green, 1.0f, 0u));
+
+    AvFrameView view = {};
+    CHECK(surfaces.map(av::SurfacePoint(key, 1u), 1000u, view));
+    CHECK_EQ(view.width, size);
+    CHECK_EQ(view.height, size);
+    CHECK(view.row_pitch >= size * 4u);
+    std::uint32_t west = 0u, east = 0u;
+    std::memcpy(&west, view.pixels + (size / 2u) * view.row_pitch, sizeof west);
+    std::memcpy(&east, view.pixels + (size / 2u) * view.row_pitch + (size - 1u) * 4u, sizeof east);
+    CHECK_EQ(west, red);
+    CHECK_EQ(east, blue);
+    surfaces.unmap(av::SurfacePoint(key, 1u));
+    CHECK(!surfaces.map(av::SurfacePoint(key, 1u), 0u, view));
+
+    /* A multisampled target is resolved into the frame. */
+    constexpr std::uint32_t four_samples = 4u;
+    constexpr std::uint32_t sampled = 77u;
+    CHECK(av_d3d9_CreateSurface9(wire, sampled, kind_render_target, size, size, format_a8r8g8b8, four_samples, 0u,
+                                 0u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, sampled, 0u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, blue, 1.0f, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, sampled, 0u, key, 4u));
+    CHECK(surfaces.map(av::SurfacePoint(key, 4u), 1000u, view));
+    std::uint32_t resolved = 0u;
+    std::memcpy(&resolved, view.pixels + (size / 2u) * view.row_pitch + (size / 2u) * 4u, sizeof resolved);
+    CHECK_EQ(resolved, blue);
+    surfaces.unmap(av::SurfacePoint(key, 4u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
+
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, 0u, 2u));
+    CHECK(av_d3d9_CreateSurface9(wire, other_target, kind_render_target, size, size, format_r5g6b5, 0u, 0u, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, other_target, 0u, key, 3u));
+    CHECK(!surfaces.map(av::SurfacePoint(key, 3u), 0u, view));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(surfaces.invariants_hold());
+}
+
+/* A present point names a surface of the selected device or nothing: with
+ * none selected, or for a surface that is not there, it is refused. */
+TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
+{
+    av::LoaderHostApis   apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d9HostDevice  *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::SharedSurfaces surfaces;
+    av::D3dBackend     backend;
+    CHECK(backend.initialize(device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend);
+    std::uint32_t   hresult = 1u;
+    CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, 0x9151u, 1u));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK(hresult != 0u);
+    CHECK_EQ(wire.refused(), 0u);
+}
+

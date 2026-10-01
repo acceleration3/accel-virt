@@ -43,7 +43,7 @@ constexpr uint32_t depth_texture_bit = 15u;
 
 }  // namespace
 
-D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), memory_mb_(0u)
+D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), memory_mb_(0u), frames_()
 {
     AV_SCOPE("D3d9HostDevice::D3d9HostDevice");
 }
@@ -69,10 +69,18 @@ bool D3d9HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
 void D3d9HostDevice::close()
 {
     AV_SCOPE("D3d9HostDevice::close");
+    frames_.clear();
     if (d3d9_ != nullptr) d3d9_->Release();
     d3d9_ = nullptr;
     adapter_ = ~0u;
     memory_mb_ = 0u;
+}
+
+StagedFrame *D3d9HostDevice::stage_frame(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint32_t width,
+                                         uint32_t height, uint32_t format, bool multisampled)
+{
+    AV_SCOPE("D3d9HostDevice::stage_frame");
+    return d3d9_ != nullptr ? frames_.stage(device, source, width, height, format, multisampled) : nullptr;
 }
 
 bool D3d9HostDevice::opened() const

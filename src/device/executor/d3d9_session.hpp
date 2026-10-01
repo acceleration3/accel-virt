@@ -34,6 +34,7 @@ struct IUnknown;
 namespace av {
 
 class D3d9HostDevice;
+class SharedSurfaces;
 class GuestRegion;
 class WireArena;
 class WireReader;
@@ -61,7 +62,10 @@ public:
 
     /* Binds the session to its GPU's Direct3D 9, which must outlive it; null
      * is a GPU with none, on which every device create fails. */
-    void initialize(D3d9HostDevice *host);
+    /* `surfaces` is where a present point's frame is kept for the present
+     * engine; null where the device has none, and a present point stages
+     * nothing. */
+    void initialize(D3d9HostDevice *host, SharedSurfaces *surfaces);
     /* Every device and object let go. */
     void shut_down();
 
@@ -104,6 +108,7 @@ public:
                          uint32_t destination, uint32_t destination_subresource,
                          const d3d9proto::Rect &destination_rect, uint32_t filter) override;
     bool on_ColorFill9(uint32_t surface, uint32_t subresource, const d3d9proto::Rect &rect, uint32_t color) override;
+    bool on_PresentPoint9(uint32_t surface, uint32_t subresource, uint64_t key, uint32_t point) override;
 
     bool on_CreateVertexShader9(uint32_t shader, const uint8_t *code, uint64_t code_size) override;
     bool on_CreatePixelShader9(uint32_t shader, const uint8_t *code, uint64_t code_size) override;
@@ -183,6 +188,7 @@ private:
 
     GuestRegion    &region_;
     D3d9HostDevice *host_;
+    SharedSurfaces *surfaces_;
     D3dObjectTable &objects_;
     Device          devices_[max_devices];
     Device         *selected_;

@@ -52,7 +52,7 @@ public:
         region_.take(guest, sizeof guest);
         CHECK_STATUS(table_storage.construct(), av::Status::ok);
         CHECK_STATUS(session_storage.construct(region_, table_storage.object()), av::Status::ok);
-        session_storage.object().initialize(nullptr);
+        session_storage.object().initialize(nullptr, nullptr);
     }
     ~FreshSession()
     {
@@ -153,6 +153,7 @@ TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
     CHECK(!session.on_GenerateMips9(nobody, 2u));
     CHECK(!session.on_StretchRect9(nobody, 0u, rect, nobody, 0u, rect, 2u));
     CHECK(!session.on_ColorFill9(nobody, 0u, rect, 0u));
+    CHECK(!session.on_PresentPoint9(nobody, 0u, 0x9152u, 1u));
     CHECK(!session.on_CreateVertexShader9(1u, data, sizeof data));
     CHECK(!session.on_CreatePixelShader9(1u, data, sizeof data));
     CHECK(!session.on_CreateVertexDeclaration9(1u, 1u, &element));

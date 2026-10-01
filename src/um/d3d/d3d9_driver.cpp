@@ -47,6 +47,7 @@ uint32_t D3d9Driver::slot_of(uint32_t kmt_adapter)
         text.append_hex(learned.VertexProcessingCaps, 8u);
         text.append(" DevCaps2 0x");
         text.append_hex(learned.DevCaps2, 8u);
+        text.append(caps_[slot].present_snapshots() ? " snapshots" : " no snapshots");
         log_.write(text.text());
         return slot;
     }

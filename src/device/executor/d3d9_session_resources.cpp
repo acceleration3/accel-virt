@@ -4,7 +4,11 @@
 #include "core/trace/function_scope.hpp"
 #include "device/executor/d3d9_session.hpp"
 #include "device/executor/d3d9_texture_write.hpp"
+#include "device/shim/d3d9_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
+#include "device/surfaces/staged_frame.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 
 #include <string.h>
@@ -364,6 +368,36 @@ bool D3d9Session::on_ColorFill9(uint32_t surface_id, uint32_t subresource, const
     ScopeExit  release([target] { target->Release(); });
     const RECT area = {rect.left, rect.top, rect.right, rect.bottom};
     return SUCCEEDED(selected_->device_->ColorFill(target, rect.right > rect.left ? &area : nullptr, color));
+}
+
+/* What D3dBackend::on_PresentPoint does for Direct3D 11: the frame staged
+ * where the commands before it left the surface, kept under the guest's key
+ * and point for the present engine. A surface it cannot stage is abandoned,
+ * so the present naming it is refused rather than left waiting. */
+bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, uint64_t key, uint32_t point)
+{
+    AV_SCOPE("D3d9Session::on_PresentPoint9");
+    if (selected_ == nullptr) return false;
+    IDirect3DSurface9 *const source = surface(surface_id, subresource);
+    if (source == nullptr) return false;
+    ScopeExit             release([source] { source->Release(); });
+    const SurfacePoint    frame(key, point);
+    if (surfaces_ == nullptr || host_ == nullptr || !frame.names()) return true;
+    D3DSURFACE_DESC desc = {};
+    if (FAILED(source->GetDesc(&desc)) || (desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_A8R8G8B8)) {
+        surfaces_->abandon(frame);
+        return true;
+    }
+    static_cast<void>(surfaces_->presented(frame));
+    StagedFrame *const staged = host_->stage_frame(selected_->device_, source, desc.Width, desc.Height,
+                                                   static_cast<uint32_t>(desc.Format),
+                                                   desc.MultiSampleType != D3DMULTISAMPLE_NONE);
+    if (staged == nullptr) {
+        surfaces_->abandon(frame);
+        return true;
+    }
+    if (!surfaces_->keep(frame, *staged)) staged->release();
+    return true;
 }
 
 }  // namespace av

@@ -150,6 +150,9 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
             return made;
         }
     }
+    /* Read back, not staged on the host (PresentPoint9): d3d9.dll's PresentCB
+     * builds the kernel's present itself and drops the private driver data a
+     * point rides in, so the miniport would blt pages nothing wrote. */
     const HRESULT published = publish(*source, args->SrcSubResourceIndex);
     if (FAILED(published)) {
         log_once(said_present_, "avumd: a Direct3D 9 present whose buffer could not be read back");

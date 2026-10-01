@@ -75,6 +75,12 @@ namespace av::d3d9proto {
 // IDirect3DDevice9::ColorFill of a render-target or offscreen surface (or texture level); an empty
 // rectangle is the whole surface.
 [[nodiscard]] bool av_d3d9_ColorFill9(::av::ClientTransport& t, uint32_t surface, uint32_t subresource, const Rect& rect, uint32_t color);
+// A blt-model present of a render-target surface (or texture level), the `point`th of the kernel surface
+// `key` names: the pixels as the commands before this one left them, copied on the host GPU into a frame the present
+// engine reads by `key` and `point` (docs/shared-surfaces.md, docs/protocol.md "Present engine"). Nothing is
+// answered; a point or key of 0, or a surface not of four-byte pixels, stages nothing, and the present that names the
+// point is refused.
+[[nodiscard]] bool av_d3d9_PresentPoint9(::av::ClientTransport& t, uint32_t surface, uint32_t subresource, uint64_t key, uint32_t point);
 // A vertex shader from its Direct3D 9 token stream, as IDirect3DDevice9::CreateVertexShader takes it.
 [[nodiscard]] bool av_d3d9_CreateVertexShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size);
 [[nodiscard]] bool av_d3d9_CreatePixelShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size);

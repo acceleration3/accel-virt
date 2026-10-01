@@ -418,6 +418,24 @@ static bool decode_ColorFill9(ServerDispatch& s, ::av::WireReader& r, ::av::Wire
     return true;
 }
 
+static bool decode_PresentPoint9(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d9:PresentPoint9");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t surface{};
+    if (!r.read_pod(surface)) return false;
+    uint32_t subresource{};
+    if (!r.read_pod(subresource)) return false;
+    uint64_t key{};
+    if (!r.read_pod(key)) return false;
+    uint32_t point{};
+    if (!r.read_pod(point)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_PresentPoint9(surface, subresource, key, point)) return false;
+    return true;
+}
+
 static bool decode_CreateVertexShader9(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d9:CreateVertexShader9");
     (void)s;
@@ -972,6 +990,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_ReadSurface9:
         case kCmd_StretchRect9:
         case kCmd_ColorFill9:
+        case kCmd_PresentPoint9:
         case kCmd_CreateVertexShader9:
         case kCmd_CreatePixelShader9:
         case kCmd_CreateVertexDeclaration9:
@@ -1030,6 +1049,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_ReadSurface9: return decode_ReadSurface9(s, r, reply, arena);
         case kCmd_StretchRect9: return decode_StretchRect9(s, r, reply, arena);
         case kCmd_ColorFill9: return decode_ColorFill9(s, r, reply, arena);
+        case kCmd_PresentPoint9: return decode_PresentPoint9(s, r, reply, arena);
         case kCmd_CreateVertexShader9: return decode_CreateVertexShader9(s, r, reply, arena);
         case kCmd_CreatePixelShader9: return decode_CreatePixelShader9(s, r, reply, arena);
         case kCmd_CreateVertexDeclaration9: return decode_CreateVertexDeclaration9(s, r, reply, arena);

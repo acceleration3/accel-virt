@@ -316,6 +316,16 @@ bool av_d3d9_ColorFill9(::av::ClientTransport& t, uint32_t surface, uint32_t sub
     return t.send_async(kCmd_ColorFill9, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d9_PresentPoint9(::av::ClientTransport& t, uint32_t surface, uint32_t subresource, uint64_t key, uint32_t point) {
+    AV_SCOPE("av_d3d9_PresentPoint9");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(surface);
+    b.write_pod<uint32_t>(subresource);
+    b.write_pod<uint64_t>(key);
+    b.write_pod<uint32_t>(point);
+    return t.send_async(kCmd_PresentPoint9, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d9_CreateVertexShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size) {
     AV_SCOPE("av_d3d9_CreateVertexShader9");
     ::av::WireWriter b = t.request_writer();

@@ -85,7 +85,7 @@ bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12
     device11_ = device11;
     surfaces_ = surfaces;
     d3d12_.initialize(device12, device11, surfaces);
-    d3d9_.initialize(device9);
+    d3d9_.initialize(device9, surfaces);
     lost_ = false;
     return true;
 }

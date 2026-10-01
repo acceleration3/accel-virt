@@ -20,7 +20,7 @@ constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
 }  // namespace
 
 D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects)
-    : region_(region), host_(nullptr), objects_(objects), devices_{}, selected_(nullptr), arena_(nullptr)
+    : region_(region), host_(nullptr), surfaces_(nullptr), objects_(objects), devices_{}, selected_(nullptr), arena_(nullptr)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -31,10 +31,11 @@ D3d9Session::~D3d9Session()
     shut_down();
 }
 
-void D3d9Session::initialize(D3d9HostDevice *host)
+void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces)
 {
     AV_SCOPE("D3d9Session::initialize");
     host_ = host != nullptr && host->opened() ? host : nullptr;
+    surfaces_ = surfaces;
 }
 
 /* Objects first: each holds a reference to the device that made it. Only

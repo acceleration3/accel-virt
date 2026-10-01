@@ -27,6 +27,7 @@ inline constexpr uint32_t kCmd_WriteBuffer9 = 0x00042106;
 inline constexpr uint32_t kCmd_GenerateMips9 = 0x00042107;
 inline constexpr uint32_t kCmd_StretchRect9 = 0x00042108;
 inline constexpr uint32_t kCmd_ColorFill9 = 0x00042109;
+inline constexpr uint32_t kCmd_PresentPoint9 = 0x0004210a;
 inline constexpr uint32_t kCmd_SetRenderTarget9 = 0x00042200;
 inline constexpr uint32_t kCmd_Clear9 = 0x00042201;
 inline constexpr uint32_t kCmd_CreateVertexShader9 = 0x00042300;
