@@ -289,9 +289,8 @@ covers a hosted header, a C runtime call, `new`, `throw` or `typeid`.
 ### The driver package
 
 `cmake --build build --target drivers` builds only the Windows drivers: the
-kernel driver, and the user-mode drivers for x64 and x86.
-`cmake --build build --target install-drivers` builds them and installs the
-package as the guest's `C:\av` holds it:
+kernel driver, and the user-mode drivers for x64 and x86. `cmake --install
+build` then installs the package as the guest's `C:\av` holds it:
 
 ```
 build/av-drivers/
@@ -304,9 +303,10 @@ build/av-drivers/
     └── package.sha256     what the sign stage checks the package against
 ```
 
-`-DAV_DRIVER_PACKAGE_DIR=DIR` moves it, and
-`cmake --install build --component drivers --prefix DIR` installs the same tree
-anywhere. `adapters.txt` comes from `tools/host/list_gpus.py --adapter-names`
+`--prefix DIR` installs it anywhere else. A build directory configured before
+this existed has `/usr/local` cached as its prefix: configure it once with
+`-DCMAKE_INSTALL_PREFIX=$PWD/build/av-drivers`. `cmake --install` installs
+what is already built, so build `drivers` first. `adapters.txt` comes from `tools/host/list_gpus.py --adapter-names`
 on the host doing the install. It is left out, with a warning, when
 `vulkaninfo` fails, and the INF's models then take its static name. Copy the
 tree to the guest's `C:\av` and run route 2 below from `provision.ps1`.
@@ -397,7 +397,7 @@ Keep `-vga none`: another display adapter would take the desktop. The
 
 **In the guest,** as Administrator:
 
-1. Copy `build/av-drivers` from `install-drivers` ([The driver
+1. Copy `build/av-drivers` from `cmake --install build` ([The driver
    package](#the-driver-package)) to `C:\av`, which puts everything below in
    place with its `package.sha256` and `adapters.txt`. By hand, copy the
    package into `C:\av\package`:

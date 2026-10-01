@@ -699,11 +699,13 @@ ExternalProject_Add_StepDependencies(avtest32 configure
 #   <prefix>/package/avgpu.sys, avgpu.inf, the x64 and x86 user-mode drivers,
 #                    their Vulkan manifests and package.sha256
 #
-# `install-drivers` builds and installs in one step, into AV_DRIVER_PACKAGE_DIR
-# (build/av-drivers unless set); `cmake --install build --component drivers
-# --prefix DIR` installs the same tree anywhere else.
+# `cmake --install build` installs it, into build/av-drivers unless
+# CMAKE_INSTALL_PREFIX or --prefix says otherwise; it installs what is built, so
+# build `drivers` first. The drivers are the only thing this project installs.
 add_custom_target(drivers DEPENDS avgpu avtest avtest32)
-set(AV_DRIVER_PACKAGE_DIR ${CMAKE_BINARY_DIR}/av-drivers CACHE PATH "Where install-drivers puts the driver package")
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/av-drivers CACHE PATH "Where the driver package is installed" FORCE)
+endif()
 install(FILES ${CMAKE_SOURCE_DIR}/tools/guest/provision.ps1 DESTINATION . COMPONENT drivers)
 install(FILES
           ${CMAKE_BINARY_DIR}/driver/avgpu.sys ${CMAKE_SOURCE_DIR}/src/km/avgpu.inf
@@ -716,11 +718,6 @@ install(FILES
         DESTINATION package COMPONENT drivers)
 install(CODE "set(AV_SOURCE_DIR \"${CMAKE_SOURCE_DIR}\")" COMPONENT drivers)
 install(SCRIPT ${CMAKE_SOURCE_DIR}/cmake/driver_package.cmake COMPONENT drivers)
-add_custom_target(install-drivers
-  COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --component drivers --prefix ${AV_DRIVER_PACKAGE_DIR}
-  DEPENDS drivers
-  USES_TERMINAL
-  COMMENT "Installing the driver package into ${AV_DRIVER_PACKAGE_DIR}")
 
 # The probe binds to the Khronos loader and nothing else beyond the three
 # (feature 045).
