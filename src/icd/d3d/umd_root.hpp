@@ -18,6 +18,7 @@
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/hresult.hpp"
+#include "icd/d3d/umd_binding.hpp"
 #include "icd/d3d/umd_connections.hpp"
 
 #include <stddef.h>
@@ -35,7 +36,6 @@ class ThreadLock;
 
 namespace av::d3d {
 
-class UmdBinding;
 class UmdHostDriver;
 struct UmdRootProbe;
 struct D3d102ddiargGetCapsRecord;

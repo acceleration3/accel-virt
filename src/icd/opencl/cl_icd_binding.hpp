@@ -1,28 +1,15 @@
-/* The one pointer this ICD's entry points reach the root through
- * (constitution III).
- *
- * The Khronos loader resolves one symbol by name and then dispatches through
- * a table of bare function pointers, every one of them called with OpenCL's
- * own arguments and nowhere to put a `this`. ClIcdRoot binds itself when
- * constructed and unbinds when destroyed, so a test binds the root under test
- * and the DLL binds the one in its storage. */
+/* The pointer the OpenCL ICD's entry points reach its root through
+ * (RootBinding), defined beside the hooks in cl_hooks.cpp. */
 #ifndef AV_CLICD_CL_ICD_BINDING_HPP
 #define AV_CLICD_CL_ICD_BINDING_HPP
+
+#include "icd/common/root_binding.hpp"
 
 namespace av::clicd {
 
 class ClIcdRoot;
 
-class ClIcdBinding {
-public:
-    void       bind(ClIcdRoot &root);
-    void       unbind();
-    bool       bound() const;
-    ClIcdRoot &root() const;
-
-private:
-    ClIcdRoot *root_ = nullptr;
-};
+using ClIcdBinding = icd::RootBinding<ClIcdRoot>;
 
 extern ClIcdBinding cl_icd_binding;
 

@@ -34,6 +34,7 @@
 #include "icd/vulkan/descriptor_template_table.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/external_objects.hpp"
+#include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/memory_win32_handle_record.hpp"
 #include "icd/vulkan/semaphore_win32_handle_record.hpp"
 #include "icd/vulkan/win32_handle_kind.hpp"
@@ -51,7 +52,6 @@ class Kmt;
 
 namespace av::icd {
 
-class IcdBinding;
 class LogSink;
 class WindowChains;
 class WindowSurface;

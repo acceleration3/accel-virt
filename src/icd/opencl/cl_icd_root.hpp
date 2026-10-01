@@ -29,6 +29,7 @@
 #include "icd/opencl/cl_event_owner.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
+#include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
 #include "icd/opencl/cl_refusal_log.hpp"
@@ -55,7 +56,6 @@ class ThreadLock;
 
 namespace av::clicd {
 
-class ClIcdBinding;
 class GlShareSource;
 struct ClIcdRootProbe;
 

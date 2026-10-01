@@ -24,6 +24,7 @@
 #include "icd/opengl/window_table.hpp"
 
 #include "gl_icd_table.h"
+#include "icd/opengl/gl_icd_binding.hpp"
 
 #include <stdint.h>
 
@@ -45,7 +46,6 @@ class WindowSurface;
 
 namespace av::glicd {
 
-class GlIcdBinding;
 class GlPresentLoop;
 class SystemOpengl;
 class ThreadSlot;
