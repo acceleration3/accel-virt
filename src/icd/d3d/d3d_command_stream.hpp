@@ -118,6 +118,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* A Finish round trip, its call ended: every blob lease retired. */
+    [[nodiscard]] bool finished();
     [[nodiscard]] TransportResult append(uint32_t command_id, WireWriter &writer, uint8_t flags);
     /* The block is the recording's, which may have grown. */
     void                          adopt_recording();

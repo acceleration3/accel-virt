@@ -20,6 +20,9 @@ using Kind = d3d::D3d9StateEntry::Kind;
 namespace {
 
 constexpr uint32_t stage_vertex = 0u;
+/* Calls the trace logs, and what says it is off. */
+constexpr uint32_t trace_most = 20000u;
+constexpr uint32_t trace_none = ~0u;
 constexpr uint32_t stage_pixel = 1u;
 constexpr uint32_t components = 4u;
 /* D3DHAL_STATESET* (reverse-engineering.md §4.4). */
@@ -58,7 +61,7 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSi
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), said_unimplemented_(false), said_present_(false), said_lost_(false),
-      said_surface_write_(false)
+      said_surface_write_(false), traced_(trace_none)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
 }
@@ -96,6 +99,8 @@ D3d9Device::~D3d9Device()
 HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVICE &create)
 {
     AV_SCOPE("D3d9Device::initialize");
+    char set[4] = {};
+    traced_ = GetEnvironmentVariableA("AV_D3D9_TRACE", set, sizeof(set)) != 0u ? 0u : trace_none;
     runtime_ = create.hDevice;
     if (create.pCallbacks == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
     callbacks_ = *create.pCallbacks;
@@ -151,6 +156,23 @@ D3d9Resource *D3d9Device::resource(HANDLE handle) const
 {
     AV_SCOPE("D3d9Device::resource");
     return handle != nullptr ? resources_.find(handle) : nullptr;
+}
+
+void D3d9Device::trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
+{
+    AV_SCOPE("D3d9Device::trace");
+    if (traced_ >= trace_most) return;
+    traced_++;
+    char       line[128] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("avumd: d3d9 ");
+    text.append(call);
+    const uint32_t numbers[4] = {a, b, c, d};
+    for (const uint32_t number : numbers) {
+        text.append(" ");
+        text.append_decimal(number);
+    }
+    log_.write(text.text());
 }
 
 uint32_t D3d9Device::id_of(HANDLE handle) const
@@ -302,6 +324,9 @@ HRESULT D3d9Device::set_vertex_shader_const(const D3DDDIARG_SETVERTEXSHADERCONST
 {
     AV_SCOPE("D3d9Device::set_vertex_shader_const");
     const auto *const floats = static_cast<const FLOAT *>(values);
+    if (args->Count != 0u)
+        trace("vsconst", args->Register, args->Count, static_cast<uint32_t>(static_cast<int32_t>(floats[0] * 1000.0f)),
+              static_cast<uint32_t>(static_cast<int32_t>(floats[args->Count * components - 1u] * 1000.0f)));
     bool              kept = false;
     for (UINT index = 0u; index < args->Count; index++)
         kept = recorded(D3d9StateEntry(Kind::constant_f, stage_vertex, args->Register + index,
@@ -419,6 +444,7 @@ HRESULT D3d9Device::set_viewport(const D3DDDIARG_VIEWPORTINFO *args)
     const uint32_t words[4] = {args->X, args->Y, args->Width, args->Height};
     if (recorded(D3d9StateEntry(Kind::viewport, 0u, 0u, words, 4u))) return S_OK;
     viewport_ = *args;
+    trace("viewport", args->X, args->Y, args->Width, args->Height);
     return send_viewport();
 }
 
@@ -444,6 +470,8 @@ HRESULT D3d9Device::set_scissor_rect(const RECT *rect)
     if (recorded(D3d9StateEntry(Kind::scissor, 0u, 0u, reinterpret_cast<const uint32_t *>(rect), 4u))) return S_OK;
     scissor_ = *rect;
     scissor_set_ = true;
+    trace("scissor", static_cast<uint32_t>(rect->left), static_cast<uint32_t>(rect->top),
+          static_cast<uint32_t>(rect->right), static_cast<uint32_t>(rect->bottom));
     return send_scissor();
 }
 
@@ -473,6 +501,8 @@ HRESULT D3d9Device::set_render_target(const D3DDDIARG_SETRENDERTARGET *args)
     uint32_t                  id = 0u, subresource = 0u;
     const D3d9Resource *const target = resource(args->hRenderTarget);
     if (target != nullptr && !surface_of(*target, args->SubResourceIndex, id, subresource)) return E_INVALIDARG;
+    trace("target", args->RenderTargetIndex, id, target != nullptr ? target->subresources[args->SubResourceIndex].width : 0u,
+          target != nullptr ? target->subresources[args->SubResourceIndex].height : 0u);
     if (!send_states() || !d3d9proto::av_d3d9_SetRenderTarget9(wire(), args->RenderTargetIndex, id, subresource))
         return lost(__func__);
     const HRESULT viewport = send_viewport();
@@ -485,6 +515,8 @@ HRESULT D3d9Device::set_depth_stencil(const D3DDDIARG_SETDEPTHSTENCIL *args)
     uint32_t                  id = 0u, subresource = 0u;
     const D3d9Resource *const target = resource(args->hZBuffer);
     if (target != nullptr && !surface_of(*target, 0u, id, subresource)) return E_INVALIDARG;
+    trace("depth", id, target != nullptr ? target->subresources[0].width : 0u,
+          target != nullptr ? target->subresources[0].height : 0u, 0u);
     return d3d9proto::av_d3d9_SetDepthStencil9(wire(), id, subresource) ? S_OK : lost(__func__);
 }
 

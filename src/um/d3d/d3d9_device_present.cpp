@@ -126,6 +126,8 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     D3d9Resource *const source = resource(args->hSrcResource);
     if (source == nullptr || args->SrcSubResourceIndex >= source->count) return E_INVALIDARG;
     const D3d9Resource *const destination = resource(args->hDstResource);
+    trace("present", args->SrcSubResourceIndex, source->subresources[args->SrcSubResourceIndex].width,
+          source->subresources[args->SrcSubResourceIndex].height, args->Flags.Value);
     if (source->allocation == 0u) {
         const HRESULT made = allocate(*source);
         if (FAILED(made)) {

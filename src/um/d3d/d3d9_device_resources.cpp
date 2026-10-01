@@ -8,6 +8,7 @@
  * The runtime keeps the managed pool itself and fills it with TexBlt and
  * BufBlt from system memory of its own, which is copied from where it lies. */
 #include "core/platform/block_source.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
@@ -87,6 +88,9 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
         made->subresources[index].system_pitch = surface.SysMemPitch;
         made->subresources[index].system_slice_pitch = surface.SysMemSlicePitch;
     }
+    if (args->Flags.RenderTarget || args->Flags.ZBuffer || args->Flags.Primary)
+        trace("resource", args->Flags.Value, static_cast<uint32_t>(args->Format), made->subresources[0].width,
+              made->subresources[0].height);
     const HRESULT host = args->Pool == D3DDDIPOOL_SYSTEMMEM ? S_OK : create_host_object(*made, *args);
     if (FAILED(host)) {
         release_resource(*made);
@@ -406,11 +410,20 @@ HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box
         const d3d9proto::Box part = {box.Left, top, box.Front, box.Right, bottom < box.Bottom ? bottom : box.Bottom,
                                      box.Back};
         const size_t bytes = size_t{count - 1u} * row_pitch + line;
-        if (bytes > inline_limit && !wire().make_room_for(bytes)) return lost(__func__);
-        if (!d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
-                                              done == 0u ? flags : flags & ~write_discard,
-                                              data + size_t{done} * row_pitch, bytes))
+        const bool room = bytes <= inline_limit || wire().make_room_for(bytes);
+        if (!room || !d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
+                                                       done == 0u ? flags : flags & ~write_discard,
+                                                       data + size_t{done} * row_pitch, bytes)) {
+            char       said[160] = {};
+            TextBuffer text(said, sizeof(said));
+            text.append("avumd: a texture write of ");
+            text.append_decimal(bytes);
+            text.append(" bytes, pitch ");
+            text.append_decimal(row_pitch);
+            text.append(room ? " was refused by the encoder" : " found no room in the arena");
+            log_.write(text.text());
             return lost(__func__);
+        }
     }
     return S_OK;
 }

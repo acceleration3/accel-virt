@@ -111,6 +111,10 @@ private:
     HRESULT                lost(const char *call);
     void                   not_implemented(const char *call);
     void                   log_once(bool &said, const char *line);
+    /* With AV_D3D9_TRACE set in the process's environment, the first calls
+     * that place a frame - targets made and bound, viewports, scissors,
+     * presents - are logged with their numbers. */
+    void                   trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
 
     /* Pending render, sampler and stage states sent before what reads them. */
     [[nodiscard]] bool send_states();
@@ -219,6 +223,7 @@ private:
     bool                                 said_present_;
     bool                                 said_lost_;
     bool                                 said_surface_write_;
+    uint32_t                             traced_;
 };
 
 }  // namespace av::d3d9

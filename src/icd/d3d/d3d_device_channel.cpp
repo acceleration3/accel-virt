@@ -56,6 +56,9 @@ Status D3dDeviceChannel::application_flush()
     AV_SCOPE("D3dDeviceChannel::application_flush");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
+    /* The flush is the speaking device's: a host whose selected device was
+     * just destroyed has none to flush. */
+    if (!stream_.speak_as(device_)) return Status::invalid_state;
     return stream_.application_flush();
 }
 

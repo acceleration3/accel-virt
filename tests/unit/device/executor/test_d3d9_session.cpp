@@ -128,7 +128,8 @@ TEST(d3d9_session_on_CreateDevice9, a_gpu_with_no_d3d9_makes_no_device)
 }
 
 /* With no device selected every command that would draw or make something is
- * refused: there is no device to hand DXVK, and nobody to remove. */
+ * refused: there is no device to hand DXVK, and nobody to remove. A flush
+ * has nothing to do and is no refusal: the guest flushes as its devices go. */
 TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
 {
     FreshSession fresh;
@@ -140,7 +141,8 @@ TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
     const std::int32_t integers[4] = {};
     const std::uint32_t words[4] = {7u, 1u, 0u, 0u};
     const VertexElement element = {0u, 0u, 3u, 0u, 0u, 0u};
-    CHECK(!session.on_Flush9());
+    CHECK(session.on_Flush9());
+    CHECK(session.invariants_hold());
     CHECK(!session.on_Destroy9(nobody));
     CHECK(!session.on_CreateSurface9(1u, 1u, 4u, 4u, 21u, 0u, 0u, 0u));
     CHECK(!session.on_CreateTexture9(1u, 1u, 4u, 4u, 1u, 1u, 0u, 21u, 1u));
@@ -215,9 +217,13 @@ TEST(d3d9_session_run, a_refusal_with_no_device_fails_the_session)
     std::uint8_t     answer[64] = {};
     std::uint8_t     scratch[256] = {};
     av::WireArena    arena(scratch, sizeof scratch);
-    av::WireReader   flush(frame, 0u);
-    av::WireWriter   flush_reply(answer, sizeof answer);
-    CHECK(!session.run(kCmd_Flush9, flush, flush_reply, arena));
+    av::WireReader   indices(frame, sizeof(std::uint32_t));
+    av::WireWriter   indices_reply(answer, sizeof answer);
+    CHECK(!session.run(kCmd_SetIndices9, indices, indices_reply, arena));
+    /* A flush has nothing to do, which is no refusal. */
+    av::WireReader flush(frame, 0u);
+    av::WireWriter flush_reply(answer, sizeof answer);
+    CHECK(session.run(kCmd_Flush9, flush, flush_reply, arena));
     av::WireReader finish(frame, 0u);
     av::WireWriter finish_reply(answer, sizeof answer);
     CHECK(session.run(kCmd_Finish9, finish, finish_reply, arena));

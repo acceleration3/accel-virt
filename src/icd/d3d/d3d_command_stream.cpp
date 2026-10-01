@@ -154,13 +154,19 @@ bool D3dCommandStream::make_room_for(size_t bytes)
     ClientBlobArena &arena = blobs();
     if (!arena.ready()) return false;
     if (arena.room() >= bytes) return true;
-    /* Every lease handed out so far is read once the host answers a command
-     * sent after all of them; Finish is that command. */
-    WireWriter           finish = request_writer();
-    const SyncCallScope  call{*this};
-    WireReader           reply{nullptr, 0u};
-    if (send_sync(finish_command_, finish, reply) != TransportResult::ok) return false;
-    return arena.room() >= bytes;
+    return finished() && arena.room() >= bytes;
+}
+
+/* Every lease handed out so far is read once the host answers a command sent
+ * after all of them; Finish is that command. The leases are retired as the
+ * call ends - when this returns, not before - so the room is asked after. */
+bool D3dCommandStream::finished()
+{
+    AV_SCOPE("D3dCommandStream::finished");
+    WireWriter          finish = request_writer();
+    const SyncCallScope call{*this};
+    WireReader          reply{nullptr, 0u};
+    return send_sync(finish_command_, finish, reply) == TransportResult::ok;
 }
 
 void D3dCommandStream::speak_with(uint32_t select_command, uint32_t finish_command, uint32_t flush_command)

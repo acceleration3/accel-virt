@@ -200,10 +200,13 @@ bool D3d9Session::on_QueryMultisample9(uint32_t format, uint32_t multisample, ui
     return true;
 }
 
+/* With no device selected - the one that was is destroyed - there is nothing
+ * to flush, which is no reason to fault the session (the guest flushes as
+ * its devices go). */
 bool D3d9Session::on_Flush9()
 {
     AV_SCOPE("D3d9Session::on_Flush9");
-    if (selected_ == nullptr) return false;
+    if (selected_ == nullptr) return true;
     selected_->device_->EndScene();
     selected_->device_->BeginScene();
     return true;

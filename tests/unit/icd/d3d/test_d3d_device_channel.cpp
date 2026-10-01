@@ -168,6 +168,25 @@ TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
   CHECK(!fixture.lock().held());
   CHECK(std::strcmp(fixture.trace().text(), "Pp") == 0); }
 
+/* A full arena is emptied by one Finish, and the room is asked once the
+ * answer retired the leases: asked before, a full arena refused every first
+ * upload that needed it (DWM's "an upload larger than the arena"). */
+TEST(d3d_device_channel, room_is_made_by_one_finish_in_a_full_arena)
+{ Fixture fixture;
+  alignas(64) static std::uint8_t block[4096];
+  av::ClientBlobArena &arena = fixture.transport().blobs();
+  arena.lend(block, sizeof block);
+  CHECK(arena.take(arena.room()).taken());
+  CHECK_EQ(arena.room(), 0u);
+  std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
+  CHECK(reply != nullptr);
+  static_cast<void>(av::ReplyHeader(1u, 4u).encode(reply, av::ReplyHeader::encoded_size));
+  const std::uint32_t answered = 0u;
+  std::memcpy(reply + av::ReplyHeader::encoded_size, &answered, sizeof answered);
+  CHECK(fixture.a().make_room_for(1024u));
+  CHECK(arena.room() >= 1024u);
+  CHECK(!fixture.lock().held()); }
+
 TEST(d3d_device_channel, a_command_given_up_before_it_was_sent_lets_the_lock_go)
 { Fixture fixture;
   const Box whole = {};
@@ -382,6 +401,23 @@ TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_SetIndices9);
+  CHECK(!fixture.lock().held()); }
+
+/* What Portal did: one device destroyed while selected, then another's
+ * flush. The flush names its device first, or the host has none selected. */
+TEST(d3d_device_channel, an_application_flush_after_the_selected_device_closed_selects_its_own)
+{ Fixture fixture;
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
+                            av::d3d9proto::kCmd_Flush9);
+  CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.a(), 7u));
+  CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.b(), 8u));
+  CHECK(fixture.b().close9());
+  CHECK_STATUS(fixture.a().application_flush(), Status::ok);
+  std::uint32_t ids[8] = {}, selected[8] = {};
+  const std::uint32_t shipped = fixture.shipped(ids, selected, 8u);
+  CHECK(shipped >= 2u);
+  CHECK_EQ(ids[shipped - 2u], av::d3d9proto::kCmd_SelectDevice9);
+  CHECK_EQ(ids[shipped - 1u], av::d3d9proto::kCmd_Flush9);
   CHECK(!fixture.lock().held()); }
 
 TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_no_lock)
