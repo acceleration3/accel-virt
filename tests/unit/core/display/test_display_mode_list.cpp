@@ -42,7 +42,7 @@ TEST(display_mode_list_preferred, is_1280x800_as_qemu_virtio_gpu_defaults)
 TEST(display_mode_list_find, a_source_mode_in_the_list)
 { const DisplayModeList modes;
   D3dkmdtVidPnSourceModeRecord source = {};
-  DisplayMode(1024u, 768u).describe(source);
+  DisplayMode(1024u, 768u).describe(source, DisplayMode::source_formats[0]);
   const DisplayMode *found = modes.find(source);
   CHECK(found != nullptr);
   CHECK_EQ(found != nullptr ? found->width() : 0u, 1024u);

@@ -1,6 +1,6 @@
-/* One resolution the adapter scans out: a 32-bpp A8R8G8B8 primary with
- * progressive 60 Hz timing whose blanking keeps 1080p's proportions (160
- * columns, and one blank line for every 24 active ones). */
+/* One resolution the adapter scans out: a 32-bpp primary, blue first or red
+ * first, with progressive 60 Hz timing whose blanking keeps 1080p's
+ * proportions (160 columns, and one blank line for every 24 active ones). */
 #ifndef AV_DISPLAY_MODE_HPP
 #define AV_DISPLAY_MODE_HPP
 
@@ -14,6 +14,15 @@ struct D3dkmdtVidPnSourceModeRecord;
 class DisplayMode {
 public:
     static constexpr uint32_t refresh_hz = 60u;
+    /* The D3DDDIFORMATs each mode is offered in, the desktop's first.
+     * A8R8G8B8, not X8R8G8B8: cdd.dll's DrvGetModes keeps only R8G8B8,
+     * A8R8G8B8, R5G6B5 and P8 source modes, and a list it empties leaves
+     * win32k one made-up 800x600 and Settings no resolution to pick.
+     * A8B8G8R8 because DXGI lists an output's modes in a format only from
+     * source modes in it: a game asking for R8G8B8A8 modes got none, and Dark
+     * Souls Remastered took the last of none. */
+    static constexpr uint32_t source_format_count = 2u;
+    static constexpr int32_t  source_formats[source_format_count] = {21, 32};
 
     DisplayMode(uint32_t width, uint32_t height);
     /* 640x480: what a list's slot holds until the list fills it. */
@@ -34,9 +43,11 @@ public:
      * blank, sixteen for the pixel clock in 10 kHz units. */
     bool     offerable() const;
 
-    /* Leaves the Id dxgkrnl assigned. */
-    void describe(D3dkmdtVidPnSourceModeRecord &source) const;
+    /* As a primary of `format`, one of source_formats; leaves the Id dxgkrnl
+     * assigned. */
+    void describe(D3dkmdtVidPnSourceModeRecord &source, int32_t format) const;
     void describe(D3dkmdtVideoSignalInfoRecord &signal) const;
+    /* A source mode of this size in any of source_formats. */
     bool matches(const D3dkmdtVidPnSourceModeRecord &source) const;
     bool matches(const D3dkmdtVideoSignalInfoRecord &signal) const;
 
@@ -62,10 +73,6 @@ private:
     static constexpr uint64_t interrupt_ticks_per_second = 10000000u;
     enum : int32_t {
         rendering_graphics = 1,   /* D3DKMDT_RMT_GRAPHICS */
-        /* D3DDDIFMT_A8R8G8B8, not X8R8G8B8: cdd.dll's DrvGetModes keeps only
-         * R8G8B8, A8R8G8B8, R5G6B5 and P8 source modes, and a list it empties
-         * leaves win32k one made-up 800x600 and Settings no resolution to pick. */
-        format_a8r8g8b8 = 21,
         color_basis_srgb = 2,     /* D3DKMDT_CB_SRGB */
         access_direct = 1,        /* D3DKMDT_PVAM_DIRECT */
         standard_other = 255,     /* D3DKMDT_VSS_OTHER */

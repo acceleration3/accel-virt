@@ -1067,7 +1067,7 @@ constexpr std::int32_t  no_pivot = 5;
 av::D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
 {
     av::D3dkmdtVidPnSourceModeRecord mode = {};
-    av::DisplayMode(width, height).describe(mode);
+    av::DisplayMode(width, height).describe(mode, av::DisplayMode::source_formats[0]);
     return mode;
 }
 
@@ -4032,7 +4032,7 @@ TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
   av::FakeVidPn vidpn;
   vidpn.add_path(1u, 1u);
   av::D3dkmdtVidPnSourceModeRecord pinned = {};
-  av::DisplayMode(1024u, 768u).describe(pinned);
+  av::DisplayMode(1024u, 768u).describe(pinned, av::DisplayMode::source_formats[0]);
   vidpn.source_modes(1u).seed(pinned, true);
   const av::DxgkargCommitVidPnRecord commit = {&vidpn, 1u, 0, nullptr, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().commit_vidpn(&commit)), success);

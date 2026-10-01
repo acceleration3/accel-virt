@@ -31,7 +31,7 @@ constexpr std::uint32_t path_powered_off = 2u;
 D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
 {
     D3dkmdtVidPnSourceModeRecord mode = {};
-    DisplayMode(width, height).describe(mode);
+    DisplayMode(width, height).describe(mode, DisplayMode::source_formats[0]);
     return mode;
 }
 

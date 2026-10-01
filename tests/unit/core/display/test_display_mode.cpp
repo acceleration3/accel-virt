@@ -14,6 +14,7 @@ namespace {
 constexpr std::int32_t  graphics = 1;         /* D3DKMDT_RMT_GRAPHICS */
 constexpr std::int32_t  a8r8g8b8 = 21;        /* D3DDDIFMT_A8R8G8B8 */
 constexpr std::int32_t  x8r8g8b8 = 22;
+constexpr std::int32_t  a8b8g8r8 = 32;        /* D3DDDIFMT_A8B8G8R8 */
 constexpr std::int32_t  srgb = 2;             /* D3DKMDT_CB_SRGB */
 constexpr std::int32_t  direct = 1;           /* D3DKMDT_PVAM_DIRECT */
 constexpr std::int32_t  standard_other = 255; /* D3DKMDT_VSS_OTHER */
@@ -31,10 +32,10 @@ TEST(display_mode, has_1080p_blanking_proportions)
   CHECK_EQ(mode.pixel_rate(), 2080u * 1125u * 60u);
   CHECK_EQ(DisplayMode(1280u, 800u).total_height(), 833u); }
 
-TEST(display_mode_describe, a_source_mode_is_a_32_bpp_a8r8g8b8_primary)
+TEST(display_mode_describe, a_source_mode_is_a_32_bpp_primary_of_the_format_asked)
 { D3dkmdtVidPnSourceModeRecord source = {};
   source.Id = 7u;
-  DisplayMode(1024u, 768u).describe(source);
+  DisplayMode(1024u, 768u).describe(source, a8r8g8b8);
   CHECK_EQ(source.Id, 7u);
   CHECK_EQ(source.Type, graphics);
   CHECK_EQ(source.PrimSurfSizeCx, 1024u);
@@ -44,7 +45,17 @@ TEST(display_mode_describe, a_source_mode_is_a_32_bpp_a8r8g8b8_primary)
   CHECK_EQ(source.Stride, 4096u);
   CHECK_EQ(source.PixelFormat, a8r8g8b8);
   CHECK_EQ(source.ColorBasis, srgb);
-  CHECK_EQ(source.PixelValueAccessMode, direct); }
+  CHECK_EQ(source.PixelValueAccessMode, direct);
+  DisplayMode(1024u, 768u).describe(source, a8b8g8r8);
+  CHECK_EQ(source.PixelFormat, a8b8g8r8);
+  CHECK_EQ(source.Stride, 4096u); }
+
+/* The desktop's format first - cdd.dll keeps only it of the two - and the
+ * red-first one DXGI lists R8G8B8A8 modes from. */
+TEST(display_mode_describe, each_mode_is_offered_blue_first_then_red_first)
+{ CHECK_EQ(DisplayMode::source_format_count, 2u);
+  CHECK_EQ(DisplayMode::source_formats[0], a8r8g8b8);
+  CHECK_EQ(DisplayMode::source_formats[1], a8b8g8r8); }
 
 TEST(display_mode_describe, a_signal_is_progressive_at_60_hz)
 { D3dkmdtVideoSignalInfoRecord signal = {};
@@ -64,7 +75,9 @@ TEST(display_mode_describe, a_signal_is_progressive_at_60_hz)
 TEST(display_mode_matches, a_source_mode_of_its_size_and_format)
 { const DisplayMode mode(1024u, 768u);
   D3dkmdtVidPnSourceModeRecord source = {};
-  mode.describe(source);
+  mode.describe(source, a8r8g8b8);
+  CHECK(mode.matches(source));
+  source.PixelFormat = a8b8g8r8;
   CHECK(mode.matches(source));
   /* The format a Windows source mode had before this driver offered A8R8G8B8,
    * which dxgkrnl may still pin from its saved configuration. */

@@ -42,7 +42,7 @@ constexpr std::uint32_t rotation_supported = 0x11u;
 D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
 {
     D3dkmdtVidPnSourceModeRecord mode = {};
-    DisplayMode(width, height).describe(mode);
+    DisplayMode(width, height).describe(mode, DisplayMode::source_formats[0]);
     return mode;
 }
 
@@ -81,10 +81,14 @@ TEST(cofunc_modality_enumerate, nothing_pinned_offers_every_mode_on_both_ends)
   CHECK_EQ(enumeration.run(), 0u);
   const auto &sources = enumeration.vidpn().source_modes(0u);
   const auto &targets = enumeration.vidpn().target_modes(0u);
-  CHECK_EQ(sources.modes(), DisplayModeList::standard_count);
+  /* Every mode blue first, then every mode again red first. */
+  CHECK_EQ(sources.modes(), DisplayModeList::standard_count * 2u);
   CHECK_EQ(targets.modes(), DisplayModeList::standard_count);
   CHECK_EQ(sources.mode(0u).PrimSurfSizeCx, 640u);
   CHECK_EQ(sources.mode(0u).PixelFormat, 21);
+  CHECK_EQ(sources.mode(DisplayModeList::standard_count).PrimSurfSizeCx, 640u);
+  CHECK_EQ(sources.mode(DisplayModeList::standard_count).PixelFormat, 32);
+  CHECK_EQ(sources.mode(DisplayModeList::standard_count - 1u).PixelFormat, 21);
   for (std::uint32_t index = 0u; index < targets.modes(); index++) {
       const D3dkmdtVidPnTargetModeRecord &mode = targets.mode(index);
       const bool is_preferred = mode.VideoSignalInfo.ActiveSizeCx == 1280u && mode.VideoSignalInfo.ActiveSizeCy == 800u;

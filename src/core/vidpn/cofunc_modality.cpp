@@ -2,6 +2,7 @@
 
 #include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "core/display/display_mode.hpp"
 #include "core/display/display_mode_list.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/platform/log_budget.hpp"
@@ -73,11 +74,12 @@ Status CofuncModality::offer_sources(uint32_t source)
     AV_SCOPE("CofuncModality::offer_sources");
     SourceModeSet set(platform_, vidpn_, source);
     Status status = set.create();
-    for (uint32_t index = 0u; status == Status::ok && index < modes_.count(); index++) {
-        D3dkmdtVidPnSourceModeRecord description = {};
-        modes_.mode(index).describe(description);
-        status = set.add(description);
-    }
+    for (const int32_t format : DisplayMode::source_formats)
+        for (uint32_t index = 0u; status == Status::ok && index < modes_.count(); index++) {
+            D3dkmdtVidPnSourceModeRecord description = {};
+            modes_.mode(index).describe(description, format);
+            status = set.add(description);
+        }
     return status != Status::ok ? status : set.assign();
 }
 

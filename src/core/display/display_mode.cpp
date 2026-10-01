@@ -60,7 +60,7 @@ uint64_t DisplayMode::pixel_rate() const
     return static_cast<uint64_t>(total_width()) * total_height() * refresh_hz;
 }
 
-void DisplayMode::describe(D3dkmdtVidPnSourceModeRecord &source) const
+void DisplayMode::describe(D3dkmdtVidPnSourceModeRecord &source, int32_t format) const
 {
     AV_SCOPE("DisplayMode::describe");
     source.Type = rendering_graphics;
@@ -69,7 +69,7 @@ void DisplayMode::describe(D3dkmdtVidPnSourceModeRecord &source) const
     source.VisibleRegionSizeCx = width_;
     source.VisibleRegionSizeCy = height_;
     source.Stride = width_ * bytes_per_pixel;
-    source.PixelFormat = format_a8r8g8b8;
+    source.PixelFormat = format;
     source.ColorBasis = color_basis_srgb;
     source.PixelValueAccessMode = access_direct;
 }
@@ -93,8 +93,10 @@ void DisplayMode::describe(D3dkmdtVideoSignalInfoRecord &signal) const
 bool DisplayMode::matches(const D3dkmdtVidPnSourceModeRecord &source) const
 {
     AV_SCOPE("DisplayMode::matches");
-    return source.PrimSurfSizeCx == width_ && source.PrimSurfSizeCy == height_ &&
-           source.PixelFormat == format_a8r8g8b8;
+    if (source.PrimSurfSizeCx != width_ || source.PrimSurfSizeCy != height_) return false;
+    for (const int32_t format : source_formats)
+        if (source.PixelFormat == format) return true;
+    return false;
 }
 
 bool DisplayMode::matches(const D3dkmdtVideoSignalInfoRecord &signal) const

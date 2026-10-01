@@ -84,7 +84,11 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     resource.depth = args->pMipInfoList[0].TexelDepth;
     resource.mips = args->MipLevels;
     const bool cube = args->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE;
-    resource.layers = args->ArraySize * (cube ? 6u : 1u);
+    /* A cube's ArraySize already counts its faces, six a cube, as the
+     * application's TEXTURE2D_DESC did: counted again, a cube's initial data
+     * was read for 36 faces from the runtime's six, and Dark Souls
+     * Remastered's first environment map faulted in the copy. */
+    resource.layers = args->ArraySize;
     resource.samples = args->SampleDesc.Count;
     resource.runtime_resource = runtime.handle;
 

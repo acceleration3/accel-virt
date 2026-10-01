@@ -751,7 +751,7 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   av::FakeVidPn   vidpn;
   vidpn.add_path(0u, 0u);
   av::D3dkmdtVidPnSourceModeRecord pinned = {};
-  av::DisplayMode(1280u, 800u).describe(pinned);
+  av::DisplayMode(1280u, 800u).describe(pinned, av::DisplayMode::source_formats[0]);
   vidpn.source_modes(0u).seed(pinned, true);
   const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
   const auto commit_vidpn = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
@@ -810,7 +810,7 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   av::FakeVidPn vidpn;
   vidpn.add_path(0u, 0u);
   av::D3dkmdtVidPnSourceModeRecord pinned = {};
-  av::DisplayMode(1280u, 800u).describe(pinned);
+  av::DisplayMode(1280u, 800u).describe(pinned, av::DisplayMode::source_formats[0]);
   vidpn.source_modes(0u).seed(pinned, true);
   const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
@@ -994,7 +994,7 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts
   av::FakeVidPn vidpn;
   vidpn.add_path(0u, 0u);
   av::D3dkmdtVidPnSourceModeRecord pinned = {};
-  av::DisplayMode(1280u, 800u).describe(pinned);
+  av::DisplayMode(1280u, 800u).describe(pinned, av::DisplayMode::source_formats[0]);
   vidpn.source_modes(0u).seed(pinned, true);
   const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
@@ -2179,7 +2179,7 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
       av::FakeVidPn vidpn;
       vidpn.add_path(source, source);
       av::D3dkmdtVidPnSourceModeRecord pinned = {};
-      av::DisplayMode(1280u, 800u).describe(pinned);
+      av::DisplayMode(1280u, 800u).describe(pinned, av::DisplayMode::source_formats[0]);
       vidpn.source_modes(source).seed(pinned, true);
       const av::DxgkargCommitVidPnRecord commit = {&vidpn, source, 0, nullptr, 0u, 0u};
       CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(

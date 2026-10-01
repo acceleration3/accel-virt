@@ -118,7 +118,7 @@ TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_offers_is_suppo
 { VidPnFixture fixture;
   fixture.vidpn().add_path(0u, 0u);
   D3dkmdtVidPnSourceModeRecord mode = {};
-  DisplayMode(1024u, 768u).describe(mode);
+  DisplayMode(1024u, 768u).describe(mode, DisplayMode::source_formats[0]);
   fixture.vidpn().source_modes(0u).seed(mode, true);
   std::uint8_t supported = 0u;
   CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
@@ -128,9 +128,9 @@ TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_offers_is_suppo
  * X8R8G8B8 an older driver described. Refused, so it is never committed. */
 TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_does_not_offer_is_not_supported)
 { D3dkmdtVidPnSourceModeRecord unoffered_size = {};
-  DisplayMode(1000u, 700u).describe(unoffered_size);
+  DisplayMode(1000u, 700u).describe(unoffered_size, DisplayMode::source_formats[0]);
   D3dkmdtVidPnSourceModeRecord old_format = {};
-  DisplayMode(1024u, 768u).describe(old_format);
+  DisplayMode(1024u, 768u).describe(old_format, DisplayMode::source_formats[0]);
   old_format.PixelFormat = x8r8g8b8;
   const D3dkmdtVidPnSourceModeRecord pinned[] = {unoffered_size, old_format};
   for (const D3dkmdtVidPnSourceModeRecord &mode : pinned) {
