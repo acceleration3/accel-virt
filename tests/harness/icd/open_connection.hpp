@@ -7,6 +7,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/connection.hpp"
@@ -30,6 +31,7 @@ public:
     ScriptedHost        &host();
     LockTrace           &trace();
     RecordingThreadLock &lock();
+    RecordingLog        &log();
     icd::Connection     &connection();
 
 private:
@@ -38,6 +40,7 @@ private:
     ScriptedHost        host_;
     LockTrace           trace_;
     RecordingThreadLock lock_;
+    RecordingLog        log_;
     icd::Connection     connection_;
 };
 

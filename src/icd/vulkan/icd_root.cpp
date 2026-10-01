@@ -399,7 +399,7 @@ Status IcdRoot::open_connection(Connection *&opened)
 {
     AV_SCOPE("IcdRoot::open_connection");
     const icd::ThreadLockHold release(lock_);
-    const Status made = connections_.create(opened, kmt_, memory_, send_lock_);
+    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_);
     if (made != Status::ok) return made;
     const Status status = opened->open();
     if (status == Status::ok) return Status::ok;

@@ -99,10 +99,10 @@ public:
     SwapchainRig()
     { windows_.add_dc(as_window(0x20u), window(), width, height);
       CHECK_STATUS(first_.construct(memory_, windows_, chains_, host_, host_.device(), host_.physical(), open_.kmt(),
-                                    log_, open_.connection()),
+                                    open_.log(), open_.connection()),
                    av::Status::ok);
       CHECK_STATUS(second_.construct(memory_, windows_, chains_, host_, host_.device(), host_.physical(),
-                                     open_.kmt(), log_, open_.connection()),
+                                     open_.kmt(), open_.log(), open_.connection()),
                    av::Status::ok); }
     ~SwapchainRig()
     { if (second_.constructed()) second_.destroy();
@@ -122,7 +122,7 @@ public:
     MockKmt               &kmt() { return open_.kmt(); }
     av::ScriptedHost      &device() { return open_.host(); }
     av::icd::Connection   &connection() { return open_.connection(); }
-    RecordingLog          &log() { return log_; }
+    RecordingLog          &log() { return open_.log(); }
     ScriptedVulkanDevice  &host() { return host_; }
     ScriptedWindowSurface &windows() { return windows_; }
     ScriptedWindowChains  &chains() { return chains_; }
@@ -131,7 +131,6 @@ public:
 private:
     MockPlatform               memory_;
     av::OpenConnection         open_;
-    RecordingLog               log_;
     ScriptedVulkanDevice       host_;
     ScriptedWindowSurface      windows_;
     ScriptedWindowChains       chains_;

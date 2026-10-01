@@ -436,7 +436,7 @@ namespace {
  * connection only at end, which these tests never call. */
 class BatchSource {
 public:
-    BatchSource() : lock_(trace_, 'S'), connection_(kmt_, platform_, lock_), batches_(platform_), memories_(platform_) {}
+    BatchSource() : lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_), batches_(platform_), memories_(platform_) {}
 
     MockPlatform                          &platform() { return platform_; }
     av::ObjectPool<av::icd::CommandBatch> &batches() { return batches_; }
@@ -461,9 +461,9 @@ private:
     MockPlatform                          platform_;
     av::LockTrace                         trace_;
     av::RecordingThreadLock               lock_;
+    av::RecordingLog                      log_;
     Connection                            connection_;
     av::ObjectPool<av::icd::CommandBatch> batches_;
-    av::RecordingLog                      log_;
     av::ObjectPool<av::icd::DeviceMemory> memories_;
 };
 

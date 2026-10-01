@@ -15,6 +15,16 @@
 #include <cstdint>
 
 using av::clicd::ClArenaBlocks;
+
+namespace av::icd {
+
+/* A count past the rows: the table's own invariant, which the blocks' folds in. */
+struct RangeTableProbe {
+    template <std::uint32_t Max>
+    static void overcount(RangeTable<Max> &table) { table.count_ = Max + 1u; }
+};
+
+}  // namespace av::icd
 using av::clicd::ClArenaBlocksProbe;
 
 namespace av::clicd {
@@ -34,6 +44,7 @@ struct ClArenaBlocksProbe {
      * still placed - blocks over memory that is gone. */
     static void blocks_without_an_arena(ClArenaBlocks &blocks)
     { blocks.base_ = nullptr; blocks.bytes_ = 0u; }
+    static void rows_past_the_table(ClArenaBlocks &blocks) { icd::RangeTableProbe::overcount(blocks.blocks_); }
 };
 
 }  // namespace av::clicd
@@ -201,7 +212,8 @@ TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
   };
   CHECK(!broken(ClArenaBlocksProbe::blocks_past_the_arena));
   CHECK(!broken(ClArenaBlocksProbe::capacity_without_an_arena));
-  CHECK(!broken(ClArenaBlocksProbe::blocks_without_an_arena)); }
+  CHECK(!broken(ClArenaBlocksProbe::blocks_without_an_arena));
+  CHECK(!broken(ClArenaBlocksProbe::rows_past_the_table)); }
 
 TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)
 { ClArenaBlocks blocks;

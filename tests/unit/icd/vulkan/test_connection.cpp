@@ -13,9 +13,11 @@
 #include "guest/transport/host_window_chunk.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/host_channel_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/connection.hpp"
@@ -38,6 +40,7 @@ using av::LockTrace;
 using av::MockKmt;
 using av::MockPlatform;
 using av::PciIdentity;
+using av::RecordingLog;
 using av::RecordingThreadLock;
 using av::ScriptedHost;
 using av::Status;
@@ -68,22 +71,8 @@ namespace av::icd {
 
 struct ConnectionProbe {
     static GuestConnection &guest(Connection &c) { return c.connection_; }
-    static KmtTransport    &transport(Connection &c) { return c.transport_.object(); }
+    static HostChannel     &channel(Connection &c) { return c.channel_; }
     static AdapterSearch   &search(Connection &c) { return c.search_; }
-    static std::uint8_t    *swap_staging(Connection &c, std::uint8_t *staging)
-    {
-        std::uint8_t *const kept = c.staging_;
-        c.staging_ = staging;
-        return kept;
-    }
-    /* A transport built while the connection is closed, or taken away while it is open. */
-    static void build_transport(Connection &c)
-    {
-        CHECK_STATUS(c.transport_.construct(c.connection_, SubApi::vulkan, Connection::ring_order,
-                                            Connection::reply_bytes, nullptr, 0u),
-                     Status::ok);
-    }
-    static void drop_transport(Connection &c) { c.transport_.destroy(); }
 };
 
 }  // namespace av::icd
@@ -91,6 +80,7 @@ struct ConnectionProbe {
 using av::GuestConnectionProbe;
 using av::KmtTransportProbe;
 using av::icd::ConnectionProbe;
+using av::icd::HostChannelProbe;
 
 namespace {
 
@@ -105,7 +95,7 @@ constexpr std::uint32_t open_objects = 7u;
 
 class Rig {
 public:
-    Rig() : lock_(trace_, 'S'), connection_(kmt_, platform_, lock_)
+    Rig() : lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_)
     {
         kmt_.add_adapter(basic_render, 3100u);
         kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
@@ -136,6 +126,7 @@ private:
     MockPlatform        platform_;
     LockTrace           trace_;
     RecordingThreadLock lock_;
+    RecordingLog        log_;
     Connection          connection_;
 };
 
@@ -224,7 +215,8 @@ TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leave
       MockPlatform        platform;
       LockTrace           trace;
       RecordingThreadLock lock(trace, 'S');
-      Connection          connection(kmt, platform, lock);
+      RecordingLog        log;
+      Connection          connection(kmt, platform, lock, log);
       kmt.add_adapter(basic_render, 3100u);
       if (!refusal.no_avgpu) kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
       if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, 1u, MockKmt::invalid_parameter);
@@ -291,15 +283,16 @@ TEST(connection, invariants_see_a_half_open_connection)
   Connection      &connection = rig.connection();
   GuestConnection &guest = ConnectionProbe::guest(connection);
   AdapterSearch   &search = ConnectionProbe::search(connection);
+  HostChannelProbe channel(ConnectionProbe::channel(connection));
   std::uint8_t     stray = 0u;
-  /* Closed, with staging kept, a transport built, an adapter still kept, a device still open. */
-  CHECK(ConnectionProbe::swap_staging(connection, &stray) == nullptr);
+  /* Closed, with staging kept, a channel open under it, an adapter still
+   * kept, a device still open. */
+  CHECK(channel.swap_staging(&stray) == nullptr);
   CHECK(!connection.invariants_hold());
-  CHECK(ConnectionProbe::swap_staging(connection, nullptr) == &stray);
-  CHECK(connection.invariants_hold());
-  ConnectionProbe::build_transport(connection);
+  channel.build_transport(guest);
   CHECK(!connection.invariants_hold());
-  ConnectionProbe::drop_transport(connection);
+  channel.drop_transport();
+  CHECK(channel.swap_staging(nullptr) == &stray);
   CHECK(connection.invariants_hold());
   CHECK_STATUS(search.find(avgpu), Status::ok);
   CHECK(!connection.invariants_hold());
@@ -311,14 +304,14 @@ TEST(connection, invariants_see_a_half_open_connection)
   /* Open, with a context it does not name, no staging, the device gone, a
    * device without its queue, another adapter. */
   CHECK_STATUS(connection.open(), Status::ok);
-  KmtTransport &transport = ConnectionProbe::transport(connection);
+  KmtTransport &transport = channel.channel.transport();
   const std::uint32_t name = KmtTransportProbe::forget_name(transport);
   CHECK(!connection.invariants_hold());
   KmtTransportProbe::restore_name(transport, name);
   CHECK(connection.invariants_hold());
-  std::uint8_t *const staging = ConnectionProbe::swap_staging(connection, nullptr);
+  std::uint8_t *const staging = channel.swap_staging(nullptr);
   CHECK(!connection.invariants_hold());
-  ConnectionProbe::swap_staging(connection, staging);
+  channel.swap_staging(staging);
   const std::uint32_t device = guest.device();
   GuestConnectionProbe::set_device(guest, 0u);
   CHECK(!connection.invariants_hold());
@@ -334,9 +327,12 @@ TEST(connection, invariants_see_a_half_open_connection)
   CHECK(connection.invariants_hold());
   CHECK_STATUS(search.close(), Status::ok);
   CHECK(!connection.invariants_hold());
-  /* Last, since neither the adapter nor the transport can be given back. */
-  ConnectionProbe::drop_transport(connection);
+  /* Last, since neither the adapter nor the transport can be given back: a
+   * channel closed under the lock that still sends through it. */
+  channel.drop_transport();
+  std::uint8_t *const kept = channel.swap_staging(nullptr);
   CHECK(!connection.invariants_hold());
+  channel.swap_staging(kept);
   connection.close();
   CHECK(connection.invariants_hold());
   CHECK_EQ(rig.platform().live_allocations(), 0u); }

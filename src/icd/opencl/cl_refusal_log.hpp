@@ -7,7 +7,7 @@
 #ifndef AV_CLICD_CL_REFUSAL_LOG_HPP
 #define AV_CLICD_CL_REFUSAL_LOG_HPP
 
-#include "icd/common/driver_log.hpp"
+#include "icd/common/keyed_log.hpp"
 
 #include <stdint.h>
 
@@ -21,7 +21,7 @@ class ClRefusalLog {
 public:
     /* Room for every slot of cl_icd_dispatch this ICD leaves to the generated
      * refusals and a few errors from each entry point it serves. */
-    static constexpr uint32_t max_named = icd::DriverLog::max_keys;
+    static constexpr uint32_t max_named = icd::KeyedLog::max_keys;
 
     explicit ClRefusalLog(icd::LogSink &log);
     ClRefusalLog(const ClRefusalLog &) = delete;
@@ -34,7 +34,7 @@ public:
     uint32_t named() const;
 
 private:
-    icd::DriverLog lines_;
+    icd::KeyedLog  lines_;
 };
 
 }  // namespace av::clicd

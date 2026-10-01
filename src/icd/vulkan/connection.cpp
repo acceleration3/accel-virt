@@ -14,12 +14,13 @@
 
 namespace av::icd {
 
-Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock)
-    : kmt_(kmt), memory_(memory), lock_(lock), search_(kmt), connection_(kmt), staging_(nullptr), transport_(),
+Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log)
+    : kmt_(kmt), lock_(lock), search_(kmt), connection_(kmt),
+      channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u)),
       locked_(), luid_(0u), host_dma_buf_(false)
-      {
-          AV_SCOPE("Connection::Connection");
-      }
+{
+    AV_SCOPE("Connection::Connection");
+}
 
 Connection::~Connection()
 {
@@ -37,14 +38,9 @@ Status Connection::open()
     if (search_.find(avgpu) != Status::ok) return Status::not_supported;
     if (kmt_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
-    staging_ = static_cast<uint8_t *>(memory_.allocate(command_bytes, Pool::paged));
-    if (staging_ == nullptr) return Status::no_memory;
-    /* Neither storage holds an object here: close() empties both on every way
-     * out, and an open connection was refused above. */
-    static_cast<void>(transport_.construct(connection_, SubApi::vulkan, ring_order, reply_bytes, staging_,
-                                           command_bytes));
-    if (transport_.object().initialize() != Status::ok) return Status::not_supported;
-    static_cast<void>(locked_.construct(transport_.object(), lock_));
+    const Status opened = channel_.open(connection_);
+    if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::not_supported;
+    static_cast<void>(locked_.construct(channel_.transport(), lock_));
     undo.dismiss();
     return Status::ok;
 }
@@ -53,9 +49,8 @@ void Connection::close()
 {
     AV_SCOPE("Connection::close");
     locked_.destroy();
-    transport_.destroy();
-    if (staging_ != nullptr) memory_.release(staging_);
-    staging_ = nullptr;
+    /* No batch and no arena: nothing differs for a faulted channel. */
+    channel_.close(false);
     connection_.close();
     /* Nothing is left to report a failed close to: the instance is gone. */
     static_cast<void>(search_.close());
@@ -70,7 +65,7 @@ void Connection::report(StateWriter &writer) const
     writer.number("adapter", adapter());
     writer.hex("luid", luid_);
     writer.number("device", opened() ? connection_.device() : 0u);
-    writer.number("context", opened() ? transport_.object().context() : 0u);
+    writer.number("context", opened() ? channel_.transport().context() : 0u);
 }
 
 bool             Connection::opened() const
@@ -81,7 +76,7 @@ bool             Connection::opened() const
 bool             Connection::faulted() const
 {
     AV_SCOPE("Connection::faulted");
-    return opened() && transport_.object().faulted();
+    return opened() && channel_.faulted();
 }
 uint32_t         Connection::adapter() const
 {
@@ -103,7 +98,7 @@ uint64_t         Connection::luid() const
 uint64_t Connection::submissions() const
 {
     AV_SCOPE("Connection::submissions");
-    return transport_.constructed() ? transport_.object().submissions() : 0u;
+    return channel_.opened() ? channel_.transport().submissions() : 0u;
 }
 
 ClientTransport &Connection::transport()
@@ -117,7 +112,7 @@ TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
     AV_SCOPE("Connection::send_batch");
     const icd::ThreadLockHold release(lock_);
     WireReader unanswered(nullptr, 0u);
-    return transport_.object().send_batch(framed, length, unanswered);
+    return channel_.transport().send_batch(framed, length, unanswered);
 }
 
 Status Connection::open_chunk(ObjectStorage<HostWindowChunk> &chunk, uint64_t bytes)
@@ -125,7 +120,7 @@ Status Connection::open_chunk(ObjectStorage<HostWindowChunk> &chunk, uint64_t by
     AV_SCOPE("Connection::open_chunk");
     if (!opened() || faulted() || chunk.constructed()) return Status::invalid_state;
     const icd::ThreadLockHold release(lock_);
-    static_cast<void>(chunk.construct(connection_, transport_.object()));   /* checked empty above */
+    static_cast<void>(chunk.construct(connection_, channel_.transport()));   /* checked empty above */
     const Status status = chunk.object().open(bytes);
     if (status != Status::ok) chunk.destroy();
     return status;
@@ -145,9 +140,9 @@ bool Connection::invariants_hold() const
 {
     AV_SCOPE("Connection::invariants_hold");
     if (!connection_.invariants_hold()) return false;
-    if (!opened()) return !transport_.constructed() && staging_ == nullptr && !connection_.opened() && !search_.found();
-    if (!transport_.constructed() || !transport_.object().invariants_hold()) return false;
-    return staging_ != nullptr && connection_.opened() && search_.found() && connection_.adapter() == search_.adapter();
+    if (!channel_.invariants_hold()) return false;
+    if (!opened()) return !channel_.opened() && !connection_.opened() && !search_.found();
+    return channel_.opened() && connection_.opened() && search_.found() && connection_.adapter() == search_.adapter();
 }
 
 void Connection::note_host_dma_buf()

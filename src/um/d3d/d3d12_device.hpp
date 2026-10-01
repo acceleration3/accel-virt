@@ -28,7 +28,7 @@
 #define AV_UM_D3D12_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "icd/common/driver_log.hpp"
+#include "icd/common/keyed_log.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
@@ -142,7 +142,7 @@ private:
     d3d::D3dSession                      &session_;
     d3d::D3d12HeapArena                  &heaps_;
     icd::LogSink                         &log_;
-    icd::DriverLog                        lines_;
+    icd::KeyedLog                         lines_;
     /* Refusals logged so far; some slots are asked in a loop. */
     const D3d12HostCaps                  &caps_;
     void *const                          &list_table_;

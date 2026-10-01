@@ -8,7 +8,7 @@
 namespace av {
 
 OpenConnection::OpenConnection()
-    : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), connection_(kmt_, platform_, lock_)
+    : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_)
 {
     kmt_.add_adapter(PciIdentity(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                                  AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem),
@@ -21,6 +21,7 @@ MockPlatform        &OpenConnection::platform() { return platform_; }
 ScriptedHost        &OpenConnection::host() { return host_; }
 LockTrace           &OpenConnection::trace() { return trace_; }
 RecordingThreadLock &OpenConnection::lock() { return lock_; }
+RecordingLog        &OpenConnection::log() { return log_; }
 icd::Connection     &OpenConnection::connection() { return connection_; }
 
 }  // namespace av

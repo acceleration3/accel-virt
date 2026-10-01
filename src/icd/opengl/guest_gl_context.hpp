@@ -14,9 +14,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "guest/transport/kmt_blob_arena.hpp"
-#include "guest/transport/kmt_transport.hpp"
-#include "icd/common/batched_transport.hpp"
+#include "icd/common/host_channel.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/reported_gl_errors.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
@@ -214,11 +212,7 @@ private:
     /* The device link a made or lost context holds; no_link otherwise. */
     uint32_t                       link_;
     bool                           loss_reported_;
-    uint8_t                       *staging_;
-    uint8_t                       *batch_block_;
-    ObjectStorage<KmtTransport>    transport_;
-    ObjectStorage<icd::BatchedTransport> batched_;
-    ObjectStorage<KmtBlobArena>    arena_;
+    icd::HostChannel               channel_;
     ReportedGlErrors               reported_;
     ClientArrayState               arrays_;
     UniformShapes                  uniforms_;

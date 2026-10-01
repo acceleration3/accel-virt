@@ -83,9 +83,10 @@ struct Rig {
     explicit Rig(bool arena = true, std::uint32_t width = 8u, std::uint32_t height = 4u)
     {
         if (!arena) {
-            /* The transport's views and tail are the first two escapes; the
-             * arena's chunk is the third. */
-            context_rig.kmt().fail_at(av::MockKmt::Call::escape, 3u, av::MockKmt::invalid_parameter);
+            /* The device will not import the arena at its size, nor at the
+             * half of it that is the last size above the least. */
+            host().blob_import(1u, 0u);
+            host().blob_import(1u, 0u);
             host().gl_string("vendor");
             host().gl_string("renderer");
             host().gl_string("4.6");

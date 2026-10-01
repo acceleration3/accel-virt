@@ -50,7 +50,7 @@ struct KmtTransportProbe {
 namespace av::icd {
 
 struct ConnectionProbe {
-    static KmtTransport &transport(Connection &c) { return c.transport_.object(); }
+    static KmtTransport &transport(Connection &c) { return c.channel_.transport(); }
 };
 
 struct IcdRootProbe {

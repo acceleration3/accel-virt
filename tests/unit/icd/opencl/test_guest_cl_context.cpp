@@ -8,6 +8,7 @@
  * becomes a lost context there rather than wherever somebody remembered to
  * look. */
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/host_channel_probe.hpp"
 #include "harness/icd/cl_context_rig.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "icd/common/shared_handles.hpp"
@@ -269,12 +270,7 @@ namespace av::clicd {
 struct GuestClContextProbe {
     static MappedRegion &mapping(GuestClContext &context, uint32_t slot)
     { return context.mappings_[slot]; }
-    /* Answers the block it took away, so a test can put it back: the
-     * destructor is what frees it, and a context that has forgotten it leaks. */
-    static uint8_t      *forget_staging(GuestClContext &context)
-    { uint8_t *const held = context.staging_; context.staging_ = nullptr; return held; }
-    static void          remember_staging(GuestClContext &context, uint8_t *staging)
-    { context.staging_ = staging; }
+    static icd::HostChannel &channel(GuestClContext &context) { return context.channel_; }
     static void          forget_link(GuestClContext &context)
     { context.link_ = icd::IcdConnection::no_link; }
     static void          say_it_was_made(GuestClContext &context)
@@ -286,12 +282,10 @@ struct GuestClContextProbe {
      * teardown that stopped halfway. */
     static void          drop_the_lock(GuestClContext &context) { context.locked_.destroy(); }
     static void          restore_the_lock(GuestClContext &context)
-    { static_cast<void>(context.locked_.construct(context.transport_.object(),
+    { static_cast<void>(context.locked_.construct(context.channel_.batched(),
                                                   context.send_lock_)); }
-    /* A staging block and a link on a context that says it has made nothing.
-     * Neither points at anything, so nothing is freed or released. */
-    static void          stray_staging(GuestClContext &context, uint8_t *block)
-    { context.staging_ = block; }
+    /* A link on a context that says it has made nothing. It points at
+     * nothing, so nothing is released. */
     static void          stray_link(GuestClContext &context) { context.link_ = 0u; }
     static SvmTable     &svm_of(GuestClContext &context) { return context.svm_; }
 };
@@ -390,10 +384,11 @@ TEST(guest_cl_context, the_invariant_catches_a_made_context_that_is_missing_what
     CHECK(context.invariants_hold());
     /* Made, but with no staging block: the transport has nowhere to put a
      * reply, and teardown would give back nothing. */
-    std::uint8_t *const staging = GuestClContextProbe::forget_staging(context);
+    av::icd::HostChannelProbe channel(GuestClContextProbe::channel(context));
+    std::uint8_t *const staging = channel.swap_staging(nullptr);
     CHECK(!context.invariants_hold());
     /* Put it back: the destructor is what frees it. */
-    GuestClContextProbe::remember_staging(context, staging);
+    static_cast<void>(channel.swap_staging(staging));
     CHECK(context.invariants_hold()); }
   { ClContextRig   rig;
     arena_answers(rig);
@@ -484,9 +479,10 @@ TEST(guest_cl_context, the_invariant_catches_each_thing_an_unmade_context_should
     GuestClContext context = made_context(rig);
     CHECK(context.invariants_hold());
     std::uint8_t block = 0u;
-    GuestClContextProbe::stray_staging(context, &block);
+    av::icd::HostChannelProbe channel(GuestClContextProbe::channel(context));
+    static_cast<void>(channel.swap_staging(&block));
     CHECK(!context.invariants_hold());
-    GuestClContextProbe::stray_staging(context, nullptr);
+    static_cast<void>(channel.swap_staging(nullptr));
     CHECK(context.invariants_hold()); }
   { ClContextRig rig;
     GuestClContext context = made_context(rig);

@@ -31,7 +31,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
-      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -143,7 +143,7 @@ const GlContextOptions &GuestGlContext::options() const
 uint32_t GuestGlContext::share_name() const
 {
     AV_SCOPE("GuestGlContext::share_name");
-    return state_ == State::created ? 0u : transport_.object().ring();
+    return state_ == State::created ? 0u : channel_.transport().ring();
 }
 
 Status GuestGlContext::share_after(uint64_t target)
@@ -174,15 +174,15 @@ Status GuestGlContext::share(uint32_t share_name)
 BatchMark GuestGlContext::mark() const
 {
     AV_SCOPE("GuestGlContext::mark");
-    return transport_.constructed() ? transport_.object().newest_mark() : BatchMark();
+    return channel_.opened() ? channel_.transport().newest_mark() : BatchMark();
 }
 
 void GuestGlContext::flush()
 {
     AV_SCOPE("GuestGlContext::flush");
-    if (state_ != State::made || !batched_.constructed()) return;
+    if (state_ != State::made || !channel_.opened()) return;
     send_lock_.acquire();
-    const TransportResult sent = batched_.object().flush();
+    const TransportResult sent = channel_.batched().flush();
     send_lock_.release();
     if (sent != TransportResult::ok) log_.write("avgl: the held calls could not be sent");
 }
@@ -193,7 +193,7 @@ ClientTransport *GuestGlContext::wire()
     if (state_ != State::made) return nullptr;
     /* One faulted transport loses its whole device: every context on the
      * link finds out at its own next call, on its own thread. */
-    if (transport_.object().faulted()) connection_.lose(link_);
+    if (channel_.faulted()) connection_.lose(link_);
     if (connection_.lost(link_)) {
         state_ = State::lost;
         log_.write("avgl: the context's device faulted; the context is lost");
@@ -202,7 +202,7 @@ ClientTransport *GuestGlContext::wire()
      * thread at a time, and it is only ever called on that one. The lock
      * every call took serialised each context's calls against every other
      * context's, and cost a sixth of a draw-heavy thread's time. */
-    return state_ == State::made ? &batched_.object() : nullptr;
+    return state_ == State::made ? &channel_.batched() : nullptr;
 }
 
 ClientArrayState &GuestGlContext::arrays()
@@ -277,8 +277,8 @@ bool GuestGlContext::take_host_error(uint32_t &error)
 {
     AV_SCOPE("GuestGlContext::take_host_error");
     error = no_error;
-    if (!arena_.constructed() || !arena_.object().lending()) return false;
-    const uint64_t word = arena_.object().host_errors();
+    if (channel_.arena_view() == nullptr) return false;
+    const uint64_t word = channel_.host_errors();
     if (!reported_.readable(word)) return false;
     error = reported_.take(word);
     return true;
@@ -375,7 +375,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("share_target", share_target_);
     writer.number("error", error_);
     writer.number("link", link_);
-    writer.flag("arena", arena_.constructed() && arena_.object().lending());
+    writer.flag("arena", channel_.arena_view() != nullptr);
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
     writer.number("extensions", extensions_.count());
     framebuffers_.report(writer);
@@ -390,41 +390,24 @@ bool GuestGlContext::invariants_hold() const
 {
     AV_SCOPE("GuestGlContext::invariants_hold");
     const bool held = state_ != State::created;
-    if (held != transport_.constructed() || held != batched_.constructed() ||
-        held != (link_ != icd::IcdConnection::no_link))
-        return false;
+    if (held != channel_.opened() || held != (link_ != icd::IcdConnection::no_link)) return false;
     if (loss_reported_ && state_ != State::lost) return false;
-    if (held != (staging_ != nullptr)) return false;
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
     return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
-           framebuffers_.invariants_hold() && mappings_.invariants_hold() && shadows_.invariants_hold();
+           framebuffers_.invariants_hold() && mappings_.invariants_hold() && shadows_.invariants_hold() &&
+           channel_.invariants_hold();
 }
 
 Status GuestGlContext::build()
 {
     AV_SCOPE("GuestGlContext::build");
     if (connection_.acquire(link_) != Status::ok) return Status::not_supported;
-    staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes, Pool::paged));
-    if (staging_ == nullptr) return Status::no_memory;
-    /* Both storages were emptied by teardown or never filled. */
-    static_cast<void>(transport_.construct(connection_.device(link_), SubApi::opengl, ring_order, reply_bytes, staging_,
-                                           staging_bytes));
-    const Status initialized = transport_.object().initialize(options_);
-    if (initialized != Status::ok) {
-        log_.write("avgl: the driver refused the context");
-        return initialized == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
-    }
-    batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
-    if (batch_block_ == nullptr) return Status::no_memory;
-    static_cast<void>(batched_.construct(transport_.object(), batch_block_, batch_bytes, staging_bytes));
-    static_cast<void>(pacer_.construct(connection_.device(link_).kmt(), log_, connection_.device(link_).adapter(),
-                                       connection_.device(link_).device()));
-    static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
     GuestConnection &device = connection_.device(link_);
+    const Status     opened = channel_.open(device, options_);
+    if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
+    static_cast<void>(pacer_.construct(device.kmt(), log_, device.adapter(), device.device()));
     if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
-    if (arena_.object().open(arena_bytes) != Status::ok)
-        log_.write("avgl: no blob arena for the context; bulk data crosses inline");
     return Status::ok;
 }
 
@@ -437,7 +420,7 @@ uint64_t GuestGlContext::adapter_luid() const
 bool GuestGlContext::learn()
 {
     AV_SCOPE("GuestGlContext::learn");
-    ClientTransport &wire = batched_.object();
+    ClientTransport &wire = channel_.batched();
     for (uint32_t row = 0u; row < strings; row++) {
         size_t length = 0u;
         if (!glproto::av_glGetString(wire, string_names[row], strings_[row], string_bytes - 1u, &length))
@@ -460,7 +443,7 @@ bool GuestGlContext::learn()
                    static_cast<uint32_t>(mask));
     cap_version();
     policy_.learn(wire, extensions_);
-    return !transport_.object().faulted();
+    return !channel_.faulted();
 }
 
 /* A host newer than the ICD implements is reported as 4.6: the version's
@@ -489,27 +472,15 @@ void GuestGlContext::cap_version()
 void GuestGlContext::teardown()
 {
     AV_SCOPE("GuestGlContext::teardown");
-    /* What the application sent last still reaches the host before its
-     * context goes. */
-    if (batched_.constructed() && state_ == State::made) static_cast<void>(batched_.object().flush());
     /* The host's framebuffer objects go with its context. */
     framebuffers_.release(nullptr);
     mappings_.release();
     shadows_.forget_all();
-    if (arena_.constructed()) {
-        /* A lost context's host context goes with DestroyContext, and its
-         * import with it: nothing is asked of the host. */
-        const Status closed = state_ == State::lost ? arena_.object().abandon() : arena_.object().close();
-        if (closed != Status::ok) log_.write("avgl: the blob arena did not close whole");
-        arena_.destroy();
-    }
-    batched_.destroy();
+    /* What the application sent last still reaches the host before its
+     * context goes; a lost context's goes with DestroyContext, and its arena
+     * import with it, so nothing is asked of the host. */
+    channel_.close(state_ == State::lost);
     pacer_.destroy();
-    transport_.destroy();
-    if (staging_ != nullptr) memory_.release(staging_);
-    staging_ = nullptr;
-    if (batch_block_ != nullptr) memory_.release(batch_block_);
-    batch_block_ = nullptr;
     connection_.release(link_);
     link_ = icd::IcdConnection::no_link;
     loss_reported_ = false;

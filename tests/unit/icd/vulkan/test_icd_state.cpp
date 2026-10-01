@@ -42,7 +42,7 @@ struct CommandBatchProbe {
 
 struct ConnectionProbe {
     static std::uint32_t device(const Connection &c) { return c.connection_.device(); }
-    static std::uint32_t context(const Connection &c) { return c.transport_.object().context(); }
+    static std::uint32_t context(const Connection &c) { return c.channel_.transport().context(); }
 };
 
 }  // namespace av::icd
@@ -167,7 +167,7 @@ TEST(icd_state, a_closed_connection_reports_nothing_it_does_not_hold)
 { IcdRig rig;
   av::LockTrace           trace;
   av::RecordingThreadLock lock(trace, 'C');
-  Connection              connection(rig.kmt(), rig.platform(), lock);
+  Connection              connection(rig.kmt(), rig.platform(), lock, rig.log());
   char                    bytes[256];
   StateWriter             dump(bytes, sizeof bytes);
   dump.open("connection", 0u);

@@ -15,8 +15,8 @@
 #include "core/support/object_storage.hpp"
 #include "um/d3d/query_results.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/host_channel.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "core/support/object_pool.hpp"
@@ -88,16 +88,13 @@ private:
     icd::LogSink                        &log_;
     SrwLock                              lock_;
     GuestConnection                      connection_;
-    ObjectStorage<KmtTransport>          transport_;
-    ObjectStorage<KmtBlobArena>          arena_;
+    icd::HostChannel                     channel_;
     ObjectStorage<d3d::D3dCommandStream> stream_;
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
-    uint8_t                             *staging_;
     uint8_t                             *batch_;
     uint32_t                             members_;
     uint32_t                             next_id_;
-    uint64_t                             arena_bytes_;
     uint32_t                             select_command_;
     uint32_t                             finish_command_;
     uint32_t                             flush_command_;

@@ -48,7 +48,7 @@ struct KmtTransportProbe {
 namespace av::icd {
 
 struct ConnectionProbe {
-    static KmtTransport &transport(Connection &c) { return c.transport_.object(); }
+    static KmtTransport &transport(Connection &c) { return c.channel_.transport(); }
 };
 
 struct CommandBatchProbe {
@@ -90,7 +90,7 @@ const VkCommandBuffer command_buffer = VK_NULL_HANDLE;
  * unwrap handles through. */
 class BatchRig {
 public:
-    BatchRig() : connection_(rig_.kmt(), rig_.platform(), rig_.send_lock()), batch_(rig_.platform(), connection_)
+    BatchRig() : connection_(rig_.kmt(), rig_.platform(), rig_.send_lock(), rig_.log()), batch_(rig_.platform(), connection_)
     {
         CHECK_STATUS(connection_.open(), Status::ok);
         baseline_ = rig_.platform().live_allocations();
@@ -248,7 +248,7 @@ TEST(command_batch, memory_refused_while_recording_answers_no_memory_at_end_and_
 
 TEST(command_batch, the_block_goes_with_the_batch)
 { IcdRig rig;
-  Connection connection(rig.kmt(), rig.platform(), rig.send_lock());
+  Connection connection(rig.kmt(), rig.platform(), rig.send_lock(), rig.log());
   CHECK_STATUS(connection.open(), Status::ok);
   const std::uint32_t baseline = rig.platform().live_allocations();
   {

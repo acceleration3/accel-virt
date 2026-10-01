@@ -20,7 +20,7 @@
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
-#include "icd/common/driver_log.hpp"
+#include "icd/common/keyed_log.hpp"
 #include "icd/common/window_chains.hpp"
 #include "um/icd/com_reference.hpp"
 
@@ -123,7 +123,7 @@ private:
     Kmt             &kmt_;
     icd::ThreadLock &lock_;
     icd::LogSink    &log_;
-    icd::DriverLog  lines_;
+    icd::KeyedLog   lines_;
     void            *d3d11_;
     void            *dxgi_;
     void            *create_device_;

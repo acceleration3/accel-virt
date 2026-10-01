@@ -19,6 +19,7 @@
 #include "guest/suite/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/host_channel.hpp"
 #include "icd/common/locked_transport.hpp"
 
 #include <stddef.h>
@@ -34,6 +35,7 @@ class StateWriter;
 
 namespace av::icd {
 
+class LogSink;
 class ThreadLock;
 struct ConnectionProbe;
 
@@ -43,7 +45,8 @@ public:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   command_bytes = 256u * 1024u;
 
-    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock);
+    /* `log` takes the lines the channel writes. */
+    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log);
     ~Connection();
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
@@ -100,12 +103,10 @@ public:
 
 private:
     Kmt                           &kmt_;
-    BlockSource                   &memory_;
     ThreadLock                    &lock_;
     AdapterSearch                  search_;
     GuestConnection                connection_;
-    uint8_t                       *staging_;
-    ObjectStorage<KmtTransport>    transport_;
+    HostChannel                    channel_;
     ObjectStorage<LockedTransport> locked_;
     uint64_t                       luid_;
     bool                           host_dma_buf_;

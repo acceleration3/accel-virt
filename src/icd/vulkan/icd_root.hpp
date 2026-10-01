@@ -22,7 +22,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
-#include "icd/common/driver_log.hpp"
+#include "icd/common/keyed_log.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
@@ -277,7 +277,7 @@ private:
     ThreadLock            &send_lock_;
     ThreadLock            &memory_lock_;
     LogSink               &log_;
-    DriverLog             lines_;
+    KeyedLog              lines_;
     IcdBinding            &binding_;
     uint32_t               api_version_;
     EntryPoints            before_instance_;

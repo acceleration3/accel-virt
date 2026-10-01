@@ -29,7 +29,7 @@ struct KmtTransportProbe {
 namespace icd {
 
 struct ConnectionProbe {
-    static KmtTransport &transport(Connection &connection) { return connection.transport_.object(); }
+    static KmtTransport &transport(Connection &connection) { return connection.channel_.transport(); }
 };
 
 }  // namespace icd

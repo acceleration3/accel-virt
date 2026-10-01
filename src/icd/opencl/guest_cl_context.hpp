@@ -22,7 +22,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "icd/common/batched_transport.hpp"
+#include "icd/common/host_channel.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_property_list.hpp"
@@ -151,12 +151,8 @@ private:
     icd::LogSink       &log_;
     uint32_t            link_;
     uint32_t            gl_share_;
-    uint8_t            *staging_;
-    uint8_t            *batch_block_;
-    ObjectStorage<KmtTransport>          transport_;
-    ObjectStorage<icd::BatchedTransport> batched_;
+    icd::HostChannel                     channel_;
     ObjectStorage<icd::LockedTransport>  locked_;
-    ObjectStorage<KmtBlobArena>          arena_;
     ClArenaBlocks                        blocks_;
     SvmTable                             svm_;
     ClExternalMemory                     external_;

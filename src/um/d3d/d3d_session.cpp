@@ -10,8 +10,11 @@ namespace av::d3d {
 
 D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, icd::LogSink &log, uint64_t arena_size,
                        uint32_t select_command, uint32_t finish_command, uint32_t flush_command)
-    : memory_(memory), log_(log), lock_(), connection_(kmt), transport_(), arena_(), stream_(), query_results_(), contexts_(memory),
-      staging_(nullptr), batch_(nullptr), members_(0u), next_id_(0u), arena_bytes_(arena_size), select_command_(select_command),
+    : memory_(memory), log_(log), lock_(), connection_(kmt),
+      channel_(memory, log, "avumd: ",
+               icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, 0u, arena_size)),
+      stream_(), query_results_(), contexts_(memory), batch_(nullptr), members_(0u), next_id_(0u),
+      select_command_(select_command),
       finish_command_(finish_command), flush_command_(flush_command)
 {
     AV_SCOPE("D3dSession::D3dSession");
@@ -48,33 +51,19 @@ void D3dSession::leave()
 HRESULT D3dSession::open(uint32_t adapter)
 {
     AV_SCOPE("D3dSession::open");
-    staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes, Pool::paged));
     batch_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
-    if (staging_ == nullptr || batch_ == nullptr) return E_OUTOFMEMORY;
+    if (batch_ == nullptr) return E_OUTOFMEMORY;
     if (connection_.open(adapter) != Status::ok) {
         log_.write("avumd: no device on the adapter for a Direct3D session");
         return E_FAIL;
     }
-    static_cast<void>(transport_.construct(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes));
-    if (transport_.object().initialize() != Status::ok) {
-        log_.write("avumd: the kernel refused the Direct3D context");
-        return E_FAIL;
-    }
-    static_cast<void>(arena_.construct(connection_, transport_.object()));
-    /* Each size is the host window's when it has room and guest RAM's when
-     * not (the kernel decides); an arena neither can hold is tried again at
-     * half the size, down to what bulk data alone needs. */
-    uint64_t bytes = arena_bytes_;
-    Status   opened = arena_.object().open(bytes);
-    while (opened != Status::ok && bytes / 2u >= KmtBlobArena::default_bytes) {
-        bytes /= 2u;
-        opened = arena_.object().open(bytes);
-    }
-    if (opened != Status::ok)
-        log_.write("avumd: no blob arena for the session; bulk data crosses inline");
-    else
-        query_results_.reserve(transport_.object().blobs(), arena_.object().view(), arena_.object().bytes());
-    static_cast<void>(stream_.construct(transport_.object(), batch_, batch_bytes));
+    /* An arena of the shape's size is the host window's when it has room
+     * and guest RAM's when not (the kernel decides). */
+    const Status opened = channel_.open(connection_);
+    if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
+    if (channel_.arena_view() != nullptr)
+        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes());
+    static_cast<void>(stream_.construct(channel_.transport(), batch_, batch_bytes));
     stream_.object().speak_with(select_command_, finish_command_, flush_command_);
     return S_OK;
 }
@@ -86,18 +75,9 @@ void D3dSession::close()
         static_cast<void>(stream_.object().flush());
         stream_.destroy();
     }
-    if (arena_.constructed()) {
-        static_cast<void>(arena_.object().close());
-        arena_.destroy();
-    }
-    if (transport_.constructed()) {
-        transport_.object().teardown();
-        transport_.destroy();
-    }
+    channel_.close(false);
     connection_.close();
-    if (staging_ != nullptr) memory_.release(staging_);
     if (batch_ != nullptr) memory_.release(batch_);
-    staging_ = nullptr;
     batch_ = nullptr;
 }
 
@@ -124,19 +104,19 @@ d3d11::QueryResults &D3dSession::query_results()
 uint8_t *D3dSession::arena_view() const
 {
     AV_SCOPE("D3dSession::arena_view");
-    return arena_.constructed() ? arena_.object().view() : nullptr;
+    return channel_.arena_view();
 }
 
 uint64_t D3dSession::arena_bytes() const
 {
     AV_SCOPE("D3dSession::arena_bytes");
-    return arena_.constructed() ? arena_.object().bytes() : 0u;
+    return channel_.arena_bytes();
 }
 
 ClientBlobArena &D3dSession::blobs()
 {
     AV_SCOPE("D3dSession::blobs");
-    return transport_.object().blobs();
+    return channel_.transport().blobs();
 }
 
 icd::ThreadLock &D3dSession::lock()
@@ -148,7 +128,7 @@ icd::ThreadLock &D3dSession::lock()
 KmtTransport &D3dSession::transport()
 {
     AV_SCOPE("D3dSession::transport");
-    return transport_.object();
+    return channel_.transport();
 }
 
 ObjectPool<d3d11::D3d11Device> &D3dSession::contexts()

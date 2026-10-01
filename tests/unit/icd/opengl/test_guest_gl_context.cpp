@@ -4,6 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/host_channel_probe.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "harness/icd/gl_context_rig.hpp"
@@ -27,22 +28,13 @@ namespace av::glicd {
 
 struct GuestGlContextProbe {
     static void claim_made(GuestGlContext &context) { context.state_ = GuestGlContext::State::made; }
-    static void drop_staging(GuestGlContext &context, void *other)
-    {
-        context.staging_ = static_cast<uint8_t *>(other);
-    }
+    static av::icd::HostChannel &channel(GuestGlContext &context) { return context.channel_; }
     static void unterminate(GuestGlContext &context) { std::memset(context.strings_[2], 'x', GuestGlContext::string_bytes); }
     static void connect(GuestGlContext &context, bool connected)
     {
         context.link_ = connected ? 0u : av::icd::IcdConnection::no_link;
     }
     static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
-    static void drop_batch(GuestGlContext &context) { context.batched_.destroy(); }
-    static void restore_batch(GuestGlContext &context)
-    {
-        static_cast<void>(context.batched_.construct(context.transport_.object(), context.batch_block_,
-                                                     GuestGlContext::batch_bytes, GuestGlContext::staging_bytes));
-    }
 };
 
 struct ClientArrayStateProbe {
@@ -327,9 +319,10 @@ TEST(guest_gl_context, a_transport_out_of_memory_is_no_memory)
 TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
 { GlContextRig rig;
   Context context(rig);
-  /* The transport's views and tail are the first two escapes; the arena's
-   * chunk is the third. */
-  rig.kmt().fail_at(MockKmt::Call::escape, 3u, MockKmt::invalid_parameter);
+  /* The device will not import the arena at its size, nor at the half of it
+   * that is the last size still above the least an arena is opened at. */
+  rig.host().blob_import(1u, 0u);
+  rig.host().blob_import(1u, 0u);
   rig.host().gl_string("vendor");
   rig.host().gl_string(renderer);
   rig.host().gl_string("4.6");
@@ -360,8 +353,11 @@ TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
       CHECK_STATUS(context->make(), Status::invalid_parameter);
       CHECK(context->state() == State::created);
       /* One line per ask the ladder made (feature 051): the host refused the
-       * compatibility context, its own default and the core one. */
-      CHECK_EQ(rig.log().holding("the host refused the context"), 3u);
+       * compatibility context, its own default and the core one - or the
+       * ask's transport faulted on the arena, before the host was asked. */
+      CHECK_EQ(rig.log().holding("the host refused the context") +
+                   rig.log().holding("faulted opening its blob arena"),
+               3u);
       CHECK_EQ(rig.kmt().open_objects(), 0u);
       CHECK_EQ(rig.platform().live_allocations(), 0u);
   } }
@@ -513,10 +509,11 @@ TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
   av::glicd::GuestGlContextProbe::claim_made(*claimed);
   CHECK(!claimed->invariants_hold());
   Context staged(rig);
-  int block = 0;
-  av::glicd::GuestGlContextProbe::drop_staging(*staged, &block);
+  std::uint8_t block = 0u;
+  av::icd::HostChannelProbe staging(av::glicd::GuestGlContextProbe::channel(*staged));
+  static_cast<void>(staging.swap_staging(&block));
   CHECK(!staged->invariants_hold());
-  av::glicd::GuestGlContextProbe::drop_staging(*staged, nullptr);
+  static_cast<void>(staging.swap_staging(nullptr));
   Context unterminated(rig);
   av::glicd::GuestGlContextProbe::unterminate(*unterminated);
   CHECK(!unterminated->invariants_hold());
@@ -537,9 +534,10 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(made->make(), Status::ok);
   CHECK(made->invariants_hold());
-  GuestGlContextProbe::drop_batch(*made);
+  av::icd::HostChannelProbe channel(GuestGlContextProbe::channel(*made));
+  channel.drop_batched();
   CHECK(!made->invariants_hold());
-  GuestGlContextProbe::restore_batch(*made);
+  channel.restore_batched();
   CHECK(made->invariants_hold());
   GuestGlContextProbe::connect(*made, false);
   CHECK(!made->invariants_hold());

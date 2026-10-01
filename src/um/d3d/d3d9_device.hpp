@@ -19,7 +19,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
-#include "icd/common/driver_log.hpp"
+#include "icd/common/keyed_log.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
@@ -193,7 +193,7 @@ private:
     d3d::D3dSession                     &session_;
     BlockSource                         &memory_;
     icd::LogSink                        &log_;
-    icd::DriverLog                       lines_;
+    icd::KeyedLog                        lines_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
     SrwLock                              lock_;
