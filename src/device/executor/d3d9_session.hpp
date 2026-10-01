@@ -22,6 +22,7 @@
 #define AV_D3D9_SESSION_HPP
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_server.h"
 
@@ -192,6 +193,7 @@ private:
     D3dObjectTable &objects_;
     Device          devices_[max_devices];
     Device         *selected_;
+    CommandRefusal  refusal_;
     /* The decode arena of the command running; null between commands. */
     WireArena      *arena_;
 };

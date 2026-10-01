@@ -13,6 +13,7 @@
 #ifndef AV_D3D_BACKEND_HPP
 #define AV_D3D_BACKEND_HPP
 
+#include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d12_session.hpp"
 #include "device/executor/d3d9_session.hpp"
 #include "device/executor/d3d_context_states.hpp"
@@ -220,6 +221,7 @@ private:
     /* The guest's id of the selected device; 0 before any selection or after
      * the selected device was destroyed. An id with no state selects nothing. */
     uint32_t                selected_device_;
+    CommandRefusal          refusal_;
     /* The decode arena of the command running, which scratch - a shader's
      * container - is taken from; null between commands. */
     WireArena              *arena_;

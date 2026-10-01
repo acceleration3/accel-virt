@@ -17,6 +17,7 @@
 #include "device/surfaces/shared_surfaces.hpp"
 #include "device/surfaces/staged_frame.hpp"
 #include "proto/resources/surface_point.hpp"
+#include "proto/generated/d3d/d3d_command_names.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 
@@ -71,7 +72,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_, objects_), published_(),
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), refusal_("d3d11"), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_, objects_), published_(),
       missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -144,13 +145,10 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     arena_ = &arena;
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
-    /* A command the host refuses removes the device that sent it, not the
-     * session: the session is every device of a guest process, the whole of
-     * the desktop's composition in DWM's case. The guest learns the reason at
-     * its next Finish11 and recreates the device, as it would after a TDR.
-     * With no device selected there is nobody to remove, and the session is
-     * what refused. */
-    if (ran || selected_device_ == 0u) return ran;
+    if (ran) return true;
+    if (!refusal_.removes(d3dproto::command_name(command_id), reply, selected_device_,
+                          states_.removed_reason(selected_device_) != 0u))
+        return false;
     states_.mark_removed(selected_device_, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
     return true;
 }

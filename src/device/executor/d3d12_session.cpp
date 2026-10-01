@@ -21,6 +21,8 @@ namespace av {
 
 namespace {
 
+/* Direct3D 12's commands name no device: a session is its guest's one. */
+constexpr uint32_t only_device = 1u;
 constexpr uint32_t max_format = 191u;
 constexpr uint32_t descriptor_heap_types = 4u;
 /* D3D12_HEAP_TYPE and D3D12_CPU_PAGE_PROPERTY values the wire carries. */
@@ -105,7 +107,7 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 
 D3d12Session::D3d12Session(GuestRegion &region)
     : region_(region), device_(nullptr), surfaces_(nullptr), objects_(), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
-      pipelines_(objects_), presentation_(), arena_(nullptr), removed_(0u)
+      pipelines_(objects_), presentation_(), arena_(nullptr), removed_(0u), refusal_("d3d12")
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -149,15 +151,8 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
     arena_ = &arena;
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
-    /* A synchronous command that is refused has no answer to give, and the
-     * guest is waiting on one: that is the session's to fail. An asynchronous
-     * one removes the device, which the next Finish12 reports. */
-    if (ran || command_id == d3d12proto::kCmd_Finish12 || command_id == d3d12proto::kCmd_FenceValue12 ||
-        command_id == d3d12proto::kCmd_OpenDevice12 || command_id == d3d12proto::kCmd_QueryFormat12)
-        return ran;
-    /* The first refusal is the one that says why: every later one follows from it. */
-    if (removed_ == 0u)
-        fprintf(stderr, "virtio-gpu-av: d3d12: %s refused; the device is removed\n", d3d12proto::command_name(command_id));
+    if (ran) return true;
+    if (!refusal_.removes(d3d12proto::command_name(command_id), reply, only_device, removed_ != 0u)) return false;
     removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
     return true;
 }

@@ -16,6 +16,7 @@
 #define AV_D3D12_SESSION_HPP
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d12_address_map.hpp"
 #include "device/executor/d3d12_arena_heaps.hpp"
 #include "device/executor/d3d12_fence_publisher.hpp"
@@ -186,6 +187,7 @@ private:
     /* The decoding command's arena, which containers are written into. */
     WireArena             *arena_;
     uint32_t               removed_;
+    CommandRefusal         refusal_;
 };
 
 template <typename T> T *D3d12Session::object(uint32_t id, D3dObjectKind kind) const

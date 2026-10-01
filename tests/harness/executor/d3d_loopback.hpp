@@ -47,7 +47,8 @@ public:
     uint32_t refused() const;
 
 private:
-    bool run(uint32_t command_id, WireWriter &writer, std::size_t &answered);
+    /* `awaited`: the guest waits on the answer, so it is lent room. */
+    bool run(uint32_t command_id, WireWriter &writer, bool awaited, std::size_t &answered);
 
     D3dBackend     &backend_;
     uint8_t        *command_;

@@ -41,12 +41,14 @@ WireWriter D3dLoopback::request_writer()
     return WireWriter(command_, command_bytes);
 }
 
-bool D3dLoopback::run(uint32_t command_id, WireWriter &writer, std::size_t &answered)
+bool D3dLoopback::run(uint32_t command_id, WireWriter &writer, bool awaited, std::size_t &answered)
 {
     answered = 0u;
     if (writer.status() != Status::ok) return false;
     WireReader payload(command_, writer.offset());
-    WireWriter reply(reply_, reply_bytes);
+    /* Only an answer the guest waits on is lent room, as the device's batch
+     * executor lends it: that is how a session tells the two apart. */
+    WireWriter reply(awaited ? reply_ : nullptr, awaited ? reply_bytes : 0u);
     arena_.reset();
     /* Each command is a batch of its own here, ended as the worker ends one:
      * whether it ran or was refused, the Direct3D 11 lock it took is let go. */
@@ -63,13 +65,13 @@ bool D3dLoopback::run(uint32_t command_id, WireWriter &writer, std::size_t &answ
 TransportResult D3dLoopback::send_async(uint32_t command_id, WireWriter &writer)
 {
     std::size_t answered = 0u;
-    return run(command_id, writer, answered) ? TransportResult::ok : TransportResult::failed;
+    return run(command_id, writer, false, answered) ? TransportResult::ok : TransportResult::failed;
 }
 
 TransportResult D3dLoopback::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
     std::size_t answered = 0u;
-    if (!run(command_id, writer, answered)) return TransportResult::failed;
+    if (!run(command_id, writer, true, answered)) return TransportResult::failed;
     /* An answer means the host has read every lease sent before it. */
     blobs_.retire_all();
     reply = WireReader(reply_, answered);
