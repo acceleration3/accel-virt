@@ -136,7 +136,7 @@ HRESULT D3d9Device::create_host_object(D3d9Resource &resource, const D3DDDIARG_C
         resource.id = 0u;
         return create_surfaces(resource, create);
     }
-    return sent ? S_OK : lost();
+    return sent ? S_OK : lost(__func__);
 }
 
 /* A surface resource is as many surfaces as it has subresources: a swap
@@ -155,7 +155,7 @@ HRESULT D3d9Device::create_surfaces(D3d9Resource &resource, const D3DDDIARG_CREA
                                                static_cast<uint32_t>(create.Format),
                                                static_cast<uint32_t>(create.MultisampleType),
                                                create.MultisampleQuality, flags))
-            return lost();
+            return lost(__func__);
     }
     return S_OK;
 }
@@ -360,10 +360,10 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     const auto *const from = static_cast<const uint8_t *>(data);
     for (uint32_t done = 0u; done < bytes;) {
         const uint32_t piece = bytes - done < write_piece ? bytes - done : static_cast<uint32_t>(write_piece);
-        if (piece > inline_limit && !wire().make_room_for(piece)) return lost();
+        if (piece > inline_limit && !wire().make_room_for(piece)) return lost(__func__);
         if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, done == 0u ? flags : flags & ~write_discard,
                                              from + done, piece))
-            return lost();
+            return lost(__func__);
         done += piece;
     }
     return S_OK;
@@ -406,11 +406,11 @@ HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box
         const d3d9proto::Box part = {box.Left, top, box.Front, box.Right, bottom < box.Bottom ? bottom : box.Bottom,
                                      box.Back};
         const size_t bytes = size_t{count - 1u} * row_pitch + line;
-        if (bytes > inline_limit && !wire().make_room_for(bytes)) return lost();
+        if (bytes > inline_limit && !wire().make_room_for(bytes)) return lost(__func__);
         if (!d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
                                               done == 0u ? flags : flags & ~write_discard,
                                               data + size_t{done} * row_pitch, bytes))
-            return lost();
+            return lost(__func__);
     }
     return S_OK;
 }
@@ -440,12 +440,12 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     constexpr uint32_t pitch_slack = 256u;
     const size_t capacity = (size_t{layout.row_bytes(level.width)} + pitch_slack) * layout.rows(level.height);
     if (capacity == 0u || !readback_room(capacity)) return E_OUTOFMEMORY;
-    if (capacity > inline_limit && !wire().make_room_for(capacity)) return lost();
+    if (capacity > inline_limit && !wire().make_room_for(capacity)) return lost(__func__);
     uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
     uint64_t read = 0u;
     if (!d3d9proto::av_d3d9_ReadSurface9(wire(), id, subresource, &hresult, &width, &height, &format, &pitch,
                                          readback_, capacity, &read))
-        return lost();
+        return lost(__func__);
     if (hresult != 0u) return static_cast<HRESULT>(hresult);
     rows = pitch == 0u ? 0u : static_cast<uint32_t>(read / pitch);
     return S_OK;
@@ -578,7 +578,7 @@ HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
     const bool from_system = source->kind == D3d9Resource::Kind::system;
     const bool to_system = destination->kind == D3d9Resource::Kind::system;
     if (from_system && to_system) return S_OK;
-    if (!send_states()) return lost();
+    if (!send_states()) return lost(__func__);
     if (to_system) return blt_to_system(*source, *destination, *args);
     if (from_system) {
         const POINT at = {args->DstRect.left, args->DstRect.top};
@@ -594,7 +594,7 @@ HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
     const uint32_t filter = args->Flags.Linear ? filter_linear : args->Flags.Point ? filter_point : 0u;
     return d3d9proto::av_d3d9_StretchRect9(wire(), from_id, from_sub, from_rect, to_id, to_sub, to_rect, filter)
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::blt_to_system(const D3d9Resource &source, const D3d9Resource &destination,
@@ -631,7 +631,7 @@ HRESULT D3d9Device::color_fill(const D3DDDIARG_COLORFILL *args)
     if (target == nullptr) return S_OK;
     if (!surface_of(*target, args->SubResourceIndex, id, subresource)) return E_INVALIDARG;
     const d3d9proto::Rect rect = {args->DstRect.left, args->DstRect.top, args->DstRect.right, args->DstRect.bottom};
-    return d3d9proto::av_d3d9_ColorFill9(wire(), id, subresource, rect, args->Color) ? S_OK : lost();
+    return d3d9proto::av_d3d9_ColorFill9(wire(), id, subresource, rect, args->Color) ? S_OK : lost(__func__);
 }
 
 /* Asked for only by the runtime's own clears of depth it cannot reach with
@@ -649,7 +649,7 @@ HRESULT D3d9Device::generate_mip_sub_levels(const D3DDDIARG_GENERATEMIPSUBLEVELS
     const D3d9Resource *const texture = resource(args->hResource);
     if (texture == nullptr || texture->id == 0u) return E_INVALIDARG;
     const uint32_t filter = args->Filter == D3DDDITEXF_NONE ? filter_linear : static_cast<uint32_t>(args->Filter);
-    return d3d9proto::av_d3d9_GenerateMips9(wire(), texture->id, filter) ? S_OK : lost();
+    return d3d9proto::av_d3d9_GenerateMips9(wire(), texture->id, filter) ? S_OK : lost(__func__);
 }
 
 }  // namespace av::d3d9

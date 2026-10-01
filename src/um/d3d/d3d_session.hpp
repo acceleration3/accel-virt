@@ -44,11 +44,12 @@ public:
     /* `arena_size` is the blob arena the session opens: bulk data crosses
      * through it, and the Direct3D 12 driver places its CPU-visible heaps in
      * what it does not lend. */
-    /* `select_command` and `finish_command` are what the session's stream
-     * selects a device and waits for the host with (D3dCommandStream::
-     * speak_with): Direct3D 11's for 11 and 12, Direct3D 9's for 9. */
+    /* `select_command`, `finish_command` and `flush_command` are what the
+     * session's stream selects a device, waits for the host and flushes with
+     * (D3dCommandStream::speak_with): Direct3D 11's for 11 and 12, Direct3D
+     * 9's for 9. */
     D3dSession(Kmt &kmt, BlockSource &memory, icd::LogSink &log, uint64_t arena_size, uint32_t select_command,
-               uint32_t finish_command);
+               uint32_t finish_command, uint32_t flush_command);
     ~D3dSession();
     D3dSession(const D3dSession &) = delete;
     D3dSession &operator=(const D3dSession &) = delete;
@@ -99,6 +100,7 @@ private:
     uint64_t                             arena_bytes_;
     uint32_t                             select_command_;
     uint32_t                             finish_command_;
+    uint32_t                             flush_command_;
 };
 
 }  // namespace av::d3d

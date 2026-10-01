@@ -56,7 +56,7 @@ HRESULT D3d9Device::flush()
 {
     AV_SCOPE("D3d9Device::flush");
     if (!channel_.constructed()) return S_OK;
-    if (!send_states() || wire().application_flush() != Status::ok) return lost();
+    if (!send_states() || wire().application_flush() != Status::ok) return lost(__func__);
     return follow_host();
 }
 

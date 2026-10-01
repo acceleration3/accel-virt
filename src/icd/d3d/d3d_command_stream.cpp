@@ -21,7 +21,8 @@ constexpr size_t header_bytes = CommandHeader::encoded_size;
 D3dCommandStream::D3dCommandStream(KmtTransport &transport, uint8_t *block, size_t capacity)
     : transport_(transport), block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u), batches_(0u),
       recorded_(0u), flushed_at_(0u), no_arena_(), recording_(nullptr), lent_(false), incomplete_(false), speaking_(0u),
-      select_command_(d3dproto::kCmd_SelectDevice11), finish_command_(d3dproto::kCmd_Finish11), failed_(false)
+      select_command_(d3dproto::kCmd_SelectDevice11), finish_command_(d3dproto::kCmd_Finish11),
+      flush_command_(d3dproto::kCmd_Flush11), failed_(false)
 {
     AV_SCOPE("D3dCommandStream::D3dCommandStream");
 }
@@ -51,7 +52,8 @@ Status D3dCommandStream::application_flush()
 {
     AV_SCOPE("D3dCommandStream::application_flush");
     if (recorded_ != flushed_at_) {
-        if (!d3dproto::av_d3d_Flush11(*this)) return Status::invalid_state;
+        WireWriter flush = request_writer();
+        if (send_async(flush_command_, flush) != TransportResult::ok) return Status::invalid_state;
         flushed_at_ = recorded_;
     }
     return flush_hint();
@@ -161,11 +163,12 @@ bool D3dCommandStream::make_room_for(size_t bytes)
     return arena.room() >= bytes;
 }
 
-void D3dCommandStream::speak_with(uint32_t select_command, uint32_t finish_command)
+void D3dCommandStream::speak_with(uint32_t select_command, uint32_t finish_command, uint32_t flush_command)
 {
     AV_SCOPE("D3dCommandStream::speak_with");
     select_command_ = select_command;
     finish_command_ = finish_command;
+    flush_command_ = flush_command;
 }
 
 bool D3dCommandStream::speak_as(uint32_t device)

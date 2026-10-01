@@ -7,6 +7,8 @@
  * test_d3d9_session_device.cpp. */
 #include "core/support/object_storage.hpp"
 #include "device/executor/d3d9_session.hpp"
+#include "device/executor/d3d_object_table.hpp"
+#include "device/shim/d3d_headers.hpp"
 #include "device/executor/guest_region.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
@@ -26,26 +28,43 @@ constexpr std::uint32_t nobody = 77u;
 constexpr std::uint32_t not_available = 0x8876086au;   /* D3DERR_NOTAVAILABLE */
 constexpr std::uint32_t invalid_call = 0x8876086cu;    /* D3DERR_INVALIDCALL */
 
+av::ObjectStorage<av::D3dObjectTable> table_storage;
 av::ObjectStorage<D3d9Session> session_storage;
 alignas(64) std::uint8_t guest[4096];
+
+class Counted final : public IUnknown {
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
+    {
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references; }
+    ULONG STDMETHODCALLTYPE Release() override { return --references; }
+
+    ULONG references = 1u;
+};
 
 class FreshSession {
 public:
     FreshSession()
     {
         region_.take(guest, sizeof guest);
-        CHECK_STATUS(session_storage.construct(region_), av::Status::ok);
+        CHECK_STATUS(table_storage.construct(), av::Status::ok);
+        CHECK_STATUS(session_storage.construct(region_, table_storage.object()), av::Status::ok);
         session_storage.object().initialize(nullptr);
     }
     ~FreshSession()
     {
         session_storage.object().shut_down();
         session_storage.destroy();
+        table_storage.destroy();
     }
     FreshSession(const FreshSession &) = delete;
     FreshSession &operator=(const FreshSession &) = delete;
 
-    D3d9Session &session() { return session_storage.object(); }
+    D3d9Session        &session() { return session_storage.object(); }
+    av::D3dObjectTable &table() { return table_storage.object(); }
 
 private:
     GuestRegion region_;
@@ -203,4 +222,22 @@ TEST(d3d9_session_run, a_refusal_with_no_device_fails_the_session)
     av::WireWriter finish_reply(answer, sizeof answer);
     CHECK(session.run(kCmd_Finish9, finish, finish_reply, arena));
     CHECK(finish_reply.offset() != 0u);
+}
+
+/* The table is the whole session's: shutting Direct3D 9 down lets go of its
+ * own objects and leaves Direct3D 11's where they are. */
+TEST(d3d9_session_shut_down, lets_go_of_direct3d_9_objects_and_keeps_the_rest)
+{
+    FreshSession fresh;
+    Counted      eleven, nine;
+    CHECK(fresh.table().insert(5u, av::D3dObjectKind::resource, &eleven));
+    CHECK(fresh.table().insert(6u, av::D3dObjectKind::texture9, &nine));
+    fresh.session().shut_down();
+    CHECK_EQ(nine.references, 0u);
+    CHECK_EQ(eleven.references, 1u);
+    av::D3dObjectKind kind = av::D3dObjectKind::none;
+    CHECK(fresh.table().find_any(5u, kind) == &eleven);
+    CHECK(fresh.table().find_any(6u, kind) == nullptr);
+    CHECK(fresh.session().invariants_hold());
+    fresh.table().clear();
 }

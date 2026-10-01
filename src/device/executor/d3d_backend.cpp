@@ -71,7 +71,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_), published_(),
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_, objects_), published_(),
       missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");

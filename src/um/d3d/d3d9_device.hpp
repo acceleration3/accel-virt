@@ -70,6 +70,13 @@ public:
 private:
     static constexpr uint32_t streams = 16u;
     static constexpr uint32_t render_targets = 4u;
+    /* The most words one state command carries (d3d9.toml), in whole
+     * (state, value) pairs and (stage, state, value) triples. */
+    static constexpr uint32_t render_piece = 512u;
+    static constexpr uint32_t stage_piece = 768u;
+
+    /* SetRenderStates9, SetSamplerStates9 or SetTextureStageStates9. */
+    using StatesCommand = bool (*)(ClientTransport &, uint32_t, const uint32_t *);
 
     /* What the runtime bound to a stream: a buffer (a host one, or a
      * system-memory one the draw copies from), or a user pointer. */
@@ -101,12 +108,13 @@ private:
     HANDLE                 handle_of(uint32_t id) const;
     /* A command the transport refused: the device is lost, and the runtime
      * learns it on the call that returns. */
-    HRESULT                lost();
+    HRESULT                lost(const char *call);
     void                   not_implemented(const char *call);
     void                   log_once(bool &said, const char *line);
 
     /* Pending render, sampler and stage states sent before what reads them. */
     [[nodiscard]] bool send_states();
+    [[nodiscard]] bool send_pieces(StatesCommand send, uint32_t count, const uint32_t *values, uint32_t piece);
     /* While a state block records, a state goes into it instead of to the
      * device; otherwise it is the device's, and the shadow keeps it. */
     bool               recorded(const d3d::D3d9StateEntry &entry);
@@ -184,6 +192,10 @@ private:
     d3d::D3d9StateBlock                 *recording_;
     d3d::D3d9StateBatch                  batch_;
     d3d::D3d9StateShadow                 shadow_;
+    /* d3d9.dll builds its callback table on CreateDevice's stack
+     * (reverse-engineering.md §3.2): the device keeps a copy, and kernel_
+     * points at it once made. */
+    D3DDDI_DEVICECALLBACKS               callbacks_;
     const D3DDDI_DEVICECALLBACKS        *kernel_;
     HANDLE                               runtime_;
     HANDLE                               context_;

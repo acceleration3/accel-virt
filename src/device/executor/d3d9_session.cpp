@@ -19,8 +19,8 @@ constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
 
 }  // namespace
 
-D3d9Session::D3d9Session(GuestRegion &region)
-    : region_(region), host_(nullptr), objects_(), devices_{}, selected_(nullptr), arena_(nullptr)
+D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects)
+    : region_(region), host_(nullptr), objects_(objects), devices_{}, selected_(nullptr), arena_(nullptr)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -37,11 +37,18 @@ void D3d9Session::initialize(D3d9HostDevice *host)
     host_ = host != nullptr && host->opened() ? host : nullptr;
 }
 
-/* Objects first: each holds a reference to the device that made it. */
+/* Objects first: each holds a reference to the device that made it. Only
+ * Direct3D 9's: the table is the whole session's. */
 void D3d9Session::shut_down()
 {
     AV_SCOPE("D3d9Session::shut_down");
-    objects_.clear();
+    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity;
+         slot = objects_.next_used(slot + 1u)) {
+        uint32_t      id = 0u;
+        D3dObjectKind kind = D3dObjectKind::none;
+        static_cast<void>(objects_.at(slot, id, kind));
+        if (kind >= D3dObjectKind::surface9) objects_.remove(id);
+    }
     for (Device &device : devices_) {
         if (device.device_ != nullptr) device.device_->Release();
         device = Device{};
@@ -72,10 +79,18 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     case d3d9proto::kCmd_QueryMultisample9:
     case d3d9proto::kCmd_Finish9:
     case d3d9proto::kCmd_ReadSurface9:
-    case d3d9proto::kCmd_GetQueryData9: return ran;
+    case d3d9proto::kCmd_GetQueryData9:
+        if (!ran) fprintf(stderr, "virtio-gpu-av: d3d9: %s refused; the session faults\n",
+                          d3d9proto::command_name(command_id));
+        return ran;
     default: break;
     }
-    if (ran || selected_ == nullptr) return ran;
+    if (ran) return true;
+    if (selected_ == nullptr) {
+        fprintf(stderr, "virtio-gpu-av: d3d9: %s refused with no device selected; the session faults\n",
+                d3d9proto::command_name(command_id));
+        return false;
+    }
     /* The first refusal is the one that says why: every later one follows from it. */
     if (selected_->removed_ == 0u)
         fprintf(stderr, "virtio-gpu-av: d3d9: %s refused; device %u is removed\n",

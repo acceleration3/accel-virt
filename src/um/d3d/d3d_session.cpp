@@ -9,10 +9,10 @@
 namespace av::d3d {
 
 D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, icd::LogSink &log, uint64_t arena_size,
-                       uint32_t select_command, uint32_t finish_command)
+                       uint32_t select_command, uint32_t finish_command, uint32_t flush_command)
     : memory_(memory), log_(log), lock_(), connection_(kmt), transport_(), arena_(), stream_(), query_results_(), contexts_(memory),
       staging_(nullptr), batch_(nullptr), members_(0u), next_id_(0u), arena_bytes_(arena_size), select_command_(select_command),
-      finish_command_(finish_command)
+      finish_command_(finish_command), flush_command_(flush_command)
 {
     AV_SCOPE("D3dSession::D3dSession");
 }
@@ -75,7 +75,7 @@ HRESULT D3dSession::open(uint32_t adapter)
     else
         query_results_.reserve(transport_.object().blobs(), arena_.object().view(), arena_.object().bytes());
     static_cast<void>(stream_.construct(transport_.object(), batch_, batch_bytes));
-    stream_.object().speak_with(select_command_, finish_command_);
+    stream_.object().speak_with(select_command_, finish_command_, flush_command_);
     return S_OK;
 }
 

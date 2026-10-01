@@ -10,6 +10,7 @@
 #include "device/surfaces/shared_surfaces.hpp"
 #include "fixtures/d3d/triangle_ps.hpp"
 #include "fixtures/d3d/triangle_vs.hpp"
+#include "core/support/object_storage.hpp"
 #include "device/executor/d3d_backend.hpp"
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/loader_host_apis.hpp"
@@ -143,6 +144,27 @@ void bind_triangle(av::D3dLoopback &wire)
     CHECK(av_d3d_SetConstantBuffers(wire, 4u, 0u, 1u, &constants));
 }
 
+/* A backend is several megabytes - two object tables and Direct3D 12's
+ * descriptor state - so a test holding two would overflow its stack: they
+ * live in static storage, constructed and destroyed around each test. */
+av::ObjectStorage<av::D3dBackend> first_backend, second_backend;
+
+class HeldBackend {
+public:
+    explicit HeldBackend(av::ObjectStorage<av::D3dBackend> &storage) : storage_(storage)
+    {
+        CHECK_STATUS(storage_.construct(), av::Status::ok);
+    }
+    ~HeldBackend() { storage_.destroy(); }
+    HeldBackend(const HeldBackend &) = delete;
+    HeldBackend &operator=(const HeldBackend &) = delete;
+
+    av::D3dBackend &backend() { return storage_.object(); }
+
+private:
+    av::ObjectStorage<av::D3dBackend> &storage_;
+};
+
 }  // namespace
 
 TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_was_drawn)
@@ -150,7 +172,8 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     av::LoaderHostApis apis;
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    av::D3dBackend backend;
+    HeldBackend     held(first_backend);
+    av::D3dBackend &backend = held.backend();
     CHECK(backend.initialize(device));
     av::D3dLoopback wire(backend);
 
@@ -205,7 +228,8 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     constexpr std::uint64_t key = 0x5100000000000007ull;
-    av::D3dBackend creator, opener;
+    HeldBackend     held_creator(first_backend), held_opener(second_backend);
+    av::D3dBackend &creator = held_creator.backend(), &opener = held_opener.backend();
     CHECK(creator.initialize(device));
     CHECK(opener.initialize(device));
     av::D3dLoopback made(creator), opening(opener);
@@ -263,7 +287,8 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     av::LoaderHostApis apis;
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    av::D3dBackend backend;
+    HeldBackend     held(first_backend);
+    av::D3dBackend &backend = held.backend();
     CHECK(backend.initialize(device));
     av::D3dLoopback wire(backend);
 
@@ -344,7 +369,8 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     if (device == nullptr) return;
     constexpr std::uint64_t shown = 0x5150u;
     av::SharedSurfaces      surfaces;
-    av::D3dBackend          backend;
+    HeldBackend             held(first_backend);
+    av::D3dBackend         &backend = held.backend();
     CHECK(backend.initialize(device, nullptr, &surfaces));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;

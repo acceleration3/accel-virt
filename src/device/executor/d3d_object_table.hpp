@@ -50,7 +50,8 @@ enum class D3dObjectKind : uint8_t {
     fence12,
     query_heap12,
     command_signature12,
-    /* Direct3D 9's, in its own session's table. */
+    /* Direct3D 9's, last: the session's table is shared, and a Direct3D 9
+     * session shutting down lets go of these kinds alone. */
     surface9,
     texture9,
     cube_texture9,

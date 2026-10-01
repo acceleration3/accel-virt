@@ -45,7 +45,8 @@ d3d::D3dSession &D3d9Driver::session(uint32_t slot)
     AV_SCOPE("D3d9Driver::session");
     if (!sessions_[slot].constructed())
         static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, session_arena_bytes,
-                                                    d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Finish9));
+                                                    d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Finish9,
+                                                    d3d9proto::kCmd_Flush9));
     return sessions_[slot].object();
 }
 

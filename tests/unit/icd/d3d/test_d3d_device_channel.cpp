@@ -332,7 +332,8 @@ void answer_create9(Fixture &fixture, std::uint32_t hresult)
  * would name a device the host keeps no Direct3D 11 state for. */
 TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3d_9)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
+                            av::d3d9proto::kCmd_Flush9);
   answer_create9(fixture, 0u);
   std::uint32_t hresult = 1u;
   CHECK(fixture.a().open9(hresult));
@@ -357,9 +358,36 @@ TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_SelectDevice9);
   CHECK(!fixture.lock().held()); }
 
+/* An application's flush is the dialect's too: Flush11 from a Direct3D 9
+ * session names no Direct3D 11 device to the host, which refuses it and
+ * faults the whole session. */
+TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
+{ Fixture fixture;
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
+                            av::d3d9proto::kCmd_Flush9);
+  answer_create9(fixture, 0u);
+  std::uint32_t hresult = 1u;
+  CHECK(fixture.a().open9(hresult));
+  std::uint32_t ids[4] = {}, selected[4] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
+  CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.a(), 7u));
+  CHECK_STATUS(fixture.a().application_flush(), Status::ok);
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
+  CHECK_EQ(ids[0], av::d3d9proto::kCmd_SetIndices9);
+  CHECK_EQ(ids[1], av::d3d9proto::kCmd_Flush9);
+  /* Nothing recorded since: no second flush command, so the next batch is
+   * the next command alone. */
+  CHECK_STATUS(fixture.a().application_flush(), Status::ok);
+  CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.a(), 8u));
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
+  CHECK_EQ(ids[0], av::d3d9proto::kCmd_SetIndices9);
+  CHECK(!fixture.lock().held()); }
+
 TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_no_lock)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
+                            av::d3d9proto::kCmd_Flush9);
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
   std::uint32_t hresult = 0u;
   CHECK(!fixture.a().open9(hresult));

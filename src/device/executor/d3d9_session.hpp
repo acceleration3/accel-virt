@@ -43,12 +43,18 @@ class D3d9Session final : public d3d9proto::ServerDispatch {
 public:
     /* Devices one process keeps at once; a create past this is answered with
      * an error rather than made. */
-    static constexpr uint32_t max_devices = 4u;
+    /* d3d9.dll makes a device for each DirectDraw object it opens - to
+     * enumerate, to validate a create, to create, to ask multisample levels -
+     * and a process may hold several at once. */
+    static constexpr uint32_t max_devices = 16u;
     /* The largest surface edge any Direct3D 9 device makes. */
     static constexpr uint32_t max_dimension = 16384u;
 
-    /* `region` is the session's blob arena, which D3dBackend adopts. */
-    explicit D3d9Session(GuestRegion &region);
+    /* `region` is the session's blob arena, which D3dBackend adopts, and
+     * `objects` the session's object table: the guest names every object of
+     * a session from one id space, so Direct3D 9's share Direct3D 11's table
+     * (and a table is a megabyte). */
+    D3d9Session(GuestRegion &region, D3dObjectTable &objects);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
@@ -177,7 +183,7 @@ private:
 
     GuestRegion    &region_;
     D3d9HostDevice *host_;
-    D3dObjectTable  objects_;
+    D3dObjectTable &objects_;
     Device          devices_[max_devices];
     Device         *selected_;
     /* The decode arena of the command running; null between commands. */

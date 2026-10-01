@@ -3,6 +3,7 @@
 #include "um/d3d/d3d9_device.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -53,7 +54,7 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSi
                        d3d::UmdAdapter &adapter)
     : session_(session), memory_(memory), log_(log), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
-      kernel_(nullptr), runtime_(nullptr), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
+      callbacks_{}, kernel_(nullptr), runtime_(nullptr), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), said_unimplemented_(false), said_present_(false), said_lost_(false),
@@ -96,8 +97,9 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
 {
     AV_SCOPE("D3d9Device::initialize");
     runtime_ = create.hDevice;
-    kernel_ = create.pCallbacks;
-    if (kernel_ == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
+    if (create.pCallbacks == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
+    callbacks_ = *create.pCallbacks;
+    kernel_ = &callbacks_;
     static_cast<void>(paging_.construct(*kernel_, runtime_));
     const HRESULT context = make_context();
     if (FAILED(context)) return context;
@@ -163,10 +165,18 @@ HANDLE D3d9Device::handle_of(uint32_t id) const
     return reinterpret_cast<HANDLE>(static_cast<uintptr_t>(id));
 }
 
-HRESULT D3d9Device::lost()
+HRESULT D3d9Device::lost(const char *call)
 {
     AV_SCOPE("D3d9Device::lost");
-    log_once(said_lost_, "avumd: a Direct3D 9 command could not be sent; the device is lost");
+    if (!said_lost_) {
+        said_lost_ = true;
+        char       line[128] = {};
+        TextBuffer text(line, sizeof(line));
+        text.append("avumd: Direct3D 9 ");
+        text.append(call);
+        text.append(" could not be sent; the device is lost");
+        log_.write(text.text());
+    }
     return D3DDDIERR_DEVICEREMOVED;
 }
 
@@ -188,18 +198,29 @@ void D3d9Device::not_implemented(const char *call)
 
 /* ---------------------------------------------------------------- state */
 
+/* A device's first states are every state there is, more than one command
+ * carries (d3d9.toml's limits): they go in pieces of whole entries. */
 bool D3d9Device::send_states()
 {
     AV_SCOPE("D3d9Device::send_states");
     if (!batch_.pending()) return true;
-    const bool sent = (batch_.render_count() == 0u ||
-                       d3d9proto::av_d3d9_SetRenderStates9(wire(), batch_.render_count(), batch_.render_values())) &&
-                      (batch_.sampler_count() == 0u ||
-                       d3d9proto::av_d3d9_SetSamplerStates9(wire(), batch_.sampler_count(), batch_.sampler_values())) &&
-                      (batch_.stage_count() == 0u || d3d9proto::av_d3d9_SetTextureStageStates9(
-                                                         wire(), batch_.stage_count(), batch_.stage_values()));
+    const bool sent =
+        send_pieces(d3d9proto::av_d3d9_SetRenderStates9, batch_.render_count(), batch_.render_values(),
+                    render_piece) &&
+        send_pieces(d3d9proto::av_d3d9_SetSamplerStates9, batch_.sampler_count(), batch_.sampler_values(),
+                    stage_piece) &&
+        send_pieces(d3d9proto::av_d3d9_SetTextureStageStates9, batch_.stage_count(), batch_.stage_values(),
+                    stage_piece);
     batch_.taken();
     return sent;
+}
+
+bool D3d9Device::send_pieces(StatesCommand send, uint32_t count, const uint32_t *values, uint32_t piece)
+{
+    AV_SCOPE("D3d9Device::send_pieces");
+    for (uint32_t done = 0u; done < count; done += piece)
+        if (!send(wire(), count - done < piece ? count - done : piece, values + done)) return false;
+    return true;
 }
 
 bool D3d9Device::recorded(const D3d9StateEntry &entry)
@@ -238,28 +259,28 @@ HRESULT D3d9Device::set_texture(UINT stage, HANDLE texture)
     if (recorded(D3d9StateEntry(Kind::texture, stage, texture, 0u, 0u))) return S_OK;
     const D3d9Resource *const bound = resource(texture);
     const uint32_t            id = bound != nullptr && bound->kind != D3d9Resource::Kind::system ? bound->id : 0u;
-    return d3d9proto::av_d3d9_SetTexture9(wire(), stage, id) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetTexture9(wire(), stage, id) ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::set_pixel_shader(HANDLE shader)
 {
     AV_SCOPE("D3d9Device::set_pixel_shader");
     if (recorded(D3d9StateEntry(Kind::pixel_shader, 0u, shader, 0u, 0u))) return S_OK;
-    return d3d9proto::av_d3d9_SetPixelShader9(wire(), id_of(shader)) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetPixelShader9(wire(), id_of(shader)) ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::set_vertex_shader_func(HANDLE shader)
 {
     AV_SCOPE("D3d9Device::set_vertex_shader_func");
     if (recorded(D3d9StateEntry(Kind::vertex_shader, 0u, shader, 0u, 0u))) return S_OK;
-    return d3d9proto::av_d3d9_SetVertexShader9(wire(), id_of(shader)) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetVertexShader9(wire(), id_of(shader)) ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::set_vertex_shader_decl(HANDLE declaration)
 {
     AV_SCOPE("D3d9Device::set_vertex_shader_decl");
     if (recorded(D3d9StateEntry(Kind::declaration, 0u, declaration, 0u, 0u))) return S_OK;
-    return d3d9proto::av_d3d9_SetVertexDeclaration9(wire(), id_of(declaration)) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetVertexDeclaration9(wire(), id_of(declaration)) ? S_OK : lost(__func__);
 }
 
 /* Constants are the shadow's and a state block's register by register, and
@@ -274,7 +295,7 @@ HRESULT D3d9Device::set_pixel_shader_const(const D3DDDIARG_SETPIXELSHADERCONST *
     if (kept) return S_OK;
     return d3d9proto::av_d3d9_SetConstantsF9(wire(), stage_pixel, args->Register, args->Count * components, values)
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::set_vertex_shader_const(const D3DDDIARG_SETVERTEXSHADERCONST *args, const void *values)
@@ -288,7 +309,7 @@ HRESULT D3d9Device::set_vertex_shader_const(const D3DDDIARG_SETVERTEXSHADERCONST
     if (kept) return S_OK;
     return d3d9proto::av_d3d9_SetConstantsF9(wire(), stage_vertex, args->Register, args->Count * components, floats)
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::set_vertex_shader_const_i(const D3DDDIARG_SETVERTEXSHADERCONSTI *args, const INT *values)
@@ -302,7 +323,7 @@ HRESULT D3d9Device::set_vertex_shader_const_i(const D3DDDIARG_SETVERTEXSHADERCON
     return d3d9proto::av_d3d9_SetConstantsI9(wire(), stage_vertex, args->Register, args->Count * components,
                                              reinterpret_cast<const int32_t *>(values))
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::set_pixel_shader_const_i(const D3DDDIARG_SETPIXELSHADERCONSTI *args, const INT *values)
@@ -316,7 +337,7 @@ HRESULT D3d9Device::set_pixel_shader_const_i(const D3DDDIARG_SETPIXELSHADERCONST
     return d3d9proto::av_d3d9_SetConstantsI9(wire(), stage_pixel, args->Register, args->Count * components,
                                              reinterpret_cast<const int32_t *>(values))
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::set_vertex_shader_const_b(const D3DDDIARG_SETVERTEXSHADERCONSTB *args, const BOOL *values)
@@ -330,7 +351,7 @@ HRESULT D3d9Device::set_vertex_shader_const_b(const D3DDDIARG_SETVERTEXSHADERCON
     return d3d9proto::av_d3d9_SetConstantsB9(wire(), stage_vertex, args->Register, args->Count,
                                              reinterpret_cast<const uint32_t *>(values))
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::set_pixel_shader_const_b(const D3DDDIARG_SETPIXELSHADERCONSTB *args, const BOOL *values)
@@ -344,7 +365,7 @@ HRESULT D3d9Device::set_pixel_shader_const_b(const D3DDDIARG_SETPIXELSHADERCONST
     return d3d9proto::av_d3d9_SetConstantsB9(wire(), stage_pixel, args->Register, args->Count,
                                              reinterpret_cast<const uint32_t *>(values))
                ? S_OK
-               : lost();
+               : lost(__func__);
 }
 
 HRESULT D3d9Device::set_stream_source(const D3DDDIARG_SETSTREAMSOURCE *args)
@@ -387,7 +408,7 @@ HRESULT D3d9Device::set_indices_um(UINT index_bytes, const void *data)
 HRESULT D3d9Device::set_stream_source_freq(const D3DDDIARG_SETSTREAMSOURCEFREQ *args)
 {
     AV_SCOPE("D3d9Device::set_stream_source_freq");
-    return d3d9proto::av_d3d9_SetStreamSourceFreq9(wire(), args->Stream, args->Divider) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetStreamSourceFreq9(wire(), args->Stream, args->Divider) ? S_OK : lost(__func__);
 }
 
 /* The DDI sets the viewport's rectangle and its depth range apart; the API
@@ -414,7 +435,7 @@ HRESULT D3d9Device::send_viewport()
     AV_SCOPE("D3d9Device::send_viewport");
     const d3d9proto::Viewport viewport = {viewport_.X, viewport_.Y, viewport_.Width, viewport_.Height, z_range_.MinZ,
                                           z_range_.MaxZ};
-    return d3d9proto::av_d3d9_SetViewport9(wire(), viewport) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetViewport9(wire(), viewport) ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::set_scissor_rect(const RECT *rect)
@@ -431,7 +452,7 @@ HRESULT D3d9Device::send_scissor()
     AV_SCOPE("D3d9Device::send_scissor");
     if (!scissor_set_) return S_OK;
     const d3d9proto::Rect rect = {scissor_.left, scissor_.top, scissor_.right, scissor_.bottom};
-    return d3d9proto::av_d3d9_SetScissorRect9(wire(), rect) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetScissorRect9(wire(), rect) ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::set_clip_plane(const D3DDDIARG_SETCLIPPLANE *args)
@@ -440,7 +461,7 @@ HRESULT D3d9Device::set_clip_plane(const D3DDDIARG_SETCLIPPLANE *args)
     if (recorded(D3d9StateEntry(Kind::clip_plane, args->Index, 0u, reinterpret_cast<const uint32_t *>(args->Plane),
                                 components)))
         return S_OK;
-    return d3d9proto::av_d3d9_SetClipPlane9(wire(), args->Index, components, args->Plane) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetClipPlane9(wire(), args->Index, components, args->Plane) ? S_OK : lost(__func__);
 }
 
 /* The API's SetRenderTarget resets the viewport and scissor to the target;
@@ -453,7 +474,7 @@ HRESULT D3d9Device::set_render_target(const D3DDDIARG_SETRENDERTARGET *args)
     const D3d9Resource *const target = resource(args->hRenderTarget);
     if (target != nullptr && !surface_of(*target, args->SubResourceIndex, id, subresource)) return E_INVALIDARG;
     if (!send_states() || !d3d9proto::av_d3d9_SetRenderTarget9(wire(), args->RenderTargetIndex, id, subresource))
-        return lost();
+        return lost(__func__);
     const HRESULT viewport = send_viewport();
     return FAILED(viewport) ? viewport : send_scissor();
 }
@@ -464,7 +485,7 @@ HRESULT D3d9Device::set_depth_stencil(const D3DDDIARG_SETDEPTHSTENCIL *args)
     uint32_t                  id = 0u, subresource = 0u;
     const D3d9Resource *const target = resource(args->hZBuffer);
     if (target != nullptr && !surface_of(*target, 0u, id, subresource)) return E_INVALIDARG;
-    return d3d9proto::av_d3d9_SetDepthStencil9(wire(), id, subresource) ? S_OK : lost();
+    return d3d9proto::av_d3d9_SetDepthStencil9(wire(), id, subresource) ? S_OK : lost(__func__);
 }
 
 /* ---------------------------------------------------------------- shaders */
@@ -474,7 +495,7 @@ HRESULT D3d9Device::create_vertex_shader_func(D3DDDIARG_CREATEVERTEXSHADERFUNC *
     AV_SCOPE("D3d9Device::create_vertex_shader_func");
     const uint32_t id = next_id();
     if (!d3d9proto::av_d3d9_CreateVertexShader9(wire(), id, reinterpret_cast<const uint8_t *>(code), args->Size))
-        return lost();
+        return lost(__func__);
     args->ShaderHandle = handle_of(id);
     return S_OK;
 }
@@ -482,7 +503,7 @@ HRESULT D3d9Device::create_vertex_shader_func(D3DDDIARG_CREATEVERTEXSHADERFUNC *
 HRESULT D3d9Device::delete_vertex_shader_func(HANDLE shader)
 {
     AV_SCOPE("D3d9Device::delete_vertex_shader_func");
-    return d3d9proto::av_d3d9_Destroy9(wire(), id_of(shader)) ? S_OK : lost();
+    return d3d9proto::av_d3d9_Destroy9(wire(), id_of(shader)) ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::create_pixel_shader(D3DDDIARG_CREATEPIXELSHADER *args, const UINT *code)
@@ -490,7 +511,7 @@ HRESULT D3d9Device::create_pixel_shader(D3DDDIARG_CREATEPIXELSHADER *args, const
     AV_SCOPE("D3d9Device::create_pixel_shader");
     const uint32_t id = next_id();
     if (!d3d9proto::av_d3d9_CreatePixelShader9(wire(), id, reinterpret_cast<const uint8_t *>(code), args->CodeSize))
-        return lost();
+        return lost(__func__);
     args->ShaderHandle = handle_of(id);
     return S_OK;
 }
@@ -498,7 +519,7 @@ HRESULT D3d9Device::create_pixel_shader(D3DDDIARG_CREATEPIXELSHADER *args, const
 HRESULT D3d9Device::delete_pixel_shader(HANDLE shader)
 {
     AV_SCOPE("D3d9Device::delete_pixel_shader");
-    return d3d9proto::av_d3d9_Destroy9(wire(), id_of(shader)) ? S_OK : lost();
+    return d3d9proto::av_d3d9_Destroy9(wire(), id_of(shader)) ? S_OK : lost(__func__);
 }
 
 /* The runtime may or may not end the list with D3DDECL_END (stream 0xff). */
@@ -517,7 +538,7 @@ HRESULT D3d9Device::create_vertex_shader_decl(D3DDDIARG_CREATEVERTEXSHADERDECL *
                                                  element.Usage,  element.UsageIndex};
     }
     const uint32_t id = next_id();
-    if (count != 0u && !d3d9proto::av_d3d9_CreateVertexDeclaration9(wire(), id, count, list)) return lost();
+    if (count != 0u && !d3d9proto::av_d3d9_CreateVertexDeclaration9(wire(), id, count, list)) return lost(__func__);
     args->ShaderHandle = handle_of(id);
     return S_OK;
 }
@@ -525,7 +546,7 @@ HRESULT D3d9Device::create_vertex_shader_decl(D3DDDIARG_CREATEVERTEXSHADERDECL *
 HRESULT D3d9Device::delete_vertex_shader_decl(HANDLE declaration)
 {
     AV_SCOPE("D3d9Device::delete_vertex_shader_decl");
-    return d3d9proto::av_d3d9_Destroy9(wire(), id_of(declaration)) ? S_OK : lost();
+    return d3d9proto::av_d3d9_Destroy9(wire(), id_of(declaration)) ? S_OK : lost(__func__);
 }
 
 /* ---------------------------------------------------------------- queries */
@@ -538,7 +559,7 @@ HRESULT D3d9Device::create_query(D3DDDIARG_CREATEQUERY *args)
     *made = D3d9Query{next_id(), args->QueryType, query_bytes(args->QueryType)};
     if (!d3d9proto::av_d3d9_CreateQuery9(wire(), made->id, static_cast<uint32_t>(args->QueryType))) {
         static_cast<void>(queries_.destroy(made));
-        return lost();
+        return lost(__func__);
     }
     args->hQuery = made;
     return S_OK;
@@ -551,7 +572,7 @@ HRESULT D3d9Device::destroy_query(const HANDLE handle)
     if (query == nullptr) return E_INVALIDARG;
     const bool sent = d3d9proto::av_d3d9_Destroy9(wire(), query->id);
     static_cast<void>(queries_.destroy(query));
-    return sent ? S_OK : lost();
+    return sent ? S_OK : lost(__func__);
 }
 
 HRESULT D3d9Device::issue_query(const D3DDDIARG_ISSUEQUERY *args)
@@ -560,7 +581,7 @@ HRESULT D3d9Device::issue_query(const D3DDDIARG_ISSUEQUERY *args)
     const D3d9Query *const query = queries_.find(args->hQuery);
     if (query == nullptr) return E_INVALIDARG;
     const uint32_t flags = args->Flags.Begin != 0u ? issue_begin : issue_end;
-    if (!send_states() || !d3d9proto::av_d3d9_IssueQuery9(wire(), query->id, flags)) return lost();
+    if (!send_states() || !d3d9proto::av_d3d9_IssueQuery9(wire(), query->id, flags)) return lost(__func__);
     return S_OK;
 }
 
@@ -575,7 +596,7 @@ HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
     uint64_t answered = 0u;
     if (!d3d9proto::av_d3d9_GetQueryData9(wire(), query->id, get_data_flush, &hresult, answer, sizeof(answer),
                                           &answered))
-        return lost();
+        return lost(__func__);
     if (hresult != S_OK) return hresult == S_FALSE ? S_FALSE : static_cast<HRESULT>(hresult);
     if (args->pData != nullptr && answered >= query->data_bytes) memcpy(args->pData, answer, query->data_bytes);
     return S_OK;

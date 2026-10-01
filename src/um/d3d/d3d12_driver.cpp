@@ -43,7 +43,8 @@ d3d::D3dSession &D3d12Driver::session(uint32_t slot)
     AV_SCOPE("D3d12Driver::session");
     if (!sessions_[slot].constructed())
         static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, KmtBlobArena::max_bytes,
-                                                          d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11));
+                                                          d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11,
+                                                    d3dproto::kCmd_Flush11));
     if (!heaps_[slot].constructed()) static_cast<void>(heaps_[slot].construct(arena_locks_[slot]));
     return sessions_[slot].object();
 }
