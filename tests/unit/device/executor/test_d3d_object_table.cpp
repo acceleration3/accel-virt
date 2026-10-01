@@ -202,3 +202,52 @@ TEST(d3d_object_table_insert, a_table_three_quarters_full_refuses_the_next)
   table.clear();
   CHECK_EQ(object.released, most);
   table.clear(); }
+
+/* What a create made is the table's, or let go: a null - a refused create -
+ * is no object, and one the table cannot keep loses the reference it came
+ * with rather than leaking it. */
+TEST(d3d_object_table_keep, keeps_what_was_made_or_releases_it)
+{ D3dObjectTable &table = fresh_table();
+  Counted made, twin;
+  CHECK(!table.keep(5u, D3dObjectKind::resource, nullptr));
+  CHECK(table.keep(5u, D3dObjectKind::resource, &made));
+  CHECK_EQ(made.released, 0u);
+  CHECK(table.find(5u, D3dObjectKind::resource) == &made);
+  CHECK(!table.keep(5u, D3dObjectKind::resource, &twin));
+  CHECK_EQ(twin.released, 1u);
+  CHECK(table.find(5u, D3dObjectKind::resource) == &made);
+  CHECK(table.invariants_hold());
+  table.clear(); }
+
+TEST(d3d_object_table_find_as, answers_the_object_as_the_interface_its_kind_is_kept_as)
+{ D3dObjectTable &table = fresh_table();
+  Counted buffer;
+  CHECK(table.insert(3u, D3dObjectKind::resource, &buffer));
+  CHECK(table.find_as<Counted>(3u, D3dObjectKind::resource) == &buffer);
+  CHECK(table.find_as<Counted>(3u, D3dObjectKind::shader_resource_view) == nullptr);
+  table.clear(); }
+
+/* One runtime's objects counted and let go together, the rest kept. */
+TEST(d3d_object_table_kinds, count_and_remove_a_range_of_kinds_only)
+{ D3dObjectTable &table = fresh_table();
+  Counted resource, surface, query;
+  CHECK(table.insert(1u, D3dObjectKind::resource, &resource));
+  CHECK(table.insert(2u, D3dObjectKind::surface9, &surface));
+  CHECK(table.insert(3u, D3dObjectKind::query9, &query));
+  CHECK_EQ(table.count_kinds(D3dObjectKind::surface9, D3dObjectKind::query9), 2u);
+  CHECK_EQ(table.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12), 0u);
+  /* A range in the middle passes the kinds either side of it. */
+  Counted heap;
+  CHECK(table.insert(4u, D3dObjectKind::heap12, &heap));
+  CHECK_EQ(table.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12), 1u);
+  table.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
+  CHECK_EQ(heap.released, 1u);
+  CHECK_EQ(table.count(), 3u);
+  table.remove_kinds(D3dObjectKind::surface9, D3dObjectKind::query9);
+  CHECK_EQ(surface.released, 1u);
+  CHECK_EQ(query.released, 1u);
+  CHECK_EQ(resource.released, 0u);
+  CHECK_EQ(table.count(), 1u);
+  CHECK(table.find(1u, D3dObjectKind::resource) == &resource);
+  CHECK(table.invariants_hold());
+  table.clear(); }

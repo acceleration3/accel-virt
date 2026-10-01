@@ -41,8 +41,8 @@ bool D3d12Session::on_ResourceBarrier12(uint32_t id, uint32_t count, const d3d12
     D3D12_RESOURCE_BARRIER made[most_barriers] = {};
     for (uint32_t index = 0u; index < count; index++) {
         const d3d12proto::Barrier &barrier = barriers[index];
-        ID3D12Resource *const resource = object<ID3D12Resource>(barrier.resource, D3dObjectKind::resource12);
-        ID3D12Resource *const after = object<ID3D12Resource>(barrier.resource_after, D3dObjectKind::resource12);
+        ID3D12Resource *const resource = objects_.find_as<ID3D12Resource>(barrier.resource, D3dObjectKind::resource12);
+        ID3D12Resource *const after = objects_.find_as<ID3D12Resource>(barrier.resource_after, D3dObjectKind::resource12);
         if ((barrier.resource != 0u && resource == nullptr) || (barrier.resource_after != 0u && after == nullptr))
             return false;
         made[index].Type = static_cast<D3D12_RESOURCE_BARRIER_TYPE>(barrier.type);
@@ -67,7 +67,7 @@ bool D3d12Session::on_SetPipelineState12(uint32_t id, uint32_t pipeline)
 {
     AV_SCOPE("D3d12Session::on_SetPipelineState12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12PipelineState       *const state = object<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
+    ID3D12PipelineState       *const state = objects_.find_as<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
     if (recorded == nullptr || state == nullptr) return false;
     recorded->SetPipelineState(state);
     return true;
@@ -77,7 +77,7 @@ bool D3d12Session::on_SetRootSignature12(uint32_t id, uint32_t compute, uint32_t
 {
     AV_SCOPE("D3d12Session::on_SetRootSignature12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12RootSignature       *const signature = object<ID3D12RootSignature>(root, D3dObjectKind::root_signature12);
+    ID3D12RootSignature       *const signature = objects_.find_as<ID3D12RootSignature>(root, D3dObjectKind::root_signature12);
     if (recorded == nullptr || (root != 0u && signature == nullptr)) return false;
     if (compute != 0u) recorded->SetComputeRootSignature(signature);
     else recorded->SetGraphicsRootSignature(signature);
@@ -91,7 +91,7 @@ bool D3d12Session::on_SetDescriptorHeaps12(uint32_t id, uint32_t count, const ui
     if (recorded == nullptr || count > 2u) return false;
     ID3D12DescriptorHeap *made[2] = {};
     for (uint32_t index = 0u; index < count; index++) {
-        made[index] = object<ID3D12DescriptorHeap>(heaps[index], D3dObjectKind::descriptor_heap12);
+        made[index] = objects_.find_as<ID3D12DescriptorHeap>(heaps[index], D3dObjectKind::descriptor_heap12);
         if (made[index] == nullptr) return false;
     }
     recorded->SetDescriptorHeaps(count, made);
@@ -322,10 +322,10 @@ bool D3d12Session::on_ExecuteIndirect12(uint32_t id, uint32_t signature, uint32_
     constexpr uint64_t count_bytes = sizeof(uint32_t);
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12CommandSignature *const    signed_by =
-        object<ID3D12CommandSignature>(signature, D3dObjectKind::command_signature12);
-    ID3D12Resource *const arguments = object<ID3D12Resource>(argument_buffer, D3dObjectKind::resource12);
+        objects_.find_as<ID3D12CommandSignature>(signature, D3dObjectKind::command_signature12);
+    ID3D12Resource *const arguments = objects_.find_as<ID3D12Resource>(argument_buffer, D3dObjectKind::resource12);
     ID3D12Resource *const counts =
-        count_buffer == 0u ? nullptr : object<ID3D12Resource>(count_buffer, D3dObjectKind::resource12);
+        count_buffer == 0u ? nullptr : objects_.find_as<ID3D12Resource>(count_buffer, D3dObjectKind::resource12);
     D3d12IndirectStride stride;
     if (recorded == nullptr || signed_by == nullptr || arguments == nullptr || (count_buffer != 0u && counts == nullptr) ||
         !stride.read(signed_by))
@@ -350,8 +350,8 @@ bool D3d12Session::on_CopyBufferRegion12(uint32_t id, uint32_t destination, uint
 {
     AV_SCOPE("D3d12Session::on_CopyBufferRegion12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12Resource *const to = object<ID3D12Resource>(destination, D3dObjectKind::resource12);
-    ID3D12Resource *const from = object<ID3D12Resource>(source, D3dObjectKind::resource12);
+    ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
+    ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
     if (recorded == nullptr || to == nullptr || from == nullptr) return false;
     const D3D12_RESOURCE_DESC to_desc = to->GetDesc();
     const D3D12_RESOURCE_DESC from_desc = from->GetDesc();
@@ -389,7 +389,7 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
 bool D3d12Session::copy_location(const d3d12proto::CopyLocation &location, D3D12_TEXTURE_COPY_LOCATION &made) const
 {
     AV_SCOPE("D3d12Session::copy_location");
-    ID3D12Resource *const resource = object<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
+    ID3D12Resource *const resource = objects_.find_as<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
     if (resource == nullptr) return false;
     made.pResource = resource;
     if (location.type == copy_subresource) {
@@ -409,7 +409,7 @@ bool D3d12Session::footprint_holds(const d3d12proto::CopyLocation &location, con
 {
     AV_SCOPE("D3d12Session::footprint_holds");
     if (location.type != copy_footprint) return true;
-    ID3D12Resource *const     buffer = object<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
+    ID3D12Resource *const     buffer = objects_.find_as<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
     const D3D12_RESOURCE_DESC desc = buffer->GetDesc();
     const D3d12Footprint      footprint(location.format, location.width, location.height, location.depth,
                                         location.row_pitch, location.offset);
@@ -420,8 +420,8 @@ bool D3d12Session::on_CopyResource12(uint32_t id, uint32_t destination, uint32_t
 {
     AV_SCOPE("D3d12Session::on_CopyResource12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12Resource *const to = object<ID3D12Resource>(destination, D3dObjectKind::resource12);
-    ID3D12Resource *const from = object<ID3D12Resource>(source, D3dObjectKind::resource12);
+    ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
+    ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
     if (recorded == nullptr || to == nullptr || from == nullptr) return false;
     recorded->CopyResource(to, from);
     return true;
@@ -432,8 +432,8 @@ bool D3d12Session::on_ResolveSubresource12(uint32_t id, uint32_t destination, ui
 {
     AV_SCOPE("D3d12Session::on_ResolveSubresource12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12Resource *const to = object<ID3D12Resource>(destination, D3dObjectKind::resource12);
-    ID3D12Resource *const from = object<ID3D12Resource>(source, D3dObjectKind::resource12);
+    ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
+    ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
     if (recorded == nullptr || to == nullptr || from == nullptr || format > max_format) return false;
     recorded->ResolveSubresource(to, destination_subresource, from, source_subresource, static_cast<DXGI_FORMAT>(format));
     return true;
@@ -443,7 +443,7 @@ bool D3d12Session::on_BeginQuery12(uint32_t id, uint32_t heap, uint32_t type, ui
 {
     AV_SCOPE("D3d12Session::on_BeginQuery12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12QueryHeap *const queries = object<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
+    ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
     if (recorded == nullptr || queries == nullptr || type > most_query_type) return false;
     recorded->BeginQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
@@ -453,7 +453,7 @@ bool D3d12Session::on_EndQuery12(uint32_t id, uint32_t heap, uint32_t type, uint
 {
     AV_SCOPE("D3d12Session::on_EndQuery12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12QueryHeap *const queries = object<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
+    ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
     if (recorded == nullptr || queries == nullptr || type > most_query_type) return false;
     recorded->EndQuery(queries, static_cast<D3D12_QUERY_TYPE>(type), index);
     return true;
@@ -466,8 +466,8 @@ bool D3d12Session::on_ResolveQueryData12(uint32_t id, uint32_t heap, uint32_t ty
     /* Each type's result: a counter, pipeline statistics, stream-output statistics. */
     constexpr uint64_t result_bytes[most_query_type + 1u] = {8u, 8u, 8u, 88u, 16u, 16u, 16u, 16u};
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12QueryHeap *const queries = object<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
-    ID3D12Resource  *const to = object<ID3D12Resource>(destination, D3dObjectKind::resource12);
+    ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
+    ID3D12Resource  *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
     if (recorded == nullptr || queries == nullptr || to == nullptr || type > most_query_type) return false;
     const D3D12_RESOURCE_DESC desc = to->GetDesc();
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || offset % 8u != 0u || offset > desc.Width ||

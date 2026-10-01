@@ -248,3 +248,19 @@ TEST(d3d9_session_shut_down, lets_go_of_direct3d_9_objects_and_keeps_the_rest)
     CHECK(fresh.session().invariants_hold());
     fresh.table().clear();
 }
+
+/* The session's table holds every runtime's objects under one id space:
+ * Destroy9 removes Direct3D 9's and refuses another runtime's. */
+TEST(d3d9_session_on_Destroy9, removes_only_direct3d_9_objects)
+{
+    FreshSession fresh;
+    Counted      eleven, nine;
+    CHECK(fresh.table().insert(31u, av::D3dObjectKind::resource, &eleven));
+    CHECK(fresh.table().insert(32u, av::D3dObjectKind::surface9, &nine));
+    CHECK(!fresh.session().on_Destroy9(31u));
+    CHECK(fresh.table().find(31u, av::D3dObjectKind::resource) == &eleven);
+    CHECK(fresh.session().on_Destroy9(32u));
+    CHECK(fresh.table().find(32u, av::D3dObjectKind::surface9) == nullptr);
+    CHECK_EQ(nine.references, 0u);
+    fresh.table().remove(31u);
+}

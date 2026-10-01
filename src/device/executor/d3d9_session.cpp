@@ -43,13 +43,7 @@ void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces)
 void D3d9Session::shut_down()
 {
     AV_SCOPE("D3d9Session::shut_down");
-    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity;
-         slot = objects_.next_used(slot + 1u)) {
-        uint32_t      id = 0u;
-        D3dObjectKind kind = D3dObjectKind::none;
-        static_cast<void>(objects_.at(slot, id, kind));
-        if (kind >= D3dObjectKind::surface9) objects_.remove(id);
-    }
+    objects_.remove_kinds(D3dObjectKind::surface9, D3dObjectKind::query9);
     for (IDirect3DDevice9 *device = devices_.remove_any(); device != nullptr; device = devices_.remove_any())
         device->Release();
     host_ = nullptr;
@@ -203,8 +197,10 @@ bool D3d9Session::on_Destroy9(uint32_t object)
         device->Release();
         return true;
     }
+    /* The session's table holds every runtime's objects: only Direct3D 9's
+     * are Destroy9's to remove. */
     D3dObjectKind kind = D3dObjectKind::none;
-    if (objects_.find_any(object, kind) == nullptr) return false;
+    if (objects_.find_any(object, kind) == nullptr || kind < D3dObjectKind::surface9) return false;
     objects_.remove(object);
     return true;
 }
@@ -212,10 +208,12 @@ bool D3d9Session::on_Destroy9(uint32_t object)
 bool D3d9Session::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
 {
     AV_SCOPE("D3d9Session::keep");
-    if (made == nullptr) return false;
-    if (devices_.find(id) == nullptr && objects_.insert(id, kind, made)) return true;
-    made->Release();
-    return false;
+    /* A device's id is in the objects' space too. */
+    if (made != nullptr && devices_.find(id) != nullptr) {
+        made->Release();
+        return false;
+    }
+    return objects_.keep(id, kind, made);
 }
 
 /* Each kind asks its own interface which device made it: every Direct3D 9

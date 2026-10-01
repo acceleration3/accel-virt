@@ -8,7 +8,9 @@
 #include "core/support/object_storage.hpp"
 #include "device/executor/d3d12_fence_publisher.hpp"
 #include "device/executor/d3d12_session.hpp"
+#include "device/executor/d3d_object_table.hpp"
 #include "device/executor/guest_region.hpp"
+#include "device/shim/d3d_headers.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -22,12 +24,26 @@ using namespace av::d3d12proto;
 
 namespace {
 
+class Counted final : public IUnknown {
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
+    {
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references; }
+    ULONG STDMETHODCALLTYPE Release() override { return --references; }
+
+    ULONG references = 1u;
+};
+
 constexpr std::uint32_t nobody = 77u;
 constexpr std::uint32_t dxgi_error_unsupported = 0x887A0004u;
 
-/* Most of two megabytes: in static storage, made fresh for each test over a
- * region of guest memory. */
+/* The session and the session's object table, a megabyte: in static storage,
+ * made fresh for each test over a region of guest memory. */
 av::ObjectStorage<D3d12Session> session_storage;
+av::D3dObjectTable              objects;
 alignas(64) std::uint8_t guest[8192];
 
 class FreshSession {
@@ -35,7 +51,8 @@ public:
     FreshSession()
     {
         region_.take(guest, sizeof guest);
-        CHECK_STATUS(session_storage.construct(region_), av::Status::ok);
+        objects.clear();
+        CHECK_STATUS(session_storage.construct(region_, objects), av::Status::ok);
         session_storage.object().initialize(nullptr);
     }
     ~FreshSession()
@@ -223,3 +240,25 @@ TEST(d3d12_session, a_session_that_executed_nothing_has_no_gpu_work_outstanding)
   CHECK(marked == 0u);
   CHECK(reached == 0u);
   CHECK(!fresh.session().poll()); }
+
+/* The session's table is shared with Direct3D 11's and 9's: Destroy12 and the
+ * session going touch only Direct3D 12's objects, and the invariant counts
+ * only those against a session with no device. */
+TEST(d3d12_session_objects, are_its_own_kinds_in_the_shared_table)
+{ Counted eleven, twelve;
+  { FreshSession fresh;
+    D3d12Session &session = fresh.session();
+    CHECK(objects.insert(41u, av::D3dObjectKind::resource, &eleven));
+    CHECK(session.invariants_hold());
+    CHECK(!session.on_Destroy12(41u));
+    CHECK(objects.insert(42u, av::D3dObjectKind::query_heap12, &twelve));
+    CHECK(!session.invariants_hold());
+    CHECK(session.on_Destroy12(42u));
+    CHECK_EQ(twelve.references, 0u);
+    CHECK(objects.insert(43u, av::D3dObjectKind::query9, &twelve));
+    CHECK(!session.on_Destroy12(43u));
+    objects.remove(43u); }
+  /* The session went; the Direct3D 11 object is still the table's. */
+  CHECK(objects.find(41u, av::D3dObjectKind::resource) == &eleven);
+  objects.remove(41u);
+  CHECK_EQ(eleven.references, 0u); }

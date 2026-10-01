@@ -13,6 +13,8 @@
 #ifndef AV_D3D_OBJECT_TABLE_HPP
 #define AV_D3D_OBJECT_TABLE_HPP
 
+#include "core/trace/function_scope.hpp"
+
 #include <stdint.h>
 
 struct IUnknown;
@@ -75,9 +77,17 @@ public:
     /* Takes the caller's reference to `object` under `id`. False, with the
      * reference still the caller's, for id 0, an id in use and a full table. */
     [[nodiscard]] bool insert(uint32_t id, D3dObjectKind kind, IUnknown *object);
+    /* `made`, just made, kept under `id`: the reference it came with is the
+     * table's, or released when it cannot be kept - an id already taken, a
+     * full table. False then, and for a null `made`, which a refused create
+     * leaves. */
+    [[nodiscard]] bool keep(uint32_t id, D3dObjectKind kind, IUnknown *made);
     /* The object `id` names if it is of `kind`; null otherwise. No reference
      * is taken: the table's lasts until the id is removed. */
     IUnknown          *find(uint32_t id, D3dObjectKind kind) const;
+    /* The same, as the interface `kind` is kept as. */
+    template <typename T>
+    T                 *find_as(uint32_t id, D3dObjectKind kind) const;
     /* The object `id` names and its kind, whatever it is. */
     IUnknown          *find_any(uint32_t id, D3dObjectKind &kind) const;
     /* Puts `object` under `id` in place of what it named, if that was of
@@ -96,6 +106,11 @@ public:
     IUnknown          *at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const;
     /* Removes `id` and gives its reference back; nothing for an unknown id. */
     void               remove(uint32_t id);
+    /* Every object of a kind from `first` to `last` removed, its reference
+     * given back: one API's objects as its session goes, the others' kept. */
+    void               remove_kinds(D3dObjectKind first, D3dObjectKind last);
+    /* How many objects of a kind from `first` to `last` are kept. */
+    uint32_t           count_kinds(D3dObjectKind first, D3dObjectKind last) const;
     /* Every reference back. */
     void               clear();
     uint32_t           count() const;
@@ -121,6 +136,13 @@ private:
     uint32_t      views_;
     uint32_t      count_;
 };
+
+template <typename T>
+T *D3dObjectTable::find_as(uint32_t id, D3dObjectKind kind) const
+{
+    AV_SCOPE("D3dObjectTable::find_as");
+    return static_cast<T *>(static_cast<void *>(find(id, kind)));
+}
 
 }  // namespace av
 

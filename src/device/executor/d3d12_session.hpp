@@ -48,7 +48,9 @@ class D3d12Session final : public d3d12proto::ServerDispatch {
 public:
     /* `region` is the session's blob arena, which D3dBackend adopts and this
      * reads upload heaps, bulk data and published fences through. */
-    explicit D3d12Session(GuestRegion &region);
+    /* `objects` is the session's table, which the guest names every object
+     * of from one id space: Direct3D 12's share it with 11's and 9's. */
+    D3d12Session(GuestRegion &region, D3dObjectTable &objects);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. Swap chain buffers are
@@ -146,8 +148,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    template <typename T> T   *object(uint32_t id, D3dObjectKind kind) const;
-    [[nodiscard]] bool         keep(uint32_t id, D3dObjectKind kind, IUnknown *made);
     ID3D12GraphicsCommandList *list(uint32_t id) const;
     /* A descriptor's CPU (or GPU) handle, for a heap of `type`; false for a
      * heap that is not one, of another type, or an index past its end - and
@@ -176,7 +176,7 @@ private:
     D3d12ArenaHeaps        arena_heaps_;
     D3d12HostDevice       *device_;
     SharedSurfaces        *surfaces_;
-    D3dObjectTable         objects_;
+    D3dObjectTable        &objects_;
     D3d12AddressMap        addresses_;
     D3d12FencePublisher    fences_;
     D3d12FenceWake         wake_;
@@ -189,12 +189,6 @@ private:
     uint32_t               removed_;
     CommandRefusal         refusal_;
 };
-
-template <typename T> T *D3d12Session::object(uint32_t id, D3dObjectKind kind) const
-{
-    AV_SCOPE("D3d12Session::object");
-    return static_cast<T *>(static_cast<void *>(objects_.find(id, kind)));
-}
 
 }  // namespace av
 

@@ -10,6 +10,7 @@
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/query_result_publisher.hpp"
 #include "device/shim/d3d11_host_device.hpp"
+#include "device/shim/d3d_headers.hpp"
 #include "device/shim/d3d_runtime.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -20,6 +21,15 @@
 #include <unistd.h>
 
 #include <vulkan/vulkan.h>
+
+namespace av {
+
+/* The session's object table, shared with Direct3D 12 and 9. */
+struct D3dBackendProbe {
+    static D3dObjectTable &objects(D3dBackend &backend) { return backend.objects_; }
+};
+
+}  // namespace av
 
 using av::D3dBackend;
 using av::ImportedBlob;
@@ -315,3 +325,38 @@ TEST(d3d_backend_on_SelectDevice11, a_known_device_is_drawn_on_and_an_unknown_on
   CHECK_EQ(seen.drew_on_unknown, 0u);
   CHECK_EQ(seen.selected_again, 1u);
   CHECK_EQ(seen.drew_again, 1u); }
+
+namespace {
+
+class Counted final : public IUnknown {
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
+    {
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references; }
+    ULONG STDMETHODCALLTYPE Release() override { return --references; }
+
+    ULONG references = 1u;
+};
+
+}  // namespace
+
+/* DestroyObject removes Direct3D 11's objects; Direct3D 12's and 9's in the
+ * same table are theirs to destroy. */
+TEST(d3d_backend_on_DestroyObject, removes_only_direct3d_11_objects)
+{ FreshBackend fresh;
+  D3dBackend &backend = fresh.backend();
+  av::D3dObjectTable &objects = av::D3dBackendProbe::objects(backend);
+  Counted eleven, twelve, nine;
+  CHECK(objects.insert(51u, av::D3dObjectKind::resource, &eleven));
+  CHECK(objects.insert(52u, av::D3dObjectKind::heap12, &twelve));
+  CHECK(objects.insert(53u, av::D3dObjectKind::surface9, &nine));
+  CHECK(!backend.on_DestroyObject(52u));
+  CHECK(!backend.on_DestroyObject(53u));
+  CHECK_EQ(twelve.references, 1u);
+  CHECK(backend.on_DestroyObject(51u));
+  CHECK_EQ(eleven.references, 0u);
+  objects.remove(52u);
+  objects.remove(53u); }

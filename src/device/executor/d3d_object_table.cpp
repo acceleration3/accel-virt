@@ -82,6 +82,15 @@ bool D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
     return true;
 }
 
+bool D3dObjectTable::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
+{
+    AV_SCOPE("D3dObjectTable::keep");
+    if (made == nullptr) return false;
+    if (insert(id, kind, made)) return true;
+    made->Release();
+    return false;
+}
+
 IUnknown *D3dObjectTable::find(uint32_t id, D3dObjectKind kind) const
 {
     AV_SCOPE("D3dObjectTable::find");
@@ -158,6 +167,22 @@ void D3dObjectTable::remove(uint32_t id)
     objects_[slot]->Release();
     set(slot, 0u, D3dObjectKind::none, true, nullptr);
     count_--;
+}
+
+void D3dObjectTable::remove_kinds(D3dObjectKind first, D3dObjectKind last)
+{
+    AV_SCOPE("D3dObjectTable::remove_kinds");
+    for (uint32_t slot = next_used(0u); slot < capacity; slot = next_used(slot + 1u))
+        if (kinds_[slot] >= first && kinds_[slot] <= last) remove(ids_[slot]);
+}
+
+uint32_t D3dObjectTable::count_kinds(D3dObjectKind first, D3dObjectKind last) const
+{
+    AV_SCOPE("D3dObjectTable::count_kinds");
+    uint32_t kept = 0u;
+    for (uint32_t slot = next_used(0u); slot < capacity; slot = next_used(slot + 1u))
+        if (kinds_[slot] >= first && kinds_[slot] <= last) kept++;
+    return kept;
 }
 
 void D3dObjectTable::clear()

@@ -105,8 +105,8 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 
 }  // namespace
 
-D3d12Session::D3d12Session(GuestRegion &region)
-    : region_(region), device_(nullptr), surfaces_(nullptr), objects_(), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
+D3d12Session::D3d12Session(GuestRegion &region, D3dObjectTable &objects)
+    : region_(region), device_(nullptr), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), arena_(nullptr), removed_(0u), refusal_("d3d12")
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -132,7 +132,7 @@ void D3d12Session::shut_down()
     progress_.clear();
     wake_.stop();
     addresses_.clear();
-    objects_.clear();
+    objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
     arena_heaps_.close();
     views_.bind(nullptr);
     pipelines_.bind(nullptr);
@@ -194,25 +194,16 @@ uint8_t *D3d12Session::guest_bytes_out(uint64_t offset, uint64_t size)
     return region_.at(offset, size);
 }
 
-bool D3d12Session::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
-{
-    AV_SCOPE("D3d12Session::keep");
-    if (made == nullptr) return false;
-    if (objects_.insert(id, kind, made)) return true;
-    made->Release();
-    return false;
-}
-
 ID3D12GraphicsCommandList *D3d12Session::list(uint32_t id) const
 {
     AV_SCOPE("D3d12Session::list");
-    return object<ID3D12GraphicsCommandList>(id, D3dObjectKind::list12);
+    return objects_.find_as<ID3D12GraphicsCommandList>(id, D3dObjectKind::list12);
 }
 
 bool D3d12Session::cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t type, size_t &handle) const
 {
     AV_SCOPE("D3d12Session::cpu_handle");
-    ID3D12DescriptorHeap *const heap = object<ID3D12DescriptorHeap>(ref.heap, D3dObjectKind::descriptor_heap12);
+    ID3D12DescriptorHeap *const heap = objects_.find_as<ID3D12DescriptorHeap>(ref.heap, D3dObjectKind::descriptor_heap12);
     if (heap == nullptr || type >= descriptor_heap_types) return false;
     const D3D12_DESCRIPTOR_HEAP_DESC desc = heap->GetDesc();
     if (static_cast<uint32_t>(desc.Type) != type || ref.index >= desc.NumDescriptors) return false;
@@ -224,7 +215,7 @@ bool D3d12Session::cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t typ
 bool D3d12Session::gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const
 {
     AV_SCOPE("D3d12Session::gpu_handle");
-    ID3D12DescriptorHeap *const heap = object<ID3D12DescriptorHeap>(ref.heap, D3dObjectKind::descriptor_heap12);
+    ID3D12DescriptorHeap *const heap = objects_.find_as<ID3D12DescriptorHeap>(ref.heap, D3dObjectKind::descriptor_heap12);
     if (heap == nullptr) return false;
     const D3D12_DESCRIPTOR_HEAP_DESC desc = heap->GetDesc();
     const uint32_t type = static_cast<uint32_t>(desc.Type);
@@ -252,7 +243,7 @@ bool D3d12Session::place(uint32_t id, IUnknown *made, uint64_t address, uint64_t
         made->Release();
         return false;
     }
-    if (keep(id, D3dObjectKind::resource12, made)) return true;
+    if (objects_.keep(id, D3dObjectKind::resource12, made)) return true;
     addresses_.remove(id);
     return false;
 }
@@ -340,7 +331,9 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     AV_SCOPE("D3d12Session::on_Destroy12");
     if (arena_heaps_.remove(id)) return true;
     D3dObjectKind kind = D3dObjectKind::none;
-    if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12) return false;
+    if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12 ||
+        kind > D3dObjectKind::command_signature12)
+        return false;
     if (kind == D3dObjectKind::resource12) addresses_.remove(id);
     if (kind == D3dObjectKind::fence12) fences_.forget(id);
     if (kind == D3dObjectKind::queue12) progress_.forget(id);
@@ -381,7 +374,7 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
         }
         const bool shared = region_.descriptor() >= 0;
         const bool made = shared ? arena_heaps_.add(*device_, region_, heap, arena_offset, size)
-                                 : keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
+                                 : objects_.keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
         if (!made)
             fprintf(stderr, "virtio-gpu-av: d3d12: the host did not import the arena of %llu bytes as %s\n",
                     static_cast<unsigned long long>(region_.length()), shared ? "a dma-buf" : "host memory");
@@ -395,7 +388,7 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
     ID3D12Heap *made = nullptr;
     if (FAILED(device_->device()->CreateHeap(&desc, __uuidof(ID3D12Heap), reinterpret_cast<void **>(&made))))
         return false;
-    return keep(heap, D3dObjectKind::heap12, made);
+    return objects_.keep(heap, D3dObjectKind::heap12, made);
 }
 
 bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties &properties,
@@ -422,7 +415,7 @@ bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12pr
 bool D3d12Session::on_ShareResource12(uint32_t resource, uint64_t key)
 {
     AV_SCOPE("D3d12Session::on_ShareResource12");
-    ID3D12Resource *const shown = object<ID3D12Resource>(resource, D3dObjectKind::resource12);
+    ID3D12Resource *const shown = objects_.find_as<ID3D12Resource>(resource, D3dObjectKind::resource12);
     return shown != nullptr && presentation_.share(shown, key);
 }
 
@@ -449,7 +442,7 @@ bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, u
     if (device_ != nullptr && resource_holds(desc) &&
         arena_heaps_.place(heap, offset, desc.dimension == buffer_dimension ? desc.width : 0u, in_arena))
         return placed(resource, arena_heaps_.heap(), in_arena, desc, state, clear, address);
-    ID3D12Heap *const in = object<ID3D12Heap>(heap, D3dObjectKind::heap12);
+    ID3D12Heap *const in = objects_.find_as<ID3D12Heap>(heap, D3dObjectKind::heap12);
     if (device_ == nullptr || in == nullptr || !resource_holds(desc)) return false;
     const D3D12_HEAP_DESC heap_desc = in->GetDesc();
     if (offset > heap_desc.SizeInBytes || (desc.dimension == buffer_dimension && desc.width > heap_desc.SizeInBytes - offset))
@@ -495,7 +488,7 @@ bool D3d12Session::on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint3
     if (FAILED(device_->device()->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap),
                                                        reinterpret_cast<void **>(&made))))
         return false;
-    return keep(heap, D3dObjectKind::descriptor_heap12, made);
+    return objects_.keep(heap, D3dObjectKind::descriptor_heap12, made);
 }
 
 bool D3d12Session::on_CreateShaderResourceView12(const d3d12proto::DescriptorRef &at, uint32_t has_desc,
@@ -554,7 +547,7 @@ bool D3d12Session::on_CopyDescriptors12(const d3d12proto::DescriptorRef &destina
                                         const d3d12proto::DescriptorRef &source, uint32_t count)
 {
     AV_SCOPE("D3d12Session::on_CopyDescriptors12");
-    ID3D12DescriptorHeap *const from = object<ID3D12DescriptorHeap>(source.heap, D3dObjectKind::descriptor_heap12);
+    ID3D12DescriptorHeap *const from = objects_.find_as<ID3D12DescriptorHeap>(source.heap, D3dObjectKind::descriptor_heap12);
     if (device_ == nullptr || from == nullptr || count == 0u) return false;
     const uint32_t type = static_cast<uint32_t>(from->GetDesc().Type);
     const d3d12proto::DescriptorRef last_from = {source.heap, source.index + count - 1u};
@@ -578,7 +571,7 @@ bool D3d12Session::on_CreateRootSignature12(uint32_t root, uint32_t flags, uint3
                                             const d3d12proto::StaticSampler *samplers)
 {
     AV_SCOPE("D3d12Session::on_CreateRootSignature12");
-    return keep(root, D3dObjectKind::root_signature12,
+    return objects_.keep(root, D3dObjectKind::root_signature12,
                 pipelines_.root_signature(flags, parameters, parameter_count, ranges, range_count, samplers,
                                           sampler_count));
 }
@@ -590,12 +583,12 @@ bool D3d12Session::on_CreateCommandSignature12(uint32_t signature, uint32_t root
 {
     AV_SCOPE("D3d12Session::on_CreateCommandSignature12");
     ID3D12RootSignature *const rooted =
-        root == 0u ? nullptr : object<ID3D12RootSignature>(root, D3dObjectKind::root_signature12);
+        root == 0u ? nullptr : objects_.find_as<ID3D12RootSignature>(root, D3dObjectKind::root_signature12);
     D3d12RootLayout layout;
     if (device_ == nullptr || (root != 0u && (rooted == nullptr || !layout.read(rooted)))) return false;
     const D3d12IndirectSignature made(arguments, argument_count, byte_stride);
     if (!made.holds(rooted != nullptr ? &layout : nullptr)) return false;
-    return keep(signature, D3dObjectKind::command_signature12, made.make(device_->device(), rooted));
+    return objects_.keep(signature, D3dObjectKind::command_signature12, made.make(device_->device(), rooted));
 }
 
 bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const d3d12proto::GraphicsState &state,
@@ -610,7 +603,7 @@ bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root,
     if (arena_ == nullptr) return false;
     const uint8_t *const code[D3d12PipelineBuilder::stage_count] = {vs, hs, ds, gs, ps};
     const uint64_t sizes[D3d12PipelineBuilder::stage_count] = {vs_size, hs_size, ds_size, gs_size, ps_size};
-    return keep(pipeline, D3dObjectKind::pipeline12,
+    return objects_.keep(pipeline, D3dObjectKind::pipeline12,
                 pipelines_.graphics(root, state, elements, element_count, signatures, signature_count, code, sizes,
                                     *arena_));
 }
@@ -619,7 +612,7 @@ bool D3d12Session::on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, 
 {
     AV_SCOPE("D3d12Session::on_CreateComputePipeline12");
     if (arena_ == nullptr) return false;
-    return keep(pipeline, D3dObjectKind::pipeline12, pipelines_.compute(root, cs, cs_size, *arena_));
+    return objects_.keep(pipeline, D3dObjectKind::pipeline12, pipelines_.compute(root, cs, cs_size, *arena_));
 }
 
 // ---------------------------------------------------------------- queues, lists, fences
@@ -637,7 +630,7 @@ bool D3d12Session::on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32
     if (FAILED(device_->device()->CreateCommandQueue(&desc, __uuidof(ID3D12CommandQueue),
                                                      reinterpret_cast<void **>(&made))))
         return false;
-    return keep(queue, D3dObjectKind::queue12, made);
+    return objects_.keep(queue, D3dObjectKind::queue12, made);
 }
 
 bool D3d12Session::on_CreateCommandAllocator12(uint32_t allocator, uint32_t type)
@@ -650,36 +643,36 @@ bool D3d12Session::on_CreateCommandAllocator12(uint32_t allocator, uint32_t type
                                                          __uuidof(ID3D12CommandAllocator),
                                                          reinterpret_cast<void **>(&made))))
         return false;
-    return keep(allocator, D3dObjectKind::allocator12, made);
+    return objects_.keep(allocator, D3dObjectKind::allocator12, made);
 }
 
 bool D3d12Session::on_ResetCommandAllocator12(uint32_t allocator)
 {
     AV_SCOPE("D3d12Session::on_ResetCommandAllocator12");
-    ID3D12CommandAllocator *const made = object<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
+    ID3D12CommandAllocator *const made = objects_.find_as<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
     return made != nullptr && SUCCEEDED(made->Reset());
 }
 
 bool D3d12Session::on_CreateCommandList12(uint32_t id, uint32_t allocator, uint32_t type, uint32_t pipeline)
 {
     AV_SCOPE("D3d12Session::on_CreateCommandList12");
-    ID3D12CommandAllocator *const with = object<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
-    ID3D12PipelineState    *const initial = object<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
+    ID3D12CommandAllocator *const with = objects_.find_as<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
+    ID3D12PipelineState    *const initial = objects_.find_as<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
     if (device_ == nullptr || with == nullptr || (pipeline != 0u && initial == nullptr)) return false;
     ID3D12GraphicsCommandList *made = nullptr;
     if (FAILED(device_->device()->CreateCommandList(0u, static_cast<D3D12_COMMAND_LIST_TYPE>(type), with, initial,
                                                     __uuidof(ID3D12GraphicsCommandList),
                                                     reinterpret_cast<void **>(&made))))
         return false;
-    return keep(id, D3dObjectKind::list12, made);
+    return objects_.keep(id, D3dObjectKind::list12, made);
 }
 
 bool D3d12Session::on_ResetCommandList12(uint32_t id, uint32_t allocator, uint32_t pipeline)
 {
     AV_SCOPE("D3d12Session::on_ResetCommandList12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12CommandAllocator    *const with = object<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
-    ID3D12PipelineState       *const initial = object<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
+    ID3D12CommandAllocator    *const with = objects_.find_as<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
+    ID3D12PipelineState       *const initial = objects_.find_as<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
     if (recorded == nullptr || with == nullptr || (pipeline != 0u && initial == nullptr)) return false;
     return SUCCEEDED(recorded->Reset(with, initial));
 }
@@ -699,7 +692,7 @@ bool D3d12Session::on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t f
     if (FAILED(device_->device()->CreateFence(initial, static_cast<D3D12_FENCE_FLAGS>(flags), __uuidof(ID3D12Fence),
                                               reinterpret_cast<void **>(&made))))
         return false;
-    return keep(fence, D3dObjectKind::fence12, made);
+    return objects_.keep(fence, D3dObjectKind::fence12, made);
 }
 
 /* The frame a blt reads is copied on the presenting queue here, behind the
@@ -709,8 +702,8 @@ bool D3d12Session::on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t f
 bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point)
 {
     AV_SCOPE("D3d12Session::on_PresentResource12");
-    ID3D12CommandQueue *const from = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
-    ID3D12Resource *const     shown = object<ID3D12Resource>(resource, D3dObjectKind::resource12);
+    ID3D12CommandQueue *const from = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
+    ID3D12Resource *const     shown = objects_.find_as<ID3D12Resource>(resource, D3dObjectKind::resource12);
     if (from == nullptr || shown == nullptr || !presentation_.present(from)) return false;
     const SurfacePoint frame(SurfaceIdentity(shown).surface(), point);
     if (surfaces_ == nullptr || !surfaces_->presented(frame)) return true;
@@ -727,7 +720,7 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
 {
     AV_SCOPE("D3d12Session::on_ExecuteCommandLists12");
     constexpr uint32_t most_lists = 64u;
-    ID3D12CommandQueue *const on = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
+    ID3D12CommandQueue *const on = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
     if (on == nullptr || count > most_lists) return false;
     /* A refused command left a list short of what the guest recorded into it
      * - a descriptor heap never bound, a view never written - and the GPU
@@ -749,10 +742,10 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
 bool D3d12Session::on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value)
 {
     AV_SCOPE("D3d12Session::on_SignalFence12");
-    ID3D12Fence *const signalled = object<ID3D12Fence>(fence, D3dObjectKind::fence12);
+    ID3D12Fence *const signalled = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
     if (signalled == nullptr) return false;
     if (queue == 0u) return SUCCEEDED(signalled->Signal(value));
-    ID3D12CommandQueue *const on = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
+    ID3D12CommandQueue *const on = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
     if (on == nullptr || FAILED(on->Signal(signalled, value))) return false;
     fences_.expect(fence, value);
     return true;
@@ -761,8 +754,8 @@ bool D3d12Session::on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t val
 bool D3d12Session::on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value)
 {
     AV_SCOPE("D3d12Session::on_WaitFence12");
-    ID3D12Fence        *const waited = object<ID3D12Fence>(fence, D3dObjectKind::fence12);
-    ID3D12CommandQueue *const on = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
+    ID3D12Fence        *const waited = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
+    ID3D12CommandQueue *const on = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
     return waited != nullptr && on != nullptr && SUCCEEDED(on->Wait(waited, value));
 }
 
@@ -770,7 +763,7 @@ bool D3d12Session::on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value
 {
     AV_SCOPE("D3d12Session::on_FenceValue12");
     completed = 0u;
-    ID3D12Fence *const asked = object<ID3D12Fence>(fence, D3dObjectKind::fence12);
+    ID3D12Fence *const asked = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
     if (asked == nullptr) return false;
     if (wait != 0u && asked->GetCompletedValue() < value) asked->SetEventOnCompletion(value, nullptr);
     completed = asked->GetCompletedValue();
@@ -780,7 +773,7 @@ bool D3d12Session::on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value
 bool D3d12Session::on_PublishFence12(uint32_t fence, uint64_t offset)
 {
     AV_SCOPE("D3d12Session::on_PublishFence12");
-    ID3D12Fence *const published = object<ID3D12Fence>(fence, D3dObjectKind::fence12);
+    ID3D12Fence *const published = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
     if (published == nullptr && offset != D3d12FencePublisher::stop) return false;
     return fences_.publish(fence, published, offset);
 }
@@ -797,14 +790,15 @@ bool D3d12Session::on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t c
     ID3D12QueryHeap *made = nullptr;
     if (FAILED(device_->device()->CreateQueryHeap(&desc, __uuidof(ID3D12QueryHeap), reinterpret_cast<void **>(&made))))
         return false;
-    return keep(heap, D3dObjectKind::query_heap12, made);
+    return objects_.keep(heap, D3dObjectKind::query_heap12, made);
 }
 
 bool D3d12Session::invariants_hold() const
 {
     AV_SCOPE("D3d12Session::invariants_hold");
     return objects_.invariants_hold() && addresses_.invariants_hold() && fences_.invariants_hold() &&
-           (device_ != nullptr || objects_.count() == 0u);
+           (device_ != nullptr ||
+            objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
 }
 
 }  // namespace av

@@ -72,7 +72,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), refusal_("d3d11"), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_, objects_), published_(),
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), refusal_("d3d11"), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(),
       missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -94,6 +94,10 @@ bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12
 void D3dBackend::shut_down()
 {
     AV_SCOPE("D3dBackend::shut_down");
+    /* Direct3D 12's and 9's first: their objects are in the session's table
+     * too, and 12 drains its queues through its own before letting them go. */
+    d3d12_.shut_down();
+    d3d9_.shut_down();
     if (device11_ != nullptr) {
         /* forget_state takes the device's lock itself. */
         for (ID3DDeviceContextState *state = states_.remove_any(); state != nullptr; state = states_.remove_any()) {
@@ -108,8 +112,6 @@ void D3dBackend::shut_down()
         objects_.clear();
         device11_->unlock();
     }
-    d3d12_.shut_down();
-    d3d9_.shut_down();
     static_cast<void>(states_.select(0u));
     device11_ = nullptr;
     region_.give_back();
@@ -243,7 +245,7 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
     fd = -1;
     if (device11_ == nullptr || kind != AV_SHARED_MEMORY || wire_handle == 0u || wire_handle > UINT32_MAX)
         return false;
-    ID3D11Resource *const resource = object<ID3D11Resource>(static_cast<uint32_t>(wire_handle), D3dObjectKind::resource);
+    ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(static_cast<uint32_t>(wire_handle), D3dObjectKind::resource);
     ID3D11Texture2D *texture = nullptr;
     if (resource == nullptr ||
         FAILED(resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture))))
@@ -281,26 +283,12 @@ uint8_t *D3dBackend::guest_bytes_out(uint64_t offset, uint64_t size)
     return region_.at(offset, size);
 }
 
-template <typename T> T *D3dBackend::object(uint32_t id, D3dObjectKind kind) const
-{
-    AV_SCOPE("D3dBackend::object");
-    return static_cast<T *>(static_cast<void *>(objects_.find(id, kind)));
-}
-
 bool D3dBackend::all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const
 {
     AV_SCOPE("D3dBackend::all_of");
     for (uint32_t index = 0u; index < count; index++)
         if (ids[index] != 0u && objects_.find(ids[index], kind) == nullptr) return false;
     return true;
-}
-
-bool D3dBackend::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
-{
-    AV_SCOPE("D3dBackend::keep");
-    if (objects_.insert(id, kind, made)) return true;
-    made->Release();
-    return false;
 }
 
 bool D3dBackend::ready() const
@@ -653,7 +641,9 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     AV_SCOPE("D3dBackend::on_DestroyObject");
     D3dObjectKind kind = D3dObjectKind::none;
     IUnknown *const found = objects_.find_any(id, kind);
-    if (found == nullptr) return false;
+    /* Direct3D 12's and 9's share the session's table; they are not
+     * DestroyObject's. */
+    if (found == nullptr || kind >= D3dObjectKind::heap12) return false;
     published_.forget(id);
     constants_.forget(id);
     objects_.remove(id);
@@ -724,7 +714,7 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
      * next Finish, as a real driver's out-of-memory would be; the id then names
      * nothing and every command naming it is refused. */
     if (FAILED(result) || made == nullptr) return true;
-    if (!keep(id, D3dObjectKind::resource, made)) return false;
+    if (!objects_.keep(id, D3dObjectKind::resource, made)) return false;
     /* The surface a present of it publishes on (SharedSurfaces). */
     ID3D11DeviceChild *child = nullptr;
     if (shared_key != 0u &&
@@ -781,7 +771,7 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
         desc.misc_flags = buffer.MiscFlags;
         desc.structure_stride = buffer.StructureByteStride;
     }
-    if (!keep(id, D3dObjectKind::resource, resource)) return false;
+    if (!objects_.keep(id, D3dObjectKind::resource, resource)) return false;
     found = 1u;
     return true;
 }
@@ -789,7 +779,7 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
 bool D3dBackend::on_CreateShaderResourceView(uint32_t id, const d3dproto::ViewDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateShaderResourceView");
-    ID3D11Resource *const resource = object<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
+    ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
     if (resource == nullptr || desc.format > max_format) return false;
     D3D11_SHADER_RESOURCE_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
@@ -802,13 +792,13 @@ bool D3dBackend::on_CreateShaderResourceView(uint32_t id, const d3dproto::ViewDe
     if (desc.dimension > D3D11_SRV_DIMENSION_BUFFEREX) return false;
     ID3D11ShaderResourceView *made = nullptr;
     if (FAILED(device11_->device()->CreateShaderResourceView(resource, &view, &made))) return true;
-    return keep(id, D3dObjectKind::shader_resource_view, made);
+    return objects_.keep(id, D3dObjectKind::shader_resource_view, made);
 }
 
 bool D3dBackend::on_CreateRenderTargetView(uint32_t id, const d3dproto::ViewDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateRenderTargetView");
-    ID3D11Resource *const resource = object<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
+    ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
     if (resource == nullptr || desc.format > max_format || desc.dimension > D3D11_RTV_DIMENSION_TEXTURE3D)
         return false;
     D3D11_RENDER_TARGET_VIEW_DESC view = {};
@@ -817,13 +807,13 @@ bool D3dBackend::on_CreateRenderTargetView(uint32_t id, const d3dproto::ViewDesc
     __builtin_memcpy(&view.Buffer, desc.args, sizeof(uint32_t) * 3u);
     ID3D11RenderTargetView *made = nullptr;
     if (FAILED(device11_->device()->CreateRenderTargetView(resource, &view, &made))) return true;
-    return keep(id, D3dObjectKind::render_target_view, made);
+    return objects_.keep(id, D3dObjectKind::render_target_view, made);
 }
 
 bool D3dBackend::on_CreateDepthStencilView(uint32_t id, const d3dproto::ViewDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateDepthStencilView");
-    ID3D11Resource *const resource = object<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
+    ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
     if (resource == nullptr || desc.format > max_format || desc.dimension > D3D11_DSV_DIMENSION_TEXTURE2DMSARRAY)
         return false;
     D3D11_DEPTH_STENCIL_VIEW_DESC view = {};
@@ -833,13 +823,13 @@ bool D3dBackend::on_CreateDepthStencilView(uint32_t id, const d3dproto::ViewDesc
     __builtin_memcpy(&view.Texture1D, desc.args, sizeof(uint32_t) * 3u);
     ID3D11DepthStencilView *made = nullptr;
     if (FAILED(device11_->device()->CreateDepthStencilView(resource, &view, &made))) return true;
-    return keep(id, D3dObjectKind::depth_stencil_view, made);
+    return objects_.keep(id, D3dObjectKind::depth_stencil_view, made);
 }
 
 bool D3dBackend::on_CreateUnorderedAccessView(uint32_t id, const d3dproto::ViewDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateUnorderedAccessView");
-    ID3D11Resource *const resource = object<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
+    ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
     if (resource == nullptr || desc.format > max_format || desc.dimension > D3D11_UAV_DIMENSION_TEXTURE3D)
         return false;
     D3D11_UNORDERED_ACCESS_VIEW_DESC view = {};
@@ -849,7 +839,7 @@ bool D3dBackend::on_CreateUnorderedAccessView(uint32_t id, const d3dproto::ViewD
     if (view.ViewDimension == D3D11_UAV_DIMENSION_BUFFER) view.Buffer.Flags = desc.flags;
     ID3D11UnorderedAccessView *made = nullptr;
     if (FAILED(device11_->device()->CreateUnorderedAccessView(resource, &view, &made))) return true;
-    return keep(id, D3dObjectKind::unordered_access_view, made);
+    return objects_.keep(id, D3dObjectKind::unordered_access_view, made);
 }
 
 bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_count,
@@ -944,7 +934,7 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
     }
     }
     if (FAILED(result) || made == nullptr) return true;
-    return keep(id, kind, made);
+    return objects_.keep(id, kind, made);
 }
 
 bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const d3dproto::InputElement *elements)
@@ -976,7 +966,7 @@ bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const
     if (size == 0u) return false;
     ID3D11InputLayout *made = nullptr;
     if (FAILED(device11_->device()->CreateInputLayout(descs, element_count, storage, size, &made))) return true;
-    return keep(id, D3dObjectKind::input_layout, made);
+    return objects_.keep(id, D3dObjectKind::input_layout, made);
 }
 
 bool D3dBackend::on_CreateBlendState(uint32_t id, const d3dproto::BlendDesc &desc)
@@ -1002,7 +992,7 @@ bool D3dBackend::on_CreateBlendState(uint32_t id, const d3dproto::BlendDesc &des
     }
     ID3D11BlendState1 *made = nullptr;
     if (FAILED(device11_->device()->CreateBlendState1(&blend, &made))) return true;
-    return keep(id, D3dObjectKind::blend_state, made);
+    return objects_.keep(id, D3dObjectKind::blend_state, made);
 }
 
 bool D3dBackend::on_CreateDepthStencilState(uint32_t id, const d3dproto::DepthStencilDesc &desc)
@@ -1026,7 +1016,7 @@ bool D3dBackend::on_CreateDepthStencilState(uint32_t id, const d3dproto::DepthSt
     }
     ID3D11DepthStencilState *made = nullptr;
     if (FAILED(device11_->device()->CreateDepthStencilState(&state, &made))) return true;
-    return keep(id, D3dObjectKind::depth_stencil_state, made);
+    return objects_.keep(id, D3dObjectKind::depth_stencil_state, made);
 }
 
 bool D3dBackend::on_CreateRasterizerState(uint32_t id, const d3dproto::RasterizerDesc &desc)
@@ -1048,7 +1038,7 @@ bool D3dBackend::on_CreateRasterizerState(uint32_t id, const d3dproto::Rasterize
     state.ConservativeRaster = static_cast<D3D11_CONSERVATIVE_RASTERIZATION_MODE>(desc.conservative);
     ID3D11RasterizerState2 *made = nullptr;
     if (FAILED(device11_->device()->CreateRasterizerState2(&state, &made))) return true;
-    return keep(id, D3dObjectKind::rasterizer_state, made);
+    return objects_.keep(id, D3dObjectKind::rasterizer_state, made);
 }
 
 bool D3dBackend::on_CreateSampler(uint32_t id, const d3dproto::SamplerDesc &desc)
@@ -1068,7 +1058,7 @@ bool D3dBackend::on_CreateSampler(uint32_t id, const d3dproto::SamplerDesc &desc
     sampler.MaxLOD = desc.max_lod;
     ID3D11SamplerState *made = nullptr;
     if (FAILED(device11_->device()->CreateSamplerState(&sampler, &made))) return true;
-    return keep(id, D3dObjectKind::sampler, made);
+    return objects_.keep(id, D3dObjectKind::sampler, made);
 }
 
 bool D3dBackend::on_CreateQuery(uint32_t id, uint32_t type, uint32_t misc_flags)
@@ -1078,7 +1068,7 @@ bool D3dBackend::on_CreateQuery(uint32_t id, uint32_t type, uint32_t misc_flags)
     const D3D11_QUERY_DESC query = {static_cast<D3D11_QUERY>(type), misc_flags & D3D11_QUERY_MISC_PREDICATEHINT};
     ID3D11Query *made = nullptr;
     if (FAILED(device11_->device()->CreateQuery(&query, &made))) return true;
-    return keep(id, D3dObjectKind::query, made);
+    return objects_.keep(id, D3dObjectKind::query, made);
 }
 
 /* ---------------------------------------------------------------- binding */
@@ -1112,7 +1102,7 @@ bool D3dBackend::on_SetConstantBuffers(uint32_t stage, uint32_t start, uint32_t 
     UINT first[D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT] = {};
     UINT counts[D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++) {
-        bound[index] = object<ID3D11Buffer>(buffers[index].buffer, D3dObjectKind::resource);
+        bound[index] = objects_.find_as<ID3D11Buffer>(buffers[index].buffer, D3dObjectKind::resource);
         if (buffers[index].buffer != 0u && bound[index] == nullptr) return false;
         first[index] = buffers[index].first_constant;
         counts[index] = buffers[index].num_constants == 0u ? D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT
@@ -1140,7 +1130,7 @@ bool D3dBackend::on_SetShaderResources(uint32_t stage, uint32_t start, uint32_t 
     if (!all_of(views, count, D3dObjectKind::shader_resource_view)) return false;
     ID3D11ShaderResourceView *bound[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++)
-        bound[index] = object<ID3D11ShaderResourceView>(views[index], D3dObjectKind::shader_resource_view);
+        bound[index] = objects_.find_as<ID3D11ShaderResourceView>(views[index], D3dObjectKind::shader_resource_view);
     ID3D11DeviceContext4 *const context = device11_->context();
     switch (stage) {
     case stage_vertex: context->VSSetShaderResources(start, count, bound); break;
@@ -1160,7 +1150,7 @@ bool D3dBackend::on_SetSamplers(uint32_t stage, uint32_t start, uint32_t count, 
     if (!all_of(samplers, count, D3dObjectKind::sampler)) return false;
     ID3D11SamplerState *bound[D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++)
-        bound[index] = object<ID3D11SamplerState>(samplers[index], D3dObjectKind::sampler);
+        bound[index] = objects_.find_as<ID3D11SamplerState>(samplers[index], D3dObjectKind::sampler);
     ID3D11DeviceContext4 *const context = device11_->context();
     switch (stage) {
     case stage_vertex: context->VSSetSamplers(start, count, bound); break;
@@ -1180,7 +1170,7 @@ bool D3dBackend::on_SetComputeUnorderedAccessViews(uint32_t start, uint32_t coun
     ID3D11UnorderedAccessView *bound[D3D11_1_UAV_SLOT_COUNT] = {};
     UINT counts[D3D11_1_UAV_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++) {
-        bound[index] = object<ID3D11UnorderedAccessView>(views[index].view, D3dObjectKind::unordered_access_view);
+        bound[index] = objects_.find_as<ID3D11UnorderedAccessView>(views[index].view, D3dObjectKind::unordered_access_view);
         if (views[index].view != 0u && bound[index] == nullptr) return false;
         counts[index] = views[index].initial_count;
     }
@@ -1197,13 +1187,13 @@ bool D3dBackend::on_SetRenderTargets(uint32_t rtv_count, const uint32_t *rtvs, u
     if (!all_of(rtvs, rtv_count, D3dObjectKind::render_target_view)) return false;
     ID3D11RenderTargetView *targets[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
     for (uint32_t index = 0u; index < rtv_count; index++)
-        targets[index] = object<ID3D11RenderTargetView>(rtvs[index], D3dObjectKind::render_target_view);
-    ID3D11DepthStencilView *const depth = object<ID3D11DepthStencilView>(dsv, D3dObjectKind::depth_stencil_view);
+        targets[index] = objects_.find_as<ID3D11RenderTargetView>(rtvs[index], D3dObjectKind::render_target_view);
+    ID3D11DepthStencilView *const depth = objects_.find_as<ID3D11DepthStencilView>(dsv, D3dObjectKind::depth_stencil_view);
     if (dsv != 0u && depth == nullptr) return false;
     ID3D11UnorderedAccessView *views[D3D11_1_UAV_SLOT_COUNT] = {};
     UINT counts[D3D11_1_UAV_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < uav_count; index++) {
-        views[index] = object<ID3D11UnorderedAccessView>(uavs[index].view, D3dObjectKind::unordered_access_view);
+        views[index] = objects_.find_as<ID3D11UnorderedAccessView>(uavs[index].view, D3dObjectKind::unordered_access_view);
         if (uavs[index].view != 0u && views[index] == nullptr) return false;
         counts[index] = uavs[index].initial_count;
     }
@@ -1220,7 +1210,7 @@ bool D3dBackend::on_SetRenderTargets(uint32_t rtv_count, const uint32_t *rtvs, u
 bool D3dBackend::on_SetInputLayout(uint32_t layout)
 {
     AV_SCOPE("D3dBackend::on_SetInputLayout");
-    ID3D11InputLayout *const found = object<ID3D11InputLayout>(layout, D3dObjectKind::input_layout);
+    ID3D11InputLayout *const found = objects_.find_as<ID3D11InputLayout>(layout, D3dObjectKind::input_layout);
     if (!ready() || (layout != 0u && found == nullptr)) return false;
     device11_->context()->IASetInputLayout(found);
     return true;
@@ -1234,7 +1224,7 @@ bool D3dBackend::on_SetVertexBuffers(uint32_t start, uint32_t count, const d3dpr
     UINT strides[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = {};
     UINT offsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++) {
-        bound[index] = object<ID3D11Buffer>(buffers[index].buffer, D3dObjectKind::resource);
+        bound[index] = objects_.find_as<ID3D11Buffer>(buffers[index].buffer, D3dObjectKind::resource);
         if (buffers[index].buffer != 0u && bound[index] == nullptr) return false;
         strides[index] = buffers[index].stride;
         offsets[index] = buffers[index].offset;
@@ -1246,7 +1236,7 @@ bool D3dBackend::on_SetVertexBuffers(uint32_t start, uint32_t count, const d3dpr
 bool D3dBackend::on_SetIndexBuffer(uint32_t buffer, uint32_t format, uint32_t offset)
 {
     AV_SCOPE("D3dBackend::on_SetIndexBuffer");
-    ID3D11Buffer *const found = object<ID3D11Buffer>(buffer, D3dObjectKind::resource);
+    ID3D11Buffer *const found = objects_.find_as<ID3D11Buffer>(buffer, D3dObjectKind::resource);
     if (!ready() || (buffer != 0u && found == nullptr) || format > max_format) return false;
     device11_->context()->IASetIndexBuffer(found, static_cast<DXGI_FORMAT>(format), offset);
     return true;
@@ -1286,7 +1276,7 @@ bool D3dBackend::on_SetScissorRects(uint32_t count, const d3dproto::Rect *rects)
 bool D3dBackend::on_SetBlendState(uint32_t state, const d3dproto::Float4 &factor, uint32_t sample_mask)
 {
     AV_SCOPE("D3dBackend::on_SetBlendState");
-    ID3D11BlendState *const found = object<ID3D11BlendState>(state, D3dObjectKind::blend_state);
+    ID3D11BlendState *const found = objects_.find_as<ID3D11BlendState>(state, D3dObjectKind::blend_state);
     if (!ready() || (state != 0u && found == nullptr)) return false;
     device11_->context()->OMSetBlendState(found, factor.v, sample_mask);
     return true;
@@ -1295,7 +1285,7 @@ bool D3dBackend::on_SetBlendState(uint32_t state, const d3dproto::Float4 &factor
 bool D3dBackend::on_SetDepthStencilState(uint32_t state, uint32_t stencil_ref)
 {
     AV_SCOPE("D3dBackend::on_SetDepthStencilState");
-    ID3D11DepthStencilState *const found = object<ID3D11DepthStencilState>(state, D3dObjectKind::depth_stencil_state);
+    ID3D11DepthStencilState *const found = objects_.find_as<ID3D11DepthStencilState>(state, D3dObjectKind::depth_stencil_state);
     if (!ready() || (state != 0u && found == nullptr)) return false;
     device11_->context()->OMSetDepthStencilState(found, stencil_ref);
     return true;
@@ -1304,7 +1294,7 @@ bool D3dBackend::on_SetDepthStencilState(uint32_t state, uint32_t stencil_ref)
 bool D3dBackend::on_SetRasterizerState(uint32_t state)
 {
     AV_SCOPE("D3dBackend::on_SetRasterizerState");
-    ID3D11RasterizerState *const found = object<ID3D11RasterizerState>(state, D3dObjectKind::rasterizer_state);
+    ID3D11RasterizerState *const found = objects_.find_as<ID3D11RasterizerState>(state, D3dObjectKind::rasterizer_state);
     if (!ready() || (state != 0u && found == nullptr)) return false;
     device11_->context()->RSSetState(found);
     return true;
@@ -1317,7 +1307,7 @@ bool D3dBackend::on_SetStreamOutTargets(uint32_t count, const d3dproto::StreamOu
     ID3D11Buffer *bound[4] = {};
     UINT offsets[4] = {};
     for (uint32_t index = 0u; index < count; index++) {
-        bound[index] = object<ID3D11Buffer>(targets[index].buffer, D3dObjectKind::resource);
+        bound[index] = objects_.find_as<ID3D11Buffer>(targets[index].buffer, D3dObjectKind::resource);
         if (targets[index].buffer != 0u && bound[index] == nullptr) return false;
         offsets[index] = targets[index].offset;
     }
@@ -1328,7 +1318,7 @@ bool D3dBackend::on_SetStreamOutTargets(uint32_t count, const d3dproto::StreamOu
 bool D3dBackend::on_SetPredication(uint32_t query, uint32_t value)
 {
     AV_SCOPE("D3dBackend::on_SetPredication");
-    ID3D11Query *const found = object<ID3D11Query>(query, D3dObjectKind::query);
+    ID3D11Query *const found = objects_.find_as<ID3D11Query>(query, D3dObjectKind::query);
     if (!ready() || (query != 0u && found == nullptr)) return false;
     ID3D11Predicate *predicate = nullptr;
     if (found != nullptr &&
@@ -1342,7 +1332,7 @@ bool D3dBackend::on_SetPredication(uint32_t query, uint32_t value)
 bool D3dBackend::on_SetResourceMinLod(uint32_t resource, float min_lod)
 {
     AV_SCOPE("D3dBackend::on_SetResourceMinLod");
-    ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
+    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     device11_->context()->SetResourceMinLOD(found, min_lod);
     return true;
@@ -1395,7 +1385,7 @@ bool D3dBackend::on_DrawAuto()
 bool D3dBackend::on_DrawInstancedIndirect(uint32_t buffer, uint32_t offset)
 {
     AV_SCOPE("D3dBackend::on_DrawInstancedIndirect");
-    ID3D11Buffer *const found = object<ID3D11Buffer>(buffer, D3dObjectKind::resource);
+    ID3D11Buffer *const found = objects_.find_as<ID3D11Buffer>(buffer, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     device11_->context()->DrawInstancedIndirect(found, offset);
     return true;
@@ -1404,7 +1394,7 @@ bool D3dBackend::on_DrawInstancedIndirect(uint32_t buffer, uint32_t offset)
 bool D3dBackend::on_DrawIndexedInstancedIndirect(uint32_t buffer, uint32_t offset)
 {
     AV_SCOPE("D3dBackend::on_DrawIndexedInstancedIndirect");
-    ID3D11Buffer *const found = object<ID3D11Buffer>(buffer, D3dObjectKind::resource);
+    ID3D11Buffer *const found = objects_.find_as<ID3D11Buffer>(buffer, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     device11_->context()->DrawIndexedInstancedIndirect(found, offset);
     return true;
@@ -1421,7 +1411,7 @@ bool D3dBackend::on_Dispatch(uint32_t x, uint32_t y, uint32_t z)
 bool D3dBackend::on_DispatchIndirect(uint32_t buffer, uint32_t offset)
 {
     AV_SCOPE("D3dBackend::on_DispatchIndirect");
-    ID3D11Buffer *const found = object<ID3D11Buffer>(buffer, D3dObjectKind::resource);
+    ID3D11Buffer *const found = objects_.find_as<ID3D11Buffer>(buffer, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     device11_->context()->DispatchIndirect(found, offset);
     return true;
@@ -1432,7 +1422,7 @@ bool D3dBackend::on_DispatchIndirect(uint32_t buffer, uint32_t offset)
 bool D3dBackend::on_ClearRenderTargetView(uint32_t view, const d3dproto::Float4 &color)
 {
     AV_SCOPE("D3dBackend::on_ClearRenderTargetView");
-    ID3D11RenderTargetView *const found = object<ID3D11RenderTargetView>(view, D3dObjectKind::render_target_view);
+    ID3D11RenderTargetView *const found = objects_.find_as<ID3D11RenderTargetView>(view, D3dObjectKind::render_target_view);
     if (!ready() || found == nullptr) return false;
     device11_->context()->ClearRenderTargetView(found, color.v);
     return true;
@@ -1441,7 +1431,7 @@ bool D3dBackend::on_ClearRenderTargetView(uint32_t view, const d3dproto::Float4 
 bool D3dBackend::on_ClearDepthStencilView(uint32_t view, uint32_t flags, float depth, uint32_t stencil)
 {
     AV_SCOPE("D3dBackend::on_ClearDepthStencilView");
-    ID3D11DepthStencilView *const found = object<ID3D11DepthStencilView>(view, D3dObjectKind::depth_stencil_view);
+    ID3D11DepthStencilView *const found = objects_.find_as<ID3D11DepthStencilView>(view, D3dObjectKind::depth_stencil_view);
     if (!ready() || found == nullptr) return false;
     device11_->context()->ClearDepthStencilView(found, flags & (D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL), depth,
                                                 static_cast<UINT8>(stencil));
@@ -1452,7 +1442,7 @@ bool D3dBackend::on_ClearUnorderedAccessViewUint(uint32_t view, const d3dproto::
 {
     AV_SCOPE("D3dBackend::on_ClearUnorderedAccessViewUint");
     ID3D11UnorderedAccessView *const found =
-        object<ID3D11UnorderedAccessView>(view, D3dObjectKind::unordered_access_view);
+        objects_.find_as<ID3D11UnorderedAccessView>(view, D3dObjectKind::unordered_access_view);
     if (!ready() || found == nullptr) return false;
     device11_->context()->ClearUnorderedAccessViewUint(found, values.v);
     return true;
@@ -1462,7 +1452,7 @@ bool D3dBackend::on_ClearUnorderedAccessViewFloat(uint32_t view, const d3dproto:
 {
     AV_SCOPE("D3dBackend::on_ClearUnorderedAccessViewFloat");
     ID3D11UnorderedAccessView *const found =
-        object<ID3D11UnorderedAccessView>(view, D3dObjectKind::unordered_access_view);
+        objects_.find_as<ID3D11UnorderedAccessView>(view, D3dObjectKind::unordered_access_view);
     if (!ready() || found == nullptr) return false;
     device11_->context()->ClearUnorderedAccessViewFloat(found, values.v);
     return true;
@@ -1509,8 +1499,8 @@ bool D3dBackend::on_Discard(uint32_t id, uint32_t rect_count, const d3dproto::Re
 bool D3dBackend::on_CopyResource(uint32_t destination, uint32_t source)
 {
     AV_SCOPE("D3dBackend::on_CopyResource");
-    ID3D11Resource *const to = object<ID3D11Resource>(destination, D3dObjectKind::resource);
-    ID3D11Resource *const from = object<ID3D11Resource>(source, D3dObjectKind::resource);
+    ID3D11Resource *const to = objects_.find_as<ID3D11Resource>(destination, D3dObjectKind::resource);
+    ID3D11Resource *const from = objects_.find_as<ID3D11Resource>(source, D3dObjectKind::resource);
     if (!ready() || to == nullptr || from == nullptr) return false;
     constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
     constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
@@ -1523,8 +1513,8 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
                                           uint32_t has_box, const d3dproto::Box &box, uint32_t copy_flags)
 {
     AV_SCOPE("D3dBackend::on_CopySubresourceRegion");
-    ID3D11Resource *const to = object<ID3D11Resource>(destination, D3dObjectKind::resource);
-    ID3D11Resource *const from = object<ID3D11Resource>(source, D3dObjectKind::resource);
+    ID3D11Resource *const to = objects_.find_as<ID3D11Resource>(destination, D3dObjectKind::resource);
+    ID3D11Resource *const from = objects_.find_as<ID3D11Resource>(source, D3dObjectKind::resource);
     if (!ready() || to == nullptr || from == nullptr) return false;
     constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
     constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
@@ -1539,8 +1529,8 @@ bool D3dBackend::on_ResolveSubresource(uint32_t destination, uint32_t destinatio
                                        uint32_t source_subresource, uint32_t format)
 {
     AV_SCOPE("D3dBackend::on_ResolveSubresource");
-    ID3D11Resource *const to = object<ID3D11Resource>(destination, D3dObjectKind::resource);
-    ID3D11Resource *const from = object<ID3D11Resource>(source, D3dObjectKind::resource);
+    ID3D11Resource *const to = objects_.find_as<ID3D11Resource>(destination, D3dObjectKind::resource);
+    ID3D11Resource *const from = objects_.find_as<ID3D11Resource>(source, D3dObjectKind::resource);
     if (!ready() || to == nullptr || from == nullptr || format > max_format) return false;
     device11_->context()->ResolveSubresource(to, destination_subresource, from, source_subresource,
                                              static_cast<DXGI_FORMAT>(format));
@@ -1550,7 +1540,7 @@ bool D3dBackend::on_ResolveSubresource(uint32_t destination, uint32_t destinatio
 bool D3dBackend::on_GenerateMips(uint32_t view)
 {
     AV_SCOPE("D3dBackend::on_GenerateMips");
-    ID3D11ShaderResourceView *const found = object<ID3D11ShaderResourceView>(view, D3dObjectKind::shader_resource_view);
+    ID3D11ShaderResourceView *const found = objects_.find_as<ID3D11ShaderResourceView>(view, D3dObjectKind::shader_resource_view);
     if (!ready() || found == nullptr) return false;
     device11_->context()->GenerateMips(found);
     return true;
@@ -1559,9 +1549,9 @@ bool D3dBackend::on_GenerateMips(uint32_t view)
 bool D3dBackend::on_CopyStructureCount(uint32_t destination, uint32_t offset, uint32_t source_view)
 {
     AV_SCOPE("D3dBackend::on_CopyStructureCount");
-    ID3D11Buffer *const to = object<ID3D11Buffer>(destination, D3dObjectKind::resource);
+    ID3D11Buffer *const to = objects_.find_as<ID3D11Buffer>(destination, D3dObjectKind::resource);
     ID3D11UnorderedAccessView *const from =
-        object<ID3D11UnorderedAccessView>(source_view, D3dObjectKind::unordered_access_view);
+        objects_.find_as<ID3D11UnorderedAccessView>(source_view, D3dObjectKind::unordered_access_view);
     if (!ready() || to == nullptr || from == nullptr) return false;
     device11_->context()->CopyStructureCount(to, offset, from);
     return true;
@@ -1572,7 +1562,7 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
                                       uint32_t copy_flags, const uint8_t *data, uint64_t data_size)
 {
     AV_SCOPE("D3dBackend::on_UpdateSubresource");
-    ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
+    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr || data == nullptr) return false;
     /* The bytes DXVK will read are rows of row_pitch and slices of
      * depth_pitch over the box; the data that crossed must cover them, or
@@ -1636,7 +1626,7 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
 bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point)
 {
     AV_SCOPE("D3dBackend::on_PresentPoint");
-    ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
+    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     const SurfacePoint frame(SurfaceIdentity(found).surface(), point);
     if (surfaces_ == nullptr || !frame.names()) return true;
@@ -1666,7 +1656,7 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     row_pitch = 0u;
     depth_pitch = 0u;
     data_size = 0u;
-    ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
+    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
     uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
@@ -1711,7 +1701,7 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
 bool D3dBackend::on_BeginQuery(uint32_t query)
 {
     AV_SCOPE("D3dBackend::on_BeginQuery");
-    ID3D11Query *const found = object<ID3D11Query>(query, D3dObjectKind::query);
+    ID3D11Query *const found = objects_.find_as<ID3D11Query>(query, D3dObjectKind::query);
     if (!ready() || found == nullptr) return false;
     device11_->context()->Begin(found);
     return true;
@@ -1720,7 +1710,7 @@ bool D3dBackend::on_BeginQuery(uint32_t query)
 bool D3dBackend::on_EndQuery(uint32_t query)
 {
     AV_SCOPE("D3dBackend::on_EndQuery");
-    ID3D11Query *const found = object<ID3D11Query>(query, D3dObjectKind::query);
+    ID3D11Query *const found = objects_.find_as<ID3D11Query>(query, D3dObjectKind::query);
     const bool         usable = ready() && found != nullptr;
     if (usable) device11_->context()->End(found);
     /* Counted whether or not it ran: the guest counted it when it sent it. */
@@ -1745,7 +1735,7 @@ bool D3dBackend::on_GetQueryData(uint32_t query, uint32_t flags, uint32_t &ready
     AV_SCOPE("D3dBackend::on_GetQueryData");
     ready_out = 0u;
     data_size = 0u;
-    ID3D11Query *const found = object<ID3D11Query>(query, D3dObjectKind::query);
+    ID3D11Query *const found = objects_.find_as<ID3D11Query>(query, D3dObjectKind::query);
     if (!ready() || found == nullptr) return false;
     const UINT size = found->GetDataSize();
     if (size > data_capacity) return false;

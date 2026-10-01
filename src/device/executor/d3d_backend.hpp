@@ -34,6 +34,8 @@ struct ID3D11Buffer;
 
 namespace av {
 
+struct D3dBackendProbe;
+
 class D3d11HostDevice;
 class D3d12HostDevice;
 class D3d9HostDevice;
@@ -170,17 +172,17 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3dBackendProbe;
+
     static constexpr uint32_t stage_count = 6u;
 
     /* The object `id` names, as the kind a command needs; null for none or
      * another kind. Id 0 is null too, which is what an unbinding names. */
-    template <typename T> T *object(uint32_t id, D3dObjectKind kind) const;
     /* `texture` made over memory other APIs can open, when the guest's
      * `guest_misc` shares it and the host can; null otherwise. */
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
     /* Whether every id in `ids` names nothing (0) or an object of `kind`. */
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
-    [[nodiscard]] bool       keep(uint32_t id, D3dObjectKind kind, IUnknown *object);
     /* A device is selected and not removed: what a command on the immediate
      * context needs, since without one it would run on another session's
      * pipeline state, and a removed device's commands are dropped. */
