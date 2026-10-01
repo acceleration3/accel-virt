@@ -14,6 +14,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/reported_gl_errors.hpp"
@@ -195,7 +196,6 @@ private:
     void                 cap_version();
     void                 teardown();
 
-    icd::IcdConnection                  &connection_;
     BlockSource                   &memory_;
     icd::ThreadLock               &send_lock_;
     icd::LogSink                  &log_;
@@ -210,7 +210,7 @@ private:
     uint32_t                       error_;
     uint64_t                       share_target_;
     /* The device link a made or lost context holds; no_link otherwise. */
-    uint32_t                       link_;
+    icd::ContextLink               link_;
     bool                           loss_reported_;
     icd::HostChannel               channel_;
     ReportedGlErrors               reported_;

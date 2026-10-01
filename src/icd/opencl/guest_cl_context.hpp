@@ -22,6 +22,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
@@ -145,11 +146,10 @@ private:
     [[nodiscard]] Status build(uint32_t gl_share);
     void                 teardown();
 
-    icd::IcdConnection &connection_;
     BlockSource        &memory_;
     icd::ThreadLock    &send_lock_;
     icd::LogSink       &log_;
-    uint32_t            link_;
+    icd::ContextLink    link_;
     uint32_t            gl_share_;
     icd::HostChannel                     channel_;
     ObjectStorage<icd::LockedTransport>  locked_;

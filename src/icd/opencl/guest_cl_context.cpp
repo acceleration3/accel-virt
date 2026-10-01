@@ -15,8 +15,8 @@ namespace av::clicd {
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
                                icd::ThreadLock &send_lock, icd::LogSink &log,
                                icd::SharedHandles &handles)
-    : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log),
-      link_(icd::IcdConnection::no_link), gl_share_(0u), 
+    : memory_(memory), send_lock_(send_lock), log_(log),
+      link_(connection), gl_share_(0u), 
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
       locked_(),
       svm_(memory), external_(handles, log), mappings_(), properties_(), state_(State::created)
@@ -64,11 +64,11 @@ uint32_t GuestClContext::properties(cl_context_properties *out, uint32_t capacit
 Status GuestClContext::build(uint32_t gl_share)
 {
     AV_SCOPE("GuestClContext::build");
-    if (connection_.acquire(link_) != Status::ok) return Status::not_supported;
+    if (link_.acquire() != Status::ok) return Status::not_supported;
     /* The record's reserved tail stays zero: it is OpenGL's, and
      * KmtTransport refuses a non-default one on any other sub-API without
      * asking the driver. */
-    const Status opened = channel_.open(connection_.device(link_), GlContextOptions().sharing(gl_share));
+    const Status opened = channel_.open(link_.device(), GlContextOptions().sharing(gl_share));
     if (opened != Status::ok) return opened;
     static_cast<void>(locked_.construct(channel_.batched(), send_lock_));
     if (channel_.arena_view() == nullptr) {
@@ -103,10 +103,7 @@ void GuestClContext::teardown()
      * context's arena import is forgotten rather than released, since the
      * device frees it with the context. */
     channel_.close(state_ == State::lost);
-    if (link_ != icd::IcdConnection::no_link) {
-        connection_.release(link_);
-        link_ = icd::IcdConnection::no_link;
-    }
+    link_.release();
 }
 
 GuestClContext::State GuestClContext::state() const
@@ -120,12 +117,8 @@ ClientTransport *GuestClContext::wire()
     AV_SCOPE("GuestClContext::wire");
     if (state_ != State::made) return nullptr;
     /* The one place loss is noticed, because it is the one place every call
-     * goes through. A faulted transport takes its whole device down, so every
-     * other context on the link finds out here too, at its own next call -
-     * which is what makes a sibling stop sending rather than send into a
-     * device that is gone (icd::IcdConnection). */
-    if (channel_.faulted()) connection_.lose(link_);
-    if (connection_.lost(link_)) {
+     * goes through (icd::ContextLink). */
+    if (link_.lost(channel_)) {
         state_ = State::lost;
         log_.write("avcl: the context's device faulted; the context is lost");
         return nullptr;
@@ -160,8 +153,8 @@ ClExternalMemory &GuestClContext::external()
 uint32_t GuestClContext::guest_device() const
 {
     AV_SCOPE("GuestClContext::guest_device");
-    if (link_ == icd::IcdConnection::no_link) return 0u;
-    return connection_.device(link_).device();
+    if (!link_.held()) return 0u;
+    return link_.device().device();
 }
 
 bool GuestClContext::has_arena() const
@@ -232,7 +225,7 @@ void GuestClContext::report(StateWriter &writer) const
     AV_SCOPE("GuestClContext::report");
     writer.open("context", 0u);
     writer.number("state", static_cast<uint32_t>(state_));
-    writer.number("link", link_);
+    writer.number("link", link_.link());
     writer.flag("arena", has_arena());
     writer.number("mappings", mappings());
     svm_.report(writer);
@@ -262,9 +255,9 @@ bool GuestClContext::invariants_hold() const
     if (state_ == State::created) {
         /* Nothing is held before a make, and a make that failed held nothing
          * after it either. */
-        return !channel_.opened() && link_ == icd::IcdConnection::no_link;
+        return !channel_.opened() && !link_.held();
     }
-    return channel_.opened() && link_ != icd::IcdConnection::no_link;
+    return channel_.opened() && link_.held();
 }
 
 }  // namespace av::clicd

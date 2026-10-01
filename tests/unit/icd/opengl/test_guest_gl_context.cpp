@@ -4,6 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "proto/resources/shared_object_kind.hpp"
@@ -32,7 +33,7 @@ struct GuestGlContextProbe {
     static void unterminate(GuestGlContext &context) { std::memset(context.strings_[2], 'x', GuestGlContext::string_bytes); }
     static void connect(GuestGlContext &context, bool connected)
     {
-        context.link_ = connected ? 0u : av::icd::IcdConnection::no_link;
+        av::icd::ContextLinkProbe(context.link_).link() = connected ? 0u : av::icd::IcdConnection::no_link;
     }
     static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
 };

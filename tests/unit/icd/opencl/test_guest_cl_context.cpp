@@ -8,6 +8,7 @@
  * becomes a lost context there rather than wherever somebody remembered to
  * look. */
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
 #include "harness/icd/cl_context_rig.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -272,7 +273,7 @@ struct GuestClContextProbe {
     { return context.mappings_[slot]; }
     static icd::HostChannel &channel(GuestClContext &context) { return context.channel_; }
     static void          forget_link(GuestClContext &context)
-    { context.link_ = icd::IcdConnection::no_link; }
+    { icd::ContextLinkProbe(context.link_).link() = icd::IcdConnection::no_link; }
     static void          say_it_was_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::made; }
     static void          say_it_was_never_made(GuestClContext &context)
@@ -286,7 +287,7 @@ struct GuestClContextProbe {
                                                   context.send_lock_)); }
     /* A link on a context that says it has made nothing. It points at
      * nothing, so nothing is released. */
-    static void          stray_link(GuestClContext &context) { context.link_ = 0u; }
+    static void          stray_link(GuestClContext &context) { icd::ContextLinkProbe(context.link_).link() = 0u; }
     static SvmTable     &svm_of(GuestClContext &context) { return context.svm_; }
 };
 
