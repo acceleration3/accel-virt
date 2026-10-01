@@ -1,8 +1,9 @@
 /* What a Direct3D 12 session shows through its GPU's Direct3D 11 device, where
  * the compositor is: its swap chain buffers, published under the keys the
- * guest shares them by and made on DXVK's device over the same memory
- * (D3d11HostDevice::share_image), and the order a present puts DXVK's queue
- * in - after everything the presenting queue executed.
+ * guest shares them by and made on DXVK's device over the same memory the
+ * first time something opens them (D3d11HostDevice::find_shared), and the
+ * order a present puts DXVK's queue in - after everything the presenting
+ * queue executed.
  *
  * The order is a shared fence: the present signals it on the Direct3D 12
  * queue, in that queue's order, and DXVK's queue waits on the GPU for the
@@ -34,8 +35,9 @@ public:
     /* `device12`'s surfaces shown through `device11`; with either null, none
      * is. Both must outlive this. */
     void               bind(D3d12HostDevice *device12, D3d11HostDevice *device11);
-    /* `resource` - a committed 2D texture made shared - published under
-     * `key`. False for anything else, and where DXVK cannot import it. */
+    /* `resource` - a committed 2D texture made shared - marked as the surface
+     * `key` (SurfaceIdentity) and published under it. False for anything
+     * else, and for a key already shared. */
     [[nodiscard]] bool share(ID3D12Resource *resource, uint64_t key);
     /* What `queue` executed so far is done before what DXVK runs next. */
     [[nodiscard]] bool present(ID3D12CommandQueue *queue);

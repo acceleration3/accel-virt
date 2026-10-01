@@ -9,7 +9,7 @@
 #include "device/control/scanout_commands.hpp"
 #include "device/control/present_commands.hpp"
 #include "device/control/present_engine_commands.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "device/control/shared_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/abi/entry_points.hpp"
@@ -86,7 +86,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
      * setup against the narrowed one before the renderer sees it. */
     /* Snapshots are read where the contexts run: in this process only. */
     const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine |
-                              (contexts_->reads_snapshots() ? CapsetInfo::feature_present_from_image : 0u);
+                              (contexts_->reads_frames() ? CapsetInfo::feature_present_from_image : 0u);
     if (isolated) {
         capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, features);
         const Status started = contexts_->start(capset_.info().gpu().uuid(), capset_.info());
@@ -181,7 +181,7 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
      * display could take a dma-buf - a GL window, which then only draws. */
     if (!capset_.display_resolved()) capset_.resolve_display(false);
     ControlRequest         control(host_, request);
-    const PresentSnapshots snapshots(*contexts_, capset_.info().gpu().uuid());
+    const PresentFrames snapshots(*contexts_, capset_.info().gpu().uuid());
     return ContextCommands(host_, *contexts_, capset_).answer(control, type) ||
            BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
            ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||

@@ -10,7 +10,7 @@ namespace av {
 
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
-      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, extensions_{}, count_(0u),
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, surfaces_{}, extensions_{}, count_(0u),
       opened_(false)
       {
           AV_SCOPE("LoaderHostApis::LoaderHostApis");
@@ -92,7 +92,7 @@ void LoaderHostApis::enumerate()
                 sub_apis_[i] |= RVK_EXECUTOR_SUB_API_D3D;
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
-                static_cast<void>(d3d12_devices_[i].open(d3d_runtime_, uuids_[i]));
+                if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i])) d3d11_devices_[i].pair(&d3d12_devices_[i]);
             }
     }
     count_ = found;
@@ -204,6 +204,12 @@ D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d12_device");
     return index < count_ && d3d12_devices_[index].opened() ? &d3d12_devices_[index] : nullptr;
+}
+
+SharedSurfaces *LoaderHostApis::surfaces(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::surfaces");
+    return index < count_ ? &surfaces_[index] : nullptr;
 }
 
 }  // namespace av

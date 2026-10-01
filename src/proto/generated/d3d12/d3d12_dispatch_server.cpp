@@ -617,8 +617,10 @@ static bool decode_PresentResource12(ServerDispatch& s, ::av::WireReader& r, ::a
     if (!r.read_pod(queue)) return false;
     uint32_t resource{};
     if (!r.read_pod(resource)) return false;
+    uint32_t point{};
+    if (!r.read_pod(point)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_PresentResource12(queue, resource)) return false;
+    if (!s.on_PresentResource12(queue, resource, point)) return false;
     return true;
 }
 

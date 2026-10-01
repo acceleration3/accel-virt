@@ -165,7 +165,7 @@ TEST(d3d12_session, every_queue_list_and_fence_command_naming_nothing_is_refused
   CHECK(session.on_PublishFence12(nobody, av::D3d12FencePublisher::stop));
   /* A swap chain buffer shared or presented that nothing names. */
   CHECK(!session.on_ShareResource12(nobody, 0x5eedu));
-  CHECK(!session.on_PresentResource12(nobody, nobody)); }
+  CHECK(!session.on_PresentResource12(nobody, nobody, 1u)); }
 
 TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
 { FreshSession fresh;

@@ -5,6 +5,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "proto/commands/present_operation.hpp"
 #include "proto/commands/present_region.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -18,6 +19,7 @@ using av::PresentOperation;
 using av::PresentRegion;
 using av::QueuedPresentRequest;
 using av::Status;
+using av::SurfacePoint;
 using av::WireReader;
 using av::WireWriter;
 using Source = av::QueuedPresentRequest::Source;
@@ -27,7 +29,8 @@ namespace {
 constexpr std::uint32_t swap = PresentCopyRequest::flag_swap_red_blue;
 constexpr std::uint32_t max_entries = QueuedPresentRequest::max_entries;
 constexpr std::uint32_t max_regions = QueuedPresentRequest::max_regions;
-constexpr std::uint64_t key = 0x1122334455667788u;
+constexpr std::uint64_t surface = 0x1122334455667788u;
+constexpr std::uint32_t point = 0x99AABBCCu;
 
 struct Encoded {
     std::uint8_t bytes[QueuedPresentRequest::encoded_size] = {};
@@ -87,9 +90,10 @@ TEST(queued_present_request, writes_the_ticket_the_source_then_the_copy_s_fields
   const std::uint32_t expected[8] = {1u, swap, 0u, 3u, 5u, 7u, 5120u, 8192u};
   for (std::uint32_t index = 0u; index < 8u; index++)
       CHECK_EQ(field_at<std::uint32_t>(encoded.bytes, 48u + index * 4u), expected[index]);
-  const Encoded image = encode(QueuedPresentRequest(10u, key, blt(0u, 0u, 1u, 0u, 0u, 2u, 256u)));
+  const Encoded image = encode(QueuedPresentRequest(10u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 0u, 0u, 2u, 256u)));
   CHECK_EQ(field_at<std::uint32_t>(image.bytes, 32u), 1u);
-  CHECK_EQ(field_at<std::uint64_t>(image.bytes, 40u), key);
+  CHECK_EQ(field_at<std::uint32_t>(image.bytes, 36u), point);
+  CHECK_EQ(field_at<std::uint64_t>(image.bytes, 40u), surface);
   CHECK_EQ(field_at<std::uint32_t>(image.bytes, 52u), 0u); }
 
 TEST(queued_present_request, a_page_blt_reads_back_as_written_and_places_its_parts_after_its_own_fixed_part)
@@ -97,7 +101,7 @@ TEST(queued_present_request, a_page_blt_reads_back_as_written_and_places_its_par
   CHECK_STATUS(decode(QueuedPresentRequest(9u, blt(swap, 0u, 3u, 5u, 5120u, 7u, 8192u)), read), Status::ok);
   CHECK_EQ(read.ticket(), 9u);
   CHECK(read.source() == Source::pages);
-  CHECK_EQ(read.key(), 0u);
+  CHECK(!read.image().names());
   CHECK(read.copy().operation() == PresentOperation::blt);
   CHECK(read.copy().swaps_red_and_blue());
   CHECK_EQ(read.copy().regions(), 3u);
@@ -112,11 +116,12 @@ TEST(queued_present_request, a_page_blt_reads_back_as_written_and_places_its_par
                Status::ok);
   CHECK(!read.copy().swaps_red_and_blue()); }
 
-TEST(queued_present_request, an_image_blt_names_its_key_and_no_source_pages)
+TEST(queued_present_request, an_image_blt_names_its_surface_and_point_and_no_source_pages)
 { QueuedPresentRequest read;
-  CHECK_STATUS(decode(QueuedPresentRequest(4u, key, blt(swap, 0u, 2u, 0u, 0u, 3u, 256u)), read), Status::ok);
+  CHECK_STATUS(decode(QueuedPresentRequest(4u, SurfacePoint(surface, point), blt(swap, 0u, 2u, 0u, 0u, 3u, 256u)), read),
+               Status::ok);
   CHECK(read.source() == Source::image);
-  CHECK_EQ(read.key(), key);
+  CHECK(read.image() == SurfacePoint(surface, point));
   CHECK(read.copy().swaps_red_and_blue());
   CHECK_EQ(read.destination_entries_offset(), 80u);
   CHECK_EQ(read.regions_offset(), 80u + 3u * 16u);
@@ -152,10 +157,11 @@ TEST(queued_present_request, every_rule_broken_is_malformed_and_changes_nothing)
       QueuedPresentRequest(8u, fill(swap, 0u, 0u)),                               /* nothing to swap in a fill */
       QueuedPresentRequest(8u, fill(0u, 1u, 0u)),                                 /* a fill with a source */
       QueuedPresentRequest(8u, fill(0u, 0u, 64u)),
-      QueuedPresentRequest(8u, 0u, blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),             /* an image with no key */
-      QueuedPresentRequest(8u, key, blt(0u, 0u, 1u, 1u, 0u, 1u, 64u)),            /* an image with pages */
-      QueuedPresentRequest(8u, key, blt(0u, 0u, 1u, 0u, 64u, 1u, 64u)),           /* ... or a pitch */
-      QueuedPresentRequest(8u, key, fill(0u, 0u, 0u)),                            /* an image fills nothing */
+      QueuedPresentRequest(8u, SurfacePoint(0u, point), blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),      /* an image of no surface */
+      QueuedPresentRequest(8u, SurfacePoint(surface, 0u), blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),    /* ... at no point */
+      QueuedPresentRequest(8u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 1u, 0u, 1u, 64u)), /* an image with pages */
+      QueuedPresentRequest(8u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 0u, 64u, 1u, 64u)),/* ... or a pitch */
+      QueuedPresentRequest(8u, SurfacePoint(surface, point), fill(0u, 0u, 0u)),                 /* an image fills nothing */
   };
   for (const QueuedPresentRequest &request : broken) {
       CHECK_STATUS(decode(request, read), Status::malformed);
@@ -169,9 +175,9 @@ TEST(queued_present_request, every_rule_broken_is_malformed_and_changes_nothing)
       std::uint8_t value;
   };
   const Damage damages[] = {{32u, 2u},    /* a source kind nothing names */
-                            {36u, 1u},    /* reserved */
-                            {39u, 1u},    /* reserved, last byte */
-                            {40u, 1u},    /* a key on a page source */
+                            {36u, 1u},    /* a point on a page source */
+                            {39u, 1u},    /* ... in its last byte */
+                            {40u, 1u},    /* a surface on a page source */
                             {52u, 2u},    /* a flag nothing names */
                             {55u, 0x80u}};
   for (const Damage &damage : damages) {

@@ -7,6 +7,7 @@
 #include "device/fence/fence_interrupts.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/recording/wire_recorder.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "harness/context/local_context_plane_probe.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -90,23 +91,25 @@ TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
   CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(RVK_BLOB_HOST_POINTER));
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_state); }
 
-/* Snapshots are the library's: read through the plane from any thread, and
+/* Frames are the library's: read through the plane from any thread, and
  * none from a plane with no library. */
-TEST(local_context_plane, reads_present_snapshots_through_its_library)
+TEST(local_context_plane, reads_staged_frames_through_its_library)
 { Fixture fixture;
-  CHECK(!fixture.plane().reads_snapshots());
-  RvkSnapshotView view = {};
-  CHECK(!fixture.plane().map_snapshot(uuid, 3u, 1u, view));
+  const av::SurfacePoint frame(3u, 9u);
+  CHECK(!fixture.plane().reads_frames());
+  RvkFrameView view = {};
+  CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view));
   static const std::uint8_t pixels[16] = {};
-  fixture.ops().serve_snapshot(3u, RvkSnapshotView{pixels, 16u, 4u, 1u, 0u});
+  fixture.ops().serve_frame(3u, 9u, RvkFrameView{pixels, 16u, 4u, 1u, 0u});
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
-  CHECK(fixture.plane().reads_snapshots());
-  CHECK(fixture.plane().map_snapshot(uuid, 3u, 1u, view));
+  CHECK(fixture.plane().reads_frames());
+  CHECK(!fixture.plane().map_frame(uuid, av::SurfacePoint(3u, 8u), 1u, view));
+  CHECK(fixture.plane().map_frame(uuid, frame, 1u, view));
   CHECK(view.pixels == pixels);
   CHECK_EQ(view.width, 4u);
-  fixture.plane().unmap_snapshot(uuid, 3u);
-  CHECK_EQ(fixture.ops().snapshot_unmaps(), 1u);
-  CHECK(!fixture.plane().map_snapshot(uuid, 3u, 1u, view)); }
+  fixture.plane().unmap_frame(uuid, frame);
+  CHECK_EQ(fixture.ops().frame_unmaps(), 1u);
+  CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view)); }
 
 /* Either lock missing is no_memory; a second initialize after both were made
  * is not a failure. */

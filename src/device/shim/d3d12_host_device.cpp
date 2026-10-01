@@ -16,7 +16,7 @@ constexpr uint32_t shader_model_6_6 = 0x66u;
 
 }  // namespace
 
-D3d12HostDevice::D3d12HostDevice() : runtime_(nullptr), device_(nullptr), caps_{}
+D3d12HostDevice::D3d12HostDevice() : runtime_(nullptr), device_(nullptr), caps_{}, frames_()
 {
     AV_SCOPE("D3d12HostDevice::D3d12HostDevice");
 }
@@ -35,6 +35,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
     if (FAILED(runtime.create_device12(uuid, made)) || made == nullptr) return false;
     runtime_ = &runtime;
     device_ = static_cast<ID3D12Device *>(made);
+    frames_.bind(device_);
     /* The vendor and device ids come from the GPU's Direct3D 11 answer; a
      * Direct3D 12 device has no adapter description natively. */
     measure(0u, 0u, 0u);
@@ -44,6 +45,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
 void D3d12HostDevice::close()
 {
     AV_SCOPE("D3d12HostDevice::close");
+    frames_.bind(nullptr);
     if (device_ != nullptr) device_->Release();
     device_ = nullptr;
     runtime_ = nullptr;
@@ -163,6 +165,12 @@ void D3d12HostDevice::measure(uint32_t vendor_id, uint32_t device_id, uint64_t v
     for (uint32_t type = 0u; type < 4u; type++)
         caps_.descriptor_sizes[type] =
             device_->GetDescriptorHandleIncrementSize(static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));
+}
+
+StagedFrame *D3d12HostDevice::stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source)
+{
+    AV_SCOPE("D3d12HostDevice::stage_frame");
+    return frames_.stage(queue, source);
 }
 
 }  // namespace av

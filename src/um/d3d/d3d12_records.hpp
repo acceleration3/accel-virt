@@ -73,7 +73,9 @@ struct ResourceRecord {
      * opens it by, and the runtime resource it was made for: 0 and null for
      * every other resource. */
     D3DKMT_HANDLE allocation;
-    uint32_t      reserved;
+    /* The presents of it so far: the point the last one published on its
+     * surface (docs/shared-surfaces.md). */
+    uint32_t      presents;
     HANDLE        runtime_resource;
 };
 

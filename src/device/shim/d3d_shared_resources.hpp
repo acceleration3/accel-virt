@@ -34,6 +34,10 @@ public:
     [[nodiscard]] bool publish(uint64_t key, IUnknown *resource);
     /* What `key` shares, with a reference the caller owns; null for none. */
     IUnknown          *find(uint64_t key) const;
+    /* What `key` shares becomes `resource`, the table's reference moving to
+     * it - another API's view of the same surface. False for a key it does
+     * not hold. */
+    [[nodiscard]] bool replace(uint64_t key, IUnknown *resource);
     /* The guest let go of `key` everywhere: the table's reference goes. A key
      * it does not hold is nothing to do. */
     void               release(uint64_t key);

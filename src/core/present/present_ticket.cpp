@@ -11,8 +11,8 @@
 namespace av {
 
 PresentTicket::PresentTicket(Platform &platform, LogBudget &budget, PresentQueue *queue, PixelMover &fallback,
-                             uint64_t snapshot)
-    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), snapshot_(snapshot), ticket_(0u)
+                             const SurfacePoint &image)
+    : platform_(platform), budget_(budget), queue_(queue), fallback_(fallback), image_(image), ticket_(0u)
 {
     AV_SCOPE("PresentTicket::PresentTicket");
 }
@@ -42,9 +42,9 @@ bool PresentTicket::queued(const PresentCopyRequest &request, const PresentSurfa
     AV_SCOPE("PresentTicket::queued");
     if (queue_ == nullptr) return false;
     uint64_t     ticket = 0u;
-    const bool   image = snapshot_ != 0u && source != nullptr;
-    const Status status = image ? queue_->queue_image(snapshot_, request, destination, regions, ticket)
-                                : queue_->queue(request, source, destination, regions, ticket);
+    const bool   imaged = image_.names() && source != nullptr;
+    const Status status = imaged ? queue_->queue_image(image_, request, destination, regions, ticket)
+                                 : queue_->queue(request, source, destination, regions, ticket);
     if (status == Status::ok) {
         ticket_ = ticket;
         return true;

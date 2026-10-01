@@ -29,10 +29,6 @@ constexpr uint32_t most_constants = 64u;
 /* CopyLocation types. */
 constexpr uint32_t location_subresource = 0u;
 constexpr uint32_t location_footprint = 1u;
-/* DXGI_FORMAT BC1_TYPELESS through BC5_SNORM, and BC6H_TYPELESS through
- * BC7_UNORM_SRGB: the 4x4 block formats. */
-constexpr uint32_t bc1_first = 70u, bc5_last = 84u, bc6_first = 94u, bc7_last = 99u;
-constexpr uint32_t block_edge = 4u;
 
 }  // namespace
 
@@ -51,13 +47,6 @@ void D3d12Recorder::sent(bool sent_ok, const char *what)
 {
     AV_SCOPE("D3d12Recorder::sent");
     if (!sent_ok) device_.lost(what);
-}
-
-uint32_t D3d12Recorder::block(uint32_t format) const
-{
-    AV_SCOPE("D3d12Recorder::block");
-    const bool compressed = (format >= bc1_first && format <= bc5_last) || (format >= bc6_first && format <= bc7_last);
-    return compressed ? block_edge : 1u;
 }
 
 /* ---------------------------------------------------------------- lifetime */
@@ -187,12 +176,13 @@ CopyLocation D3d12Recorder::location(const D3D12DDIARG_BUFFER_PLACEMENT &placeme
         made.depth = footprint.VirtualDepth;
         made.row_pitch = footprint.Pitch;
     } else if (layout.pLayout != nullptr) {
-        /* Physical dimensions are in blocks; the API's footprint, in texels. */
+        /* d3d12umddi.h calls these block dimensions, but D3D12Core fills them
+         * with the API footprint's texels: Direct3D 9 on 12 uploads a 32x32
+         * BC1 mip as 32x32 at a 256-byte pitch, 2 KiB apart. */
         const auto &footprint = *static_cast<const D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT *>(layout.pLayout);
-        const uint32_t edge = block(static_cast<uint32_t>(footprint.Format));
         made.format = static_cast<uint32_t>(footprint.Format);
-        made.width = footprint.PhysicalWidth * edge;
-        made.height = footprint.PhysicalHeight * edge;
+        made.width = footprint.PhysicalWidth;
+        made.height = footprint.PhysicalHeight;
         made.depth = footprint.PhysicalDepth;
         made.row_pitch = footprint.Pitch;
     }

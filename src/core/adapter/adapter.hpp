@@ -57,8 +57,10 @@
 namespace av {
 
 class AdapterInfoQuery;
+class DeviceAllocation;
 
 class PresentSurface;
+class SurfacePoint;
 class Rectangle;
 
 struct D3dkmdtVidPnPresentPathRecord;
@@ -302,9 +304,11 @@ private:
     /* What moves a present's pixels when neither the engine nor the device's
      * present copy is there. */
     PixelMover &immediate_mover();
-    /* The present snapshot a blt's private driver data names
-     * (PresentSnapshotRecord); 0 for none. */
-    uint64_t    snapshot_of(const DxgkargPresentRecord &request);
+    /* The host frame a blt from `source` comes from: the source allocation's
+     * own shared id, at the point its private driver data names
+     * (PresentPointRecord); naming nothing for a source the host holds no
+     * surface of, or no point. */
+    SurfacePoint image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source);
     void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);

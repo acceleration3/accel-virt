@@ -23,6 +23,7 @@ class D3d11HostDevice;
 class D3d12HostDevice;
 class GlDisplay;
 class OpenClDevice;
+class SharedSurfaces;
 
 class HostApis {
 public:
@@ -61,6 +62,10 @@ public:
     /* The GPU's Direct3D 12 device, made through vkd3d-proton alongside it;
      * null for a GPU with none. */
     virtual D3d12HostDevice    *d3d12_device(uint32_t index) = 0;
+    /* The surfaces the guest presents from this GPU and the frames staged of
+     * them (docs/shared-surfaces.md): every Direct3D session on it and the
+     * present engine's reads share it. Null for an index nobody has. */
+    virtual SharedSurfaces     *surfaces(uint32_t index) = 0;
 
 protected:
     HostApis() = default;

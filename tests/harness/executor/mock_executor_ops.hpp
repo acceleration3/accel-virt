@@ -124,9 +124,9 @@ public:
     std::uint32_t live_objects();
     /* The guest's shared releases the library was told of (ABI 12): how many,
      * and the last one's id and GPU. */
-    /* map_snapshot answers `view` for `key` until it is unmapped. */
-    void                 serve_snapshot(std::uint64_t key, const RvkSnapshotView &view);
-    std::uint32_t        snapshot_unmaps() const;
+    /* map_frame answers `view` for `surface` at `point` until it is unmapped. */
+    void                 serve_frame(std::uint64_t surface, std::uint32_t point, const RvkFrameView &view);
+    std::uint32_t        frame_unmaps() const;
     std::uint32_t        shared_releases();
     std::uint64_t        last_shared_release();
     const std::uint8_t *last_shared_gpu();
@@ -202,9 +202,10 @@ private:
     std::uint32_t              imported_objects_;
     std::uint32_t              released_objects_;
     std::uint32_t              shared_releases_ = 0u;
-    std::uint64_t              snapshot_key_ = 0u;
-    RvkSnapshotView            snapshot_ = {};
-    std::uint32_t              snapshot_unmaps_ = 0u;
+    std::uint64_t              frame_surface_ = 0u;
+    std::uint32_t              frame_point_ = 0u;
+    RvkFrameView               frame_ = {};
+    std::uint32_t              frame_unmaps_ = 0u;
     std::uint64_t              last_shared_release_ = 0u;
     const std::uint8_t        *last_shared_gpu_ = nullptr;
     std::uint64_t              next_object_;

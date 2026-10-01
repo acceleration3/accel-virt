@@ -21,6 +21,7 @@
 #include "device/shim/loader_host_apis.hpp"
 #include "device/shim/reporter_state_source.hpp"
 #include "device/shim/state_socket.hpp"
+#include "proto/resources/surface_point.hpp"
 
 #include <dlfcn.h>
 
@@ -220,16 +221,19 @@ uint32_t export_image(void *, const uint8_t *gpu_uuid, uint64_t key, RvkExported
     return image != nullptr && library.root().export_image(gpu_uuid, key, *image) ? RVK_EXECUTED : RVK_UNKNOWN;
 }
 
-uint32_t map_snapshot(void *, const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView *view)
+uint32_t map_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point, uint32_t wait_ms,
+                   RvkFrameView *view)
 {
-    AV_SCOPE("map_snapshot");
-    return view != nullptr && library.root().map_snapshot(gpu_uuid, key, wait_ms, *view) ? RVK_EXECUTED : RVK_UNKNOWN;
+    AV_SCOPE("map_frame");
+    return view != nullptr && library.root().map_frame(gpu_uuid, av::SurfacePoint(surface, point), wait_ms, *view)
+               ? RVK_EXECUTED
+               : RVK_UNKNOWN;
 }
 
-void unmap_snapshot(void *, const uint8_t *gpu_uuid, uint64_t key)
+void unmap_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point)
 {
-    AV_SCOPE("unmap_snapshot");
-    library.root().unmap_snapshot(gpu_uuid, key);
+    AV_SCOPE("unmap_frame");
+    library.root().unmap_frame(gpu_uuid, av::SurfacePoint(surface, point));
 }
 
 void release_shared(void *, const uint8_t *gpu_uuid, uint64_t object_id)
@@ -284,8 +288,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               poll,
                               gpu_progress,
                               release_shared,
-                              map_snapshot,
-                              unmap_snapshot};
+                              map_frame,
+                              unmap_frame};
 
 }  // namespace
 

@@ -19,7 +19,7 @@ namespace av {
 
 class ControlRequest;
 class Host;
-class PresentSnapshots;
+class PresentFrames;
 class RegionMover;
 
 class QueuedPresent {
@@ -34,12 +34,12 @@ public:
      * `snapshots` cannot be read; the mapping's refusal otherwise. Holds
      * nothing on failure. */
     [[nodiscard]] Status accept(ControlRequest &request, const QueuedPresentRequest &present,
-                                const PresentSnapshots &snapshots);
+                                const PresentFrames &snapshots);
     /* The engine's thread, once accepted: every region moved, in order, from
      * the pages or from the snapshot in `snapshots`, which is let go after.
      * invalid_parameter at the first region outside either surface, the
      * regions before it moved; not_found for a snapshot that never came. */
-    [[nodiscard]] Status move(const PresentSnapshots &snapshots);
+    [[nodiscard]] Status move(const PresentFrames &snapshots);
     /* Main loop. The mappings let go and the refusals forgotten; the slot
      * takes another present. */
     void                 release();
@@ -55,7 +55,7 @@ private:
     [[nodiscard]] Status read_regions(ControlRequest &request);
     /* The regions through `mover`, in order. */
     [[nodiscard]] Status move_regions(RegionMover &mover);
-    [[nodiscard]] Status move_snapshot(const PresentSnapshots &snapshots);
+    [[nodiscard]] Status move_snapshot(const PresentFrames &snapshots);
 
     GuestPageMapping     source_;
     GuestPageMapping     destination_;

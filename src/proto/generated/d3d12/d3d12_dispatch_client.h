@@ -66,9 +66,12 @@ namespace av::d3d12proto {
 [[nodiscard]] bool rvk_d3d12_CloseCommandList12(::av::ClientTransport& t, uint32_t list);
 [[nodiscard]] bool rvk_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t initial, uint32_t flags);
 [[nodiscard]] bool rvk_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, uint32_t count, const uint32_t* lists);
-// `resource`, shared by ShareResource12, is presented from `queue`: what the queue executed before is
-// done on the GPU before the host's Direct3D 11 device runs anything it is given after.
-[[nodiscard]] bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource);
+// `resource`, shared by ShareResource12, is presented from `queue`, the `point`th present of it: what the
+// queue executed before is done on the GPU before the host's Direct3D 11 device runs anything it is given after.
+// Where a blt-model present has read this surface before, the host stages the frame on `queue` here, which the
+// present engine reads by the surface's shared id and `point` (docs/shared-surfaces.md); a point of 0 stages
+// nothing.
+[[nodiscard]] bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t point);
 // `fence` reaches `value` once `queue` has finished what was executed on it before; queue 0 signals
 // from the CPU, now.
 [[nodiscard]] bool rvk_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value);

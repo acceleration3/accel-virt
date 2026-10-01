@@ -290,3 +290,41 @@ TEST(d3d12_queue_progress_forget, lets_one_queue_s_fence_go_and_clear_every_fenc
   CHECK(progress.executed(2u, &copy, &device));
   CHECK(copy.signalled_value == 4u);
   CHECK(progress.invariants_hold()); }
+
+/* A drain marks every queue that executed on its own fence, so it is over
+ * only once each has caught up - an idle queue finishing first reaches
+ * nothing for a busy one. A queue refusing its signal is reported and leaves
+ * no mark, and the others are marked all the same. */
+TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reached_only_once_all_are)
+{ D3d12FenceWake     wake;
+  D3d12QueueProgress progress(wake);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  CHECK(progress.mark_all());                       /* nothing executed: nothing to mark */
+  CHECK(progress.marked() == 0u);
+  CHECK(progress.executed(1u, &direct, &device));   /* mark 1 */
+  CHECK(progress.executed(2u, &copy, &device));     /* mark 2 */
+  device.fences[0].completed = 1u;
+  device.fences[1].completed = 2u;
+  CHECK(progress.mark_all());
+  CHECK(direct.signalled == &device.fences[0]);
+  CHECK(direct.signalled_value == 3u);
+  CHECK(copy.signalled == &device.fences[1]);
+  CHECK(copy.signalled_value == 4u);
+  CHECK(progress.marked() == 4u);
+  device.fences[1].completed = 4u;                  /* the idle queue first */
+  CHECK(progress.reached() == 1u);
+  device.fences[0].completed = 3u;
+  CHECK(progress.reached() == progress.marked());
+  copy.refuse_signal = true;
+  CHECK(!progress.mark_all());
+  CHECK(direct.signalled_value == 5u);
+  CHECK(progress.marked() == 5u);
+  CHECK(progress.reached() == 3u);                  /* direct behind at 3; copy, unmarked, holds nothing */
+  progress.forget(1u);
+  copy.refuse_signal = false;
+  direct.signalled_value = 0u;
+  CHECK(progress.mark_all());
+  CHECK(copy.signalled_value == 6u);                /* the forgotten queue is not marked */
+  CHECK(direct.signalled_value == 0u);
+  CHECK(progress.invariants_hold()); }

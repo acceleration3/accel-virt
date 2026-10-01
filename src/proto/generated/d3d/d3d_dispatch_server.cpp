@@ -1132,8 +1132,8 @@ static bool decode_ReadSubresource(ServerDispatch& s, ::av::WireReader& r, ::av:
     return true;
 }
 
-static bool decode_PresentSnapshot(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d:PresentSnapshot");
+static bool decode_PresentPoint(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:PresentPoint");
     (void)s;
     (void)reply;
     (void)arena;
@@ -1141,10 +1141,10 @@ static bool decode_PresentSnapshot(ServerDispatch& s, ::av::WireReader& r, ::av:
     if (!r.read_pod(resource)) return false;
     uint32_t subresource{};
     if (!r.read_pod(subresource)) return false;
-    uint64_t key{};
-    if (!r.read_pod(key)) return false;
+    uint32_t point{};
+    if (!r.read_pod(point)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_PresentSnapshot(resource, subresource, key)) return false;
+    if (!s.on_PresentPoint(resource, subresource, point)) return false;
     return true;
 }
 
@@ -1281,7 +1281,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CopyStructureCount:
         case kCmd_UpdateSubresource:
         case kCmd_ReadSubresource:
-        case kCmd_PresentSnapshot:
+        case kCmd_PresentPoint:
         case kCmd_BeginQuery:
         case kCmd_EndQuery:
         case kCmd_BindQueryResults:
@@ -1356,7 +1356,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CopyStructureCount: return decode_CopyStructureCount(s, r, reply, arena);
         case kCmd_UpdateSubresource: return decode_UpdateSubresource(s, r, reply, arena);
         case kCmd_ReadSubresource: return decode_ReadSubresource(s, r, reply, arena);
-        case kCmd_PresentSnapshot: return decode_PresentSnapshot(s, r, reply, arena);
+        case kCmd_PresentPoint: return decode_PresentPoint(s, r, reply, arena);
         case kCmd_BeginQuery: return decode_BeginQuery(s, r, reply, arena);
         case kCmd_EndQuery: return decode_EndQuery(s, r, reply, arena);
         case kCmd_BindQueryResults: return decode_BindQueryResults(s, r, reply, arena);

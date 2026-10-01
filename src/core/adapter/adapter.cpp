@@ -24,7 +24,8 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/submission/follow_record.hpp"
-#include "proto/submission/present_snapshot_record.hpp"
+#include "proto/resources/surface_point.hpp"
+#include "proto/submission/present_point_record.hpp"
 #include "proto/submission/present_ticket_record.hpp"
 #include "proto/context/context_views_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
@@ -1545,7 +1546,7 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
     PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
-                         immediate_mover(), snapshot_of(request));
+                         immediate_mover(), image_of(request, source));
     PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
     const uint32_t  count = end - first;
@@ -1563,18 +1564,20 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     return ticket.ticket();
 }
 
-/* The user-mode driver names a snapshot only where the answer to its
- * UMDRIVERPRIVATE said it may; one named anyway on a device that reads none
- * is a present from its pages, which is all such a device has. */
-uint64_t Adapter::snapshot_of(const DxgkargPresentRecord &request)
+/* The user-mode driver names a point only where the answer to its
+ * UMDRIVERPRIVATE said it may; one named anyway on a device that reads none is
+ * a present from its pages, which is all such a device has. The surface is
+ * the one the source allocation was minted as - the driver's private data
+ * names only when, never what. */
+SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source)
 {
-    AV_SCOPE("Adapter::snapshot_of");
-    PresentSnapshotRecord record;
-    if (!identity_.offers(CapsetInfo::feature_present_from_image) ||
+    AV_SCOPE("Adapter::image_of");
+    PresentPointRecord record;
+    if (source == nullptr || !identity_.offers(CapsetInfo::feature_present_from_image) ||
         record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) !=
             Status::ok)
-        return 0u;
-    return record.key();
+        return SurfacePoint();
+    return SurfacePoint(source->allocation().shared_id(), record.point());
 }
 
 PixelMover &Adapter::immediate_mover()

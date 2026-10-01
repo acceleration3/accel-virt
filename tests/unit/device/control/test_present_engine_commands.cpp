@@ -7,7 +7,7 @@
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -39,7 +39,7 @@ struct Rig {
     FenceInterrupts interrupts;
     PresentScene    scene;
     PresentEngine   engine;
-    av::PresentSnapshots snapshots;
+    av::PresentFrames snapshots;
 
     Rig() : host(), interrupts(host), scene(host), engine(host, interrupts), snapshots()
     {

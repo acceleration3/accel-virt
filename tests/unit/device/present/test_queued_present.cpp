@@ -7,13 +7,14 @@
  * and an image source where nothing reads snapshots are refused holding
  * nothing; a region outside a surface is refused where the move reaches it. */
 #include "device/control/control_request.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "device/present/queued_present.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/host/present_scene.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -31,11 +32,11 @@ using av::WireReader;
 
 namespace {
 
-const av::PresentSnapshots none;
+const av::PresentFrames none;
 
 /* `builder`'s request accepted into `present`, as the engine hands it over. */
 Status accept(MockHost &host, QueuedPresent &present, const GpuRequestBuilder &builder,
-              const av::PresentSnapshots &snapshots = none)
+              const av::PresentFrames &snapshots = none)
 {
     MockRequest          mock(builder.bytes(), builder.size());
     ControlRequest       request(host, &mock);
@@ -126,11 +127,11 @@ TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_s
 { MockHost                  host;
   PresentScene              scene(host);
   av::RecordingContextPlane plane;
-  constexpr std::uint8_t    gpu[av::PresentSnapshots::uuid_bytes] = {9};
-  const av::PresentSnapshots snapshots(plane, gpu);
+  constexpr std::uint8_t    gpu[av::PresentFrames::uuid_bytes] = {9};
+  const av::PresentFrames snapshots(plane, gpu);
   static std::uint32_t      pixels[PresentScene::width];
   for (std::uint32_t x = 0u; x < PresentScene::width; x++) pixels[x] = 0x0000FF00u | x;
-  plane.serve_snapshot(0x61u, RvkSnapshotView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
+  plane.serve_frame(av::SurfacePoint(0x61u, 1u), RvkFrameView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
                                               PresentScene::width, 1u, 0u});
   QueuedPresent present(host);
   CHECK_STATUS(accept(host, present, scene.image(4u, 0x61u), snapshots), Status::ok);
@@ -142,7 +143,7 @@ TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_s
   present.release();
   QueuedPresent outside(host);
   static std::uint32_t row[4];   /* a snapshot narrower than the region */
-  plane.serve_snapshot(0x62u, RvkSnapshotView{reinterpret_cast<const std::uint8_t *>(row), sizeof row, 4u, 1u, 0u});
+  plane.serve_frame(av::SurfacePoint(0x62u, 1u), RvkFrameView{reinterpret_cast<const std::uint8_t *>(row), sizeof row, 4u, 1u, 0u});
   CHECK_STATUS(accept(host, outside, scene.image(5u, 0x62u), snapshots), Status::ok);
   CHECK_STATUS(outside.move(snapshots), Status::invalid_parameter);
   CHECK_EQ(plane.unmaps(), 2u);

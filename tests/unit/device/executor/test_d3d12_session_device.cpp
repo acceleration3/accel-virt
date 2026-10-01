@@ -10,6 +10,7 @@
  * (tools/build_d3d_runtime.sh, which applies the host-pointer heap patch this
  * needs). A host without it, or with a vkd3d-proton that cannot import guest
  * memory, returns without judging, as the other device tests do. */
+#include "device/surfaces/shared_surfaces.hpp"
 #include "fixtures/d3d12/triangle_ps.hpp"
 #include "fixtures/d3d12/triangle_vs.hpp"
 #include "device/executor/d3d_backend.hpp"
@@ -20,6 +21,7 @@
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -599,16 +601,39 @@ void make_shown(av::D3dLoopback &wire)
     CHECK(rvk_d3d12_ShareResource12(wire, shown, shown_key));
 }
 
-/* The buffer cleared `colour`, executed and presented, and the list open again. */
-void present_cleared(av::D3dLoopback &wire, Float4 colour)
+/* The buffer cleared `colour` and executed, and the list open again. */
+void draw_cleared(av::D3dLoopback &wire, Float4 colour)
 {
     CHECK(rvk_d3d12_ClearRenderTargetView12(wire, list, DescriptorRef{shown_rtv, 0u}, colour, 0u, nullptr));
     CHECK(rvk_d3d12_CloseCommandList12(wire, list));
     const std::uint32_t lists[1] = {list};
     CHECK(rvk_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
-    CHECK(rvk_d3d12_PresentResource12(wire, queue, shown));
     CHECK(rvk_d3d12_ResetCommandAllocator12(wire, allocator));
     CHECK(rvk_d3d12_ResetCommandList12(wire, list, allocator, 0u));
+}
+
+/* The buffer cleared `colour`, executed and presented as its `point`th present. */
+void present_cleared(av::D3dLoopback &wire, Float4 colour, std::uint32_t point)
+{
+    CHECK(rvk_d3d12_ClearRenderTargetView12(wire, list, DescriptorRef{shown_rtv, 0u}, colour, 0u, nullptr));
+    CHECK(rvk_d3d12_CloseCommandList12(wire, list));
+    const std::uint32_t lists[1] = {list};
+    CHECK(rvk_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
+    CHECK(rvk_d3d12_PresentResource12(wire, queue, shown, point));
+    CHECK(rvk_d3d12_ResetCommandAllocator12(wire, allocator));
+    CHECK(rvk_d3d12_ResetCommandList12(wire, list, allocator, 0u));
+}
+
+/* Whether every pixel of a staged frame is `expected`. */
+bool frame_everywhere(const RvkFrameView &view, std::uint32_t expected)
+{
+    for (std::uint32_t y = 0u; y < view.height; y++)
+        for (std::uint32_t x = 0u; x < view.width; x++) {
+            std::uint32_t value = 0u;
+            std::memcpy(&value, view.pixels + y * view.row_pitch + x * 4u, sizeof value);
+            if (value != expected) return false;
+        }
+    return view.width == size && view.height == size;
 }
 
 /* Whether every pixel of what the Direct3D 11 device has under shown_key -
@@ -629,8 +654,8 @@ const ShowMisuse show_misuses[] = {
     [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, shown, 0u)); },
     [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, 99u, shown_key + 1u)); },
     [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, shown, shown_key)); },
-    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_PresentResource12(wire, 99u, shown)); },
-    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_PresentResource12(wire, queue, 99u)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_PresentResource12(wire, 99u, shown, 1u)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_PresentResource12(wire, queue, 99u, 1u)); },
 };
 
 }  // namespace
@@ -652,9 +677,9 @@ TEST(d3d12_session_device, a_shared_buffer_drawn_on_d3d12_is_what_d3d11_reads_un
         return;
     }
     make_shown(wire);
-    present_cleared(wire, Float4{{1.0f, 0.0f, 0.0f, 1.0f}});
+    present_cleared(wire, Float4{{1.0f, 0.0f, 0.0f, 1.0f}}, 1u);
     CHECK(shown_everywhere(*device11, opaque_red));
-    present_cleared(wire, Float4{{0.0f, 1.0f, 0.0f, 1.0f}});
+    present_cleared(wire, Float4{{0.0f, 1.0f, 0.0f, 1.0f}}, 2u);
     CHECK(shown_everywhere(*device11, opaque_green));
     std::uint32_t removed = 1u;
     CHECK(rvk_d3d12_Finish12(wire, &removed));
@@ -665,6 +690,45 @@ TEST(d3d12_session_device, a_shared_buffer_drawn_on_d3d12_is_what_d3d11_reads_un
     /* The guest let go of it everywhere: nothing is shown under the key. */
     device11->release_shared(shown_key);
     CHECK(!shown_everywhere(*device11, opaque_green));
+}
+
+/* A blt reads a swap chain buffer by its shared id and the point a present
+ * published (docs/shared-surfaces.md): the first blt to ask finds nothing
+ * staged - nobody knew one would - and from then on every present of it is
+ * staged on its queue, behind the work that drew it and ahead of what follows:
+ * a clear after the present never reaches the frame. */
+TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_queue_s_order)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    av::SharedSurfaces surfaces;
+    av::D3dBackend     backend;
+    CHECK(backend.initialize(device11, device12, &surfaces));
+    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    if (!imports(*device12, wire)) {
+        backend.shut_down();
+        return;
+    }
+    make_shown(wire);
+    present_cleared(wire, Float4{{1.0f, 0.0f, 0.0f, 1.0f}}, 1u);
+    std::uint32_t removed = 1u;
+    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    RvkFrameView view = {};
+    CHECK(!surfaces.map(av::SurfacePoint(shown_key, 1u), 1000u, view));
+    present_cleared(wire, Float4{{0.0f, 1.0f, 0.0f, 1.0f}}, 2u);
+    draw_cleared(wire, Float4{{0.0f, 0.0f, 1.0f, 1.0f}});
+    CHECK(surfaces.map(av::SurfacePoint(shown_key, 2u), 1000u, view));
+    CHECK(frame_everywhere(view, opaque_green));
+    surfaces.unmap(av::SurfacePoint(shown_key, 2u));
+    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(surfaces.invariants_hold());
+    backend.shut_down();
+    surfaces.release(0u);
+    device11->release_shared(shown_key);
 }
 
 /* A share of a texture not made shared, of none, under key 0 or a key already

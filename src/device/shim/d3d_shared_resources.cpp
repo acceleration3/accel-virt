@@ -34,6 +34,20 @@ IUnknown *D3dSharedResources::find(uint64_t key) const
     return nullptr;
 }
 
+bool D3dSharedResources::replace(uint64_t key, IUnknown *resource)
+{
+    AV_SCOPE("D3dSharedResources::replace");
+    if (key == 0u || resource == nullptr) return false;
+    for (uint32_t index = 0u; index < count_; index++) {
+        if (keys_[index] != key) continue;
+        resource->AddRef();
+        resources_[index]->Release();
+        resources_[index] = resource;
+        return true;
+    }
+    return false;
+}
+
 void D3dSharedResources::release(uint64_t key)
 {
     AV_SCOPE("D3dSharedResources::release");

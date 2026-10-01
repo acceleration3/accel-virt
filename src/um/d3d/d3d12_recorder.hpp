@@ -37,9 +37,6 @@ private:
      * footprint. */
     d3d12proto::CopyLocation location(const D3D12DDIARG_BUFFER_PLACEMENT &placement,
                                       const D3D12DDIARG_PLACED_RESOURCE &layout) const;
-    /* Pixels per block of `format`'s width and height: 4 for the block
-     * compressed formats, 1 otherwise. */
-    uint32_t block(uint32_t format) const;
 
     D3d12Device &device_;
 };

@@ -391,11 +391,12 @@ bool rvk_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, u
     return t.send_async(kCmd_ExecuteCommandLists12, b) == ::av::TransportResult::ok;
 }
 
-bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource) {
+bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t point) {
     AV_SCOPE("rvk_d3d12_PresentResource12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(queue);
     b.write_pod<uint32_t>(resource);
+    b.write_pod<uint32_t>(point);
     return t.send_async(kCmd_PresentResource12, b) == ::av::TransportResult::ok;
 }
 

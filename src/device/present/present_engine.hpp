@@ -11,7 +11,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "device/present/present_page_window.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "device/present/queued_present.hpp"
 
 #include <stdint.h>
@@ -41,7 +41,7 @@ public:
      * are read from `snapshots`. invalid_state before initialize; the page's
      * refusal (PresentPageWindow::map), which leaves no page; no_memory when
      * no thread starts. */
-    [[nodiscard]] Status attach(uint64_t address, const PresentSnapshots &snapshots);
+    [[nodiscard]] Status attach(uint64_t address, const PresentFrames &snapshots);
     /* Main loop. A virtio reset: the thread stopped, the page let go, and every
      * present not yet moved forgotten. */
     void                 detach();
@@ -78,7 +78,7 @@ private:
     bool                         stopping_;
     PresentPageWindow            page_;
     /* Set while the thread is stopped, read by it after. */
-    PresentSnapshots             snapshots_;
+    PresentFrames             snapshots_;
     ObjectStorage<QueuedPresent> slots_[depth];
     /* The ring: `held_` slots from `first_`, the first `moved_` of them moved
      * and waiting for the main loop to let them go. */

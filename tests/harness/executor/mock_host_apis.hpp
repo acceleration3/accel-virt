@@ -5,6 +5,7 @@
 
 #include "device/executor/host_apis.hpp"
 #include "device/shim/d3d11_host_device.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
 
 #include <stdint.h>
 
@@ -42,6 +43,7 @@ public:
     const OpenClDevice *opencl_device(uint32_t index) override;
     D3d11HostDevice    *d3d11_device(uint32_t index) override;
     D3d12HostDevice    *d3d12_device(uint32_t index) override;
+    SharedSurfaces     *surfaces(uint32_t index) override;
 
 private:
     struct Gpu {
@@ -55,6 +57,7 @@ private:
     uint32_t        questions_;
     D3d11HostDevice d3d11_;
     uint32_t        d3d11_index_;
+    SharedSurfaces  surfaces_;
 };
 
 }  // namespace av

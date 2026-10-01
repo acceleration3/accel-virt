@@ -5,7 +5,7 @@
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/dxvk_vulkan_device.hpp"
-#include "device/shim/vkd3d_image_export.hpp"
+#include "device/shim/surface_identity.hpp"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -32,36 +32,29 @@ void D3d12Presentation::bind(D3d12HostDevice *device12, D3d11HostDevice *device1
     device11_ = device11;
 }
 
-/* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a
- * texture it samples, and the view formats vkd3d-proton made it with are what
- * DXVK may view it as. */
+/* Any committed texture made shared is marked as the surface it is: a blt
+ * of it is staged by that (SharedSurfaces), whatever its shape. Only one the
+ * compositor can open - one 2D image of one mip and one sample, a swap chain
+ * buffer - is published for it, and its view is made the first time it is
+ * opened (D3d11HostDevice::find_shared): Direct3D 9 on 12 shares every
+ * texture it makes, and only its presents are ever read. A table too full to
+ * publish one costs that one the compositor, not the session its device. */
 bool D3d12Presentation::share(ID3D12Resource *resource, uint64_t key)
 {
     AV_SCOPE("D3d12Presentation::share");
     if (device12_ == nullptr || device11_ == nullptr || resource == nullptr || key == 0u) return false;
     const D3D12_RESOURCE_DESC desc = resource->GetDesc();
-    if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || desc.MipLevels != 1u || desc.DepthOrArraySize != 1u ||
-        desc.SampleDesc.Count != 1u)
+    D3D12_HEAP_PROPERTIES     heap = {};
+    D3D12_HEAP_FLAGS          heap_flags = D3D12_HEAP_FLAG_NONE;
+    if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || FAILED(resource->GetHeapProperties(&heap, &heap_flags)) ||
+        (heap_flags & D3D12_HEAP_FLAG_SHARED) == 0)
         return false;
-    Vkd3dImageExport image;
-    if (!device12_->export_image(resource, image)) return false;
-    D3D11_TEXTURE2D_DESC1 shown = {};
-    shown.Width = static_cast<UINT>(desc.Width);
-    shown.Height = desc.Height;
-    shown.MipLevels = 1u;
-    shown.ArraySize = 1u;
-    shown.Format = desc.Format;
-    shown.SampleDesc = {1u, 0u};
-    shown.Usage = D3D11_USAGE_DEFAULT;
-    shown.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) shown.BindFlags |= D3D11_BIND_RENDER_TARGET;
-    if (device11_->share_image(key, image, shown)) return true;
-    fprintf(stderr,
-            "virtio-gpu-rvk: d3d12: a swap chain buffer %ux%u format %u flags 0x%x could not be shown under key "
-            "0x%016llx\n",
-            shown.Width, shown.Height, static_cast<unsigned>(shown.Format), static_cast<unsigned>(desc.Flags),
-            static_cast<unsigned long long>(key));
-    return false;
+    /* A key already shared is another surface's: taking it is refused. */
+    const bool composable = desc.MipLevels == 1u && desc.DepthOrArraySize == 1u && desc.SampleDesc.Count == 1u;
+    if (composable && device11_->shares(key)) return false;
+    if (!SurfaceIdentity(key).mark(resource)) return false;
+    if (composable) static_cast<void>(device11_->publish_shared(key, resource));
+    return true;
 }
 
 bool D3d12Presentation::present(ID3D12CommandQueue *queue)

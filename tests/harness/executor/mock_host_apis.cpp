@@ -4,7 +4,7 @@
 
 namespace av {
 
-MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus) {}
+MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus), surfaces_() {}
 
 void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis, uint32_t vulkan_kinds,
                            uint32_t opengl_kinds, uint32_t opencl_kinds)
@@ -82,6 +82,14 @@ D3d12HostDevice *MockHostApis::d3d12_device(uint32_t)
 {
     questions_++;
     return nullptr;
+}
+
+/* Every GPU this host has shares the one table: no test here has two GPUs
+ * presenting at once. */
+SharedSurfaces *MockHostApis::surfaces(uint32_t index)
+{
+    questions_++;
+    return index < count_ ? &surfaces_ : nullptr;
 }
 
 }  // namespace av

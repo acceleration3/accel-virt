@@ -45,6 +45,9 @@ struct ResourceRecord {
     uint32_t reserved;
     uint32_t shadow_watched; /* the shadow is WatchedShadows' write-watched region */
     uint64_t shared_key;
+    /* The presents of this surface so far: the point the last one published
+     * on it (docs/shared-surfaces.md). Moves with shared_key. */
+    uint32_t presents;
     void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
     uint8_t *shadow;
     size_t   shadow_bytes;

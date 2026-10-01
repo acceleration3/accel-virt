@@ -6,8 +6,12 @@
 #include "device/executor/guest_region.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "device/shim/surface_identity.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
+#include "device/surfaces/staged_frame.hpp"
 #include "proto/generated/d3d12/d3d12_command_names.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
+#include "proto/resources/surface_point.hpp"
 #include "proto/wire/wire_arena.hpp"
 
 #include <stdio.h>
@@ -100,16 +104,17 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 }  // namespace
 
 D3d12Session::D3d12Session(GuestRegion &region)
-    : region_(region), device_(nullptr), objects_(), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
-      pipelines_(objects_), presentation_(), arena_(nullptr), drained_(nullptr), drained_value_(0u), removed_(0u)
+    : region_(region), device_(nullptr), surfaces_(nullptr), objects_(), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
+      pipelines_(objects_), presentation_(), arena_(nullptr), removed_(0u)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
 
-void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by)
+void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by, SharedSurfaces *surfaces)
 {
     AV_SCOPE("D3d12Session::initialize");
     device_ = device != nullptr && device->opened() ? device : nullptr;
+    surfaces_ = surfaces;
     views_.bind(device_ != nullptr ? device_->device() : nullptr);
     pipelines_.bind(device_);
     presentation_.bind(device_, shown_by);
@@ -127,9 +132,6 @@ void D3d12Session::shut_down()
     addresses_.clear();
     objects_.clear();
     arena_heaps_.close();
-    if (drained_ != nullptr) drained_->Release();
-    drained_ = nullptr;
-    drained_value_ = 0u;
     views_.bind(nullptr);
     pipelines_.bind(nullptr);
     device_ = nullptr;
@@ -264,17 +266,11 @@ void D3d12Session::drain()
 {
     AV_SCOPE("D3d12Session::drain");
     if (device_ == nullptr) return;
-    if (drained_ == nullptr &&
-        FAILED(device_->device()->CreateFence(0u, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
-                                              reinterpret_cast<void **>(&drained_))))
-        drained_ = nullptr;
-    if (drained_ == nullptr) return;
-    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity; slot = objects_.next_used(slot + 1u)) {
-        uint32_t      id = 0u;
-        D3dObjectKind kind = D3dObjectKind::none;
-        IUnknown     *const held = objects_.at(slot, id, kind);
-        if (kind != D3dObjectKind::queue12) continue;
-        static_cast<ID3D12CommandQueue *>(static_cast<void *>(held))->Signal(drained_, ++drained_value_);
+    if (!progress_.mark_all()) {
+        if (removed_ == 0u)
+            fprintf(stderr, "virtio-gpu-rvk: d3d12: a queue refused the drain's signal; the device is removed\n");
+        removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
+        return;
     }
     /* The GPU usually finishes within a frame's time, and a blocked wait adds
      * a thread's wake on top of vkd3d-proton's own: the worker looks for a
@@ -286,13 +282,16 @@ void D3d12Session::drain()
     timespec           began;
     clock_gettime(CLOCK_MONOTONIC, &began);
     for (;;) {
-        if (drained_->GetCompletedValue() >= drained_value_) return;
+        if (progress_.reached() >= progress_.marked()) return;
         timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
         const uint64_t spent = static_cast<uint64_t>(now.tv_sec - began.tv_sec) * 1000000000u +
                                static_cast<uint64_t>(now.tv_nsec) - static_cast<uint64_t>(began.tv_nsec);
         if (spent >= hung_ns) {
-            if (removed_ == 0u) fprintf(stderr, "virtio-gpu-rvk: d3d12: the GPU did not finish in 5 s; the device is removed\n");
+            if (removed_ == 0u) {
+                fprintf(stderr, "virtio-gpu-rvk: d3d12: the GPU did not finish in 5 s; the device is removed\n");
+                progress_.log_stuck();
+            }
             removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
             return;
         }
@@ -708,12 +707,25 @@ bool D3d12Session::on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t f
     return keep(fence, D3dObjectKind::fence12, made);
 }
 
-bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource)
+/* The frame a blt reads is copied on the presenting queue here, behind the
+ * work that drew it and ahead of whatever the queue is given next; only for a
+ * surface a blt has read before (SharedSurfaces). One the host cannot stage
+ * is a frame not shown, never a removed device. */
+bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point)
 {
     AV_SCOPE("D3d12Session::on_PresentResource12");
     ID3D12CommandQueue *const from = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
-    if (from == nullptr || object<ID3D12Resource>(resource, D3dObjectKind::resource12) == nullptr) return false;
-    return presentation_.present(from);
+    ID3D12Resource *const     shown = object<ID3D12Resource>(resource, D3dObjectKind::resource12);
+    if (from == nullptr || shown == nullptr || !presentation_.present(from)) return false;
+    const SurfacePoint frame(SurfaceIdentity(shown).surface(), point);
+    if (surfaces_ == nullptr || !surfaces_->presented(frame)) return true;
+    StagedFrame *const staged = device_->stage_frame(from, shown);
+    if (staged == nullptr) {
+        surfaces_->abandon(frame);
+        return true;
+    }
+    if (!surfaces_->keep(frame, *staged)) staged->release();
+    return true;
 }
 
 bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, const uint32_t *lists)

@@ -4,15 +4,17 @@
 #include <time.h>
 
 #include "core/trace/function_scope.hpp"
+#include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/d3d_runtime.hpp"
+#include "device/shim/vkd3d_image_export.hpp"
 
 namespace av {
 
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), imports_(vulkan_), snapshots_(), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
+    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), imports_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -66,7 +68,7 @@ void D3d11HostDevice::close()
     AV_SCOPE("D3d11HostDevice::close");
     exports_.release();
     shared_.clear();
-    if (context_ != nullptr) snapshots_.clear(context_);
+    if (context_ != nullptr) frames_.clear();
     imports_.release();
     vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
@@ -104,7 +106,7 @@ bool D3d11HostDevice::export_image(uint64_t key, RvkExportedImage &image)
     constexpr uint32_t most_polls = 400u;   /* 20 ms */
     if (device_ == nullptr) return false;
     lock(nullptr);
-    IUnknown        *const published = shared_.find(key);
+    IUnknown        *const published = find_shared(key);
     ID3D11Texture2D *texture = nullptr;
     const bool found = published != nullptr &&
                        SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
@@ -126,39 +128,11 @@ bool D3d11HostDevice::export_image(uint64_t key, RvkExportedImage &image)
     return true;
 }
 
-bool D3d11HostDevice::snapshot(uint64_t key, ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
-                               uint32_t height, uint32_t format)
+StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
+                                          uint32_t height, uint32_t format)
 {
-    AV_SCOPE("D3d11HostDevice::snapshot");
-    return device_ != nullptr && snapshots_.take(device_, context_, key, source, subresource, width, height, format);
-}
-
-/* The engine can reach a present before the session reaches its snapshot: a
- * snapshot not there yet is waited for, as one the GPU is still copying is. */
-bool D3d11HostDevice::map_snapshot(uint64_t key, uint32_t wait_ms, RvkSnapshotView &view)
-{
-    AV_SCOPE("D3d11HostDevice::map_snapshot");
-    constexpr long     poll_nanoseconds = 100000;
-    constexpr uint32_t polls_per_ms = 10u;
-    if (device_ == nullptr) return false;
-    for (uint32_t poll = 0u; poll <= wait_ms * polls_per_ms; poll++) {
-        lock(nullptr);
-        const SnapshotPool::Reading reading = snapshots_.read(context_, key, view);
-        unlock();
-        if (reading == SnapshotPool::Reading::mapped) return true;
-        const timespec pause = {0, poll_nanoseconds};
-        nanosleep(&pause, nullptr);
-    }
-    return false;
-}
-
-void D3d11HostDevice::unmap_snapshot(uint64_t key)
-{
-    AV_SCOPE("D3d11HostDevice::unmap_snapshot");
-    if (device_ == nullptr) return;
-    lock(nullptr);
-    snapshots_.release(context_, key);
-    unlock();
+    AV_SCOPE("D3d11HostDevice::stage_frame");
+    return device_ != nullptr ? frames_.stage(source, subresource, width, height, format) : nullptr;
 }
 
 void D3d11HostDevice::release_shared(uint64_t object_id)
@@ -170,7 +144,6 @@ void D3d11HostDevice::release_shared(uint64_t object_id)
     if (object_id == 0u) {
         fprintf(stderr, "virtio-gpu-rvk: d3d11: the guest's shared ids start again; %u released\n", shared_.count());
         shared_.clear();
-        snapshots_.clear(context_);
     } else {
         shared_.release(object_id);
     }
@@ -180,7 +153,7 @@ void D3d11HostDevice::release_shared(uint64_t object_id)
 bool D3d11HostDevice::stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted)
 {
     AV_SCOPE("D3d11HostDevice::stage");
-    IUnknown *const published = shared_.find(key);
+    IUnknown *const published = find_shared(key);
     if (published == nullptr) return false;
     ID3D11Texture2D *texture = nullptr;
     const bool found = SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
@@ -342,19 +315,87 @@ const D3d11Capabilities &D3d11HostDevice::capabilities() const
     return capabilities_;
 }
 
-bool D3d11HostDevice::share_image(uint64_t key, Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc)
+void D3d11HostDevice::pair(D3d12HostDevice *device12)
 {
-    AV_SCOPE("D3d11HostDevice::share_image");
+    AV_SCOPE("D3d11HostDevice::pair");
+    device12_ = device12;
+}
+
+bool D3d11HostDevice::publish_shared(uint64_t key, IUnknown *surface)
+{
+    AV_SCOPE("D3d11HostDevice::publish_shared");
     if (device_ == nullptr) return false;
     lock(nullptr);
-    ID3D11Texture2D *const texture = imports_.import(image, desc);
-    const bool          published = texture != nullptr && shared_.publish(key, texture);
-    if (texture != nullptr && !published)
-        fprintf(stderr, "virtio-gpu-rvk: d3d11: image key 0x%016llx not shared: already shared, or the table is full\n",
-                static_cast<unsigned long long>(key));
-    if (texture != nullptr) texture->Release();
+    const bool published = shared_.publish(key, surface);
     unlock();
+    if (!published)
+        fprintf(stderr, "virtio-gpu-rvk: d3d11: surface key 0x%016llx not shared: already shared, or %u of %u held\n",
+                static_cast<unsigned long long>(key), shared_.count(), D3dSharedResources::capacity);
     return published;
+}
+
+bool D3d11HostDevice::shares(uint64_t key)
+{
+    AV_SCOPE("D3d11HostDevice::shares");
+    if (device_ == nullptr) return false;
+    lock(nullptr);
+    IUnknown *const found = shared_.find(key);
+    unlock();
+    if (found == nullptr) return false;
+    found->Release();
+    return true;
+}
+
+IUnknown *D3d11HostDevice::find_shared(uint64_t key)
+{
+    AV_SCOPE("D3d11HostDevice::find_shared");
+    IUnknown *const published = shared_.find(key);
+    if (published == nullptr) return nullptr;
+    ID3D11Resource *own = nullptr;
+    if (SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Resource), reinterpret_cast<void **>(&own)))) {
+        own->Release();
+        return published;
+    }
+    ID3D12Resource *resource = nullptr;
+    const bool      twelve =
+        SUCCEEDED(published->QueryInterface(__uuidof(ID3D12Resource), reinterpret_cast<void **>(&resource)));
+    published->Release();
+    if (!twelve) return nullptr;
+    ID3D11Texture2D *const texture = view_of(resource);
+    resource->Release();
+    if (texture == nullptr) return nullptr;
+    static_cast<void>(shared_.replace(key, texture));
+    return texture;
+}
+
+/* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a
+ * texture it samples, and the view formats vkd3d-proton made it with are what
+ * DXVK may view it as. */
+ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
+{
+    AV_SCOPE("D3d11HostDevice::view_of");
+    const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+    if (device12_ == nullptr || desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || desc.MipLevels != 1u ||
+        desc.DepthOrArraySize != 1u || desc.SampleDesc.Count != 1u)
+        return nullptr;
+    Vkd3dImageExport image;
+    if (!device12_->export_image(resource, image)) return nullptr;
+    D3D11_TEXTURE2D_DESC1 shown = {};
+    shown.Width = static_cast<UINT>(desc.Width);
+    shown.Height = desc.Height;
+    shown.MipLevels = 1u;
+    shown.ArraySize = 1u;
+    shown.Format = desc.Format;
+    shown.SampleDesc = {1u, 0u};
+    shown.Usage = D3D11_USAGE_DEFAULT;
+    shown.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) shown.BindFlags |= D3D11_BIND_RENDER_TARGET;
+    ID3D11Texture2D *const texture = imports_.import(image, shown);
+    if (texture == nullptr)
+        fprintf(stderr,
+                "virtio-gpu-rvk: d3d12: a surface %ux%u format %u flags 0x%x could not be made a Direct3D 11 view\n",
+                shown.Width, shown.Height, static_cast<unsigned>(shown.Format), static_cast<unsigned>(desc.Flags));
+    return texture;
 }
 
 DxvkVulkanDevice &D3d11HostDevice::vulkan()

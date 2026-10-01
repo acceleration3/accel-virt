@@ -57,7 +57,7 @@
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
@@ -103,7 +103,9 @@
 #include "proto/commands/present_command.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/umd_adapter_info.hpp"
-#include "proto/submission/present_snapshot_record.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/submission/present_point_record.hpp"
 #include "proto/submission/present_ticket_record.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -475,7 +477,7 @@ private:
         }
         av::MockRequest    mock(request, length);
         av::ControlRequest control(fixture->host_, &mock);
-        static_cast<void>(av::PresentEngineCommands(fixture->host_, fixture->present_engine_, av::PresentSnapshots()).answer(control, type));
+        static_cast<void>(av::PresentEngineCommands(fixture->host_, fixture->present_engine_, av::PresentFrames()).answer(control, type));
         const std::size_t given = mock.response_size() < room ? mock.response_size() : room;
         std::memcpy(answer, mock.response_bytes(), given);
         return static_cast<std::uint32_t>(given);
@@ -573,7 +575,10 @@ public:
     static constexpr std::uint32_t pitch = side * 4u;
     static constexpr std::uint32_t colour = 0x11223344u;
 
-    MappedSurface(Fixture &fixture, av::FakeHandleTable &handles, void *device, av::AllocationKind kind)
+    /* `shared`: asked for a shared object's identity, as a surface the host
+     * holds is (feature 053) - the miniport mints its id at the create. */
+    MappedSurface(Fixture &fixture, av::FakeHandleTable &handles, void *device, av::AllocationKind kind,
+                  bool shared = false)
         : platform_(fixture.platform()), block_(nullptr), frames_{}, encoded_{}, handle_(nullptr),
           open_handle_(nullptr)
     {
@@ -588,9 +593,15 @@ public:
         const av::AllocationDescriptor descriptor(kind, true, av::SurfaceLayout(side, side, 21u, pitch), page,
                                                   target);
         CHECK_STATUS(descriptor.encode(encoded_, sizeof encoded_), av::Status::ok);
+        const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, page);
+        if (shared)
+            CHECK_STATUS(asking.encode(encoded_ + av::AllocationDescriptor::encoded_size,
+                                       av::SharedObjectRecord::encoded_size),
+                         av::Status::ok);
         av::DxgkAllocationInfoRecord info = {};
         info.pPrivateDriverData = encoded_;
-        info.PrivateDriverDataSize = av::AllocationDescriptor::encoded_size;
+        info.PrivateDriverDataSize = av::AllocationDescriptor::encoded_size +
+                                     (shared ? av::SharedObjectRecord::encoded_size : 0u);
         av::DxgkargCreateAllocationRecord create = {};
         create.NumAllocations = 1u;
         create.pAllocationInfo = &info;
@@ -610,6 +621,12 @@ public:
         CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&paging)), success);
         av::DxgkOpenAllocationInfoRecord opening = {};
         opening.hAllocation = handles.insert(handle_);
+        /* dxgkrnl hands the creator's own bytes to its implicit open, which is
+         * where the miniport writes the minted id back. */
+        if (shared) {
+            opening.pPrivateDriverData = encoded_;
+            opening.PrivateDriverDataSize = info.PrivateDriverDataSize;
+        }
         av::DxgkargOpenAllocationRecord open = {};
         open.NumAllocations = 1u;
         open.pOpenAllocation = &opening;
@@ -648,7 +665,7 @@ private:
     MockPlatform     &platform_;
     std::uint8_t     *block_;
     std::uint64_t     frames_[1];
-    std::uint8_t      encoded_[av::AllocationDescriptor::encoded_size];
+    std::uint8_t      encoded_[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size];
     void             *handle_;
     void             *open_handle_;
 };
@@ -2852,11 +2869,12 @@ TEST(adapter_query_adapter_info, umd_private_names_the_luid_the_adapter_was_star
   CHECK_EQ(three[1], 0x0000000500001234ull);
   CHECK_EQ(three[2], 0u); }
 
-/* Where the engine runs on a device that reads snapshots, the third word
- * offers them, and a blt whose private driver data names one is queued from
- * it - no source pages, and the snapshot's key - while one naming none is
- * queued from its pages. */
-TEST(adapter_present, a_blt_naming_a_snapshot_is_queued_from_it_where_snapshots_are_offered)
+/* Where the engine runs on a device that reads host frames, the third word
+ * offers them, and a blt from a surface the host holds, whose private driver
+ * data names a point, is queued from that frame: no source pages, the source
+ * allocation's own shared id, and the point. One naming no point, or from a
+ * source the host holds no surface of, is queued from its pages. */
+TEST(adapter_present, a_blt_naming_a_point_on_a_host_surface_is_queued_from_its_frame)
 { Fixture fixture;
   fixture.offer_present_snapshots();
   CHECK_EQ(fixture.start(), success);
@@ -2874,19 +2892,20 @@ TEST(adapter_present, a_blt_naming_a_snapshot_is_queued_from_it_where_snapshots_
   context.Flags = 0x4u;
   CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
   av::FakeHandleTable handles;
-  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface unshared(fixture, handles, device.hDevice, av::AllocationKind::shadow);
   MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
   av::DxgkPresentAllocationInfoRecord info[3] = {};
   info[1].hDeviceSpecificAllocation = source.open_handle();
   info[2].hDeviceSpecificAllocation = destination.open_handle();
   std::uint8_t dma[512] = {};
-  std::uint8_t snapshot[av::PresentSnapshotRecord::encoded_size] = {};
-  CHECK_STATUS(av::PresentSnapshotRecord(0xABCDu).encode(snapshot, sizeof snapshot), av::Status::ok);
+  std::uint8_t point[av::PresentPointRecord::encoded_size] = {};
+  CHECK_STATUS(av::PresentPointRecord(0xABCDu).encode(point, sizeof point), av::Status::ok);
   av::DxgkargPresentRecord present = {};
   present.pDmaBuffer = dma;
   present.DmaSize = sizeof dma;
-  present.pPrivateDriverData = snapshot;
-  present.PrivateDriverDataSize = sizeof snapshot;
+  present.pPrivateDriverData = point;
+  present.PrivateDriverDataSize = sizeof point;
   present.Flags = 1u;   /* Blt */
   present.pAllocationList = info;
   const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
@@ -2895,14 +2914,17 @@ TEST(adapter_present, a_blt_naming_a_snapshot_is_queued_from_it_where_snapshots_
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   fixture.serve();
   CHECK_EQ(fixture.queued_presents(), 1u);
-  std::uint32_t kind = 0u, source_entries = 1u;
-  std::uint64_t key = 0u;
+  std::uint32_t kind = 0u, named_point = 0u, source_entries = 1u;
+  std::uint64_t surface = 0u;
   std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
-  std::memcpy(&key, fixture.last_queued() + 40u, sizeof key);
+  std::memcpy(&named_point, fixture.last_queued() + 36u, sizeof named_point);
+  std::memcpy(&surface, fixture.last_queued() + 40u, sizeof surface);
   std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
   CHECK_EQ(kind, 1u);   /* an image */
-  CHECK(key == 0xABCDu);
+  CHECK_EQ(named_point, 0xABCDu);
+  CHECK(surface != 0u);   /* the id the miniport minted at the create */
   CHECK_EQ(source_entries, 0u);
+  /* No point: the source's pages. */
   av::DxgkargPresentRecord pages = present;
   pages.pDmaBuffer = dma;
   pages.pPrivateDriverData = nullptr;
@@ -2914,6 +2936,17 @@ TEST(adapter_present, a_blt_naming_a_snapshot_is_queued_from_it_where_snapshots_
   std::memcpy(&source_entries, fixture.last_queued() + 64u, sizeof source_entries);
   CHECK_EQ(kind, 0u);
   CHECK_EQ(source_entries, 1u);
+  /* A point on a source the host holds no surface of: its pages too. */
+  info[1].hDeviceSpecificAllocation = unshared.open_handle();
+  av::DxgkargPresentRecord unknown = present;
+  unknown.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &unknown)), success);
+  fixture.serve();
+  CHECK_EQ(fixture.queued_presents(), 3u);
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&named_point, fixture.last_queued() + 36u, sizeof named_point);
+  CHECK_EQ(kind, 0u);
+  CHECK_EQ(named_point, 0u);
   fixture.stop_presents();
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }

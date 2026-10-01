@@ -14,6 +14,8 @@
 
 namespace av {
 
+class SurfacePoint;
+
 class CapsetInfo;
 class ContextSetup;
 class StateWriter;
@@ -65,10 +67,10 @@ public:
                             uint32_t height) = 0;
     /* Any thread: whether a present snapshot a Direct3D session took can be
      * read here, and the one under `key` mapped and let go
-     * (ExecutorLibrary::map_snapshot). */
-    virtual bool reads_snapshots() const = 0;
-    virtual bool map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view) = 0;
-    virtual void unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key) = 0;
+     * (ExecutorLibrary::map_frame). */
+    virtual bool reads_frames() const = 0;
+    virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view) = 0;
+    virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
 
     virtual void report(StateWriter &writer) = 0;
     virtual bool invariants_hold() const = 0;

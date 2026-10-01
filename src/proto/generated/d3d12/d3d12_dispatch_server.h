@@ -58,7 +58,7 @@ public:
     virtual bool on_CloseCommandList12(uint32_t list) = 0;
     virtual bool on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t flags) = 0;
     virtual bool on_ExecuteCommandLists12(uint32_t queue, uint32_t count, const uint32_t* lists) = 0;
-    virtual bool on_PresentResource12(uint32_t queue, uint32_t resource) = 0;
+    virtual bool on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point) = 0;
     virtual bool on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
     virtual bool on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
     virtual bool on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t& completed) = 0;

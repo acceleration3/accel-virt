@@ -23,6 +23,8 @@
 
 namespace av {
 
+class SurfacePoint;
+
 class FenceInterrupts;
 class Host;
 struct RendererContextPlaneProbe;
@@ -68,9 +70,9 @@ public:
     bool export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) override;
     bool read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                     uint32_t height) override;
-    bool reads_snapshots() const override;
-    bool map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view) override;
-    void unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key) override;
+    bool reads_frames() const override;
+    bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view) override;
+    void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) override;
 
     bool alive() const;
     uint32_t epoch() const;

@@ -34,10 +34,12 @@ struct ID3D12Fence;
 struct ID3D12GraphicsCommandList;
 struct IUnknown;
 struct ID3D12Heap;
+struct D3D12_TEXTURE_COPY_LOCATION;
 
 namespace av {
 
 class D3d11HostDevice;
+class SharedSurfaces;
 class D3d12HostDevice;
 class GuestRegion;
 
@@ -50,8 +52,10 @@ public:
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. Swap chain buffers are
      * shown through `shown_by`, the GPU's Direct3D 11 device; with none, a
-     * share or a present is refused. */
-    void               initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by = nullptr);
+     * share or a present is refused. A present publishes its point on
+     * `surfaces`, and stages its frame where that asks (SharedSurfaces). */
+    void               initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by = nullptr,
+                                  SharedSurfaces *surfaces = nullptr);
     /* Waits for the GPU to finish with everything, then lets it all go. */
     void               shut_down();
 
@@ -79,7 +83,7 @@ public:
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
     bool on_ShareResource12(uint32_t resource, uint64_t key) override;
-    bool on_PresentResource12(uint32_t queue, uint32_t resource) override;
+    bool on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point) override;
     bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) override;
     bool on_CreateShaderResourceView12(const d3d12proto::DescriptorRef& at, uint32_t has_desc, const d3d12proto::ViewDesc& desc) override;
@@ -155,12 +159,22 @@ private:
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
                                       const d3d12proto::ResourceDesc &desc, uint32_t state,
                                       const d3d12proto::ClearValue &clear, uint64_t address);
-    /* Every queue of the session has finished what was executed on it. */
+    /* `location`'s resource and kind as the host's copy names them; false for
+     * an unknown resource, kind or format. */
+    bool                       copy_location(const d3d12proto::CopyLocation &location,
+                                             D3D12_TEXTURE_COPY_LOCATION &made) const;
+    /* A footprint location's buffer holds `region` of it; a subresource holds
+     * anything. The location was resolved (copy_location). */
+    bool                       footprint_holds(const d3d12proto::CopyLocation &location,
+                                               const d3d12proto::Box &region) const;
+    /* Every queue of the session has finished what was executed on it; one
+     * that has not in 5 s removes the device. */
     void                       drain();
 
     GuestRegion           &region_;
     D3d12ArenaHeaps        arena_heaps_;
     D3d12HostDevice       *device_;
+    SharedSurfaces        *surfaces_;
     D3dObjectTable         objects_;
     D3d12AddressMap        addresses_;
     D3d12FencePublisher    fences_;
@@ -171,9 +185,6 @@ private:
     D3d12Presentation      presentation_;
     /* The decoding command's arena, which containers are written into. */
     WireArena             *arena_;
-    /* What drain() signals each queue with, and the value it signalled last. */
-    ID3D12Fence           *drained_;
-    uint64_t               drained_value_;
     uint32_t               removed_;
 };
 

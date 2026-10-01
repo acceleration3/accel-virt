@@ -15,6 +15,7 @@
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_runtime.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
 #include "device/shim/gl_display.hpp"
 #include "device/shim/opencl_device.hpp"
 
@@ -42,6 +43,7 @@ public:
     const OpenClDevice *opencl_device(uint32_t index) override;
     D3d11HostDevice    *d3d11_device(uint32_t index) override;
     D3d12HostDevice    *d3d12_device(uint32_t index) override;
+    SharedSurfaces     *surfaces(uint32_t index) override;
 
 private:
     static constexpr uint32_t uuid_bytes = 16u;
@@ -74,6 +76,7 @@ private:
     D3dRuntime      d3d_runtime_;
     D3d11HostDevice d3d11_devices_[HostGpuSet::max_gpus];
     D3d12HostDevice d3d12_devices_[HostGpuSet::max_gpus];
+    SharedSurfaces  surfaces_[HostGpuSet::max_gpus];
     VkExtensionProperties extensions_[max_extensions];
     uint32_t count_;
     bool     opened_;

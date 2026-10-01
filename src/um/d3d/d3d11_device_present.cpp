@@ -15,7 +15,7 @@
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
-#include "proto/submission/present_snapshot_record.hpp"
+#include "proto/submission/present_point_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 
@@ -147,7 +147,8 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
                                    void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_pages");
-    if (caps_.present_snapshots()) return present_snapshot(source, subresource, destination, dxgi_context);
+    if (caps_.present_snapshots() && source.shared_key != 0u)
+        return present_point(source, subresource, destination, dxgi_context);
     const HRESULT published = publish(source, subresource);
     if (FAILED(published) && removed_on_host()) {
         set_error(D3DDDIERR_DEVICEREMOVED);
@@ -160,30 +161,33 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
     return present_to_kernel(source, destination, dxgi_context, 0u);
 }
 
-/* The snapshot is taken where the buffer is drawn, so what the application
+/* The frame is staged where the buffer is drawn, so what the application
  * draws into it after this returns never reaches the window; the present
- * follows the batch that carries it, as every present does. */
-HRESULT D3d11Device::present_snapshot(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
-                                      void *dxgi_context)
+ * follows the batch that carries it, as every present does. The miniport
+ * names the surface by the allocation's own id, and the frame by this point. */
+HRESULT D3d11Device::present_point(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
+                                   void *dxgi_context)
 {
-    AV_SCOPE("D3d11Device::present_snapshot");
+    AV_SCOPE("D3d11Device::present_point");
     if (source.allocation == 0u) return E_INVALIDARG;
-    const uint64_t key = snapshot_keys_.next();
-    if (!d3dproto::rvk_d3d_PresentSnapshot(wire(), source.id, subresource, key) || wire().flush() != Status::ok) {
+    /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
+    source.presents = source.presents + 1u == 0u ? 1u : source.presents + 1u;
+    if (!d3dproto::rvk_d3d_PresentPoint(wire(), source.id, subresource, source.presents) ||
+        wire().flush() != Status::ok) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return DXGI_ERROR_DEVICE_REMOVED;
     }
-    return present_to_kernel(source, destination, dxgi_context, key);
+    return present_to_kernel(source, destination, dxgi_context, source.presents);
 }
 
 HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context,
-                                       uint64_t snapshot)
+                                       uint32_t point)
 {
     AV_SCOPE("D3d11Device::present_to_kernel");
     const HRESULT followed = follow_host();
     if (FAILED(followed)) return followed;
-    uint8_t record[PresentSnapshotRecord::encoded_size] = {};
-    const bool named = snapshot != 0u && PresentSnapshotRecord(snapshot).encode(record, sizeof record) == Status::ok;
+    uint8_t record[PresentPointRecord::encoded_size] = {};
+    const bool named = point != 0u && PresentPointRecord(point).encode(record, sizeof record) == Status::ok;
     DXGIDDICB_PRESENT present = {};
     present.hSrcAllocation = source.allocation;
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
@@ -292,6 +296,7 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         to.allocation = from.allocation;
         to.allocation_pitch = from.allocation_pitch;
         to.shared_key = from.shared_key;
+        to.presents = from.presents;
         to.shadow = from.shadow;
         to.shadow_bytes = from.shadow_bytes;
         to.shadow_watched = from.shadow_watched;

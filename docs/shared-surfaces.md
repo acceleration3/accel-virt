@@ -289,6 +289,23 @@ dma-bufs already do.
    with staging for blt-read surfaces. D3D11 blts move onto it, and
    `SnapshotPool` and the random keys retire. **Portal's Direct3D 9 frames show
    from this step.**
+
+   Done, as `map_frame` / `unmap_frame` (ABI 14), `PresentPoint` and
+   `PresentResource12`'s point, and `D3d11FramePool` / `D3d12FramePool`
+   staging into `SharedSurfaces`. Getting Portal's frames on screen also took:
+   - a multisampled present resolved before it is read - Direct3D 9 on 12
+     presents its antialiased back buffer as it is - into a texture of the
+     frame's own, in a typed format (`DxgiResolveFormat`), at a single-sample
+     placement;
+   - texture copies judged by the region they touch (`D3d12Footprint`,
+     `D3d12CopyExtent`), and the DDI's physical footprint taken as texels:
+     every block-compressed upload was refused, which removed the device;
+   - kernel surfaces sized in rows of blocks: D3D9On12 shares every texture,
+     and a BC1 texture counted a block a texel asked for sixteen times its
+     bytes, running the aperture out loading a level;
+   - the drain marking each queue on its own fence (`D3d12QueueProgress::
+     mark_all`), so an idle queue reaching a shared fence first no longer
+     ends it early.
 3. **Scanout.** `HostImageExport` and `read_image` move under `SharedSurfaces`.
 4. **Feature 053 joins.** `HostSharedObjects` becomes the rows' descriptor
    store, and Vulkan, OpenGL and OpenCL open Direct3D surfaces and the reverse.

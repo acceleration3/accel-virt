@@ -13,6 +13,10 @@
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/d3d_shared_resources.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "device/shim/surface_identity.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
+#include "device/surfaces/staged_frame.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 
@@ -67,18 +71,19 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), published_(),
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), published_(),
       missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
 
-bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12)
+bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12, SharedSurfaces *surfaces)
 {
     AV_SCOPE("D3dBackend::initialize");
     if (device11 == nullptr || !device11->opened()) return false;
     device11_ = device11;
-    d3d12_.initialize(device12, device11);
+    surfaces_ = surfaces;
+    d3d12_.initialize(device12, device11, surfaces);
     lost_ = false;
     return true;
 }
@@ -118,8 +123,13 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
     /* Direct3D 12 has no immediate context to share: its commands take no
-     * Direct3D 11 lock, and a batch mixing both takes it only for the 11 ones. */
-    if (d3d12_.knows(command_id)) return d3d12_.run(command_id, payload, reply, arena);
+     * Direct3D 11 lock, and a batch mixing both holds it only across the 11
+     * ones - a 12 command can take it itself (sharing a surface does), and
+     * the lock is not recursive. */
+    if (d3d12_.knows(command_id)) {
+        end_batch();
+        return d3d12_.run(command_id, payload, reply, arena);
+    }
     if (!held_) device11_->lock(selected_);
     else device11_->select(selected_);
     held_ = true;
@@ -693,6 +703,13 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
      * nothing and every command naming it is refused. */
     if (FAILED(result) || made == nullptr) return true;
     if (!keep(id, D3dObjectKind::resource, made)) return false;
+    /* The surface a present of it publishes on (SharedSurfaces). */
+    ID3D11DeviceChild *child = nullptr;
+    if (shared_key != 0u &&
+        SUCCEEDED(made->QueryInterface(__uuidof(ID3D11DeviceChild), reinterpret_cast<void **>(&child)))) {
+        static_cast<void>(SurfaceIdentity(shared_key).mark(child));
+        child->Release();
+    }
     /* A key the table refuses is one no other process can open: the host log
      * is where the refusal is seen, since the creator is not told. */
     if (shared_key != 0u && !device11_->shared().publish(shared_key, made))
@@ -707,7 +724,7 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     found = 0u;
     desc = d3dproto::ResourceDesc{};
     if (!has_device()) return false;
-    IUnknown *const shared = device11_->shared().find(shared_key);
+    IUnknown *const shared = device11_->find_shared(shared_key);
     if (shared == nullptr) {
         if (shared_key != missed_key_)
             fprintf(stderr, "virtio-gpu-rvk: d3d11: no resource shared under key 0x%016llx; %u shared\n",
@@ -1590,14 +1607,17 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     return true;
 }
 
-/* A snapshot the host cannot keep - not a 2D texture of four-byte pixels, a
- * key already kept - is a present the engine refuses: the session goes on,
- * and the application sees at most a frame not shown. */
-bool D3dBackend::on_PresentSnapshot(uint32_t resource, uint32_t subresource, uint64_t key)
+/* A frame the host cannot stage - a resource never shared, not a 2D texture
+ * of four-byte pixels, no frame free - is a present the engine refuses: the
+ * session goes on, and the application sees at most a frame not shown. A
+ * blt-model buffer's every present stages: Direct3D 11 knows its model. */
+bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point)
 {
-    AV_SCOPE("D3dBackend::on_PresentSnapshot");
+    AV_SCOPE("D3dBackend::on_PresentPoint");
     ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
+    const SurfacePoint frame(SurfaceIdentity(found).surface(), point);
+    if (surfaces_ == nullptr || !frame.names()) return true;
     D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
     found->GetType(&dimension);
     uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
@@ -1605,8 +1625,14 @@ bool D3dBackend::on_PresentSnapshot(uint32_t resource, uint32_t subresource, uin
         return true;
     const DxgiFormatLayout layout(format);
     if (layout.element_bytes() != 4u || layout.element_width() != 1u) return true;
-    static_cast<void>(device11_->snapshot(key, static_cast<ID3D11Texture2D *>(found), subresource, width, height,
-                                          format));
+    static_cast<void>(surfaces_->presented(frame));
+    StagedFrame *const staged =
+        device11_->stage_frame(static_cast<ID3D11Texture2D *>(found), subresource, width, height, format);
+    if (staged == nullptr) {
+        surfaces_->abandon(frame);
+        return true;
+    }
+    if (!surfaces_->keep(frame, *staged)) staged->release();
     return true;
 }
 

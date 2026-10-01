@@ -7,12 +7,20 @@
  * the host shows its own texture to its Direct3D 11 device under the identity
  * the miniport minted over the allocation (ShareResource12), the same memory
  * on both of its devices, and a present orders that device's work after what
- * the presenting queue executed (PresentResource12). */
+ * the presenting queue executed (PresentResource12).
+ *
+ * A present also names its point on the buffer - its nth present of it - in
+ * the host command and in the private data dxgkrnl hands the miniport. A
+ * flip-model present is composed from the host's texture and the point goes
+ * unread; a blt-model one - Direct3D 9 on 12's redirected blt - is moved from
+ * the frame the host staged at that point (docs/shared-surfaces.md). This
+ * driver cannot tell the two apart: the runtime presents both alike. */
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/submission/present_point_record.hpp"
 #include "um/d3d/d3d12_device.hpp"
 
 namespace av::d3d12 {
@@ -46,11 +54,10 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
         log_.write("rvkumd: the miniport minted no identity for a swap chain buffer; DWM cannot open it");
         return S_OK;
     }
-    /* The host shows one 2D image of one mip and one sample; D3D9On12 makes
-     * every Direct3D 9 texture shared, mip chains and all, and a share the
-     * host refuses removes the device - Portal's did before its first frame.
-     * Such a texture keeps its kernel allocation, and is not shown. */
-    if (args.MipLevels != 1u || args.DepthOrArraySize != 1u || args.SampleDesc.Count != 1u) return S_OK;
+    /* Every shown surface is shared, whatever its shape: the host marks it
+     * as the surface it is, which a blt of it is staged by, and makes the
+     * compositor's view of it only if something opens it - so D3D9On12, which
+     * shares every texture it makes, costs the host no more than that. */
     if (!sent(d3d12proto::rvk_d3d12_ShareResource12(wire(), resource.header.id, key), "ShareResource12"))
         return E_OUTOFMEMORY;
     /* DWM may open it as soon as the kernel hands it the handle, on a stream
@@ -77,14 +84,20 @@ void D3d12Device::present(D3D12DDI_HCOMMANDQUEUE queue_handle, const D3D12DDIARG
     }
     *out = {};
     const QueueRecord    &queue = *static_cast<const QueueRecord *>(queue_handle.pDrvPrivate);
-    const auto *const     source = static_cast<const ResourceRecord *>(args->phSurfacesToPresent[0].hSurface.pDrvPrivate);
+    auto *const           source = static_cast<ResourceRecord *>(args->phSurfacesToPresent[0].hSurface.pDrvPrivate);
     const auto *const     destination = static_cast<const ResourceRecord *>(args->hDstResource.pDrvPrivate);
     if (source == nullptr || source->allocation == 0u) {
         lost("a present of a buffer with no kernel allocation");
         return;
     }
-    if (!sent(d3d12proto::rvk_d3d12_PresentResource12(wire(), queue.header.id, source->header.id), "PresentResource12"))
+    /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
+    source->presents = source->presents + 1u == 0u ? 1u : source->presents + 1u;
+    if (!sent(d3d12proto::rvk_d3d12_PresentResource12(wire(), queue.header.id, source->header.id, source->presents),
+              "PresentResource12"))
         return;
+    if (args->pPrivateDriverData != nullptr && args->PrivateDriverDataSize >= PresentPointRecord::encoded_size)
+        static_cast<void>(PresentPointRecord(source->presents)
+                              .encode(static_cast<uint8_t *>(args->pPrivateDriverData), args->PrivateDriverDataSize));
     if (wire().flush() != Status::ok) {
         lost("a present could not be sent");
         return;

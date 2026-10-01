@@ -362,9 +362,12 @@ params = ["u32 queue", "u32 count", "u32 lists[count] max 64"]
 [[command]]
 name = "PresentResource12"
 id = 0x140d
-doc = """`resource`, shared by ShareResource12, is presented from `queue`: what the queue executed before is
-done on the GPU before the host's Direct3D 11 device runs anything it is given after."""
-params = ["u32 queue", "u32 resource"]
+doc = """`resource`, shared by ShareResource12, is presented from `queue`, the `point`th present of it: what the
+queue executed before is done on the GPU before the host's Direct3D 11 device runs anything it is given after.
+Where a blt-model present has read this surface before, the host stages the frame on `queue` here, which the
+present engine reads by the surface's shared id and `point` (docs/shared-surfaces.md); a point of 0 stages
+nothing."""
+params = ["u32 queue", "u32 resource", "u32 point"]
 
 [[command]]
 name = "SignalFence12"

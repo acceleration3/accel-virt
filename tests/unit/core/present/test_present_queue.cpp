@@ -13,7 +13,7 @@
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/device/mapped_virtio_function.hpp"
@@ -24,6 +24,7 @@
 #include "proto/commands/present_region.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "proto/submission/present_ticket_record.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 
@@ -58,7 +59,7 @@ constexpr std::uint32_t pitch = side * PresentSurface::pixel_bytes;
 constexpr std::uint32_t blue_first = 21u;   /* D3DDDIFMT_A8R8G8B8 */
 constexpr std::uint32_t red_first = 32u;    /* D3DDDIFMT_A8B8G8R8 */
 constexpr std::uint32_t epoch = 3u;
-constexpr std::uint8_t  gpu[av::PresentSnapshots::uuid_bytes] = {4};
+constexpr std::uint8_t  gpu[av::PresentFrames::uuid_bytes] = {4};
 
 /* The device's side: its present engine and the commands that feed it,
  * serving the control queue when the test says or when the driver stalls. */
@@ -89,7 +90,7 @@ public:
     void          serve() { static_cast<void>(queue_.answer_all(request_, sizeof request_, &EngineSide::answer, this)); }
     std::uint32_t presents() const { return presents_; }
     /* The host's snapshot of an application's buffer, under `key`. */
-    void          snapshot(std::uint64_t key, const RvkSnapshotView &view) { plane_.serve_snapshot(key, view); }
+    void          frame(const av::SurfacePoint &frame, const RvkFrameView &view) { plane_.serve_frame(frame, view); }
 
 private:
     static void stall(void *context)
@@ -128,7 +129,7 @@ private:
     FenceInterrupts     interrupts_;
     PresentEngine       engine_;
     av::RecordingContextPlane plane_;
-    av::PresentSnapshots      snapshots_;
+    av::PresentFrames      snapshots_;
     bool                held_ = false;
     bool                refuse_page_ = false;
     std::uint32_t       presents_ = 0u;
@@ -360,14 +361,14 @@ TEST(present_queue, a_blt_from_a_snapshot_is_moved_out_of_it_by_the_device)
   CHECK_STATUS(queue.start(), Status::ok);
   static std::uint32_t pixels[side * side];
   for (std::uint32_t at = 0u; at < side * side; at++) pixels[at] = 0x80000000u | at;
-  device.snapshot(0x4242u, RvkSnapshotView{reinterpret_cast<const std::uint8_t *>(pixels), pitch, side, side, 0u});
+  device.frame(av::SurfacePoint(0x4242u, 7u), RvkFrameView{reinterpret_cast<const std::uint8_t *>(pixels), pitch, side, side, 0u});
   Surface              source(fixture.platform());
   Surface              destination(fixture.platform());
   const PresentSurface from = source.present(red_first);
   const PresentSurface into = destination.present(blue_first);
   const PresentRegion  region(2u, 3u, 0u, 0u, 4u, 1u);
   std::uint64_t        ticket = 0u;
-  CHECK_STATUS(queue.queue_image(0x4242u, from.blt_into(into, 1u), into, &region, ticket), Status::ok);
+  CHECK_STATUS(queue.queue_image(av::SurfacePoint(0x4242u, 7u), from.blt_into(into, 1u), into, &region, ticket), Status::ok);
   CHECK_EQ(ticket, 1u);
   device.serve();
   CHECK(finishes(queue, 1u));

@@ -8,6 +8,7 @@
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/submission/present_point_record.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -114,7 +115,8 @@ void D3d12Device::refused(const char *slot, uint32_t hresult)
 HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
 {
     AV_SCOPE("D3d12Device::answered");
-    if (FAILED(hresult) && refusals_ < refusals_logged) {
+    /* E_PENDING is MakeResident's answer when it queued paging, not a refusal. */
+    if (FAILED(hresult) && hresult != E_PENDING && refusals_ < refusals_logged) {
         refusals_++;
         refused(slot, static_cast<uint32_t>(hresult));
     }
@@ -212,10 +214,12 @@ UINT D3d12Device::get_implicit_physical_adapter_mask()
     return 1u;
 }
 
+/* Room for the point a present names (PresentPointRecord), which the runtime
+ * hands back in the present's arguments and the miniport reads at the blt. */
 UINT D3d12Device::get_present_private_driver_data_size(const D3D12DDIARG_PRESENT_0001 *)
 {
     AV_SCOPE("D3d12Device::get_present_private_driver_data_size");
-    return 0u;
+    return static_cast<UINT>(PresentPointRecord::encoded_size);
 }
 
 VOID D3d12Device::query_node_map(UINT count, UINT *map)

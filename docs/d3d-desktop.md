@@ -131,14 +131,16 @@ width, height, pitch, format), and the UMD's `OpenResource` recognises it
 - **A blt-model present into a window** names no destination the driver can
   see: the runtime hands the kernel the buffer, and dxgkrnl has the miniport
   copy it into the window's redirection surface, which DWM reads with the CPU.
-  Where the device reads present snapshots - the miniport answers
-  UMDRIVERPRIVATE with a third word, bit 0 - the driver sends `PresentSnapshot`
-  for the buffer under a fresh random key, in the buffer's command order, and
-  hands the key to the kernel in the present's private driver data
-  (`PresentSnapshotRecord`). The device's present engine copies the snapshot
-  into the redirection surface off the application's thread
-  (docs/protocol.md, "Present engine"). Without it the buffer is read back
-  into its allocation before the present, which the application waits for.
+  Where the device reads frames of shared surfaces - the miniport answers
+  UMDRIVERPRIVATE with a third word, bit 0 - the driver numbers each present
+  of the buffer (`PresentPoint`, or `PresentResource12`'s point), in the
+  buffer's command order, and hands the point to the kernel in the present's
+  private driver data (`PresentPointRecord`); the miniport names the buffer's
+  shared id beside it. The device's present engine copies that frame into the
+  redirection surface off the application's thread (docs/protocol.md,
+  "Present engine"; docs/shared-surfaces.md). Without it the buffer is read
+  back into its allocation before the present, which the application waits
+  for.
 
 ### 3.3 The scanout names a host image
 

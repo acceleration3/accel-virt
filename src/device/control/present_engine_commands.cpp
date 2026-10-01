@@ -12,7 +12,7 @@
 
 namespace av {
 
-PresentEngineCommands::PresentEngineCommands(Host &host, PresentEngine &engine, const PresentSnapshots &snapshots)
+PresentEngineCommands::PresentEngineCommands(Host &host, PresentEngine &engine, const PresentFrames &snapshots)
     : host_(host), engine_(engine), snapshots_(snapshots)
 {
     AV_SCOPE("PresentEngineCommands::PresentEngineCommands");

@@ -674,13 +674,13 @@ bool rvk_d3d_ReadSubresource(::av::ClientTransport& t, uint32_t resource, uint32
     return r.remaining() == 0u;
 }
 
-bool rvk_d3d_PresentSnapshot(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint64_t key) {
-    AV_SCOPE("rvk_d3d_PresentSnapshot");
+bool rvk_d3d_PresentPoint(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t point) {
+    AV_SCOPE("rvk_d3d_PresentPoint");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint32_t>(subresource);
-    b.write_pod<uint64_t>(key);
-    return t.send_async(kCmd_PresentSnapshot, b) == ::av::TransportResult::ok;
+    b.write_pod<uint32_t>(point);
+    return t.send_async(kCmd_PresentPoint, b) == ::av::TransportResult::ok;
 }
 
 bool rvk_d3d_BeginQuery(::av::ClientTransport& t, uint32_t query) {

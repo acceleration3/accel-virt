@@ -28,6 +28,7 @@
 #include "proto/context/protocol_version.hpp"
 #include "proto/renderer/exported_image_message.hpp"
 #include "proto/renderer/renderer_message_header.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "proto/submission/fence_page.hpp"
 
 #include <cstdint>
@@ -909,16 +910,16 @@ TEST(renderer_context_plane, reads_no_image)
   std::uint32_t pixels[4] = {};
   CHECK(!fixture.plane().read_image(uuid, 9u, pixels, 8u, 2u, 2u)); }
 
-/* A snapshot a renderer's session takes is in the renderer's memory: none is
+/* A frame a renderer's session stages is in the renderer's memory: none is
  * read here, and letting one go does nothing. */
-TEST(renderer_context_plane, reads_no_present_snapshot)
+TEST(renderer_context_plane, reads_no_staged_frame)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
-  CHECK(!fixture.plane().reads_snapshots());
-  RvkSnapshotView view = {};
-  CHECK(!fixture.plane().map_snapshot(uuid, 9u, 1u, view));
+  CHECK(!fixture.plane().reads_frames());
+  RvkFrameView view = {};
+  CHECK(!fixture.plane().map_frame(uuid, av::SurfacePoint(9u, 1u), 1u, view));
   CHECK(view.pixels == nullptr);
-  fixture.plane().unmap_snapshot(uuid, 9u); }
+  fixture.plane().unmap_frame(uuid, av::SurfacePoint(9u, 1u)); }
 
 TEST(renderer_context_plane, reports_its_renderer_and_what_it_holds)
 { Fixture fixture;

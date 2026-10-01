@@ -7,6 +7,7 @@
  * DXVK is loaded from RVK_D3D_PATH, or from build-d3d/lib in this checkout
  * (tools/build_d3d_runtime.sh). A host without it returns without judging, as
  * the other device tests do on a host without their API. */
+#include "device/surfaces/shared_surfaces.hpp"
 #include "fixtures/d3d/triangle_ps.hpp"
 #include "fixtures/d3d/triangle_vs.hpp"
 #include "device/executor/d3d_backend.hpp"
@@ -15,6 +16,7 @@
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -80,7 +82,7 @@ std::uint32_t pixel(const std::uint8_t *pixels, std::uint32_t x, std::uint32_t y
 /* The render target (1) and its view (2), a triangle's vertices (3), a tint
  * (4), its shaders (5, 6) and input layout (7): one triangle over the left
  * half and down the middle, red halved by the tint. */
-void make_triangle(av::D3dLoopback &wire)
+void make_triangle(av::D3dLoopback &wire, std::uint64_t shared_key = 0u)
 {
     ResourceDesc target = {};
     target.dimension = 3u;
@@ -91,7 +93,7 @@ void make_triangle(av::D3dLoopback &wire)
     target.format = format_b8g8r8a8;
     target.sample_count = 1u;
     target.bind_flags = bind_render_target;
-    CHECK(rvk_d3d_CreateResource(wire, 1u, target, 0u));
+    CHECK(rvk_d3d_CreateResource(wire, 1u, target, shared_key));
     ViewDesc rtv = {};
     rtv.resource = 1u;
     rtv.format = format_b8g8r8a8;
@@ -331,39 +333,42 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK(backend.invariants_hold());
 }
 
-/* A present snapshot is the target as the commands before it left it: a
- * clear after it never reaches it. It is mapped once the GPU has copied it
- * and gone once let go; a key of 0, or a resource that is no texture, keeps
- * nothing and removes no device. */
-TEST(d3d_backend_device, a_present_snapshot_keeps_the_frame_the_commands_before_it_drew)
+/* A present's point on a shared target stages the target as the commands
+ * before it left it: a clear after it never reaches the frame. The frame is
+ * mapped once the GPU has copied it and gone once let go; a point of 0, or a
+ * resource never shared, stages nothing and removes no device. */
+TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it_drew)
 {
     av::LoaderHostApis apis;
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    av::D3dBackend backend;
-    CHECK(backend.initialize(device));
+    constexpr std::uint64_t shown = 0x5150u;
+    av::SharedSurfaces      surfaces;
+    av::D3dBackend          backend;
+    CHECK(backend.initialize(device, nullptr, &surfaces));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
-    make_triangle(wire);
+    make_triangle(wire, shown);
     bind_triangle(wire);
     CHECK(rvk_d3d_Draw(wire, 3u, 0u));
-    CHECK(rvk_d3d_PresentSnapshot(wire, 1u, 0u, 0x5150u));
+    CHECK(rvk_d3d_PresentPoint(wire, 1u, 0u, 1u));
     CHECK(rvk_d3d_ClearRenderTargetView(wire, 2u, Float4{{1.0f, 0.0f, 0.0f, 1.0f}}));
-    RvkSnapshotView view = {};
-    CHECK(device->map_snapshot(0x5150u, 1000u, view));
+    RvkFrameView view = {};
+    CHECK(surfaces.map(av::SurfacePoint(shown, 1u), 1000u, view));
     CHECK_EQ(view.width, size);
     CHECK_EQ(view.height, size);
     CHECK(view.row_pitch >= size * 4u);
     std::uint32_t edge = 0u;
     std::memcpy(&edge, view.pixels + (size / 2u) * view.row_pitch + (size - 4u) * 4u, sizeof edge);
     CHECK_EQ(edge, 0xff0000ffu);   /* the blue the draw left, not the red cleared after */
-    device->unmap_snapshot(0x5150u);
-    CHECK(!device->map_snapshot(0x5150u, 0u, view));
-    CHECK(rvk_d3d_PresentSnapshot(wire, 1u, 0u, 0u));
-    CHECK(rvk_d3d_PresentSnapshot(wire, 3u, 0u, 0x77u));   /* the vertex buffer */
-    CHECK(!device->map_snapshot(0x77u, 0u, view));
+    surfaces.unmap(av::SurfacePoint(shown, 1u));
+    CHECK(!surfaces.map(av::SurfacePoint(shown, 1u), 0u, view));
+    CHECK(rvk_d3d_PresentPoint(wire, 1u, 0u, 0u));
+    CHECK(rvk_d3d_PresentPoint(wire, 3u, 0u, 2u));   /* the vertex buffer, never shared */
+    CHECK(!surfaces.map(av::SurfacePoint(shown, 2u), 0u, view));
     CHECK(rvk_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, 0u);
     CHECK_EQ(wire.refused(), 0u);
+    CHECK(surfaces.invariants_hold());
 }

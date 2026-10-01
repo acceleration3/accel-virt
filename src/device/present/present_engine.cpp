@@ -48,7 +48,7 @@ QueuedPresent &PresentEngine::slot(uint32_t index)
     return slots_[index % depth].object();
 }
 
-Status PresentEngine::attach(uint64_t address, const PresentSnapshots &snapshots)
+Status PresentEngine::attach(uint64_t address, const PresentFrames &snapshots)
 {
     AV_SCOPE("PresentEngine::attach");
     host_.require_main_loop("PresentEngine::attach");

@@ -5,7 +5,7 @@
 #include "device/control/region_mover.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
-#include "device/present/present_snapshots.hpp"
+#include "device/present/present_frames.hpp"
 #include "core/support/scope_exit.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -22,7 +22,7 @@ QueuedPresent::QueuedPresent(Host &host)
 }
 
 Status QueuedPresent::accept(ControlRequest &request, const QueuedPresentRequest &present,
-                             const PresentSnapshots &snapshots)
+                             const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::accept");
     if (present.source() == QueuedPresentRequest::Source::image && !snapshots.readable()) return Status::not_supported;
@@ -56,7 +56,7 @@ Status QueuedPresent::read_regions(ControlRequest &request)
     return Status::ok;
 }
 
-Status QueuedPresent::move(const PresentSnapshots &snapshots)
+Status QueuedPresent::move(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move");
     if (present_.source() == QueuedPresentRequest::Source::image) return move_snapshot(snapshots);
@@ -74,12 +74,12 @@ Status QueuedPresent::move_regions(RegionMover &mover)
 
 /* The snapshot is one extent of the executor's memory, rows `row_pitch`
  * apart: the regions move out of it as out of a surface of that pitch. */
-Status QueuedPresent::move_snapshot(const PresentSnapshots &snapshots)
+Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move_snapshot");
-    RvkSnapshotView view = {};
-    if (!snapshots.map(present_.key(), view)) return Status::not_found;
-    ScopeExit       unmap([this, &snapshots] { snapshots.unmap(present_.key()); });
+    RvkFrameView view = {};
+    if (!snapshots.map(present_.image(), view)) return Status::not_found;
+    ScopeExit       unmap([this, &snapshots] { snapshots.unmap(present_.image()); });
     void *const     pixels = const_cast<uint8_t *>(view.pixels);
     const uint64_t  length = uint64_t{view.row_pitch} * view.height;
     const BlobWindow source(&pixels, &length, 1u, length);

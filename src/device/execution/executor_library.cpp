@@ -1,6 +1,7 @@
 #include "device/execution/executor_library.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/surface_point.hpp"
 
 namespace av {
 
@@ -123,24 +124,24 @@ void ExecutorLibrary::release_shared(const uint8_t *gpu_uuid, uint64_t object_id
     ops_->release_shared(ops_->opaque, gpu_uuid, object_id);
 }
 
-bool ExecutorLibrary::reads_snapshots() const
+bool ExecutorLibrary::reads_frames() const
 {
-    AV_SCOPE("ExecutorLibrary::reads_snapshots");
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_SNAPSHOTS &&
-           ops_->map_snapshot != nullptr && ops_->unmap_snapshot != nullptr;
+    AV_SCOPE("ExecutorLibrary::reads_frames");
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_FRAMES &&
+           ops_->map_frame != nullptr && ops_->unmap_frame != nullptr;
 }
 
-bool ExecutorLibrary::map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view) const
+bool ExecutorLibrary::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view) const
 {
-    AV_SCOPE("ExecutorLibrary::map_snapshot");
-    if (!reads_snapshots()) return false;
-    return ops_->map_snapshot(ops_->opaque, gpu_uuid, key, wait_ms, &view) == RVK_EXECUTED;
+    AV_SCOPE("ExecutorLibrary::map_frame");
+    if (!reads_frames()) return false;
+    return ops_->map_frame(ops_->opaque, gpu_uuid, frame.surface(), frame.point(), wait_ms, &view) == RVK_EXECUTED;
 }
 
-void ExecutorLibrary::unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key) const
+void ExecutorLibrary::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) const
 {
-    AV_SCOPE("ExecutorLibrary::unmap_snapshot");
-    if (reads_snapshots()) ops_->unmap_snapshot(ops_->opaque, gpu_uuid, key);
+    AV_SCOPE("ExecutorLibrary::unmap_frame");
+    if (reads_frames()) ops_->unmap_frame(ops_->opaque, gpu_uuid, frame.surface(), frame.point());
 }
 
 bool ExecutorLibrary::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,

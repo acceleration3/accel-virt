@@ -9,7 +9,7 @@
 // return addresses under it as module+offset, which the module's public PDB
 // names.
 //
-//   d3d9_probe.exe [--fullscreen] [--frames N] [--width W --height H]
+//   d3d9_probe.exe [--fullscreen] [--frames N] [--width W --height H] [--samples N]
 #include <windows.h>
 #include <d3d9.h>
 #include <stdio.h>
@@ -80,14 +80,17 @@ void pump()
 int wmain(int argc, wchar_t **argv)
 {
     bool fullscreen = false;
-    UINT frames = 120u, width = 1280u, height = 720u;
+    UINT frames = 120u, width = 1280u, height = 720u, samples = 0u;
     for (int index = 1; index < argc; index++) {
         if (wcscmp(argv[index], L"--fullscreen") == 0) fullscreen = true;
         else if (wcscmp(argv[index], L"--frames") == 0 && index + 1 < argc) frames = wcstoul(argv[++index], nullptr, 10);
         else if (wcscmp(argv[index], L"--width") == 0 && index + 1 < argc) width = wcstoul(argv[++index], nullptr, 10);
         else if (wcscmp(argv[index], L"--height") == 0 && index + 1 < argc) height = wcstoul(argv[++index], nullptr, 10);
+        else if (wcscmp(argv[index], L"--samples") == 0 && index + 1 < argc) samples = wcstoul(argv[++index], nullptr, 10);
     }
     AddVectoredExceptionHandler(1, first_chance);
+    /* A probe that hangs is killed: what it printed so far must be in the file. */
+    setvbuf(stdout, nullptr, _IONBF, 0);
 
     WNDCLASSW window_class = {};
     window_class.lpfnWndProc = window_procedure;
@@ -135,6 +138,7 @@ int wmain(int argc, wchar_t **argv)
     present.EnableAutoDepthStencil = TRUE;
     present.AutoDepthStencilFormat = D3DFMT_D24S8;
     present.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
+    present.MultiSampleType = static_cast<D3DMULTISAMPLE_TYPE>(samples);
     if (fullscreen) present.FullScreen_RefreshRateInHz = 60;
     IDirect3DDevice9 *device = nullptr;
     const HRESULT made = direct3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, window,
@@ -154,6 +158,7 @@ int wmain(int argc, wchar_t **argv)
         device->BeginScene();
         device->EndScene();
         shown = device->Present(nullptr, nullptr, nullptr, nullptr);
+        if (frame < 3u) wprintf(L"frame %u presented 0x%08lx\n", frame, static_cast<unsigned long>(shown));
         if (FAILED(shown)) {
             wprintf(L"Present 0x%08lx at frame %u\n", static_cast<unsigned long>(shown), frame);
             break;

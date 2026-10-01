@@ -147,17 +147,18 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         for (SharedObject &object : mock.objects_)
             if (object.live && object.wire_handle == wire_handle) object.live = false;
     };
-    table_.map_snapshot = [](void *opaque, const std::uint8_t *, std::uint64_t key, std::uint32_t,
-                             RvkSnapshotView *view) -> std::uint32_t {
+    table_.map_frame = [](void *opaque, const std::uint8_t *, std::uint64_t surface, std::uint32_t point,
+                          std::uint32_t, RvkFrameView *view) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
-        if (view == nullptr || key == 0u || key != mock.snapshot_key_) return RVK_UNKNOWN;
-        *view = mock.snapshot_;
+        if (view == nullptr || surface == 0u || surface != mock.frame_surface_ || point != mock.frame_point_)
+            return RVK_UNKNOWN;
+        *view = mock.frame_;
         return RVK_EXECUTED;
     };
-    table_.unmap_snapshot = [](void *opaque, const std::uint8_t *, std::uint64_t key) {
+    table_.unmap_frame = [](void *opaque, const std::uint8_t *, std::uint64_t surface, std::uint32_t point) {
         MockExecutorOps &mock = mock_of(opaque);
-        if (key == mock.snapshot_key_) mock.snapshot_key_ = 0u;
-        mock.snapshot_unmaps_++;
+        if (surface == mock.frame_surface_ && point == mock.frame_point_) mock.frame_surface_ = 0u;
+        mock.frame_unmaps_++;
     };
     table_.release_shared = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t object_id) {
         MockExecutorOps &mock = mock_of(opaque);
@@ -439,15 +440,16 @@ std::uint32_t MockExecutorOps::released_objects()
     return released_objects_;
 }
 
-void MockExecutorOps::serve_snapshot(std::uint64_t key, const RvkSnapshotView &view)
+void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, const RvkFrameView &view)
 {
-    snapshot_key_ = key;
-    snapshot_ = view;
+    frame_surface_ = surface;
+    frame_point_ = point;
+    frame_ = view;
 }
 
-std::uint32_t MockExecutorOps::snapshot_unmaps() const
+std::uint32_t MockExecutorOps::frame_unmaps() const
 {
-    return snapshot_unmaps_;
+    return frame_unmaps_;
 }
 
 std::uint32_t MockExecutorOps::shared_releases()

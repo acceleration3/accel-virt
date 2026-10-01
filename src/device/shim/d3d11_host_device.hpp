@@ -22,7 +22,7 @@
 #include "device/shim/dxvk_vulkan_device.hpp"
 #include "device/shim/host_image_export.hpp"
 #include "device/shim/imported_textures.hpp"
-#include "device/shim/snapshot_pool.hpp"
+#include "device/shim/d3d11_frame_pool.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -33,10 +33,14 @@ struct ID3DDeviceContextState;
 struct D3D11_TEXTURE2D_DESC;
 struct D3D11_TEXTURE2D_DESC1;
 struct ID3D11Texture2D;
+struct ID3D12Resource;
+struct IUnknown;
 
 namespace av {
 
 class D3dRuntime;
+class StagedFrame;
+class D3d12HostDevice;
 class Vkd3dImageExport;
 
 class D3d11HostDevice {
@@ -72,24 +76,29 @@ public:
     /* The image published under `key` as a dma-buf (HostImageExport). */
     [[nodiscard]] bool export_image(uint64_t key, RvkExportedImage &image);
     /* Under the lock a session's command already holds: subresource
-     * `subresource` of `source` kept under `key` for the present engine
-     * (SnapshotPool::take). */
-    [[nodiscard]] bool snapshot(uint64_t key, ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
-                                uint32_t height, uint32_t format);
-    /* Any thread: the snapshot under `key` mapped into `view`, waiting up to
-     * `wait_ms` for a session to take it and the GPU to copy it. False when
-     * it does not come. Takes the lock for each look. */
-    [[nodiscard]] bool map_snapshot(uint64_t key, uint32_t wait_ms, RvkSnapshotView &view);
-    /* Any thread: the snapshot under `key` let go. Takes the lock. */
-    void               unmap_snapshot(uint64_t key);
+     * `subresource` of `source` staged for the present engine
+     * (D3d11FramePool::stage); null when no frame is free. */
+    StagedFrame       *stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
+                                   uint32_t format);
     /* The guest let go of the surface shared under `object_id` everywhere, or
      * of every one for 0 - the device was reset and its ids start again. Takes
      * the lock itself. */
     void               release_shared(uint64_t object_id);
-    /* A Direct3D 12 surface vkd3d-proton exported, shared under `key` as a
-     * texture described as `desc` over the same memory (ImportedTextures).
-     * False where DXVK cannot import it or the key is taken. Takes the lock. */
-    [[nodiscard]] bool share_image(uint64_t key, Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc);
+    /* The GPU's Direct3D 12 device, whose surfaces this one makes views of
+     * (find_shared); null for none. */
+    void               pair(D3d12HostDevice *device12);
+    /* Another API's surface - a Direct3D 12 resource - shared under `key`,
+     * taking a reference: no view of it is made until something here opens
+     * it. False for a key already shared or a full table. Takes the lock. */
+    [[nodiscard]] bool publish_shared(uint64_t key, IUnknown *surface);
+    /* Whether anything is shared under `key`. Takes the lock. */
+    bool               shares(uint64_t key);
+    /* Under the lock: what `key` shares, as this device sees it, with a
+     * reference the caller owns; null for none. A Direct3D 12 resource is
+     * made a texture of DXVK's over the same memory the first time
+     * (ImportedTextures), which then takes its place in the table - only the
+     * surfaces something opens cost an import. */
+    IUnknown          *find_shared(uint64_t key);
     /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
     DxvkVulkanDevice  &vulkan();
 
@@ -99,6 +108,10 @@ public:
     D3dSharedResources   &shared();
 
 private:
+    /* Under the lock: a texture of DXVK's over `resource`'s memory, with a
+     * reference the caller owns; null for one DXVK cannot import - not one
+     * 2D image of one mip and one sample. */
+    ID3D11Texture2D   *view_of(ID3D12Resource *resource);
     /* The published texture copied into staging_, queued, under the lock. */
     [[nodiscard]] bool stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted);
     /* staging_ read once the GPU is done with it, taking the lock only to look. */
@@ -106,6 +119,7 @@ private:
                              uint32_t height);
 
     ID3D11Device5          *device_;
+    D3d12HostDevice        *device12_;
     ID3D11DeviceContext4   *context_;
     ID3DDeviceContextState *active_;
     uint32_t                feature_level_;
@@ -114,7 +128,7 @@ private:
     DxvkVulkanDevice        vulkan_;
     HostImageExport         exports_;
     ImportedTextures        imports_;
-    SnapshotPool            snapshots_;
+    D3d11FramePool          frames_;
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */
     ID3D11Texture2D        *staging_;

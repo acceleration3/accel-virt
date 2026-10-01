@@ -10,10 +10,12 @@
 #ifndef AV_D3D12_HOST_DEVICE_HPP
 #define AV_D3D12_HOST_DEVICE_HPP
 
+#include "device/shim/d3d12_frame_pool.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 
 #include <stdint.h>
 
+struct ID3D12CommandQueue;
 struct ID3D12Device;
 struct ID3D12Fence;
 struct ID3D12Heap;
@@ -23,6 +25,7 @@ struct ID3D12RootSignature;
 namespace av {
 
 class D3dRuntime;
+class StagedFrame;
 class Vkd3dImageExport;
 
 class D3d12HostDevice {
@@ -54,6 +57,9 @@ public:
     [[nodiscard]] bool         export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const;
     /* A shared fence's timeline semaphore as an fd the caller owns. */
     [[nodiscard]] bool         export_fence(ID3D12Fence *fence, int &fd) const;
+    /* `source` staged for the present engine on `queue`, in that queue's
+     * order (D3d12FramePool::stage); null when it is not. */
+    StagedFrame               *stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source);
 
 private:
     void measure(uint32_t vendor_id, uint32_t device_id, uint64_t video_memory);
@@ -61,6 +67,7 @@ private:
     const D3dRuntime  *runtime_;
     ID3D12Device      *device_;
     d3d12proto::Caps12 caps_;
+    D3d12FramePool     frames_;
 };
 
 }  // namespace av

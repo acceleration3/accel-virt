@@ -1227,8 +1227,8 @@ moved; the miniport registers the page again at each start.
 | 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F7`, context 0, no fence |
 | 24 | 8 | ticket | the count of queued presents since the page was registered, this one included: the first is 1 |
 | 32 | 4 | source_kind | 0 guest pages, 1 a host image |
-| 36 | 4 | reserved | 0 |
-| 40 | 8 | source_key | an image source's: the identity the host shares the image under (a presented surface's key); otherwise 0 |
+| 36 | 4 | source_point | an image source's: the present of the surface whose frame is read, counted from 1 by the surface's writer; otherwise 0 |
+| 40 | 8 | source_surface | an image source's: the shared surface's id, as the miniport minted it (`SharedObjectRecord`); otherwise 0 |
 | 48 | 4 | operation | 1 blt, 2 colour fill |
 | 52 | 4 | flags | bit 0 swaps each pixel's first and third byte, as in the present copy; blt only |
 | 56 | 4 | colour | a fill's four bytes; 0 for a blt |
@@ -1255,22 +1255,28 @@ and never skips one. Without a page the request is refused and not counted.
 The device holds at most 16 presents it has not moved; one past that is
 refused, so a miniport keeps no more than 16 outstanding.
 
-An image source is a present snapshot: what the Direct3D command
-`PresentSnapshot` (`0x040d`) copied of an application's buffer on the host GPU,
-in the order of that application's own commands, and kept under the key the
-application chose - `source_key`. A snapshot is taken where the buffer is
-drawn, so what the application draws into it after the present never reaches
-the destination; the key is 64 random bits, which is what keeps one process
-from naming another's. The device reads a snapshot once its session has
-reached the command and the GPU has copied it, waiting up to half a second -
-past that the present is refused - and lets it go once read, or refused. It
-arrives in the buffer's own byte order (a red-first buffer arrives red-first,
-as its guest pages would hold it; the swap flag says whether the destination
-wants the other order); `x` and `y` of a region are the buffer's pixels, and a
-region with a row outside the snapshot or the destination is refused where it
+An image source is a frame of a shared surface (docs/shared-surfaces.md):
+the surface's contents as its writer presented them for the `source_point`th
+time, in the order of the writer's own commands. The Direct3D drivers number
+each present of a shared surface - `PresentPoint` (`0x040d`) for Direct3D 11,
+the `point` of `PresentResource12` for Direct3D 12 - and hand the point to the
+kernel in the present's private driver data (`PresentPointRecord`, 16 bytes:
+u32 magic `0x504B5652`, u32 point, u64 reserved 0); the miniport adds the
+source allocation's shared id, which it minted, so no process names a surface
+it was not given. The device stages a surface's frames only once a blt has
+asked for one of them - a flip-model buffer the compositor reads itself costs
+nothing - so the first blt of a surface is refused, and each one after reads a
+frame copied where the writer presented it: what the writer draws after the
+present never reaches the destination. The device waits for the writer to
+reach the point and the GPU to copy it, up to half a second - past that the
+present is refused - and lets the frame go once read, or refused. It arrives
+in the surface's own byte order (a red-first surface arrives red-first, as its
+guest pages would hold it; the swap flag says whether the destination wants
+the other order); `x` and `y` of a region are the surface's pixels, and a
+region with a row outside the frame or the destination is refused where it
 goes wrong, as in the present copy. A device offers image sources only where
-it reads the snapshots itself: one whose contexts run in a renderer process
-does not set bit 5.
+it reads the frames itself: one whose contexts run in a renderer process does
+not set bit 5.
 
 ### The page, 4 KiB, little-endian
 

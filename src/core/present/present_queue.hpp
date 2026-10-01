@@ -25,6 +25,7 @@ class PresentRegion;
 class PresentSurface;
 class PresentTicketRecord;
 class QueuedPresentRequest;
+class SurfacePoint;
 class VirtioGpuDevice;
 
 class PresentQueue {
@@ -56,10 +57,10 @@ public:
      * back; the send's refusal otherwise. Nothing is queued unless ok. */
     [[nodiscard]] Status queue(const PresentCopyRequest &request, const PresentSurface *source,
                                const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket);
-    /* PASSIVE. The blt `request` states, out of the present snapshot kept
-     * under `key` rather than its source's pages: as queue, which names no
-     * source pages. */
-    [[nodiscard]] Status queue_image(uint64_t key, const PresentCopyRequest &request,
+    /* PASSIVE. The blt `request` states, out of the host surface as the
+     * present that published `image` left it, rather than its source's pages:
+     * as queue, which names no source pages. */
+    [[nodiscard]] Status queue_image(const SurfacePoint &image, const PresentCopyRequest &request,
                                      const PresentSurface &destination, const PresentRegion *regions,
                                      uint64_t &ticket);
     /* Dispatch at most: the last ticket the device finished with; 0 before the
@@ -73,9 +74,9 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The present under the next ticket: from `source`'s pages, or for a
-     * snapshot `key` from the snapshot, with no source in `request`. */
-    [[nodiscard]] Status enqueue(uint64_t key, const PresentCopyRequest &request, const PresentSurface *source,
+    /* The present under the next ticket: from `source`'s pages, or for an
+     * `image` that names a frame from that frame, with no source in `request`. */
+    [[nodiscard]] Status enqueue(const SurfacePoint &image, const PresentCopyRequest &request, const PresentSurface *source,
                                  const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket);
     /* Waits for the payload `ticket` is written into to be done with. */
     [[nodiscard]] Status wait_for_payload(uint64_t ticket);

@@ -4,9 +4,12 @@
 #include "device/executor/d3d12_session.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/d3d12_copy_extent.hpp"
+#include "device/executor/d3d12_footprint.hpp"
 #include "device/executor/d3d12_indirect_stride.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+
 
 namespace av {
 
@@ -366,35 +369,51 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
 {
     AV_SCOPE("D3d12Session::on_CopyTextureRegion12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    if (recorded == nullptr) return false;
-    D3D12_TEXTURE_COPY_LOCATION made[2] = {};
-    const d3d12proto::CopyLocation *const locations[2] = {&destination, &source};
-    for (uint32_t side = 0u; side < 2u; side++) {
-        const d3d12proto::CopyLocation &location = *locations[side];
-        ID3D12Resource *const resource = object<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
-        if (resource == nullptr) return false;
-        made[side].pResource = resource;
-        if (location.type == copy_subresource) {
-            made[side].Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            made[side].SubresourceIndex = location.subresource;
-        } else if (location.type == copy_footprint && location.format <= max_format) {
-            const D3D12_RESOURCE_DESC desc = resource->GetDesc();
-            /* The footprint's rows must lie inside the buffer they name. */
-            const uint64_t rows = static_cast<uint64_t>(location.height) * location.depth;
-            if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || location.offset > desc.Width ||
-                (rows != 0u && static_cast<uint64_t>(location.row_pitch) * (rows - 1u) > desc.Width - location.offset))
-                return false;
-            made[side].Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            made[side].PlacedFootprint.Offset = location.offset;
-            made[side].PlacedFootprint.Footprint = {static_cast<DXGI_FORMAT>(location.format), location.width,
-                                                    location.height, location.depth, location.row_pitch};
-        } else {
-            return false;
-        }
-    }
+    D3D12_TEXTURE_COPY_LOCATION      to = {};
+    D3D12_TEXTURE_COPY_LOCATION      from = {};
+    if (recorded == nullptr || !copy_location(destination, to) || !copy_location(source, from)) return false;
+    if (destination.type == copy_footprint && source.type == copy_footprint) return false;
+    const D3d12CopyExtent extent(from, has_box != 0u ? &box : nullptr);
+    d3d12proto::Box       written = {};
+    if (!extent.known() || !extent.written_at(x, y, z, written)) return false;
+    /* A footprint's bytes are guest memory the host GPU reads or writes: only
+     * the region the copy touches must lie in its buffer - Direct3D 9 on 12
+     * names a whole texture's footprint and copies a box of it from a buffer
+     * holding that box. */
+    if (!footprint_holds(destination, written) || !footprint_holds(source, extent.read())) return false;
     const D3D12_BOX made_box = {box.left, box.top, box.front, box.right, box.bottom, box.back};
-    recorded->CopyTextureRegion(&made[0], x, y, z, &made[1], has_box != 0u ? &made_box : nullptr);
+    recorded->CopyTextureRegion(&to, x, y, z, &from, has_box != 0u ? &made_box : nullptr);
     return true;
+}
+
+bool D3d12Session::copy_location(const d3d12proto::CopyLocation &location, D3D12_TEXTURE_COPY_LOCATION &made) const
+{
+    AV_SCOPE("D3d12Session::copy_location");
+    ID3D12Resource *const resource = object<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
+    if (resource == nullptr) return false;
+    made.pResource = resource;
+    if (location.type == copy_subresource) {
+        made.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        made.SubresourceIndex = location.subresource;
+        return true;
+    }
+    if (location.type != copy_footprint || location.format > max_format) return false;
+    made.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    made.PlacedFootprint.Offset = location.offset;
+    made.PlacedFootprint.Footprint = {static_cast<DXGI_FORMAT>(location.format), location.width, location.height,
+                                      location.depth, location.row_pitch};
+    return true;
+}
+
+bool D3d12Session::footprint_holds(const d3d12proto::CopyLocation &location, const d3d12proto::Box &region) const
+{
+    AV_SCOPE("D3d12Session::footprint_holds");
+    if (location.type != copy_footprint) return true;
+    ID3D12Resource *const     buffer = object<ID3D12Resource>(location.resource, D3dObjectKind::resource12);
+    const D3D12_RESOURCE_DESC desc = buffer->GetDesc();
+    const D3d12Footprint      footprint(location.format, location.width, location.height, location.depth,
+                                        location.row_pitch, location.offset);
+    return desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER && footprint.holds(region, desc.Width);
 }
 
 bool D3d12Session::on_CopyResource12(uint32_t id, uint32_t destination, uint32_t source)

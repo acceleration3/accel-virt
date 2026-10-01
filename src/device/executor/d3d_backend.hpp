@@ -33,6 +33,7 @@ namespace av {
 
 class D3d11HostDevice;
 class D3d12HostDevice;
+class SharedSurfaces;
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
 public:
@@ -42,9 +43,11 @@ public:
     D3dBackend();
 
     /* Binds this session to its GPU's Direct3D 11 device and, where it has
-     * one, its Direct3D 12 device; both must outlive it. False for a GPU with
-     * no Direct3D 11 device: that is what says Direct3D is served at all. */
-    [[nodiscard]] bool initialize(D3d11HostDevice *device11, D3d12HostDevice *device12 = nullptr);
+     * one, its Direct3D 12 device, and to the surfaces its presents publish
+     * (SharedSurfaces); all must outlive it. False for a GPU with no Direct3D
+     * 11 device: that is what says Direct3D is served at all. */
+    [[nodiscard]] bool initialize(D3d11HostDevice *device11, D3d12HostDevice *device12 = nullptr,
+                                  SharedSurfaces *surfaces = nullptr);
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;
@@ -153,7 +156,7 @@ public:
     bool on_ReadSubresource(uint32_t resource, uint32_t subresource, uint32_t &hresult, uint32_t &row_pitch,
                             uint32_t &depth_pitch, uint8_t *data, uint64_t data_capacity,
                             uint64_t &data_size) override;
-    bool on_PresentSnapshot(uint32_t resource, uint32_t subresource, uint64_t key) override;
+    bool on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point) override;
     bool on_BeginQuery(uint32_t query) override;
     bool on_EndQuery(uint32_t query) override;
     bool on_BindQueryResults(uint64_t offset, uint32_t slots) override;
@@ -197,6 +200,7 @@ private:
                                          uint32_t height, uint32_t depth, uint32_t format);
 
     D3d11HostDevice        *device11_;
+    SharedSurfaces         *surfaces_;
     /* The device lock, taken at a batch's first command and held to its end. */
     bool                    held_;
     /* The views a rotation remade, the old ones held until what bound them is rebound. */

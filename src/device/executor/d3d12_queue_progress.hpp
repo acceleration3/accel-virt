@@ -45,10 +45,19 @@ public:
      * stall the host GPU until the guest's timeout. False when a wait is
      * refused. */
     [[nodiscard]] bool after_siblings(uint32_t id, ID3D12CommandQueue *queue) const;
+    /* Every queue that executed signals its own fence with the next mark:
+     * once reached() passes marked(), everything each one was given has
+     * finished, a staged frame's copy behind its last execute included. One
+     * fence signalled from several queues would be reached by whichever
+     * queue got there first. False when a queue refuses its signal. */
+    [[nodiscard]] bool mark_all();
     /* The queue is going: its fence goes with it. */
     void               forget(uint32_t id);
     /* Every fence goes; marks keep rising. */
     void               clear();
+    /* Each queue's progress signalled and completed, to stderr: which queue
+     * a drain that never finished is waiting for. */
+    void               log_stuck() const;
 
     /* The mark the latest execute left, 0 before the first. */
     uint64_t marked() const;
@@ -61,8 +70,10 @@ private:
     uint32_t slot_of(uint32_t id) const;
 
     D3d12FenceWake &wake_;
-    uint32_t     ids_[capacity];
-    ID3D12Fence *fences_[capacity];
+    uint32_t            ids_[capacity];
+    /* The session's queues, which it releases only after forget(). */
+    ID3D12CommandQueue *queues_[capacity];
+    ID3D12Fence        *fences_[capacity];
     uint64_t     signalled_[capacity];
     uint32_t     count_;
     uint64_t     marked_;

@@ -67,7 +67,9 @@ private:
     uint8_t       allocation_[allocation_bytes];
     uint64_t      resource_[2];
     uint32_t      width_;
-    uint32_t      height_;
+    /* Rows of elements: a block-compressed surface's rows of blocks, which
+     * is what the kernel's layout counts - pitch times rows is its bytes. */
+    uint32_t      rows_;
     uint32_t      format_;
     uint32_t      pitch_;
     uint64_t      bytes_;

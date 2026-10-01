@@ -1,6 +1,7 @@
 #include "device/context/local_context_plane.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/surface_point.hpp"
 
 namespace av {
 
@@ -147,22 +148,22 @@ bool LocalContextPlane::read_image(const uint8_t *gpu_uuid, uint64_t key, void *
     return library_.read_image(gpu_uuid, key, pixels, stride, width, height);
 }
 
-bool LocalContextPlane::reads_snapshots() const
+bool LocalContextPlane::reads_frames() const
 {
-    AV_SCOPE("LocalContextPlane::reads_snapshots");
-    return library_.reads_snapshots();
+    AV_SCOPE("LocalContextPlane::reads_frames");
+    return library_.reads_frames();
 }
 
-bool LocalContextPlane::map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view)
+bool LocalContextPlane::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view)
 {
-    AV_SCOPE("LocalContextPlane::map_snapshot");
-    return library_.map_snapshot(gpu_uuid, key, wait_ms, view);
+    AV_SCOPE("LocalContextPlane::map_frame");
+    return library_.map_frame(gpu_uuid, frame, wait_ms, view);
 }
 
-void LocalContextPlane::unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key)
+void LocalContextPlane::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame)
 {
-    AV_SCOPE("LocalContextPlane::unmap_snapshot");
-    library_.unmap_snapshot(gpu_uuid, key);
+    AV_SCOPE("LocalContextPlane::unmap_frame");
+    library_.unmap_frame(gpu_uuid, frame);
 }
 
 void LocalContextPlane::report(StateWriter &writer)

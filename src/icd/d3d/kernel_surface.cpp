@@ -31,7 +31,7 @@ constexpr uint32_t unsized_element_bytes = 4u;
 }  // namespace
 
 KernelSurface::KernelSurface()
-    : allocation_{}, resource_{}, width_(0u), height_(0u), format_(0u), pitch_(0u), bytes_(0u), scanout_(),
+    : allocation_{}, resource_{}, width_(0u), rows_(0u), format_(0u), pitch_(0u), bytes_(0u), scanout_(),
       primary_(false)
 {
     AV_SCOPE("KernelSurface::KernelSurface");
@@ -45,17 +45,25 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format)
 }
 
 /* A row wider than 32 bits of bytes is no surface: its pitch is 0, and so is
- * its size, which make() refuses. */
+ * its size, which make() refuses. A block-compressed surface's rows are rows
+ * of blocks: counted a texel at a time, a BC1 texture asked for sixteen times
+ * its bytes, and Direct3D 9 on 12, which shares every texture it makes, ran
+ * the aperture out loading a level. */
 KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, const ScanoutTarget &scanout)
-    : allocation_{}, resource_{}, width_(width), height_(height), format_(format), pitch_(0u), bytes_(0u),
+    : allocation_{}, resource_{}, width_(width), rows_(0u), format_(format), pitch_(0u), bytes_(0u),
       scanout_(scanout), primary_(true)
 {
     AV_SCOPE("KernelSurface::KernelSurface");
     const DxgiFormatLayout layout(format);
-    const uint64_t element = layout.element_bytes() == 0u ? unsized_element_bytes : layout.element_bytes();
-    const uint64_t row = uint64_t{width} * element;
+    const bool             sized = layout.element_bytes() != 0u;
+    const uint64_t         element = sized ? layout.element_bytes() : unsized_element_bytes;
+    const uint64_t         across = sized ? layout.element_width() : 1u;
+    const uint64_t         down = sized ? layout.element_height() : 1u;
+    const uint64_t         row = (uint64_t{width} + across - 1u) / across * element;
+    const uint64_t         rows = (uint64_t{height} + down - 1u) / down;
     pitch_ = row > UINT32_MAX ? 0u : static_cast<uint32_t>(row);
-    bytes_ = (uint64_t{pitch_} * height + page_bytes - 1u) / page_bytes * page_bytes;
+    rows_ = static_cast<uint32_t>(rows);
+    bytes_ = (uint64_t{pitch_} * rows_ + page_bytes - 1u) / page_bytes * page_bytes;
 }
 
 /* Both are encoded into buffers of exactly their encoded sizes, which is the
@@ -65,7 +73,7 @@ Status KernelSurface::make()
     AV_SCOPE("KernelSurface::make");
     if (bytes_ == 0u) return Status::invalid_parameter;
     const AllocationKind kind = primary_ ? AllocationKind::shared_primary : AllocationKind::surface;
-    static_cast<void>(AllocationDescriptor(kind, true, SurfaceLayout(width_, height_, kernel_format(), pitch_), bytes_,
+    static_cast<void>(AllocationDescriptor(kind, true, SurfaceLayout(width_, rows_, kernel_format(), pitch_), bytes_,
                                            scanout_)
                           .encode(allocation_, AllocationDescriptor::encoded_size));
     static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes_)

@@ -118,6 +118,24 @@ TEST(kernel_surface, a_format_with_no_fixed_size_is_laid_out_as_a_32_bit_one)
   KernelSurface wide(10u, 1u, r32g32b32a32);
   CHECK_EQ(wide.pitch(), 160u); }
 
+/* A block-compressed surface is rows of blocks: a 2048x2048 BC1 texture is
+ * 512 rows of 512 eight-byte blocks, 2 MiB - not 32 MiB at a block a texel -
+ * and a BC3 surface smaller than its blocks rounds up to whole ones. */
+TEST(kernel_surface, a_block_compressed_surface_is_sized_in_rows_of_blocks)
+{ KernelSurface bc1(2048u, 2048u, 71u);
+  CHECK_EQ(bc1.pitch(), 4096u);
+  CHECK_EQ(bc1.bytes(), 2u * 1024u * 1024u);
+  CHECK_STATUS(bc1.make(), Status::ok);
+  const AllocationDescriptor kernel_view = described(bc1);   /* decodes as the miniport does: rows x pitch fits */
+  CHECK_EQ(kernel_view.layout().height(), 512u);
+  CHECK(kernel_view.layout().bytes() <= kernel_view.size());
+  KernelSurface bc3(6u, 6u, 77u);
+  CHECK_EQ(bc3.pitch(), 32u);
+  CHECK_EQ(bc3.bytes(), 4096u);
+  KernelSurface tall(4u, 4096u * 4u + 1u, 71u);   /* one block wide: 4097 rows of 8 bytes, nine pages */
+  CHECK_EQ(tall.pitch(), 8u);
+  CHECK_EQ(tall.bytes(), 9u * 4096u); }
+
 TEST(kernel_surface, a_surface_of_no_texels_or_a_row_past_32_bits_of_bytes_is_refused)
 { KernelSurface no_width(0u, 16u, b8g8r8a8);
   CHECK_STATUS(no_width.make(), Status::invalid_parameter);

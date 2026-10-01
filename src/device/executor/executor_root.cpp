@@ -7,6 +7,8 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu.hpp"
+#include "device/surfaces/shared_surfaces.hpp"
+#include "proto/resources/surface_point.hpp"
 
 namespace av {
 
@@ -62,7 +64,9 @@ void ExecutorRoot::release_shared(const uint8_t *gpu_uuid, uint64_t object_id)
     AV_SCOPE("ExecutorRoot::release_shared");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    SharedSurfaces *const  surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
     if (device != nullptr) device->release_shared(object_id);
+    if (surfaces != nullptr) surfaces->release(object_id);
 }
 
 bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
@@ -74,20 +78,20 @@ bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixel
     return device != nullptr && device->read_image(key, pixels, stride, width, height);
 }
 
-bool ExecutorRoot::map_snapshot(const uint8_t *gpu_uuid, uint64_t key, uint32_t wait_ms, RvkSnapshotView &view)
+bool ExecutorRoot::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, RvkFrameView &view)
 {
-    AV_SCOPE("ExecutorRoot::map_snapshot");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
-    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->map_snapshot(key, wait_ms, view);
+    AV_SCOPE("ExecutorRoot::map_frame");
+    const HostGpu *const  gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
+    return surfaces != nullptr && surfaces->map(frame, wait_ms, view);
 }
 
-void ExecutorRoot::unmap_snapshot(const uint8_t *gpu_uuid, uint64_t key)
+void ExecutorRoot::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame)
 {
-    AV_SCOPE("ExecutorRoot::unmap_snapshot");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
-    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    if (device != nullptr) device->unmap_snapshot(key);
+    AV_SCOPE("ExecutorRoot::unmap_frame");
+    const HostGpu *const  gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
+    if (surfaces != nullptr) surfaces->unmap(frame);
 }
 
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
@@ -181,7 +185,8 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     case RVK_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
     case RVK_EXECUTOR_SUB_API_D3D:
-        return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()));
+        return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
+                                     apis_->surfaces(gpu.index()));
     default: vulkan_[slot].initialize(gpu); return true;
     }
 }
