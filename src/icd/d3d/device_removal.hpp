@@ -13,9 +13,9 @@
 
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 class LogSink;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::d3d {
 
@@ -35,7 +35,7 @@ public:
     Hresult reason() const;
     /* The reason, logged the first time a caller notices it, naming the entry
      * point that did. hr_ok while live. */
-    Hresult check(icd::LogSink &log, const char *entry);
+    Hresult check(LogSink &log, const char *entry);
     /* How many causes arrived after the first. */
     uint32_t later_causes() const;
 

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
@@ -14,7 +15,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), interop_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
+    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), interop_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -58,8 +59,7 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
     /* Without DXVK's Vulkan interop the scanout is read back rather than
      * exported, and a Direct3D 12 swap chain has nothing to be shown by. */
     if (!vulkan_.connect(device_))
-        fprintf(stderr, "virtio-gpu-av: d3d11: DXVK offers no Vulkan interop with fd export; "
-                        "Direct3D 12 swap chains cannot be shown\n");
+        lines_.write("DXVK offers no Vulkan interop with fd export; Direct3D 12 swap chains cannot be shown");
     return true;
 }
 
@@ -142,7 +142,7 @@ void D3d11HostDevice::release_shared(uint64_t object_id)
     /* A reset is rare and ends every id the guest had: the log says it came,
      * since a surface held past it would be refused its key again. */
     if (object_id == 0u) {
-        fprintf(stderr, "virtio-gpu-av: d3d11: the guest's shared ids start again; %u released\n", shared_.count());
+        LogLine(lines_).text("the guest's shared ids start again; ").number(shared_.count()).text(" released").write();
         shared_.clear();
     } else {
         shared_.release(object_id);
@@ -329,8 +329,15 @@ bool D3d11HostDevice::publish_shared(uint64_t key, IUnknown *surface)
     const bool published = shared_.publish(key, surface);
     unlock();
     if (!published)
-        fprintf(stderr, "virtio-gpu-av: d3d11: surface key 0x%016llx not shared: already shared, or %u of %u held\n",
-                static_cast<unsigned long long>(key), shared_.count(), D3dSharedResources::capacity);
+        LogLine(lines_)
+            .text("surface key ")
+            .hex(key, 16u)
+            .text(" not shared: already shared, or ")
+            .number(shared_.count())
+            .text(" of ")
+            .number(D3dSharedResources::capacity)
+            .text(" held")
+            .write();
     return published;
 }
 
@@ -392,9 +399,17 @@ ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
     if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) shown.BindFlags |= D3D11_BIND_RENDER_TARGET;
     ID3D11Texture2D *const texture = interop_.import(image, shown);
     if (texture == nullptr)
-        fprintf(stderr,
-                "virtio-gpu-av: d3d12: a surface %ux%u format %u flags 0x%x could not be made a Direct3D 11 view\n",
-                shown.Width, shown.Height, static_cast<unsigned>(shown.Format), static_cast<unsigned>(desc.Flags));
+        LogLine(lines_)
+            .text("a Direct3D 12 surface ")
+            .number(shown.Width)
+            .text("x")
+            .number(shown.Height)
+            .text(" format ")
+            .number(static_cast<uint32_t>(shown.Format))
+            .text(" flags ")
+            .hex(static_cast<uint32_t>(desc.Flags), 8u)
+            .text(" could not be made a Direct3D 11 view")
+            .write();
     return texture;
 }
 

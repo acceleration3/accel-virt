@@ -9,13 +9,17 @@
 #define AV_ICD_DEVICE_MEMORY_HPP
 
 #include "core/support/status.hpp"
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 #include "icd/vulkan/chunk_allocator.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
 #include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
+
+namespace av {
+class LogSink;
+}  // namespace av
 
 namespace av {
 class BlockSource;
@@ -26,7 +30,6 @@ class StateWriter;
 namespace av::icd {
 
 class Connection;
-class LogSink;
 struct DeviceMemoryProbe;
 
 class DeviceMemory {

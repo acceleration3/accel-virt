@@ -7,13 +7,13 @@
 #ifndef AV_CLICD_CL_REFUSAL_LOG_HPP
 #define AV_CLICD_CL_REFUSAL_LOG_HPP
 
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 class LogSink;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::clicd {
 
@@ -21,9 +21,9 @@ class ClRefusalLog {
 public:
     /* Room for every slot of cl_icd_dispatch this ICD leaves to the generated
      * refusals and a few errors from each entry point it serves. */
-    static constexpr uint32_t max_named = icd::KeyedLog::max_keys;
+    static constexpr uint32_t max_named = KeyedLog::max_keys;
 
-    explicit ClRefusalLog(icd::LogSink &log);
+    explicit ClRefusalLog(LogSink &log);
     ClRefusalLog(const ClRefusalLog &) = delete;
     ClRefusalLog &operator=(const ClRefusalLog &) = delete;
 
@@ -34,7 +34,7 @@ public:
     uint32_t named() const;
 
 private:
-    icd::KeyedLog  lines_;
+    KeyedLog  lines_;
 };
 
 }  // namespace av::clicd

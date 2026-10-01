@@ -11,7 +11,6 @@
 #include "proto/resources/surface_layout.hpp"
 
 #include "core/support/scope_exit.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
@@ -19,7 +18,7 @@
 #include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/vulkan/memory_allocate_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
@@ -161,7 +160,6 @@ const Entry        local_rows[] = {
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
 constexpr uint32_t vulkan_1_3 = (1u << 22u) | (3u << 12u);
-constexpr size_t   line_bytes = 160u;
 /* The device extensions this ICD reports (research.md §9), each with the test
  * that exercises it through the ICD; tools/check_extension_policy.py holds every
  * row to a test that exists and a name the generator implemented. The probe's
@@ -542,11 +540,8 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
     const uint32_t refused = extensions_.first_refused(create->ppEnabledExtensionNames, create->enabledExtensionCount);
     if (refused != create->enabledExtensionCount) {
         const char *const name = create->ppEnabledExtensionNames[refused];
-        char              line[line_bytes] = {};
-        TextBuffer        text(line, sizeof line);
-        text.append("avvk: vkCreateDevice names an extension this driver does not report: ");
-        text.append(name != nullptr ? name : "(null)");
-        log_.write(text.text());
+        lines_.name("vkCreateDevice names an extension this driver does not report:",
+                    name != nullptr ? name : "(null)");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     HostExtensionList asked;

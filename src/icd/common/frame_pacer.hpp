@@ -13,12 +13,15 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class Kmt;
 }  // namespace av
 
 namespace av::icd {
 
-class LogSink;
 struct FramePacerProbe;
 
 class FramePacer {

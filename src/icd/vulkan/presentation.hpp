@@ -14,6 +14,10 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 class StateWriter;
@@ -22,7 +26,6 @@ class StateWriter;
 namespace av::icd {
 
 class IcdRoot;
-class LogSink;
 class WindowChains;
 class WindowSurface;
 struct PresentationProbe;

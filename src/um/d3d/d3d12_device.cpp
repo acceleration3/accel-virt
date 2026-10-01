@@ -2,9 +2,9 @@
  * them, fences, queries, and the slots that answer a fixed fact. */
 #include "um/d3d/d3d12_device.hpp"
 
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
@@ -44,7 +44,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 
 }  // namespace
 
-D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log,
+D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
     : session_(session), heaps_(heaps), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
@@ -103,13 +103,7 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
 void D3d12Device::refused(const char *slot, uint32_t hresult)
 {
     AV_SCOPE("D3d12Device::refused");
-    char       line[128] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: Direct3D 12 ");
-    text.append(slot);
-    text.append(" refused, HRESULT ");
-    text.append_hex(hresult, 8u);
-    log_.write(text.text());
+    LogLine(lines_).text("Direct3D 12 ").text(slot).text(" refused, HRESULT ").hex(hresult, 8u).write();
 }
 
 HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
@@ -145,11 +139,10 @@ void D3d12Device::lost(const char *what)
     AV_SCOPE("D3d12Device::lost");
     if (lost_) return;
     lost_ = true;
-    char       line[128] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: Direct3D 12 device lost: ");
-    text.append(what);
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("Direct3D 12 device lost: ")
+        .text(what)
+        .write();
     if (core_ != nullptr) core_->pfnSetErrorCb(runtime_, D3DDDIERR_DEVICEREMOVED);
 }
 

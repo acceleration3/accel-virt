@@ -21,10 +21,12 @@
 #ifndef AV_D3D9_SESSION_HPP
 #define AV_D3D9_SESSION_HPP
 
+#include "core/support/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/executor/guest_devices.hpp"
+#include "device/host/stdio_log.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_server.h"
 
 #include <stdint.h>
@@ -188,6 +190,9 @@ private:
     SharedSurfaces *surfaces_;
     D3dObjectTable &objects_;
     GuestDevices<IDirect3DDevice9, max_devices> devices_;
+    /* QEMU's stderr, where the host log is read when a guest's command fails. */
+    StdioLog        sink_;
+    DriverLog       lines_;
     CommandRefusal  refusal_;
     /* The decode arena of the command running; null between commands. */
     WireArena      *arena_;

@@ -1,12 +1,11 @@
 #include "device/executor/command_refusal.hpp"
 
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-
-#include <stdio.h>
 
 namespace av {
 
-CommandRefusal::CommandRefusal(const char *api) : api_(api)
+CommandRefusal::CommandRefusal(DriverLog &lines) : lines_(lines)
 {
     AV_SCOPE("CommandRefusal::CommandRefusal");
 }
@@ -15,11 +14,10 @@ bool CommandRefusal::removes(const char *command, uint32_t device, bool removed)
 {
     AV_SCOPE("CommandRefusal::removes");
     if (device == 0u) {
-        fprintf(stderr, "virtio-gpu-av: %s: %s refused with no device selected; the session faults\n", api_,
-                command);
+        LogLine(lines_).text(command).text(" refused with no device selected; the session faults").write();
         return false;
     }
-    if (!removed) fprintf(stderr, "virtio-gpu-av: %s: %s refused; device %u is removed\n", api_, command, device);
+    if (!removed) LogLine(lines_).text(command).text(" refused; device ").number(device).text(" is removed").write();
     return true;
 }
 

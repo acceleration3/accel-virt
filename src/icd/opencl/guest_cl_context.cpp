@@ -6,14 +6,14 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::clicd {
 
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
-                               icd::ThreadLock &send_lock, icd::LogSink &log,
+                               icd::ThreadLock &send_lock, LogSink &log,
                                icd::SharedHandles &handles)
     : memory_(memory), send_lock_(send_lock), log_(log),
       link_(connection), gl_share_(0u), 

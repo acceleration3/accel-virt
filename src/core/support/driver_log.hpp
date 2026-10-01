@@ -1,13 +1,13 @@
 /* A driver's lines (constitution IX), each prefixed with the driver's name -
  * "avvk: ", "avgl: ", "avcl: ", "avumd: ". KeyedLog adds the lines a caller
  * would otherwise write on every call, written once per key instead. */
-#ifndef AV_ICD_DRIVER_LOG_HPP
-#define AV_ICD_DRIVER_LOG_HPP
+#ifndef AV_DRIVER_LOG_HPP
+#define AV_DRIVER_LOG_HPP
 
 #include <stddef.h>
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 
 class LogSink;
 
@@ -32,6 +32,6 @@ private:
     const char *prefix_;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
-#endif  // AV_ICD_DRIVER_LOG_HPP
+#endif  // AV_DRIVER_LOG_HPP

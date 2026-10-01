@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "proto/wire/foreign_enum.hpp"
 #include "icd/vulkan/icd_root.hpp"

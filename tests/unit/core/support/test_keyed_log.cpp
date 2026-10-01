@@ -3,22 +3,22 @@
  * every call of an application that keeps calling. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 
 #include <cstdint>
 #include <cstring>
 
 using av::RecordingLog;
-using av::icd::KeyedLog;
+using av::KeyedLog;
 
-namespace av::icd {
+namespace av {
 
 /* A row another thread has taken and not yet written. */
 struct KeyedLogProbe {
     static void take_a_row(KeyedLog &log) { log.count_++; }
 };
 
-}  // namespace av::icd
+}  // namespace av
 
 namespace {
 
@@ -73,7 +73,7 @@ TEST(keyed_log, a_row_still_being_written_is_passed_over)
 { RecordingLog log;
   KeyedLog     lines(log, "avvk: ");
   CHECK(lines.first(entry, 1));
-  av::icd::KeyedLogProbe::take_a_row(lines);
+  av::KeyedLogProbe::take_a_row(lines);
   CHECK(lines.first(other, 1));
   CHECK_EQ(lines.keys(), 3u);
   CHECK(!lines.first(other, 1));

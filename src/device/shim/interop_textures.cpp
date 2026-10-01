@@ -1,5 +1,6 @@
 #include "device/shim/interop_textures.hpp"
 
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/dxvk_vulkan_device.hpp"
@@ -79,7 +80,8 @@ void InteropTextures::Slot::empty(const DxvkVulkanDevice &vulkan)
     memory_ = VK_NULL_HANDLE;
 }
 
-InteropTextures::InteropTextures(DxvkVulkanDevice &vulkan) : vulkan_(vulkan), slots_{}
+InteropTextures::InteropTextures(DxvkVulkanDevice &vulkan)
+    : vulkan_(vulkan), slots_{}, sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("InteropTextures::InteropTextures");
 }
@@ -98,9 +100,7 @@ InteropTextures::~InteropTextures()
 ID3D11Texture2D *InteropTextures::import(Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("InteropTextures::import");
-    const auto refuse = [](const char *why) {
-        fprintf(stderr, "virtio-gpu-av: d3d11: an image cannot be imported: %s\n", why);
-    };
+    const auto refuse = [this](const char *why) { lines_.name("an image cannot be imported:", why); };
     collect();
     Slot *const slot = vacant_slot();
     if (slot == nullptr || !image.whole() || !vulkan_.connected()) {
@@ -115,11 +115,16 @@ ID3D11Texture2D *InteropTextures::import(Vkd3dImageExport &image, const D3D11_TE
     }
     const VkMemoryRequirements needs = vulkan_.requirements(made);
     if (needs.size > image.size() || (needs.memoryTypeBits & (1u << image.memory_type())) == 0u) {
-        fprintf(stderr,
-                "virtio-gpu-av: d3d11: an image cannot be imported: it needs %llu bytes of types 0x%x, and "
-                "vkd3d-proton gave %llu of type %u\n",
-                static_cast<unsigned long long>(needs.size), needs.memoryTypeBits,
-                static_cast<unsigned long long>(image.size()), image.memory_type());
+        LogLine(lines_)
+            .text("an image cannot be imported: it needs ")
+            .number(needs.size)
+            .text(" bytes of types ")
+            .hex(needs.memoryTypeBits, 8u)
+            .text(", and vkd3d-proton gave ")
+            .number(image.size())
+            .text(" of type ")
+            .number(image.memory_type())
+            .write();
         vulkan_.destroy_image(made);
         return nullptr;
     }
@@ -189,7 +194,7 @@ ID3D11Texture2D *InteropTextures::wrap(Slot &slot, VkImage image, VkDeviceMemory
     slot.hold(image, memory);
     if (!vulkan_.wrap(desc, image, texture) ||
         FAILED(texture->SetPrivateDataInterface(slot_data, reinterpret_cast<IUnknown *>(&slot)))) {
-        fprintf(stderr, "virtio-gpu-av: d3d11: DXVK made no texture over an image of its own device\n");
+        lines_.write("DXVK made no texture over an image of its own device");
         if (texture != nullptr) texture->Release();
         slot.empty(vulkan_);
         return nullptr;

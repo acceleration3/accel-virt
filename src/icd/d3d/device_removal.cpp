@@ -1,13 +1,12 @@
 #include "icd/d3d/device_removal.hpp"
 
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 
 namespace av::d3d {
 namespace {
 
-constexpr uint32_t line_bytes = 128u;
 
 }  // namespace
 
@@ -39,19 +38,19 @@ Hresult DeviceRemoval::reason() const
     return reason_;
 }
 
-Hresult DeviceRemoval::check(icd::LogSink &log, const char *entry)
+Hresult DeviceRemoval::check(LogSink &log, const char *entry)
 {
     AV_SCOPE("DeviceRemoval::check");
     if (reason_ == hr_ok) return hr_ok;
     if (!reported_) {
         reported_ = true;
-        char       line[line_bytes] = {};
-        TextBuffer text(line, sizeof line);
-        text.append("avumd: device removed, ");
-        text.append(entry);
-        text.append(" answers 0x");
-        text.append_hex(static_cast<uint64_t>(static_cast<uint32_t>(reason_)), 8u);
-        log.write(text.text());
+        DriverLog lines(log, "avumd: ");
+        LogLine(lines)
+            .text("device removed, ")
+            .text(entry)
+            .text(" answers ")
+            .hex(static_cast<uint32_t>(reason_), 8u)
+            .write();
     }
     return reason_;
 }

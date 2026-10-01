@@ -9,7 +9,7 @@
 
 namespace av::glicd {
 
-WindowFramebuffers::WindowFramebuffers(BlockSource &memory, icd::LogSink &log)
+WindowFramebuffers::WindowFramebuffers(BlockSource &memory, LogSink &log)
     : memory_(memory), log_(log), presenters_{}, current_(max_windows), presented_(max_windows), draws_window_(false),
       reads_window_(false),
       read_buffer_(gl_back), ever_current_(false)

@@ -20,7 +20,7 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
@@ -34,12 +34,13 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 class D3dSession;
@@ -51,7 +52,7 @@ class D3d11HostCaps;
 
 class D3d11Device {
 public:
-    D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps);
+    D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
@@ -206,8 +207,8 @@ private:
     d3d::D3dSession          &session_;
     BlockSource           &memory_;
     WatchedShadows         shadows_;
-    icd::LogSink          &log_;
-    icd::KeyedLog         lines_;
+    LogSink          &log_;
+    KeyedLog         lines_;
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;

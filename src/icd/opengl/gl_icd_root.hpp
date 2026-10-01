@@ -12,6 +12,7 @@
 #ifndef AV_GLICD_GL_ICD_ROOT_HPP
 #define AV_GLICD_GL_ICD_ROOT_HPP
 
+#include "core/support/driver_log.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/common/icd_connection.hpp"
@@ -29,6 +30,10 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class Kmt;
@@ -36,7 +41,6 @@ class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 class ThreadLock;
 }  // namespace av::icd
 
@@ -68,7 +72,7 @@ public:
     static constexpr uint32_t swap_main_plane = 1u;
     static constexpr uint32_t max_pending = 64u;
 
-    GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, icd::LogSink &log,
+    GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, LogSink &log,
               icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentLoop &presents,
               GlIcdBinding &binding);
     ~GlIcdRoot();
@@ -171,7 +175,8 @@ private:
     void                 note_profile(const GuestGlContext &context);
 
     icd::ThreadLock  &lock_;
-    icd::LogSink     &log_;
+    LogSink     &log_;
+    DriverLog   lines_;
     icd::WindowSurface    &surface_;
     ThreadSlot       &slot_;
     SystemOpengl     &system_;

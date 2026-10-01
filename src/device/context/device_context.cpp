@@ -1,5 +1,7 @@
 #include "device/context/device_context.hpp"
 
+#include "core/support/driver_log.hpp"
+#include "core/support/log_line.hpp"
 #include "device/context/d3d_ordering.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -8,6 +10,7 @@
 #include "core/support/scope_exit.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/fence/fence_window.hpp"
+#include "device/host/stdio_log.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_window.hpp"
 #include "device/threading/work_item.hpp"
@@ -59,7 +62,16 @@ Status DeviceContext::post(const WorkItem &item)
 Status DeviceContext::refused(const char *step, Status status) const
 {
     AV_SCOPE("DeviceContext::refused");
-    fprintf(stderr, "virtio-gpu-av: context %u setup refused at %s, status %d\n", id_, step, static_cast<int>(status));
+    StdioLog  sink(stderr);
+    DriverLog lines(sink, "virtio-gpu-av: ");
+    LogLine(lines)
+        .text("context ")
+        .number(id_)
+        .text(" setup refused at ")
+        .text(step)
+        .text(", status ")
+        .number(static_cast<uint32_t>(status))
+        .write();
     return status;
 }
 

@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 
 #include "gl_dispatch_client.h"
@@ -31,7 +31,7 @@ uint32_t access_error(uint32_t access)
 
 }  // namespace
 
-MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, icd::LogSink &log)
+MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, LogSink &log)
     : memory_(memory), shadows_(shadows), log_(log), mappings_{}, persistent_writers_(0u), logged_(false)
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");

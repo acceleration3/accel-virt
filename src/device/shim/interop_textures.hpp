@@ -17,6 +17,9 @@
 #ifndef AV_INTEROP_TEXTURES_HPP
 #define AV_INTEROP_TEXTURES_HPP
 
+#include "core/support/driver_log.hpp"
+#include "device/host/stdio_log.hpp"
+
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
@@ -95,6 +98,9 @@ private:
 
     DxvkVulkanDevice &vulkan_;
     Slot              slots_[capacity];
+    /* QEMU's stderr: a refused import is seen nowhere else. */
+    StdioLog          sink_;
+    DriverLog         lines_;
 };
 
 }  // namespace av

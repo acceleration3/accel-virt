@@ -15,7 +15,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 #include "um/icd/once_body.hpp"
 #include "um/icd/run_once.hpp"
 #include "um/trace/process_trace.hpp"
@@ -73,7 +73,7 @@ void LazyDriver<Seams>::run_once()
     AV_SCOPE("LazyDriver::run_once");
     if (seams_.construct() != Status::ok) return;
     Seams         &seams = seams_.object();
-    icd::DriverLog lines(seams.log, prefix_);
+    DriverLog lines(seams.log, prefix_);
     if (seams.initialize() != Status::ok) {
         lines.write("no D3DKMT wait event; this process is refused");
         seams_.destroy();

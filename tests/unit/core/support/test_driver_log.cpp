@@ -1,13 +1,13 @@
 /* DriverLog: every line carries its driver's prefix. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 
 #include <cstdint>
 #include <cstring>
 
 using av::RecordingLog;
-using av::icd::DriverLog;
+using av::DriverLog;
 
 namespace {
 

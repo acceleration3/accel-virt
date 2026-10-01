@@ -50,7 +50,7 @@ struct WindowFramebuffersProbe {
     {
         return windows.presenters_[slot].object();
     }
-    static void copy_window(WindowFramebuffers &windows, BlockSource &memory, icd::LogSink &log, void *window)
+    static void copy_window(WindowFramebuffers &windows, BlockSource &memory, LogSink &log, void *window)
     {
         static_cast<void>(windows.presenters_[5].construct(memory, log));
         BackBufferPresenterProbe::set_window(windows.presenters_[5].object(), window);

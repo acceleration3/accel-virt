@@ -1,6 +1,8 @@
 #include "device/shim/d3d12_presentation.hpp"
 
+#include "core/support/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
+#include "device/host/stdio_log.hpp"
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
@@ -94,7 +96,8 @@ bool D3d12Presentation::connect()
     if (!device12_->export_fence(made, fd) || !device11_->vulkan().import_timeline(fd, waited_)) {
         if (fd >= 0) close(fd);
         made->Release();
-        fprintf(stderr, "virtio-gpu-av: d3d12: no timeline shared with DXVK; presents cannot be shown\n");
+        StdioLog sink(stderr);
+        DriverLog(sink, "virtio-gpu-av: d3d12: ").write("no timeline shared with DXVK; presents cannot be shown");
         return false;
     }
     fence_ = made;

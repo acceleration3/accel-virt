@@ -8,9 +8,9 @@
  * and every present hands the allocation to dxgkrnl through DXGI's present
  * callback, on a context of the device's own. */
 #include "core/platform/block_source.hpp"
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -66,11 +66,10 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
      * and the resource still made. */
     const HRESULT resident = paging_.object().make_resident(info.hAllocation);
     if (FAILED(resident)) {
-        char       line[96] = {};
-        TextBuffer text(line, sizeof(line));
-        text.append("avumd: the kernel would not keep a presented resource resident 0x");
-        text.append_hex(static_cast<uint32_t>(resident), 8u);
-        log_.write(text.text());
+        LogLine(lines_)
+            .text("the kernel would not keep a presented resource resident ")
+            .hex(static_cast<uint32_t>(resident), 8u)
+            .write();
     }
     resource.present_model = d3d::SwapChainBuffer(primary, create.MiscFlags).model();
     resource.vidpn_source = primary ? create.pPrimaryDesc->VidPnSourceId : 0u;
@@ -208,25 +207,23 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
 void D3d11Device::log_present(const char *what, uint32_t value, const ResourceRecord &source)
 {
     AV_SCOPE("D3d11Device::log_present");
-    char       line[192] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: ");
-    text.append(what);
-    text.append(" 0x");
-    text.append_hex(value, 8u);
-    text.append(" source 0x");
-    text.append_hex(source.allocation, 8u);
-    text.append(" model ");
-    text.append_decimal(static_cast<uint32_t>(source.present_model));
-    text.append(" output ");
-    text.append_decimal(source.vidpn_source);
-    text.append(" ");
-    text.append_decimal(source.width);
-    text.append("x");
-    text.append_decimal(source.height);
-    text.append(" format ");
-    text.append_decimal(source.format);
-    log_.write(text.text());
+    LogLine(lines_)
+        .text(what)
+        .text(" ")
+        .hex(value, 8u)
+        .text(" source ")
+        .hex(source.allocation, 8u)
+        .text(" model ")
+        .number(static_cast<uint32_t>(source.present_model))
+        .text(" output ")
+        .number(source.vidpn_source)
+        .text(" ")
+        .number(source.width)
+        .text("x")
+        .number(source.height)
+        .text(" format ")
+        .number(source.format)
+        .write();
 }
 
 HRESULT D3d11Device::follow_host()
@@ -235,11 +232,10 @@ HRESULT D3d11Device::follow_host()
     const HRESULT followed = follower_.constructed() ? follower_.object().follow(context_) : E_FAIL;
     if (SUCCEEDED(followed) || follow_refused_) return followed;
     follow_refused_ = true;
-    char       line[96] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: the kernel refused the packet that waits for the host 0x");
-    text.append_hex(static_cast<uint32_t>(followed), 8u);
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("the kernel refused the packet that waits for the host ")
+        .hex(static_cast<uint32_t>(followed), 8u)
+        .write();
     return followed;
 }
 

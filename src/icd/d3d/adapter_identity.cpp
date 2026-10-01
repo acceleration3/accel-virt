@@ -1,30 +1,18 @@
 #include "icd/d3d/adapter_identity.hpp"
 
+#include "core/support/driver_log.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 
 namespace av::d3d {
 namespace {
 
-constexpr uint32_t line_bytes = 128u;
 constexpr char     adapter_name[] = "avgpu paravirtual GPU";
-
-void note(icd::LogSink &log, const char *what, uint64_t value)
-{
-    AV_SCOPE("note");
-    char       line[line_bytes] = {};
-    TextBuffer text(line, sizeof line);
-    text.append("avumd: ");
-    text.append(what);
-    text.append(" ");
-    text.append_decimal(value);
-    log.write(text.text());
-}
 
 }  // namespace
 
@@ -34,19 +22,19 @@ AdapterIdentity::AdapterIdentity()
     AV_SCOPE("AdapterIdentity::AdapterIdentity");
 }
 
-Status AdapterIdentity::learn(Kmt &kmt, uint32_t adapter, icd::LogSink &log)
+Status AdapterIdentity::learn(Kmt &kmt, uint32_t adapter, LogSink &log)
 {
     AV_SCOPE("AdapterIdentity::learn");
     uint64_t     luid = 0ull;
     const Status had_luid = kmt.adapter_luid(adapter, luid);
     if (had_luid != Status::ok) {
-        note(log, "adapter luid refused, status", static_cast<uint64_t>(had_luid));
+        DriverLog(log, "avumd: ").note("adapter luid refused, status", static_cast<uint64_t>(had_luid));
         return Status::not_supported;
     }
     PciIdentity  identity;
     const Status had_identity = kmt.query_identity(adapter, identity);
     if (had_identity != Status::ok) {
-        note(log, "adapter identity refused, status", static_cast<uint64_t>(had_identity));
+        DriverLog(log, "avumd: ").note("adapter identity refused, status", static_cast<uint64_t>(had_identity));
         return Status::not_supported;
     }
     luid_ = luid;
@@ -59,14 +47,14 @@ Status AdapterIdentity::learn(Kmt &kmt, uint32_t adapter, icd::LogSink &log)
     return Status::ok;
 }
 
-uint64_t AdapterIdentity::budget(Kmt &kmt, uint32_t adapter, icd::LogSink &log, uint32_t group)
+uint64_t AdapterIdentity::budget(Kmt &kmt, uint32_t adapter, LogSink &log, uint32_t group)
 {
     AV_SCOPE("AdapterIdentity::budget");
     uint64_t     bytes = 0ull;
     uint64_t     used = 0ull;
     const Status asked = kmt.query_video_memory(adapter, static_cast<MemorySegmentGroup>(group), bytes, used);
     if (asked == Status::ok) return bytes;
-    note(log, "video memory refused for group", group);
+    DriverLog(log, "avumd: ").note("video memory refused for group", group);
     return 0ull;
 }
 

@@ -17,7 +17,7 @@
  * driver cannot tell the two apart: the runtime presents both alike. */
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/submission/present_point_record.hpp"

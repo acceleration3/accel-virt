@@ -9,7 +9,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "um/d3d/d3d12_device.hpp"
@@ -21,13 +21,14 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 struct D3d102ddiargGetCapsRecord;
@@ -38,7 +39,7 @@ namespace av::d3d12 {
 
 class D3d12Driver {
 public:
-    D3d12Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log);
+    D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log);
     D3d12Driver(const D3d12Driver &) = delete;
     D3d12Driver &operator=(const D3d12Driver &) = delete;
 
@@ -59,8 +60,8 @@ private:
 
     BlockSource                    &memory_;
     Kmt                            &kmt_;
-    icd::LogSink                   &log_;
-    icd::DriverLog                      lines_;
+    LogSink                   &log_;
+    DriverLog                      lines_;
     ObjectPool<D3d12Device>         devices_;
     D3d12HostCaps                   caps_[max_adapters];
     ObjectStorage<d3d::D3dSession>  sessions_[max_adapters];

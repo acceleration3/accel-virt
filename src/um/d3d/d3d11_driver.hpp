@@ -16,13 +16,14 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 class UmdAdapter;
@@ -35,7 +36,7 @@ namespace av::d3d11 {
 
 class D3d11Driver {
 public:
-    D3d11Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log);
+    D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log);
 
     d3d::Hresult build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create, uint32_t kmt_adapter);
     d3d::Hresult caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter);
@@ -52,7 +53,7 @@ private:
 
     BlockSource             &memory_;
     Kmt                     &kmt_;
-    icd::LogSink            &log_;
+    LogSink            &log_;
     ObjectPool<D3d11Device>  devices_;
     D3d11HostCaps            caps_[max_adapters];
     ObjectStorage<d3d::D3dSession> sessions_[max_adapters];

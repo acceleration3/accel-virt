@@ -28,7 +28,7 @@
 #define AV_UM_D3D12_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
@@ -40,9 +40,9 @@
 
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 class LogSink;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::d3d {
 class D3dSession;
@@ -60,7 +60,7 @@ public:
     static constexpr UINT descriptor_bytes = 32u;
 
     /* `list_table` is the driver's, and is filled after the device is made. */
-    D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log, const D3d12HostCaps &caps,
+    D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, LogSink &log, const D3d12HostCaps &caps,
                 void *const &list_table);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;
@@ -141,8 +141,8 @@ private:
 
     d3d::D3dSession                      &session_;
     d3d::D3d12HeapArena                  &heaps_;
-    icd::LogSink                         &log_;
-    icd::KeyedLog                         lines_;
+    LogSink                         &log_;
+    KeyedLog                         lines_;
     /* Refusals logged so far; some slots are asked in a loop. */
     const D3d12HostCaps                  &caps_;
     void *const                          &list_table_;

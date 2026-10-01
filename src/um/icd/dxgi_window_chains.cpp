@@ -1,10 +1,10 @@
 #include "um/icd/dxgi_window_chains.hpp"
 
+#include "core/support/log_line.hpp"
 #include "core/support/status.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
@@ -44,8 +44,8 @@ constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedOb
 
 }  // namespace
 
-DxgiWindowChains::DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log)
-    : kmt_(kmt), lock_(lock), log_(log), lines_(log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
+DxgiWindowChains::DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, LogSink &log)
+    : kmt_(kmt), lock_(lock), lines_(log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
       create_factory_(nullptr), compiler_(nullptr), compile_(nullptr), load_refused_(false),
       devices_(), chains_()
 {
@@ -451,11 +451,10 @@ void DxgiWindowChains::drop_device(Device &device)
 void DxgiWindowChains::refuse(const char *why)
 {
     AV_SCOPE("DxgiWindowChains::refuse");
-    char       line[160] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("av: no DXGI chain for a window: ");
-    text.append(why);
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("no DXGI chain for a window: ")
+        .text(why)
+        .write();
 }
 
 }  // namespace av

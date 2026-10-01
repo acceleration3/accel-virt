@@ -1,8 +1,8 @@
 #include "um/d3d/d3d9_driver.hpp"
 
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/umd_adapter.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
@@ -18,8 +18,8 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 
 }  // namespace
 
-D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
-    : memory_(memory), kmt_(kmt), log_(log), devices_(memory), caps_(), sessions_(), adapters_{}
+D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
+    : memory_(memory), kmt_(kmt), log_(log), lines_(log, "avumd: "), devices_(memory), caps_(), sessions_(), adapters_{}
 {
     AV_SCOPE("D3d9Driver::D3d9Driver");
 }
@@ -37,18 +37,17 @@ uint32_t D3d9Driver::slot_of(uint32_t kmt_adapter)
         }
         adapters_[slot] = kmt_adapter;
         const D3DCAPS9 &learned = caps_[slot].caps();
-        char            line[160] = {};
-        TextBuffer      text(line, sizeof(line));
-        text.append("avumd: Direct3D 9 caps: DevCaps 0x");
-        text.append_hex(learned.DevCaps, 8u);
-        text.append(" Caps2 0x");
-        text.append_hex(learned.Caps2, 8u);
-        text.append(" VertexProcessingCaps 0x");
-        text.append_hex(learned.VertexProcessingCaps, 8u);
-        text.append(" DevCaps2 0x");
-        text.append_hex(learned.DevCaps2, 8u);
-        text.append(caps_[slot].present_snapshots() ? " snapshots" : " no snapshots");
-        log_.write(text.text());
+        LogLine(lines_)
+            .text("Direct3D 9 caps: DevCaps ")
+            .hex(learned.DevCaps, 8u)
+            .text(" Caps2 ")
+            .hex(learned.Caps2, 8u)
+            .text(" VertexProcessingCaps ")
+            .hex(learned.VertexProcessingCaps, 8u)
+            .text(" DevCaps2 ")
+            .hex(learned.DevCaps2, 8u)
+            .text(caps_[slot].present_snapshots() ? " snapshots" : " no snapshots")
+            .write();
         return slot;
     }
     return max_adapters;

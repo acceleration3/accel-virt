@@ -5,7 +5,7 @@
 
 namespace av::clicd {
 
-ClRefusalLog::ClRefusalLog(icd::LogSink &log) : lines_(log, "avcl: ")
+ClRefusalLog::ClRefusalLog(LogSink &log) : lines_(log, "avcl: ")
 {
     AV_SCOPE("ClRefusalLog::ClRefusalLog");
 }

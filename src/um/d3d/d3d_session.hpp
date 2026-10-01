@@ -25,13 +25,14 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d11 {
 class D3d11Device;
@@ -48,7 +49,7 @@ public:
      * session's stream selects a device, waits for the host and flushes with
      * (D3dCommandStream::speak_with): Direct3D 11's for 11 and 12, Direct3D
      * 9's for 9. */
-    D3dSession(Kmt &kmt, BlockSource &memory, icd::LogSink &log, uint64_t arena_size, uint32_t select_command,
+    D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint32_t select_command,
                uint32_t finish_command, uint32_t flush_command);
     ~D3dSession();
     D3dSession(const D3dSession &) = delete;
@@ -85,7 +86,7 @@ private:
     void    close();
 
     BlockSource                         &memory_;
-    icd::LogSink                        &log_;
+    LogSink                        &log_;
     SrwLock                              lock_;
     GuestConnection                      connection_;
     icd::HostChannel                     channel_;

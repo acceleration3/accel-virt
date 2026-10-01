@@ -18,12 +18,15 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class ClientTransport;
 }
 
 namespace av::icd {
 
-class LogSink;
 struct PhysicalDeviceViewProbe;
 
 class PhysicalDeviceView {

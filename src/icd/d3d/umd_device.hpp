@@ -19,12 +19,13 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class StateWriter;
 }
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 
@@ -35,7 +36,7 @@ struct UmdDeviceProbe;
 
 class UmdDevice {
 public:
-    UmdDevice(UmdAdapter &adapter, icd::LogSink &log);
+    UmdDevice(UmdAdapter &adapter, LogSink &log);
     UmdDevice(const UmdDevice &) = delete;
     UmdDevice &operator=(const UmdDevice &) = delete;
 
@@ -64,7 +65,7 @@ public:
 
 private:
     UmdAdapter   &adapter_;
-    icd::LogSink &log_;
+    LogSink &log_;
     void         *runtime_device_;
     void         *runtime_core_layer_;
     const void   *kernel_callbacks_;

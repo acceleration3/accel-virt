@@ -20,6 +20,8 @@ struct ID3D12Fence;
 
 namespace av {
 
+class DriverLog;
+
 class D3d12FenceWake;
 struct D3d12QueueProgressProbe;
 
@@ -57,7 +59,7 @@ public:
     void               clear();
     /* Each queue's progress signalled and completed, to stderr: which queue
      * a drain that never finished is waiting for. */
-    void               log_stuck() const;
+    void               log_stuck(DriverLog &lines) const;
 
     /* The mark the latest execute left, 0 before the first. */
     uint64_t marked() const;

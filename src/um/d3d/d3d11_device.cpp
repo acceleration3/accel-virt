@@ -1,9 +1,9 @@
 #include "um/d3d/d3d11_device.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "proto/client_blob_arena.hpp"
@@ -37,7 +37,7 @@ constexpr uint32_t copy_discard = 0x2u;
 
 }  // namespace
 
-D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
+D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), shadows_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
@@ -128,11 +128,10 @@ uint32_t D3d11Device::next_id()
 void D3d11Device::set_error(HRESULT result)
 {
     AV_SCOPE("D3d11Device::set_error");
-    char line[96] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: device error 0x");
-    text.append_hex(static_cast<uint32_t>(result), 8u);
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("device error ")
+        .hex(static_cast<uint32_t>(result), 8u)
+        .write();
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
 }
 
@@ -546,13 +545,12 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
     }
     const Status ran = wire().execute(list.commands, list.length);
     if (ran == Status::ok) return;
-    char       line[96] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: a command list of ");
-    text.append_decimal(list.length);
-    text.append(" bytes could not be run, status ");
-    text.append_decimal(static_cast<uint32_t>(ran));
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("a command list of ")
+        .number(list.length)
+        .text(" bytes could not be run, status ")
+        .number(static_cast<uint32_t>(ran))
+        .write();
     set_error(D3DDDIERR_DEVICEREMOVED);
 }
 

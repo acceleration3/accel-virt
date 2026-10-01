@@ -22,12 +22,15 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class ClientTransport;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 class SharedHandles;
 }  // namespace av::icd
 
@@ -81,7 +84,7 @@ public:
     static constexpr uint32_t protected_memory = 0x959Bu;
     static constexpr uint32_t d3d12_fence_value = 0x9595u;
 
-    GlExternalObjects(icd::SharedHandles &handles, icd::LogSink &log);
+    GlExternalObjects(icd::SharedHandles &handles, LogSink &log);
     GlExternalObjects(const GlExternalObjects &) = delete;
     GlExternalObjects &operator=(const GlExternalObjects &) = delete;
 
@@ -150,7 +153,7 @@ private:
     void                     give_back(ClientTransport &wire, GlSharedObjectRow &row);
 
     icd::SharedHandles &handles_;
-    icd::LogSink       &log_;
+    LogSink       &log_;
     GlSharedObjectRow   rows_[max_objects];
     uint32_t            live_;
     /* The next name this ICD hands out. Its own counter, because the only

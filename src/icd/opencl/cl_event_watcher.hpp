@@ -27,12 +27,15 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class ClientTransport;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 }
 
 namespace av::clicd {
@@ -46,7 +49,7 @@ public:
      * is refused, which is a call the application can see fail. */
     static constexpr uint32_t max_registrations = 256u;
 
-    ClEventWatcher(icd::ServiceThread &thread, icd::LogSink &log, ClEventOwner &owner);
+    ClEventWatcher(icd::ServiceThread &thread, LogSink &log, ClEventOwner &owner);
     ~ClEventWatcher();
     ClEventWatcher(const ClEventWatcher &) = delete;
     ClEventWatcher &operator=(const ClEventWatcher &) = delete;
@@ -86,7 +89,7 @@ private:
     bool completed(const ClWatchedEvent &registration, cl_int &status) const;
 
     icd::ServiceThread &thread_;
-    icd::LogSink       &log_;
+    LogSink       &log_;
     ClEventOwner       &owner_;
     ClWatchedEvent      registrations_[max_registrations];
     uint32_t            held_;

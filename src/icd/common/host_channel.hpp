@@ -18,12 +18,16 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/batched_transport.hpp"
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
+
+namespace av {
+class LogSink;
+}  // namespace av
 
 namespace av {
 class BlockSource;
@@ -33,7 +37,6 @@ class StateWriter;
 
 namespace av::icd {
 
-class LogSink;
 struct HostChannelProbe;
 
 /* The sizes one driver's channels are opened at. */

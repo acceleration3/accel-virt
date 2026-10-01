@@ -6,11 +6,11 @@
 #ifndef AV_UM_FILE_LOG_HPP
 #define AV_UM_FILE_LOG_HPP
 
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 
 namespace av {
 
-class FileLog final : public icd::LogSink {
+class FileLog final : public LogSink {
 public:
     /* `stem` names the ICD (avvk, avgl) and outlives the log. */
     explicit FileLog(const wchar_t *stem);

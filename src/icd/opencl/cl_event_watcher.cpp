@@ -2,13 +2,13 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
 
-ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, icd::LogSink &log, ClEventOwner &owner)
+ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, LogSink &log, ClEventOwner &owner)
     : thread_(thread), log_(log), owner_(owner), registrations_(), held_(0u), delivered_(0u)
 {
     AV_SCOPE("ClEventWatcher::ClEventWatcher");

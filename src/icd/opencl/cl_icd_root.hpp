@@ -42,6 +42,10 @@
 #include <CL/cl_icd.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class Kmt;
@@ -49,7 +53,6 @@ class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 class ServiceThread;
 class ThreadLock;
 }  // namespace av::icd
@@ -73,7 +76,7 @@ public:
     static constexpr size_t  host_extensions_bytes = 4096u;
 
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-              icd::LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+              LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
               ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;
@@ -421,7 +424,7 @@ private:
     cl_int           refusal_for(ClObject::Kind kind) const;
 
     icd::ThreadLock       &lock_;
-    icd::LogSink          &log_;
+    LogSink          &log_;
     GlShareSource         &gl_share_;
     ClIcdBinding          &binding_;
     ClDispatchTable        dispatch_;

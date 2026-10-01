@@ -6,7 +6,7 @@
 
 namespace av::d3d {
 
-DeviceTable::DeviceTable(BlockSource &memory, icd::LogSink &log) : log_(log), devices_(memory)
+DeviceTable::DeviceTable(BlockSource &memory, LogSink &log) : log_(log), devices_(memory)
 {
     AV_SCOPE("DeviceTable::DeviceTable");
 }

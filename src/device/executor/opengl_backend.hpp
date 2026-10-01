@@ -8,12 +8,14 @@
 #ifndef AV_OPENGL_BACKEND_HPP
 #define AV_OPENGL_BACKEND_HPP
 
+#include "core/support/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/gl_error_tally.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/executor/sync_tokens.hpp"
+#include "device/host/stdio_log.hpp"
 #include "device/shim/gl_context.hpp"
 #include "device/shim/gl_host_import.hpp"
 #include "proto/generated/opengl/gl_real_dispatch.h"
@@ -107,6 +109,9 @@ private:
     bool        lost_;
     /* Whether this batch has made the context current yet. */
     bool        current_;
+    /* QEMU's stderr, where the host log is read when a guest's batch fails. */
+    StdioLog    sink_;
+    DriverLog   lines_;
 
     friend struct OpenGlBackendProbe;
 };

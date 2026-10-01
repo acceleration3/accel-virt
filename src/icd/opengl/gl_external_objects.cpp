@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/shared_object_call.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
@@ -17,7 +17,7 @@ constexpr uint32_t semaphore_kind = SharedObjectKind::monitored_fence;
 
 }  // namespace
 
-GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, icd::LogSink &log)
+GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, LogSink &log)
     : handles_(handles), log_(log), rows_{}, live_(0u), next_name_(1u)
 {
     AV_SCOPE("GlExternalObjects::GlExternalObjects");

@@ -1,9 +1,9 @@
 #include "icd/vulkan/swapchain.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/surface_properties.hpp"
@@ -129,15 +129,8 @@ VkResult Swapchain::judge(const VkSwapchainCreateInfoKHR &info, SurfacePropertie
 void Swapchain::refused(const char *what, uint64_t asked, uint64_t beside) const
 {
     AV_SCOPE("Swapchain::refused");
-    char       line[refusal_line_bytes] = {};
-    TextBuffer text(line, sizeof line);
-    text.append("avvk: a swapchain is refused on its ");
-    text.append(what);
-    text.append(": ");
-    text.append_decimal(asked);
-    text.append(" / ");
-    text.append_decimal(beside);
-    log_.write(text.text());
+    DriverLog lines(log_, "avvk: ");
+    LogLine(lines).text("a swapchain is refused on its ").text(what).text(": ").number(asked).text(" / ").number(beside).write();
 }
 
 VkResult Swapchain::images(uint32_t &count, VkImage *images) const

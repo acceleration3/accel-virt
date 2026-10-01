@@ -9,14 +9,14 @@
  * a log can afford. Past max_keys a line is not written at all rather than
  * flooding the log. The table is 4 KiB, so a class that only writes lines
  * holds a DriverLog. */
-#ifndef AV_ICD_KEYED_LOG_HPP
-#define AV_ICD_KEYED_LOG_HPP
+#ifndef AV_KEYED_LOG_HPP
+#define AV_KEYED_LOG_HPP
 
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 
 class LogSink;
 struct KeyedLogProbe;
@@ -48,6 +48,6 @@ private:
     uint32_t    count_;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
-#endif  // AV_ICD_KEYED_LOG_HPP
+#endif  // AV_KEYED_LOG_HPP

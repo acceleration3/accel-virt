@@ -3,9 +3,9 @@
 #include "um/d3d/d3d9_device.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -55,7 +55,7 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 }  // namespace
 
-D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d9HostCaps &caps,
+D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter)
     : session_(session), memory_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
@@ -174,16 +174,11 @@ void D3d9Device::trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uin
     AV_SCOPE("D3d9Device::trace");
     if (traced_ >= trace_most) return;
     traced_++;
-    char       line[128] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: d3d9 ");
-    text.append(call);
+    LogLine line(lines_);
+    line.text("d3d9 ").text(call);
     const uint32_t numbers[4] = {a, b, c, d};
-    for (const uint32_t number : numbers) {
-        text.append(" ");
-        text.append_decimal(number);
-    }
-    log_.write(text.text());
+    for (const uint32_t number : numbers) line.text(" ").number(number);
+    line.write();
 }
 
 uint64_t D3d9Device::microseconds() const

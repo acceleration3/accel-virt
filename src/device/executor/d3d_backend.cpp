@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "device/executor/dxbc_container.hpp"
@@ -72,7 +73,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), refusal_("d3d11"), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(),
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(),
       missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -725,8 +726,15 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     /* A key the table refuses is one no other process can open: the host log
      * is where the refusal is seen, since the creator is not told. */
     if (shared_key != 0u && !device11_->shared().publish(shared_key, made))
-        fprintf(stderr, "virtio-gpu-av: d3d11: shared key 0x%016llx not shared: already shared, or %u of %u held\n",
-                static_cast<unsigned long long>(shared_key), device11_->shared().count(), D3dSharedResources::capacity);
+        LogLine(lines_)
+            .text("shared key ")
+            .hex(shared_key, 16u)
+            .text(" not shared: already shared, or ")
+            .number(device11_->shared().count())
+            .text(" of ")
+            .number(D3dSharedResources::capacity)
+            .text(" held")
+            .write();
     return true;
 }
 
@@ -739,8 +747,13 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     IUnknown *const shared = device11_->find_shared(shared_key);
     if (shared == nullptr) {
         if (shared_key != missed_key_)
-            fprintf(stderr, "virtio-gpu-av: d3d11: no resource shared under key 0x%016llx; %u shared\n",
-                    static_cast<unsigned long long>(shared_key), device11_->shared().count());
+            LogLine(lines_)
+                .text("no resource shared under key ")
+                .hex(shared_key, 16u)
+                .text("; ")
+                .number(device11_->shared().count())
+                .text(" shared")
+                .write();
         missed_key_ = shared_key;
         return true;
     }

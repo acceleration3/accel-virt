@@ -14,7 +14,7 @@
 #define AV_D3D_UMD_ROOT_HPP
 
 #include "core/trace/state_reporter.hpp"
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/hresult.hpp"
@@ -25,12 +25,15 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 class ThreadLock;
 }  // namespace av::icd
 
@@ -49,7 +52,7 @@ struct D3d12ddiargOpenAdapterRecord;
 class UmdRoot final : public StateReporter {
 public:
     /* Binds itself into `binding` until destroyed. */
-    UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding,
+    UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log, UmdBinding &binding,
             UmdHostDriver *builder = nullptr);
     ~UmdRoot();
     UmdRoot(const UmdRoot &) = delete;
@@ -116,8 +119,8 @@ private:
 
     Kmt             &kmt_;
     icd::ThreadLock &lock_;
-    icd::LogSink    &log_;
-    icd::DriverLog       lines_;
+    LogSink    &log_;
+    DriverLog       lines_;
     UmdBinding      &binding_;
     UmdHostDriver *builder_;
     UmdConnections   connections_;

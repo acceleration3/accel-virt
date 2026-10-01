@@ -15,6 +15,7 @@
 #ifndef AV_D3D12_SESSION_HPP
 #define AV_D3D12_SESSION_HPP
 
+#include "core/support/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d12_address_map.hpp"
@@ -25,6 +26,7 @@
 #include "device/executor/d3d12_queue_progress.hpp"
 #include "device/executor/d3d12_view_writer.hpp"
 #include "device/executor/d3d_object_table.hpp"
+#include "device/host/stdio_log.hpp"
 #include "device/shim/d3d12_presentation.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_server.h"
 
@@ -187,6 +189,9 @@ private:
     /* The decoding command's arena, which containers are written into. */
     WireArena             *arena_;
     uint32_t               removed_;
+    /* QEMU's stderr, where the host log is read when a guest's command fails. */
+    StdioLog               sink_;
+    DriverLog              lines_;
     CommandRefusal         refusal_;
 };
 

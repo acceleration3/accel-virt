@@ -18,13 +18,14 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class StateWriter;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 
@@ -34,7 +35,7 @@ struct DeviceTableProbe;
 
 class DeviceTable {
 public:
-    DeviceTable(BlockSource &memory, icd::LogSink &log);
+    DeviceTable(BlockSource &memory, LogSink &log);
     DeviceTable(const DeviceTable &) = delete;
     DeviceTable &operator=(const DeviceTable &) = delete;
 
@@ -63,7 +64,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    icd::LogSink         &log_;
+    LogSink         &log_;
     ObjectPool<UmdDevice> devices_;
 
     friend struct DeviceTableProbe;

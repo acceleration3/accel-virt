@@ -1,5 +1,6 @@
 #include "device/executor/d3d12_queue_progress.hpp"
 
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 
 #include "device/executor/d3d12_fence_wake.hpp"
@@ -84,13 +85,18 @@ void D3d12QueueProgress::forget(uint32_t id)
     fences_[count_] = nullptr;
 }
 
-void D3d12QueueProgress::log_stuck() const
+void D3d12QueueProgress::log_stuck(DriverLog &lines) const
 {
     AV_SCOPE("D3d12QueueProgress::log_stuck");
     for (uint32_t slot = 0u; slot < count_; slot++)
-        fprintf(stderr, "virtio-gpu-av: d3d12: queue %u progress signalled %llu completed %llu\n", ids_[slot],
-                static_cast<unsigned long long>(signalled_[slot]),
-                static_cast<unsigned long long>(fences_[slot]->GetCompletedValue()));
+        LogLine(lines)
+            .text("queue ")
+            .number(ids_[slot])
+            .text(" progress signalled ")
+            .number(signalled_[slot])
+            .text(" completed ")
+            .number(fences_[slot]->GetCompletedValue())
+            .write();
 }
 
 void D3d12QueueProgress::clear()

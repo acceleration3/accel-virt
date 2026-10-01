@@ -31,12 +31,15 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class ClientTransport;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 class SharedHandles;
 }  // namespace av::icd
 
@@ -78,7 +81,7 @@ public:
         0x2060u,  /* CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_FD_KHR         */
         0x2067u}; /* CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR           */
 
-    ClExternalMemory(icd::SharedHandles &handles, icd::LogSink &log);
+    ClExternalMemory(icd::SharedHandles &handles, LogSink &log);
     ClExternalMemory(const ClExternalMemory &) = delete;
     ClExternalMemory &operator=(const ClExternalMemory &) = delete;
 
@@ -138,7 +141,7 @@ private:
     bool                 holds(uint64_t object_id) const;
 
     icd::SharedHandles &handles_;
-    icd::LogSink       &log_;
+    LogSink       &log_;
     ClImportedMemoryRow rows_[max_objects];
     uint32_t            live_;
 };

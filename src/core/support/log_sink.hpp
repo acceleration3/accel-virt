@@ -2,10 +2,10 @@
  * where it is decided, with the value that decided it. The Windows shim appends
  * to a file under ProgramData that the guest runner collects; a test records
  * them. */
-#ifndef AV_ICD_LOG_SINK_HPP
-#define AV_ICD_LOG_SINK_HPP
+#ifndef AV_LOG_SINK_HPP
+#define AV_LOG_SINK_HPP
 
-namespace av::icd {
+namespace av {
 
 class LogSink {
 public:
@@ -20,6 +20,6 @@ protected:
     ~LogSink() = default;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
-#endif  // AV_ICD_LOG_SINK_HPP
+#endif  // AV_LOG_SINK_HPP

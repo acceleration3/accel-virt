@@ -6,7 +6,7 @@
 
 namespace av {
 
-UmdDrivers::UmdDrivers(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
+UmdDrivers::UmdDrivers(BlockSource &memory, Kmt &kmt, LogSink &log)
     : d3d11_(memory, kmt, log), d3d12_(memory, kmt, log), d3d9_(memory, kmt, log)
 {
     AV_SCOPE("UmdDrivers::UmdDrivers");

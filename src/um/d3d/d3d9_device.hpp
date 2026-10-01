@@ -19,7 +19,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
@@ -33,12 +33,13 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 class D3dSession;
@@ -51,7 +52,7 @@ class D3d9HostCaps;
 
 class D3d9Device {
 public:
-    D3d9Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d9HostCaps &caps,
+    D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
                d3d::UmdAdapter &adapter);
     ~D3d9Device();
     D3d9Device(const D3d9Device &) = delete;
@@ -192,8 +193,8 @@ private:
 
     d3d::D3dSession                     &session_;
     BlockSource                         &memory_;
-    icd::LogSink                        &log_;
-    icd::KeyedLog                        lines_;
+    LogSink                        &log_;
+    KeyedLog                        lines_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
     SrwLock                              lock_;

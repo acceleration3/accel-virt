@@ -15,6 +15,7 @@
 #ifndef AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 #define AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 
+#include "core/support/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
 #include "icd/opengl/chained_frames.hpp"
@@ -26,13 +27,16 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 }
 
 namespace av::icd {
@@ -64,7 +68,7 @@ public:
         gl_pack_alignment = 0x0D05u, gl_pack_skip_images = 0x806Bu, gl_pack_image_height = 0x806Cu,
     };
 
-    BackBufferPresenter(BlockSource &memory, icd::LogSink &log);
+    BackBufferPresenter(BlockSource &memory, LogSink &log);
     ~BackBufferPresenter();
     BackBufferPresenter(const BackBufferPresenter &) = delete;
     BackBufferPresenter &operator=(const BackBufferPresenter &) = delete;
@@ -142,7 +146,8 @@ private:
     size_t               stored_bytes() const;
 
     BlockSource  &memory_;
-    icd::LogSink &log_;
+    LogSink &log_;
+    DriverLog lines_;
     void         *window_;
     PixelFormat   format_;
     uint32_t      width_;

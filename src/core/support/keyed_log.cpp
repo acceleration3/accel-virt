@@ -1,8 +1,8 @@
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 
 #include "core/trace/function_scope.hpp"
 
-namespace av::icd {
+namespace av {
 
 KeyedLog::KeyedLog(LogSink &sink, const char *prefix)
     : DriverLog(sink, prefix), keys_(), codes_(), ready_(), count_(0u)
@@ -47,4 +47,4 @@ uint32_t KeyedLog::keys() const
     return count < max_keys ? count : max_keys;
 }
 
-}  // namespace av::icd
+}  // namespace av

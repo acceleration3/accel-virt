@@ -14,13 +14,16 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 }
 
 namespace av::glicd {
@@ -40,7 +43,7 @@ public:
         gl_buffer_map_length = 0x9120u, gl_buffer_map_offset = 0x9121u,
     };
 
-    MappedBuffers(BlockSource &memory, BufferShadows &shadows, icd::LogSink &log);
+    MappedBuffers(BlockSource &memory, BufferShadows &shadows, LogSink &log);
     ~MappedBuffers();
     MappedBuffers(const MappedBuffers &) = delete;
     MappedBuffers &operator=(const MappedBuffers &) = delete;
@@ -81,7 +84,7 @@ private:
 
     BlockSource                   &memory_;
     BufferShadows                 &shadows_;
-    icd::LogSink                  &log_;
+    LogSink                  &log_;
     ObjectStorage<BufferMapping>   mappings_[max_mappings];
     uint32_t                       persistent_writers_;
     bool                           logged_;

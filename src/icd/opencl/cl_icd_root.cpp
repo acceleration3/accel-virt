@@ -11,7 +11,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/common/unanswered_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
@@ -52,7 +52,7 @@ void report_error(cl_int *error, cl_int value)
 }  // namespace
 
 ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
-                     icd::ThreadLock &send_lock, icd::LogSink &log,
+                     icd::ThreadLock &send_lock, LogSink &log,
                      icd::ServiceThread &watcher_thread, GlShareSource &gl_share, ClIcdBinding &binding)
     : lock_(lock), log_(log), gl_share_(gl_share), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table()), connection_(kmt),

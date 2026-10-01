@@ -15,13 +15,14 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class Kmt;
 class StateWriter;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 
@@ -38,7 +39,7 @@ public:
     /* not_supported when the LUID or the PCI identity cannot be had, each
      * logged once; ok otherwise, with a refused budget left at zero and
      * logged. Learning again overwrites rather than accumulates. */
-    [[nodiscard]] Status learn(Kmt &kmt, uint32_t adapter, icd::LogSink &log);
+    [[nodiscard]] Status learn(Kmt &kmt, uint32_t adapter, LogSink &log);
 
     uint64_t    luid() const;
     uint32_t    vendor_id() const;
@@ -53,7 +54,7 @@ public:
 
 private:
     /* The group's budget, or zero with one log line. */
-    uint64_t budget(Kmt &kmt, uint32_t adapter, icd::LogSink &log, uint32_t group);
+    uint64_t budget(Kmt &kmt, uint32_t adapter, LogSink &log, uint32_t group);
 
     uint64_t luid_;
     uint32_t vendor_id_;

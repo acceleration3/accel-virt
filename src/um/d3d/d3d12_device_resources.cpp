@@ -2,9 +2,9 @@
  * GPU virtual address this device hands out, and a CPU-visible heap placed in
  * the session's arena so that what the application maps is what the host's
  * GPU reads. */
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
@@ -149,27 +149,26 @@ uint64_t D3d12Device::allocation_bytes(const d3d12proto::ResourceDesc &desc, uin
 void D3d12Device::log_unsized(const d3d12proto::ResourceDesc &desc)
 {
     AV_SCOPE("D3d12Device::log_unsized");
-    char       line[192] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: the host sizes no resource: dimension ");
-    text.append_decimal(desc.dimension);
-    text.append(" format ");
-    text.append_decimal(desc.format);
-    text.append(" ");
-    text.append_decimal(static_cast<uint32_t>(desc.width));
-    text.append("x");
-    text.append_decimal(desc.height);
-    text.append("x");
-    text.append_decimal(desc.depth_or_array);
-    text.append(" mips ");
-    text.append_decimal(desc.mip_levels);
-    text.append(" samples ");
-    text.append_decimal(desc.sample_count);
-    text.append(" layout ");
-    text.append_decimal(desc.layout);
-    text.append(" flags 0x");
-    text.append_hex(desc.flags, 8u);
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("the host sizes no resource: dimension ")
+        .number(desc.dimension)
+        .text(" format ")
+        .number(desc.format)
+        .text(" ")
+        .number(static_cast<uint32_t>(desc.width))
+        .text("x")
+        .number(desc.height)
+        .text("x")
+        .number(desc.depth_or_array)
+        .text(" mips ")
+        .number(desc.mip_levels)
+        .text(" samples ")
+        .number(desc.sample_count)
+        .text(" layout ")
+        .number(desc.layout)
+        .text(" flags ")
+        .hex(desc.flags, 8u)
+        .write();
 }
 
 HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed)

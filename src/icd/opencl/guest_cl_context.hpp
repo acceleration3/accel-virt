@@ -33,6 +33,10 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
@@ -40,7 +44,6 @@ class StateWriter;
 
 namespace av::icd {
 class IcdConnection;
-class LogSink;
 class SharedHandles;
 class ThreadLock;
 }  // namespace av::icd
@@ -74,7 +77,7 @@ public:
     static constexpr uint32_t max_mappings = 64u;
 
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                   icd::LogSink &log, icd::SharedHandles &handles);
+                   LogSink &log, icd::SharedHandles &handles);
     ~GuestClContext();
     GuestClContext(const GuestClContext &) = delete;
     GuestClContext &operator=(const GuestClContext &) = delete;
@@ -148,7 +151,7 @@ private:
 
     BlockSource        &memory_;
     icd::ThreadLock    &send_lock_;
-    icd::LogSink       &log_;
+    LogSink       &log_;
     icd::ContextLink    link_;
     uint32_t            gl_share_;
     icd::HostChannel                     channel_;

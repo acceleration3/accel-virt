@@ -1,15 +1,15 @@
 #include "icd/opengl/gl_icd_root.hpp"
 
+#include "core/support/log_line.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/window_visibility.hpp"
 
 #include "core/support/scope_exit.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/extension_policy.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/opengl/context_attributes.hpp"
@@ -63,7 +63,6 @@ const SharedObjectEntry shared_object_entries[] = {
 /* glGetError's slot in opengl32's table (tools/codegen/profiles/opengl_proc_table.txt). */
 constexpr uint32_t get_error_slot = 261u;
 constexpr uint32_t get_integerv_slot = 263u;
-constexpr uint32_t line_bytes = 160u;
 /* ARB_robustness, KHR_robustness, EXT_robustness and GL 4.5 all name one query. */
 constexpr const char *const reset_status_names[] = {"glGetGraphicsResetStatus", "glGetGraphicsResetStatusARB",
                                                     "glGetGraphicsResetStatusEXT", "glGetGraphicsResetStatusKHR"};
@@ -125,9 +124,9 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 }  // namespace
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-                     icd::LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
+                     LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlPresentLoop &presents, GlIcdBinding &binding)
-    : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), presents_(presents),
+    : lock_(lock), log_(log), lines_(log, "avgl: "), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
       query_(formats_), windows_(), currents_(slot), connection_(kmt),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
@@ -622,36 +621,23 @@ void GlIcdRoot::note_profile(const GuestGlContext &context)
     if (profile_noted_) return;
     profile_noted_ = true;
     const GrantedProfile &profile = context.profile();
-    char                  line[line_bytes];
-    TextBuffer            text(line, sizeof line);
-    text.append("avgl: the host granted a ");
+    LogLine line(lines_);
+    line.text("the host granted a ");
     if (profile.mask() == GrantedProfile::compatibility_bit)
-        text.append("compatibility");
+        line.text("compatibility");
     else if (profile.mask() == GrantedProfile::core_bit)
-        text.append("core");
+        line.text("core");
     else if (profile.known())
-        text.append("profileless");
+        line.text("profileless");
     else
-        text.append("silent");
-    text.append(" context, version ");
-    text.append_decimal(profile.major());
-    text.append(".");
-    text.append_decimal(profile.minor());
-    log_.write(text.text());
+        line.text("silent");
+    line.text(" context, version ").number(profile.major()).text(".").number(profile.minor()).write();
 }
 
 void GlIcdRoot::note_dropped(const char *api, const char *command, size_t written)
 {
     AV_SCOPE("GlIcdRoot::note_dropped");
-    char       line[line_bytes];
-    TextBuffer text(line, sizeof line);
-    text.append("avgl: ");
-    text.append(api);
-    text.append(" ");
-    text.append(command);
-    text.append(" not sent: its encoding overflowed at byte ");
-    text.append_decimal(written);
-    log_.write(text.text());
+    LogLine(lines_).text(api).text(" ").text(command).text(" not sent: its encoding overflowed at byte ").number(written).write();
 }
 
 void GlIcdRoot::report(StateWriter &writer)

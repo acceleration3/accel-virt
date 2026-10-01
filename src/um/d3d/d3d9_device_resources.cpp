@@ -8,9 +8,10 @@
  * The runtime keeps the managed pool itself and fills it with TexBlt and
  * BufBlt from system memory of its own, which is copied from where it lies. */
 #include "core/platform/block_source.hpp"
+#include "core/support/log_line.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -438,14 +439,13 @@ HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box
         if (!room || !d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
                                                        done == 0u ? flags : flags & ~write_discard,
                                                        data + size_t{done} * row_pitch, bytes)) {
-            char       said[160] = {};
-            TextBuffer text(said, sizeof(said));
-            text.append("avumd: a texture write of ");
-            text.append_decimal(bytes);
-            text.append(" bytes, pitch ");
-            text.append_decimal(row_pitch);
-            text.append(room ? " was refused by the encoder" : " found no room in the arena");
-            log_.write(text.text());
+            LogLine(lines_)
+                .text("a texture write of ")
+                .number(bytes)
+                .text(" bytes, pitch ")
+                .number(row_pitch)
+                .text(room ? " was refused by the encoder" : " found no room in the arena")
+                .write();
             return lost(__func__);
         }
     }

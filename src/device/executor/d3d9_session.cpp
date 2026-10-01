@@ -20,7 +20,7 @@ constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
 }  // namespace
 
 D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects)
-    : region_(region), host_(nullptr), surfaces_(nullptr), objects_(objects), devices_(), refusal_("d3d9"), arena_(nullptr)
+    : region_(region), host_(nullptr), surfaces_(nullptr), objects_(objects), devices_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }

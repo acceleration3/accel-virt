@@ -5,7 +5,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "icd/common/icd_connection.hpp"
@@ -25,7 +25,7 @@ constexpr uint32_t no_error = 0u;
 }  // namespace
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                               icd::LogSink &log, const GlExtensionPolicy &extensions,
+                               LogSink &log, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
     : memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),

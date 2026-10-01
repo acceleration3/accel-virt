@@ -1,10 +1,10 @@
-#include "icd/common/driver_log.hpp"
+#include "core/support/driver_log.hpp"
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 
-namespace av::icd {
+namespace av {
 
 DriverLog::DriverLog(LogSink &sink, const char *prefix)
     : sink_(sink), prefix_(prefix)
@@ -58,4 +58,4 @@ void DriverLog::name(const char *what, const char *name)
     sink_.write(text.text());
 }
 
-}  // namespace av::icd
+}  // namespace av

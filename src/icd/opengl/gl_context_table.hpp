@@ -28,7 +28,7 @@ class GlContextTable {
 public:
     static constexpr uint32_t max_contexts = 256u;
 
-    GlContextTable(BlockSource &memory, icd::IcdConnection &connection, icd::ThreadLock &send_lock, icd::LogSink &log,
+    GlContextTable(BlockSource &memory, icd::IcdConnection &connection, icd::ThreadLock &send_lock, LogSink &log,
                    const GlExtensionPolicy &extensions, icd::SharedHandles &handles);
     GlContextTable(const GlContextTable &) = delete;
     GlContextTable &operator=(const GlContextTable &) = delete;
@@ -56,7 +56,7 @@ private:
     BlockSource                &memory_;
     icd::IcdConnection               &connection_;
     icd::ThreadLock            &send_lock_;
-    icd::LogSink               &log_;
+    LogSink               &log_;
     const GlExtensionPolicy    &extensions_;
     icd::SharedHandles         &handles_;
     ObjectPool<GuestGlContext>  pool_;

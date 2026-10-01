@@ -20,7 +20,7 @@
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 #include "icd/common/window_chains.hpp"
 #include "um/icd/com_reference.hpp"
 
@@ -38,11 +38,14 @@ struct IDXGIFactory2;
 struct IDXGISwapChain1;
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 
 class Kmt;
 
 namespace icd {
-class LogSink;
 class ThreadLock;
 }  // namespace icd
 
@@ -54,7 +57,7 @@ public:
      * finishes nothing in two seconds is given before the slot is let go. */
     static constexpr uint32_t copy_looks = 2000u;
 
-    DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log);
+    DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, LogSink &log);
     ~DxgiWindowChains();
     DxgiWindowChains(const DxgiWindowChains &) = delete;
     DxgiWindowChains &operator=(const DxgiWindowChains &) = delete;
@@ -122,8 +125,7 @@ private:
 
     Kmt             &kmt_;
     icd::ThreadLock &lock_;
-    icd::LogSink    &log_;
-    icd::KeyedLog   lines_;
+    KeyedLog   lines_;
     void            *d3d11_;
     void            *dxgi_;
     void            *create_device_;

@@ -22,7 +22,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
-#include "icd/common/keyed_log.hpp"
+#include "core/support/keyed_log.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
@@ -45,6 +45,10 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class Kmt;
@@ -52,7 +56,6 @@ class Kmt;
 
 namespace av::icd {
 
-class LogSink;
 class WindowChains;
 class WindowSurface;
 class MemoryTypeTable;

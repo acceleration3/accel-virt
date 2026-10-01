@@ -7,7 +7,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 
 #include <cstdint>
@@ -82,7 +82,7 @@ TEST(lock_trace, is_cut_at_its_capacity_and_marks_the_cut)
 
 TEST(recording_log, keeps_each_line_and_finds_what_they_hold)
 { RecordingLog log;
-  av::icd::LogSink &sink = log;
+  av::LogSink &sink = log;
   CHECK_EQ(log.lines(), 0u);
   CHECK(std::strcmp(log.line(0u), "") == 0);
   sink.write("avvk: refused 4");

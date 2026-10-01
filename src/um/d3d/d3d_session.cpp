@@ -3,12 +3,12 @@
 #include "core/platform/block_source.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::d3d {
 
-D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, icd::LogSink &log, uint64_t arena_size,
+D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size,
                        uint32_t select_command, uint32_t finish_command, uint32_t flush_command)
     : memory_(memory), log_(log), lock_(), connection_(kmt),
       channel_(memory, log, "avumd: ",

@@ -1,7 +1,10 @@
 #include "device/control/control_request.hpp"
 
+#include "core/support/driver_log.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
+#include "device/host/stdio_log.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 
 #include <stdio.h>
@@ -30,7 +33,9 @@ void ControlRequest::respond(const GpuResponse &response)
         uint8_t bytes[sizeof(uint32_t)] = {};
         static_cast<void>(host_.read_request(request_, 0u, bytes, sizeof bytes));
         const uint32_t command = static_cast<uint32_t>(bytes[0]) | static_cast<uint32_t>(bytes[1]) << 8u;
-        fprintf(stderr, "virtio-gpu-av: command 0x%04x answered 0x%04x\n", command, response.type());
+        StdioLog  sink(stderr);
+        DriverLog lines(sink, "virtio-gpu-av: ");
+        LogLine(lines).text("command ").hex(command, 4u).text(" answered ").hex(response.type(), 4u).write();
     }
     host_.respond(request_, response.bytes(), response.length());
     responded_ = true;

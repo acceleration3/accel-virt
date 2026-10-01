@@ -7,9 +7,9 @@
  * kernel copies the frame from the allocation's pages into the window, so
  * the host's pixels are read back into them first. A buffer gets its
  * allocation the first time it is presented. */
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "um/d3d/d3d9_device.hpp"
@@ -140,13 +140,12 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     if (source->allocation == 0u) {
         const HRESULT made = allocate(*source);
         if (FAILED(made)) {
-            char       line[96] = {};
-            TextBuffer text(line, sizeof(line));
-            text.append("avumd: a Direct3D 9 buffer of format ");
-            text.append_decimal(static_cast<uint32_t>(source->format));
-            text.append(" has no allocation to present 0x");
-            text.append_hex(static_cast<uint32_t>(made), 8u);
-            log_.write(text.text());
+            LogLine(lines_)
+                .text("a Direct3D 9 buffer of format ")
+                .number(static_cast<uint32_t>(source->format))
+                .text(" has no allocation to present ")
+                .hex(static_cast<uint32_t>(made), 8u)
+                .write();
             return made;
         }
     }

@@ -1,5 +1,6 @@
 #include "device/executor/opengl_backend.hpp"
 
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/executor/gl_context_attributes.hpp"
 #include "device/executor/imported_blob.hpp"
@@ -57,7 +58,7 @@ uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
 
 OpenGlBackend::OpenGlBackend()
     : context_(), gl_(), import_(), objects_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
-      lost_(false), current_(false)
+      lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
@@ -138,13 +139,12 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     /* Named here, because all the guest learns is that its batch could not
      * be decoded, and the device's fault names only the fence. */
     if (!current_ && !context_.make_current()) {
-        fprintf(stderr, "virtio-gpu-av: opengl: the context could not be made current for %s\n",
-                glproto::cmd_id_to_string(command_id));
+        lines_.name("the context could not be made current for", glproto::cmd_id_to_string(command_id));
         return false;
     }
     current_ = true;
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
-        fprintf(stderr, "virtio-gpu-av: opengl: %s could not run\n", glproto::cmd_id_to_string(command_id));
+        LogLine(lines_).text(glproto::cmd_id_to_string(command_id)).text(" could not run").write();
         return false;
     }
     ran_++;

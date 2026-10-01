@@ -1,10 +1,10 @@
 /* The creation slots: every object the runtime makes is made on the host under
  * an id this device hands out, and its record kept in the runtime's block. */
 #include "core/platform/block_source.hpp"
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/shared_object_call.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -188,13 +188,12 @@ void D3d11Device::publish_shared(const ResourceRecord &resource)
     const uint64_t   bytes = d3d::KernelSurface(resource.width, resource.height, resource.format).bytes();
     SharedObjectCall call(wire());
     if (call.share(resource.shared_key, SharedObjectKind::memory, bytes, resource.id) == Status::ok) return;
-    char       line[128] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: a shared texture of format ");
-    text.append_decimal(resource.format);
-    text.append(" cannot be opened by OpenGL or Vulkan, status ");
-    text.append_decimal(call.device_status());
-    log_.write(text.text());
+    LogLine(lines_)
+        .text("a shared texture of format ")
+        .number(resource.format)
+        .text(" cannot be opened by OpenGL or Vulkan, status ")
+        .number(call.device_status())
+        .write();
 }
 
 VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_HRESOURCE handle,
@@ -227,25 +226,21 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     for (uint32_t attempt = 0u; sent && found == 0u && attempt < open_attempts; attempt++)
         sent = d3dproto::av_d3d_OpenResource(wire(), resource.id, key, &found, &desc);
     if (!sent || found == 0u) {
-        char line[160] = {};
-        TextBuffer text(line, sizeof(line));
-        text.append("avumd: a shared resource no Direct3D session on the host made: key 0x");
-        text.append_hex(static_cast<uint32_t>(key >> 32u), 8u);
-        text.append_hex(static_cast<uint32_t>(key), 8u);
-        text.append(" allocations 0x");
-        text.append_hex(args->NumAllocations, 2u);
-        text.append(" resource data 0x");
-        text.append_hex(args->PrivateDriverDataSize, 4u);
-        text.append(" allocation data 0x");
-        text.append_hex(args->NumAllocations != 0u ? args->pOpenAllocationInfo2[0].PrivateDriverDataSize : 0u, 4u);
+        LogLine line(lines_);
+        line.text("a shared resource no Direct3D session on the host made: key ")
+            .hex(key, 16u)
+            .text(" allocations ")
+            .hex(args->NumAllocations, 2u)
+            .text(" resource data ")
+            .hex(args->PrivateDriverDataSize, 4u)
+            .text(" allocation data ")
+            .hex(args->NumAllocations != 0u ? args->pOpenAllocationInfo2[0].PrivateDriverDataSize : 0u, 4u);
         if (args->NumAllocations != 0u && args->pOpenAllocationInfo2[0].PrivateDriverDataSize >= 8u) {
-            text.append(" head 0x");
-            uint32_t head[2] = {};
-            __builtin_memcpy(head, args->pOpenAllocationInfo2[0].pPrivateDriverData, sizeof(head));
-            text.append_hex(head[0], 8u);
-            text.append_hex(head[1], 8u);
+            uint64_t head = 0u;
+            __builtin_memcpy(&head, args->pOpenAllocationInfo2[0].pPrivateDriverData, sizeof(head));
+            line.text(" head ").hex(head, 16u);
         }
-        log_.write(text.text());
+        line.write();
         set_error(E_INVALIDARG);
         return;
     }

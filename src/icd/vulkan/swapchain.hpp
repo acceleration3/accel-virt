@@ -18,6 +18,10 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
@@ -26,7 +30,6 @@ namespace av::icd {
 
 class Connection;
 class EntryLookup;
-class LogSink;
 class SurfaceProperties;
 class WindowChains;
 class WindowSurface;
@@ -69,8 +72,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr size_t refusal_line_bytes = 128u;
-
     [[nodiscard]] VkResult judge(const VkSwapchainCreateInfoKHR &info, SurfaceProperties &surface) const;
     /* One log line naming what a create asked that this refuses, and the
      * value beside it: what is offered, or the other half of the pair. */

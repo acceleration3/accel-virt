@@ -1,10 +1,10 @@
 #include "icd/opengl/back_buffer_presenter.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/text_buffer.hpp"
+#include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
@@ -17,15 +17,14 @@ namespace av::glicd {
 
 namespace {
 
-constexpr uint32_t line_bytes = 128u;
 
 }  // namespace
 
 static_assert(BackBufferPresenter::max_edge * 4u <= BackBufferPresenter::inline_read_bytes,
               "a read-back of one row fits a reply");
 
-BackBufferPresenter::BackBufferPresenter(BlockSource &memory, icd::LogSink &log)
-    : memory_(memory), log_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
+BackBufferPresenter::BackBufferPresenter(BlockSource &memory, LogSink &log)
+    : memory_(memory), log_(log), lines_(log, "avgl: "), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
       framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(false),
       loop_(nullptr), arena_(nullptr), room_(), pending_(slot_count), pending_chained_(false), chained_(),
       chain_refused_(false)
@@ -123,13 +122,7 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     /* What the window is showing now is what a read of GL_FRONT answers. */
     front_.presented(pixels_, width_, height_);
     if (surface.blit(dc, width_, height_, pixels_) || refusal_logged_) return true;
-    char       line[line_bytes];
-    TextBuffer text(line, sizeof line);
-    text.append("avgl: the window's DC refused a frame of ");
-    text.append_decimal(width_);
-    text.append("x");
-    text.append_decimal(height_);
-    log_.write(text.text());
+    LogLine(lines_).text("the window's DC refused a frame of ").number(width_).text("x").number(height_).write();
     refusal_logged_ = true;
     return true;
 }

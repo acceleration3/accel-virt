@@ -14,13 +14,16 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 }
 
 namespace av::icd {
@@ -45,7 +48,7 @@ public:
         gl_framebuffer = 0x8D40u,
     };
 
-    WindowFramebuffers(BlockSource &memory, icd::LogSink &log);
+    WindowFramebuffers(BlockSource &memory, LogSink &log);
     ~WindowFramebuffers();
     WindowFramebuffers(const WindowFramebuffers &) = delete;
     WindowFramebuffers &operator=(const WindowFramebuffers &) = delete;
@@ -107,7 +110,7 @@ private:
     uint32_t find(void *window) const;
 
     BlockSource                        &memory_;
-    icd::LogSink                       &log_;
+    LogSink                       &log_;
     ObjectStorage<BackBufferPresenter>  presenters_[max_windows];
     uint32_t                            current_;
     /* The presenter the last present read a frame for; max_windows when none. */

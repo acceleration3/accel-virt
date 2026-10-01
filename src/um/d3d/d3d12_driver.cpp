@@ -1,9 +1,8 @@
 #include "um/d3d/d3d12_driver.hpp"
 
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
@@ -12,7 +11,7 @@
 
 namespace av::d3d12 {
 
-D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
+D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : memory_(memory), kmt_(kmt), log_(log), lines_(log, "avumd: "), devices_(memory), caps_(), sessions_(), arena_locks_(), heaps_(),
       adapters_{}, list_table_(nullptr)
 {

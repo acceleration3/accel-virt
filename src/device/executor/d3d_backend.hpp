@@ -13,6 +13,7 @@
 #ifndef AV_D3D_BACKEND_HPP
 #define AV_D3D_BACKEND_HPP
 
+#include "core/support/driver_log.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d12_session.hpp"
 #include "device/executor/d3d9_session.hpp"
@@ -22,6 +23,7 @@
 #include "device/executor/constant_ring.hpp"
 #include "device/executor/query_result_publisher.hpp"
 #include "device/executor/session_backend.hpp"
+#include "device/host/stdio_log.hpp"
 #include "proto/generated/d3d/d3d_dispatch_server.h"
 
 #include <stdint.h>
@@ -222,6 +224,9 @@ private:
     /* Each device's pipeline state, by the guest's id, and the selected
      * one, which commands run on. */
     GuestDevices<ID3DDeviceContextState, max_devices> states_;
+    /* QEMU's stderr, where the host log is read when a guest's command fails. */
+    StdioLog                sink_;
+    DriverLog               lines_;
     CommandRefusal          refusal_;
     /* The decode arena of the command running, which scratch - a shader's
      * container - is taken from; null between commands. */

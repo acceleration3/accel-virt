@@ -10,6 +10,7 @@
 #ifndef AV_UM_D3D9_DRIVER_HPP
 #define AV_UM_D3D9_DRIVER_HPP
 
+#include "core/support/driver_log.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
@@ -20,13 +21,14 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av::d3d {
 class UmdAdapter;
@@ -37,7 +39,7 @@ namespace av::d3d9 {
 
 class D3d9Driver {
 public:
-    D3d9Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log);
+    D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log);
     D3d9Driver(const D3d9Driver &) = delete;
     D3d9Driver &operator=(const D3d9Driver &) = delete;
 
@@ -58,7 +60,8 @@ private:
 
     BlockSource                   &memory_;
     Kmt                           &kmt_;
-    icd::LogSink                  &log_;
+    LogSink                  &log_;
+    DriverLog                lines_;
     ObjectPool<D3d9Device>         devices_;
     D3d9HostCaps                   caps_[max_adapters];
     ObjectStorage<d3d::D3dSession> sessions_[max_adapters];

@@ -7,7 +7,7 @@
 
 namespace av::d3d {
 
-UmdDevice::UmdDevice(UmdAdapter &adapter, icd::LogSink &log)
+UmdDevice::UmdDevice(UmdAdapter &adapter, LogSink &log)
     : adapter_(adapter), log_(log), runtime_device_(nullptr), runtime_core_layer_(nullptr),
       kernel_callbacks_(nullptr), core_layer_callbacks_(nullptr), interface_version_(0u), runtime_version_(0u),
       dxgi_(*this), removal_()

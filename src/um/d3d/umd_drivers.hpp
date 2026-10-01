@@ -14,19 +14,20 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class BlockSource;
 class Kmt;
 }  // namespace av
 
-namespace av::icd {
-class LogSink;
-}  // namespace av::icd
 
 namespace av {
 
 class UmdDrivers final : public d3d::UmdHostDriver {
 public:
-    UmdDrivers(BlockSource &memory, Kmt &kmt, icd::LogSink &log);
+    UmdDrivers(BlockSource &memory, Kmt &kmt, LogSink &log);
 
     d3d::Hresult build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create,
                        uint32_t kmt_adapter) override;

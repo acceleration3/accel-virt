@@ -3,13 +3,13 @@
 #ifndef AV_RECORDING_LOG_HPP
 #define AV_RECORDING_LOG_HPP
 
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 
 #include <cstdint>
 
 namespace av {
 
-class RecordingLog final : public icd::LogSink {
+class RecordingLog final : public LogSink {
 public:
     static constexpr std::uint32_t max_lines = 32u;
     static constexpr std::uint32_t line_bytes = 160u;

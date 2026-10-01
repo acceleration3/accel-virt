@@ -6,7 +6,7 @@
 namespace av::glicd {
 
 GlContextTable::GlContextTable(BlockSource &memory, icd::IcdConnection &connection, icd::ThreadLock &send_lock,
-                               icd::LogSink &log, const GlExtensionPolicy &extensions,
+                               LogSink &log, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles)
     : memory_(memory), connection_(connection), send_lock_(send_lock), log_(log), extensions_(extensions),
       handles_(handles), pool_(memory), contexts_{},

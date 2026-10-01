@@ -26,6 +26,10 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class HostWindowChunk;
 class BlockSource;
 class ClientTransport;
@@ -35,7 +39,6 @@ class StateWriter;
 
 namespace av::icd {
 
-class LogSink;
 class ThreadLock;
 struct ConnectionProbe;
 

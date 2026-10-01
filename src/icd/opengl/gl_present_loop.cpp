@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/common/wake_signal.hpp"
 #include "icd/common/window_chains.hpp"
@@ -14,7 +14,7 @@ namespace av::glicd {
 
 GlPresentLoop::GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
                              icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface,
-                             icd::WindowChains &chains, icd::LogSink &log)
+                             icd::WindowChains &chains, LogSink &log)
     : thread_(thread), handed_(handed), shown_(shown), lock_(lock), kmt_(kmt), surface_(surface), chains_(chains),
       log_(log),
       frames_{}, stages_{}, orders_{}, next_order_(1u), shown_frames_(0u), dropped_frames_(0u), stopping_(0u),

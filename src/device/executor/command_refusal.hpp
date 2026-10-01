@@ -17,10 +17,12 @@
 
 namespace av {
 
+class DriverLog;
+
 class CommandRefusal {
 public:
-    /* `api` names the session in what it logs ("d3d9"). */
-    explicit CommandRefusal(const char *api);
+    /* `lines` is the session's log, prefixed with its name. */
+    explicit CommandRefusal(DriverLog &lines);
     CommandRefusal(const CommandRefusal &) = delete;
     CommandRefusal &operator=(const CommandRefusal &) = delete;
 
@@ -31,7 +33,7 @@ public:
     [[nodiscard]] bool removes(const char *command, uint32_t device, bool removed) const;
 
 private:
-    const char *api_;
+    DriverLog &lines_;
 };
 
 }  // namespace av

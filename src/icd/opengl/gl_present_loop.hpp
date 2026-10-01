@@ -25,12 +25,15 @@
 #include <stdint.h>
 
 namespace av {
+class LogSink;
+}  // namespace av
+
+namespace av {
 class Kmt;
 class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class LogSink;
 class ThreadLock;
 class WakeSignal;
 class WindowChains;
@@ -55,7 +58,7 @@ public:
 
     GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
                   icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::WindowChains &chains,
-                  icd::LogSink &log);
+                  LogSink &log);
     ~GlPresentLoop();
     GlPresentLoop(const GlPresentLoop &) = delete;
     GlPresentLoop &operator=(const GlPresentLoop &) = delete;
@@ -121,7 +124,7 @@ private:
     Kmt                &kmt_;
     icd::WindowSurface &surface_;
     icd::WindowChains  &chains_;
-    icd::LogSink       &log_;
+    LogSink       &log_;
     HandedFrame         frames_[max_frames];
     Stage               stages_[max_frames];
     uint64_t            orders_[max_frames];

@@ -1,10 +1,9 @@
 #include "icd/vulkan/device_memory.hpp"
 
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/vulkan/connection.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 

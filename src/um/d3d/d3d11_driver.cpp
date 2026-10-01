@@ -4,7 +4,7 @@
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/device_handle.hpp"
 
@@ -17,7 +17,7 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 
 }  // namespace
 
-D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
+D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : memory_(memory), kmt_(kmt), log_(log), devices_(memory), caps_(), sessions_(), adapters_{}
 {
     AV_SCOPE("D3d11Driver::D3d11Driver");

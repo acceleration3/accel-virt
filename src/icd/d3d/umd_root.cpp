@@ -7,10 +7,9 @@
 
 #include "core/support/runtime_call.hpp"
 #include "core/support/scope_exit.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/log_sink.hpp"
+#include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/ddi/d3d10_2ddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
@@ -32,7 +31,7 @@ namespace {
 
 }  // namespace
 
-UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding,
+UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log, UmdBinding &binding,
                  UmdHostDriver *builder)
     : kmt_(kmt), lock_(lock), log_(log), lines_(log, "avumd: "), binding_(binding), builder_(builder), connections_(kmt),
       adapters_(memory), devices_(memory, log)
