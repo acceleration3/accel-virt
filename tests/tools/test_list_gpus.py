@@ -161,6 +161,16 @@ class WhatTheGuestIsTold(unittest.TestCase):
         self.tree.write("0000:7b:00.0/revision", "0x100\n")
         self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # past a byte
 
+    def test_the_adapter_names_list_each_gpu_by_the_ids_it_presents_and_leaves_the_cpu_out(self):
+        """What provision.ps1 reads from C:\\av\\adapters.txt: the ids the guest will see, tab-separated."""
+        for name, text in (("vendor", "0x10de\n"), ("device", "0x24e0\n"), ("revision", "0xa1\n")):
+            self.tree.write(f"0000:7b:00.0/{name}", text)
+        self.assertEqual(list_gpus.adapter_names(self.gpus, self.tree.root).splitlines(), [
+            f"1af4\t1050\t{self.gpus[0].adapter_name()}",
+            f"10de\t24e0\t{self.gpus[1].adapter_name()}",
+        ])
+        self.assertEqual(list_gpus.adapter_names([self.gpus[2]], self.tree.root), "")
+
     def test_the_adapter_name_drops_the_driver_suffix_as_the_device_does(self):
         """The cases tests/unit/device/gpu/test_adapter_name.cpp holds the C++ to."""
         cases = {"AMD Radeon RX 9070 XT (RADV GFX1201)": "AMD Radeon RX 9070 XT",

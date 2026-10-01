@@ -984,12 +984,8 @@ class GuestRun:
 
     def adapter_names(self):
         """What provision.ps1 names each host GPU's INF model with."""
-        lines = []
-        for gpu in self.host_gpus:
-            vendor, device, _revision = gpu.pci_identity(self.args.sysfs)
-            lines.append(f"{vendor:04x}\t{device:04x}\t{gpu.adapter_name()}\n")
         path = self.work / "adapter-names.txt"
-        path.write_text("".join(lines), encoding="utf-8")
+        path.write_text(list_gpus.adapter_names(self.host_gpus, self.args.sysfs), encoding="utf-8")
         return path
 
     def keep_symbols(self):

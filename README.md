@@ -286,6 +286,31 @@ What comes out:
 A core change that would not build in the guest kernel fails the build. That
 covers a hosted header, a C runtime call, `new`, `throw` or `typeid`.
 
+### The driver package
+
+`cmake --build build --target drivers` builds only the Windows drivers: the
+kernel driver, and the user-mode drivers for x64 and x86.
+`cmake --build build --target install-drivers` builds them and installs the
+package as the guest's `C:\av` holds it:
+
+```
+build/av-drivers/
+├── provision.ps1          the guest-side installer (sign, install, check, ...)
+├── adapters.txt           this host's GPU names, which the sign stage gives each INF model
+└── package/
+    ├── avgpu.sys  avgpu.inf
+    ├── avumd.dll  avvk.dll  avvk.json  avgl.dll  avcl.dll                  x64
+    ├── avumd32.dll  avvk32.dll  avvk32.json  avgl32.dll  avcl32.dll        x86
+    └── package.sha256     what the sign stage checks the package against
+```
+
+`-DAV_DRIVER_PACKAGE_DIR=DIR` moves it, and
+`cmake --install build --component drivers --prefix DIR` installs the same tree
+anywhere. `adapters.txt` comes from `tools/host/list_gpus.py --adapter-names`
+on the host doing the install. It is left out, with a warning, when
+`vulkaninfo` fails, and the INF's models then take its static name. Copy the
+tree to the guest's `C:\av` and run route 2 below from `provision.ps1`.
+
 ## Installing
 
 There are three routes. The first is how the project tests itself. The second
@@ -372,7 +397,10 @@ Keep `-vga none`: another display adapter would take the desktop. The
 
 **In the guest,** as Administrator:
 
-1. Copy the package into `C:\av\package`:
+1. Copy `build/av-drivers` from `install-drivers` ([The driver
+   package](#the-driver-package)) to `C:\av`, which puts everything below in
+   place with its `package.sha256` and `adapters.txt`. By hand, copy the
+   package into `C:\av\package`:
    - `avgpu.sys`, `avgpu.inf`, `avvk.dll`, `avvk.json`, `avgl.dll`,
      `avcl.dll`, `avumd.dll`;
    - the 32-bit drivers from `build/guest32`: `avvk32.dll`, `avgl32.dll`,

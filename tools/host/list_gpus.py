@@ -10,6 +10,8 @@ With no GPU, llvmpipe is listed as a CPU device, so there is always one.
   list_gpus.py                     a table: index, UUID, vendor:device, type, local memory, name
   list_gpus.py --qemu              one -device argument pair per GPU, for a QEMU command line
   list_gpus.py --libvirt           a libvirt domain fragment passing the same arguments
+  list_gpus.py --adapter-names     what provision.ps1 names each GPU's INF model with (C:\\av\\adapters.txt):
+                                   "<vendor>\t<device>\t<name>" a line, hex in lowercase, CPU devices left out
   list_gpus.py --vulkaninfo FILE   read captured `vulkaninfo` output instead of running it
 
 What a guest will call each one is here too, by the device's own rules: the
@@ -224,11 +226,22 @@ def libvirt(gpus):
     return LIBVIRT.format(arguments="\n".join(arguments))
 
 
+def adapter_names(gpus, sysfs=SYSFS_PCI):
+    lines = []
+    for gpu in gpus:
+        if gpu.kind == "cpu":
+            continue
+        vendor, device, _revision = gpu.pci_identity(sysfs)
+        lines.append(f"{vendor:04x}\t{device:04x}\t{gpu.adapter_name()}\n")
+    return "".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--qemu", action="store_true")
     output.add_argument("--libvirt", action="store_true")
+    output.add_argument("--adapter-names", action="store_true")
     parser.add_argument("--vulkaninfo", metavar="FILE")
     arguments = parser.parse_args()
     if arguments.vulkaninfo:
@@ -248,6 +261,9 @@ def main():
         sys.exit(f"vulkaninfo output: {error}")
     if not gpus:
         sys.exit("no Vulkan physical device found")
+    if arguments.adapter_names:
+        sys.stdout.write(adapter_names(gpus))
+        return
     print(qemu(gpus) if arguments.qemu else libvirt(gpus) if arguments.libvirt else table(gpus))
 
 

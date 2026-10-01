@@ -689,6 +689,39 @@ ExternalProject_Add_StepDependencies(avtest32 configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags_c.cmake)
 
+# ---- the driver package: every Windows driver, both architectures ----------
+# `drivers` builds the kernel driver and the user-mode drivers for x64 and x86.
+# The drivers component installs them as the guest's C:\av holds them, so the
+# tree copies there whole and provision.ps1 runs as it is:
+#
+#   <prefix>/provision.ps1
+#   <prefix>/adapters.txt              this host's GPU names (cmake/driver_package.cmake)
+#   <prefix>/package/avgpu.sys, avgpu.inf, the x64 and x86 user-mode drivers,
+#                    their Vulkan manifests and package.sha256
+#
+# `install-drivers` builds and installs in one step, into AV_DRIVER_PACKAGE_DIR
+# (build/av-drivers unless set); `cmake --install build --component drivers
+# --prefix DIR` installs the same tree anywhere else.
+add_custom_target(drivers DEPENDS avgpu avtest avtest32)
+set(AV_DRIVER_PACKAGE_DIR ${CMAKE_BINARY_DIR}/av-drivers CACHE PATH "Where install-drivers puts the driver package")
+install(FILES ${CMAKE_SOURCE_DIR}/tools/guest/provision.ps1 DESTINATION . COMPONENT drivers)
+install(FILES
+          ${CMAKE_BINARY_DIR}/driver/avgpu.sys ${CMAKE_SOURCE_DIR}/src/km/avgpu.inf
+          ${CMAKE_BINARY_DIR}/guest/avumd.dll ${CMAKE_BINARY_DIR}/guest/avvk.dll
+          ${CMAKE_SOURCE_DIR}/src/um/vulkan/avvk.json ${CMAKE_BINARY_DIR}/guest/avgl.dll
+          ${CMAKE_BINARY_DIR}/guest/avcl.dll
+          ${CMAKE_BINARY_DIR}/guest32/avumd32.dll ${CMAKE_BINARY_DIR}/guest32/avvk32.dll
+          ${CMAKE_SOURCE_DIR}/src/um/vulkan/avvk32.json ${CMAKE_BINARY_DIR}/guest32/avgl32.dll
+          ${CMAKE_BINARY_DIR}/guest32/avcl32.dll
+        DESTINATION package COMPONENT drivers)
+install(CODE "set(AV_SOURCE_DIR \"${CMAKE_SOURCE_DIR}\")" COMPONENT drivers)
+install(SCRIPT ${CMAKE_SOURCE_DIR}/cmake/driver_package.cmake COMPONENT drivers)
+add_custom_target(install-drivers
+  COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --component drivers --prefix ${AV_DRIVER_PACKAGE_DIR}
+  DEPENDS drivers
+  USES_TERMINAL
+  COMMENT "Installing the driver package into ${AV_DRIVER_PACKAGE_DIR}")
+
 # The probe binds to the Khronos loader and nothing else beyond the three
 # (feature 045).
 # It links OpenCL beside Vulkan from feature 053: the shared-object steps are
