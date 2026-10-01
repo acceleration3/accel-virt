@@ -5,11 +5,13 @@
  * gone. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/guest/scripted_host.hpp"
+#include "harness/icd/open_connection.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
-#include "guest/suite/adapter_scenario.hpp"
 #include "icd/vulkan/surface_properties.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/vulkan/swapchain.hpp"
@@ -44,6 +46,10 @@ struct SwapchainProbe {
     static void undercount(Swapchain &chain) { chain.count_ = 1u; }
     static void pace_without_an_adapter(Swapchain &chain)
     { FramePacerProbe::count_a_blank_without_an_adapter(chain.pacer_); }
+    /* The slot of the window's chain its frames are copied into. */
+    static VkImage slot(Swapchain &chain) { return chain.chained_.slot(); }
+    /* The slot given back while the swapchain still presents through it. */
+    static void lose_slot(Swapchain &chain) { chain.chained_.release(); }
 };
 
 }  // namespace av::icd
@@ -52,6 +58,7 @@ using av::MockKmt;
 using av::MockPlatform;
 using av::RecordingLog;
 using av::ScriptedVulkanDevice;
+using av::ScriptedWindowChains;
 using av::ScriptedWindowSurface;
 using av::icd::SurfaceProperties;
 using av::icd::Swapchain;
@@ -82,53 +89,52 @@ VkSwapchainCreateInfoKHR create_info()
   info.clipped = VK_TRUE;
   return info; }
 
-/* A swapchain on a scripted host device, a window of its own, and the rvkgpu
- * adapter its FIFO pacing waits on. A swapchain is neither copied nor moved,
- * so the rig holds the one it makes, and the second for a recreation. */
+/* A swapchain on a scripted host device, a window of its own, the window's
+ * chains - which refuse to open until a test accepts them - and the guest
+ * context on the rvkgpu adapter its FIFO pacing waits on and a chain's slot is
+ * opened through. A swapchain is neither copied nor moved, so the rig holds
+ * the one it makes, and the second for a recreation. */
 class SwapchainRig {
 public:
     SwapchainRig()
     { windows_.add_dc(as_window(0x20u), window(), width, height);
-      kmt_.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                       av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
-                       av::AdapterScenario::wddm_3_2);
-      std::uint32_t adapters[2] = {};
-      std::uint32_t found = 0u;
-      CHECK_STATUS(kmt_.enumerate_adapters(adapters, 2u, found), av::Status::ok);
-      adapter_ = adapters[0];
-      CHECK_STATUS(kmt_.create_device(adapter_, device_), av::Status::ok);
-      CHECK_STATUS(first_.construct(memory_, windows_, host_, host_.device(), host_.physical(), kmt_, log_, adapter_,
-                                    device_),
+      CHECK_STATUS(first_.construct(memory_, windows_, chains_, host_, host_.device(), host_.physical(), open_.kmt(),
+                                    log_, open_.connection()),
                    av::Status::ok);
-      CHECK_STATUS(second_.construct(memory_, windows_, host_, host_.device(), host_.physical(), kmt_, log_, adapter_,
-                                     device_),
+      CHECK_STATUS(second_.construct(memory_, windows_, chains_, host_, host_.device(), host_.physical(),
+                                     open_.kmt(), log_, open_.connection()),
                    av::Status::ok); }
     ~SwapchainRig()
-    { second_.destroy();
-      first_.destroy(); }
+    { if (second_.constructed()) second_.destroy();
+      if (first_.constructed()) first_.destroy(); }
 
     Swapchain &chain() { return first_.object(); }
     Swapchain &other() { return second_.object(); }
+    /* Destroyed, as an application's vkDestroySwapchainKHR would. */
+    void reset_first() { first_.destroy(); }
+    void reset_second() { second_.destroy(); }
 
     VkResult initialize(Swapchain &chain, const VkSwapchainCreateInfoKHR &info)
     { SurfaceProperties properties(windows_, window());
       return chain.initialize(info, window(), properties); }
 
     MockPlatform          &memory() { return memory_; }
-    MockKmt               &kmt() { return kmt_; }
+    MockKmt               &kmt() { return open_.kmt(); }
+    av::ScriptedHost      &device() { return open_.host(); }
+    av::icd::Connection   &connection() { return open_.connection(); }
     RecordingLog          &log() { return log_; }
     ScriptedVulkanDevice  &host() { return host_; }
     ScriptedWindowSurface &windows() { return windows_; }
+    ScriptedWindowChains  &chains() { return chains_; }
     void                  *window() { return as_window(0x10u); }
 
 private:
     MockPlatform               memory_;
-    MockKmt                    kmt_;
+    av::OpenConnection         open_;
     RecordingLog               log_;
     ScriptedVulkanDevice       host_;
     ScriptedWindowSurface      windows_;
-    std::uint32_t              adapter_ = 0u;
-    std::uint32_t              device_ = 0u;
+    ScriptedWindowChains       chains_;
     av::ObjectStorage<Swapchain> first_;
     av::ObjectStorage<Swapchain> second_;
 };
@@ -471,4 +477,135 @@ TEST(swapchain, a_window_that_refuses_the_frame_is_not_a_present)
   rig.host().refuse("vkQueueSubmit", 1u, VK_ERROR_DEVICE_LOST);
   CHECK_EQ(chain.present(rig.host().queue(), next, 0u, nullptr), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(chain.presented(), 0u);
+  CHECK(chain.invariants_hold()); }
+
+/* The window's chain opens, so frames go through it: the swapchain's slot is
+ * opened through its connection and made an image, nothing is read back - not
+ * even an RGBA frame needs guest memory - and a present copies the frame into
+ * the slot on the host, as its bytes are, and has the chain show it. */
+TEST(swapchain, a_window_with_a_chain_is_shown_the_frame_copied_into_its_slot_not_blitted)
+{ const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB};
+  for (const VkFormat format : formats) {
+      SwapchainRig rig;
+      rig.chains().refuse_opens(false);
+      rig.device().shared_object(0u, 0x7700u);
+      Swapchain &chain = rig.chain();
+      VkSwapchainCreateInfoKHR info = create_info();
+      info.imageFormat = format;
+      CHECK_EQ(rig.initialize(chain, info), VK_SUCCESS);
+      CHECK(chain.invariants_hold());
+      CHECK_EQ(rig.chains().opens(), 1u);
+      CHECK(rig.chains().open_window() == rig.window());
+      CHECK_EQ(rig.chains().last_luid(), rig.connection().luid());
+      const VkImage slot = SwapchainProbe::slot(chain);
+      CHECK(slot != VK_NULL_HANDLE);
+      /* The application's images and the slot. */
+      CHECK_EQ(rig.host().images(), images + 1u);
+      CHECK_EQ(rig.host().mappings(), 0u);
+      CHECK_EQ(rig.memory().live_allocations(), 0u);
+      std::uint32_t index = 0u;
+      CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+      VkImage made[images] = {};
+      std::uint32_t count = images;
+      CHECK_EQ(chain.images(count, made), VK_SUCCESS);
+      rig.host().paint(made[index], 0x10u, 0x20u, 0x30u, 0x40u);
+      CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
+      CHECK_EQ(rig.chains().presents(), 1u);
+      CHECK_EQ(rig.windows().blits(), 0u);
+      CHECK_EQ(chain.presented(), 1u);
+      CHECK_EQ(rig.host().image_copies(), 1u);
+      const std::uint8_t *const bytes = rig.host().bytes(slot);
+      CHECK_EQ(bytes[0], 0x10u);
+      CHECK_EQ(bytes[2], 0x30u);
+      CHECK_EQ(bytes[frame_bytes - 1u], 0x40u);
+      /* FIFO still waits for the blank after the chain has the frame. */
+      CHECK_EQ(chain.pacer().blanks(), 1u);
+      CHECK(chain.invariants_hold());
+  } }
+
+/* A chain that will not show the frame is said, and the present answers what
+ * the window is; a copy the device fails is the device's error. */
+TEST(swapchain, a_frame_the_chain_refuses_is_said_and_a_failed_copy_is_the_device_s_error)
+{ SwapchainRig rig;
+  rig.chains().refuse_opens(false);
+  rig.device().shared_object(0u, 0x7700u);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+  std::uint32_t index = 0u;
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  rig.chains().refuse_presents(true);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(rig.log().holding("a presented frame was refused by its window's chain"), 1u);
+  CHECK_EQ(chain.presented(), 0u);
+  CHECK_EQ(rig.windows().blits(), 0u);
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  rig.host().refuse("vkQueueSubmit", 1u, VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_DEVICE_LOST);
+  CHECK(chain.invariants_hold()); }
+
+/* Recreated with this one as the old swapchain: the slot goes back at once,
+ * so the successor can open the window's chain, and what the retired one still
+ * presents is consumed and shown nowhere. Its destruction leaves the chain to
+ * the successor; a swapchain destroyed unretired closes it. */
+TEST(swapchain, a_retired_swapchain_gives_its_slot_back_and_leaves_the_chain_to_its_successor)
+{ SwapchainRig rig;
+  rig.chains().refuse_opens(false);
+  rig.device().shared_object(0u, 0x7700u);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+  std::uint32_t index = 0u;
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  const std::uint32_t before = rig.host().images();
+  /* The device's answer to the slot's release. */
+  rig.device().shared_object(0u, 0u);
+  chain.retire();
+  CHECK_EQ(rig.host().images(), before - 1u);
+  CHECK(chain.invariants_hold());
+  const VkSemaphore waits[] = {reinterpret_cast<VkSemaphore>(0x900u)};
+  const std::uint32_t submits = rig.host().submits();
+  CHECK_EQ(chain.present(rig.host().queue(), index, 1u, waits), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.host().submits(), submits + 1u);
+  CHECK(rig.host().last_wait() == waits[0]);
+  CHECK_EQ(rig.host().image_copies(), 0u);
+  CHECK_EQ(rig.chains().presents(), 0u);
+  rig.device().shared_object(0u, 0x7701u);
+  CHECK_EQ(rig.initialize(rig.other(), create_info()), VK_SUCCESS);
+  CHECK_EQ(rig.chains().opens(), 2u);
+  CHECK(SwapchainProbe::slot(rig.other()) != VK_NULL_HANDLE);
+  /* Its semaphores can fail to be consumed too. */
+  CHECK_EQ(chain.acquire(0u, index), VK_ERROR_OUT_OF_DATE_KHR);
+  rig.host().refuse("vkQueueSubmit", 1u, VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(chain.present(rig.host().queue(), 1u - index, 1u, waits), VK_ERROR_UNKNOWN);
+  CHECK_EQ(rig.chains().closes(), 0u);
+  rig.reset_first();
+  CHECK_EQ(rig.chains().closes(), 0u);
+  rig.reset_second();
+  CHECK_EQ(rig.chains().closes(), 1u);
+  CHECK(rig.chains().last_closed() == rig.window()); }
+
+/* One that goes through a chain holds its slot until it is retired. */
+TEST(swapchain, its_invariants_refuse_a_chained_swapchain_without_its_slot)
+{ SwapchainRig rig;
+  rig.chains().refuse_opens(false);
+  rig.device().shared_object(0u, 0x7700u);
+  CHECK_EQ(rig.initialize(rig.chain(), create_info()), VK_SUCCESS);
+  CHECK(rig.chain().invariants_hold());
+  SwapchainProbe::lose_slot(rig.chain());
+  CHECK(!rig.chain().invariants_hold()); }
+
+/* A slot the device will not open sends the frames back to the blit. */
+TEST(swapchain, a_chain_whose_slot_cannot_be_opened_falls_back_to_the_blit)
+{ SwapchainRig rig;
+  rig.chains().refuse_opens(false);
+  rig.device().shared_object(1u, 0u);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+  CHECK_EQ(rig.chains().closes(), 1u);
+  CHECK_EQ(rig.host().images(), images);
+  CHECK_EQ(rig.host().mappings(), 1u);
+  std::uint32_t index = 0u;
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(rig.windows().blits(), 1u);
+  CHECK_EQ(rig.chains().presents(), 0u);
   CHECK(chain.invariants_hold()); }

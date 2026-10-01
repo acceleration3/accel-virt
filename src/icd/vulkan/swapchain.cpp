@@ -5,8 +5,9 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/common/window_surface.hpp"
-#include "proto/wire/foreign_enum.hpp"
+#include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/surface_properties.hpp"
+#include "proto/wire/foreign_enum.hpp"
 
 namespace av::icd {
 
@@ -16,13 +17,14 @@ constexpr uint32_t pixel_bytes = 4u;
 
 }  // namespace
 
-Swapchain::Swapchain(BlockSource &memory, WindowSurface &windows, EntryLookup &entries, VkDevice device,
-                     VkPhysicalDevice physical, Kmt &kmt, LogSink &log, uint32_t adapter, uint32_t kmt_device)
-    : memory_(memory), windows_(windows), device_(entries, device, physical), pacer_(kmt, log, adapter, kmt_device),
-      log_(log), app_device_(device), window_(nullptr), extent_{0u, 0u},
-      format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)), mode_(static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)),
-      held_{}, count_(0u), next_(0u), frame_(nullptr), retired_(false),
-      presented_(0u)
+Swapchain::Swapchain(BlockSource &memory, WindowSurface &windows, WindowChains &chains, EntryLookup &entries,
+                     VkDevice device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection)
+    : memory_(memory), windows_(windows), device_(entries, device, physical),
+      chained_(entries, device, chains, connection.transport()),
+      pacer_(kmt, log, connection.adapter(), connection.device()), log_(log), luid_(connection.luid()),
+      app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
+      mode_(static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)), held_{}, count_(0u), next_(0u), frame_(nullptr),
+      through_chain_(false), retired_(false), presented_(0u)
 {
     AV_SCOPE("Swapchain::Swapchain");
 }
@@ -40,17 +42,10 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     const VkResult judged = judge(info, surface);
     if (judged != VK_SUCCESS) return judged;
     format_ = foreign_enum(info.imageFormat);
-    const uint64_t bytes = uint64_t{info.imageExtent.width} * info.imageExtent.height * pixel_bytes;
-    /* A BGRA image is a DIB's own order, so its read-back is drawn as it is;
-     * only an RGBA one needs its red and blue traded somewhere first. */
-    if (!shows_bgra()) {
-        frame_ = static_cast<uint8_t *>(memory_.allocate(static_cast<size_t>(bytes), Pool::paged));
-        if (frame_ == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-    VkResult made = device_.make_readback(bytes);
     /* judge() has held the format to one this driver presents, so the
      * application's value is a format the host knows. */
-    const auto format = static_cast<VkFormat>(foreign_enum(info.imageFormat));
+    const auto format = static_cast<VkFormat>(format_);
+    VkResult   made = make_destination(window, format, info.imageExtent);
     for (uint32_t index = 0u; made == VK_SUCCESS && index < info.minImageCount; index++) {
         VkImage image = VK_NULL_HANDLE;
         made = device_.make_image(format, info.imageExtent, info.imageUsage, image);
@@ -65,6 +60,21 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     mode_ = foreign_enum(info.presentMode);
     count_ = info.minImageCount;
     return VK_SUCCESS;
+}
+
+VkResult Swapchain::make_destination(void *window, VkFormat format, VkExtent2D extent)
+{
+    AV_SCOPE("Swapchain::make_destination");
+    through_chain_ = chained_.open(window, luid_, format, extent);
+    if (through_chain_) return device_.make_commands();
+    const uint64_t bytes = uint64_t{extent.width} * extent.height * pixel_bytes;
+    /* A BGRA image is a DIB's own order, so its read-back is drawn as it is;
+     * only an RGBA one needs its red and blue traded somewhere first. */
+    if (!shows_bgra()) {
+        frame_ = static_cast<uint8_t *>(memory_.allocate(static_cast<size_t>(bytes), Pool::paged));
+        if (frame_ == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    return device_.make_readback(bytes);
 }
 
 VkResult Swapchain::judge(const VkSwapchainCreateInfoKHR &info, SurfaceProperties &surface) const
@@ -169,6 +179,7 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
     if (state != VK_SUCCESS) return state;
     if (mode_ == static_cast<int32_t>(VK_PRESENT_MODE_IMMEDIATE_KHR) && !pacer_.admits())
         return device_.skip(queue, wait_count, waits);
+    if (through_chain_) return present_chained(queue, index, wait_count, waits);
     const VkResult copied = device_.copy(queue, device_.made(index).image_, extent_, wait_count, waits);
     if (copied != VK_SUCCESS) return copied;
     const uint8_t *rows = device_.readback();
@@ -178,6 +189,27 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
     }
     if (!windows_.blit_window_top_down(window_, extent_.width, extent_.height, rows)) {
         log_.write("rvkvk: a presented frame was refused by its window");
+        return window_state();
+    }
+    presented_++;
+    if (mode_ == static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)) pacer_.wait();
+    return VK_SUCCESS;
+}
+
+/* A retired swapchain gave its slot back, and the window's chain shows its
+ * successor's frames: what it presents is consumed and shown nowhere. */
+VkResult Swapchain::present_chained(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits)
+{
+    AV_SCOPE("Swapchain::present_chained");
+    if (!chained_.opened()) {
+        const VkResult skipped = device_.skip(queue, wait_count, waits);
+        return skipped != VK_SUCCESS ? skipped : VK_ERROR_OUT_OF_DATE_KHR;
+    }
+    const VkResult copied =
+        device_.copy_into(queue, device_.made(index).image_, chained_.slot(), extent_, wait_count, waits);
+    if (copied != VK_SUCCESS) return copied;
+    if (!chained_.show()) {
+        log_.write("rvkvk: a presented frame was refused by its window's chain");
         return window_state();
     }
     presented_++;
@@ -223,6 +255,7 @@ void Swapchain::retire()
 {
     AV_SCOPE("Swapchain::retire");
     retired_ = true;
+    chained_.release();
 }
 
 VkDevice Swapchain::device() const
@@ -243,25 +276,32 @@ FramePacer &Swapchain::pacer()
     return pacer_;
 }
 
+/* A retired swapchain's window is its successor's, chain and all. */
 void Swapchain::release()
 {
     AV_SCOPE("Swapchain::release");
+    if (retired_) chained_.release();
+    else chained_.close();
     device_.release();
     if (frame_ != nullptr) memory_.release(frame_);
     frame_ = nullptr;
+    through_chain_ = false;
     count_ = 0u;
     for (bool &held : held_) held = false;
 }
 
 /* A made swapchain has its images and the device's, and a frame buffer
- * exactly when its format is not BGRA; it holds only images it has; an unmade
- * one holds nothing. */
+ * exactly when it reads back a format that is not BGRA; one that goes through
+ * a chain has its slot until it is retired; it holds only images it has; an
+ * unmade one holds nothing. */
 bool Swapchain::invariants_hold() const
 {
     AV_SCOPE("Swapchain::invariants_hold");
-    if (!device_.invariants_hold() || !pacer_.invariants_hold()) return false;
+    if (!device_.invariants_hold() || !pacer_.invariants_hold() || !chained_.invariants_hold()) return false;
     if (count_ > PresentDevice::max_images) return false;
-    if (count_ != 0u && ((frame_ == nullptr) != shows_bgra() || device_.images() != count_)) return false;
+    const bool reads_rgba = !through_chain_ && !shows_bgra();
+    if (count_ != 0u && ((frame_ != nullptr) != reads_rgba || device_.images() != count_)) return false;
+    if (count_ != 0u && through_chain_ && !retired_ && !chained_.opened()) return false;
     /* Every counted image is the device's own invariant; what is this one's is
      * that nothing past the count is held. */
     for (uint32_t index = count_; index < PresentDevice::max_images; index++)

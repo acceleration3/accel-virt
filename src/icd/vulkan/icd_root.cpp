@@ -298,13 +298,13 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 }  // namespace
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-                 LogSink &log, IcdBinding &binding, WindowSurface &windows)
+                 LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains)
     : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
-      entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_), templates_(lock),
+      entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_), templates_(lock),
       externals_(lock), shared_handles_(kmt, lock), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
@@ -1744,15 +1744,14 @@ Presentation &IcdRoot::presentation()
     return presentation_;
 }
 
-bool IcdRoot::present_context(VkDevice device, VkPhysicalDevice &physical, uint32_t &adapter, uint32_t &kmt_device)
+bool IcdRoot::present_context(VkDevice device, VkPhysicalDevice &physical, Connection *&connection)
 {
     AV_SCOPE("IcdRoot::present_context");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return false;
     LoaderHandle *const parent = made->parent();
     physical = static_cast<VkPhysicalDevice>(static_cast<void *>(parent));
-    adapter = made->connection()->adapter();
-    kmt_device = made->connection()->device();
+    connection = made->connection();
     return true;
 }
 

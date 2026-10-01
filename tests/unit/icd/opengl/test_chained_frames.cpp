@@ -165,6 +165,8 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   CHECK(frames.invariants_hold());
   CHECK_EQ(chains.last_luid(), luid);
   CHECK_EQ(chains.last_width(), width);
+  /* OpenGL stores its frame bottom row first, in red-first order. */
+  CHECK(chains.last_layout() == av::icd::SlotLayout::rgba_bottom_up);
   CHECK_EQ(host.count(CommandHeader::open_shared_object_id), ChainedFrames::slot_count);
   /* The second open names the second slot, at the bytes the chain shared it as. */
   const std::uint8_t *second = host.payload(1u);

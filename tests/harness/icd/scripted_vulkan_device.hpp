@@ -27,6 +27,21 @@ public:
         VkImage       image;
         VkImageLayout from;
         VkImageLayout to;
+        /* The queue family the image is handed to; IGNORED for none. */
+        std::uint32_t to_family;
+    };
+    /* What an image was made as, and the memory bound to it. */
+    struct Described {
+        VkFormat                         format;
+        VkImageCreateFlags               flags;
+        VkImageTiling                    tiling;
+        VkImageUsageFlags                usage;
+        /* The handle types its VkExternalMemoryImageCreateInfo names; 0 for
+         * none. */
+        VkExternalMemoryHandleTypeFlags  external;
+        /* The formats its VkImageFormatListCreateInfo lists. */
+        std::uint32_t                    view_formats;
+        VkDeviceMemory                   bound;
     };
 
     /* The newest device is the bound one: the entry points have nowhere to put
@@ -69,6 +84,11 @@ public:
     std::uint32_t       barriers() const;
     const Barrier      &barrier(std::uint32_t index) const;
     std::uint32_t       copies() const;
+    /* Image-to-image copies the last recording held. */
+    std::uint32_t       image_copies() const;
+    Described           described(VkImage image) const;
+    /* An image's bytes, as paints and copies left them; null for none. */
+    const std::uint8_t *bytes(VkImage image) const;
     /* The read-back buffer's bytes, as the copy left them. */
     const std::uint8_t *readback() const;
     std::uint32_t       mappings() const;
@@ -103,6 +123,7 @@ public:
     VkResult end(VkCommandBuffer commands);
     void     record_barrier(std::uint32_t count, const VkImageMemoryBarrier *barriers);
     void     record_copy(VkImage image, const VkBufferImageCopy *region);
+    void     record_image_copy(VkImage source, VkImage target, const VkImageCopy *region);
     VkResult submit(VkQueue queue, const VkSubmitInfo *info, VkFence fence);
 
 private:
@@ -110,8 +131,7 @@ private:
         bool          made;
         std::uint32_t width;
         std::uint32_t height;
-        VkFormat      format;
-        VkImageUsageFlags usage;
+        Described     described;
         std::uint8_t  bytes[max_image_bytes];
     };
     struct Memory {
@@ -123,6 +143,11 @@ private:
         VkImage    image;
         VkExtent3D extent;
     };
+    struct ImageCopy {
+        VkImage    source;
+        VkImage    target;
+        VkExtent3D extent;
+    };
     struct Refusal {
         const char   *name;
         std::uint32_t nth;
@@ -132,6 +157,7 @@ private:
     /* VK_SUCCESS, or what a test scripted for this call. */
     VkResult      judge(const char *name);
     Image        *image_of(VkImage image);
+    const Image  *image_of(VkImage image) const;
 
     ScriptedVulkanDevice *outer_;
     Refusal       refusal_;
@@ -162,6 +188,8 @@ private:
     std::uint32_t barrier_count_;
     Copy          copies_[max_barriers];
     std::uint32_t copy_count_;
+    ImageCopy     image_copies_[max_barriers];
+    std::uint32_t image_copy_count_;
 };
 
 }  // namespace av

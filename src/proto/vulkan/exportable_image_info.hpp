@@ -1,18 +1,22 @@
 /* The Vulkan image a Direct3D 11 texture is made as when another API must open
  * its memory (InteropTextures::make): at least what DXVK would make for the
- * texture's description, over memory exported as a dma-buf.
+ * texture's description, over memory exported as a dma-buf - and the image the
+ * Vulkan ICD makes over that memory once it has opened it (ChainedImage). One
+ * description for both sides, because a driver lays an image out from its
+ * description, and two that differ are two layouts of one memory.
  *
  * Only what interop shares is described - one 2D mip, one layer and one
  * sample of a colour format below, drawn and sampled. Anything else is not
  * supported(), and DXVK makes it as it would any texture, with memory nothing
  * else can open. The image is the memory's alone (InteropTextures binds it
- * dedicated), which is what lets another driver read its layout. A format with an sRGB sibling is made mutable between the
- * two, which is all the views such a texture is ever given. */
+ * dedicated), which is what lets another driver read its layout. A format
+ * with an sRGB sibling is made mutable between the two, which is all the views
+ * such a texture is ever given. */
 #ifndef AV_EXPORTABLE_IMAGE_INFO_HPP
 #define AV_EXPORTABLE_IMAGE_INFO_HPP
 
 #include <stdint.h>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 namespace av {
 

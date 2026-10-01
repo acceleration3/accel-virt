@@ -78,7 +78,7 @@ VkSwapchainCreateInfoKHR create_info(VkSurfaceKHR surface)
  * a window, and a surface on it. */
 class PresentationRig {
 public:
-    PresentationRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.log(), rig_.root(), host_)
+    PresentationRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.log(), rig_.root(), host_)
     { instance_ = rig_.create_instance();
       physical_ = rig_.physical_device(instance_);
       VkDeviceCreateInfo info = {};
@@ -209,6 +209,21 @@ TEST(icd_presentation, the_old_swapchain_a_recreation_names_is_retired)
   rig.wsi().destroy_swapchain(rig.device(), first);
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK(rig.wsi().invariants_hold()); }
+
+/* Retired even when the recreation fails, as the specification has it: the
+ * old one gave its window's chain up before the new one was asked for. */
+TEST(icd_presentation, the_old_swapchain_is_retired_even_when_its_recreation_fails)
+{ PresentationRig rig;
+  const VkSwapchainKHR first = rig.create(create_info(rig.surface()));
+  VkSwapchainCreateInfoKHR again = create_info(rig.surface());
+  again.oldSwapchain = first;
+  again.imageExtent = {width + 1u, height};
+  VkSwapchainKHR second = VK_NULL_HANDLE;
+  CHECK_EQ(rig.wsi().create_swapchain(rig.device(), &again, &second), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK(second == VK_NULL_HANDLE);
+  std::uint32_t index = 9u;
+  CHECK_EQ(rig.wsi().acquire(rig.device(), first, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.wsi().swapchains(), 1u); }
 
 /* A handle from nowhere, and a handle of another device: each entry answers
  * what the specification's caller can act on. */

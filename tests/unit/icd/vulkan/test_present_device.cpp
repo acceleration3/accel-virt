@@ -247,6 +247,87 @@ TEST(present_device, a_copy_that_cannot_run_answers_the_device_s_error_and_a_sta
   CHECK_EQ(device.copy(host.queue(), image, extent, 0u, nullptr), VK_ERROR_DEVICE_LOST);
   CHECK(device.invariants_hold()); }
 
+/* A swapchain shown through its window's chain reads nothing back: it needs
+ * only what a copy runs on, made once. */
+TEST(present_device, the_commands_a_copy_runs_on_are_made_once_without_a_read_back_buffer)
+{ ScriptedVulkanDevice host;
+  PresentDevice device(host, host.device(), host.physical());
+  CHECK_EQ(device.make_commands(), VK_SUCCESS);
+  CHECK(device.readback() == nullptr);
+  CHECK_EQ(host.mappings(), 0u);
+  CHECK_EQ(host.pools(), 1u);
+  CHECK_EQ(host.pool_family(), 0u);
+  CHECK_EQ(host.fences(), 1u);
+  CHECK(device.invariants_hold());
+  CHECK_EQ(device.make_commands(), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(host.pools(), 1u);
+  /* A read-back buffer made after them makes no second set. */
+  CHECK_EQ(device.make_readback(frame_bytes), VK_ERROR_INITIALIZATION_FAILED);
+  device.release();
+  CHECK_EQ(host.pools(), 0u);
+  CHECK_EQ(host.fences(), 0u);
+  CHECK_EQ(host.memories(), 0u); }
+
+/* Into a slot of the window's chain: the image's bytes as they are, the image
+ * a present source again after, and the slot - whatever it held discarded -
+ * handed to whichever device reads it next. */
+TEST(present_device, a_copy_into_a_slot_moves_the_image_s_bytes_and_releases_the_slot_to_its_reader)
+{ ScriptedVulkanDevice host;
+  PresentDevice device(host, host.device(), host.physical());
+  CHECK_EQ(device.make_commands(), VK_SUCCESS);
+  const VkImage image = image_of(device, host);
+  const VkImage slot = image_of(device, host);
+  host.paint(image, 0x11u, 0x22u, 0x33u, 0x44u);
+  host.paint(slot, 0u, 0u, 0u, 0u);
+  const VkSemaphore waits[] = {reinterpret_cast<VkSemaphore>(0x900u)};
+  CHECK_EQ(device.copy_into(host.queue(), image, slot, extent, 1u, waits), VK_SUCCESS);
+  CHECK_EQ(host.submits(), 1u);
+  CHECK_EQ(host.last_wait_count(), 1u);
+  CHECK(host.last_wait() == waits[0]);
+  CHECK_EQ(host.image_copies(), 1u);
+  CHECK_EQ(host.copies(), 0u);
+  const std::uint8_t *const copied = host.bytes(slot);
+  CHECK_EQ(copied[0], 0x11u);
+  CHECK_EQ(copied[2], 0x33u);
+  CHECK_EQ(copied[frame_bytes - 1u], 0x44u);
+  CHECK_EQ(host.barriers(), 4u);
+  CHECK(host.barrier(0u).image == image);
+  CHECK_EQ(host.barrier(0u).from, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+  CHECK_EQ(host.barrier(0u).to, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  CHECK(host.barrier(1u).image == slot);
+  CHECK_EQ(host.barrier(1u).from, VK_IMAGE_LAYOUT_UNDEFINED);
+  CHECK_EQ(host.barrier(1u).to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  CHECK_EQ(host.barrier(1u).to_family, VK_QUEUE_FAMILY_IGNORED);
+  CHECK(host.barrier(2u).image == image);
+  CHECK_EQ(host.barrier(2u).to, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+  CHECK(host.barrier(3u).image == slot);
+  CHECK_EQ(host.barrier(3u).from, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  CHECK_EQ(host.barrier(3u).to, VK_IMAGE_LAYOUT_GENERAL);
+  CHECK_EQ(host.barrier(3u).to_family, VK_QUEUE_FAMILY_EXTERNAL);
+  CHECK(device.invariants_hold()); }
+
+TEST(present_device, a_copy_into_a_slot_that_cannot_run_answers_the_device_s_error)
+{ ScriptedVulkanDevice host;
+  PresentDevice device(host, host.device(), host.physical());
+  const VkImage before = reinterpret_cast<VkImage>(0x1u);
+  /* Nothing to run it on: no commands were made. */
+  CHECK_EQ(device.copy_into(host.queue(), before, before, extent, 0u, nullptr), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(device.make_commands(), VK_SUCCESS);
+  const VkImage image = image_of(device, host);
+  const VkImage slot = image_of(device, host);
+  const char *const steps[] = {"vkBeginCommandBuffer", "vkEndCommandBuffer", "vkQueueSubmit"};
+  for (const char *const step : steps) {
+      host.refuse(step, 1u, VK_ERROR_DEVICE_LOST);
+      CHECK_EQ(device.copy_into(host.queue(), image, slot, extent, 0u, nullptr), VK_ERROR_DEVICE_LOST);
+  }
+  host.refuse(nullptr, 0u, VK_SUCCESS);
+  VkSemaphore many[PresentDevice::max_waits + 1u] = {};
+  CHECK_EQ(device.copy_into(host.queue(), image, slot, extent, PresentDevice::max_waits + 1u, many),
+           VK_ERROR_OUT_OF_HOST_MEMORY);
+  host.stall_copy();
+  CHECK_EQ(device.copy_into(host.queue(), image, slot, extent, 0u, nullptr), VK_ERROR_DEVICE_LOST);
+  CHECK(device.invariants_hold()); }
+
 /* Each invariant, broken: an image without its memory, memory without its
  * image, a count past the images, and a mapping over memory that is gone. */
 TEST(present_device, its_invariants_refuse_an_image_without_memory_a_miscount_and_a_stray_mapping)

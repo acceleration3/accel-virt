@@ -12,6 +12,9 @@
 //                            --swap-buffers 1 makes it a blt-model swapchain,
 //                            --sync-interval 0 presents uncapped
 //   title:TEXT               the first visible window whose title holds TEXT
+//   screen                   the primary monitor as it is, with no window of
+//                            the probe's: what another program's window
+//                            showed on screen, frame by frame
 //
 // Every line is `key value...`: `frame` once per captured frame (its
 // SystemRelativeTime, which is QPC in 100 ns, and when it arrived), then
@@ -648,6 +651,9 @@ bool run(const Options &options)
             return false;
         }
         CHECK(interop->CreateForWindow(titled_window, __uuidof(IGraphicsCaptureItem), (void **)&item));
+    } else if (!wcscmp(target, L"screen")) {
+        HMONITOR primary = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        CHECK(interop->CreateForMonitor(primary, __uuidof(IGraphicsCaptureItem), (void **)&item));
     } else {
         const bool d3d = wcsstr(target, L"-d3d") != nullptr;
         const bool monitor = !wcsncmp(target, L"monitor", 7);
@@ -705,7 +711,7 @@ int wmain(int argc, wchar_t **argv)
     Options options;
     const wchar_t *path = nullptr;
     if (!parse(argc, argv, options, path)) {
-        std::fprintf(stderr, "usage: wgc_probe <window|monitor|window-d3d|monitor-d3d|title:TEXT> [--seconds S] "
+        std::fprintf(stderr, "usage: wgc_probe <window|monitor|window-d3d|monitor-d3d|title:TEXT|screen> [--seconds S] "
                              "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--sync-interval N] [--min-update-ms M] [--out FILE] "
                              "[--thumbs FILE]\n");
         return 2;

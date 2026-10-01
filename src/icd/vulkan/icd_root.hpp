@@ -52,6 +52,7 @@ namespace av::icd {
 
 class IcdBinding;
 class LogSink;
+class WindowChains;
 class WindowSurface;
 class MemoryTypeTable;
 class ThreadLock;
@@ -65,7 +66,7 @@ public:
 
     /* Binds itself into `binding` until destroyed. */
     IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-            LogSink &log, IcdBinding &binding, WindowSurface &windows);
+            LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
     IcdRoot &operator=(const IcdRoot &) = delete;
@@ -222,11 +223,11 @@ public:
      * named it forgotten: a handle outliving what it names is one an import
      * could still follow. */
     void     destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator);
-    /* What a swapchain of `device` needs: its physical device, and the adapter
-     * and D3DKMT device its vertical blank is waited on; false for a device
-     * this ICD did not make. */
-    bool             present_context(VkDevice device, VkPhysicalDevice &physical, uint32_t &adapter,
-                                     uint32_t &kmt_device);
+    /* What a swapchain of `device` needs: its physical device, and the
+     * connection whose adapter its vertical blank is waited on and whose wire
+     * its window's chain is opened through; false for a device this ICD did
+     * not make. */
+    bool             present_context(VkDevice device, VkPhysicalDevice &physical, Connection *&connection);
     /* The entry point of that name, at whatever level it is: what the ICD's own
      * swapchains call, having already found the device they belong to. */
     PFN_vkVoidFunction entry(const char *name) const;

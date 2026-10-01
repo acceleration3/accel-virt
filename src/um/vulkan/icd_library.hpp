@@ -1,5 +1,6 @@
 /* rvkvk.dll's ICD root and what it is constructed over: the process heap, the
- * three thread locks, the log file and D3DKMT through gdi32. One per process, in
+ * thread locks, the log file, D3DKMT through gdi32, and the windows' GDI
+ * surfaces and DXGI chains. One per process, in
  * the exports' storage (rvkvk_exports.cpp), constructed on the loader's first
  * call rather than at DLL attach, where the loader lock forbids opening a file
  * or an event. Translation only: what the root decides is in src/icd. */
@@ -9,6 +10,7 @@
 #include "core/support/object_storage.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "um/gdi_kmt.hpp"
+#include "um/icd/dxgi_window_chains.hpp"
 #include "um/icd/file_log.hpp"
 #include "um/icd/gdi_window_surface.hpp"
 #include "um/icd/process_heap.hpp"
@@ -51,6 +53,9 @@ private:
         FileLog      log;
         GdiKmt       kmt;
         GdiWindowSurface windows;
+        SrwLock      chains_lock;
+        /* Before the root, which closes its swapchains' chains as it goes. */
+        DxgiWindowChains chains;
         icd::IcdRoot root;
         ProcessTrace trace;
     };

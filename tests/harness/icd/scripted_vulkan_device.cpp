@@ -94,6 +94,10 @@ VKAPI_ATTR void VKAPI_CALL scripted_copy_to_buffer(VkCommandBuffer, VkImage imag
                                                    std::uint32_t, const VkBufferImageCopy *region)
 { bound->record_copy(image, region); }
 
+VKAPI_ATTR void VKAPI_CALL scripted_copy_image(VkCommandBuffer, VkImage source, VkImageLayout, VkImage target,
+                                               VkImageLayout, std::uint32_t, const VkImageCopy *region)
+{ bound->record_image_copy(source, target, region); }
+
 VKAPI_ATTR VkResult VKAPI_CALL scripted_submit(VkQueue queue, std::uint32_t, const VkSubmitInfo *info, VkFence fence)
 { return bound->submit(queue, info, fence); }
 
@@ -127,6 +131,7 @@ const Named entries[] = {
     {"vkEndCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&scripted_end)},
     {"vkCmdPipelineBarrier", reinterpret_cast<PFN_vkVoidFunction>(&scripted_barrier)},
     {"vkCmdCopyImageToBuffer", reinterpret_cast<PFN_vkVoidFunction>(&scripted_copy_to_buffer)},
+    {"vkCmdCopyImage", reinterpret_cast<PFN_vkVoidFunction>(&scripted_copy_image)},
     {"vkQueueSubmit", reinterpret_cast<PFN_vkVoidFunction>(&scripted_submit)},
 };
 
@@ -137,7 +142,7 @@ ScriptedVulkanDevice::ScriptedVulkanDevice()
       buffer_made_(false), device_local_(true), host_visible_(true), any_type_(true), overcount_(false), stall_(false), pool_made_(false),
       fence_made_(false), recording_(false), image_count_(0u), memory_count_(0u), mappings_(0u), pools_(0u), fences_(0u),
       submits_(0u), wait_count_(0u), wait_(VK_NULL_HANDLE), family_(0u), barriers_{}, barrier_count_(0u), copies_{},
-      copy_count_(0u)
+      copy_count_(0u), image_copies_{}, image_copy_count_(0u)
 {
     bound = this;
 }
@@ -183,6 +188,13 @@ ScriptedVulkanDevice::Image *ScriptedVulkanDevice::image_of(VkImage image)
     return nullptr;
 }
 
+const ScriptedVulkanDevice::Image *ScriptedVulkanDevice::image_of(VkImage image) const
+{
+    for (const Image &slot : images_)
+        if (static_cast<const void *>(image) == &slot && slot.made) return &slot;
+    return nullptr;
+}
+
 VkResult ScriptedVulkanDevice::make_image(const VkImageCreateInfo *info, VkImage *image)
 {
     const VkResult refused = judge("vkCreateImage");
@@ -192,8 +204,14 @@ VkResult ScriptedVulkanDevice::make_image(const VkImageCreateInfo *info, VkImage
         slot.made = true;
         slot.width = info->extent.width;
         slot.height = info->extent.height;
-        slot.format = info->format;
-        slot.usage = info->usage;
+        slot.described = Described{info->format, info->flags, info->tiling, info->usage, 0u, 0u, VK_NULL_HANDLE};
+        for (auto *node = static_cast<const VkBaseInStructure *>(info->pNext); node != nullptr; node = node->pNext) {
+            if (node->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO)
+                slot.described.external = reinterpret_cast<const VkExternalMemoryImageCreateInfo *>(node)->handleTypes;
+            if (node->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO)
+                slot.described.view_formats =
+                    reinterpret_cast<const VkImageFormatListCreateInfo *>(node)->viewFormatCount;
+        }
         image_count_++;
         *image = reinterpret_cast<VkImage>(&slot);
         return VK_SUCCESS;
@@ -267,11 +285,14 @@ void ScriptedVulkanDevice::free_memory(VkDeviceMemory memory)
     }
 }
 
-VkResult ScriptedVulkanDevice::bind_image(VkImage image, VkDeviceMemory)
+VkResult ScriptedVulkanDevice::bind_image(VkImage image, VkDeviceMemory memory)
 {
     const VkResult refused = judge("vkBindImageMemory");
     if (refused != VK_SUCCESS) return refused;
-    return image_of(image) != nullptr ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+    Image *const slot = image_of(image);
+    if (slot == nullptr) return VK_ERROR_UNKNOWN;
+    slot->described.bound = memory;
+    return VK_SUCCESS;
 }
 
 VkResult ScriptedVulkanDevice::bind_buffer(VkBuffer, VkDeviceMemory) { return judge("vkBindBufferMemory"); }
@@ -357,6 +378,7 @@ VkResult ScriptedVulkanDevice::begin(VkCommandBuffer)
     recording_ = true;
     barrier_count_ = 0u;
     copy_count_ = 0u;
+    image_copy_count_ = 0u;
     return VK_SUCCESS;
 }
 
@@ -372,7 +394,7 @@ void ScriptedVulkanDevice::record_barrier(std::uint32_t count, const VkImageMemo
 {
     for (std::uint32_t index = 0u; index < count && barrier_count_ < max_barriers; index++) {
         barriers_[barrier_count_] = Barrier{barriers[index].image, barriers[index].oldLayout,
-                                            barriers[index].newLayout};
+                                            barriers[index].newLayout, barriers[index].dstQueueFamilyIndex};
         barrier_count_++;
     }
 }
@@ -384,8 +406,16 @@ void ScriptedVulkanDevice::record_copy(VkImage image, const VkBufferImageCopy *r
     copy_count_++;
 }
 
-/* A submit runs what was recorded: the copy moves the image's bytes into the
- * read-back buffer, as the host's would. */
+void ScriptedVulkanDevice::record_image_copy(VkImage source, VkImage target, const VkImageCopy *region)
+{
+    if (image_copy_count_ == max_barriers) return;
+    image_copies_[image_copy_count_] = ImageCopy{source, target, region->extent};
+    image_copy_count_++;
+}
+
+/* A submit runs what was recorded: a copy to the buffer moves the image's
+ * bytes into the read-back buffer, and one to an image into that image, as
+ * the host's would. */
 VkResult ScriptedVulkanDevice::submit(VkQueue, const VkSubmitInfo *info, VkFence)
 {
     const VkResult refused = judge("vkQueueSubmit");
@@ -398,6 +428,13 @@ VkResult ScriptedVulkanDevice::submit(VkQueue, const VkSubmitInfo *info, VkFence
         if (slot == nullptr) continue;
         const std::uint32_t bytes = copies_[index].extent.width * copies_[index].extent.height * 4u;
         std::memcpy(buffer_bytes_, slot->bytes, bytes < max_image_bytes ? bytes : max_image_bytes);
+    }
+    for (std::uint32_t index = 0u; index < image_copy_count_; index++) {
+        const Image *const source = image_of(image_copies_[index].source);
+        Image *const       target = image_of(image_copies_[index].target);
+        if (source == nullptr || target == nullptr) continue;
+        const std::uint32_t bytes = image_copies_[index].extent.width * image_copies_[index].extent.height * 4u;
+        std::memcpy(target->bytes, source->bytes, bytes < max_image_bytes ? bytes : max_image_bytes);
     }
     return VK_SUCCESS;
 }
@@ -429,6 +466,19 @@ std::uint32_t ScriptedVulkanDevice::last_wait_count() const { return wait_count_
 VkSemaphore   ScriptedVulkanDevice::last_wait() const { return wait_; }
 std::uint32_t ScriptedVulkanDevice::barriers() const { return barrier_count_; }
 std::uint32_t ScriptedVulkanDevice::copies() const { return copy_count_; }
+std::uint32_t ScriptedVulkanDevice::image_copies() const { return image_copy_count_; }
+
+ScriptedVulkanDevice::Described ScriptedVulkanDevice::described(VkImage image) const
+{
+    const Image *const slot = image_of(image);
+    return slot != nullptr ? slot->described : Described{};
+}
+
+const std::uint8_t *ScriptedVulkanDevice::bytes(VkImage image) const
+{
+    const Image *const slot = image_of(image);
+    return slot != nullptr ? slot->bytes : nullptr;
+}
 std::uint32_t ScriptedVulkanDevice::mappings() const { return mappings_; }
 std::uint32_t ScriptedVulkanDevice::pools() const { return pools_; }
 std::uint32_t ScriptedVulkanDevice::pool_family() const { return family_; }

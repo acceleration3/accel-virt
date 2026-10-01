@@ -28,7 +28,8 @@ bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void 
     forget();
     if (before != nullptr && before != window) chains.close(before);
     if (window == nullptr || width == 0u || height == 0u) return false;
-    if (!chains.open(window, luid, width, height, slot_count, ids_, bytes_)) return false;
+    if (!chains.open(window, luid, width, height, icd::SlotLayout::rgba_bottom_up, slot_count, ids_, bytes_))
+        return false;
     window_ = window;
     width_ = width;
     height_ = height;

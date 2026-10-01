@@ -10,9 +10,10 @@
 
 namespace av::icd {
 
-Presentation::Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, LogSink &log, IcdRoot &root,
-                           EntryLookup &entries)
-    : memory_(memory), kmt_(kmt), windows_(windows), log_(log), root_(root), entries_(entries), surfaces_(), slots_{}
+Presentation::Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains,
+                           LogSink &log, IcdRoot &root, EntryLookup &entries)
+    : memory_(memory), kmt_(kmt), windows_(windows), chains_(chains), log_(log), root_(root), entries_(entries),
+      surfaces_(), slots_{}
 {
     AV_SCOPE("Presentation::Presentation");
 }
@@ -96,9 +97,8 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     AV_SCOPE("Presentation::create_swapchain");
     *swapchain = VK_NULL_HANDLE;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
-    uint32_t         adapter = 0u;
-    uint32_t         kmt_device = 0u;
-    if (info == nullptr || !root_.present_context(device, physical, adapter, kmt_device)) {
+    Connection      *connection = nullptr;
+    if (info == nullptr || !root_.present_context(device, physical, connection)) {
         log_.write("rvkvk: a swapchain is refused: its device has no adapter to present on");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
@@ -107,17 +107,20 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
         log_.write("rvkvk: a swapchain is refused: its surface names no window");
         return VK_ERROR_SURFACE_LOST_KHR;
     }
+    /* Retired first, whether or not the new one is made, as Vulkan has it:
+     * the old one's slot of the window's chain is given back before the new
+     * one opens the chain again. */
+    if (Swapchain *const old = find(device, info->oldSwapchain); old != nullptr) old->retire();
     for (SwapchainSlot &slot : slots_) {
         if (slot.chain_.constructed()) continue;
-        static_cast<void>(
-            slot.chain_.construct(memory_, windows_, entries_, device, physical, kmt_, log_, adapter, kmt_device));
+        static_cast<void>(slot.chain_.construct(memory_, windows_, chains_, entries_, device, physical, kmt_, log_,
+                                                *connection));
         SurfaceProperties properties(windows_, window);
         const VkResult made = slot.chain_.object().initialize(*info, window, properties);
         if (made != VK_SUCCESS) {
             destroy(slot);
             return made;
         }
-        if (Swapchain *const old = find(device, info->oldSwapchain); old != nullptr) old->retire();
         *swapchain = HandleBits(&slot).as<VkSwapchainKHR>();
         return VK_SUCCESS;
     }

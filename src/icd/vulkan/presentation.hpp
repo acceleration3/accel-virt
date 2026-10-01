@@ -23,6 +23,7 @@ namespace av::icd {
 
 class IcdRoot;
 class LogSink;
+class WindowChains;
 class WindowSurface;
 struct PresentationProbe;
 
@@ -36,8 +37,8 @@ class Presentation {
 public:
     static constexpr uint32_t max_swapchains = 16u;
 
-    Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, LogSink &log, IcdRoot &root,
-                 EntryLookup &entries);
+    Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains, LogSink &log,
+                 IcdRoot &root, EntryLookup &entries);
     ~Presentation();
     Presentation(const Presentation &) = delete;
     Presentation &operator=(const Presentation &) = delete;
@@ -79,6 +80,7 @@ private:
     BlockSource   &memory_;
     Kmt           &kmt_;
     WindowSurface &windows_;
+    WindowChains  &chains_;
     LogSink       &log_;
     IcdRoot       &root_;
     EntryLookup   &entries_;

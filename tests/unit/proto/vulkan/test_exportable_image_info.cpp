@@ -2,7 +2,7 @@
  * its memory: the formats interop shares, mutable between linear and sRGB where
  * the format has both, drawn and sampled whatever the binds, over dma-buf
  * memory - and nothing for a texture interop does not share. */
-#include "device/shim/exportable_image_info.hpp"
+#include "proto/vulkan/exportable_image_info.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>

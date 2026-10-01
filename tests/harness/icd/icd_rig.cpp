@@ -14,8 +14,8 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 
 IcdRig::IcdRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'),
-      log_(), windows_(),
-      root_(platform_, kmt_, lock_, send_lock_, memory_lock_, log_, icd::icd_binding, windows_)
+      log_(), windows_(), chains_(),
+      root_(platform_, kmt_, lock_, send_lock_, memory_lock_, log_, icd::icd_binding, windows_, chains_)
 {
     kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);
@@ -30,6 +30,7 @@ RecordingThreadLock  &IcdRig::send_lock() { return send_lock_; }
 RecordingThreadLock  &IcdRig::memory_lock() { return memory_lock_; }
 RecordingLog         &IcdRig::log() { return log_; }
 ScriptedWindowSurface &IcdRig::windows() { return windows_; }
+ScriptedWindowChains &IcdRig::chains() { return chains_; }
 icd::IcdRoot         &IcdRig::root() { return root_; }
 
 VkInstance IcdRig::create_instance() { return create_instance(nullptr, 0u); }

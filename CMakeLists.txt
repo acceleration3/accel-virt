@@ -483,7 +483,8 @@ foreach(src ${AV_UNIT_TESTS})
   # DXVK's driver threads allocate from modules they unload before exit, which
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
   if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d12_session_device" OR
-     name STREQUAL "test_d3d12_session_features_device" OR name STREQUAL "test_d3d_gl_interop_device")
+     name STREQUAL "test_d3d12_session_features_device" OR name STREQUAL "test_d3d_gl_interop_device" OR
+     name STREQUAL "test_d3d_vulkan_interop_device")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;RVK_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
   endif()

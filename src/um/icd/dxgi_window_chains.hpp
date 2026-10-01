@@ -3,18 +3,20 @@
  * never presents through one never loads them.
  *
  * One Direct3D 11 device per adapter, on rvkumd as any application's is, and
- * per window a flip chain of two R8G8B8A8 buffers and max_slots shared
- * textures. A slot's object id is the key the miniport minted into its
- * allocation, read through D3DKMT from the NT handle the texture is shared by
- * - the AllocationDescriptor and SharedObjectRecord every kernel surface
- * carries - which is how OpenGL and Vulkan name any shared object.
+ * per window a flip chain of two buffers and up to max_slots shared textures,
+ * all of the slot layout's channel order - R8G8B8A8, or B8G8R8A8 for a
+ * blue-first Vulkan image. A slot's object id is the key the miniport minted
+ * into its allocation, read through D3DKMT from the NT handle the texture is
+ * shared by - the AllocationDescriptor and SharedObjectRecord every kernel
+ * surface carries - which is how OpenGL and Vulkan name any shared object.
  *
- * Presenting draws the slot into the chain's back buffer upside down - a slot
- * holds its frame bottom row first, as OpenGL stores it - with two shaders
- * compiled at the device's making through d3dcompiler_47.dll, then presents it
- * and waits for the draw, so the slot may be written again. The
- * chains and their devices are used under `lock`: an application's thread
- * opens a window's chain while the present thread presents another's. */
+ * Presenting puts the slot in the chain's back buffer: a top-down slot is
+ * copied, and a bottom-up one, as OpenGL stores a frame, is drawn upside down
+ * with two shaders compiled at the device's making through d3dcompiler_47.dll.
+ * The chain is then presented and the copy or draw waited for, so the slot may
+ * be written again. The chains and their devices are used under `lock`: an
+ * application's thread opens a window's chain while the present thread
+ * presents another's. */
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
@@ -56,8 +58,8 @@ public:
     DxgiWindowChains(const DxgiWindowChains &) = delete;
     DxgiWindowChains &operator=(const DxgiWindowChains &) = delete;
 
-    bool open(void *window, uint64_t luid, uint32_t width, uint32_t height, uint32_t slots, uint64_t *ids,
-              uint64_t *bytes) override;
+    bool open(void *window, uint64_t luid, uint32_t width, uint32_t height, icd::SlotLayout layout, uint32_t slots,
+              uint64_t *ids, uint64_t *bytes) override;
     bool present(void *window, uint32_t slot) override;
     void close(void *window) override;
 
@@ -88,6 +90,9 @@ private:
         uint32_t                                width;
         uint32_t                                height;
         uint32_t                                count;
+        icd::SlotLayout                         layout;
+        /* The DXGI_FORMAT of the buffers and the slots, the layout's. */
+        uint32_t                                format;
     };
 
     [[nodiscard]] bool loaded();
@@ -98,7 +103,7 @@ private:
     [[nodiscard]] bool kernel_device(uint64_t luid, Device &made);
     /* The fullscreen triangle and the flipped read of a slot, compiled. */
     [[nodiscard]] bool make_shaders(Device &made);
-    /* Slot `slot` of `chain` drawn into `back` upside down. */
+    /* Slot `slot` of a bottom-up `chain` drawn into `back` upside down. */
     void               draw_flipped(Chain &chain, Device &device, ID3D11Texture2D *back, uint32_t slot);
     Chain             *chain_of(void *window);
     Chain             *free_chain();

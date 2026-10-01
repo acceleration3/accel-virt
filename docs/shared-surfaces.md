@@ -317,8 +317,12 @@ dma-bufs already do.
    with SHARE_OBJECT under the key the miniport minted, so OpenGL and Vulkan
    open it by that id like any shared object. OpenGL imports memory as
    *dedicated*, which is what makes radeonsi read RADV's layout from the
-   dma-buf (`test_d3d_gl_interop_device`). The reverse - Direct3D opening a
-   Vulkan or OpenGL object - is still refused.
+   dma-buf (`test_d3d_gl_interop_device`). Vulkan binds an image made from the
+   same `ExportableImageInfo` - it lives in `proto/vulkan/` because both sides
+   must describe one image - to memory imported as the Vulkan backend imports
+   any, and RADV lays both out alike (`test_d3d_vulkan_interop_device`, which
+   fails for a linear image). The reverse - Direct3D opening a Vulkan or
+   OpenGL object - is still refused.
 5. **Vulkan and OpenGL swap chains present surfaces.** They stop reading back
    into guest memory and GDI-blitting.
 
@@ -330,7 +334,25 @@ dma-bufs already do.
    present thread, once the batch is done, draws the slot into the chain's
    back buffer the right way up and presents it, and DWM composes it from
    the host's texture. A window whose chain cannot be had reads back as
-   before. Vulkan is next.
+   before.
+
+   Vulkan done: a swapchain opens its window's chain with one slot in its
+   images' own channel order, rows top first (`SlotLayout`), so a present
+   copies the image into the slot with vkCmdCopyImage - its bytes unconverted,
+   an sRGB image into the slot's linear format - releases the slot to the
+   external queue, waits for the copy, and has the chain copy the slot into
+   its back buffer and present it (`ChainedImage`, `PresentDevice::copy_into`).
+   Presents stay synchronous and paced as before. A swapchain recreated with
+   the old one named retires the old one first, which gives its slot back, so
+   the new one opens the window's chain again; a retired swapchain's presents
+   are consumed and shown nowhere.
+
+   Verified in the guest with `vk_window.exe` and `gl_window.exe`, captured as
+   the whole screen (`wgc_probe screen`): the window's region holds its frame
+   in all 180 frames of 3 s at 60 Hz, before and after a resize. Captured as a
+   window instead, WGC delivers the odd frame black over the title bar too -
+   a plain D3D11 flip window does the same - which is the capture's, not the
+   screen's.
 6. **The renderer and other GPUs.** Staging slots cross to QEMU, and a surface
    opened on another GPU gets a copy path.
 

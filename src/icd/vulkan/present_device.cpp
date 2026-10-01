@@ -44,6 +44,8 @@ using Barrier = void(VKAPI_PTR *)(VkCommandBuffer, VkPipelineStageFlags, VkPipel
                                   const VkImageMemoryBarrier *);
 using CopyToBuffer = void(VKAPI_PTR *)(VkCommandBuffer, VkImage, VkImageLayout, VkBuffer, uint32_t,
                                        const VkBufferImageCopy *);
+using CopyImage = void(VKAPI_PTR *)(VkCommandBuffer, VkImage, VkImageLayout, VkImage, VkImageLayout, uint32_t,
+                                    const VkImageCopy *);
 using Submit = VkResult(VKAPI_PTR *)(VkQueue, uint32_t, const VkSubmitInfo *, VkFence);
 
 constexpr uint32_t present_family = 0u;
@@ -181,11 +183,18 @@ VkResult PresentDevice::make_readback(VkDeviceSize bytes)
     step = call<Map>("vkMapMemory")(device_, buffer_memory_, 0u, VK_WHOLE_SIZE, 0u, &view);
     if (step != VK_SUCCESS) return step;
     mapped_ = static_cast<uint8_t *>(view);
+    return make_commands();
+}
+
+VkResult PresentDevice::make_commands()
+{
+    AV_SCOPE("PresentDevice::make_commands");
+    if (pool_ != VK_NULL_HANDLE) return VK_ERROR_INITIALIZATION_FAILED;
     VkCommandPoolCreateInfo pool = {};
     pool.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool.queueFamilyIndex = present_family;
-    step = call<CreatePool>("vkCreateCommandPool")(device_, &pool, nullptr, &pool_);
+    VkResult step = call<CreatePool>("vkCreateCommandPool")(device_, &pool, nullptr, &pool_);
     if (step != VK_SUCCESS) {
         pool_ = VK_NULL_HANDLE;
         return step;
@@ -218,19 +227,35 @@ VkResult PresentDevice::copy(VkQueue queue, VkImage image, VkExtent2D extent, ui
 {
     AV_SCOPE("PresentDevice::copy");
     if (fence_ == VK_NULL_HANDLE) return VK_ERROR_INITIALIZATION_FAILED;
-    VkResult step = record_copy(image, extent);
-    if (step != VK_SUCCESS) return step;
+    const VkResult recorded = record_copy(image, extent);
+    if (recorded != VK_SUCCESS) return recorded;
+    return run(queue, wait_count, waits);
+}
+
+VkResult PresentDevice::copy_into(VkQueue queue, VkImage image, VkImage target, VkExtent2D extent,
+                                  uint32_t wait_count, const VkSemaphore *waits)
+{
+    AV_SCOPE("PresentDevice::copy_into");
+    if (fence_ == VK_NULL_HANDLE) return VK_ERROR_INITIALIZATION_FAILED;
+    const VkResult recorded = record_copy_into(image, target, extent);
+    if (recorded != VK_SUCCESS) return recorded;
+    return run(queue, wait_count, waits);
+}
+
+/* The application's semaphores are the host's: the copy waits on them where
+ * the host would have presented. */
+VkResult PresentDevice::run(VkQueue queue, uint32_t wait_count, const VkSemaphore *waits)
+{
+    AV_SCOPE("PresentDevice::run");
+    if (wait_count > max_waits) return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkSubmitInfo submit = {};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit.commandBufferCount = 1u;
     submit.pCommandBuffers = &commands_;
-    /* The application's semaphores are the host's: the copy waits on them
-     * where the host would have presented. */
-    if (wait_count > max_waits) return VK_ERROR_OUT_OF_HOST_MEMORY;
     submit.waitSemaphoreCount = wait_count;
     submit.pWaitSemaphores = waits;
     submit.pWaitDstStageMask = present_stages;
-    step = call<Submit>("vkQueueSubmit")(queue, 1u, &submit, fence_);
+    VkResult step = call<Submit>("vkQueueSubmit")(queue, 1u, &submit, fence_);
     if (step != VK_SUCCESS) return step;
     step = call<WaitFences>("vkWaitForFences")(device_, 1u, &fence_, VK_TRUE, copy_timeout_ns);
     const VkResult reset = call<ResetFences>("vkResetFences")(device_, 1u, &fence_);
@@ -270,11 +295,38 @@ VkResult PresentDevice::record_copy(VkImage image, VkExtent2D extent)
     return call<End>("vkEndCommandBuffer")(commands_);
 }
 
+/* The slot is overwritten whole, so it is taken from UNDEFINED: nothing it
+ * held is kept, and no ownership needs taking back from the device that read
+ * it last. A copy, not a blit: the slot has the image's channel order, and its
+ * bytes cross unconverted. */
+VkResult PresentDevice::record_copy_into(VkImage image, VkImage target, VkExtent2D extent)
+{
+    AV_SCOPE("PresentDevice::record_copy_into");
+    VkCommandBufferBeginInfo begin = {};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    const VkResult begun = call<Begin>("vkBeginCommandBuffer")(commands_, &begin);
+    if (begun != VK_SUCCESS) return begun;
+    transition(image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    transition(target, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    VkImageCopy region = {};
+    region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.srcSubresource.layerCount = 1u;
+    region.dstSubresource = region.srcSubresource;
+    region.extent = {extent.width, extent.height, 1u};
+    call<CopyImage>("vkCmdCopyImage")(commands_, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
+    transition(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    release_to_external(target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+    return call<End>("vkEndCommandBuffer")(commands_);
+}
+
 void PresentDevice::transition(VkImage image, VkImageLayout from, VkImageLayout to)
 {
     AV_SCOPE("PresentDevice::transition");
     VkImageMemoryBarrier barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.dstAccessMask = to == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u;
     barrier.oldLayout = from;
     barrier.newLayout = to;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -285,6 +337,28 @@ void PresentDevice::transition(VkImage image, VkImageLayout from, VkImageLayout 
     barrier.subresourceRange.layerCount = 1u;
     call<Barrier>("vkCmdPipelineBarrier")(commands_, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0u,
                                           0u, nullptr, 0u, nullptr, 1u, &barrier);
+}
+
+/* What the copy wrote made visible beyond this device, and the image handed to
+ * the queue of whichever device reads it next, which is what has a driver
+ * leave it in a state another driver can read. */
+void PresentDevice::release_to_external(VkImage image, VkImageLayout from, VkImageLayout to)
+{
+    AV_SCOPE("PresentDevice::release_to_external");
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.oldLayout = from;
+    barrier.newLayout = to;
+    barrier.srcQueueFamilyIndex = present_family;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1u;
+    barrier.subresourceRange.layerCount = 1u;
+    call<Barrier>("vkCmdPipelineBarrier")(commands_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                          VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0u, 0u, nullptr, 0u, nullptr, 1u,
+                                          &barrier);
 }
 
 void PresentDevice::release()

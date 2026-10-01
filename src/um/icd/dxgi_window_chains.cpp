@@ -38,7 +38,6 @@ constexpr char flipped_source[] = "Texture2D slot : register(t0);"
 constexpr uint32_t buffer_count = 2u;
 constexpr uint32_t max_adapters = 16u;
 constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
-constexpr DXGI_FORMAT chain_format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 }  // namespace
 
@@ -60,8 +59,8 @@ DxgiWindowChains::~DxgiWindowChains()
     if (compiler_ != nullptr) FreeLibrary(static_cast<HMODULE>(compiler_));
 }
 
-bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_t height, uint32_t slots,
-                            uint64_t *ids, uint64_t *bytes)
+bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_t height, icd::SlotLayout layout,
+                            uint32_t slots, uint64_t *ids, uint64_t *bytes)
 {
     AV_SCOPE("DxgiWindowChains::open");
     if (window == nullptr || luid == 0u || width == 0u || height == 0u || slots == 0u || slots > max_slots)
@@ -76,9 +75,12 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
     if (chain == nullptr) chain = free_chain();
     bool made = device != max_devices && chain != nullptr;
     if (made && (chain->chain.get() == nullptr || chain->width != width || chain->height != height ||
-                 chain->count != slots)) {
+                 chain->count != slots || chain->layout != layout)) {
         chain->window = window;
         chain->device = device;
+        chain->layout = layout;
+        chain->format = layout == icd::SlotLayout::bgra_top_down ? DXGI_FORMAT_B8G8R8A8_UNORM
+                                                                 : DXGI_FORMAT_R8G8B8A8_UNORM;
         made = make_chain(*chain, devices_[device], width, height) && make_slots(*chain, devices_[device], slots);
         if (!made) drop_chain(*chain);
     }
@@ -94,8 +96,10 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
     return made;
 }
 
-/* The copy runs on the host's queue after the frame the slot holds, which the
- * caller waited for; the query after the present ends once it has. */
+/* The copy or draw runs on the host's queue after the frame the slot holds,
+ * which the caller waited for; the query after the present ends once it has.
+ * A top-down slot is the back buffer's format and size, so it is copied as it
+ * is. */
 bool DxgiWindowChains::present(void *window, uint32_t slot)
 {
     AV_SCOPE("DxgiWindowChains::present");
@@ -110,7 +114,10 @@ bool DxgiWindowChains::present(void *window, uint32_t slot)
     bool presented = SUCCEEDED(
         chain->chain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(back.receive())));
     if (presented) {
-        draw_flipped(*chain, devices_[chain->device], back.get(), slot);
+        if (chain->layout == icd::SlotLayout::rgba_bottom_up)
+            draw_flipped(*chain, devices_[chain->device], back.get(), slot);
+        else
+            context->CopyResource(back.get(), chain->slots[slot].get());
         const HRESULT shown = chain->chain->Present(0, 0);
         presented = SUCCEEDED(shown);
         if (!presented_noted_) note("a window's chain presented its first frame, answering", static_cast<uint32_t>(shown));
@@ -299,7 +306,7 @@ bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, 
     AV_SCOPE("DxgiWindowChains::make_chain");
     drop_slots(chain);
     if (chain.chain.get() != nullptr) {
-        if (FAILED(chain.chain->ResizeBuffers(0u, width, height, DXGI_FORMAT_UNKNOWN, 0u))) {
+        if (FAILED(chain.chain->ResizeBuffers(0u, width, height, static_cast<DXGI_FORMAT>(chain.format), 0u))) {
             refuse("the window's chain would not resize");
             return false;
         }
@@ -307,7 +314,7 @@ bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, 
         DXGI_SWAP_CHAIN_DESC1 described = {};
         described.Width = width;
         described.Height = height;
-        described.Format = chain_format;
+        described.Format = static_cast<DXGI_FORMAT>(chain.format);
         described.SampleDesc = {1u, 0u};
         described.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         described.BufferCount = buffer_count;
@@ -338,7 +345,7 @@ bool DxgiWindowChains::make_slots(Chain &chain, Device &device, uint32_t count)
     described.Height = chain.height;
     described.MipLevels = 1u;
     described.ArraySize = 1u;
-    described.Format = chain_format;
+    described.Format = static_cast<DXGI_FORMAT>(chain.format);
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
     described.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
@@ -397,16 +404,29 @@ void DxgiWindowChains::drop_slots(Chain &chain)
     chain.count = 0u;
 }
 
+/* Direct3D defers destroying what was released until its context lets go,
+ * and DXGI makes a window another chain only once the last is destroyed: the
+ * flush is what lets a window closed by one swapchain be opened by the next
+ * (ID3D11DeviceContext::Flush, "Deferred Destruction Issues with Flip
+ * Presentation Swap Chains"). */
 void DxgiWindowChains::drop_chain(Chain &chain)
 {
     AV_SCOPE("DxgiWindowChains::drop_chain");
+    const bool held = chain.chain.get() != nullptr;
     drop_slots(chain);
     chain.copied.reset();
     chain.chain.reset();
+    ID3D11DeviceContext *const context = devices_[chain.device].context.get();
+    if (held && context != nullptr) {
+        context->ClearState();
+        context->Flush();
+    }
     chain.window = nullptr;
     chain.device = 0u;
     chain.width = 0u;
     chain.height = 0u;
+    chain.layout = icd::SlotLayout::rgba_bottom_up;
+    chain.format = 0u;
 }
 
 void DxgiWindowChains::drop_device(Device &device)

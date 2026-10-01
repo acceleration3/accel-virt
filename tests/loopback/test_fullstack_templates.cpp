@@ -14,6 +14,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/icd_binding.hpp"
@@ -58,7 +59,7 @@ class IcdProcess {
 public:
     explicit IcdProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'),
-          root_(memory_, kmt, lock_, send_lock_, memory_lock_, log_, av::icd::icd_binding, windows_)
+          root_(memory_, kmt, lock_, send_lock_, memory_lock_, log_, av::icd::icd_binding, windows_, chains_)
     {
     }
 
@@ -73,6 +74,7 @@ private:
     RecordingThreadLock       memory_lock_;
     RecordingLog              log_;
     av::ScriptedWindowSurface windows_;
+    av::ScriptedWindowChains  chains_;
     av::icd::IcdRoot          root_;
 };
 

@@ -1,4 +1,4 @@
-#include "device/shim/exportable_image_info.hpp"
+#include "proto/vulkan/exportable_image_info.hpp"
 
 #include "core/trace/function_scope.hpp"
 

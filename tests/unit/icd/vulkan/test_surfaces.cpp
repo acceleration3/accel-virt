@@ -44,7 +44,7 @@ Win32SurfaceCreateRecord surface_of(void *window)
  * entries would be called on. */
 class WsiRig {
 public:
-    WsiRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.log(), rig_.root(), host_) {}
+    WsiRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.log(), rig_.root(), host_) {}
 
     IcdRig       &rig() { return rig_; }
     Presentation &wsi() { return wsi_; }

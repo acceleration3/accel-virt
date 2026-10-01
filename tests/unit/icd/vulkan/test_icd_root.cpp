@@ -11,6 +11,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/icd_binding.hpp"
@@ -489,7 +490,8 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::RecordingThreadLock memory_lock(trace, 'M');
       av::RecordingLog log;
       av::ScriptedWindowSurface windows;
-      IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows);
+      av::ScriptedWindowChains chains;
+      IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows, chains);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
                                           av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),

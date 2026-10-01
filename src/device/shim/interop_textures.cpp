@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/dxvk_vulkan_device.hpp"
-#include "device/shim/exportable_image_info.hpp"
+#include "proto/vulkan/exportable_image_info.hpp"
 #include "device/shim/vkd3d_image_export.hpp"
 
 #include <stdio.h>
