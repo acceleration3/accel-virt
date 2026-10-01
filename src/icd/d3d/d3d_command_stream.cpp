@@ -6,6 +6,8 @@
 #include "icd/d3d/command_recording.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/generated/d3d/d3d_protocol_ids.h"
+#include "proto/sync_call_scope.hpp"
 #include "proto/submission/command_header.hpp"
 
 namespace av::d3d {
@@ -18,7 +20,8 @@ constexpr size_t header_bytes = CommandHeader::encoded_size;
 
 D3dCommandStream::D3dCommandStream(KmtTransport &transport, uint8_t *block, size_t capacity)
     : transport_(transport), block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u), batches_(0u),
-      recorded_(0u), flushed_at_(0u), no_arena_(), recording_(nullptr), lent_(false), incomplete_(false), speaking_(0u), failed_(false)
+      recorded_(0u), flushed_at_(0u), no_arena_(), recording_(nullptr), lent_(false), incomplete_(false), speaking_(0u),
+      select_command_(d3dproto::kCmd_SelectDevice11), finish_command_(d3dproto::kCmd_Finish11), failed_(false)
 {
     AV_SCOPE("D3dCommandStream::D3dCommandStream");
 }
@@ -151,9 +154,18 @@ bool D3dCommandStream::make_room_for(size_t bytes)
     if (arena.room() >= bytes) return true;
     /* Every lease handed out so far is read once the host answers a command
      * sent after all of them; Finish is that command. */
-    uint32_t removed = 0u;
-    if (!d3dproto::av_d3d_Finish11(*this, &removed)) return false;
+    WireWriter           finish = request_writer();
+    const SyncCallScope  call{*this};
+    WireReader           reply{nullptr, 0u};
+    if (send_sync(finish_command_, finish, reply) != TransportResult::ok) return false;
     return arena.room() >= bytes;
+}
+
+void D3dCommandStream::speak_with(uint32_t select_command, uint32_t finish_command)
+{
+    AV_SCOPE("D3dCommandStream::speak_with");
+    select_command_ = select_command;
+    finish_command_ = finish_command;
 }
 
 bool D3dCommandStream::speak_as(uint32_t device)
@@ -162,7 +174,9 @@ bool D3dCommandStream::speak_as(uint32_t device)
     /* Device 0 is a Direct3D 12 speaker: its commands name their own objects
      * and read no selected pipeline state, so whoever was selected stays. */
     if (device == 0u || device == speaking_) return !failed_;
-    if (!d3dproto::av_d3d_SelectDevice11(*this, device)) return false;
+    WireWriter selection = request_writer();
+    selection.write_pod<uint32_t>(device);
+    if (send_async(select_command_, selection) != TransportResult::ok) return false;
     speaking_ = device;
     return true;
 }

@@ -13,6 +13,9 @@
  * d3dkmthk.h. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
+#include <d3d9types.h>
+#include <d3d9caps.h>
+#include <d3dumddi.h>
 #include <d3d10umddi.h>
 #include <d3d12umddi.h>
 #include <dxgiddi.h>
@@ -29,6 +32,8 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
+#include "icd/d3d/ddi/d3dddi_adapter_funcs_record.hpp"
+#include "icd/d3d/ddi/d3dddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/dxgi1_6_1_ddi_base_functions_record.hpp"
 #include "icd/d3d/ddi/dxgi_ddi_args_record.hpp"
 #include "icd/d3d/ddi/dxgi_ddi_base_args_record.hpp"
@@ -44,6 +49,27 @@ AV_SAME_OFFSET(D3dddiAdapterCallbacksRecord, pfnQueryAdapterInfoCb, D3DDDI_ADAPT
 AV_SAME_OFFSET(D3dddiAdapterCallbacksRecord, pfnGetMultisampleMethodListCb, D3DDDI_ADAPTERCALLBACKS,
                pfnGetMultisampleMethodListCb);
 AV_SAME_OFFSET(D3dddiAdapterCallbacksRecord, pfnQueryAdapterInfoCb2, D3DDDI_ADAPTERCALLBACKS, pfnQueryAdapterInfoCb2);
+
+AV_SAME_SIZE(D3dddiargOpenAdapterRecord, D3DDDIARG_OPENADAPTER);
+AV_SAME_OFFSET(D3dddiargOpenAdapterRecord, hAdapter, D3DDDIARG_OPENADAPTER, hAdapter);
+AV_SAME_OFFSET(D3dddiargOpenAdapterRecord, Interface, D3DDDIARG_OPENADAPTER, Interface);
+AV_SAME_OFFSET(D3dddiargOpenAdapterRecord, Version, D3DDDIARG_OPENADAPTER, Version);
+AV_SAME_OFFSET(D3dddiargOpenAdapterRecord, pAdapterCallbacks, D3DDDIARG_OPENADAPTER, pAdapterCallbacks);
+AV_SAME_OFFSET(D3dddiargOpenAdapterRecord, pAdapterFuncs, D3DDDIARG_OPENADAPTER, pAdapterFuncs);
+AV_SAME_OFFSET(D3dddiargOpenAdapterRecord, DriverVersion, D3DDDIARG_OPENADAPTER, DriverVersion);
+
+AV_SAME_SIZE(D3dddiAdapterFuncsRecord, D3DDDI_ADAPTERFUNCS);
+AV_SAME_OFFSET(D3dddiAdapterFuncsRecord, pfnGetCaps, D3DDDI_ADAPTERFUNCS, pfnGetCaps);
+AV_SAME_OFFSET(D3dddiAdapterFuncsRecord, pfnCreateDevice, D3DDDI_ADAPTERFUNCS, pfnCreateDevice);
+AV_SAME_OFFSET(D3dddiAdapterFuncsRecord, pfnCloseAdapter, D3DDDI_ADAPTERFUNCS, pfnCloseAdapter);
+/* Direct3D 9's GetCaps argument is Direct3D 10's in all but its name, so one
+ * record and one root slot answer both. */
+AV_SAME_SIZE(D3d102ddiargGetCapsRecord, D3DDDIARG_GETCAPS);
+AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, Type, D3DDDIARG_GETCAPS, Type);
+AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, pInfo, D3DDDIARG_GETCAPS, pInfo);
+AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, pData, D3DDDIARG_GETCAPS, pData);
+AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, DataSize, D3DDDIARG_GETCAPS, DataSize);
+static_assert(D3D_UMD_INTERFACE_VERSION_WIN7 == 0x2003, "the interface d3d9.dll is told the driver speaks");
 
 AV_SAME_SIZE(D3d10ddiargOpenAdapterRecord, D3D10DDIARG_OPENADAPTER);
 AV_SAME_OFFSET(D3d10ddiargOpenAdapterRecord, hRTAdapter, D3D10DDIARG_OPENADAPTER, hRTAdapter);

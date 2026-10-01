@@ -1,5 +1,7 @@
 #include "icd/d3d/umd_root.hpp"
 
+#include "icd/d3d/ddi/d3dddiarg_open_adapter_record.hpp"
+#include "icd/d3d/ddi/d3dddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
 
 #include "core/support/runtime_call.hpp"
@@ -148,6 +150,53 @@ Hresult UmdRoot::open_adapter12(D3d12ddiargOpenAdapterRecord *args)
     if (opened != hr_ok) return opened;
     fill_d3d12_adapter_funcs(*static_cast<D3d12ddiAdapterFuncsRecord *>(args->pAdapterFuncs));
     args->hAdapter = adapter;
+    return hr_ok;
+}
+
+Hresult UmdRoot::open_adapter9(D3dddiargOpenAdapterRecord *args)
+{
+    AV_SCOPE("UmdRoot::open_adapter9");
+    constexpr uint32_t interface9 = 9u;
+    constexpr uint32_t win7_interface = 0x2003u;   /* D3D_UMD_INTERFACE_VERSION_WIN7 */
+    if (args == nullptr || args->pAdapterFuncs == nullptr) return hr_invalid_arg;
+    if (args->Interface != interface9 || args->Version < win7_interface) {
+        note("open9 refused, version", args->Version);
+        return hr_no_interface;
+    }
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    UmdAdapter   *adapter = nullptr;
+    const Hresult opened = open(adapter, RuntimeKind::d3d9, args->hAdapter, args->pAdapterCallbacks,
+                                args->Interface, args->Version);
+    if (opened != hr_ok) return opened;
+    fill_d3d9_adapter_funcs(*static_cast<D3dddiAdapterFuncsRecord *>(args->pAdapterFuncs));
+    args->hAdapter = adapter;
+    args->DriverVersion = win7_interface;
+    return hr_ok;
+}
+
+Hresult UmdRoot::create_device9(void *adapter, void *create)
+{
+    AV_SCOPE("UmdRoot::create_device9");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
+    if (open_adapter == nullptr || create == nullptr || open_adapter->runtime() != RuntimeKind::d3d9)
+        return hr_invalid_arg;
+    if (builder_ == nullptr) return hr_not_impl;
+    const Hresult built = builder_->build9(*open_adapter, create, open_adapter->connection().adapter());
+    if (built == hr_ok) open_adapter->device_made();
+    return built;
+}
+
+Hresult UmdRoot::destroy_device9(void *device)
+{
+    AV_SCOPE("UmdRoot::destroy_device9");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    UmdAdapter *const made_on = builder_ != nullptr ? builder_->tear_down9(device) : nullptr;
+    if (made_on == nullptr) return hr_invalid_arg;
+    made_on->device_gone();
     return hr_ok;
 }
 

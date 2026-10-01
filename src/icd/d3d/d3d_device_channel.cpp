@@ -5,6 +5,7 @@
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
 namespace av::d3d {
 
@@ -27,6 +28,17 @@ bool D3dDeviceChannel::open(uint32_t feature_level, uint32_t &hresult, uint32_t 
     ScopeExit release([this] { lock_.release(); });
     hresult = 1u;
     if (!d3dproto::av_d3d_CreateDevice11(stream_, device_, feature_level, 0u, &hresult, &level)) return false;
+    if (hresult == 0u) stream_.selected(device_);
+    return true;
+}
+
+bool D3dDeviceChannel::open9(uint32_t &hresult)
+{
+    AV_SCOPE("D3dDeviceChannel::open9");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    hresult = 1u;
+    if (!d3d9proto::av_d3d9_CreateDevice9(stream_, device_, 0u, &hresult)) return false;
     if (hresult == 0u) stream_.selected(device_);
     return true;
 }
@@ -97,6 +109,16 @@ bool D3dDeviceChannel::close()
 
 /* A selection that could not be sent fails the stream, and the writer the
  * stream lends then has no room, so the command fails where it is sent. */
+bool D3dDeviceChannel::close9()
+{
+    AV_SCOPE("D3dDeviceChannel::close9");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    const bool sent = d3d9proto::av_d3d9_Destroy9(stream_, device_);
+    stream_.forget(device_);
+    return sent;
+}
+
 WireWriter D3dDeviceChannel::request_writer()
 {
     AV_SCOPE("D3dDeviceChannel::request_writer");

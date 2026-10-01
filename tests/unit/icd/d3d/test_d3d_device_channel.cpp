@@ -22,6 +22,8 @@
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/generated/d3d9/d3d9_dispatch_client.h"
+#include "proto/generated/d3d9/d3d9_protocol_ids.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
@@ -311,3 +313,54 @@ TEST(d3d_device_channel, an_application_flush_is_the_streams_under_the_lock)
   CHECK_EQ(ids[1], kCmd_Draw);
   CHECK_EQ(ids[2], kCmd_Flush11);
   CHECK_EQ(fixture.stream().recorded_bytes(), 0u); }
+
+namespace {
+
+/* CreateDevice9's answer: an hresult alone. */
+void answer_create9(Fixture &fixture, std::uint32_t hresult)
+{
+    std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
+    CHECK(reply != nullptr);
+    static_cast<void>(av::ReplyHeader(1u, 4u).encode(reply, av::ReplyHeader::encoded_size));
+    std::memcpy(reply + av::ReplyHeader::encoded_size, &hresult, sizeof hresult);
+}
+
+}  // namespace
+
+/* A Direct3D 9 session's stream selects with SelectDevice9 and opens and
+ * closes its devices with Direct3D 9's own commands: Direct3D 11's selection
+ * would name a device the host keeps no Direct3D 11 state for. */
+TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3d_9)
+{ Fixture fixture;
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9);
+  answer_create9(fixture, 0u);
+  std::uint32_t hresult = 1u;
+  CHECK(fixture.a().open9(hresult));
+  CHECK_EQ(hresult, 0u);
+  std::uint32_t ids[6] = {}, selected[6] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 6u), 1u);
+  CHECK_EQ(ids[0], av::d3d9proto::kCmd_CreateDevice9);
+  /* Opened means selected: a's next command goes alone, b's is preceded by its selection. */
+  CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.a()));
+  CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.b()));
+  CHECK(fixture.b().close9());
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  CHECK_EQ(fixture.shipped(ids, selected, 6u), 4u);
+  CHECK_EQ(ids[0], av::d3d9proto::kCmd_Flush9);
+  CHECK_EQ(ids[1], av::d3d9proto::kCmd_SelectDevice9);
+  CHECK_EQ(ids[2], av::d3d9proto::kCmd_Flush9);
+  CHECK_EQ(ids[3], av::d3d9proto::kCmd_Destroy9);
+  /* The closed device is forgotten: speaking for it again selects it again. */
+  CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.b()));
+  CHECK_STATUS(fixture.b().flush(), Status::ok);
+  CHECK_EQ(fixture.shipped(ids, selected, 6u), 2u);
+  CHECK_EQ(ids[0], av::d3d9proto::kCmd_SelectDevice9);
+  CHECK(!fixture.lock().held()); }
+
+TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_no_lock)
+{ Fixture fixture;
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9);
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  std::uint32_t hresult = 0u;
+  CHECK(!fixture.a().open9(hresult));
+  CHECK(!fixture.lock().held()); }

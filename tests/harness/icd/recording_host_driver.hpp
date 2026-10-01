@@ -27,10 +27,16 @@ public:
     d3d::Hresult fill_table12(std::uint32_t table_type, void *table, std::size_t bytes, std::uint32_t index,
                               void *runtime_table) override;
     void         tear_down(d3d::UmdDevice &device, void *block) override;
+    /* A Direct3D 9 device made is the address of a counter here, handed back
+     * through hDevice; tearing it down names the adapter it was made on. */
+    d3d::Hresult     build9(d3d::UmdAdapter &adapter, void *create, std::uint32_t kmt_adapter) override;
+    d3d::UmdAdapter *tear_down9(void *device) override;
 
     /* What the next build12, caps and fill_table12 answer. */
     void answer(d3d::Hresult build, d3d::Hresult caps, d3d::Hresult fill);
 
+    std::uint32_t    builds9() const;
+    void            *device9() const;
     std::uint32_t    builds12() const;
     std::uint32_t    builds11() const;
     std::uint32_t    kmt_adapter() const;
@@ -47,6 +53,8 @@ private:
     d3d::Hresult     build_answer_;
     d3d::Hresult     caps_answer_;
     d3d::Hresult     fill_answer_;
+    std::uint32_t    builds9_;
+    d3d::UmdAdapter *built9_on_;
     std::uint32_t    builds12_;
     std::uint32_t    builds11_;
     std::uint32_t    kmt_adapter_;

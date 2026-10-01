@@ -485,12 +485,15 @@ FEATURES = [
           "or pkg-configs render-server: it contributes no runtime."}),
  ("064","d3d9-umd",None,"implement",
   "Direct3D 9: the user-mode driver",
-  "The D3D9 UMD DDI in avumd.dll over Vulkan remoting - resources, fixed "
-  "function and shader model 1-3 translated to SPIR-V, state blocks, draws, "
-  "locks and presents - so Direct3D 9 applications, and DirectDraw applications "
-  "Windows runs on top of it, use the host GPU through the Microsoft runtime "
-  "without DXVK placed beside them.",
-  {"deps":["055"],"kb":["07-usermode.md"]}),
+  "The D3D9 UMD DDI in avumd.dll - OpenAdapter, caps and formats, resources "
+  "and their locks, state and state blocks, shaders, draws, queries and blt "
+  "presents - replayed as Direct3D 9 API calls on the host's own Direct3D 9, "
+  "DXVK's native d3d9, so Direct3D 9 applications use the host GPU through the "
+  "Microsoft runtime with neither D3D9On12 nor DXVK placed beside them.",
+  {"deps":["055"],"kb":["07-usermode.md"],
+   "note":"The runtime does fixed function and the managed pool itself "
+          "(docs/research/d3d9/reverse-engineering.md); the host translates "
+          "shaders, so nothing here compiles one."}),
 
  # ---- debugging the wire ------------------------------------------------------
  ("065","wire-recording",None,"implement",

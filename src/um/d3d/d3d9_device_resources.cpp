@@ -1,0 +1,655 @@
+/* D3d9Device's resources, their locks, and the blts between them
+ * (d3d9_device.hpp).
+ *
+ * A host resource is written, never mapped: a lock hands out a guest shadow
+ * of the subresource, and its unlock sends what the lock covered. Discard
+ * then needs no renaming - the data crosses in the command stream, and the
+ * host's own discard keeps the GPU from waiting - and no-overwrite no wait.
+ * The runtime keeps the managed pool itself and fills it with TexBlt and
+ * BufBlt from system memory of its own, which is copied from where it lies. */
+#include "core/platform/block_source.hpp"
+#include "core/trace/function_scope.hpp"
+#include "icd/common/log_sink.hpp"
+#include "icd/d3d/d3d_device_channel.hpp"
+#include "proto/d3d/d3d9_format_layout.hpp"
+#include "proto/generated/d3d9/d3d9_dispatch_client.h"
+#include "um/d3d/d3d9_device.hpp"
+
+#include <string.h>
+
+namespace av::d3d9 {
+
+namespace {
+
+/* CreateSurface9's and CreateTexture9's kinds (d3d9.toml). */
+constexpr uint32_t surface_render_target = 1u;
+constexpr uint32_t surface_depth_stencil = 2u;
+constexpr uint32_t surface_offscreen_plain = 3u;
+constexpr uint32_t surface_lockable = 0x1u;
+constexpr uint32_t texture_2d = 1u;
+constexpr uint32_t texture_cube = 2u;
+constexpr uint32_t texture_volume = 3u;
+constexpr uint32_t cube_faces = 6u;
+/* D3DPOOL_DEFAULT: the host places what the guest makes as it can draw it. */
+constexpr uint32_t pool_default = 0u;
+/* D3DUSAGE_*, from d3d9types.h's values. */
+constexpr uint32_t usage_render_target = 0x1u;
+constexpr uint32_t usage_depth_stencil = 0x2u;
+constexpr uint32_t usage_write_only = 0x8u;
+constexpr uint32_t usage_points = 0x40u;
+constexpr uint32_t usage_rt_patches = 0x80u;
+constexpr uint32_t usage_n_patches = 0x100u;
+constexpr uint32_t usage_dynamic = 0x200u;
+constexpr uint32_t usage_autogen_mipmap = 0x400u;
+constexpr uint32_t usage_dmap = 0x4000u;
+/* D3DLOCK_DISCARD and D3DLOCK_NOOVERWRITE, which a write carries. */
+constexpr uint32_t write_discard = 0x2000u;
+constexpr uint32_t write_no_overwrite = 0x1000u;
+/* D3DTEXF_POINT and D3DTEXF_LINEAR. */
+constexpr uint32_t filter_point = 1u;
+constexpr uint32_t filter_linear = 2u;
+/* Past this a command's data crosses through the blob arena. */
+constexpr size_t inline_limit = 32u * 1024u;
+/* The most one write carries: half the session's blob arena, so a piece
+ * always fits once the arena is emptied. */
+constexpr size_t write_piece = 16u << 20u;
+
+}  // namespace
+
+/* ---------------------------------------------------------------- creation */
+
+HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
+{
+    AV_SCOPE("D3d9Device::create_resource");
+    if (args->SurfCount == 0u || args->pSurfList == nullptr) return E_INVALIDARG;
+    D3d9Resource *made = nullptr;
+    if (resources_.create(made) != Status::ok) return E_OUTOFMEMORY;
+    *made = D3d9Resource{};
+    made->subresources =
+        static_cast<D3d9Subresource *>(memory_.allocate(sizeof(D3d9Subresource) * args->SurfCount, Pool::paged));
+    if (made->subresources == nullptr) {
+        static_cast<void>(resources_.destroy(made));
+        return E_OUTOFMEMORY;
+    }
+    memset(made->subresources, 0, sizeof(D3d9Subresource) * args->SurfCount);
+    made->format = args->Format;
+    made->pool = args->Pool;
+    made->flags = args->Flags;
+    made->count = args->SurfCount;
+    made->runtime = args->hResource;
+    for (UINT index = 0u; index < args->SurfCount; index++) {
+        const D3DDDI_SURFACEINFO &surface = args->pSurfList[index];
+        made->subresources[index] = D3d9Subresource{};
+        made->subresources[index].width = surface.Width;
+        made->subresources[index].height = surface.Height == 0u ? 1u : surface.Height;
+        made->subresources[index].depth = surface.Depth == 0u ? 1u : surface.Depth;
+        made->subresources[index].system = static_cast<const uint8_t *>(surface.pSysMem);
+        made->subresources[index].system_pitch = surface.SysMemPitch;
+        made->subresources[index].system_slice_pitch = surface.SysMemSlicePitch;
+    }
+    const HRESULT host = args->Pool == D3DDDIPOOL_SYSTEMMEM ? S_OK : create_host_object(*made, *args);
+    if (FAILED(host)) {
+        release_resource(*made);
+        static_cast<void>(resources_.destroy(made));
+        return host;
+    }
+    args->hResource = made;
+    return S_OK;
+}
+
+/* What the runtime's resource flags say of the API's usage
+ * (reverse-engineering.md §4.2 maps one to the other). */
+HRESULT D3d9Device::create_host_object(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
+{
+    AV_SCOPE("D3d9Device::create_host_object");
+    const D3DDDI_RESOURCEFLAGS flags = create.Flags;
+    const uint32_t usage = (flags.RenderTarget ? usage_render_target : 0u) |
+                           (flags.ZBuffer ? usage_depth_stencil : 0u) | (flags.Dynamic ? usage_dynamic : 0u) |
+                           (flags.AutogenMipmap ? usage_autogen_mipmap : 0u) |
+                           (flags.WriteOnly ? usage_write_only : 0u) | (flags.Points ? usage_points : 0u) |
+                           (flags.RtPatches ? usage_rt_patches : 0u) | (flags.NPatches ? usage_n_patches : 0u) |
+                           (flags.DMap ? usage_dmap : 0u);
+    const D3d9Subresource &top = resource.subresources[0];
+    resource.id = next_id();
+    bool sent = false;
+    if (flags.VertexBuffer) {
+        resource.kind = D3d9Resource::Kind::vertex_buffer;
+        sent = d3d9proto::av_d3d9_CreateVertexBuffer9(wire(), resource.id, top.width, usage, create.Fvf, pool_default);
+    } else if (flags.IndexBuffer) {
+        resource.kind = D3d9Resource::Kind::index_buffer;
+        sent = d3d9proto::av_d3d9_CreateIndexBuffer9(wire(), resource.id, top.width, usage,
+                                                     static_cast<uint32_t>(create.Format), pool_default);
+    } else if (flags.Texture || flags.CubeMap || flags.Volume) {
+        const uint32_t faces = flags.CubeMap ? cube_faces : 1u;
+        resource.kind = flags.CubeMap  ? D3d9Resource::Kind::cube
+                        : flags.Volume ? D3d9Resource::Kind::volume
+                                       : D3d9Resource::Kind::texture;
+        resource.levels = create.SurfCount / faces;
+        const uint32_t type = flags.CubeMap ? texture_cube : flags.Volume ? texture_volume : texture_2d;
+        /* An autogen texture shows the runtime its top level only, and the
+         * host makes the chain below it. */
+        const uint32_t levels = flags.AutogenMipmap ? 0u : resource.levels;
+        sent = d3d9proto::av_d3d9_CreateTexture9(wire(), resource.id, type, top.width, top.height, top.depth, levels,
+                                                 usage, static_cast<uint32_t>(create.Format), pool_default);
+    } else {
+        resource.kind = D3d9Resource::Kind::surface;
+        resource.id = 0u;
+        return create_surfaces(resource, create);
+    }
+    return sent ? S_OK : lost();
+}
+
+/* A surface resource is as many surfaces as it has subresources: a swap
+ * chain's buffers, or one render target or depth surface. */
+HRESULT D3d9Device::create_surfaces(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
+{
+    AV_SCOPE("D3d9Device::create_surfaces");
+    const uint32_t kind = create.Flags.ZBuffer        ? surface_depth_stencil
+                          : create.Flags.RenderTarget ? surface_render_target
+                                                      : surface_offscreen_plain;
+    const uint32_t flags = kind == surface_render_target && !create.Flags.NotLockable ? surface_lockable : 0u;
+    for (uint32_t index = 0u; index < resource.count; index++) {
+        D3d9Subresource &surface = resource.subresources[index];
+        surface.id = next_id();
+        if (!d3d9proto::av_d3d9_CreateSurface9(wire(), surface.id, kind, surface.width, surface.height,
+                                               static_cast<uint32_t>(create.Format),
+                                               static_cast<uint32_t>(create.MultisampleType),
+                                               create.MultisampleQuality, flags))
+            return lost();
+    }
+    return S_OK;
+}
+
+HRESULT D3d9Device::destroy_resource(HANDLE handle)
+{
+    AV_SCOPE("D3d9Device::destroy_resource");
+    D3d9Resource *const gone = resource(handle);
+    if (gone == nullptr) return E_INVALIDARG;
+    for (uint32_t stream = 0u; stream < streams; stream++)
+        if (streams_[stream].buffer == gone) streams_[stream] = Stream{};
+    if (indices_ == gone) indices_ = nullptr;
+    release_resource(*gone);
+    static_cast<void>(resources_.destroy(gone));
+    return S_OK;
+}
+
+/* The host objects, shadows and kernel allocation go; the record stays for
+ * the caller to destroy. */
+void D3d9Device::release_resource(D3d9Resource &resource)
+{
+    AV_SCOPE("D3d9Device::release_resource");
+    if (resource.id != 0u) static_cast<void>(d3d9proto::av_d3d9_Destroy9(wire(), resource.id));
+    for (uint32_t index = 0u; resource.subresources != nullptr && index < resource.count; index++) {
+        D3d9Subresource &subresource = resource.subresources[index];
+        if (subresource.id != 0u) static_cast<void>(d3d9proto::av_d3d9_Destroy9(wire(), subresource.id));
+        if (subresource.shadow != nullptr) memory_.release(subresource.shadow);
+    }
+    if (resource.subresources != nullptr) memory_.release(resource.subresources);
+    resource.subresources = nullptr;
+    if (resource.allocation != 0u && kernel_ != nullptr) {
+        D3DDDICB_DEALLOCATE deallocate = {};
+        deallocate.NumAllocations = 1u;
+        deallocate.HandleList = &resource.allocation;
+        static_cast<void>(kernel_->pfnDeallocateCb(runtime_, &deallocate));
+    }
+}
+
+/* Another process's resource opens through the host's object, which nothing
+ * here shares yet. The runtime tolerates the refusal for the shared GDI
+ * primary a windowed device opens (reverse-engineering.md §4.2). */
+HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *)
+{
+    AV_SCOPE("D3d9Device::open_resource");
+    return E_INVALIDARG;
+}
+
+bool D3d9Device::surface_of(const D3d9Resource &resource, uint32_t index, uint32_t &id, uint32_t &subresource) const
+{
+    AV_SCOPE("D3d9Device::surface_of");
+    if (index >= resource.count) return false;
+    switch (resource.kind) {
+    case D3d9Resource::Kind::surface:
+        id = resource.subresources[index].id;
+        subresource = 0u;
+        return true;
+    case D3d9Resource::Kind::texture:
+    case D3d9Resource::Kind::cube:
+        id = resource.id;
+        subresource = index;
+        return true;
+    default: return false;
+    }
+}
+
+/* ---------------------------------------------------------------- locks */
+
+uint32_t D3d9Device::row_pitch(const D3d9Resource &resource, const D3d9Subresource &subresource) const
+{
+    AV_SCOPE("D3d9Device::row_pitch");
+    if (resource.kind == D3d9Resource::Kind::vertex_buffer || resource.kind == D3d9Resource::Kind::index_buffer)
+        return subresource.width;
+    return D3d9FormatLayout(static_cast<uint32_t>(resource.format)).row_bytes(subresource.width);
+}
+
+size_t D3d9Device::subresource_bytes(const D3d9Resource &resource, const D3d9Subresource &subresource) const
+{
+    AV_SCOPE("D3d9Device::subresource_bytes");
+    if (resource.kind == D3d9Resource::Kind::vertex_buffer || resource.kind == D3d9Resource::Kind::index_buffer)
+        return subresource.width;
+    const uint32_t rows = D3d9FormatLayout(static_cast<uint32_t>(resource.format)).rows(subresource.height);
+    return size_t{row_pitch(resource, subresource)} * rows * subresource.depth;
+}
+
+size_t D3d9Device::lock_offset(const D3d9Resource &resource, const D3DDDIARG_LOCK &lock, uint32_t pitch,
+                               uint32_t slice_pitch) const
+{
+    AV_SCOPE("D3d9Device::lock_offset");
+    if (lock.Flags.RangeValid) return lock.Range.Offset;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
+    const uint32_t         element_width = layout.element_width() == 0u ? 1u : layout.element_width();
+    const uint32_t         element_height = layout.element_height() == 0u ? 1u : layout.element_height();
+    if (lock.Flags.BoxValid)
+        return size_t{lock.Box.Front} * slice_pitch + size_t{lock.Box.Top / element_height} * pitch +
+               size_t{lock.Box.Left / element_width} * layout.element_bytes();
+    if (lock.Flags.AreaValid)
+        return size_t{static_cast<uint32_t>(lock.Area.top) / element_height} * pitch +
+               size_t{static_cast<uint32_t>(lock.Area.left) / element_width} * layout.element_bytes();
+    return 0u;
+}
+
+bool D3d9Device::make_shadow(const D3d9Resource &resource, D3d9Subresource &subresource)
+{
+    AV_SCOPE("D3d9Device::make_shadow");
+    if (subresource.shadow != nullptr) return true;
+    const size_t bytes = subresource_bytes(resource, subresource);
+    if (bytes == 0u) return false;
+    subresource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    if (subresource.shadow == nullptr) return false;
+    memset(subresource.shadow, 0, bytes);
+    subresource.shadow_bytes = bytes;
+    subresource.shadow_pitch = row_pitch(resource, subresource);
+    const uint32_t rows = resource.kind == D3d9Resource::Kind::vertex_buffer ||
+                                  resource.kind == D3d9Resource::Kind::index_buffer
+                              ? 1u
+                              : D3d9FormatLayout(static_cast<uint32_t>(resource.format)).rows(subresource.height);
+    subresource.shadow_slice_pitch = subresource.shadow_pitch * rows;
+    return true;
+}
+
+/* System memory is the runtime's own and handed back where it lies. A host
+ * subresource hands out its shadow, which for a surface the host draws into
+ * is read back first unless the lock throws it away. */
+HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
+{
+    AV_SCOPE("D3d9Device::lock");
+    D3d9Resource *const locked = resource(args->hResource);
+    if (locked == nullptr || args->SubResourceIndex >= locked->count) return E_INVALIDARG;
+    if (args->Flags.NotifyOnly) return S_OK;
+    D3d9Subresource &subresource = locked->subresources[args->SubResourceIndex];
+    if (locked->kind == D3d9Resource::Kind::system) {
+        auto *const base = const_cast<uint8_t *>(subresource.system);
+        args->pSurfData = base + lock_offset(*locked, *args, subresource.system_pitch, subresource.system_slice_pitch);
+        args->Pitch = subresource.system_pitch;
+        args->SlicePitch = subresource.system_slice_pitch;
+        return S_OK;
+    }
+    if (!make_shadow(*locked, subresource)) return E_OUTOFMEMORY;
+    if (locked->kind == D3d9Resource::Kind::surface && !args->Flags.Discard && !args->Flags.WriteOnly) {
+        uint32_t pitch = 0u, rows = 0u;
+        if (SUCCEEDED(read_surface(*locked, args->SubResourceIndex, pitch, rows)))
+            for (uint32_t row = 0u; row < rows && size_t{row + 1u} * subresource.shadow_pitch <= subresource.shadow_bytes;
+                 row++)
+                memcpy(subresource.shadow + size_t{row} * subresource.shadow_pitch, readback_ + size_t{row} * pitch,
+                       pitch < subresource.shadow_pitch ? pitch : subresource.shadow_pitch);
+    }
+    args->pSurfData =
+        subresource.shadow + lock_offset(*locked, *args, subresource.shadow_pitch, subresource.shadow_slice_pitch);
+    args->Pitch = subresource.shadow_pitch;
+    args->SlicePitch = subresource.shadow_slice_pitch;
+    subresource.locked = true;
+    subresource.lock_flags = args->Flags;
+    subresource.lock = *args;
+    return S_OK;
+}
+
+HRESULT D3d9Device::unlock(const D3DDDIARG_UNLOCK *args)
+{
+    AV_SCOPE("D3d9Device::unlock");
+    D3d9Resource *const locked = resource(args->hResource);
+    if (locked == nullptr || args->SubResourceIndex >= locked->count) return E_INVALIDARG;
+    D3d9Subresource &subresource = locked->subresources[args->SubResourceIndex];
+    if (locked->kind == D3d9Resource::Kind::system || !subresource.locked) return S_OK;
+    subresource.locked = false;
+    if (subresource.lock_flags.ReadOnly) return S_OK;
+    return unlock_subresource(*locked, subresource, args->SubResourceIndex);
+}
+
+/* What the lock covered crosses to the host, with the lock's discard or
+ * no-overwrite. */
+HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subresource &subresource, uint32_t index)
+{
+    AV_SCOPE("D3d9Device::unlock_subresource");
+    const D3DDDIARG_LOCK &lock = subresource.lock;
+    const uint32_t flags = (lock.Flags.Discard ? write_discard : 0u) | (lock.Flags.NoOverwrite ? write_no_overwrite : 0u);
+    const size_t offset = lock_offset(resource, lock, subresource.shadow_pitch, subresource.shadow_slice_pitch);
+    if (resource.kind == D3d9Resource::Kind::vertex_buffer || resource.kind == D3d9Resource::Kind::index_buffer) {
+        const uint32_t start = lock.Flags.RangeValid ? lock.Range.Offset : 0u;
+        const uint32_t bytes = lock.Flags.RangeValid && lock.Range.Size != 0u ? lock.Range.Size : subresource.width - start;
+        if (start >= subresource.width) return E_INVALIDARG;
+        const uint32_t fit = bytes < subresource.width - start ? bytes : subresource.width - start;
+        return write_buffer(resource.id, start, subresource.shadow + start, fit, flags);
+    }
+    if (resource.kind == D3d9Resource::Kind::surface) {
+        log_once(said_surface_write_, "avumd: a lock wrote to a surface, which the host takes no writes into");
+        return S_OK;
+    }
+    D3DDDIBOX box = {0u, 0u, subresource.width, subresource.height, 0u, subresource.depth};
+    if (lock.Flags.BoxValid) box = lock.Box;
+    if (lock.Flags.AreaValid)
+        box = D3DDDIBOX{static_cast<UINT>(lock.Area.left), static_cast<UINT>(lock.Area.top),
+                        static_cast<UINT>(lock.Area.right), static_cast<UINT>(lock.Area.bottom), 0u, 1u};
+    return write_texture(resource, index, box, subresource.shadow + offset, subresource.shadow_pitch,
+                         subresource.shadow_slice_pitch, flags);
+}
+
+/* ---------------------------------------------------------------- writes and reads */
+
+HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags)
+{
+    AV_SCOPE("D3d9Device::write_buffer");
+    const auto *const from = static_cast<const uint8_t *>(data);
+    for (uint32_t done = 0u; done < bytes;) {
+        const uint32_t piece = bytes - done < write_piece ? bytes - done : static_cast<uint32_t>(write_piece);
+        if (piece > inline_limit && !wire().make_room_for(piece)) return lost();
+        if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, done == 0u ? flags : flags & ~write_discard,
+                                             from + done, piece))
+            return lost();
+        done += piece;
+    }
+    return S_OK;
+}
+
+/* A texture goes a depth slice at a time and, within one, as many rows
+ * (block rows, for a compressed format) as fit a piece. */
+HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box,
+                                  const uint8_t *data, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags)
+{
+    AV_SCOPE("D3d9Device::write_texture");
+    if (box.Right <= box.Left || box.Bottom <= box.Top) return S_OK;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
+    const uint32_t         rows = layout.rows(box.Bottom - box.Top);
+    const uint32_t         line = layout.row_bytes(box.Right - box.Left);
+    if (rows == 0u || line == 0u || row_pitch < line) return E_INVALIDARG;
+    const uint32_t back = box.Back > box.Front ? box.Back : box.Front + 1u;
+    for (uint32_t slice = box.Front; slice < back; slice++) {
+        D3DDDIBOX plane = box;
+        plane.Front = slice;
+        plane.Back = slice + 1u;
+        const HRESULT written = write_rows(resource.id, index, plane, rows, line,
+                                           data + size_t{slice - box.Front} * slice_pitch, row_pitch,
+                                           slice == box.Front ? flags : flags & ~write_discard);
+        if (FAILED(written)) return written;
+    }
+    return S_OK;
+}
+
+HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, uint32_t rows, uint32_t line,
+                               const uint8_t *data, uint32_t row_pitch, uint32_t flags)
+{
+    AV_SCOPE("D3d9Device::write_rows");
+    const uint32_t texels_per_row = (box.Bottom - box.Top + rows - 1u) / rows;
+    const uint32_t rows_per_piece = row_pitch >= write_piece ? 1u : static_cast<uint32_t>(write_piece / row_pitch);
+    for (uint32_t done = 0u; done < rows; done += rows_per_piece) {
+        const uint32_t count = rows - done < rows_per_piece ? rows - done : rows_per_piece;
+        const uint32_t top = box.Top + done * texels_per_row;
+        const uint32_t bottom = box.Top + (done + count) * texels_per_row;
+        const d3d9proto::Box part = {box.Left, top, box.Front, box.Right, bottom < box.Bottom ? bottom : box.Bottom,
+                                     box.Back};
+        const size_t bytes = size_t{count - 1u} * row_pitch + line;
+        if (bytes > inline_limit && !wire().make_room_for(bytes)) return lost();
+        if (!d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
+                                              done == 0u ? flags : flags & ~write_discard,
+                                              data + size_t{done} * row_pitch, bytes))
+            return lost();
+    }
+    return S_OK;
+}
+
+bool D3d9Device::readback_room(size_t bytes)
+{
+    AV_SCOPE("D3d9Device::readback_room");
+    if (bytes <= readback_bytes_) return true;
+    if (readback_ != nullptr) memory_.release(readback_);
+    readback_bytes_ = 0u;
+    readback_ = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    if (readback_ == nullptr) return false;
+    readback_bytes_ = bytes;
+    return true;
+}
+
+/* A round trip: the host has run everything before it once it answers. */
+HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, uint32_t &pitch, uint32_t &rows)
+{
+    AV_SCOPE("D3d9Device::read_surface");
+    uint32_t id = 0u, subresource = 0u;
+    if (!surface_of(resource, index, id, subresource)) return E_INVALIDARG;
+    const D3d9Subresource &level = resource.subresources[index];
+    const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
+    /* The host's pitch may be wider than packed rows: room for a 256-byte
+     * aligned row. */
+    constexpr uint32_t pitch_slack = 256u;
+    const size_t capacity = (size_t{layout.row_bytes(level.width)} + pitch_slack) * layout.rows(level.height);
+    if (capacity == 0u || !readback_room(capacity)) return E_OUTOFMEMORY;
+    if (capacity > inline_limit && !wire().make_room_for(capacity)) return lost();
+    uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
+    uint64_t read = 0u;
+    if (!d3d9proto::av_d3d9_ReadSurface9(wire(), id, subresource, &hresult, &width, &height, &format, &pitch,
+                                         readback_, capacity, &read))
+        return lost();
+    if (hresult != 0u) return static_cast<HRESULT>(hresult);
+    rows = pitch == 0u ? 0u : static_cast<uint32_t>(read / pitch);
+    return S_OK;
+}
+
+/* ---------------------------------------------------------------- blts */
+
+/* The runtime fills the managed pool level by level from its system-memory
+ * copy: the whole chain of one face, from the source level that is the
+ * destination's top level (a source may have more levels), each level's
+ * rectangle and point halved from the one above. */
+HRESULT D3d9Device::tex_blt(const D3DDDIARG_TEXBLT *args)
+{
+    AV_SCOPE("D3d9Device::tex_blt");
+    const D3d9Resource *const destination = resource(args->hDstResource);
+    const D3d9Resource *const source = resource(args->hSrcResource);
+    if (destination == nullptr || source == nullptr || source->kind != D3d9Resource::Kind::system ||
+        destination->kind == D3d9Resource::Kind::system || destination->levels == 0u)
+        return E_INVALIDARG;
+    const uint32_t faces = destination->kind == D3d9Resource::Kind::cube ? cube_faces : 1u;
+    const uint32_t source_levels = source->count / faces;
+    const uint32_t face = faces == 1u ? 0u : static_cast<uint32_t>(args->CubeMapFace);
+    if (face >= faces || source_levels == 0u) return E_INVALIDARG;
+    uint32_t first = 0u;
+    while (first < source_levels && source->subresources[face * source_levels + first].width >
+                                        destination->subresources[face * destination->levels].width)
+        first++;
+    for (uint32_t level = 0u; level < destination->levels && first + level < source_levels; level++) {
+        const RECT  area = {args->SrcRect.left >> level, args->SrcRect.top >> level,
+                            (args->SrcRect.right + (1 << level) - 1) >> level,
+                            (args->SrcRect.bottom + (1 << level) - 1) >> level};
+        const POINT at = {args->DstPoint.x >> level, args->DstPoint.y >> level};
+        const HRESULT copied = blt_level(*source, face * source_levels + first + level, *destination,
+                                         face * destination->levels + level, area, at);
+        if (FAILED(copied)) return copied;
+    }
+    return S_OK;
+}
+
+/* A compressed format's rectangle widens to whole blocks, and stays inside
+ * both levels. */
+HRESULT D3d9Device::blt_level(const D3d9Resource &source, uint32_t source_index, const D3d9Resource &destination,
+                              uint32_t destination_index, const RECT &area, POINT at)
+{
+    AV_SCOPE("D3d9Device::blt_level");
+    const D3d9Subresource &from = source.subresources[source_index];
+    const D3d9Subresource &to = destination.subresources[destination_index];
+    if (from.system == nullptr) return E_INVALIDARG;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
+    const uint32_t         block_width = layout.element_width() == 0u ? 1u : layout.element_width();
+    const uint32_t         block_height = layout.element_height() == 0u ? 1u : layout.element_height();
+    uint32_t left = static_cast<uint32_t>(area.left) / block_width * block_width;
+    uint32_t top = static_cast<uint32_t>(area.top) / block_height * block_height;
+    uint32_t right = static_cast<uint32_t>(area.right) < from.width ? static_cast<uint32_t>(area.right) : from.width;
+    uint32_t bottom = static_cast<uint32_t>(area.bottom) < from.height ? static_cast<uint32_t>(area.bottom) : from.height;
+    const uint32_t x = static_cast<uint32_t>(at.x) / block_width * block_width;
+    const uint32_t y = static_cast<uint32_t>(at.y) / block_height * block_height;
+    if (right <= left || bottom <= top || x >= to.width || y >= to.height) return S_OK;
+    if (x + (right - left) > to.width) right = left + (to.width - x);
+    if (y + (bottom - top) > to.height) bottom = top + (to.height - y);
+    const uint8_t *const data = from.system + size_t{top / block_height} * from.system_pitch +
+                                size_t{left / block_width} * layout.element_bytes();
+    const D3DDDIBOX box = {x, y, x + (right - left), y + (bottom - top), 0u, 1u};
+    return write_texture(destination, destination_index, box, data, from.system_pitch, from.system_slice_pitch, 0u);
+}
+
+/* A volume's levels, each box halved from the one above. */
+HRESULT D3d9Device::vol_blt(const D3DDDIARG_VOLUMEBLT *args)
+{
+    AV_SCOPE("D3d9Device::vol_blt");
+    const D3d9Resource *const destination = resource(args->hDstResource);
+    const D3d9Resource *const source = resource(args->hSrcResource);
+    if (destination == nullptr || source == nullptr || source->kind != D3d9Resource::Kind::system ||
+        destination->kind != D3d9Resource::Kind::volume)
+        return E_INVALIDARG;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(source->format));
+    for (uint32_t level = 0u; level < destination->levels && level < source->count; level++) {
+        const D3d9Subresource &from = source->subresources[level];
+        const D3d9Subresource &to = destination->subresources[level];
+        const D3DDDIBOX &whole = args->SrcBox;
+        const uint32_t left = whole.Left >> level, top = whole.Top >> level, front = whole.Front >> level;
+        const uint32_t right = (whole.Right >> level) > from.width ? from.width : (whole.Right >> level);
+        const uint32_t bottom = (whole.Bottom >> level) > from.height ? from.height : (whole.Bottom >> level);
+        const uint32_t back = (whole.Back >> level) > from.depth ? from.depth : (whole.Back >> level);
+        if (right <= left || bottom <= top || back <= front || from.system == nullptr) break;
+        const uint32_t x = args->DstX >> level, y = args->DstY >> level, z = args->DstZ >> level;
+        if (x + (right - left) > to.width || y + (bottom - top) > to.height || z + (back - front) > to.depth) break;
+        const uint8_t *const data = from.system + size_t{front} * from.system_slice_pitch +
+                                    size_t{top} * from.system_pitch + size_t{left} * layout.element_bytes();
+        const D3DDDIBOX box = {x, y, x + (right - left), y + (bottom - top), z, z + (back - front)};
+        const HRESULT copied =
+            write_texture(*destination, level, box, data, from.system_pitch, from.system_slice_pitch, 0u);
+        if (FAILED(copied)) return copied;
+    }
+    return S_OK;
+}
+
+/* A managed buffer's dirty range, from the runtime's copy. A lock's shadow
+ * takes it too, since a later lock that keeps the contents reads it. */
+HRESULT D3d9Device::buf_blt(const D3DDDIARG_BUFFERBLT *args)
+{
+    AV_SCOPE("D3d9Device::buf_blt");
+    D3d9Resource *const       destination = resource(args->hDstResource);
+    const D3d9Resource *const source = resource(args->hSrcResource);
+    if (destination == nullptr || source == nullptr || source->kind != D3d9Resource::Kind::system ||
+        source->subresources[0].system == nullptr)
+        return E_INVALIDARG;
+    const D3d9Subresource &from = source->subresources[0];
+    D3d9Subresource       &to = destination->subresources[0];
+    const uint32_t         start = args->SrcRange.Offset;
+    if (start >= from.width || args->Offset >= to.width) return E_INVALIDARG;
+    uint32_t bytes = args->SrcRange.Size < from.width - start ? args->SrcRange.Size : from.width - start;
+    if (bytes > to.width - args->Offset) bytes = to.width - args->Offset;
+    if (to.shadow != nullptr) memcpy(to.shadow + args->Offset, from.system + start, bytes);
+    return write_buffer(destination->id, args->Offset, from.system + start, bytes, 0u);
+}
+
+/* Between host surfaces a StretchRect; into system memory a read-back the
+ * runtime asked for (GetRenderTargetData, GetFrontBufferData); from system
+ * memory a write; between two system-memory surfaces nothing, since the
+ * runtime copies those itself after the call (prior-art.md §8). */
+HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
+{
+    AV_SCOPE("D3d9Device::blt");
+    const D3d9Resource *const source = resource(args->hSrcResource);
+    const D3d9Resource *const destination = resource(args->hDstResource);
+    if (source == nullptr || destination == nullptr || args->SrcSubResourceIndex >= source->count ||
+        args->DstSubResourceIndex >= destination->count)
+        return E_INVALIDARG;
+    const bool from_system = source->kind == D3d9Resource::Kind::system;
+    const bool to_system = destination->kind == D3d9Resource::Kind::system;
+    if (from_system && to_system) return S_OK;
+    if (!send_states()) return lost();
+    if (to_system) return blt_to_system(*source, *destination, *args);
+    if (from_system) {
+        const POINT at = {args->DstRect.left, args->DstRect.top};
+        return blt_level(*source, args->SrcSubResourceIndex, *destination, args->DstSubResourceIndex, args->SrcRect,
+                         at);
+    }
+    uint32_t from_id = 0u, from_sub = 0u, to_id = 0u, to_sub = 0u;
+    if (!surface_of(*source, args->SrcSubResourceIndex, from_id, from_sub) ||
+        !surface_of(*destination, args->DstSubResourceIndex, to_id, to_sub))
+        return E_INVALIDARG;
+    const d3d9proto::Rect from_rect = {args->SrcRect.left, args->SrcRect.top, args->SrcRect.right, args->SrcRect.bottom};
+    const d3d9proto::Rect to_rect = {args->DstRect.left, args->DstRect.top, args->DstRect.right, args->DstRect.bottom};
+    const uint32_t filter = args->Flags.Linear ? filter_linear : args->Flags.Point ? filter_point : 0u;
+    return d3d9proto::av_d3d9_StretchRect9(wire(), from_id, from_sub, from_rect, to_id, to_sub, to_rect, filter)
+               ? S_OK
+               : lost();
+}
+
+HRESULT D3d9Device::blt_to_system(const D3d9Resource &source, const D3d9Resource &destination,
+                                  const D3DDDIARG_BLT &blt)
+{
+    AV_SCOPE("D3d9Device::blt_to_system");
+    const D3d9Subresource &to = destination.subresources[blt.DstSubResourceIndex];
+    if (to.system == nullptr) return E_INVALIDARG;
+    uint32_t pitch = 0u, rows = 0u;
+    const HRESULT read = read_surface(source, blt.SrcSubResourceIndex, pitch, rows);
+    if (FAILED(read)) return read;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
+    const uint32_t         element = layout.element_bytes();
+    const uint32_t         left = static_cast<uint32_t>(blt.SrcRect.left), top = static_cast<uint32_t>(blt.SrcRect.top);
+    const uint32_t width = static_cast<uint32_t>(blt.SrcRect.right - blt.SrcRect.left);
+    const uint32_t height = static_cast<uint32_t>(blt.SrcRect.bottom - blt.SrcRect.top);
+    auto *const    out = const_cast<uint8_t *>(to.system);
+    const size_t   line = size_t{width} * element;
+    for (uint32_t row = 0u; row < height && top + row < rows; row++) {
+        const size_t from = size_t{top + row} * pitch + size_t{left} * element;
+        const size_t into = size_t{static_cast<uint32_t>(blt.DstRect.top) + row} * to.system_pitch +
+                            size_t{static_cast<uint32_t>(blt.DstRect.left)} * element;
+        if (from + line > readback_bytes_ || line > to.system_pitch) break;
+        memcpy(out + into, readback_ + from, line);
+    }
+    return S_OK;
+}
+
+HRESULT D3d9Device::color_fill(const D3DDDIARG_COLORFILL *args)
+{
+    AV_SCOPE("D3d9Device::color_fill");
+    const D3d9Resource *const target = resource(args->hResource);
+    uint32_t                  id = 0u, subresource = 0u;
+    if (target == nullptr) return S_OK;
+    if (!surface_of(*target, args->SubResourceIndex, id, subresource)) return E_INVALIDARG;
+    const d3d9proto::Rect rect = {args->DstRect.left, args->DstRect.top, args->DstRect.right, args->DstRect.bottom};
+    return d3d9proto::av_d3d9_ColorFill9(wire(), id, subresource, rect, args->Color) ? S_OK : lost();
+}
+
+/* Asked for only by the runtime's own clears of depth it cannot reach with
+ * Clear; there is no host command for a fill in a native depth value. */
+HRESULT D3d9Device::depth_fill(const D3DDDIARG_DEPTHFILL *)
+{
+    AV_SCOPE("D3d9Device::depth_fill");
+    not_implemented("avumd: DepthFill is not implemented");
+    return S_OK;
+}
+
+HRESULT D3d9Device::generate_mip_sub_levels(const D3DDDIARG_GENERATEMIPSUBLEVELS *args)
+{
+    AV_SCOPE("D3d9Device::generate_mip_sub_levels");
+    const D3d9Resource *const texture = resource(args->hResource);
+    if (texture == nullptr || texture->id == 0u) return E_INVALIDARG;
+    const uint32_t filter = args->Filter == D3DDDITEXF_NONE ? filter_linear : static_cast<uint32_t>(args->Filter);
+    return d3d9proto::av_d3d9_GenerateMips9(wire(), texture->id, filter) ? S_OK : lost();
+}
+
+}  // namespace av::d3d9

@@ -40,6 +40,7 @@ struct UmdRootProbe;
 struct D3d102ddiargGetCapsRecord;
 struct D3d10ddiargCreateDeviceRecord;
 struct D3d10ddiargOpenAdapterRecord;
+struct D3dddiargOpenAdapterRecord;
 struct D3d12ddiTableRequestRecord;
 struct D3d12ddiargCreateDeviceRecord;
 struct D3d12ddiargOpenAdapterRecord;
@@ -59,6 +60,11 @@ public:
      * Nothing is left open unless hr_ok. */
     Hresult open_adapter10_2(D3d10ddiargOpenAdapterRecord *args);
     Hresult open_adapter12(D3d12ddiargOpenAdapterRecord *args);
+    /* d3d9.dll's OpenAdapter: Interface 9 only, at any runtime version from
+     * Windows 7's on (the runtime tries the newest first and walks down);
+     * DriverVersion answers Windows 7's interface, the one whose entry points
+     * the device fills (docs/research/d3d9/reverse-engineering.md §1.4). */
+    Hresult open_adapter9(D3dddiargOpenAdapterRecord *args);
 
     /* The adapter-table slots, each reached from a thunk with the adapter
      * handle the open handed back. A handle this root did not hand out is
@@ -71,6 +77,10 @@ public:
      * it and built by the host driver, and without one no device is made and
      * the runtime is told so. */
     Hresult create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *create);
+    /* Direct3D 9's create and destroy, through the host driver: `create` is
+     * a D3DDDIARG_CREATEDEVICE, `device` the handle build9 wrote into it. */
+    Hresult create_device9(void *adapter, void *create);
+    Hresult destroy_device9(void *device);
     Hresult close_adapter(void *adapter);
     void    destroy_device(void *block);
     Hresult optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests);

@@ -69,10 +69,15 @@ class DriverPackage(unittest.TestCase):
         software = self.software_section()
         self.assertRegex(
             self.text,
-            rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,\s*\"<>\",\s*\"%13%\\avumd\.dll",
+            rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,"
+            rf"(\s*\"%13%\\avumd\.dll\",?){{4}}[ \t]*\r?\n",
             "avgpu.inf must add UserModeDriverName (REG_MULTI_SZ) under the install section's AddReg: "
-            "\"<>\" for Direct3D 9, which d3d9.dll then runs on 12, and %13% paths for the rest - d3d11.dll "
+            "avumd.dll for all four of Direct3D 9, 10, 11 and 12 (feature 064), as %13% paths - d3d11.dll "
             "loads the string as the registry holds it, and a bare name is looked for in System32")
+        self.assertRegex(
+            self.text,
+            r"HKR,+\s*UserModeDriverNameWow,\s*0x00010000,(\s*\"%13%\\avumd32\.dll\",?){4}[ \t]*\r?\n",
+            "a 32-bit process is answered UserModeDriverNameWow: avumd32.dll for all four")
 
     def test_registers_the_vulkan_icd_through_the_adapter_and_nowhere_else(self):
         """Feature 045, contracts/loader_interface.md: the Windows Vulkan loader

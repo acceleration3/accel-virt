@@ -432,6 +432,7 @@ list(FILTER AVUMD_SOURCES EXCLUDE REGEX "(extension_policy|gdi_window_surface)\\
 list(APPEND AVUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d/d3d_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d9/d3d9_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp)
 add_library(avumd SHARED ${AVUMD_SOURCES} ${AV_STACK_PROBE})

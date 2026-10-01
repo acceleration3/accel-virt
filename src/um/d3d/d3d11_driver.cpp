@@ -1,6 +1,7 @@
 #include "um/d3d/d3d11_driver.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
 #include "icd/common/log_sink.hpp"
@@ -42,7 +43,9 @@ uint32_t D3d11Driver::slot_of(uint32_t kmt_adapter)
 d3d::D3dSession &D3d11Driver::session(uint32_t slot)
 {
     AV_SCOPE("D3d11Driver::session");
-    if (!sessions_[slot].constructed()) static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, session_arena_bytes));
+    if (!sessions_[slot].constructed()) static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, session_arena_bytes,
+                                                                                    d3dproto::kCmd_SelectDevice11,
+                                                                                    d3dproto::kCmd_Finish11));
     return sessions_[slot].object();
 }
 

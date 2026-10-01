@@ -20,6 +20,7 @@
 #include "icd/d3d/ddi/d3d12ddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
+#include "icd/d3d/ddi/d3dddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/dxgi1_6_1_ddi_base_functions_record.hpp"
 #include "icd/d3d/ddi/dxgi_ddi_base_callbacks_record.hpp"
 #include "icd/d3d/hresult.hpp"
@@ -40,6 +41,10 @@ public:
      * else is asking for a driver this is not. */
     static constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
     static constexpr std::uint32_t d3d11_runtime_build = 26100u;
+    /* What d3d9.dll offers first: Interface 9 at the newest version it knows
+     * (docs/research/d3d9/reverse-engineering.md §1.3). */
+    static constexpr std::uint32_t d3d9_interface = 9u;
+    static constexpr std::uint32_t d3d9_newest_version = 0x11000u;
     static constexpr std::size_t   device_block_bytes = 64u;
     static constexpr std::size_t   table_bytes = 2048u;
 
@@ -51,6 +56,8 @@ public:
     void offer_no_callbacks();
     void offer_no_table();
     void ask_for_interface(std::uint32_t interface_version);
+    /* Direct3D 9 only: the Version OpenAdapter is called with. */
+    void ask_for_version(std::uint32_t version);
     /* Refusals a test sets before `create_device`. */
     void offer_no_dxgi_callbacks();
     void offer_no_dxgi_table();
@@ -81,6 +88,11 @@ public:
     /* Slots the last fill left non-null. */
     std::uint32_t filled_slots() const;
     void         destroy_device();
+    /* Direct3D 9: the DriverVersion OpenAdapter answered, and the device
+     * handle the last create handed back. */
+    std::uint32_t driver_version() const;
+    void         *device9() const;
+    d3d::Hresult  destroy_device9();
 
     /* What the last create was given, so a test can drive the DXGI slots. */
     void                                   *device_block();
@@ -90,6 +102,10 @@ private:
     d3d::UmdRoot                        &root_;
     d3d::RuntimeKind                     runtime_;
     d3d::D3dddiAdapterCallbacksRecord    callbacks_;
+    d3d::D3dddiAdapterFuncsRecord        funcs9_;
+    std::uint32_t                        version9_;
+    std::uint32_t                        driver_version_;
+    void                                *device9_;
     d3d::D3d102ddiAdapterFuncsRecord     funcs10_;
     d3d::D3d12ddiAdapterFuncsRecord      funcs12_;
     d3d::DxgiDdiBaseCallbacksRecord      dxgi_callbacks_;

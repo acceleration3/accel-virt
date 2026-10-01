@@ -2,6 +2,7 @@
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
@@ -41,7 +42,8 @@ d3d::D3dSession &D3d12Driver::session(uint32_t slot)
 {
     AV_SCOPE("D3d12Driver::session");
     if (!sessions_[slot].constructed())
-        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, KmtBlobArena::max_bytes));
+        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, KmtBlobArena::max_bytes,
+                                                          d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11));
     if (!heaps_[slot].constructed()) static_cast<void>(heaps_[slot].construct(arena_locks_[slot]));
     return sessions_[slot].object();
 }

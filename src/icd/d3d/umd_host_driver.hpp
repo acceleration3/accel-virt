@@ -40,6 +40,15 @@ public:
     /* Direct3D 12's create: the same contract over D3D12Core's arguments, the
      * device's own tables coming later through fill_table12. */
     virtual Hresult build12(UmdDevice &adopted, D3d12ddiargCreateDeviceRecord &create, uint32_t kmt_adapter) = 0;
+    /* Direct3D 9's create: d3d9.dll sizes no block, so the device is the
+     * driver's own, its handle written into the D3DDDIARG_CREATEDEVICE
+     * `create` points at (hDevice) with the device-functions table filled.
+     * Anything but hr_ok leaves nothing made. */
+    virtual Hresult build9(UmdAdapter &adapter, void *create, uint32_t kmt_adapter) = 0;
+    /* d3d9.dll destroying the device `device` names, which build9 handed out:
+     * the adapter it was made on, so its count can drop; null for a handle
+     * this driver never handed out, which is left alone. */
+    virtual UmdAdapter *tear_down9(void *device) = 0;
     /* One GetCaps question about `adapter`, answered in the caller's buffer;
      * the adapter's runtime says which DDI's question it is (the two records
      * are one shape). */

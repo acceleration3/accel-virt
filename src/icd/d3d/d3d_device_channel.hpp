@@ -39,6 +39,9 @@ public:
      * Sent without a selection first: the host knows no device by this id
      * until the command runs, and refuses selecting one it does not know. */
     [[nodiscard]] bool   open(uint32_t feature_level, uint32_t &hresult, uint32_t &level);
+    /* The same for a Direct3D 9 device (CreateDevice9), on a stream told to
+     * speak Direct3D 9's selection (D3dCommandStream::speak_with). */
+    [[nodiscard]] bool   open9(uint32_t &hresult);
     /* The stream's flush and make_room_for, under the lock. */
     [[nodiscard]] Status flush();
     [[nodiscard]] Status application_flush();
@@ -51,6 +54,8 @@ public:
     [[nodiscard]] bool   make_room_for(size_t bytes);
     /* The device is destroyed on the host, and the stream stops speaking for it. */
     [[nodiscard]] bool   close();
+    /* The same for a Direct3D 9 device (Destroy9). */
+    [[nodiscard]] bool   close9();
 
     WireWriter       request_writer() override;
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;

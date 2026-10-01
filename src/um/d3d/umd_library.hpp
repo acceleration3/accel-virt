@@ -28,10 +28,11 @@ public:
     UmdLibrary(const UmdLibrary &) = delete;
     UmdLibrary &operator=(const UmdLibrary &) = delete;
 
-    /* The two exports. A process whose log or D3DKMT cannot be opened gets no
+    /* The three exports. A process whose log or D3DKMT cannot be opened gets no
      * root, and the runtime is told this driver cannot serve the adapter. */
     d3d::Hresult open_adapter10_2(void *args);
     d3d::Hresult open_adapter12(void *args);
+    d3d::Hresult open_adapter9(void *args);
     /* The process is crashing: the crash file, if tracing started. */
     long         crashed(void *pointers);
 

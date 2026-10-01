@@ -8,7 +8,8 @@
 namespace av {
 
 RecordingHostDriver::RecordingHostDriver()
-    : build_answer_(d3d::hr_ok), caps_answer_(d3d::hr_ok), fill_answer_(d3d::hr_ok), builds12_(0u), builds11_(0u),
+    : build_answer_(d3d::hr_ok), caps_answer_(d3d::hr_ok), fill_answer_(d3d::hr_ok), builds9_(0u),
+      built9_on_(nullptr), builds12_(0u), builds11_(0u),
       kmt_adapter_(0u), built_block_(nullptr), caps_runtime_(d3d::RuntimeKind::d3d10_11), caps_type_(0u),
       table_type_(~0u), table_bytes_(0u), tear_downs_(0u), torn_block_(nullptr),
       torn_runtime_(d3d::RuntimeKind::d3d10_11)
@@ -55,6 +56,27 @@ void RecordingHostDriver::tear_down(d3d::UmdDevice &device, void *block)
     torn_runtime_ = device.adapter().runtime();
 }
 
+/* hDevice is D3DDDIARG_CREATEDEVICE's first member. */
+d3d::Hresult RecordingHostDriver::build9(d3d::UmdAdapter &adapter, void *create, std::uint32_t kmt_adapter)
+{
+    kmt_adapter_ = kmt_adapter;
+    if (build_answer_ != d3d::hr_ok) return build_answer_;
+    builds9_++;
+    built9_on_ = &adapter;
+    *static_cast<void **>(create) = &builds9_;
+    return d3d::hr_ok;
+}
+
+d3d::UmdAdapter *RecordingHostDriver::tear_down9(void *device)
+{
+    if (device != &builds9_ || built9_on_ == nullptr) return nullptr;
+    tear_downs_++;
+    torn_runtime_ = built9_on_->runtime();
+    d3d::UmdAdapter *const made_on = built9_on_;
+    built9_on_ = nullptr;
+    return made_on;
+}
+
 void RecordingHostDriver::answer(d3d::Hresult build, d3d::Hresult caps, d3d::Hresult fill)
 {
     build_answer_ = build;
@@ -62,6 +84,8 @@ void RecordingHostDriver::answer(d3d::Hresult build, d3d::Hresult caps, d3d::Hre
     fill_answer_ = fill;
 }
 
+std::uint32_t    RecordingHostDriver::builds9() const { return builds9_; }
+void            *RecordingHostDriver::device9() const { return built9_on_ != nullptr ? const_cast<std::uint32_t *>(&builds9_) : nullptr; }
 std::uint32_t    RecordingHostDriver::builds12() const { return builds12_; }
 std::uint32_t    RecordingHostDriver::builds11() const { return builds11_; }
 std::uint32_t    RecordingHostDriver::kmt_adapter() const { return kmt_adapter_; }

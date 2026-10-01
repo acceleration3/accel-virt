@@ -55,6 +55,13 @@ public:
     D3dCommandStream(const D3dCommandStream &) = delete;
     D3dCommandStream &operator=(const D3dCommandStream &) = delete;
 
+    /* The commands that select a speaker and wait for the host: Direct3D 11's
+     * (SelectDevice11, Finish11) until told otherwise. A Direct3D 9 session's
+     * stream speaks for Direct3D 9 devices (SelectDevice9, Finish9), which
+     * Direct3D 11's selection would name to a host that knows no such device.
+     * Both are a u32 device, and a u32 hresult answered. */
+    void                 speak_with(uint32_t select_command, uint32_t finish_command);
+
     /* Sends what is recorded, answered by nothing. invalid_state when the
      * transport refused it, which loses the device; ok with nothing to send. */
     [[nodiscard]] Status flush();
@@ -140,6 +147,8 @@ private:
     bool          incomplete_;
     /* The device the host runs recorded commands on; 0 before any. */
     uint32_t      speaking_;
+    uint32_t      select_command_;
+    uint32_t      finish_command_;
     bool          failed_;
 };
 

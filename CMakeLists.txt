@@ -761,13 +761,15 @@ add_test(NAME avgl_image
                  --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
                  --require-export DrvSwapBuffers)
 
-# The Direct3D user-mode driver exports exactly the two names the runtimes
-# resolve (feature 055, contracts/umd_interface.md). No user32: nothing in it
+# The Direct3D user-mode driver exports exactly the three names the runtimes
+# resolve (feature 055, contracts/umd_interface.md; OpenAdapter for d3d9.dll,
+# feature 064). No user32: nothing in it
 # touches a window, and the DXGI seam presents through the KMD, not GDI.
 add_test(NAME avumd_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/avumd.dll --dll --only-exports
-                 --require-export OpenAdapter10_2 --require-export OpenAdapter12)
+                 --require-export OpenAdapter10_2 --require-export OpenAdapter12
+                 --require-export OpenAdapter)
 
 # The OpenCL ICD exports exactly the two names the Khronos loader may resolve
 # (feature 052, research §1); it presents nothing, so it wants no user32.
@@ -829,7 +831,8 @@ add_test(NAME avgl32_image
 add_test(NAME avumd32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest32/avumd32.dll --machine i386 --dll --only-exports
-                 --require-export OpenAdapter10_2 --require-export OpenAdapter12)
+                 --require-export OpenAdapter10_2 --require-export OpenAdapter12
+                 --require-export OpenAdapter)
 add_test(NAME avcl32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest32/avcl32.dll --machine i386 --dll --only-exports
@@ -912,6 +915,7 @@ find_program(AV_CLANG_CL clang-cl)
 if(AV_CLANG_CL AND EXISTS ${AV_WINDOWS_KIT_DIR}/include/um/d3d12umddi.h)
   add_test(NAME generated_d3d11_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d11_ddi.py --check)
   add_test(NAME generated_d3d12_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d12_ddi.py --check)
+  add_test(NAME generated_d3d9_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d9_ddi.py --check)
 endif()
 
 # ---- the committed SPIR-V is what its GLSL compiles to (045) ----------------

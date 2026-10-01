@@ -1,6 +1,7 @@
-/* avumd.dll's entry points (contracts/umd_interface.md): the two names the
+/* avumd.dll's entry points (contracts/umd_interface.md): the three names the
  * Direct3D runtimes resolve out of the export table - `OpenAdapter10_2` for
- * d3d11.dll and `OpenAdapter12` for D3D12Core.dll - each one line into the
+ * d3d11.dll, `OpenAdapter12` for D3D12Core.dll and `OpenAdapter` for
+ * d3d9.dll - each one line into the
  * library in this translation unit's storage, the D3D user-mode driver's
  * process-lifetime state (constitution III), and a DLL entry that does nothing
  * at attach or detach, where the loader lock allows nothing. No C runtime runs
@@ -30,6 +31,8 @@ extern "C" BOOL WINAPI avumd_entry(HINSTANCE, DWORD, LPVOID) { return TRUE; }
 extern "C" HRESULT APIENTRY OpenAdapter10_2(void *args) { return avumd_library.open_adapter10_2(args); }
 
 extern "C" HRESULT APIENTRY OpenAdapter12(void *args) { return avumd_library.open_adapter12(args); }
+
+extern "C" HRESULT APIENTRY OpenAdapter(void *args) { return avumd_library.open_adapter9(args); }
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
 

@@ -7,7 +7,7 @@
 namespace av {
 
 UmdDrivers::UmdDrivers(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
-    : d3d11_(memory, kmt, log), d3d12_(memory, kmt, log)
+    : d3d11_(memory, kmt, log), d3d12_(memory, kmt, log), d3d9_(memory, kmt, log)
 {
     AV_SCOPE("UmdDrivers::UmdDrivers");
 }
@@ -25,10 +25,23 @@ d3d::Hresult UmdDrivers::build12(d3d::UmdDevice &, d3d::D3d12ddiargCreateDeviceR
     return d3d12_.build(create, kmt_adapter);
 }
 
+d3d::Hresult UmdDrivers::build9(d3d::UmdAdapter &adapter, void *create, uint32_t kmt_adapter)
+{
+    AV_SCOPE("UmdDrivers::build9");
+    return d3d9_.build(adapter, create, kmt_adapter);
+}
+
+d3d::UmdAdapter *UmdDrivers::tear_down9(void *device)
+{
+    AV_SCOPE("UmdDrivers::tear_down9");
+    return d3d9_.tear_down(device);
+}
+
 d3d::Hresult UmdDrivers::caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter)
 {
     AV_SCOPE("UmdDrivers::caps");
     if (adapter.runtime() == d3d::RuntimeKind::d3d12) return d3d12_.caps(args, kmt_adapter);
+    if (adapter.runtime() == d3d::RuntimeKind::d3d9) return d3d9_.caps(args, kmt_adapter);
     return d3d11_.caps(adapter, args, kmt_adapter);
 }
 
