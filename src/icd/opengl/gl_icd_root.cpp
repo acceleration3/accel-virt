@@ -401,6 +401,9 @@ GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
      * host GPU and blitted for a client area that is not there (feature 051,
      * US2.3). */
     if (!WindowVisibility(surface_, window).showing()) return Shown::nothing;
+    /* Minecraft swapped 175 times a second and every frame was read back and
+     * blitted onto its window for DWM to show 60 of. */
+    if (!context->admits()) return Shown::nothing;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
     if (!framebuffers.present(*transport, context->arrays(), dc, window, surface_, &presents_)) return Shown::refused;

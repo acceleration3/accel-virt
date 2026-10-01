@@ -499,6 +499,36 @@ TEST(gl_icd_root, a_lost_context_reports_its_loss_once_and_sends_nothing)
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
   CHECK_EQ(rig.kmt().commands(), commands); }
 
+/* Unpaced, the screen shows one frame a refresh - the first swapped after
+ * each blank - so a second swap in the same refresh reads nothing back and
+ * blits nothing: Minecraft swapped 175 times a second, and every frame was
+ * copied onto its window for DWM to show 60. Paced again, every swap shows. */
+TEST(gl_icd_root_set_swap_interval, unpaced_only_the_first_swap_after_a_blank_is_shown)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+  CHECK(rig.current_context() != nullptr);
+  CHECK_EQ(set(0), 1);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 1u);
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));   /* the same refresh: covered before it is seen */
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 1u);
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK_EQ(set(1), 1);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));   /* paced: shown, and a blank waited out after it */
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 2u);
+  CHECK_EQ(rig.surface().blits(), 2u);
+  CHECK_EQ(set(0), 1);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));   /* the first since that blank */
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 3u);
+  CHECK_EQ(rig.surface().blits(), 3u);
+  CHECK(rig.root().invariants_hold()); }
+
 /* A swap puts the calling thread's context's frame on the DC's window: a DC of
  * a window with another format, a memory DC and a thread with nothing current
  * swap nothing, and only the main plane is a layer that swaps. */

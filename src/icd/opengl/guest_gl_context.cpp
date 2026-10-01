@@ -308,6 +308,13 @@ void GuestGlContext::pace()
     }
 }
 
+bool GuestGlContext::admits()
+{
+    AV_SCOPE("GuestGlContext::admits");
+    if (state_ != State::made || interval_.blanks() != 0u) return true;
+    return pacer_.object().admits();
+}
+
 const GrantedProfile &GuestGlContext::profile() const
 {
     AV_SCOPE("GuestGlContext::profile");

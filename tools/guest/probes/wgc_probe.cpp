@@ -2,7 +2,7 @@
 // whether they hold what was on screen.
 //
 //   wgc_probe.exe <mode> [--seconds S] [--render-ms M] [--swap-buffers N]
-//                        [--pool-buffers N] [--out FILE]
+//                        [--pool-buffers N] [--out FILE] [--thumbs FILE]
 //
 // Modes:
 //   window, monitor          the probe's own window, repainted with GDI once a
@@ -16,6 +16,9 @@
 // Every line is `key value...`: `frame` once per captured frame (its
 // SystemRelativeTime, which is QPC in 100 ns, and when it arrived), then
 // `capture`, `intervals` and `pixels` for the run, then `WGC PASS|FAIL`.
+// --thumbs writes each captured frame as a 96x54 luminance thumbnail, one
+// after the other: what the window showed frame by frame, to see whether it
+// ever steps back to an older frame.
 // tools/frame_pacing.py reads the frames to line captures up with its ETW
 // trace. Each paint and each captured frame also calls D3DKMTGetScanLine, which
 // dxgkrnl's profiler keyword logs with the calling thread: a marker on the
@@ -75,6 +78,7 @@ struct Options {
     UINT sync_interval = 1;   // 0 presents uncapped, as a game with vsync off
     int pool_buffers = 3;
     double min_update_ms = -1.0;   // GraphicsCaptureSession.MinUpdateInterval; below 0, DWM's 16 ms
+    const wchar_t *thumbs = nullptr;
 };
 
 // A marker on the ETW timeline: dxgkrnl's profiler keyword logs each
@@ -288,7 +292,55 @@ template <class T> HRESULT activation_factory(const wchar_t *runtime_class, T **
 class FrameReader {
 public:
     FrameReader(ID3D11Device *device, ID3D11DeviceContext *context) : device_(device), context_(context) {}
-    ~FrameReader() { release(row_); }
+    ~FrameReader()
+    {
+        release(row_);
+        release(whole_);
+    }
+
+    static constexpr unsigned thumb_width = 96, thumb_height = 54;
+
+    // The frame's luminance on a 96x54 grid, into `thumb`; false when it
+    // cannot be read.
+    bool thumbnail(IDirect3D11CaptureFrame *frame, unsigned char *thumb)
+    {
+        ID3D11Texture2D *texture = texture_of(frame);
+        if (!texture) return false;
+        D3D11_TEXTURE2D_DESC description;
+        texture->GetDesc(&description);
+        if (whole_) {
+            D3D11_TEXTURE2D_DESC held;
+            whole_->GetDesc(&held);
+            if (held.Width != description.Width || held.Height != description.Height) release(whole_);
+        }
+        if (!whole_) {
+            D3D11_TEXTURE2D_DESC staging = description;
+            staging.Usage = D3D11_USAGE_STAGING;
+            staging.BindFlags = 0;
+            staging.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            staging.MiscFlags = 0;
+            device_->CreateTexture2D(&staging, nullptr, &whole_);
+        }
+        bool read = false;
+        D3D11_MAPPED_SUBRESOURCE map;
+        if (whole_) {
+            context_->CopyResource(whole_, texture);
+            if (SUCCEEDED(context_->Map(whole_, 0, D3D11_MAP_READ, 0, &map))) {
+                const auto *bytes = static_cast<const unsigned char *>(map.pData);
+                for (unsigned ty = 0; ty < thumb_height; ty++)
+                    for (unsigned tx = 0; tx < thumb_width; tx++) {
+                        const unsigned x = (2 * tx + 1) * description.Width / (2 * thumb_width);
+                        const unsigned y = (2 * ty + 1) * description.Height / (2 * thumb_height);
+                        const unsigned char *p = bytes + (size_t)y * map.RowPitch + (size_t)x * 4;
+                        thumb[ty * thumb_width + tx] = (unsigned char)((p[0] + 2 * p[1] + p[2]) / 4);
+                    }
+                context_->Unmap(whole_, 0);
+                read = true;
+            }
+        }
+        release(texture);
+        return read;
+    }
 
     static ID3D11Texture2D *texture_of(IDirect3D11CaptureFrame *frame)
     {
@@ -383,6 +435,7 @@ private:
     ID3D11Device *device_;
     ID3D11DeviceContext *context_;
     ID3D11Texture2D *row_ = nullptr;
+    ID3D11Texture2D *whole_ = nullptr;
 };
 
 struct Device {
@@ -451,6 +504,7 @@ bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options,
     LOG("item width %d height %d pool_buffers %d thread %lu process %lu\n", size.Width, size.Height,
         options.pool_buffers, GetCurrentThreadId(), GetCurrentProcessId());
     FrameReader reader(device.d3d, device.context);
+    FILE *thumbs = options.thumbs ? _wfopen(options.thumbs, L"wb") : nullptr;
     const double period = refresh_period_ms();
     LARGE_INTEGER frequency, start, now;
     QueryPerformanceFrequency(&frequency);
@@ -492,6 +546,10 @@ bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options,
             }
             if (step >= 0) last_step = step;
         }
+        if (thumbs) {
+            unsigned char thumb[FrameReader::thumb_width * FrameReader::thumb_height];
+            if (reader.thumbnail(frame, thumb)) std::fwrite(thumb, sizeof thumb, 1, thumbs);
+        }
         if (checked < 3) {
             checked++;
             held += reader.holds_content(frame, window) ? 1 : 0;
@@ -523,6 +581,7 @@ bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options,
         LOG("presents %ld rate %.1f\n", window->painted() - painted_at_start,
             (window->painted() - painted_at_start) / options.seconds);
     LOG("pixels checked %u held %u\n", checked, held);
+    if (thumbs) std::fclose(thumbs);
     IClosable *closable = nullptr;
     if (SUCCEEDED(session->QueryInterface(__uuidof(IClosable), (void **)&closable))) closable->Close();
     release(closable);
@@ -632,6 +691,7 @@ bool parse(int argc, wchar_t **argv, Options &options, const wchar_t *&path)
         else if (!wcscmp(argument, L"--sync-interval") && valued) options.sync_interval = (UINT)_wtoi(argv[++i]);
         else if (!wcscmp(argument, L"--min-update-ms") && valued) options.min_update_ms = _wtof(argv[++i]);
         else if (!wcscmp(argument, L"--out") && valued) path = argv[++i];
+        else if (!wcscmp(argument, L"--thumbs") && valued) options.thumbs = argv[++i];
         else if (argument[0] != L'-') options.mode = argument;
         else return false;
     }
@@ -646,7 +706,8 @@ int wmain(int argc, wchar_t **argv)
     const wchar_t *path = nullptr;
     if (!parse(argc, argv, options, path)) {
         std::fprintf(stderr, "usage: wgc_probe <window|monitor|window-d3d|monitor-d3d|title:TEXT> [--seconds S] "
-                             "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--sync-interval N] [--min-update-ms M] [--out FILE]\n");
+                             "[--render-ms M] [--swap-buffers N] [--pool-buffers N] [--sync-interval N] [--min-update-ms M] [--out FILE] "
+                             "[--thumbs FILE]\n");
         return 2;
     }
     if (path) {

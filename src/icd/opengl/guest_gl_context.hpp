@@ -160,6 +160,11 @@ public:
     /* Waits for them, once the frame is on its window; nothing at interval 0,
      * and nothing before the context is made. */
     void                  pace();
+    /* Whether a frame swapped now is one the screen shows: every one when
+     * the interval paces swaps to blanks; unpaced, the first after each blank
+     * (FramePacer::admits) - the rest would be read back and blitted only to
+     * be covered before DWM composed them. */
+    bool                  admits();
     /* Which ask is being answered, recorded before the make that asks it. */
     void                  asking(GrantedProfile::Rung rung);
     void        set_debug_callback(uint64_t callback, uint64_t user);
