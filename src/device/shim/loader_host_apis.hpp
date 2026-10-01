@@ -19,6 +19,7 @@
 #include "device/surfaces/shared_surfaces.hpp"
 #include "device/shim/gl_display.hpp"
 #include "device/shim/opencl_device.hpp"
+#include "proto/context/device_uuid.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
@@ -48,7 +49,6 @@ public:
     SharedSurfaces     *surfaces(uint32_t index) override;
 
 private:
-    static constexpr uint32_t uuid_bytes = 16u;
     /* Room for a driver's whole extension list in one call, because the
      * enumeration has no offset to continue from. Mesa and NVIDIA report
      * under two hundred each. */
@@ -61,7 +61,7 @@ private:
     uint32_t kinds_of(void *device);
 
     void    *instance_;
-    uint8_t  uuids_[HostGpuSet::max_gpus][uuid_bytes];
+    DeviceUuid uuids_[HostGpuSet::max_gpus];
     uint32_t sub_apis_[HostGpuSet::max_gpus];
     uint32_t vulkan_kinds_[HostGpuSet::max_gpus];
     uint32_t opencl_kinds_[HostGpuSet::max_gpus];

@@ -15,7 +15,6 @@ namespace av {
 
 class OpenClDevice {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
 
     OpenClDevice();
     OpenClDevice(const OpenClDevice &) = delete;

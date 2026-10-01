@@ -19,7 +19,7 @@ extern "C" void av_context_signalled(void *context)
 
 
 ContextExecutor::ContextExecutor(Host &host, const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id)
-    : host_(host), library_(library), signal_(nullptr), shares_(shares), id_(id), executor_(nullptr), api_(SubApi::vulkan), uuid_{},
+    : host_(host), library_(library), signal_(nullptr), shares_(shares), id_(id), executor_(nullptr), api_(SubApi::vulkan), uuid_(),
       options_(), configured_(false)
       {
           AV_SCOPE("ContextExecutor::ContextExecutor");
@@ -39,7 +39,7 @@ void ContextExecutor::configure(SubApi api, const uint8_t *gpu_uuid, const GlCon
     AV_SCOPE("ContextExecutor::configure");
     host_.require_main_loop("ContextExecutor::configure");
     api_ = api;
-    for (size_t i = 0u; i < uuid_bytes; i++) uuid_[i] = gpu_uuid[i];
+    uuid_ = DeviceUuid(gpu_uuid);
     options_ = options;
     configured_ = true;
 }
@@ -55,8 +55,8 @@ AvExecutor *ContextExecutor::make() const
     AV_SCOPE("ContextExecutor::make");
     const AvContextOptions wanted = {options_.major(), options_.minor(),
                                       static_cast<uint8_t>(options_.profile()), options_.flags(), 0u};
-    if (options_.share_context() != 0u) return shares_.create_sharing(api_, options_.share_context(), uuid_, wanted);
-    return library_.create(api_, uuid_, options_.defaults() ? nullptr : &wanted);
+    if (options_.share_context() != 0u) return shares_.create_sharing(api_, options_.share_context(), uuid_.raw(), wanted);
+    return library_.create(api_, uuid_.raw(), options_.defaults() ? nullptr : &wanted);
 }
 
 void ContextExecutor::signals_through(ContextSignal &signal)
@@ -79,7 +79,7 @@ Status ContextExecutor::create()
      * long as the device does. */
     if (signal_ != nullptr) library_.set_signal(executor_, &av_context_signalled, signal_);
     if (api_ != SubApi::opengl) return Status::ok;
-    const Status published = shares_.publish(id_, uuid_, executor_);
+    const Status published = shares_.publish(id_, uuid_.raw(), executor_);
     if (published == Status::ok) return Status::ok;
     library_.destroy(executor_);
     executor_ = nullptr;

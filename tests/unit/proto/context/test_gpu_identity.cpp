@@ -131,3 +131,16 @@ TEST(gpu_identity_decode, a_short_reader_is_malformed)
   WireReader reader(encoded.bytes(), GpuIdentity::encoded_size - 1u);
   GpuIdentity decoded;
   CHECK_STATUS(decoded.decode(reader), Status::malformed); }
+
+/* A context started on a GPU is on the same one while the UUID matches, what
+ * else the identity says notwithstanding. */
+TEST(gpu_identity, the_same_gpu_is_the_one_with_the_same_uuid)
+{ const GpuIdentity started = sample();
+  const GpuIdentity renamed(0x10DEu, 0x2684u, GpuIdentity::discrete_gpu, uuid, 1u, 1u, "renamed");
+  CHECK(started.same_gpu(renamed));
+  std::uint8_t other[GpuIdentity::uuid_bytes] = {};
+  other[0] = 1u;
+  const GpuIdentity elsewhere(0x10DEu, 0x2684u, GpuIdentity::discrete_gpu, other, 24ull << 30, 64ull << 30,
+                              "NVIDIA GeForce RTX 4090");
+  CHECK(!started.same_gpu(elsewhere));
+  CHECK(!started.same_gpu(GpuIdentity())); }

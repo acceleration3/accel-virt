@@ -2,7 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 
-#include <string.h>
 #include <vulkan/vulkan.h>
 
 namespace av {
@@ -20,14 +19,14 @@ PhysicalDeviceIdentity::PhysicalDeviceIdentity(VkInstance instance, VkPhysicalDe
     properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     properties.pNext = &identity;
     query(physical, &properties);
-    memcpy(uuid_, identity.deviceUUID, uuid_bytes);
+    uuid_ = DeviceUuid(identity.deviceUUID);
     known_ = true;
 }
 
 bool PhysicalDeviceIdentity::is(const uint8_t *uuid) const
 {
     AV_SCOPE("PhysicalDeviceIdentity::is");
-    return known_ && uuid != nullptr && memcmp(uuid_, uuid, uuid_bytes) == 0;
+    return known_ && uuid_.equals(uuid);
 }
 
 }  // namespace av

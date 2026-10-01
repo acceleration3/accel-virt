@@ -18,6 +18,7 @@
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/renderer/bind_context_message.hpp"
@@ -170,7 +171,7 @@ public:
     {
         std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
         static_cast<void>(capset().encode(capset_bytes, sizeof capset_bytes));
-        const av::HelloMessage message(RendererService::protocol_version, 1u, uuid, library, sizeof library - 1u,
+        const av::HelloMessage message(RendererService::protocol_version, 1u, av::DeviceUuid(uuid), library, sizeof library - 1u,
                                        capset_bytes, sizeof capset_bytes);
         std::uint8_t body[capacity] = {};
         static_cast<void>(message.encode(body, sizeof body));
@@ -285,18 +286,18 @@ TEST(renderer_service_hello, refuses_another_version_a_bad_capset_or_descriptors
   std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
   CHECK_STATUS(capset().encode(capset_bytes, sizeof capset_bytes), Status::ok);
   std::uint8_t body[capacity] = {};
-  const av::HelloMessage other(RendererService::protocol_version + 1u, 1u, uuid, library, sizeof library - 1u,
+  const av::HelloMessage other(RendererService::protocol_version + 1u, 1u, av::DeviceUuid(uuid), library, sizeof library - 1u,
                                capset_bytes, sizeof capset_bytes);
   CHECK_STATUS(other.encode(body, sizeof body), Status::ok);
   CHECK_STATUS(rig.send(Kind::hello, 1u, body, static_cast<std::uint32_t>(other.encoded_length())), Status::malformed);
   std::uint8_t garbage_capset[av::CapsetInfo::encoded_size] = {};
   std::memset(garbage_capset, 0xAB, sizeof garbage_capset);
-  const av::HelloMessage bad_capset(RendererService::protocol_version, 1u, uuid, library, sizeof library - 1u,
+  const av::HelloMessage bad_capset(RendererService::protocol_version, 1u, av::DeviceUuid(uuid), library, sizeof library - 1u,
                                     garbage_capset, sizeof garbage_capset);
   CHECK_STATUS(bad_capset.encode(body, sizeof body), Status::ok);
   CHECK_STATUS(rig.send(Kind::hello, 1u, body, static_cast<std::uint32_t>(bad_capset.encoded_length())),
                Status::malformed);
-  const av::HelloMessage good(RendererService::protocol_version, 1u, uuid, library, sizeof library - 1u, capset_bytes,
+  const av::HelloMessage good(RendererService::protocol_version, 1u, av::DeviceUuid(uuid), library, sizeof library - 1u, capset_bytes,
                               sizeof capset_bytes);
   CHECK_STATUS(good.encode(body, sizeof body), Status::ok);
   const int carried[2] = {fresh_descriptor(), fresh_descriptor()};
@@ -333,7 +334,7 @@ TEST(renderer_service_hello, a_library_that_does_not_load_or_is_refused_answers_
   Rig rig;
   std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
   CHECK_STATUS(capset().encode(capset_bytes, sizeof capset_bytes), Status::ok);
-  const av::HelloMessage message(RendererService::protocol_version, 1u, uuid, library, sizeof library - 1u,
+  const av::HelloMessage message(RendererService::protocol_version, 1u, av::DeviceUuid(uuid), library, sizeof library - 1u,
                                  capset_bytes, sizeof capset_bytes);
   std::uint8_t datagram[capacity] = {};
   CHECK_STATUS(RendererMessageHeader(Kind::hello, static_cast<std::uint32_t>(message.encoded_length()), 1u)

@@ -7,7 +7,7 @@
 namespace av {
 
 ExecutorShares::ExecutorShares(Host &host, const ExecutorLibrary &library)
-    : host_(host), library_(library), lock_(nullptr), ids_{}, uuids_{}, executors_{}
+    : host_(host), library_(library), lock_(nullptr), ids_{}, uuids_(), executors_{}
     {
         AV_SCOPE("ExecutorShares::ExecutorShares");
     }
@@ -36,9 +36,7 @@ uint32_t ExecutorShares::index_of(uint32_t id) const
 bool ExecutorShares::on_gpu(uint32_t index, const uint8_t *uuid) const
 {
     AV_SCOPE("ExecutorShares::on_gpu");
-    for (uint32_t at = 0u; at < uuid_bytes; at++)
-        if (uuids_[index][at] != uuid[at]) return false;
-    return true;
+    return uuids_[index].equals(uuid);
 }
 
 Status ExecutorShares::publish(uint32_t id, const uint8_t *uuid, AvExecutor *executor)
@@ -53,7 +51,7 @@ Status ExecutorShares::publish(uint32_t id, const uint8_t *uuid, AvExecutor *exe
         status = Status::conflict;
     } else if (free != none) {
         ids_[free] = id;
-        for (uint32_t at = 0u; at < uuid_bytes; at++) uuids_[free][at] = uuid[at];
+        uuids_[free] = DeviceUuid(uuid);
         executors_[free] = executor;
         status = Status::ok;
     }

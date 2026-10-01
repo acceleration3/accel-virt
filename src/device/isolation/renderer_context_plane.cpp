@@ -27,7 +27,7 @@ constexpr uint32_t protocol_version = 1u;
 
 RendererContextPlane::RendererContextPlane(Host &host, BlobTable &blobs, FenceInterrupts &interrupts)
     : host_(host), blobs_(blobs), interrupts_(interrupts), link_(host), renderer_{}, executor_{},
-      executor_length_(0u), gpu_uuid_{}, capset_{}, capset_length_(0u), ready_(), configured_(false), alive_(false),
+      executor_length_(0u), gpu_uuid_(), capset_{}, capset_length_(0u), ready_(), configured_(false), alive_(false),
       interrupts_on_(false), epoch_(0u), losses_{}, loss_count_(0u), images_{}, mirrored_{}, mirrored_count_(0u), slots_{},
       extents_{}, body_{}
 {
@@ -77,7 +77,7 @@ Status RendererContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &ca
     AV_SCOPE("RendererContextPlane::start");
     host_.require_main_loop("RendererContextPlane::start");
     if (!configured_ || gpu_uuid == nullptr) return Status::invalid_state;
-    for (uint32_t index = 0u; index < HelloMessage::uuid_bytes; index++) gpu_uuid_[index] = gpu_uuid[index];
+    gpu_uuid_ = DeviceUuid(gpu_uuid);
     if (capset.encode(capset_, sizeof capset_) != Status::ok) return Status::invalid_parameter;
     capset_length_ = static_cast<uint32_t>(CapsetInfo::encoded_size);
     return launch();

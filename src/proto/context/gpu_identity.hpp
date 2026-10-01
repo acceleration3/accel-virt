@@ -4,6 +4,7 @@
 #define AV_GPU_IDENTITY_HPP
 
 #include "core/support/status.hpp"
+#include "proto/context/device_uuid.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,7 +17,7 @@ class WireWriter;
 class GpuIdentity {
 public:
     static constexpr size_t   encoded_size = 96u;
-    static constexpr size_t   uuid_bytes   = 16u;
+    static constexpr size_t   uuid_bytes   = DeviceUuid::bytes;
     static constexpr size_t   name_bytes   = 48u;
     /* VkPhysicalDeviceType. */
     static constexpr uint32_t other_gpu      = 0u;
@@ -35,6 +36,9 @@ public:
     uint32_t       device_id() const;
     uint32_t       device_type() const;
     const uint8_t *uuid() const;
+    /* The same host GPU: what a context started on and what a device
+     * offers now are compared by it. */
+    bool           same_gpu(const GpuIdentity &other) const;
     uint64_t       local_memory() const;
     uint64_t       shared_memory() const;
     const char    *name() const;
@@ -49,7 +53,7 @@ private:
     uint32_t vendor_id_;
     uint32_t device_id_;
     uint32_t device_type_;
-    uint8_t  uuid_[uuid_bytes];
+    DeviceUuid uuid_;
     uint64_t local_memory_;
     uint64_t shared_memory_;
     char     name_[name_bytes];

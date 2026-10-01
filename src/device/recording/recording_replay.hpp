@@ -13,6 +13,7 @@
 #include "core/support/status.hpp"
 #include "device/recording/record_header.hpp"
 #include "device/recording/replay_context.hpp"
+#include "proto/context/device_uuid.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,7 +33,7 @@ public:
     static constexpr uint32_t max_contexts = 8u;
     static constexpr uint32_t max_findings = 32u;
     static constexpr size_t   finding_bytes = 192u;
-    static constexpr size_t   uuid_bytes = 16u;
+    static constexpr size_t   uuid_bytes = DeviceUuid::bytes;
 
     explicit RecordingReplay(const ExecutorLibrary &library);
     /* Destroys every executor it made. */
@@ -74,7 +75,7 @@ private:
     void           finding_about(const RecordHeader &record, const char *what);
 
     const ExecutorLibrary &library_;
-    uint8_t                gpu_[uuid_bytes];
+    DeviceUuid             gpu_;
     bool                   gpu_chosen_;
     bool                   ran_;
     uint32_t               contexts_;

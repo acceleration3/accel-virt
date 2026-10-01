@@ -9,6 +9,7 @@
 
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "proto/context/device_uuid.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <stdint.h>
@@ -23,7 +24,7 @@ class ExecutorShares {
 public:
     /* One per context a device can hold (DeviceContextTable::max_contexts). */
     static constexpr uint32_t capacity = 64u;
-    static constexpr uint32_t uuid_bytes = 16u;
+    static constexpr uint32_t uuid_bytes = DeviceUuid::bytes;
 
     ExecutorShares(Host &host, const ExecutorLibrary &library);
     ~ExecutorShares();
@@ -60,7 +61,7 @@ private:
     void                  *lock_;
     /* One published executor per index: its context, its GPU, itself. */
     uint32_t               ids_[capacity];
-    uint8_t                uuids_[capacity][uuid_bytes];
+    DeviceUuid             uuids_[capacity];
     AvExecutor           *executors_[capacity];
 
     friend struct ExecutorSharesProbe;

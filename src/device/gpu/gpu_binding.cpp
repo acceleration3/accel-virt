@@ -1,7 +1,7 @@
 #include "device/gpu/gpu_binding.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/gpu/device_uuid.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "device/host/host.hpp"
 #include "core/support/text_buffer.hpp"
 #include "proto/context/gpu_identity.hpp"

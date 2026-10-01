@@ -3,6 +3,7 @@
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "proto/renderer/hello_message.hpp"
 
 #include <cstddef>
@@ -25,7 +26,7 @@ constexpr std::size_t   hello_length = HelloMessage::fixed_size + path_length + 
 
 HelloMessage sample()
 {
-    return HelloMessage(3u, 7u, uuid, path, path_length, capset, sizeof capset);
+    return HelloMessage(3u, 7u, av::DeviceUuid(uuid), path, path_length, capset, sizeof capset);
 }
 
 bool rejects(const std::uint8_t *bytes, std::size_t length)
@@ -80,7 +81,7 @@ TEST(hello_message, the_longest_path_and_capset_round_trip)
   static std::uint8_t   long_capset[HelloMessage::max_capset_length];
   static std::uint8_t   bytes[HelloMessage::fixed_size + sizeof long_path + sizeof long_capset];
   std::memset(long_path, 'a', sizeof long_path);
-  const HelloMessage hello(1u, 1u, uuid, long_path, sizeof long_path, long_capset, sizeof long_capset);
+  const HelloMessage hello(1u, 1u, av::DeviceUuid(uuid), long_path, sizeof long_path, long_capset, sizeof long_capset);
   CHECK_STATUS(hello.encode(bytes, sizeof bytes), Status::ok);
   HelloMessage decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 0u), Status::ok);
@@ -95,22 +96,22 @@ TEST(hello_message_encode, refuses_what_decode_would)
   static std::uint8_t bytes[HelloMessage::fixed_size + sizeof long_path + sizeof long_capset];
   std::memset(long_path, 'a', sizeof long_path);
   const char with_nul[] = {'/', '\0', 'x'};
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, path, 0u, capset, 4u).encode(bytes, sizeof bytes), Status::invalid_parameter);
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, nullptr, 5u, capset, 4u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), path, 0u, capset, 4u).encode(bytes, sizeof bytes), Status::invalid_parameter);
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), nullptr, 5u, capset, 4u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, long_path, sizeof long_path, capset, 4u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), long_path, sizeof long_path, capset, 4u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, path, path_length, capset, 0u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), path, path_length, capset, 0u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, path, path_length, nullptr, 4u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), path, path_length, nullptr, 4u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, path, path_length, long_capset, sizeof long_capset).encode(bytes, sizeof bytes),
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), path, path_length, long_capset, sizeof long_capset).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(HelloMessage(1u, 1u, uuid, with_nul, sizeof with_nul, capset, 4u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(HelloMessage(1u, 1u, av::DeviceUuid(uuid), with_nul, sizeof with_nul, capset, 4u).encode(bytes, sizeof bytes),
                Status::invalid_parameter); }
 
 TEST(hello_message, a_null_path_or_capset_is_empty)
-{ const HelloMessage hello(1u, 1u, uuid, nullptr, 9u, nullptr, 9u);
+{ const HelloMessage hello(1u, 1u, av::DeviceUuid(uuid), nullptr, 9u, nullptr, 9u);
   CHECK_EQ(hello.executor_path_length(), 0u);
   CHECK_EQ(hello.capset_length(), 0u); }
 
@@ -166,7 +167,7 @@ TEST(hello_message_decode, refuses_an_empty_path_or_capset_and_a_nul_in_the_path
       std::memset(bytes + HelloMessage::fixed_size, 'x', 8u);
       bytes[HelloMessage::fixed_size] = c.first_path_byte;
       const std::size_t length = HelloMessage::fixed_size + c.path_length + c.capset_length;
-      HelloMessage decoded(9u, 9u, uuid, path, path_length, capset, sizeof capset);
+      HelloMessage decoded(9u, 9u, av::DeviceUuid(uuid), path, path_length, capset, sizeof capset);
       CHECK_STATUS(decoded.decode(bytes, length, 0u), Status::malformed);
       CHECK_EQ(decoded.version(), 9u);
       CHECK(decoded.executor_path() == path);

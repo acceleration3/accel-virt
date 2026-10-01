@@ -10,6 +10,7 @@
 #include "harness/host/loopback_renderer_peer.hpp"
 #include "harness/host/mock_host.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/renderer/hello_message.hpp"
@@ -43,7 +44,7 @@ std::size_t hello(std::uint8_t (&datagram)[datagram_capacity], std::uint64_t seq
                                                 "mock gpu"));
     std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
     CHECK_STATUS(capset.encode(capset_bytes, sizeof capset_bytes), Status::ok);
-    const av::HelloMessage message(av::RendererService::protocol_version, 1u, uuid, executor_path,
+    const av::HelloMessage message(av::RendererService::protocol_version, 1u, av::DeviceUuid(uuid), executor_path,
                                    sizeof executor_path - 1u, capset_bytes, sizeof capset_bytes);
     const RendererMessageHeader header(RendererMessageHeader::Kind::hello,
                                        static_cast<std::uint32_t>(message.encoded_length()), sequence);

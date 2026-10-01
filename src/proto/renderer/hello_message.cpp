@@ -7,21 +7,20 @@
 namespace av {
 
 HelloMessage::HelloMessage()
-    : version_(0u), epoch_(0u), gpu_uuid_{}, executor_path_(nullptr), path_length_(0u), capset_(nullptr),
+    : version_(0u), epoch_(0u), gpu_uuid_(), executor_path_(nullptr), path_length_(0u), capset_(nullptr),
       capset_length_(0u)
 {
     AV_SCOPE("HelloMessage::HelloMessage");
 }
 
-HelloMessage::HelloMessage(uint32_t version, uint32_t epoch, const uint8_t (&gpu_uuid)[uuid_bytes],
+HelloMessage::HelloMessage(uint32_t version, uint32_t epoch, const DeviceUuid &gpu_uuid,
                            const char *executor_path, uint32_t path_length, const uint8_t *capset,
                            uint32_t capset_length)
-    : version_(version), epoch_(epoch), gpu_uuid_{}, executor_path_(executor_path),
+    : version_(version), epoch_(epoch), gpu_uuid_(gpu_uuid), executor_path_(executor_path),
       path_length_(executor_path != nullptr ? path_length : 0u), capset_(capset),
       capset_length_(capset != nullptr ? capset_length : 0u)
 {
     AV_SCOPE("HelloMessage::HelloMessage");
-    for (size_t index = 0u; index < uuid_bytes; index++) gpu_uuid_[index] = gpu_uuid[index];
 }
 
 uint32_t HelloMessage::version() const
@@ -39,7 +38,7 @@ uint32_t HelloMessage::epoch() const
 const uint8_t *HelloMessage::gpu_uuid() const
 {
     AV_SCOPE("HelloMessage::gpu_uuid");
-    return gpu_uuid_;
+    return gpu_uuid_.raw();
 }
 
 const char *HelloMessage::executor_path() const
@@ -90,7 +89,7 @@ Status HelloMessage::encode(uint8_t *bytes, size_t capacity) const
     WireWriter writer(bytes, capacity);
     writer.write_u32(version_);
     writer.write_u32(epoch_);
-    writer.copy_bytes(gpu_uuid_, uuid_bytes);
+    gpu_uuid_.encode(writer);
     writer.write_u32(path_length_);
     writer.write_u32(capset_length_);
     writer.copy_bytes(reinterpret_cast<const uint8_t *>(executor_path_), path_length_);
@@ -106,7 +105,7 @@ Status HelloMessage::decode(const uint8_t *bytes, size_t length, uint32_t descri
     HelloMessage candidate;
     candidate.version_ = reader.read_u32();
     candidate.epoch_ = reader.read_u32();
-    reader.copy_bytes(candidate.gpu_uuid_, uuid_bytes);
+    candidate.gpu_uuid_.decode(reader);
     candidate.path_length_ = reader.read_u32();
     candidate.capset_length_ = reader.read_u32();
     if (reader.status() != Status::ok) return reader.status();

@@ -1,10 +1,10 @@
 #include "device/shim/opencl_device.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/context/device_uuid.hpp"
 
 #include <CL/cl.h>
 #include <CL/cl_ext.h>
-#include <string.h>
 
 namespace av {
 
@@ -31,12 +31,12 @@ bool OpenClDevice::find(const uint8_t *uuid)
             continue;
         if (device_count > max_gpu_devices) device_count = max_gpu_devices;
         for (cl_uint d = 0u; d < device_count && device_ == nullptr; d++) {
-            uint8_t device_uuid[uuid_bytes] = {};
+            uint8_t device_uuid[DeviceUuid::bytes] = {};
             /* A device whose driver does not carry cl_khr_device_uuid cannot
              * be matched to a Vulkan GPU, so it is not claimed for one. */
-            if (clGetDeviceInfo(devices[d], CL_DEVICE_UUID_KHR, uuid_bytes, device_uuid, nullptr) != CL_SUCCESS)
+            if (clGetDeviceInfo(devices[d], CL_DEVICE_UUID_KHR, DeviceUuid::bytes, device_uuid, nullptr) != CL_SUCCESS)
                 continue;
-            if (memcmp(device_uuid, uuid, uuid_bytes) != 0) continue;
+            if (!DeviceUuid(device_uuid).equals(uuid)) continue;
             platform_ = platforms[p];
             device_ = devices[d];
         }

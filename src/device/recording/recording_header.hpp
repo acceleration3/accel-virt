@@ -6,6 +6,7 @@
 #define AV_RECORDING_HEADER_HPP
 
 #include "core/support/status.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "proto/context/protocol_version.hpp"
 
 #include <stddef.h>
@@ -18,7 +19,7 @@ struct RecordingHeaderProbe;
 class RecordingHeader {
 public:
     static constexpr size_t   encoded_size = 64u;
-    static constexpr size_t   uuid_bytes = 16u;
+    static constexpr size_t   uuid_bytes = DeviceUuid::bytes;
     static constexpr uint16_t current_major = 1u;
     static constexpr uint16_t current_minor = 0u;
 
@@ -65,7 +66,7 @@ private:
     uint32_t wraps_;
     uint32_t vendor_id_;
     uint32_t device_id_;
-    uint8_t  uuid_[uuid_bytes];
+    DeviceUuid uuid_;
 
     friend struct RecordingHeaderProbe;
 };

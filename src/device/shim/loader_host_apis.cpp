@@ -67,12 +67,12 @@ void LoaderHostApis::enumerate()
         device.pNext = &identity;
         vkGetPhysicalDeviceProperties2(devices[i], &device);
 
-        memcpy(uuids_[i], identity.deviceUUID, uuid_bytes);
+        uuids_[i] = DeviceUuid(identity.deviceUUID);
         render_minors_[i] = node.hasRender ? static_cast<int32_t>(node.renderMinor) : -1;
         sub_apis_[i] = AV_EXECUTOR_SUB_API_VULKAN;
         vulkan_kinds_[i] = kinds_of(devices[i]);
         opencl_kinds_[i] = 0u;
-        if (opencl_devices_[i].find(uuids_[i])) {
+        if (opencl_devices_[i].find(uuids_[i].raw())) {
             sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
             /* A host pointer, on every device that runs OpenCL at all:
              * CL_MEM_USE_HOST_PTR is core rather than an extension, so a
@@ -82,19 +82,19 @@ void LoaderHostApis::enumerate()
              * platform answers differently. */
             opencl_kinds_[i] = AV_BLOB_HOST_POINTER;
         }
-        if (gl_displays_[i].open(uuids_[i])) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENGL;
+        if (gl_displays_[i].open(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENGL;
     }
     /* After the loop: DXVK makes a Vulkan instance of its own, and asking it
      * about each GPU in turn is one factory and one enumeration. */
     if (d3d_runtime_.open()) {
         for (uint32_t i = 0u; i < found; i++)
-            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i])) {
+            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i].raw())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
-                if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i])) d3d11_devices_[i].pair(&d3d12_devices_[i]);
+                if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i].raw())) d3d11_devices_[i].pair(&d3d12_devices_[i]);
                 /* So does Direct3D 9, where DXVK's d3d9 is there too. */
-                static_cast<void>(d3d9_devices_[i].open(d3d_runtime_, uuids_[i]));
+                static_cast<void>(d3d9_devices_[i].open(d3d_runtime_, uuids_[i].raw()));
             }
     }
     count_ = found;
@@ -156,7 +156,7 @@ void LoaderHostApis::gpu_uuid(uint32_t index, uint8_t *out)
 {
     AV_SCOPE("LoaderHostApis::gpu_uuid");
     if (index >= count_ || out == nullptr) return;
-    memcpy(out, uuids_[index], uuid_bytes);
+    memcpy(out, uuids_[index].raw(), DeviceUuid::bytes);
 }
 
 int32_t LoaderHostApis::render_minor(uint32_t index)

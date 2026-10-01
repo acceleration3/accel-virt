@@ -62,11 +62,7 @@ void DeviceIdentity::forget()
 bool DeviceIdentity::same_gpu(const CapsetInfo &capset) const
 {
     AV_SCOPE("DeviceIdentity::same_gpu");
-    const uint8_t *const started = started_on_.gpu().uuid();
-    const uint8_t *const found = capset.gpu().uuid();
-    for (size_t byte = 0u; byte < GpuIdentity::uuid_bytes; byte++)
-        if (started[byte] != found[byte]) return false;
-    return true;
+    return started_on_.gpu().same_gpu(capset.gpu());
 }
 
 /* The same major, and no older a minor: the device agreed to speak what this

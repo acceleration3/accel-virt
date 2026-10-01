@@ -6,6 +6,7 @@
 
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "proto/context/device_uuid.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -23,7 +24,7 @@ class ContextSignal;
 
 class ContextExecutor {
 public:
-    static constexpr size_t uuid_bytes = 16u;
+    static constexpr size_t uuid_bytes = DeviceUuid::bytes;
 
     /* `shares` is the device's; an OpenGL executor is published there under
      * context `id` for as long as it lives (feature 050). */
@@ -107,7 +108,7 @@ private:
     uint32_t               id_;
     AvExecutor           *executor_;
     SubApi                 api_;
-    uint8_t                uuid_[uuid_bytes];
+    DeviceUuid             uuid_;
     GlContextOptions       options_;
     bool                   configured_;
 

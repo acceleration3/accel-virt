@@ -4,6 +4,7 @@
  * when QEMU closes its end. Every wait is bounded. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "proto/context/device_uuid.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -172,7 +173,7 @@ std::uint32_t hello_body(std::uint8_t *body, std::size_t room, const char *libra
                                 av::GpuIdentity(0x1002u, 0x7550u, av::GpuIdentity::discrete_gpu, uuid, 1u, 1u, "gpu"));
     std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
     static_cast<void>(capset.encode(capset_bytes, sizeof capset_bytes));
-    const av::HelloMessage hello(1u, 1u, uuid, library, static_cast<std::uint32_t>(std::strlen(library)), capset_bytes,
+    const av::HelloMessage hello(1u, 1u, av::DeviceUuid(uuid), library, static_cast<std::uint32_t>(std::strlen(library)), capset_bytes,
                                  sizeof capset_bytes);
     static_cast<void>(hello.encode(body, room));
     return static_cast<std::uint32_t>(hello.encoded_length());

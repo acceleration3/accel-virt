@@ -6,6 +6,8 @@
 #ifndef AV_PHYSICAL_DEVICE_IDENTITY_HPP
 #define AV_PHYSICAL_DEVICE_IDENTITY_HPP
 
+#include "proto/context/device_uuid.hpp"
+
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
@@ -13,8 +15,6 @@ namespace av {
 
 class PhysicalDeviceIdentity {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
-
     /* An instance with no vkGetPhysicalDeviceProperties2 is no GPU at all. */
     PhysicalDeviceIdentity(VkInstance instance, VkPhysicalDevice physical);
 
@@ -22,8 +22,8 @@ public:
     bool is(const uint8_t *uuid) const;
 
 private:
-    uint8_t uuid_[uuid_bytes];
-    bool    known_;
+    DeviceUuid uuid_;
+    bool       known_;
 };
 
 }  // namespace av

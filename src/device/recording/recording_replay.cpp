@@ -22,7 +22,7 @@ constexpr uint32_t blob_imported = 1u;
 
 RecordingReplay::RecordingReplay(const ExecutorLibrary &library)
     : library_(library),
-      gpu_{},
+      gpu_(),
       gpu_chosen_(false),
       ran_(false),
       contexts_(0u),
@@ -45,7 +45,7 @@ void RecordingReplay::use_gpu(const uint8_t *uuid)
 {
     AV_SCOPE("RecordingReplay::use_gpu");
     if (uuid == nullptr) return;
-    for (size_t index = 0u; index < uuid_bytes; index++) gpu_[index] = uuid[index];
+    gpu_ = DeviceUuid(uuid);
     gpu_chosen_ = true;
 }
 
@@ -94,7 +94,7 @@ void RecordingReplay::replay_setup(const RecordHeader &record, const uint8_t *pa
     if (known != nullptr) known->destroy(library_);
     for (ReplayContext &slot : slots_) {
         if (slot.created()) continue;
-        if (slot.create(library_, record.context(), setup.sub_api(), gpu_) != Status::ok) {
+        if (slot.create(library_, record.context(), setup.sub_api(), gpu_.raw()) != Status::ok) {
             finding_about(record, "the library made no executor for it");
             return;
         }

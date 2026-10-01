@@ -26,7 +26,6 @@ class Vkd3dImageExport;
 
 class D3dRuntime {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
 
     D3dRuntime();
     ~D3dRuntime();

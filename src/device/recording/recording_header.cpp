@@ -35,11 +35,9 @@ RecordingHeader::RecordingHeader(const ProtocolVersion &wire, uint32_t kinds, ui
       wraps_(0u),
       vendor_id_(vendor_id),
       device_id_(device_id),
-      uuid_()
+      uuid_(uuid)
 {
     AV_SCOPE("RecordingHeader::RecordingHeader");
-    if (uuid == nullptr) return;
-    for (size_t index = 0u; index < uuid_bytes; index++) uuid_[index] = uuid[index];
 }
 
 uint16_t RecordingHeader::major_version() const
@@ -99,7 +97,7 @@ uint32_t RecordingHeader::device_id() const
 const uint8_t *RecordingHeader::uuid() const
 {
     AV_SCOPE("RecordingHeader::uuid");
-    return uuid_;
+    return uuid_.raw();
 }
 
 void RecordingHeader::wrapped()
@@ -127,7 +125,7 @@ Status RecordingHeader::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(vendor_id_);
     writer.write_u32(device_id_);
     writer.write_u32(0u);
-    writer.copy_bytes(uuid_, uuid_bytes);
+    uuid_.encode(writer);
     return writer.status();
 }
 
@@ -147,14 +145,14 @@ Status RecordingHeader::decode(const uint8_t *bytes, size_t length)
     const uint32_t vendor_id = reader.read_u32();
     const uint32_t device_id = reader.read_u32();
     reader.expect_zero(4u);
-    uint8_t uuid[uuid_bytes] = {};
-    reader.copy_bytes(uuid, uuid_bytes);
+    DeviceUuid uuid;
+    uuid.decode(reader);
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic) return Status::malformed;
     if (limit != 0u && limit < encoded_size) return Status::malformed;
     if (major != current_major) return Status::not_supported;
     RecordingHeader decoded(ProtocolVersion(wire_major, wire_minor), kinds, started, limit, vendor_id,
-                            device_id, uuid);
+                            device_id, uuid.raw());
     decoded.minor_ = minor;
     decoded.wraps_ = wraps;
     *this = decoded;

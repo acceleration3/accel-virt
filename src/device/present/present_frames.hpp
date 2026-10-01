@@ -7,6 +7,7 @@
 #define AV_PRESENT_FRAMES_HPP
 
 #include "device/abi/av_executor.h"
+#include "proto/context/device_uuid.hpp"
 
 #include <stdint.h>
 
@@ -21,7 +22,7 @@ public:
     /* How long a present waits for its session to reach the snapshot and the
      * GPU to copy it; past it the present is refused. */
     static constexpr uint32_t wait_ms = 500u;
-    static constexpr uint32_t uuid_bytes = 16u;
+    static constexpr uint32_t uuid_bytes = DeviceUuid::bytes;
 
     PresentFrames();
     /* `gpu_uuid` is the host GPU's Vulkan device UUID, copied. */
@@ -35,7 +36,7 @@ public:
 
 private:
     ContextPlane *plane_;
-    uint8_t       gpu_uuid_[uuid_bytes];
+    DeviceUuid    gpu_uuid_;
 };
 
 }  // namespace av

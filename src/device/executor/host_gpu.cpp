@@ -16,7 +16,7 @@ constexpr uint32_t sub_api_bits[] = {AV_EXECUTOR_SUB_API_VULKAN, AV_EXECUTOR_SUB
 
 }  // namespace
 
-HostGpu::HostGpu() : uuid_{}, sub_apis_(0u), kinds_{}, index_(0u), known_(false)
+HostGpu::HostGpu() : uuid_(), sub_apis_(0u), kinds_{}, index_(0u), known_(false)
 {
     AV_SCOPE("HostGpu::HostGpu");
 }
@@ -24,7 +24,9 @@ HostGpu::HostGpu() : uuid_{}, sub_apis_(0u), kinds_{}, index_(0u), known_(false)
 void HostGpu::describe(HostApis &apis, uint32_t index)
 {
     AV_SCOPE("HostGpu::describe");
-    apis.gpu_uuid(index, uuid_);
+    uint8_t reported[DeviceUuid::bytes] = {};
+    apis.gpu_uuid(index, reported);
+    uuid_ = DeviceUuid(reported);
     sub_apis_ = apis.sub_apis(index);
     for (uint32_t slot = 0u; slot < sub_api_count; slot++) {
         /* A GPU that cannot run an API cannot import for it either, whatever
@@ -40,11 +42,7 @@ void HostGpu::describe(HostApis &apis, uint32_t index)
 bool HostGpu::matches(const uint8_t *uuid) const
 {
     AV_SCOPE("HostGpu::matches");
-    if (!known_ || uuid == nullptr) return false;
-    for (uint32_t i = 0u; i < uuid_bytes; i++) {
-        if (uuid_[i] != uuid[i]) return false;
-    }
-    return true;
+    return known_ && uuid_.equals(uuid);
 }
 
 uint32_t HostGpu::sub_apis() const
@@ -88,9 +86,9 @@ bool HostGpu::invariants_hold() const
 void HostGpu::report(StateWriter &writer) const
 {
     AV_SCOPE("HostGpu::report");
-    char       text[uuid_bytes * 2u + 1u];
+    char       text[DeviceUuid::bytes * 2u + 1u];
     TextBuffer uuid(text, sizeof text);
-    for (const uint8_t byte : uuid_) uuid.append_hex(byte, 2u);
+    uuid_.append_hex(uuid);
     writer.open("gpu", index_);
     writer.text("uuid", uuid.text());
     writer.hex("sub_apis", sub_apis_);

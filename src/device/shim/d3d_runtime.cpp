@@ -7,7 +7,6 @@
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <vulkan/vulkan.h>
 
 namespace av {
@@ -191,15 +190,8 @@ uint32_t D3dRuntime::vulkan_index(const uint8_t *uuid) const
     uint32_t count = most_devices;
     uint32_t found = ~0u;
     if (vkEnumeratePhysicalDevices(instance, &count, devices) >= 0) {
-        for (uint32_t index = 0u; index < count && found == ~0u; index++) {
-            VkPhysicalDeviceIDProperties identity = {};
-            identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
-            VkPhysicalDeviceProperties2 properties = {};
-            properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-            properties.pNext = &identity;
-            vkGetPhysicalDeviceProperties2(devices[index], &properties);
-            if (memcmp(identity.deviceUUID, uuid, uuid_bytes) == 0) found = index;
-        }
+        for (uint32_t index = 0u; index < count && found == ~0u; index++)
+            if (PhysicalDeviceIdentity(instance, devices[index]).is(uuid)) found = index;
     }
     vkDestroyInstance(instance, nullptr);
     return found;

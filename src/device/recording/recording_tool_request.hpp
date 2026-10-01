@@ -8,6 +8,7 @@
 #define AV_RECORDING_TOOL_REQUEST_HPP
 
 #include "core/support/status.hpp"
+#include "proto/context/device_uuid.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,7 +23,7 @@ class RecordingToolRequest {
 public:
     enum class Action : uint8_t { none, print, replay };
 
-    static constexpr size_t uuid_bytes = 16u;
+    static constexpr size_t uuid_bytes = DeviceUuid::bytes;
     static constexpr size_t uuid_digits = 2u * uuid_bytes;
 
     RecordingToolRequest();

@@ -3,6 +3,8 @@
 #ifndef AV_HOST_GPU_HPP
 #define AV_HOST_GPU_HPP
 
+#include "proto/context/device_uuid.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -13,8 +15,6 @@ class HostApis;
 
 class HostGpu {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
-
     HostGpu();
     HostGpu(const HostGpu &) = delete;
     HostGpu &operator=(const HostGpu &) = delete;
@@ -52,7 +52,7 @@ private:
      * not one of the three bits. */
     uint32_t slot_of(uint32_t sub_api) const;
 
-    uint8_t  uuid_[uuid_bytes];
+    DeviceUuid uuid_;
     uint32_t sub_apis_;
     uint32_t kinds_[sub_api_count];
     uint32_t index_;

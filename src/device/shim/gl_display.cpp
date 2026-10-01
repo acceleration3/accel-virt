@@ -2,13 +2,13 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/executor/gl_context_attributes.hpp"
+#include "proto/context/device_uuid.hpp"
 
 #include <dlfcn.h>
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <stdlib.h>
-#include <string.h>
 
 /* libstdc++'s <stdlib.h> is its freestanding one under -ffreestanding, which
  * declares none of POSIX; the executor links glibc's all the same. */
@@ -89,7 +89,7 @@ bool GlDisplay::open(const uint8_t *uuid)
         if (display == EGL_NO_DISPLAY || eglInitialize(display, nullptr, nullptr) != EGL_TRUE) continue;
         display_ = display;
         void *const context = create_context(GlContextAttributes(nullptr), nullptr);
-        uint8_t mine[uuid_bytes] = {};
+        uint8_t mine[DeviceUuid::bytes] = {};
         bool    told = false;
         if (make_current(context)) {
             /* Resolved with a context current, where every EGL resolves a GL
@@ -101,7 +101,7 @@ bool GlDisplay::open(const uint8_t *uuid)
             told = unsigned_bytev != nullptr;
         }
         destroy_context(context);
-        if (!told || memcmp(mine, uuid, uuid_bytes) != 0) display_ = nullptr;
+        if (!told || !DeviceUuid(mine).equals(uuid)) display_ = nullptr;
     }
     return display_ != nullptr;
 }

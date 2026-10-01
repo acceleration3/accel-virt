@@ -22,7 +22,6 @@ class GlContextAttributes;
 
 class GlDisplay {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
 
     GlDisplay();
     ~GlDisplay();

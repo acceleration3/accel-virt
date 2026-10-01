@@ -13,6 +13,7 @@
 #include "device/isolation/remote_context.hpp"
 #include "device/isolation/renderer_link.hpp"
 #include "device/memory/blob_table.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "proto/renderer/exported_image_message.hpp"
 #include "proto/renderer/guest_blob_message.hpp"
 #include "proto/renderer/hello_message.hpp"
@@ -101,7 +102,7 @@ private:
     char             renderer_[max_path + 2u];
     char             executor_[max_path + 2u];
     uint32_t         executor_length_;
-    uint8_t          gpu_uuid_[HelloMessage::uuid_bytes];
+    DeviceUuid       gpu_uuid_;
     uint8_t          capset_[HelloMessage::max_capset_length];
     uint32_t         capset_length_;
     ReadyMessage     ready_;
