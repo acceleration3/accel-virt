@@ -20,6 +20,7 @@
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
+#include "icd/common/driver_log.hpp"
 #include "icd/common/window_chains.hpp"
 #include "um/icd/com_reference.hpp"
 
@@ -117,12 +118,12 @@ private:
     void               drop_device(Device &device);
     void               refuse(const char *why);
     /* The first chain opened, and the first present's answer, said once each:
-     * whether a window is shown this way at all is otherwise invisible. */
-    void               note(const char *what, uint64_t value);
+     * whether a window is shown this way at all is otherwise invisible. */ 
 
     Kmt             &kmt_;
     icd::ThreadLock &lock_;
     icd::LogSink    &log_;
+    icd::DriverLog  lines_;
     void            *d3d11_;
     void            *dxgi_;
     void            *create_device_;
@@ -130,8 +131,6 @@ private:
     void            *compiler_;
     void            *compile_;
     bool             load_refused_;
-    bool             opened_noted_;
-    bool             presented_noted_;
     Device           devices_[max_devices];
     Chain            chains_[max_windows];
 };

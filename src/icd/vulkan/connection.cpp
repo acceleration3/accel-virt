@@ -9,6 +9,7 @@
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/transport/host_window_chunk.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::icd {
@@ -114,8 +115,7 @@ ClientTransport &Connection::transport()
 TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
 {
     AV_SCOPE("Connection::send_batch");
-    lock_.acquire();
-    ScopeExit  release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     WireReader unanswered(nullptr, 0u);
     return transport_.object().send_batch(framed, length, unanswered);
 }
@@ -124,8 +124,7 @@ Status Connection::open_chunk(ObjectStorage<HostWindowChunk> &chunk, uint64_t by
 {
     AV_SCOPE("Connection::open_chunk");
     if (!opened() || faulted() || chunk.constructed()) return Status::invalid_state;
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     static_cast<void>(chunk.construct(connection_, transport_.object()));   /* checked empty above */
     const Status status = chunk.object().open(bytes);
     if (status != Status::ok) chunk.destroy();
@@ -136,8 +135,7 @@ Status Connection::close_chunk(ObjectStorage<HostWindowChunk> &chunk)
 {
     AV_SCOPE("Connection::close_chunk");
     if (!chunk.constructed()) return Status::ok;
-    lock_.acquire();
-    ScopeExit    release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const Status released = chunk.object().release();
     chunk.destroy();
     return released;

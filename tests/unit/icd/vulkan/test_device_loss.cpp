@@ -285,8 +285,11 @@ TEST(device_loss, local_entry_points_answer_lost_with_no_kmt_call)
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(rig.device()), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(idle), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  CHECK_EQ(rig.rig().log().holding("on a lost device"), logged + 18u);
+  /* One line per entry point, not per call: enumeration, allocation and
+   * vkDeviceWaitIdle were each called twice and named once. */
+  CHECK_EQ(rig.rig().log().holding("on a lost device"), logged + 14u);
   CHECK_EQ(rig.rig().log().holding("avvk: vkQueueWaitIdle on a lost device"), 1u);
+  CHECK_EQ(rig.rig().log().holding("avvk: vkDeviceWaitIdle on a lost device"), 1u);
   CHECK(rig.rig().root().invariants_hold()); }
 
 /* The memory queries have no result to answer the loss with: they answer no

@@ -86,7 +86,7 @@ HRESULT D3d9Device::send_locked(D3d9Resource &buffer)
     AV_SCOPE("D3d9Device::send_locked");
     D3d9Subresource &subresource = buffer.subresources[0];
     if (!subresource.locked || subresource.lock_flags.ReadOnly || subresource.shadow == nullptr) return S_OK;
-    log_once(said_drawn_locked_, "avumd: a Direct3D 9 draw reads a buffer that is still locked");
+    lines_.once("a Direct3D 9 draw reads a buffer that is still locked");
     const HRESULT sent = unlock_subresource(buffer, subresource, 0u);
     subresource.lock.Flags.Discard = 0u;
     subresource.lock.Flags.NoOverwrite = 1u;

@@ -1,6 +1,7 @@
 #include "icd/vulkan/icd_root.hpp"
 
 #include "guest/transport/shared_object_call.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -299,7 +300,7 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
                  LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains)
-    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log),
+    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log), lines_(log, "avvk: "),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
@@ -321,28 +322,12 @@ IcdRoot::~IcdRoot()
     binding_.unbind();
 }
 
-void IcdRoot::note(const char *what, uint64_t value)
-{
-    AV_SCOPE("IcdRoot::note");
-    char       line[line_bytes] = {};
-    TextBuffer text(line, sizeof line);
-    text.append("avvk: ");
-    text.append(what);
-    text.append(" ");
-    text.append_decimal(value);
-    log_.write(text.text());
-}
-
 bool IcdRoot::lost(const Connection &connection, const char *entry)
 {
     AV_SCOPE("IcdRoot::lost");
     if (!connection.faulted()) return false;
-    char       line[line_bytes] = {};
-    TextBuffer text(line, sizeof line);
-    text.append("avvk: ");
-    text.append(entry);
-    text.append(" on a lost device");
-    log_.write(text.text());
+    /* Once per entry point: an application keeps calling a lost device. */
+    if (lines_.first(entry, 0)) lines_.name(entry, "on a lost device");
     return true;
 }
 
@@ -354,7 +339,7 @@ VkResult IcdRoot::negotiate(uint32_t *version)
         return VK_ERROR_INCOMPATIBLE_DRIVER;
     }
     if (*version < oldest_interface) {
-        note("loader interface version refused:", *version);
+        lines_.note("loader interface version refused:", *version);
         return VK_ERROR_INCOMPATIBLE_DRIVER;
     }
     if (*version > latest_interface) *version = latest_interface;
@@ -413,8 +398,7 @@ VkResult IcdRoot::enumerate_instance_version(uint32_t *version)
 Status IcdRoot::open_connection(Connection *&opened)
 {
     AV_SCOPE("IcdRoot::open_connection");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const Status made = connections_.create(opened, kmt_, memory_, send_lock_);
     if (made != Status::ok) return made;
     const Status status = opened->open();
@@ -431,13 +415,13 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
     Connection  *opened = nullptr;
     const Status status = open_connection(opened);
     if (status != Status::ok) {
-        note("vkCreateInstance: no Vulkan connection to an avgpu adapter, status", static_cast<uint64_t>(status));
+        lines_.note("vkCreateInstance: no Vulkan connection to an avgpu adapter, status", static_cast<uint64_t>(status));
         return status == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INCOMPATIBLE_DRIVER;
     }
     pending_ = opened;
     HostExtensionList asked;
     if (asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount) != Status::ok) {
-        note("vkCreateInstance: the extensions it names are not a list this driver can pass on, count",
+        lines_.note("vkCreateInstance: the extensions it names are not a list this driver can pass on, count",
              create->enabledExtensionCount);
         release_connection(opened);
         pending_ = nullptr;
@@ -450,7 +434,7 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
     forwarded.ppEnabledExtensionNames = asked.names();
     const VkResult result = vkicd::generated::Wrap_vkCreateInstance(&forwarded, allocator, instance);
     if (result != VK_SUCCESS) {
-        note("vkCreateInstance: the host refused, result", static_cast<uint32_t>(result));
+        lines_.note("vkCreateInstance: the host refused, result", static_cast<uint32_t>(result));
         return result;
     }
     if (*instance != VK_NULL_HANDLE) return VK_SUCCESS;
@@ -503,7 +487,7 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
     if (result != VK_SUCCESS) return result;
     if (listed == 0u) return extensions_.report(nullptr, 0u, count, properties);
     if (listed > max_host_extensions) {
-        note("vkEnumerateDeviceExtensionProperties: the host lists more device extensions than 1024:", listed);
+        lines_.note("vkEnumerateDeviceExtensionProperties: the host lists more device extensions than 1024:", listed);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     auto *const host =
@@ -567,7 +551,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
     }
     HostExtensionList asked;
     if (asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount) != Status::ok) {
-        note("vkCreateDevice: the extensions it names are not a list this driver can pass on, count",
+        lines_.note("vkCreateDevice: the extensions it names are not a list this driver can pass on, count",
              create->enabledExtensionCount);
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
@@ -604,12 +588,11 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
 void IcdRoot::release_device_memory(LoaderHandle &device)
 {
     AV_SCOPE("IcdRoot::release_device_memory");
-    memory_lock_.acquire();
-    ScopeExit           release([&] { memory_lock_.release(); });
+    const icd::ThreadLockHold release(memory_lock_);
     DeviceMemory *const memory = device.device_memory();
     if (memory == nullptr) return;
     const Status released = memory->release_all();
-    if (released != Status::ok) note("device memory not released whole, status", static_cast<uint64_t>(released));
+    if (released != Status::ok) lines_.note("device memory not released whole, status", static_cast<uint64_t>(released));
 }
 
 DescriptorTemplateTable &IcdRoot::templates()
@@ -695,7 +678,7 @@ VkResult IcdRoot::own_process_allocation(LoaderHandle &made, VkDevice device,
     const Status        built =
         chain.take(info, memory_handles_, memory_share_type(*made.connection()), fd);
     if (built != Status::ok) {
-        note("vkAllocateMemory: the chain of an imported allocation is not one this driver can send, status",
+        lines_.note("vkAllocateMemory: the chain of an imported allocation is not one this driver can send, status",
              static_cast<uint64_t>(built));
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
@@ -726,8 +709,8 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         /* What the refusal was about, because the status alone cannot say:
          * a device of 0 is a connection that never opened, and the length is
          * the one thing this request has that an ordinary create does not. */
-        note("vkAllocateMemory: the carrier was asked for on guest device", guest_device);
-        note("vkAllocateMemory: the carrier's private driver data was bytes", sizeof carrier_data);
+        lines_.note("vkAllocateMemory: the carrier was asked for on guest device", guest_device);
+        lines_.note("vkAllocateMemory: the carrier's private driver data was bytes", sizeof carrier_data);
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
     ScopeExit unwind([&] { static_cast<void>(kmt_.destroy_shared_allocation(guest_device, carrier)); });
@@ -745,7 +728,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
                                                                 : vkproto::handle_to_wire(semaphore);
     const Status         published = call.share(minted.object_id(), kind, size, wire_handle);
     if (published != Status::ok) {
-        note("vkAllocateMemory: the device would not publish a shared object, status", call.device_status());
+        lines_.note("vkAllocateMemory: the device would not publish a shared object, status", call.device_status());
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
     uint64_t     handle = 0u;
@@ -851,7 +834,7 @@ void IcdRoot::refused(const char *what)
 {
     AV_SCOPE("IcdRoot::refused");
     kernel_refusal_ = kmt_.last_code();
-    note(what, kernel_refusal_);
+    lines_.note(what, kernel_refusal_);
 }
 
 VkResult IcdRoot::last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status)
@@ -1052,7 +1035,7 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
     const Status        built =
         chain.take(info, memory_handles_, memory_share_type(*made.connection()), -1);
     if (built != Status::ok) {
-        note("vkAllocateMemory: the chain of a shared allocation is not one this driver can send, status",
+        lines_.note("vkAllocateMemory: the chain of a shared allocation is not one this driver can send, status",
              static_cast<uint64_t>(built));
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
@@ -1100,7 +1083,7 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
     uint64_t         opened = 0u;
     const Status     answered = call.open(object_id, SharedObjectKind::memory, size, opened);
     if (answered != Status::ok) {
-        note("vkAllocateMemory: the device would not open a shared object, status", call.device_status());
+        lines_.note("vkAllocateMemory: the device would not open a shared object, status", call.device_status());
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
     /* Not branched on, because it cannot fail: SharedObjectCall::judge has
@@ -1132,8 +1115,8 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     presentation_.forget_device(device);
     release_device_memory(*made);
     release_idle_fences(*made);
-    note("queue idle waits answered without the host", idle_skipped_);
-    note("queue idle waits sent to the host", idle_waited_);
+    lines_.note("queue idle waits answered without the host", idle_skipped_);
+    lines_.note("queue idle waits sent to the host", idle_waited_);
     vkicd::generated::Wrap_vkDestroyDevice(device, allocator);
     destroy_wrapper(device, LoaderHandle::Kind::device);
 }
@@ -1181,7 +1164,7 @@ void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_devi
     vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection.transport(), physical_device, &host);
     if (lost(connection, entry)) return;
     const Status built = types.build(host);
-    if (built != Status::ok) note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+    if (built != Status::ok) lines_.note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
 }
 
 void IcdRoot::physical_device_memory_properties(VkPhysicalDevice physical_device,
@@ -1222,8 +1205,7 @@ LoaderHandle *IcdRoot::allocating_device(VkDevice device)
 DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
 {
     AV_SCOPE("IcdRoot::memory_of");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     if (device.device_memory() != nullptr) return device.device_memory();
     DeviceMemory *made = nullptr;
     if (memories_.create(made, memory_, kmt_, *device.connection(), log_) != Status::ok) {
@@ -1241,8 +1223,7 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
     if (lost(*made->connection(), "vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
-    memory_lock_.acquire();
-    ScopeExit           release([&] { memory_lock_.release(); });
+    const icd::ThreadLockHold release(memory_lock_);
     /* An allocation that shares memory is the host's whole and never a chunk
      * of this process's RAM: its chain is rebuilt over the host's own fd
      * mechanism (feature 047, US3). */
@@ -1258,8 +1239,7 @@ void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAlloca
     AV_SCOPE("IcdRoot::free_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return;
-    memory_lock_.acquire();
-    ScopeExit          release([&] { memory_lock_.release(); });
+    const icd::ThreadLockHold release(memory_lock_);
     ExternalObjectSlot row = {};
     if (externals_.take_memory(memory, row)) {
         release_shared(*made, row);
@@ -1279,8 +1259,7 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     if (lost(*made->connection(), "vkMapMemory")) return VK_ERROR_DEVICE_LOST;
-    memory_lock_.acquire();
-    ScopeExit                 release([&] { memory_lock_.release(); });
+    const icd::ThreadLockHold release(memory_lock_);
     const DeviceMemory *const owned = made->device_memory();
     if (owned == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     return owned->map(memory, offset, size, flags, *data);
@@ -1340,16 +1319,14 @@ Connection *IcdRoot::acquire_connection()
 void IcdRoot::release_connection(Connection *connection)
 {
     AV_SCOPE("IcdRoot::release_connection");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     if (connections_.destroy(connection) != Status::ok) log_.write("avvk: release of a connection never opened");
 }
 
 void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection)
 {
     AV_SCOPE("IcdRoot::wrap");
-    lock_.acquire();
-    ScopeExit           release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     LoaderHandle *const parent = kind == LoaderHandle::Kind::instance ? nullptr : handles_.instance_of(connection);
     return wrap_under(kind, host, connection, parent);
 }
@@ -1363,13 +1340,13 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
     LoaderHandle *handle = nullptr;
     const Status  status = handles_.wrap(kind, host, connection, parent, handle);
     if (status != Status::ok) {
-        note("no handle for host object, status", static_cast<uint64_t>(status));
+        lines_.note("no handle for host object, status", static_cast<uint64_t>(status));
         return nullptr;
     }
     if (kind != LoaderHandle::Kind::command_buffer || handle->batch() != nullptr) return handle;
     CommandBatch *batch = nullptr;
     if (batches_.create(batch, memory_, *connection) != Status::ok) {
-        note("no batch for host command buffer", host);
+        lines_.note("no batch for host command buffer", host);
         /* The handle was made just now, so the registry cannot refuse it. */
         static_cast<void>(handles_.destroy(handle));
         return nullptr;
@@ -1382,32 +1359,28 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
 void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent)
 {
     AV_SCOPE("IcdRoot::wrap_child");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return wrap_under(kind, host, parent.connection(), &parent);
 }
 
 LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::handle_of");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return handles_.made(handle, kind);
 }
 
 LoaderHandle *IcdRoot::child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index)
 {
     AV_SCOPE("IcdRoot::child_of");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return handles_.child(parent, kind, index);
 }
 
 Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::connection_of");
-    lock_.acquire();
-    ScopeExit                 release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const LoaderHandle *const made = handles_.made(handle, kind);
     return made != nullptr ? made->connection() : nullptr;
 }
@@ -1415,8 +1388,7 @@ Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::wire");
-    lock_.acquire();
-    ScopeExit                 release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const LoaderHandle *const made = handles_.made(handle, kind);
     return made != nullptr ? made->host() : 0u;
 }
@@ -1424,8 +1396,7 @@ uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
 void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::destroy_wrapper");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     if (handles_.destroy(handles_.made(handle, kind)) != Status::ok)
         log_.write("avvk: destroy of a handle this driver did not make");
 }
@@ -1433,8 +1404,7 @@ void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 CommandBatch &IcdRoot::record_target(VkCommandBuffer command_buffer)
 {
     AV_SCOPE("IcdRoot::record_target");
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return *handles_.made(command_buffer, LoaderHandle::Kind::command_buffer)->batch();
 }
 
@@ -1470,7 +1440,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
     if (lost(*made->connection(), "vkAllocateCommandBuffers")) return VK_ERROR_DEVICE_LOST;
     const uint32_t count = info->commandBufferCount;
     if (count > max_allocated_at_once) {
-        note("vkAllocateCommandBuffers: more command buffers at once than", max_allocated_at_once);
+        lines_.note("vkAllocateCommandBuffers: more command buffers at once than", max_allocated_at_once);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     uint64_t       hosts[max_allocated_at_once] = {};
@@ -1483,7 +1453,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
         /* The ones already handed out go back; the host's others stay in their
          * pool until it is reset or destroyed, with no handle to name them by. */
         free_command_buffers(device, info->commandPool, wrapped, command_buffers);
-        note("vkAllocateCommandBuffers: host command buffers left in their pool:", count - wrapped);
+        lines_.note("vkAllocateCommandBuffers: host command buffers left in their pool:", count - wrapped);
         for (uint32_t cleared = 0u; cleared < count; cleared++) command_buffers[cleared] = VK_NULL_HANDLE;
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -1527,8 +1497,8 @@ VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
     const VkResult recorded = vkproto::av_vkEndCommandBuffer(batch, command_buffer);
     const Status   shipped = batch.end();
     if (shipped == Status::ok) return recorded;
-    note("vkEndCommandBuffer: batch not shipped, status", static_cast<uint64_t>(shipped));
-    if (batch.refused() != 0u) note("vkEndCommandBuffer: a command larger than its room, id", batch.refused());
+    lines_.note("vkEndCommandBuffer: batch not shipped, status", static_cast<uint64_t>(shipped));
+    if (batch.refused() != 0u) lines_.note("vkEndCommandBuffer: a command larger than its room, id", batch.refused());
     return shipped == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_DEVICE_LOST;
 }
 

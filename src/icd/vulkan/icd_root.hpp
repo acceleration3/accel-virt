@@ -22,6 +22,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
@@ -249,8 +250,7 @@ public:
     void report(StateWriter &writer) override;
 
 private:
-    [[nodiscard]] Status open_connection(Connection *&opened);
-    void                 note(const char *what, uint64_t value);
+    [[nodiscard]] Status open_connection(Connection *&opened); 
     /* Whether the host has faulted `connection`, logged as `entry`'s. */
     bool                 lost(const Connection &connection, const char *entry);
     /* The host's memory types into `types`, unless the connection is lost
@@ -277,6 +277,7 @@ private:
     ThreadLock            &send_lock_;
     ThreadLock            &memory_lock_;
     LogSink               &log_;
+    DriverLog             lines_;
     IcdBinding            &binding_;
     uint32_t               api_version_;
     EntryPoints            before_instance_;

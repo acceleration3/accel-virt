@@ -38,7 +38,7 @@ constexpr uint32_t copy_discard = 0x2u;
 }  // namespace
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
-    : session_(session), memory_(memory), shadows_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
+    : session_(session), memory_(memory), shadows_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), present_flags_(~0u), follow_refused_(false), frame_(1u)
@@ -139,12 +139,8 @@ void D3d11Device::set_error(HRESULT result)
 void D3d11Device::not_implemented(const char *call)
 {
     AV_SCOPE("D3d11Device::not_implemented");
-    char       line[128] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: ");
-    text.append(call);
-    text.append(" is not implemented");
-    log_.write(text.text());
+    /* Once per call: the runtime makes the same one every frame. */
+    if (lines_.first(call, 0)) lines_.name(call, "is not implemented");
     set_error(E_NOTIMPL);
 }
 

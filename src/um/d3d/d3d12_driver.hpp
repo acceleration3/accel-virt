@@ -9,6 +9,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "um/d3d/d3d12_device.hpp"
@@ -54,12 +55,12 @@ private:
     /* The slot of this kernel adapter, its host capabilities asked on first
      * use; max_adapters when the adapter runs no Direct3D 12 or none is free. */
     uint32_t         slot_of(uint32_t kmt_adapter);
-    d3d::D3dSession &session(uint32_t slot);
-    void             note(const char *what, uint64_t value);
+    d3d::D3dSession &session(uint32_t slot); 
 
     BlockSource                    &memory_;
     Kmt                            &kmt_;
     icd::LogSink                   &log_;
+    icd::DriverLog                      lines_;
     ObjectPool<D3d12Device>         devices_;
     D3d12HostCaps                   caps_[max_adapters];
     ObjectStorage<d3d::D3dSession>  sessions_[max_adapters];

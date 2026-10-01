@@ -3,6 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -24,8 +25,7 @@ uint32_t D3dDeviceChannel::device() const
 bool D3dDeviceChannel::open(uint32_t feature_level, uint32_t &hresult, uint32_t &level)
 {
     AV_SCOPE("D3dDeviceChannel::open");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     hresult = 1u;
     if (!d3dproto::av_d3d_CreateDevice11(stream_, device_, feature_level, 0u, &hresult, &level)) return false;
     if (hresult == 0u) stream_.selected(device_);
@@ -35,8 +35,7 @@ bool D3dDeviceChannel::open(uint32_t feature_level, uint32_t &hresult, uint32_t 
 bool D3dDeviceChannel::open9(uint32_t &hresult)
 {
     AV_SCOPE("D3dDeviceChannel::open9");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     hresult = 1u;
     if (!d3d9proto::av_d3d9_CreateDevice9(stream_, device_, 0u, &hresult)) return false;
     if (hresult == 0u) stream_.selected(device_);
@@ -46,16 +45,14 @@ bool D3dDeviceChannel::open9(uint32_t &hresult)
 Status D3dDeviceChannel::flush()
 {
     AV_SCOPE("D3dDeviceChannel::flush");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return stream_.flush();
 }
 
 Status D3dDeviceChannel::application_flush()
 {
     AV_SCOPE("D3dDeviceChannel::application_flush");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     /* The flush is the speaking device's: a host whose selected device was
      * just destroyed has none to flush. */
     if (!stream_.speak_as(device_)) return Status::invalid_state;
@@ -65,24 +62,21 @@ Status D3dDeviceChannel::application_flush()
 Status D3dDeviceChannel::take_recorded(uint8_t *out, size_t capacity, size_t &length)
 {
     AV_SCOPE("D3dDeviceChannel::take_recorded");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return stream_.take_recorded(out, capacity, length);
 }
 
 size_t D3dDeviceChannel::recorded_bytes()
 {
     AV_SCOPE("D3dDeviceChannel::recorded_bytes");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return stream_.recorded_bytes();
 }
 
 Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
 {
     AV_SCOPE("D3dDeviceChannel::execute");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     if (!stream_.speak_as(device_)) return Status::invalid_state;
     if (stream_.recorded_total() != cleared_at_ && !d3dproto::av_d3d_ClearState11(stream_)) return Status::invalid_state;
     const Status appended = stream_.append_recorded(commands, length);
@@ -95,16 +89,14 @@ Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
 bool D3dDeviceChannel::make_room_for(size_t bytes)
 {
     AV_SCOPE("D3dDeviceChannel::make_room_for");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return stream_.make_room_for(bytes);
 }
 
 bool D3dDeviceChannel::close()
 {
     AV_SCOPE("D3dDeviceChannel::close");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const bool sent = d3dproto::av_d3d_DestroyDevice11(stream_, device_);
     stream_.forget(device_);
     return sent;
@@ -115,8 +107,7 @@ bool D3dDeviceChannel::close()
 bool D3dDeviceChannel::close9()
 {
     AV_SCOPE("D3dDeviceChannel::close9");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const bool sent = d3d9proto::av_d3d9_Destroy9(stream_, device_);
     stream_.forget(device_);
     return sent;

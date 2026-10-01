@@ -3,6 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 
 namespace av::icd {
 
@@ -20,8 +21,7 @@ VkResult DescriptorTemplateTable::record(VkDevice device, VkDescriptorUpdateTemp
     DescriptorTemplateLayout layout;
     if (layout.take(info->pDescriptorUpdateEntries, info->descriptorUpdateEntryCount) != Status::ok)
         return VK_ERROR_INITIALIZATION_FAILED;
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     DescriptorTemplateSlot *free_slot = nullptr;
     for (DescriptorTemplateSlot &slot : slots_) {
         /* A handle a driver handed out again is this template now, not the one
@@ -42,8 +42,7 @@ VkResult DescriptorTemplateTable::record(VkDevice device, VkDescriptorUpdateTemp
 void DescriptorTemplateTable::forget(VkDescriptorUpdateTemplate made)
 {
     AV_SCOPE("DescriptorTemplateTable::forget");
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     for (DescriptorTemplateSlot &slot : slots_) {
         if (slot.template_ != made || made == VK_NULL_HANDLE) continue;
         slot = DescriptorTemplateSlot{};
@@ -54,8 +53,7 @@ void DescriptorTemplateTable::forget(VkDescriptorUpdateTemplate made)
 void DescriptorTemplateTable::forget_device(VkDevice device)
 {
     AV_SCOPE("DescriptorTemplateTable::forget_device");
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     for (DescriptorTemplateSlot &slot : slots_)
         if (slot.device_ == device && device != VK_NULL_HANDLE) slot = DescriptorTemplateSlot{};
 }
@@ -63,8 +61,7 @@ void DescriptorTemplateTable::forget_device(VkDevice device)
 uint64_t DescriptorTemplateTable::bytes_of(VkDescriptorUpdateTemplate made) const
 {
     AV_SCOPE("DescriptorTemplateTable::bytes_of");
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     const DescriptorTemplateSlot *const slot = slot_of(made);
     return slot != nullptr ? slot->bytes_ : 0u;
 }
@@ -72,8 +69,7 @@ uint64_t DescriptorTemplateTable::bytes_of(VkDescriptorUpdateTemplate made) cons
 uint32_t DescriptorTemplateTable::live() const
 {
     AV_SCOPE("DescriptorTemplateTable::live");
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     uint32_t found = 0u;
     for (const DescriptorTemplateSlot &slot : slots_) found += slot.template_ != VK_NULL_HANDLE ? 1u : 0u;
     return found;

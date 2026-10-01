@@ -47,8 +47,8 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), heaps_(heaps), log_(log), refusals_(0u), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
-      recorder_(*this), null_resource_{}, lost_(false), logged_{}
+    : session_(session), heaps_(heaps), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
+      recorder_(*this), null_resource_{}, lost_(false)
 {
     AV_SCOPE("D3d12Device::D3d12Device");
     null_resource_.depth_or_array = 1u;
@@ -116,8 +116,7 @@ HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
 {
     AV_SCOPE("D3d12Device::answered");
     /* E_PENDING is MakeResident's answer when it queued paging, not a refusal. */
-    if (FAILED(hresult) && hresult != E_PENDING && refusals_ < refusals_logged) {
-        refusals_++;
+    if (FAILED(hresult) && hresult != E_PENDING && lines_.first(slot, hresult)) {
         refused(slot, static_cast<uint32_t>(hresult));
     }
     return hresult;
@@ -126,19 +125,7 @@ HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
 void D3d12Device::unsupported(const char *slot)
 {
     AV_SCOPE("D3d12Device::unsupported");
-    uint32_t length = 0u;
-    uint32_t hash = 2166136261u;
-    for (; slot[length] != '\0'; length++) hash = (hash ^ static_cast<uint8_t>(slot[length])) * 16777619u;
-    const uint32_t bit = hash % 256u;
-    uint64_t      &word = logged_[bit / 64u];
-    const uint64_t mask = uint64_t{1} << (bit % 64u);
-    if ((word & mask) != 0u) return;
-    word |= mask;
-    char       line[128] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("avumd: Direct3D 12 slot not implemented: ");
-    text.append(slot);
-    log_.write(text.text());
+    lines_.once_name("Direct3D 12 slot not implemented:", slot);
 }
 
 d3d::D3dDeviceChannel &D3d12Device::wire()

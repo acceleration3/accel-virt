@@ -19,6 +19,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
@@ -109,8 +110,8 @@ private:
     /* A command the transport refused: the device is lost, and the runtime
      * learns it on the call that returns. */
     HRESULT                lost(const char *call);
+    /* `call` once per device: the runtime asks again on every frame. */
     void                   not_implemented(const char *call);
-    void                   log_once(bool &said, const char *line);
     /* With AV_D3D9_TRACE set in the process's environment, the first calls
      * that place a frame - targets made and bound, viewports, scissors,
      * presents - are logged with their numbers. */
@@ -192,6 +193,7 @@ private:
     d3d::D3dSession                     &session_;
     BlockSource                         &memory_;
     icd::LogSink                        &log_;
+    icd::DriverLog                       lines_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
     SrwLock                              lock_;
@@ -227,13 +229,6 @@ private:
     Ring                                 index32_ring_;
     uint8_t                             *readback_;
     size_t                               readback_bytes_;
-    bool                                 said_unimplemented_;
-    bool                                 said_present_;
-    bool                                 said_lost_;
-    bool                                 said_surface_write_;
-    bool                                 said_drawn_locked_;
-    bool                                 said_relocked_;
-    bool                                 said_empty_blt_;
     uint32_t                             traced_;
     /* While tracing: when the call in progress began, and the time the
      * device's calls took since the last present, and how many. */

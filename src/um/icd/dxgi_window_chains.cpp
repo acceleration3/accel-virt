@@ -35,6 +35,9 @@ constexpr char flipped_source[] = "Texture2D slot : register(t0);"
                                   " uint width, height; slot.GetDimensions(width, height);"
                                   " return slot.Load(int3(int(at.x), int(height) - 1 - int(at.y), 0)); }";
 
+/* What the first chain opened and presented are logged once under. */
+constexpr char chain_open_key[] = "chain open";
+constexpr char chain_presented_key[] = "chain presented";
 constexpr uint32_t buffer_count = 2u;
 constexpr uint32_t max_adapters = 16u;
 constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
@@ -42,9 +45,9 @@ constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedOb
 }  // namespace
 
 DxgiWindowChains::DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log)
-    : kmt_(kmt), lock_(lock), log_(log), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
-      create_factory_(nullptr), compiler_(nullptr), compile_(nullptr), load_refused_(false), opened_noted_(false),
-      presented_noted_(false), devices_(), chains_()
+    : kmt_(kmt), lock_(lock), log_(log), lines_(log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
+      create_factory_(nullptr), compiler_(nullptr), compile_(nullptr), load_refused_(false),
+      devices_(), chains_()
 {
     AV_SCOPE("DxgiWindowChains::DxgiWindowChains");
 }
@@ -89,8 +92,8 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
             ids[slot] = chain->ids[slot];
             bytes[slot] = chain->bytes[slot];
         }
-        if (!opened_noted_) note("a window's chain is open; its first slot is shared as", ids[0]);
-        opened_noted_ = true;
+        if (lines_.first(chain_open_key, 0))
+            lines_.note_hex("a window's chain is open; its first slot is shared as", ids[0], 16u);
     }
     lock_.release();
     return made;
@@ -120,8 +123,8 @@ bool DxgiWindowChains::present(void *window, uint32_t slot)
             context->CopyResource(back.get(), chain->slots[slot].get());
         const HRESULT shown = chain->chain->Present(0, 0);
         presented = SUCCEEDED(shown);
-        if (!presented_noted_) note("a window's chain presented its first frame, answering", static_cast<uint32_t>(shown));
-        presented_noted_ = true;
+        if (lines_.first(chain_presented_key, 0))
+            lines_.note_hex("a window's chain presented its first frame, answering", static_cast<uint32_t>(shown), 16u);
         context->End(chain->copied.get());
         context->Flush();
         uint32_t looks = 0u;
@@ -443,18 +446,6 @@ void DxgiWindowChains::drop_device(Device &device)
     device.kmt_device = 0u;
     device.kmt_adapter = 0u;
     device.luid = 0u;
-}
-
-void DxgiWindowChains::note(const char *what, uint64_t value)
-{
-    AV_SCOPE("DxgiWindowChains::note");
-    char       line[160] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("av: ");
-    text.append(what);
-    text.append(" 0x");
-    text.append_hex(value, 16u);
-    log_.write(text.text());
 }
 
 void DxgiWindowChains::refuse(const char *why)

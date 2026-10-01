@@ -1,5 +1,6 @@
 #include "icd/opengl/gl_icd_root.hpp"
 
+#include "icd/common/thread_lock_hold.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/window_visibility.hpp"
 
@@ -177,8 +178,7 @@ bool GlIcdRoot::set_pixel_format(void *dc, int32_t index)
         fail(error_invalid_pixel_format);
         return false;
     }
-    lock_.acquire();
-    ScopeExit release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     Status    set = windows_.set_format(window, index);
     if (set == Status::no_space) {
         windows_.drop_gone(surface_);
@@ -202,8 +202,7 @@ uint64_t GlIcdRoot::create_layer_context(void *dc, int32_t layer)
         fail(error_invalid_parameter);
         return 0u;
     }
-    lock_.acquire();
-    ScopeExit      release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const uint64_t pending = take_pending(slot_.thread_id());
     if (pending != 0u) return pending;
     const int32_t format = windows_.format_of(surface_.window_of(dc));
@@ -219,8 +218,7 @@ uint64_t GlIcdRoot::create_layer_context(void *dc, int32_t layer)
 bool GlIcdRoot::delete_context(uint64_t handle)
 {
     AV_SCOPE("GlIcdRoot::delete_context");
-    lock_.acquire();
-    ScopeExit             release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr) {
         fail(error_invalid_handle);
@@ -239,8 +237,7 @@ bool GlIcdRoot::delete_context(uint64_t handle)
 void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
 {
     AV_SCOPE("GlIcdRoot::set_context");
-    lock_.acquire();
-    ScopeExit             release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr) {
         fail(error_invalid_handle);
@@ -286,8 +283,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
 bool GlIcdRoot::release_context(uint64_t handle)
 {
     AV_SCOPE("GlIcdRoot::release_context");
-    lock_.acquire();
-    ScopeExit             release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr || currents_.current() != context) return false;
     context->flush();
@@ -308,8 +304,7 @@ bool GlIcdRoot::copy_context(uint64_t, uint64_t, uint32_t)
 bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
 {
     AV_SCOPE("GlIcdRoot::share_lists");
-    lock_.acquire();
-    ScopeExit             release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     GuestGlContext *const target = contexts_.resolve(first);
     GuestGlContext *const sharer = contexts_.resolve(second);
     if (target == nullptr || sharer == nullptr) {
@@ -491,8 +486,7 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     const bool pended = made == Status::ok && put_pending(thread, handle);
     lock_.release();
     void *const hglrc = pended ? system_.create_context(dc) : nullptr;
-    lock_.acquire();
-    ScopeExit      release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const uint64_t unclaimed = take_pending(thread);
     if (hglrc != nullptr && unclaimed == 0u) return hglrc;
     static_cast<void>(contexts_.destroy(handle));
@@ -790,8 +784,7 @@ GuestGlContext *GlIcdRoot::shared_context(void *share)
     if (callback_count_ <= callback_get_dhglrc) return nullptr;
     using GetDhglrc = uintptr_t (APIENTRY *)(void *);
     const uintptr_t handle = reinterpret_cast<GetDhglrc>(callbacks_[callback_get_dhglrc])(share);
-    lock_.acquire();
-    ScopeExit             release([&] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     GuestGlContext *const target = contexts_.resolve(handle);
     if (target == nullptr) return nullptr;
     if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;

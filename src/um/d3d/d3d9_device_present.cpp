@@ -155,7 +155,7 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
      * point rides in, so the miniport would blt pages nothing wrote. */
     const HRESULT published = publish(*source, args->SrcSubResourceIndex);
     if (FAILED(published)) {
-        log_once(said_present_, "avumd: a Direct3D 9 present whose buffer could not be read back");
+        lines_.once("a Direct3D 9 present whose buffer could not be read back");
         return published;
     }
     const HRESULT followed = follow_host();

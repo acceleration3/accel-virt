@@ -1,5 +1,6 @@
 #include "icd/d3d/umd_root.hpp"
 
+#include "icd/common/thread_lock_hold.hpp"
 #include "icd/d3d/ddi/d3dddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
@@ -28,13 +29,12 @@
 namespace av::d3d {
 namespace {
 
-constexpr uint32_t line_bytes = 128u;
 
 }  // namespace
 
 UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding,
                  UmdHostDriver *builder)
-    : kmt_(kmt), lock_(lock), log_(log), binding_(binding), builder_(builder), connections_(kmt),
+    : kmt_(kmt), lock_(lock), log_(log), lines_(log, "avumd: "), binding_(binding), builder_(builder), connections_(kmt),
       adapters_(memory), devices_(memory, log)
 {
     AV_SCOPE("UmdRoot::UmdRoot");
@@ -45,18 +45,6 @@ UmdRoot::~UmdRoot()
 {
     AV_SCOPE("UmdRoot::~UmdRoot");
     binding_.unbind();
-}
-
-void UmdRoot::note(const char *what, uint64_t value)
-{
-    AV_SCOPE("UmdRoot::note");
-    char       line[line_bytes] = {};
-    TextBuffer text(line, sizeof line);
-    text.append("avumd: ");
-    text.append(what);
-    text.append(" ");
-    text.append_decimal(value);
-    log_.write(text.text());
 }
 
 /* The LUID avgpu.sys answers UMDRIVERPRIVATE with: which adapter the runtime
@@ -75,7 +63,7 @@ uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
     uint64_t         words[2] = {};
     QueryAdapterInfo info = {words, sizeof(words)};
     if (query == nullptr || query(runtime_adapter, &info) < 0 || words[0] != umd_private_tag) return 0u;
-    note("adapter luid", words[1]);
+    lines_.note("adapter luid", words[1]);
     return words[1];
 }
 
@@ -87,27 +75,27 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
     if (callbacks == nullptr) return hr_invalid_arg;
     const DdiVersionList versions(runtime);
     if (runtime == RuntimeKind::d3d10_11 && !versions.opens(interface_version)) {
-        note("open refused, interface", interface_version);
+        lines_.note("open refused, interface", interface_version);
         return hr_no_interface;
     }
     UmdConnection *connection = nullptr;
     const Status   held = connections_.acquire(adapter_luid(runtime_adapter, callbacks), connection);
     if (held != Status::ok) {
-        note("no avgpu adapter, status", static_cast<uint64_t>(held));
+        lines_.note("no avgpu adapter, status", static_cast<uint64_t>(held));
         return hr_fail;
     }
     bool      keep = false;
     ScopeExit give_back([this, &keep, connection] {
         if (keep) return;
         const Status released = connection->release();
-        if (released != Status::ok) note("connection release, status", static_cast<uint64_t>(released));
+        if (released != Status::ok) lines_.note("connection release, status", static_cast<uint64_t>(released));
     });
     UmdAdapter  *adapter = nullptr;
     const Status made = adapters_.open(adapter, runtime, runtime_adapter,
                                        static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks), *connection,
                                        interface_version, runtime_version);
     if (made != Status::ok) {
-        note("no memory for the adapter, status", static_cast<uint64_t>(made));
+        lines_.note("no memory for the adapter, status", static_cast<uint64_t>(made));
         return hr_out_of_memory;
     }
     const Status learned = adapter->identity().learn(kmt_, connection->adapter(), log_);
@@ -128,8 +116,7 @@ Hresult UmdRoot::open_adapter10_2(D3d10ddiargOpenAdapterRecord *args)
 {
     AV_SCOPE("UmdRoot::open_adapter10_2");
     if (args == nullptr || args->pAdapterFuncs == nullptr) return hr_invalid_arg;
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter   *adapter = nullptr;
     const Hresult opened = open(adapter, RuntimeKind::d3d10_11, args->hRTAdapter, args->pAdapterCallbacks,
                                 args->Interface, args->Version);
@@ -143,8 +130,7 @@ Hresult UmdRoot::open_adapter12(D3d12ddiargOpenAdapterRecord *args)
 {
     AV_SCOPE("UmdRoot::open_adapter12");
     if (args == nullptr || args->pAdapterFuncs == nullptr) return hr_invalid_arg;
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter   *adapter = nullptr;
     const Hresult opened = open(adapter, RuntimeKind::d3d12, args->hRTAdapter, args->pAdapterCallbacks, 0u, 0u);
     if (opened != hr_ok) return opened;
@@ -160,11 +146,10 @@ Hresult UmdRoot::open_adapter9(D3dddiargOpenAdapterRecord *args)
     constexpr uint32_t win7_interface = 0x2003u;   /* D3D_UMD_INTERFACE_VERSION_WIN7 */
     if (args == nullptr || args->pAdapterFuncs == nullptr) return hr_invalid_arg;
     if (args->Interface != interface9 || args->Version < win7_interface) {
-        note("open9 refused, version", args->Version);
+        lines_.note("open9 refused, version", args->Version);
         return hr_no_interface;
     }
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter   *adapter = nullptr;
     const Hresult opened = open(adapter, RuntimeKind::d3d9, args->hAdapter, args->pAdapterCallbacks,
                                 args->Interface, args->Version);
@@ -178,8 +163,7 @@ Hresult UmdRoot::open_adapter9(D3dddiargOpenAdapterRecord *args)
 Hresult UmdRoot::create_device9(void *adapter, void *create)
 {
     AV_SCOPE("UmdRoot::create_device9");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr || create == nullptr || open_adapter->runtime() != RuntimeKind::d3d9)
         return hr_invalid_arg;
@@ -192,8 +176,7 @@ Hresult UmdRoot::create_device9(void *adapter, void *create)
 Hresult UmdRoot::destroy_device9(void *device)
 {
     AV_SCOPE("UmdRoot::destroy_device9");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter *const made_on = builder_ != nullptr ? builder_->tear_down9(device) : nullptr;
     if (made_on == nullptr) return hr_invalid_arg;
     made_on->device_gone();
@@ -203,8 +186,7 @@ Hresult UmdRoot::destroy_device9(void *device)
 Hresult UmdRoot::supported_versions(void *adapter, uint32_t *entries, uint64_t *words)
 {
     AV_SCOPE("UmdRoot::supported_versions");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     const UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr) return hr_invalid_arg;
     return open_adapter->versions().answer(entries, words);
@@ -213,15 +195,14 @@ Hresult UmdRoot::supported_versions(void *adapter, uint32_t *entries, uint64_t *
 Hresult UmdRoot::caps(void *adapter, D3d102ddiargGetCapsRecord *args)
 {
     AV_SCOPE("UmdRoot::caps");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr || args == nullptr) return hr_invalid_arg;
     if (builder_ != nullptr) return builder_->caps(*open_adapter, *args, open_adapter->connection().adapter());
     /* No host to ask, so no capability is claimed (constitution VI). D3D12Core
      * survives this: it falls back and records generic pipeline level 1
      * (research.md §12). */
-    note("cap refused, type", args->Type);
+    lines_.note("cap refused, type", args->Type);
     return hr_invalid_arg;
 }
 
@@ -242,7 +223,7 @@ Hresult UmdRoot::adopt_device(UmdAdapter &adapter, D3d10ddiargCreateDeviceRecord
     UmdDevice   *device = nullptr;
     const Status created = devices_.make(device, adapter, create.hDrvDevice);
     if (created != Status::ok) {
-        note("no device, status", static_cast<uint64_t>(created));
+        lines_.note("no device, status", static_cast<uint64_t>(created));
         return created == Status::no_memory ? hr_out_of_memory : hr_invalid_arg;
     }
     const Hresult adopted = device->adopt(create);
@@ -258,14 +239,13 @@ void UmdRoot::forget_device(void *block)
 {
     AV_SCOPE("UmdRoot::forget_device");
     const Status destroyed = devices_.destroy(block);
-    if (destroyed != Status::ok) note("device destroy, status", static_cast<uint64_t>(destroyed));
+    if (destroyed != Status::ok) lines_.note("device destroy, status", static_cast<uint64_t>(destroyed));
 }
 
 Hresult UmdRoot::create_device(void *adapter, D3d10ddiargCreateDeviceRecord *create)
 {
     AV_SCOPE("UmdRoot::create_device");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr || create == nullptr) return hr_invalid_arg;
     UmdDevice    *device = nullptr;
@@ -283,14 +263,13 @@ Hresult UmdRoot::create_device(void *adapter, D3d10ddiargCreateDeviceRecord *cre
 Hresult UmdRoot::create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *create)
 {
     AV_SCOPE("UmdRoot::create_device12");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr || create == nullptr || create->hDrvDevice == nullptr) return hr_invalid_arg;
     UmdDevice   *device = nullptr;
     const Status made = devices_.make(device, *open_adapter, create->hDrvDevice);
     if (made != Status::ok) {
-        note("no device, status", static_cast<uint64_t>(made));
+        lines_.note("no device, status", static_cast<uint64_t>(made));
         return hr_out_of_memory;
     }
     /* As for Direct3D 11, a failed create is given back here: the runtime
@@ -304,27 +283,25 @@ Hresult UmdRoot::create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *c
 Hresult UmdRoot::close_adapter(void *adapter)
 {
     AV_SCOPE("UmdRoot::close_adapter");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     /* Taken before the close, which frees the adapter that names it. */
     UmdAdapter *const    open_adapter = adapters_.adapter_of(adapter);
     UmdConnection *const connection = open_adapter != nullptr ? &open_adapter->connection() : nullptr;
     const Status         closed = adapters_.close(adapter);
     if (closed == Status::conflict) {
-        note("adapter closed with live devices", open_adapter->devices());
+        lines_.note("adapter closed with live devices", open_adapter->devices());
         return hr_fail;
     }
     if (closed != Status::ok) return hr_invalid_arg;
     const Status released = connection->release();
-    if (released != Status::ok) note("connection release, status", static_cast<uint64_t>(released));
+    if (released != Status::ok) lines_.note("connection release, status", static_cast<uint64_t>(released));
     return hr_ok;
 }
 
 void UmdRoot::destroy_device(void *block)
 {
     AV_SCOPE("UmdRoot::destroy_device");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     UmdDevice *const device = devices_.device_of(block);
     if (builder_ != nullptr && device != nullptr) builder_->tear_down(*device, block);
     forget_device(block);
@@ -333,8 +310,7 @@ void UmdRoot::destroy_device(void *block)
 Hresult UmdRoot::optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests)
 {
     AV_SCOPE("UmdRoot::optional_ddi_tables");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     if (adapters_.adapter_of(adapter) == nullptr || entries == nullptr) return hr_invalid_arg;
     static_cast<void>(requests);
     /* None: 057 names the optional tables it fills. */
@@ -347,8 +323,7 @@ Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type, void *table,
 {
     AV_SCOPE("UmdRoot::fill_ddi_table");
     constexpr uint32_t dxgi_table = 3u;
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     if (adapters_.adapter_of(adapter) == nullptr || table == nullptr) return hr_invalid_arg;
     if (table_type == dxgi_table) {
         if (bytes < sizeof(Dxgi161DdiBaseFunctionsRecord)) return hr_invalid_arg;
@@ -356,7 +331,7 @@ Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type, void *table,
         return hr_ok;
     }
     const Hresult filled = builder_ == nullptr ? hr_not_impl : builder_->fill_table12(table_type, table, bytes, index, runtime_table);
-    if (filled != hr_ok) note("ddi table refused, type", table_type);
+    if (filled != hr_ok) lines_.note("ddi table refused, type", table_type);
     return filled;
 }
 

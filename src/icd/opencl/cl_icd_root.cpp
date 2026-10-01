@@ -57,7 +57,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table()), connection_(kmt),
       shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
-      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_(), refusals_(log, lock)
+      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_(), refusals_(log)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated

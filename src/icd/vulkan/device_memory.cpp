@@ -12,29 +12,16 @@ namespace av::icd {
 
 namespace {
 
-constexpr size_t line_bytes = 160u;
 
 
 }  // namespace
 
 DeviceMemory::DeviceMemory(BlockSource &memory, Kmt &kmt, Connection &connection, LogSink &log)
-    : connection_(connection), log_(log), types_(kmt, connection.adapter()), learnt_(false),
+    : connection_(connection), log_(log), lines_(log, "avvk: "), types_(kmt, connection.adapter()), learnt_(false),
       chunks_(memory, connection)
       {
           AV_SCOPE("DeviceMemory::DeviceMemory");
       }
-
-void DeviceMemory::note(const char *what, uint64_t value)
-{
-    AV_SCOPE("DeviceMemory::note");
-    char       line[line_bytes] = {};
-    TextBuffer text(line, sizeof line);
-    text.append("avvk: ");
-    text.append(what);
-    text.append(" ");
-    text.append_decimal(value);
-    log_.write(text.text());
-}
 
 bool DeviceMemory::learn(VkPhysicalDevice physical)
 {
@@ -48,7 +35,7 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     }
     const Status built = types_.build(host);
     if (built != Status::ok) {
-        note("vkAllocateMemory: the device's memory types cannot be learnt, status", static_cast<uint64_t>(built));
+        lines_.note("vkAllocateMemory: the device's memory types cannot be learnt, status", static_cast<uint64_t>(built));
         return false;
     }
     learnt_ = true;
@@ -66,7 +53,7 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
     ChunkPlacement *placed = nullptr;
     const Status    status = chunks_.allocate(info.allocationSize, info.memoryTypeIndex, placed);
     if (status != Status::ok) {
-        note("vkAllocateMemory: no host-visible memory, status", static_cast<uint64_t>(status));
+        lines_.note("vkAllocateMemory: no host-visible memory, status", static_cast<uint64_t>(status));
         return refusal();
     }
     memory = HandleBits(placed->memory()).as<VkDeviceMemory>();
@@ -89,7 +76,7 @@ void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocati
         return;
     }
     const Status released = chunks_.free(*placed);
-    if (released != Status::ok) note("vkFreeMemory: the import's release was refused, status", static_cast<uint64_t>(released));
+    if (released != Status::ok) lines_.note("vkFreeMemory: the import's release was refused, status", static_cast<uint64_t>(released));
 }
 
 VkResult DeviceMemory::map(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags flags,

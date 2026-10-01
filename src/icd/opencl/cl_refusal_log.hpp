@@ -7,11 +7,12 @@
 #ifndef AV_CLICD_CL_REFUSAL_LOG_HPP
 #define AV_CLICD_CL_REFUSAL_LOG_HPP
 
+#include "icd/common/driver_log.hpp"
+
 #include <stdint.h>
 
 namespace av::icd {
 class LogSink;
-class ThreadLock;
 }  // namespace av::icd
 
 namespace av::clicd {
@@ -20,9 +21,9 @@ class ClRefusalLog {
 public:
     /* Room for every slot of cl_icd_dispatch this ICD leaves to the generated
      * refusals and a few errors from each entry point it serves. */
-    static constexpr uint32_t max_named = 256u;
+    static constexpr uint32_t max_named = icd::DriverLog::max_keys;
 
-    ClRefusalLog(icd::LogSink &log, icd::ThreadLock &lock);
+    explicit ClRefusalLog(icd::LogSink &log);
     ClRefusalLog(const ClRefusalLog &) = delete;
     ClRefusalLog &operator=(const ClRefusalLog &) = delete;
 
@@ -33,14 +34,7 @@ public:
     uint32_t named() const;
 
 private:
-    /* Whether `entry_point` with `error` is new, and so to be written. */
-    bool first(const char *entry_point, int32_t error);
-
-    icd::LogSink    &log_;
-    icd::ThreadLock &lock_;
-    const char      *named_[max_named];
-    int32_t          errors_[max_named];
-    uint32_t         count_;
+    icd::DriverLog lines_;
 };
 
 }  // namespace av::clicd

@@ -20,6 +20,7 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
@@ -206,6 +207,7 @@ private:
     BlockSource           &memory_;
     WatchedShadows         shadows_;
     icd::LogSink          &log_;
+    icd::DriverLog        lines_;
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;

@@ -28,6 +28,7 @@
 #define AV_UM_D3D12_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
@@ -74,8 +75,8 @@ public:
     /* A slot this driver has no implementation of was called: logged once. */
     void unsupported(const char *slot);
     void refused(const char *slot, uint32_t hresult);
-    /* `hresult`, what the DDI `slot` answered, logged when it is a refusal
-     * - the first few a device makes. */
+    /* `hresult`, what the DDI `slot` answered, logged when it is a refusal:
+     * once for each slot and HRESULT. */
     HRESULT answered(const char *slot, HRESULT hresult);
 
 #include "um/d3d/generated/d3d12_device_ddi.inc"
@@ -97,7 +98,6 @@ public:
                                       D3D12DDI_PRESENT_HWQUEUES_0051 *hardware_queues);
 
 private:
-    static constexpr uint32_t refusals_logged = 64u;
     uint32_t next_id();
     void     stamp(RecordHeader &header, uint32_t magic, uint32_t id);
     bool     sent(bool sent_ok, const char *what);
@@ -142,8 +142,8 @@ private:
     d3d::D3dSession                      &session_;
     d3d::D3d12HeapArena                  &heaps_;
     icd::LogSink                         &log_;
+    icd::DriverLog                        lines_;
     /* Refusals logged so far; some slots are asked in a loop. */
-    uint32_t                              refusals_;
     const D3d12HostCaps                  &caps_;
     void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;
@@ -157,9 +157,6 @@ private:
     D3d12Recorder                         recorder_;
     ResourceRecord                        null_resource_;
     bool                                  lost_;
-    /* Slots already logged as unsupported, by the first byte of their name
-     * hashed with its length: a log line each, not one per call. */
-    uint64_t                              logged_[4];
 };
 
 }  // namespace av::d3d12

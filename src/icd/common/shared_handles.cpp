@@ -2,35 +2,11 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/thread_lock.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
 
 namespace av::icd {
-
-namespace {
-
-/* Holds `lock` for the length of a call, as the rest of the ICD does. */
-class Held {
-public:
-    explicit Held(ThreadLock &lock) : lock_(lock)
-    {
-        AV_SCOPE("Held::Held");
-        lock_.acquire();
-    }
-    ~Held()
-    {
-        AV_SCOPE("Held::~Held");
-        lock_.release();
-    }
-    Held(const Held &) = delete;
-    Held &operator=(const Held &) = delete;
-
-private:
-    ThreadLock &lock_;
-};
-
-}  // namespace
 
 SharedHandles::SharedHandles(Kmt &kmt, ThreadLock &lock) : kmt_(kmt), lock_(lock), slots_(), live_(0u)
 {
@@ -68,7 +44,7 @@ Status SharedHandles::mint(uint32_t device, uint32_t carrier, uint64_t object_id
     AV_SCOPE("SharedHandles::mint");
     handle = 0u;
     if (object_id == 0u) return Status::invalid_parameter;
-    Held held(lock_);
+    ThreadLockHold held(lock_);
     const SharedHandleSlot *const already = row_for(object_id);
     if (already != nullptr) {
         handle = already->handle_;
@@ -89,7 +65,7 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
     AV_SCOPE("SharedHandles::adopt");
     object_id = 0u;
     if (handle == 0u) return Status::invalid_parameter;
-    Held held(lock_);
+    ThreadLockHold held(lock_);
     const SharedHandleSlot *const already = row_of(handle);
     if (already != nullptr) {
         object_id = already->object_id_;
@@ -123,7 +99,7 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
 bool SharedHandles::resolve(uint64_t handle, uint64_t &object_id) const
 {
     AV_SCOPE("SharedHandles::resolve");
-    Held held(lock_);
+    ThreadLockHold held(lock_);
     const SharedHandleSlot *const row = row_of(handle);
     if (row == nullptr) return false;
     object_id = row->object_id_;
@@ -145,7 +121,7 @@ void SharedHandles::give_back(SharedHandleSlot &row)
 void SharedHandles::forget(uint64_t handle)
 {
     AV_SCOPE("SharedHandles::forget");
-    Held              held(lock_);
+    ThreadLockHold              held(lock_);
     SharedHandleSlot *const row = row_of(handle);
     if (row == nullptr) return;
     give_back(*row);
@@ -154,7 +130,7 @@ void SharedHandles::forget(uint64_t handle)
 void SharedHandles::forget_device(uint32_t device)
 {
     AV_SCOPE("SharedHandles::forget_device");
-    Held     held(lock_);
+    ThreadLockHold     held(lock_);
     uint32_t index = 0u;
     while (index < live_) {
         if (slots_[index].device_ != device) {
@@ -170,7 +146,7 @@ void SharedHandles::forget_device(uint32_t device)
 uint32_t SharedHandles::live() const
 {
     AV_SCOPE("SharedHandles::live");
-    Held held(lock_);
+    ThreadLockHold held(lock_);
     return live_;
 }
 

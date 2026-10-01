@@ -23,6 +23,8 @@ namespace av::d3d9 {
 namespace {
 
 /* CreateSurface9's and CreateTexture9's kinds (d3d9.toml). */
+/* What a relocked resource's line is logged once under. */
+constexpr char relocked_key[] = "relocked";
 constexpr uint32_t surface_render_target = 1u;
 constexpr uint32_t surface_depth_stencil = 2u;
 constexpr uint32_t surface_offscreen_plain = 3u;
@@ -307,13 +309,13 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
     if (subresource.locked && !subresource.lock_flags.ReadOnly) {
         char       said[160] = {};
         TextBuffer text(said, sizeof(said));
-        text.append("avumd: a Direct3D 9 resource locked again before its unlock, kind ");
+        text.append("a Direct3D 9 resource locked again before its unlock, kind ");
         text.append_decimal(static_cast<uint32_t>(locked->kind));
         text.append(" flags 0x");
         text.append_hex(args->Flags.Value, 4u);
         text.append(" after 0x");
         text.append_hex(subresource.lock_flags.Value, 4u);
-        log_once(said_relocked_, said);
+        if (lines_.first(relocked_key, 0)) lines_.write(said);
         static_cast<void>(unlock_subresource(*locked, subresource, args->SubResourceIndex));
     }
     if (locked->kind == D3d9Resource::Kind::surface && !args->Flags.Discard && !args->Flags.WriteOnly) {
@@ -362,7 +364,7 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
         return write_buffer(resource.id, start, subresource.shadow + start, fit, flags);
     }
     if (resource.kind == D3d9Resource::Kind::surface) {
-        log_once(said_surface_write_, "avumd: a lock wrote to a surface, which the host takes no writes into");
+        lines_.once("a lock wrote to a surface, which the host takes no writes into");
         return S_OK;
     }
     D3DDDIBOX box = {0u, 0u, subresource.width, subresource.height, 0u, subresource.depth};
@@ -595,7 +597,7 @@ HRESULT D3d9Device::buf_blt(const D3DDDIARG_BUFFERBLT *args)
     const uint32_t         start = args->SrcRange.Offset;
     if (start >= from.width || args->Offset >= to.width) return E_INVALIDARG;
     uint32_t bytes = args->SrcRange.Size < from.width - start ? args->SrcRange.Size : from.width - start;
-    if (bytes == 0u) log_once(said_empty_blt_, "avumd: a Direct3D 9 BufBlt of no bytes");
+    if (bytes == 0u) lines_.once("a Direct3D 9 BufBlt of no bytes");
     if (bytes > to.width - args->Offset) bytes = to.width - args->Offset;
     if (to.shadow != nullptr) memcpy(to.shadow + args->Offset, from.system + start, bytes);
     return write_buffer(destination->id, args->Offset, from.system + start, bytes, 0u);
@@ -677,7 +679,7 @@ HRESULT D3d9Device::color_fill(const D3DDDIARG_COLORFILL *args)
 HRESULT D3d9Device::depth_fill(const D3DDDIARG_DEPTHFILL *)
 {
     AV_SCOPE("D3d9Device::depth_fill");
-    not_implemented("avumd: DepthFill is not implemented");
+    not_implemented("DepthFill is not implemented");
     return S_OK;
 }
 

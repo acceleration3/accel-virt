@@ -14,6 +14,7 @@
 #define AV_D3D_UMD_ROOT_HPP
 
 #include "core/trace/state_reporter.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/hresult.hpp"
@@ -111,12 +112,12 @@ private:
      * device, its recorded handles and its published DXGI table. Feature 056's
      * create is this plus a filled device-functions table and hr_ok. */
     Hresult adopt_device(UmdAdapter &adapter, D3d10ddiargCreateDeviceRecord &create, UmdDevice *&made);
-    void    forget_device(void *block);
-    void    note(const char *what, uint64_t value);
+    void    forget_device(void *block); 
 
     Kmt             &kmt_;
     icd::ThreadLock &lock_;
     icd::LogSink    &log_;
+    icd::DriverLog       lines_;
     UmdBinding      &binding_;
     UmdHostDriver *builder_;
     UmdConnections   connections_;

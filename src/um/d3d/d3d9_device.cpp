@@ -20,6 +20,8 @@ using Kind = d3d::D3d9StateEntry::Kind;
 namespace {
 
 constexpr uint32_t stage_vertex = 0u;
+/* What a lost device's line is logged once under. */
+constexpr char lost_key[] = "lost";
 /* Calls the trace logs, and what says it is off. */
 constexpr uint32_t trace_most = 20000u;
 constexpr uint32_t trace_none = ~0u;
@@ -55,13 +57,12 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter)
-    : session_(session), memory_(memory), log_(log), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
+    : session_(session), memory_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(nullptr), runtime_(nullptr), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
-      readback_(nullptr), readback_bytes_(0u), said_unimplemented_(false), said_present_(false), said_lost_(false),
-      said_surface_write_(false), said_drawn_locked_(false), said_relocked_(false), said_empty_blt_(false), traced_(trace_none),
+      readback_(nullptr), readback_bytes_(0u), traced_(trace_none),
       call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
@@ -217,35 +218,19 @@ HANDLE D3d9Device::handle_of(uint32_t id) const
     return reinterpret_cast<HANDLE>(static_cast<uintptr_t>(id));
 }
 
+/* The first call that could not be sent says why; every later one follows
+ * from it. */
 HRESULT D3d9Device::lost(const char *call)
 {
     AV_SCOPE("D3d9Device::lost");
-    if (!said_lost_) {
-        said_lost_ = true;
-        char       line[128] = {};
-        TextBuffer text(line, sizeof(line));
-        text.append("avumd: Direct3D 9 ");
-        text.append(call);
-        text.append(" could not be sent; the device is lost");
-        log_.write(text.text());
-    }
+    if (lines_.first(lost_key, 0)) lines_.name("Direct3D 9 device lost: could not send", call);
     return D3DDDIERR_DEVICEREMOVED;
-}
-
-void D3d9Device::log_once(bool &said, const char *line)
-{
-    AV_SCOPE("D3d9Device::log_once");
-    if (said) return;
-    said = true;
-    log_.write(line);
 }
 
 void D3d9Device::not_implemented(const char *call)
 {
     AV_SCOPE("D3d9Device::not_implemented");
-    if (said_unimplemented_) return;
-    said_unimplemented_ = true;
-    log_.write(call);
+    lines_.once(call);
 }
 
 /* ---------------------------------------------------------------- state */
@@ -772,7 +757,7 @@ HRESULT D3d9Device::state_set(D3DDDIARG_STATESET *args)
         if (named == nullptr) return E_INVALIDARG;
         named->capture(shadow_);
         return S_OK;
-    default: not_implemented("avumd: a Direct3D 9 state block operation this driver has no use for"); return S_OK;
+    default: not_implemented("a Direct3D 9 state block operation this driver has no use for"); return S_OK;
     }
 }
 
@@ -867,7 +852,7 @@ HRESULT D3d9Device::set_convolution_kernel_mono(const D3DDDIARG_SETCONVOLUTIONKE
 HRESULT D3d9Device::compose_rects(const D3DDDIARG_COMPOSERECTS *)
 {
     AV_SCOPE("D3d9Device::compose_rects");
-    not_implemented("avumd: ComposeRects, which no cap offers, was called");
+    not_implemented("ComposeRects, which no cap offers, was called");
     return S_OK;
 }
 

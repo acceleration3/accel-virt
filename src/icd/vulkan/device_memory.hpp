@@ -9,6 +9,7 @@
 #define AV_ICD_DEVICE_MEMORY_HPP
 
 #include "core/support/status.hpp"
+#include "icd/common/driver_log.hpp"
 #include "icd/vulkan/chunk_allocator.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
@@ -58,11 +59,11 @@ public:
 
 private:
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
-    VkResult           refusal() const;
-    void               note(const char *what, uint64_t value);
+    VkResult           refusal() const; 
 
     Connection     &connection_;
     LogSink        &log_;
+    DriverLog      lines_;
     MemoryTypeTable types_;
     bool            learnt_;
     ChunkAllocator  chunks_;

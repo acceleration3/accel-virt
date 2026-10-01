@@ -3,6 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 
 namespace av::d3d {
 
@@ -14,8 +15,7 @@ D3d12HeapArena::D3d12HeapArena(icd::ThreadLock &lock) : lock_(lock), heaps_(alig
 void D3d12HeapArena::take(uint64_t begin, uint64_t end)
 {
     AV_SCOPE("D3d12HeapArena::take");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     heaps_.reset(begin, end);
 }
 
@@ -23,16 +23,14 @@ Status D3d12HeapArena::place(uint64_t bytes, uint64_t &offset)
 {
     AV_SCOPE("D3d12HeapArena::place");
     offset = 0u;
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return heaps_.place(bytes, offset);
 }
 
 Status D3d12HeapArena::remove(uint64_t offset)
 {
     AV_SCOPE("D3d12HeapArena::remove");
-    lock_.acquire();
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ThreadLockHold release(lock_);
     return heaps_.remove(offset);
 }
 

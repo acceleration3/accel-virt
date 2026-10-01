@@ -3,6 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 
 namespace av::icd {
 
@@ -43,8 +44,7 @@ bool ExternalObjects::remember(VkDevice device, VkDeviceMemory memory, VkSemapho
      * body's. */
     if ((memory == VK_NULL_HANDLE) == (semaphore == VK_NULL_HANDLE)) return false;
     if ((memory != VK_NULL_HANDLE) != (size != 0u)) return false;
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     if (find(memory, semaphore) != nullptr) return false;
     for (ExternalObjectSlot &slot : slots_) {
         if (slot.device_ != VK_NULL_HANDLE) continue;
@@ -58,8 +58,7 @@ uint64_t ExternalObjects::handle_of_memory(VkDeviceMemory memory) const
 {
     AV_SCOPE("ExternalObjects::handle_of_memory");
     if (memory == VK_NULL_HANDLE) return 0u;
-    lock_.acquire();
-    ScopeExit                       released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     const ExternalObjectSlot *const slot = find(memory, VK_NULL_HANDLE);
     return slot != nullptr ? slot->handle_ : 0u;
 }
@@ -68,8 +67,7 @@ uint64_t ExternalObjects::handle_of_semaphore(VkSemaphore semaphore) const
 {
     AV_SCOPE("ExternalObjects::handle_of_semaphore");
     if (semaphore == VK_NULL_HANDLE) return 0u;
-    lock_.acquire();
-    ScopeExit                       released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     const ExternalObjectSlot *const slot = find(VK_NULL_HANDLE, semaphore);
     return slot != nullptr ? slot->handle_ : 0u;
 }
@@ -78,8 +76,7 @@ bool ExternalObjects::holder_of(uint64_t object_id, ExternalObjectSlot &row) con
 {
     AV_SCOPE("ExternalObjects::holder_of");
     if (object_id == 0u) return false;
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     for (const ExternalObjectSlot &slot : slots_) {
         if (slot.device_ == VK_NULL_HANDLE || slot.object_id_ != object_id) continue;
         row = slot;
@@ -99,8 +96,7 @@ bool ExternalObjects::take_memory(VkDeviceMemory memory, ExternalObjectSlot &row
 {
     AV_SCOPE("ExternalObjects::take_memory");
     if (memory == VK_NULL_HANDLE) return false;
-    lock_.acquire();
-    ScopeExit                 released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     ExternalObjectSlot *const slot = find(memory, VK_NULL_HANDLE);
     if (slot == nullptr) return false;
     give_back(*slot, row);
@@ -111,8 +107,7 @@ bool ExternalObjects::take_semaphore(VkSemaphore semaphore, ExternalObjectSlot &
 {
     AV_SCOPE("ExternalObjects::take_semaphore");
     if (semaphore == VK_NULL_HANDLE) return false;
-    lock_.acquire();
-    ScopeExit                 released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     ExternalObjectSlot *const slot = find(VK_NULL_HANDLE, semaphore);
     if (slot == nullptr) return false;
     give_back(*slot, row);
@@ -123,8 +118,7 @@ bool ExternalObjects::take_any_of_device(VkDevice device, ExternalObjectSlot &ro
 {
     AV_SCOPE("ExternalObjects::take_any_of_device");
     if (device == VK_NULL_HANDLE) return false;
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     for (ExternalObjectSlot &slot : slots_) {
         if (slot.device_ != device) continue;
         give_back(slot, row);
@@ -136,8 +130,7 @@ bool ExternalObjects::take_any_of_device(VkDevice device, ExternalObjectSlot &ro
 uint32_t ExternalObjects::live() const
 {
     AV_SCOPE("ExternalObjects::live");
-    lock_.acquire();
-    ScopeExit released([&] { lock_.release(); });
+    const icd::ThreadLockHold released(lock_);
     uint32_t found = 0u;
     for (const ExternalObjectSlot &slot : slots_) found += slot.device_ != VK_NULL_HANDLE ? 1u : 0u;
     return found;
