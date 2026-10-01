@@ -72,7 +72,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), refusal_("d3d11"), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_, objects_), published_(),
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), refusal_("d3d11"), arena_(nullptr), objects_(), region_(), d3d12_(region_), d3d9_(region_, objects_), published_(),
       missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -110,8 +110,7 @@ void D3dBackend::shut_down()
     }
     d3d12_.shut_down();
     d3d9_.shut_down();
-    selected_ = nullptr;
-    selected_device_ = 0u;
+    static_cast<void>(states_.select(0u));
     device11_ = nullptr;
     region_.give_back();
 }
@@ -139,17 +138,17 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
         end_batch();
         return d3d9_.run(command_id, payload, reply, arena);
     }
-    if (!held_) device11_->lock(selected_);
-    else device11_->select(selected_);
+    if (!held_) device11_->lock(states_.selected());
+    else device11_->select(states_.selected());
     held_ = true;
     arena_ = &arena;
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
     if (ran) return true;
-    if (!refusal_.removes(d3dproto::command_name(command_id), selected_device_,
-                          states_.removed_reason(selected_device_) != 0u))
+    const uint32_t device = states_.selected_id();
+    if (!refusal_.removes(d3dproto::command_name(command_id), device, states_.removed_reason(device) != 0u))
         return false;
-    states_.mark_removed(selected_device_, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
+    states_.mark_removed(device, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
     return true;
 }
 
@@ -318,7 +317,7 @@ bool D3dBackend::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
 bool D3dBackend::ready() const
 {
     AV_SCOPE("D3dBackend::ready");
-    return selected_ != nullptr && states_.removed_reason(selected_device_) == 0u;
+    return states_.ready();
 }
 
 bool D3dBackend::has_device() const
@@ -418,12 +417,9 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
     uint32_t made = 0u;
     ID3DDeviceContextState *const state = device11_->make_state(made);
     const bool kept = state != nullptr && states_.add(device, state);
-    if (kept) {
-        selected_ = state;
-        selected_device_ = device;
-    }
+    if (kept) static_cast<void>(states_.select(device));
     if (!kept && state != nullptr) state->Release();
-    device11_->lock(selected_);
+    device11_->lock(states_.selected());
     if (!kept) return true;
     hresult = static_cast<uint32_t>(S_OK);
     level = feature_level != 0u && feature_level < made ? feature_level : made;
@@ -438,11 +434,10 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
 bool D3dBackend::on_SelectDevice11(uint32_t device)
 {
     AV_SCOPE("D3dBackend::on_SelectDevice11");
-    selected_ = states_.find(device);
-    selected_device_ = device;
+    ID3DDeviceContextState *const selected = states_.select(device);
     device11_->unlock();
-    device11_->lock(selected_);
-    if (selected_ != nullptr) constants_.selected(device11_->context(), device);
+    device11_->lock(selected);
+    if (selected != nullptr) constants_.selected(device11_->context(), device);
     return true;
 }
 
@@ -452,14 +447,10 @@ bool D3dBackend::on_DestroyDevice11(uint32_t device)
     ID3DDeviceContextState *const state = states_.remove(device);
     if (state == nullptr) return false;
     constants_.forget_device(device);
-    if (state == selected_) {
-        selected_ = nullptr;
-        selected_device_ = 0u;
-    }
     /* forget_state takes the device's lock itself, and run holds it. */
     device11_->unlock();
     device11_->forget_state(state);
-    device11_->lock(selected_);
+    device11_->lock(states_.selected());
     state->Release();
     return true;
 }
@@ -638,7 +629,7 @@ bool D3dBackend::on_ClearState11()
     AV_SCOPE("D3dBackend::on_ClearState11");
     if (!has_device()) return false;
     device11_->context()->ClearState();
-    constants_.cleared(selected_device_);
+    constants_.cleared(states_.selected_id());
     return true;
 }
 
@@ -663,7 +654,7 @@ bool D3dBackend::on_Finish11(uint32_t &hresult)
     device11_->context()->Flush();
     const HRESULT removed = device11_->device()->GetDeviceRemovedReason();
     lost_ = FAILED(removed);
-    const uint32_t own = states_.removed_reason(selected_device_);
+    const uint32_t own = states_.removed_reason(states_.selected_id());
     hresult = own != 0u ? own : static_cast<uint32_t>(removed);
     return true;
 }
@@ -1140,7 +1131,7 @@ bool D3dBackend::on_SetConstantBuffers(uint32_t stage, uint32_t start, uint32_t 
     }
     uint32_t ids[D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++) ids[index] = buffers[index].buffer;
-    constants_.bind(selected_device_, stage, start, count, ids, bound, first, counts);
+    constants_.bind(states_.selected_id(), stage, start, count, ids, bound, first, counts);
     ID3D11DeviceContext4 *const context = device11_->context();
     switch (stage) {
     case stage_vertex: context->VSSetConstantBuffers1(start, count, bound, first, counts); break;
@@ -1532,8 +1523,8 @@ bool D3dBackend::on_CopyResource(uint32_t destination, uint32_t source)
     ID3D11Resource *const to = object<ID3D11Resource>(destination, D3dObjectKind::resource);
     ID3D11Resource *const from = object<ID3D11Resource>(source, D3dObjectKind::resource);
     if (!ready() || to == nullptr || from == nullptr) return false;
-    constants_.release(device11_->context(), selected_device_, destination, static_cast<ID3D11Buffer *>(to));
-    constants_.release(device11_->context(), selected_device_, source, static_cast<ID3D11Buffer *>(from));
+    constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
+    constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
     device11_->context()->CopyResource(to, from);
     return true;
 }
@@ -1546,8 +1537,8 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     ID3D11Resource *const to = object<ID3D11Resource>(destination, D3dObjectKind::resource);
     ID3D11Resource *const from = object<ID3D11Resource>(source, D3dObjectKind::resource);
     if (!ready() || to == nullptr || from == nullptr) return false;
-    constants_.release(device11_->context(), selected_device_, destination, static_cast<ID3D11Buffer *>(to));
-    constants_.release(device11_->context(), selected_device_, source, static_cast<ID3D11Buffer *>(from));
+    constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
+    constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     device11_->context()->CopySubresourceRegion1(to, destination_subresource, x, y, z, from, source_subresource,
                                                  has_box != 0u ? &region : nullptr,
@@ -1614,7 +1605,7 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
                             static_cast<uint64_t>(rows - 1u) * row_pitch + row;
     if (needed > data_size) return false;
     if (update_dynamic_buffer(resource, found, has_box != 0u ? box.left : 0u, data, row, copy_flags)) return true;
-    constants_.release(device11_->context(), selected_device_, resource, static_cast<ID3D11Buffer *>(found));
+    constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     device11_->context()->UpdateSubresource1(found, subresource, has_box != 0u ? &region : nullptr, data, row_pitch,
                                              depth_pitch, copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
@@ -1636,10 +1627,10 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     if (desc.Usage != D3D11_USAGE_DYNAMIC || offset + bytes > desc.ByteWidth) return false;
     ID3D11Buffer *const buffer = static_cast<ID3D11Buffer *>(resource);
     if ((copy_flags & D3D11_COPY_DISCARD) != 0u && offset == 0u &&
-        constants_.update(device11_->device(), device11_->context(), selected_device_, id, buffer, data,
+        constants_.update(device11_->device(), device11_->context(), states_.selected_id(), id, buffer, data,
                           static_cast<uint32_t>(bytes)))
         return true;
-    constants_.release(device11_->context(), selected_device_, id, buffer);
+    constants_.release(device11_->context(), states_.selected_id(), id, buffer);
     const D3D11_MAP map = (copy_flags & D3D11_COPY_DISCARD) != 0u ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     ID3D11DeviceContext4 *const context = device11_->context();
@@ -1688,7 +1679,7 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     data_size = 0u;
     ID3D11Resource *const found = object<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
-    constants_.release(device11_->context(), selected_device_, resource, static_cast<ID3D11Buffer *>(found));
+    constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
     uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
     if (!extent_of(found, subresource, width, height, depth, format)) return false;
     ID3D11Resource *const staging = staging_for(found, subresource, width, height, depth, format);
@@ -1798,7 +1789,6 @@ bool D3dBackend::invariants_hold() const
     AV_SCOPE("D3dBackend::invariants_hold");
     if (!objects_.invariants_hold()) return false;
     if (!states_.invariants_hold()) return false;
-    if (selected_ != nullptr && (selected_device_ == 0u || states_.find(selected_device_) != selected_)) return false;
     if (device11_ == nullptr) return states_.count() == 0u && objects_.count() == 0u;
     return true;
 }

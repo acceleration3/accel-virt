@@ -79,11 +79,11 @@ bool D3d9Session::on_CreateVertexShader9(uint32_t shader, const uint8_t *code, u
 {
     AV_SCOPE("D3d9Session::on_CreateVertexShader9");
     const D3d9ShaderTokens tokens(code, code_size);
-    if (selected_ == nullptr || !tokens.valid() || !tokens.vertex()) return false;
+    if (device() == nullptr || !tokens.valid() || !tokens.vertex()) return false;
     const uint32_t *const copy = padded(code, code_size);
     if (copy == nullptr) return false;
     IDirect3DVertexShader9 *made = nullptr;
-    return SUCCEEDED(selected_->device_->CreateVertexShader(reinterpret_cast<const DWORD *>(copy), &made)) &&
+    return SUCCEEDED(device()->CreateVertexShader(reinterpret_cast<const DWORD *>(copy), &made)) &&
            keep(shader, D3dObjectKind::vertex_shader9, made);
 }
 
@@ -91,11 +91,11 @@ bool D3d9Session::on_CreatePixelShader9(uint32_t shader, const uint8_t *code, ui
 {
     AV_SCOPE("D3d9Session::on_CreatePixelShader9");
     const D3d9ShaderTokens tokens(code, code_size);
-    if (selected_ == nullptr || !tokens.valid() || tokens.vertex()) return false;
+    if (device() == nullptr || !tokens.valid() || tokens.vertex()) return false;
     const uint32_t *const copy = padded(code, code_size);
     if (copy == nullptr) return false;
     IDirect3DPixelShader9 *made = nullptr;
-    return SUCCEEDED(selected_->device_->CreatePixelShader(reinterpret_cast<const DWORD *>(copy), &made)) &&
+    return SUCCEEDED(device()->CreatePixelShader(reinterpret_cast<const DWORD *>(copy), &made)) &&
            keep(shader, D3dObjectKind::pixel_shader9, made);
 }
 
@@ -103,7 +103,7 @@ bool D3d9Session::on_CreateVertexDeclaration9(uint32_t declaration, uint32_t cou
                                               const d3d9proto::VertexElement *elements)
 {
     AV_SCOPE("D3d9Session::on_CreateVertexDeclaration9");
-    if (selected_ == nullptr || count == 0u || count > max_declaration) return false;
+    if (device() == nullptr || count == 0u || count > max_declaration) return false;
     D3DVERTEXELEMENT9 list[max_declaration + 1u];
     for (uint32_t index = 0u; index < count; index++) {
         const d3d9proto::VertexElement &element = elements[index];
@@ -117,7 +117,7 @@ bool D3d9Session::on_CreateVertexDeclaration9(uint32_t declaration, uint32_t cou
     }
     list[count] = D3DVERTEXELEMENT9{0xff, 0u, D3DDECLTYPE_UNUSED, 0u, 0u, 0u};
     IDirect3DVertexDeclaration9 *made = nullptr;
-    return SUCCEEDED(selected_->device_->CreateVertexDeclaration(list, &made)) &&
+    return SUCCEEDED(device()->CreateVertexDeclaration(list, &made)) &&
            keep(declaration, D3dObjectKind::vertex_declaration9, made);
 }
 
@@ -125,30 +125,30 @@ bool D3d9Session::on_SetVertexShader9(uint32_t shader)
 {
     AV_SCOPE("D3d9Session::on_SetVertexShader9");
     auto *const bound = mine<IDirect3DVertexShader9>(shader, D3dObjectKind::vertex_shader9);
-    if (selected_ == nullptr || (shader != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(selected_->device_->SetVertexShader(bound));
+    if (device() == nullptr || (shader != 0u && bound == nullptr)) return false;
+    return SUCCEEDED(device()->SetVertexShader(bound));
 }
 
 bool D3d9Session::on_SetPixelShader9(uint32_t shader)
 {
     AV_SCOPE("D3d9Session::on_SetPixelShader9");
     auto *const bound = mine<IDirect3DPixelShader9>(shader, D3dObjectKind::pixel_shader9);
-    if (selected_ == nullptr || (shader != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(selected_->device_->SetPixelShader(bound));
+    if (device() == nullptr || (shader != 0u && bound == nullptr)) return false;
+    return SUCCEEDED(device()->SetPixelShader(bound));
 }
 
 bool D3d9Session::on_SetVertexDeclaration9(uint32_t declaration)
 {
     AV_SCOPE("D3d9Session::on_SetVertexDeclaration9");
     auto *const bound = mine<IDirect3DVertexDeclaration9>(declaration, D3dObjectKind::vertex_declaration9);
-    if (selected_ == nullptr || (declaration != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(selected_->device_->SetVertexDeclaration(bound));
+    if (device() == nullptr || (declaration != 0u && bound == nullptr)) return false;
+    return SUCCEEDED(device()->SetVertexDeclaration(bound));
 }
 
 bool D3d9Session::on_SetFvf9(uint32_t fvf)
 {
     AV_SCOPE("D3d9Session::on_SetFvf9");
-    return selected_ != nullptr && SUCCEEDED(selected_->device_->SetFVF(fvf));
+    return device() != nullptr && SUCCEEDED(device()->SetFVF(fvf));
 }
 
 bool D3d9Session::on_SetConstantsF9(uint32_t stage, uint32_t start, uint32_t value_count, const float *values)
@@ -156,37 +156,37 @@ bool D3d9Session::on_SetConstantsF9(uint32_t stage, uint32_t start, uint32_t val
     AV_SCOPE("D3d9Session::on_SetConstantsF9");
     const uint32_t registers = value_count / components;
     const uint32_t limit = stage == stage_vertex ? vertex_float_registers : pixel_float_registers;
-    if (selected_ == nullptr || stage > stage_pixel || value_count % components != 0u || start > limit ||
+    if (device() == nullptr || stage > stage_pixel || value_count % components != 0u || start > limit ||
         registers > limit - start)
         return false;
-    IDirect3DDevice9 *const device = selected_->device_;
-    return SUCCEEDED(stage == stage_vertex ? device->SetVertexShaderConstantF(start, values, registers)
-                                           : device->SetPixelShaderConstantF(start, values, registers));
+    IDirect3DDevice9 *const host = device();
+    return SUCCEEDED(stage == stage_vertex ? host->SetVertexShaderConstantF(start, values, registers)
+                                           : host->SetPixelShaderConstantF(start, values, registers));
 }
 
 bool D3d9Session::on_SetConstantsI9(uint32_t stage, uint32_t start, uint32_t value_count, const int32_t *values)
 {
     AV_SCOPE("D3d9Session::on_SetConstantsI9");
     const uint32_t registers = value_count / components;
-    if (selected_ == nullptr || stage > stage_pixel || value_count % components != 0u || start > integer_registers ||
+    if (device() == nullptr || stage > stage_pixel || value_count % components != 0u || start > integer_registers ||
         registers > integer_registers - start)
         return false;
-    IDirect3DDevice9 *const device = selected_->device_;
-    return SUCCEEDED(stage == stage_vertex ? device->SetVertexShaderConstantI(start, values, registers)
-                                           : device->SetPixelShaderConstantI(start, values, registers));
+    IDirect3DDevice9 *const host = device();
+    return SUCCEEDED(stage == stage_vertex ? host->SetVertexShaderConstantI(start, values, registers)
+                                           : host->SetPixelShaderConstantI(start, values, registers));
 }
 
 bool D3d9Session::on_SetConstantsB9(uint32_t stage, uint32_t start, uint32_t value_count, const uint32_t *values)
 {
     AV_SCOPE("D3d9Session::on_SetConstantsB9");
-    if (selected_ == nullptr || stage > stage_pixel || start > boolean_registers ||
+    if (device() == nullptr || stage > stage_pixel || start > boolean_registers ||
         value_count > boolean_registers - start)
         return false;
     BOOL booleans[boolean_registers] = {};
     for (uint32_t index = 0u; index < value_count; index++) booleans[index] = values[index] != 0u ? TRUE : FALSE;
-    IDirect3DDevice9 *const device = selected_->device_;
-    return SUCCEEDED(stage == stage_vertex ? device->SetVertexShaderConstantB(start, booleans, value_count)
-                                           : device->SetPixelShaderConstantB(start, booleans, value_count));
+    IDirect3DDevice9 *const host = device();
+    return SUCCEEDED(stage == stage_vertex ? host->SetVertexShaderConstantB(start, booleans, value_count)
+                                           : host->SetPixelShaderConstantB(start, booleans, value_count));
 }
 
 /* A state the API would refuse is ignored there too, which is what the guest's
@@ -195,23 +195,23 @@ bool D3d9Session::on_SetConstantsB9(uint32_t stage, uint32_t start, uint32_t val
 bool D3d9Session::on_SetRenderStates9(uint32_t value_count, const uint32_t *values)
 {
     AV_SCOPE("D3d9Session::on_SetRenderStates9");
-    if (selected_ == nullptr || value_count % pair != 0u) return false;
+    if (device() == nullptr || value_count % pair != 0u) return false;
     for (uint32_t index = 0u; index < value_count; index += pair)
         if (values[index] > max_render_state) return false;
     for (uint32_t index = 0u; index < value_count; index += pair)
-        selected_->device_->SetRenderState(static_cast<D3DRENDERSTATETYPE>(values[index]), values[index + 1u]);
+        device()->SetRenderState(static_cast<D3DRENDERSTATETYPE>(values[index]), values[index + 1u]);
     return true;
 }
 
 bool D3d9Session::on_SetSamplerStates9(uint32_t value_count, const uint32_t *values)
 {
     AV_SCOPE("D3d9Session::on_SetSamplerStates9");
-    if (selected_ == nullptr || value_count % triple != 0u) return false;
+    if (device() == nullptr || value_count % triple != 0u) return false;
     for (uint32_t index = 0u; index < value_count; index += triple)
         if (!valid_sampler(values[index]) || values[index + 1u] == 0u || values[index + 1u] > max_sampler_state)
             return false;
     for (uint32_t index = 0u; index < value_count; index += triple)
-        selected_->device_->SetSamplerState(values[index], static_cast<D3DSAMPLERSTATETYPE>(values[index + 1u]),
+        device()->SetSamplerState(values[index], static_cast<D3DSAMPLERSTATETYPE>(values[index + 1u]),
                                             values[index + 2u]);
     return true;
 }
@@ -219,12 +219,12 @@ bool D3d9Session::on_SetSamplerStates9(uint32_t value_count, const uint32_t *val
 bool D3d9Session::on_SetTextureStageStates9(uint32_t value_count, const uint32_t *values)
 {
     AV_SCOPE("D3d9Session::on_SetTextureStageStates9");
-    if (selected_ == nullptr || value_count % triple != 0u) return false;
+    if (device() == nullptr || value_count % triple != 0u) return false;
     for (uint32_t index = 0u; index < value_count; index += triple)
         if (values[index] >= texture_stages || values[index + 1u] == 0u || values[index + 1u] > max_stage_state)
             return false;
     for (uint32_t index = 0u; index < value_count; index += triple)
-        selected_->device_->SetTextureStageState(
+        device()->SetTextureStageState(
             values[index], static_cast<D3DTEXTURESTAGESTATETYPE>(values[index + 1u]), values[index + 2u]);
     return true;
 }
@@ -232,58 +232,58 @@ bool D3d9Session::on_SetTextureStageStates9(uint32_t value_count, const uint32_t
 bool D3d9Session::on_SetTexture9(uint32_t sampler, uint32_t texture)
 {
     AV_SCOPE("D3d9Session::on_SetTexture9");
-    if (selected_ == nullptr || !valid_sampler(sampler)) return false;
+    if (device() == nullptr || !valid_sampler(sampler)) return false;
     IDirect3DBaseTexture9 *bound = mine<IDirect3DTexture9>(texture, D3dObjectKind::texture9);
     if (bound == nullptr) bound = mine<IDirect3DCubeTexture9>(texture, D3dObjectKind::cube_texture9);
     if (bound == nullptr) bound = mine<IDirect3DVolumeTexture9>(texture, D3dObjectKind::volume_texture9);
     if (texture != 0u && bound == nullptr) return false;
-    return SUCCEEDED(selected_->device_->SetTexture(sampler, bound));
+    return SUCCEEDED(device()->SetTexture(sampler, bound));
 }
 
 bool D3d9Session::on_SetStreamSource9(uint32_t stream, uint32_t buffer, uint32_t offset, uint32_t stride)
 {
     AV_SCOPE("D3d9Session::on_SetStreamSource9");
     auto *const bound = mine<IDirect3DVertexBuffer9>(buffer, D3dObjectKind::vertex_buffer9);
-    if (selected_ == nullptr || stream >= streams || (buffer != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(selected_->device_->SetStreamSource(stream, bound, offset, stride));
+    if (device() == nullptr || stream >= streams || (buffer != 0u && bound == nullptr)) return false;
+    return SUCCEEDED(device()->SetStreamSource(stream, bound, offset, stride));
 }
 
 bool D3d9Session::on_SetStreamSourceFreq9(uint32_t stream, uint32_t setting)
 {
     AV_SCOPE("D3d9Session::on_SetStreamSourceFreq9");
-    return selected_ != nullptr && stream < streams &&
-           SUCCEEDED(selected_->device_->SetStreamSourceFreq(stream, setting));
+    return device() != nullptr && stream < streams &&
+           SUCCEEDED(device()->SetStreamSourceFreq(stream, setting));
 }
 
 bool D3d9Session::on_SetIndices9(uint32_t buffer)
 {
     AV_SCOPE("D3d9Session::on_SetIndices9");
     auto *const bound = mine<IDirect3DIndexBuffer9>(buffer, D3dObjectKind::index_buffer9);
-    if (selected_ == nullptr || (buffer != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(selected_->device_->SetIndices(bound));
+    if (device() == nullptr || (buffer != 0u && bound == nullptr)) return false;
+    return SUCCEEDED(device()->SetIndices(bound));
 }
 
 bool D3d9Session::on_SetViewport9(const d3d9proto::Viewport &viewport)
 {
     AV_SCOPE("D3d9Session::on_SetViewport9");
     const D3DVIEWPORT9 set = {viewport.x, viewport.y, viewport.width, viewport.height, viewport.min_z, viewport.max_z};
-    return selected_ != nullptr && SUCCEEDED(selected_->device_->SetViewport(&set));
+    return device() != nullptr && SUCCEEDED(device()->SetViewport(&set));
 }
 
 bool D3d9Session::on_SetScissorRect9(const d3d9proto::Rect &rect)
 {
     AV_SCOPE("D3d9Session::on_SetScissorRect9");
     const RECT set = {rect.left, rect.top, rect.right, rect.bottom};
-    return selected_ != nullptr && SUCCEEDED(selected_->device_->SetScissorRect(&set));
+    return device() != nullptr && SUCCEEDED(device()->SetScissorRect(&set));
 }
 
 bool D3d9Session::on_SetTransform9(uint32_t state, uint32_t value_count, const float *matrix)
 {
     AV_SCOPE("D3d9Session::on_SetTransform9");
-    if (selected_ == nullptr || value_count != matrix_values || !valid_transform(state)) return false;
+    if (device() == nullptr || value_count != matrix_values || !valid_transform(state)) return false;
     D3DMATRIX set = {};
     memcpy(&set, matrix, sizeof(set));
-    return SUCCEEDED(selected_->device_->SetTransform(static_cast<D3DTRANSFORMSTATETYPE>(state), &set));
+    return SUCCEEDED(device()->SetTransform(static_cast<D3DTRANSFORMSTATETYPE>(state), &set));
 }
 
 bool D3d9Session::on_SetMaterial9(const d3d9proto::Material &material)
@@ -292,48 +292,48 @@ bool D3d9Session::on_SetMaterial9(const d3d9proto::Material &material)
     static_assert(sizeof(D3DMATERIAL9) == sizeof(d3d9proto::Material), "the wire's material is D3DMATERIAL9's");
     D3DMATERIAL9 set = {};
     memcpy(&set, &material, sizeof(set));
-    return selected_ != nullptr && SUCCEEDED(selected_->device_->SetMaterial(&set));
+    return device() != nullptr && SUCCEEDED(device()->SetMaterial(&set));
 }
 
 bool D3d9Session::on_SetLight9(uint32_t index, const d3d9proto::Light &light)
 {
     AV_SCOPE("D3d9Session::on_SetLight9");
     static_assert(sizeof(D3DLIGHT9) == sizeof(d3d9proto::Light), "the wire's light is D3DLIGHT9's");
-    if (selected_ == nullptr || index >= max_lights || light.type < D3DLIGHT_POINT || light.type > D3DLIGHT_DIRECTIONAL)
+    if (device() == nullptr || index >= max_lights || light.type < D3DLIGHT_POINT || light.type > D3DLIGHT_DIRECTIONAL)
         return false;
     D3DLIGHT9 set = {};
     memcpy(&set, &light, sizeof(set));
-    return SUCCEEDED(selected_->device_->SetLight(index, &set));
+    return SUCCEEDED(device()->SetLight(index, &set));
 }
 
 bool D3d9Session::on_LightEnable9(uint32_t index, uint32_t enable)
 {
     AV_SCOPE("D3d9Session::on_LightEnable9");
-    return selected_ != nullptr && index < max_lights &&
-           SUCCEEDED(selected_->device_->LightEnable(index, enable != 0u ? TRUE : FALSE));
+    return device() != nullptr && index < max_lights &&
+           SUCCEEDED(device()->LightEnable(index, enable != 0u ? TRUE : FALSE));
 }
 
 bool D3d9Session::on_SetClipPlane9(uint32_t index, uint32_t value_count, const float *plane)
 {
     AV_SCOPE("D3d9Session::on_SetClipPlane9");
-    return selected_ != nullptr && index < clip_planes && value_count == components &&
-           SUCCEEDED(selected_->device_->SetClipPlane(index, plane));
+    return device() != nullptr && index < clip_planes && value_count == components &&
+           SUCCEEDED(device()->SetClipPlane(index, plane));
 }
 
 bool D3d9Session::on_DrawPrimitive9(uint32_t type, uint32_t start_vertex, uint32_t primitive_count)
 {
     AV_SCOPE("D3d9Session::on_DrawPrimitive9");
-    if (selected_ == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
+    if (device() == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
     return SUCCEEDED(
-        selected_->device_->DrawPrimitive(static_cast<D3DPRIMITIVETYPE>(type), start_vertex, primitive_count));
+        device()->DrawPrimitive(static_cast<D3DPRIMITIVETYPE>(type), start_vertex, primitive_count));
 }
 
 bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, uint32_t min_index,
                                            uint32_t vertex_count, uint32_t start_index, uint32_t primitive_count)
 {
     AV_SCOPE("D3d9Session::on_DrawIndexedPrimitive9");
-    if (selected_ == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
-    return SUCCEEDED(selected_->device_->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), base_vertex,
+    if (device() == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
+    return SUCCEEDED(device()->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), base_vertex,
                                                               min_index, vertex_count, start_index,
                                                               primitive_count));
 }
@@ -341,9 +341,9 @@ bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, u
 bool D3d9Session::on_CreateQuery9(uint32_t query, uint32_t type)
 {
     AV_SCOPE("D3d9Session::on_CreateQuery9");
-    if (selected_ == nullptr) return false;
+    if (device() == nullptr) return false;
     IDirect3DQuery9 *made = nullptr;
-    return SUCCEEDED(selected_->device_->CreateQuery(static_cast<D3DQUERYTYPE>(type), &made)) &&
+    return SUCCEEDED(device()->CreateQuery(static_cast<D3DQUERYTYPE>(type), &made)) &&
            keep(query, D3dObjectKind::query9, made);
 }
 
@@ -374,34 +374,34 @@ bool D3d9Session::on_GetQueryData9(uint32_t query, uint32_t flags, uint32_t &hre
 bool D3d9Session::on_SetRenderTarget9(uint32_t index, uint32_t surface_id, uint32_t subresource)
 {
     AV_SCOPE("D3d9Session::on_SetRenderTarget9");
-    if (selected_ == nullptr || index >= max_render_targets) return false;
-    if (surface_id == 0u) return index != 0u && SUCCEEDED(selected_->device_->SetRenderTarget(index, nullptr));
+    if (device() == nullptr || index >= max_render_targets) return false;
+    if (surface_id == 0u) return index != 0u && SUCCEEDED(device()->SetRenderTarget(index, nullptr));
     IDirect3DSurface9 *const target = surface(surface_id, subresource);
     if (target == nullptr) return false;
     ScopeExit release([target] { target->Release(); });
-    return SUCCEEDED(selected_->device_->SetRenderTarget(index, target));
+    return SUCCEEDED(device()->SetRenderTarget(index, target));
 }
 
 bool D3d9Session::on_SetDepthStencil9(uint32_t surface_id, uint32_t subresource)
 {
     AV_SCOPE("D3d9Session::on_SetDepthStencil9");
-    if (selected_ == nullptr) return false;
-    if (surface_id == 0u) return SUCCEEDED(selected_->device_->SetDepthStencilSurface(nullptr));
+    if (device() == nullptr) return false;
+    if (surface_id == 0u) return SUCCEEDED(device()->SetDepthStencilSurface(nullptr));
     IDirect3DSurface9 *const target = surface(surface_id, subresource);
     if (target == nullptr) return false;
     ScopeExit release([target] { target->Release(); });
-    return SUCCEEDED(selected_->device_->SetDepthStencilSurface(target));
+    return SUCCEEDED(device()->SetDepthStencilSurface(target));
 }
 
 bool D3d9Session::on_Clear9(uint32_t rect_count, const d3d9proto::Rect *rects, uint32_t flags, uint32_t color,
                             float z, uint32_t stencil)
 {
     AV_SCOPE("D3d9Session::on_Clear9");
-    if (selected_ == nullptr || flags == 0u || (flags & ~clear_flags) != 0u) return false;
+    if (device() == nullptr || flags == 0u || (flags & ~clear_flags) != 0u) return false;
     D3DRECT areas[max_clear_rects];
     for (uint32_t index = 0u; index < rect_count; index++)
         areas[index] = D3DRECT{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    return SUCCEEDED(selected_->device_->Clear(rect_count, rect_count != 0u ? areas : nullptr, flags, color, z,
+    return SUCCEEDED(device()->Clear(rect_count, rect_count != 0u ? areas : nullptr, flags, color, z,
                                                stencil));
 }
 

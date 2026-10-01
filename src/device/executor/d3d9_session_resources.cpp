@@ -61,10 +61,10 @@ bool D3d9Session::on_CreateSurface9(uint32_t surface, uint32_t kind, uint32_t wi
                                     uint32_t format, uint32_t multisample, uint32_t quality, uint32_t flags)
 {
     AV_SCOPE("D3d9Session::on_CreateSurface9");
-    if (selected_ == nullptr || width == 0u || height == 0u || width > max_dimension || height > max_dimension ||
+    if (device() == nullptr || width == 0u || height == 0u || width > max_dimension || height > max_dimension ||
         multisample > max_multisample)
         return false;
-    IDirect3DDevice9 *const device = selected_->device_;
+    IDirect3DDevice9 *const host = device();
     const D3DFORMAT         as = static_cast<D3DFORMAT>(format);
     const auto              samples = static_cast<D3DMULTISAMPLE_TYPE>(multisample);
     const BOOL              flag = (flags & flag_lockable_or_discard) != 0u ? TRUE : FALSE;
@@ -72,13 +72,13 @@ bool D3d9Session::on_CreateSurface9(uint32_t surface, uint32_t kind, uint32_t wi
     HRESULT                 result = D3DERR_INVALIDCALL;
     switch (kind) {
     case kind_render_target:
-        result = device->CreateRenderTarget(width, height, as, samples, quality, flag, &made, nullptr);
+        result = host->CreateRenderTarget(width, height, as, samples, quality, flag, &made, nullptr);
         break;
     case kind_depth_stencil:
-        result = device->CreateDepthStencilSurface(width, height, as, samples, quality, flag, &made, nullptr);
+        result = host->CreateDepthStencilSurface(width, height, as, samples, quality, flag, &made, nullptr);
         break;
     case kind_offscreen_plain:
-        result = device->CreateOffscreenPlainSurface(width, height, as, D3DPOOL_DEFAULT, &made, nullptr);
+        result = host->CreateOffscreenPlainSurface(width, height, as, D3DPOOL_DEFAULT, &made, nullptr);
         break;
     default: return false;
     }
@@ -90,27 +90,27 @@ bool D3d9Session::on_CreateTexture9(uint32_t texture, uint32_t type, uint32_t wi
 {
     AV_SCOPE("D3d9Session::on_CreateTexture9");
     D3DPOOL placed = D3DPOOL_DEFAULT;
-    if (selected_ == nullptr || width == 0u || height == 0u || depth == 0u || width > max_dimension ||
+    if (device() == nullptr || width == 0u || height == 0u || depth == 0u || width > max_dimension ||
         height > max_dimension || depth > max_dimension || levels > max_levels || (usage & ~usage_kept) != 0u ||
         !host_pool(pool, usage, placed))
         return false;
-    IDirect3DDevice9 *const device = selected_->device_;
+    IDirect3DDevice9 *const host = device();
     const D3DFORMAT         as = static_cast<D3DFORMAT>(format);
     IUnknown               *made = nullptr;
     HRESULT                 result = D3DERR_INVALIDCALL;
     D3dObjectKind           kept = D3dObjectKind::texture9;
     if (type == type_2d && depth == 1u) {
         IDirect3DTexture9 *texture2d = nullptr;
-        result = device->CreateTexture(width, height, levels, usage, as, placed, &texture2d, nullptr);
+        result = host->CreateTexture(width, height, levels, usage, as, placed, &texture2d, nullptr);
         made = texture2d;
     } else if (type == type_cube && width == height && depth == 1u) {
         IDirect3DCubeTexture9 *cube = nullptr;
-        result = device->CreateCubeTexture(width, levels, usage, as, placed, &cube, nullptr);
+        result = host->CreateCubeTexture(width, levels, usage, as, placed, &cube, nullptr);
         made = cube;
         kept = D3dObjectKind::cube_texture9;
     } else if (type == type_volume) {
         IDirect3DVolumeTexture9 *volume = nullptr;
-        result = device->CreateVolumeTexture(width, height, depth, levels, usage, as, placed, &volume, nullptr);
+        result = host->CreateVolumeTexture(width, height, depth, levels, usage, as, placed, &volume, nullptr);
         made = volume;
         kept = D3dObjectKind::volume_texture9;
     }
@@ -122,11 +122,11 @@ bool D3d9Session::on_CreateVertexBuffer9(uint32_t buffer, uint32_t length, uint3
 {
     AV_SCOPE("D3d9Session::on_CreateVertexBuffer9");
     D3DPOOL placed = D3DPOOL_DEFAULT;
-    if (selected_ == nullptr || length == 0u || length > max_buffer_bytes || (usage & ~usage_kept) != 0u ||
+    if (device() == nullptr || length == 0u || length > max_buffer_bytes || (usage & ~usage_kept) != 0u ||
         !host_pool(pool, usage, placed))
         return false;
     IDirect3DVertexBuffer9 *made = nullptr;
-    const HRESULT result = selected_->device_->CreateVertexBuffer(length, usage, fvf, placed, &made, nullptr);
+    const HRESULT result = device()->CreateVertexBuffer(length, usage, fvf, placed, &made, nullptr);
     return SUCCEEDED(result) && keep(buffer, D3dObjectKind::vertex_buffer9, made);
 }
 
@@ -135,11 +135,11 @@ bool D3d9Session::on_CreateIndexBuffer9(uint32_t buffer, uint32_t length, uint32
 {
     AV_SCOPE("D3d9Session::on_CreateIndexBuffer9");
     D3DPOOL placed = D3DPOOL_DEFAULT;
-    if (selected_ == nullptr || length == 0u || length > max_buffer_bytes || (usage & ~usage_kept) != 0u ||
+    if (device() == nullptr || length == 0u || length > max_buffer_bytes || (usage & ~usage_kept) != 0u ||
         (format != D3DFMT_INDEX16 && format != D3DFMT_INDEX32) || !host_pool(pool, usage, placed))
         return false;
     IDirect3DIndexBuffer9 *made = nullptr;
-    const HRESULT          result = selected_->device_->CreateIndexBuffer(
+    const HRESULT          result = device()->CreateIndexBuffer(
         length, usage, static_cast<D3DFORMAT>(format), placed, &made, nullptr);
     return SUCCEEDED(result) && keep(buffer, D3dObjectKind::index_buffer9, made);
 }
@@ -312,7 +312,7 @@ int32_t D3d9Session::read(IDirect3DSurface9 *source, uint32_t &pitch, uint8_t *p
     source->GetDesc(&desc);
     IDirect3DSurface9 *copy = nullptr;
     if (desc.Pool == D3DPOOL_DEFAULT) {
-        const HRESULT made = selected_->device_->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
+        const HRESULT made = device()->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
                                                                              D3DPOOL_SYSTEMMEM, &copy, nullptr);
         if (FAILED(made)) return made;
     }
@@ -321,7 +321,7 @@ int32_t D3d9Session::read(IDirect3DSurface9 *source, uint32_t &pitch, uint8_t *p
         if (copy != nullptr) copy->Release();
     });
     if (copy != nullptr) {
-        const HRESULT copied = selected_->device_->GetRenderTargetData(source, copy);
+        const HRESULT copied = device()->GetRenderTargetData(source, copy);
         if (FAILED(copied)) return copied;
     }
     D3DLOCKED_RECT locked = {};
@@ -355,7 +355,7 @@ bool D3d9Session::on_StretchRect9(uint32_t source, uint32_t source_subresource, 
                            destination_rect.bottom};
     const RECT *from_named = source_rect.right > source_rect.left ? &from_area : nullptr;
     const RECT *to_named = destination_rect.right > destination_rect.left ? &to_area : nullptr;
-    return SUCCEEDED(selected_->device_->StretchRect(from, from_named, to, to_named,
+    return SUCCEEDED(device()->StretchRect(from, from_named, to, to_named,
                                                      static_cast<D3DTEXTUREFILTERTYPE>(filter)));
 }
 
@@ -367,7 +367,7 @@ bool D3d9Session::on_ColorFill9(uint32_t surface_id, uint32_t subresource, const
     if (target == nullptr) return false;
     ScopeExit  release([target] { target->Release(); });
     const RECT area = {rect.left, rect.top, rect.right, rect.bottom};
-    return SUCCEEDED(selected_->device_->ColorFill(target, rect.right > rect.left ? &area : nullptr, color));
+    return SUCCEEDED(device()->ColorFill(target, rect.right > rect.left ? &area : nullptr, color));
 }
 
 /* What D3dBackend::on_PresentPoint does for Direct3D 11: the frame staged
@@ -377,7 +377,7 @@ bool D3d9Session::on_ColorFill9(uint32_t surface_id, uint32_t subresource, const
 bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, uint64_t key, uint32_t point)
 {
     AV_SCOPE("D3d9Session::on_PresentPoint9");
-    if (selected_ == nullptr) return false;
+    if (device() == nullptr) return false;
     IDirect3DSurface9 *const source = surface(surface_id, subresource);
     if (source == nullptr) return false;
     ScopeExit             release([source] { source->Release(); });
@@ -389,7 +389,7 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
         return true;
     }
     static_cast<void>(surfaces_->presented(frame));
-    StagedFrame *const staged = host_->stage_frame(selected_->device_, source, desc.Width, desc.Height,
+    StagedFrame *const staged = host_->stage_frame(device(), source, desc.Width, desc.Height,
                                                    static_cast<uint32_t>(desc.Format),
                                                    desc.MultiSampleType != D3DMULTISAMPLE_NONE);
     if (staged == nullptr) {

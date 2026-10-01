@@ -16,8 +16,8 @@
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d12_session.hpp"
 #include "device/executor/d3d9_session.hpp"
-#include "device/executor/d3d_context_states.hpp"
 #include "device/executor/d3d_object_table.hpp"
+#include "device/executor/guest_devices.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/constant_ring.hpp"
 #include "device/executor/query_result_publisher.hpp"
@@ -210,17 +210,16 @@ private:
     SharedSurfaces         *surfaces_;
     /* The device lock, taken at a batch's first command and held to its end. */
     bool                    held_;
+    /* The most devices one process runs at once. */
+    static constexpr uint32_t max_devices = 64u;
     /* The views a rotation remade, the old ones held until what bound them is rebound. */
     static constexpr uint32_t max_remade = 64u;
     IUnknown               *remade_old_[max_remade];
     IUnknown               *remade_new_[max_remade];
     uint32_t                remade_;
-    D3dContextStates        states_;
-    /* The selected device's state, which commands run on; null when none is. */
-    ID3DDeviceContextState *selected_;
-    /* The guest's id of the selected device; 0 before any selection or after
-     * the selected device was destroyed. An id with no state selects nothing. */
-    uint32_t                selected_device_;
+    /* Each device's pipeline state, by the guest's id, and the selected
+     * one, which commands run on. */
+    GuestDevices<ID3DDeviceContextState, max_devices> states_;
     CommandRefusal          refusal_;
     /* The decode arena of the command running, which scratch - a shader's
      * container - is taken from; null between commands. */

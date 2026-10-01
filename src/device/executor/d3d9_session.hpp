@@ -24,6 +24,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d_object_table.hpp"
+#include "device/executor/guest_devices.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_server.h"
 
 #include <stdint.h>
@@ -151,15 +152,10 @@ public:
     bool invariants_hold() const;
 
 private:
-    struct Device {
-        uint32_t          id_;
-        IDirect3DDevice9 *device_;
-        /* The reason it is removed; 0 while it is not. */
-        uint32_t          removed_;
-    };
-
-    Device   *device_named(uint32_t id);
-    Device   *free_slot();
+    /* The selected device, when its commands may run: null with none
+     * selected, or once it is removed, which refuses them until the guest
+     * makes another. */
+    IDirect3DDevice9 *device() const;
     /* The selected device's object `id` if it is of `kind`; null for another
      * kind, another device's, or none. No reference is taken. */
     IUnknown *owned(uint32_t id, D3dObjectKind kind) const;
@@ -191,8 +187,7 @@ private:
     D3d9HostDevice *host_;
     SharedSurfaces *surfaces_;
     D3dObjectTable &objects_;
-    Device          devices_[max_devices];
-    Device         *selected_;
+    GuestDevices<IDirect3DDevice9, max_devices> devices_;
     CommandRefusal  refusal_;
     /* The decode arena of the command running; null between commands. */
     WireArena      *arena_;
