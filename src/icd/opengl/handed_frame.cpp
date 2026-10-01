@@ -35,6 +35,12 @@ const uint8_t *HandedFrame::pixels() const
     return pixels_;
 }
 
+bool HandedFrame::chained() const
+{
+    AV_SCOPE("HandedFrame::chained");
+    return owner_ != nullptr && pixels_ == nullptr;
+}
+
 uint32_t HandedFrame::width() const
 {
     AV_SCOPE("HandedFrame::width");

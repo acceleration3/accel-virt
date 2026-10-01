@@ -14,7 +14,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), imports_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
+    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), interop_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -69,7 +69,7 @@ void D3d11HostDevice::close()
     exports_.release();
     shared_.clear();
     if (context_ != nullptr) frames_.clear();
-    imports_.release();
+    interop_.release();
     vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
     staging_ = nullptr;
@@ -390,12 +390,24 @@ ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
     shown.Usage = D3D11_USAGE_DEFAULT;
     shown.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) shown.BindFlags |= D3D11_BIND_RENDER_TARGET;
-    ID3D11Texture2D *const texture = imports_.import(image, shown);
+    ID3D11Texture2D *const texture = interop_.import(image, shown);
     if (texture == nullptr)
         fprintf(stderr,
                 "virtio-gpu-rvk: d3d12: a surface %ux%u format %u flags 0x%x could not be made a Direct3D 11 view\n",
                 shown.Width, shown.Height, static_cast<unsigned>(shown.Format), static_cast<unsigned>(desc.Flags));
     return texture;
+}
+
+ID3D11Texture2D *D3d11HostDevice::make_shareable(const D3D11_TEXTURE2D_DESC1 &desc)
+{
+    AV_SCOPE("D3d11HostDevice::make_shareable");
+    return interop_.make(desc);
+}
+
+bool D3d11HostDevice::export_memory(ID3D11Texture2D *texture, int &fd)
+{
+    AV_SCOPE("D3d11HostDevice::export_memory");
+    return interop_.export_memory(texture, fd);
 }
 
 DxvkVulkanDevice &D3d11HostDevice::vulkan()

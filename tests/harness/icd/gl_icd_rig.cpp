@@ -17,7 +17,7 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 GlIcdRig::GlIcdRig(bool present_thread)
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), log_(), surface_(),
       threads_(), opengl32_(threads_), present_lock_(trace_, 'P'), present_thread_(), handed_(), shown_(),
-      presents_(present_thread_, handed_, shown_, present_lock_, kmt_, surface_, log_),
+      presents_(present_thread_, handed_, shown_, present_lock_, kmt_, surface_, chains_, log_),
       root_(platform_, kmt_, lock_, send_lock_, log_, surface_, threads_, opengl32_, presents_,
             glicd::gl_icd_binding),
       dc_(0), other_dc_(0), memory_dc_(0), window_(0), other_window_(0)

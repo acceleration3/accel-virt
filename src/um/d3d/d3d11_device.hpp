@@ -134,6 +134,7 @@ private:
     void upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &region, const uint8_t *data, uint32_t copy_flags);
     void upload_row_pieces(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX &region,
                            const uint8_t *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
+    void publish_shared(const ResourceRecord &resource);
     size_t piece_bytes() const;
     void upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
                          size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);

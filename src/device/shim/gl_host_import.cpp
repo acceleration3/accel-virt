@@ -16,6 +16,8 @@ namespace {
  * exported as an opaque fd: that one is a driver-private handle of another
  * API and GL cannot read it (research.md §7). */
 constexpr GLenum handle_type_opaque_fd = 0x9586u;
+/* GL_DEDICATED_MEMORY_OBJECT_EXT. */
+constexpr GLenum dedicated_memory_object = 0x9581u;
 constexpr GLenum num_extensions = 0x821Du;
 constexpr GLenum extensions_name = 0x1F03u;
 constexpr GLenum no_error = 0u;
@@ -23,7 +25,8 @@ constexpr GLenum no_error = 0u;
 }  // namespace
 
 GlHostImport::GlHostImport()
-    : create_memory_objects_(nullptr), import_memory_fd_(nullptr), delete_memory_objects_(nullptr),
+    : create_memory_objects_(nullptr), import_memory_fd_(nullptr), memory_parameter_(nullptr),
+      delete_memory_objects_(nullptr),
       gen_semaphores_(nullptr), import_semaphore_fd_(nullptr), delete_semaphores_(nullptr),
       get_integerv_(nullptr), get_stringi_(nullptr), get_error_(nullptr), context_(nullptr),
       memory_(false), fences_(false)
@@ -40,6 +43,8 @@ void GlHostImport::configure(GlContext &context)
         reinterpret_cast<void(APIENTRY *)(GLsizei, GLuint *)>(context.resolve("glCreateMemoryObjectsEXT"));
     import_memory_fd_ =
         reinterpret_cast<void(APIENTRY *)(GLuint, GLuint64, GLenum, GLint)>(context.resolve("glImportMemoryFdEXT"));
+    memory_parameter_ = reinterpret_cast<void(APIENTRY *)(GLuint, GLenum, const GLint *)>(
+        context.resolve("glMemoryObjectParameterivEXT"));
     delete_memory_objects_ =
         reinterpret_cast<void(APIENTRY *)(GLsizei, const GLuint *)>(context.resolve("glDeleteMemoryObjectsEXT"));
     gen_semaphores_ = reinterpret_cast<void(APIENTRY *)(GLsizei, GLuint *)>(context.resolve("glGenSemaphoresEXT"));
@@ -50,7 +55,7 @@ void GlHostImport::configure(GlContext &context)
     get_integerv_ = reinterpret_cast<void(APIENTRY *)(GLenum, GLint *)>(context.resolve("glGetIntegerv"));
     get_stringi_ = reinterpret_cast<const GLubyte *(APIENTRY *)(GLenum, GLuint)>(context.resolve("glGetStringi"));
     get_error_ = reinterpret_cast<GLenum(APIENTRY *)()>(context.resolve("glGetError"));
-    memory_ = create_memory_objects_ != nullptr && import_memory_fd_ != nullptr &&
+    memory_ = create_memory_objects_ != nullptr && import_memory_fd_ != nullptr && memory_parameter_ != nullptr &&
               delete_memory_objects_ != nullptr && get_error_ != nullptr && lists("GL_EXT_memory_object_fd");
     fences_ = gen_semaphores_ != nullptr && import_semaphore_fd_ != nullptr && delete_semaphores_ != nullptr &&
               get_error_ != nullptr && lists("GL_EXT_semaphore_fd");
@@ -105,6 +110,13 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
     GLuint made = 0u;
     create_memory_objects_(1, &made);
     while (get_error_() != no_error) {}
+    /* Shared memory is one image's own allocation - a Direct3D surface's, or a
+     * Vulkan dedicated one - and radeonsi reads such an image's layout from the
+     * dma-buf only when told it is dedicated: otherwise it lays the texture out
+     * its own way over memory RADV laid out, and every texel lands elsewhere
+     * (test_d3d_gl_interop_device). */
+    const GLint dedicated = 1;
+    memory_parameter_(made, dedicated_memory_object, &dedicated);
     import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken);
     if (get_error_() != no_error) {
         delete_memory_objects_(1, &made);

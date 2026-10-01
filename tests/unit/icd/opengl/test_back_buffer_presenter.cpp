@@ -10,6 +10,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -17,6 +18,7 @@
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/pixel_format.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/shared_object_answer.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 #include "gl_protocol_ids.h"
@@ -144,9 +146,10 @@ struct Presents {
     av::LockTrace            trace;
     av::RecordingThreadLock  lock{trace, 'P'};
     av::RecordingLog         log;
+    av::ScriptedWindowChains chains;
     av::glicd::GlPresentLoop loop;
 
-    explicit Presents(Rig &rig) : loop(thread, handed, shown, lock, rig.kmt(), rig.surface, log), rig_(rig) {}
+    explicit Presents(Rig &rig) : loop(thread, handed, shown, lock, rig.kmt(), rig.surface, chains, log), rig_(rig) {}
     /* The presenter lets go of the thread before the thread goes, as the
      * ICD's root goes before its present loop. */
     ~Presents() { rig_.presenter.release(nullptr); }
@@ -188,7 +191,7 @@ IntoBlob into_blob(Rig &rig, std::uint32_t index)
 TEST(back_buffer_presenter, a_first_frame_makes_the_framebuffer_and_puts_the_hosts_pixels_on_the_window)
 { Rig rig;
   CHECK(rig.presenter.invariants_hold());
-  CHECK(!rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(!rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   rig.host().gl_window(1u, 1u);
   const std::uint32_t made = rig.commands();
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
@@ -225,7 +228,7 @@ TEST(back_buffer_presenter, a_first_frame_makes_the_framebuffer_and_puts_the_hos
   pattern(frame, sizeof frame);
   rig.host().gl_bytes(frame, sizeof frame);
   const std::uint32_t read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 1u);
   CHECK_EQ(rig.id(read), ids::kCmd_glGetTextureSubImage);
   CHECK_EQ(rig.argument(read, 0u), 101u);
@@ -304,7 +307,7 @@ TEST(back_buffer_presenter, a_multisampled_frame_is_resolved_before_it_is_read)
   CHECK_EQ(rig.argument(made + 8u, 1u), Presenter::gl_depth_attachment);
   rig.host().gl_bytes(nullptr, 0u);
   const std::uint32_t read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.id(read), ids::kCmd_glBlitNamedFramebuffer);
   CHECK_EQ(rig.argument(read, 0u), 100u);
   CHECK_EQ(rig.argument(read, 1u), 101u);
@@ -340,13 +343,13 @@ TEST(back_buffer_presenter, a_0x0_window_has_storage_and_shows_nothing)
   CHECK_EQ(rig.argument(made + 3u, 4u), 1u);
   CHECK(rig.presenter.invariants_hold());
   const std::uint32_t swapped = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands(), swapped);
   CHECK_EQ(rig.surface.blits(), 0u);
   Rig wide(true, 3u, 0u);
   wide.host().gl_window(1u, 1u);
   CHECK_STATUS(wide.presenter.prepare(wide.wire(), &wide.window, plain_d24s8, wide.surface), Status::ok);
-  CHECK(wide.presenter.present(wide.wire(), wide.state, &wide.dc, wide.surface, nullptr));
+  CHECK(wide.presenter.present(wide.wire(), wide.state, &wide.dc, wide.surface, nullptr, 0u));
   CHECK_EQ(wide.surface.blits(), 0u); }
 
 TEST(back_buffer_presenter, refuses_a_window_that_is_gone_or_too_large)
@@ -413,7 +416,7 @@ TEST(back_buffer_presenter, the_applications_pack_state_is_set_aside_for_the_rea
   CHECK(rig.state.store_pixel(Presenter::gl_pack_skip_rows, 2));
   rig.host().gl_bytes(nullptr, 0u);
   std::uint32_t read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 15u);
   CHECK_EQ(rig.id(read), ids::kCmd_glBindBuffer);
   CHECK_EQ(rig.argument(read, 1u), 0u);
@@ -431,14 +434,14 @@ TEST(back_buffer_presenter, the_applications_pack_state_is_set_aside_for_the_rea
   CHECK(rig.state.store_pixel(Presenter::gl_pack_alignment, 8));
   rig.host().gl_bytes(nullptr, 0u);
   read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 15u);
   CHECK_EQ(rig.argument(read + 9u, 1u), 8u);
   /* Plain again: the read alone. */
   CHECK(rig.state.store_pixel(Presenter::gl_pack_alignment, 1));
   rig.host().gl_bytes(nullptr, 0u);
   read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 1u); }
 
 /* Without a blob arena every read is a reply, which holds 48 KiB. */
@@ -449,7 +452,7 @@ TEST(back_buffer_presenter, a_tall_frame_is_read_in_rows_a_reply_holds)
   rig.host().gl_bytes(nullptr, 0u);
   rig.host().gl_bytes(nullptr, 0u);
   const std::uint32_t read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 2u);
   /* 48 KiB is 192 rows of 64 pixels; the rest is 8. */
   CHECK_EQ(rig.argument(read, 3u), 0u);
@@ -464,7 +467,7 @@ TEST(back_buffer_presenter, a_refused_blit_is_logged_once_and_the_swap_happened)
   for (int frame = 0; frame < 2; frame++) {
     rig.surface.refuse_next_blit();
     rig.host().gl_bytes(nullptr, 0u);
-    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr));
+    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   }
   CHECK_EQ(rig.context_rig.log().holding("the window's DC refused a frame of 8x4"), 1u); }
 
@@ -560,7 +563,7 @@ TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_sh
   const std::size_t lendable = rig.wire().blobs().room();
   const std::size_t frame = 8u * 4u * 4u;
   std::uint32_t     read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK_EQ(rig.commands() - read, 1u);
   const IntoBlob first = into_blob(rig, read);
   CHECK_EQ(first.texture, 101u);
@@ -589,13 +592,13 @@ TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_sh
   CHECK(std::memcmp(front, pixels, sizeof pixels) == 0);
   /* Two frames in the thread's hands at once; a third waits, then is given up. */
   read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   rig.presenter.hand_over(rig.context.mark());
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   rig.presenter.hand_over(rig.context.mark());
   CHECK_EQ(into_blob(rig, read).at, first.at);
   CHECK_EQ(into_blob(rig, read + 1u).at, first.at + frame);
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   rig.presenter.hand_over(rig.context.mark());
   CHECK_EQ(rig.commands() - read, 2u);
   CHECK_EQ(presents.loop.dropped_frames(), 1u);
@@ -610,7 +613,7 @@ TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release
   const std::size_t lendable = rig.wire().blobs().room();
   rig.host().gl_window(1u, 1u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   rig.context.flush();
   rig.presenter.hand_over(rig.context.mark());
   rig.surface.resize(&rig.window, 16u, 8u);
@@ -620,7 +623,7 @@ TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release
   CHECK_EQ(presents.loop.queued(), 0u);
   CHECK_EQ(presents.loop.dropped_frames(), 1u);
   const std::uint32_t read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK_EQ(into_blob(rig, read).bytes, 16u * 8u * 4u);
   CHECK_EQ(Probe::room_bytes(rig.presenter), 2u * 16u * 8u * 4u);
   CHECK_EQ(rig.wire().blobs().room(), lendable - 2u * 16u * 8u * 4u);
@@ -639,7 +642,7 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
     rig.host().gl_window(1u, 1u);
     CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
     rig.host().gl_bytes(nullptr, 0u);
-    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
     CHECK_EQ(rig.surface.blits(), 1u);
     CHECK_EQ(presents.thread.starts(), 1u); }
   { Rig      rig;
@@ -648,7 +651,7 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
     rig.host().gl_window(1u, 1u);
     CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
     rig.host().gl_bytes(nullptr, 0u);
-    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
     CHECK_EQ(rig.surface.blits(), 1u);
     CHECK_EQ(Probe::room_bytes(rig.presenter), 0u); }
   { Rig      rig;
@@ -657,7 +660,7 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
     rig.host().gl_window(1u, 1u);
     CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
     rig.host().gl_bytes(nullptr, 0u);
-    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+    CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
     CHECK_EQ(rig.surface.blits(), 1u); }
   Rig      rig;
   Presents presents(rig);
@@ -665,7 +668,7 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   rig.state.bind_buffer(ClientArrayState::pixel_pack_buffer, 9u);
   const std::uint32_t read = rig.commands();
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK_EQ(rig.commands() - read, 15u);
   CHECK_EQ(into_blob(rig, read + 7u).mode, 3u);
   CHECK_EQ(rig.argument(read + 8u, 1u), 9u); }
@@ -696,7 +699,93 @@ TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_
   Probe::set_pending(rig.presenter, 0u);
   CHECK(!rig.presenter.invariants_hold());
   Probe::set_pending(rig.presenter, Presenter::slot_count);
-  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop));
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK(rig.presenter.invariants_hold());
   Probe::drop_arena(rig.presenter);
   CHECK(!rig.presenter.invariants_hold()); }
+
+/* With the window's chain the frame never crosses into guest memory: it is
+ * copied into a slot of the chain the swap opened on the context's adapter,
+ * finished one-way, and the thread presents that slot instead of blitting -
+ * the next frame into the other slot. GL_FRONT is then the host's to answer. */
+TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presented_by_the_thread)
+{ Rig      rig;
+  Presents presents(rig);
+  presents.chains.refuse_opens(false);
+  rig.host().gl_window(1u, 1u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  const std::size_t lendable = rig.wire().blobs().room();
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x700u);
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x701u);
+  const std::uint32_t textures[2] = {200u, 201u};
+  rig.host().gl_bytes(reinterpret_cast<const std::uint8_t *>(textures), sizeof textures);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.chains.opens(), 1u);
+  CHECK_EQ(presents.chains.last_luid(), 0x1234u);
+  CHECK_EQ(presents.chains.last_width(), 8u);
+  CHECK_EQ(presents.chains.last_height(), 4u);
+  /* No room was set aside: nothing is read back. */
+  CHECK_EQ(rig.wire().blobs().room(), lendable);
+  const std::uint32_t sent = rig.commands();
+  CHECK_EQ(rig.id(sent - 2u), ids::kCmd_glCopyImageSubData);
+  /* From the window's colour texture into the first slot's. */
+  CHECK_EQ(rig.argument(sent - 2u, 0u), 101u);
+  CHECK_EQ(rig.argument(sent - 2u, 6u), 200u);
+  CHECK_EQ(rig.id(sent - 1u), ids::kCmd_glFinish);
+  CHECK(rig.presenter.invariants_hold());
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 1u);
+  CHECK(presents.thread.step());
+  CHECK_EQ(presents.chains.presents(), 1u);
+  CHECK_EQ(presents.chains.last_slot(), 0u);
+  CHECK_EQ(rig.surface.blits(), 0u);
+  std::uint8_t front[8u * 4u * 4u] = {};
+  CHECK(!rig.presenter.read_front(0, 0, 8, 4, 0x80E1u, 0x1401u, front));
+
+  /* A presented slot is free again; while one is still held, the next frame
+   * goes into the other. The chain is opened once. */
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(rig.argument(rig.commands() - 2u, 6u), 200u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(rig.argument(rig.commands() - 2u, 6u), 201u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(presents.thread.step());
+  CHECK(presents.thread.step());
+  CHECK_EQ(presents.chains.presents(), 3u);
+  CHECK_EQ(presents.chains.last_slot(), 1u);
+  CHECK_EQ(presents.chains.opens(), 1u);
+  /* The presenter going closes the window's chain. */
+  rig.presenter.release(&rig.wire());
+  CHECK_EQ(presents.chains.closes(), 1u);
+  CHECK(presents.chains.last_closed() == &rig.window); }
+
+/* A chain that cannot be had is asked for once: the window's frames are read
+ * back and blitted, as without one, until its size changes - and a context
+ * with no adapter to name asks for none. */
+TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_resizes)
+{ Rig      rig;
+  Presents presents(rig);
+  rig.host().gl_window(1u, 1u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.chains.opens(), 1u);
+  CHECK_EQ(into_blob(rig, rig.commands() - 1u).width, 8u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(presents.thread.step());
+  CHECK_EQ(rig.surface.blits(), 1u);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.chains.opens(), 1u);
+  /* A new size asks again. */
+  CHECK(presents.thread.step());
+  rig.surface.resize(&rig.window, 16u, 8u);
+  rig.host().gl_window(1u, 1u, 300u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.chains.opens(), 2u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(presents.thread.step());
+  /* No adapter: no chain asked for. */
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
+  CHECK_EQ(presents.chains.opens(), 2u); }

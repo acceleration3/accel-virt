@@ -1,16 +1,21 @@
-/* Direct3D 12 textures the host's Direct3D 11 device shows - a guest's
- * Direct3D 12 swapchain buffers, which the compositor opens by key: each made
- * again on DXVK's device over the memory vkd3d-proton exported
- * (Vkd3dImageExport) and wrapped as a Direct3D 11 texture. No copy is ever
- * made: both devices' images are the same memory.
+/* Direct3D 11 textures of DXVK's over Vulkan memory other APIs share, each an
+ * image made on DXVK's own device (DxvkVulkanDevice) and wrapped:
+ *
+ * - imported: a guest's Direct3D 12 swapchain buffer, which the compositor
+ *   opens by key, made again over the memory vkd3d-proton exported
+ *   (Vkd3dImageExport). No copy is ever made: both devices' images are the
+ *   same memory;
+ * - made: a guest's shared texture, over memory exported as a dma-buf, which
+ *   OpenGL and Vulkan open as theirs (feature 053) - the surface an OpenGL or
+ *   Vulkan window is presented through.
  *
  * The image and its memory must outlive the texture, which DXVK destroys once
  * the last session and the last view holding it let go. So the texture holds
  * a slot of this table as private data, which DXVK releases as the texture
  * goes, and collect() frees the images of the slots it released once the GPU
  * is done with them. Under the Direct3D 11 device's lock throughout. */
-#ifndef AV_IMPORTED_TEXTURES_HPP
-#define AV_IMPORTED_TEXTURES_HPP
+#ifndef AV_INTEROP_TEXTURES_HPP
+#define AV_INTEROP_TEXTURES_HPP
 
 #include <stdint.h>
 #include <vulkan/vulkan.h>
@@ -23,19 +28,27 @@ namespace av {
 class DxvkVulkanDevice;
 class Vkd3dImageExport;
 
-class ImportedTextures {
+class InteropTextures {
 public:
     static constexpr uint32_t capacity = 64u;
 
-    explicit ImportedTextures(DxvkVulkanDevice &vulkan);
-    ~ImportedTextures();
-    ImportedTextures(const ImportedTextures &) = delete;
-    ImportedTextures &operator=(const ImportedTextures &) = delete;
+    explicit InteropTextures(DxvkVulkanDevice &vulkan);
+    ~InteropTextures();
+    InteropTextures(const InteropTextures &) = delete;
+    InteropTextures &operator=(const InteropTextures &) = delete;
 
     /* `image` as a texture of DXVK's, described as `desc`, with a reference
      * the caller owns. Null when DXVK will not make the image, import its
      * memory or wrap it, or every slot is held. */
     ID3D11Texture2D *import(Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc);
+    /* A texture described as `desc` over memory another API can open, with a
+     * reference the caller owns. Null for a description ExportableImageInfo
+     * does not support, or one DXVK will not make or wrap: DXVK then makes the
+     * texture itself. */
+    ID3D11Texture2D *make(const D3D11_TEXTURE2D_DESC1 &desc);
+    /* A dma-buf of `texture`'s memory, which the caller owns; false for a
+     * texture this table did not make. */
+    [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
     /* The images whose textures have gone, freed once DXVK's GPU work is. */
     void             collect();
     /* Every image freed, its texture gone or not: the device is closing. */
@@ -67,7 +80,7 @@ private:
         ~Slot() = default;
 
     private:
-        friend class ImportedTextures;
+        friend class InteropTextures;
 
         uint32_t       references_;
         bool           held_;
@@ -76,6 +89,9 @@ private:
     };
 
     Slot *vacant_slot();
+    /* A texture described as `desc` over `image` and `memory`, which `slot`
+     * then holds; null, with both freed, when DXVK would not wrap it. */
+    ID3D11Texture2D *wrap(Slot &slot, VkImage image, VkDeviceMemory memory, const D3D11_TEXTURE2D_DESC1 &desc);
 
     DxvkVulkanDevice &vulkan_;
     Slot              slots_[capacity];
@@ -83,4 +99,4 @@ private:
 
 }  // namespace av
 
-#endif  // AV_IMPORTED_TEXTURES_HPP
+#endif  // AV_INTEROP_TEXTURES_HPP

@@ -21,7 +21,7 @@
 #include "device/shim/d3d_shared_resources.hpp"
 #include "device/shim/dxvk_vulkan_device.hpp"
 #include "device/shim/host_image_export.hpp"
-#include "device/shim/imported_textures.hpp"
+#include "device/shim/interop_textures.hpp"
 #include "device/shim/d3d11_frame_pool.hpp"
 
 #include <pthread.h>
@@ -96,9 +96,16 @@ public:
     /* Under the lock: what `key` shares, as this device sees it, with a
      * reference the caller owns; null for none. A Direct3D 12 resource is
      * made a texture of DXVK's over the same memory the first time
-     * (ImportedTextures), which then takes its place in the table - only the
+     * (InteropTextures), which then takes its place in the table - only the
      * surfaces something opens cost an import. */
     IUnknown          *find_shared(uint64_t key);
+    /* Under the lock: a shared texture described as `desc`, made over memory
+     * OpenGL and Vulkan can open (InteropTextures::make), with a reference the
+     * caller owns; null for one only DXVK's own allocation can hold. */
+    ID3D11Texture2D   *make_shareable(const D3D11_TEXTURE2D_DESC1 &desc);
+    /* Under the lock: a dma-buf of the memory make_shareable made `texture`
+     * over, which the caller owns; false for any other texture. */
+    [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
     /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
     DxvkVulkanDevice  &vulkan();
 
@@ -127,7 +134,7 @@ private:
     D3dSharedResources      shared_;
     DxvkVulkanDevice        vulkan_;
     HostImageExport         exports_;
-    ImportedTextures        imports_;
+    InteropTextures        interop_;
     D3d11FramePool          frames_;
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */

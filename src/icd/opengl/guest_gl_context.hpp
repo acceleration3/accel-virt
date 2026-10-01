@@ -165,6 +165,10 @@ public:
      * (FramePacer::admits) - the rest would be read back and blitted only to
      * be covered before DWM composed them. */
     bool                  admits();
+    /* The LUID of the adapter the context draws on, which a window's chain is
+     * made on (ChainedFrames); 0 before the context is made, or when the
+     * kernel would not say. */
+    uint64_t              adapter_luid() const;
     /* Which ask is being answered, recorded before the make that asks it. */
     void                  asking(GrantedProfile::Rung rung);
     void        set_debug_callback(uint64_t callback, uint64_t user);
@@ -232,6 +236,7 @@ private:
     char                           strings_[strings][string_bytes];
     uint64_t                       debug_callback_;
     uint64_t                       debug_user_;
+    uint64_t                       luid_;
 
     friend struct GuestGlContextProbe;
 };

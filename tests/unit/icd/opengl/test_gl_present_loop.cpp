@@ -15,6 +15,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/common/wake_signal.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
@@ -63,7 +64,8 @@ struct Rig {
     av::RecordingThreadLock   lock{trace, 'P'};
     av::ScriptedWindowSurface surface;
     av::RecordingLog          log;
-    GlPresentLoop             loop{thread, handed, shown, lock, context_rig.kmt(), surface, log};
+    av::ScriptedWindowChains  chains;
+    GlPresentLoop             loop{thread, handed, shown, lock, context_rig.kmt(), surface, chains, log};
     BackBufferPresenter       first{context_rig.platform(), log};
     BackBufferPresenter       second{context_rig.platform(), log};
     int                       dcs[2] = {};

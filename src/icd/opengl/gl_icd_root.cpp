@@ -406,7 +406,9 @@ GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
     if (!context->admits()) return Shown::nothing;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
-    if (!framebuffers.present(*transport, context->arrays(), dc, window, surface_, &presents_)) return Shown::refused;
+    if (!framebuffers.present(*transport, context->arrays(), dc, window, surface_, &presents_,
+                              context->adapter_luid()))
+        return Shown::refused;
     /* The frame's read-back goes out with the calls before it, and the present
      * thread is handed the frame with the batch it went in. Only then may the
      * window's new size replace the room the frame is being read into. */

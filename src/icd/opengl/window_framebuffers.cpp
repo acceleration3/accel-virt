@@ -121,13 +121,13 @@ int32_t WindowFramebuffers::answer(uint32_t pname, int32_t host_value) const
 }
 
 bool WindowFramebuffers::present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                                 icd::WindowSurface &surface, GlPresentLoop *loop)
+                                 icd::WindowSurface &surface, GlPresentLoop *loop, uint64_t luid)
 {
     AV_SCOPE("WindowFramebuffers::present");
     const uint32_t slot = find(window);
     if (window == nullptr || slot == max_windows) return false;
     presented_ = slot;
-    return presenters_[slot].object().present(wire, state, dc, surface, loop);
+    return presenters_[slot].object().present(wire, state, dc, surface, loop, luid);
 }
 
 void WindowFramebuffers::hand_over(const BatchMark &mark)
@@ -146,10 +146,16 @@ void WindowFramebuffers::follow(ClientTransport &wire, void *window, const Pixel
     if (window == nullptr || slot == max_windows) return;
     BackBufferPresenter &presenter = presenters_[slot].object();
     const uint32_t       before = presenter.framebuffer();
+    const uint32_t       width = presenter.width();
+    const uint32_t       height = presenter.height();
     static_cast<void>(presenter.prepare(wire, window, format, surface));
     const uint32_t after = presenter.framebuffer();
-    if (after != before && slot == current_ && draws_window_) glproto::rvk_glBindFramebuffer(wire, gl_draw_framebuffer, after);
-    if (after != before && slot == current_ && reads_window_) glproto::rvk_glBindFramebuffer(wire, gl_read_framebuffer, after);
+    /* Made again at a new size, the framebuffer may come back under the name
+     * the deleted one had - the host reuses names - while deleting it bound 0
+     * in its place: so a new size rebinds whatever the name. */
+    const bool remade = after != before || presenter.width() != width || presenter.height() != height;
+    if (remade && slot == current_ && draws_window_) glproto::rvk_glBindFramebuffer(wire, gl_draw_framebuffer, after);
+    if (remade && slot == current_ && reads_window_) glproto::rvk_glBindFramebuffer(wire, gl_read_framebuffer, after);
 }
 
 void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &surface)

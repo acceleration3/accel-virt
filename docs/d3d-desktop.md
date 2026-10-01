@@ -240,7 +240,7 @@ On the host the buffer is made with `D3D12_HEAP_FLAG_SHARED`, and
 `ShareResource12(resource, key)` shows it to the GPU's Direct3D 11 device
 under the key the miniport minted: vkd3d-proton exports the texture's memory
 as an fd with the image it made (`vkd3d_proton_export_image`,
-`tools/vkd3d-proton-patches`), and `ImportedTextures` makes the same image on
+`tools/vkd3d-proton-patches`), and `InteropTextures` makes the same image on
 DXVK's Vulkan device over that memory and wraps it as a texture - no copy, one
 memory on two devices. The image and memory outlive the texture: DXVK
 releases a slot the texture holds as private data when the texture goes, and
@@ -271,7 +271,7 @@ GPUs, which nothing does yet.
 | `StandardAllocationBlob` | object | `src/proto/resources/` | the fields of the KMD's standard blob | encodes and decodes it for the KMD and the UMD |
 | `KernelSurface` | object | `src/icd/d3d/` | a surface's allocation and resource private data | writes and reads what a presented or shared surface's kernel allocation carries, for both UMDs |
 | `DxvkVulkanDevice` | system | `src/device/shim/` | DXVK's Vulkan device and its entry points | makes, imports and wraps images on DXVK's device and waits on its queue |
-| `ImportedTextures` | system | `src/device/shim/` | a slot per imported image | keeps a Direct3D 12 image shown by DXVK alive as long as its texture is |
+| `InteropTextures` | system | `src/device/shim/` | a slot per imported image | keeps a Direct3D 12 image shown by DXVK alive as long as its texture is |
 | `D3d12Presentation` | object | `src/device/shim/` | the session's shared fence and DXVK's semaphore of it | shares a session's swap chain buffers and orders DXVK after its presents |
 | `BatchFollower` | object | `src/um/d3d/` | the kernel thunks, the device and the session's transport | queues a packet on a kernel context that waits for the newest batch the session published, for both UMDs; none when that context already follows it |
 | `UmdConnections` | system | `src/icd/d3d/` | the Kmt | one held kernel adapter per LUID a runtime opened, shared by every open of it |

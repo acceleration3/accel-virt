@@ -11,6 +11,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
@@ -104,7 +105,7 @@ struct Rig {
      * the window, then the window's new size followed. */
     bool swap(int index)
     {
-        const bool shown = framebuffers.present(wire(), state, &dcs[index], &windows[index], surface, nullptr);
+        const bool shown = framebuffers.present(wire(), state, &dcs[index], &windows[index], surface, nullptr, 0u);
         framebuffers.follow(wire(), &windows[index], doubled, surface);
         return shown;
     }
@@ -234,7 +235,7 @@ TEST(window_framebuffers, a_query_answers_as_the_window_would)
 
 TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_was_left_on_it)
 { Rig rig;
-  CHECK(!rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], nullptr, rig.surface, nullptr));
+  CHECK(!rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], nullptr, rig.surface, nullptr, 0u));
   rig.framebuffers.follow(rig.wire(), nullptr, doubled, rig.surface);
   rig.framebuffers.hand_over(av::BatchMark());
   CHECK(!rig.swap(0));
@@ -288,6 +289,31 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   CHECK(rig.swap(1));
   CHECK_EQ(rig.framebuffers.name_of(0u), 600u);
   CHECK(rig.framebuffers.invariants_hold()); }
+
+/* The host reuses the names of what it deleted, so a window made again at a
+ * new size can come back under the very names it had - while deleting the old
+ * framebuffer bound 0 in its place. It is bound again all the same. */
+TEST(window_framebuffers, a_window_made_again_under_its_old_names_is_bound_again)
+{ Rig rig;
+  CHECK_STATUS(rig.current_on(1, 200u), Status::ok);
+  rig.context_rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.swap(1));
+  rig.surface.resize(&rig.windows[1], 16u, 8u);
+  rig.context_rig.host().gl_bytes(nullptr, 0u);
+  rig.context_rig.host().gl_window(1u, 1u, 200u);
+  const std::uint32_t swapped = rig.commands();
+  CHECK(rig.swap(1));
+  CHECK_EQ(rig.framebuffers.name_of(0u), 200u);
+  CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u + 2u);
+  CHECK_EQ(rig.argument(swapped + 11u, 0u), Windows::gl_draw_framebuffer);
+  CHECK_EQ(rig.argument(swapped + 11u, 1u), 200u);
+  CHECK_EQ(rig.argument(swapped + 12u, 0u), Windows::gl_read_framebuffer);
+  CHECK_EQ(rig.argument(swapped + 12u, 1u), 200u);
+  /* The same size again makes nothing and binds nothing. */
+  rig.context_rig.host().gl_bytes(nullptr, 0u);
+  const std::uint32_t steady = rig.commands();
+  CHECK(rig.swap(1));
+  CHECK_EQ(rig.commands() - steady, 1u); }
 
 /* Feature 051: the host has no front buffer - the window is a framebuffer
  * object there - so GL_FRONT names the frame the swap put on the window, which
@@ -395,16 +421,17 @@ TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
   av::LockTrace            trace;
   av::RecordingThreadLock  lock{trace, 'P'};
   av::RecordingLog         log;
-  av::glicd::GlPresentLoop loop{thread, handed, shown, lock, rig.context_rig.kmt(), rig.surface, log};
+  av::ScriptedWindowChains chains;
+  av::glicd::GlPresentLoop loop{thread, handed, shown, lock, rig.context_rig.kmt(), rig.surface, chains, log};
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop));
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop, 0u));
   rig.context.flush();
   rig.framebuffers.hand_over(rig.context.mark());
   rig.framebuffers.hand_over(rig.context.mark());
   CHECK_EQ(loop.queued(), 1u);
   CHECK(thread.step());
   CHECK_EQ(rig.surface.blits(), 1u);
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop));
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop, 0u));
   rig.surface.close_window(&rig.windows[0]);
   rig.framebuffers.drop_gone(rig.wire(), rig.surface);
   rig.framebuffers.hand_over(rig.context.mark());

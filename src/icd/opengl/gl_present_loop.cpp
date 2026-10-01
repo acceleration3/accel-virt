@@ -6,14 +6,17 @@
 #include "icd/common/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/common/wake_signal.hpp"
+#include "icd/common/window_chains.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
 
 namespace av::glicd {
 
 GlPresentLoop::GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
-                             icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::LogSink &log)
-    : thread_(thread), handed_(handed), shown_(shown), lock_(lock), kmt_(kmt), surface_(surface), log_(log),
+                             icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface,
+                             icd::WindowChains &chains, icd::LogSink &log)
+    : thread_(thread), handed_(handed), shown_(shown), lock_(lock), kmt_(kmt), surface_(surface), chains_(chains),
+      log_(log),
       frames_{}, stages_{}, orders_{}, next_order_(1u), shown_frames_(0u), dropped_frames_(0u), stopping_(0u),
       refused_(false), refusal_logged_(false)
 {
@@ -238,10 +241,12 @@ void GlPresentLoop::show(uint32_t row, const HandedFrame &frame)
 {
     AV_SCOPE("GlPresentLoop::show");
     const bool ready = wait_for(frame.mark());
-    const bool drawn =
-        ready && surface_.blit_window(frame.window(), frame.width(), frame.height(), frame.pixels());
+    const bool chained = frame.chained();
+    const bool drawn = ready && (chained ? chains_.present(frame.window(), frame.slot())
+                                         : surface_.blit_window(frame.window(), frame.width(), frame.height(),
+                                                                frame.pixels()));
     lock_.acquire();
-    if (ready) frame.owner()->shown(frame.pixels(), frame.width(), frame.height());
+    if (ready && !chained) frame.owner()->shown(frame.pixels(), frame.width(), frame.height());
     frames_[row] = HandedFrame();
     stages_[row] = Stage::free;
     if (drawn)
@@ -251,6 +256,12 @@ void GlPresentLoop::show(uint32_t row, const HandedFrame &frame)
     lock_.release();
     if (ready && !drawn) log_refusal();
     shown_.raise();
+}
+
+icd::WindowChains &GlPresentLoop::chains()
+{
+    AV_SCOPE("GlPresentLoop::chains");
+    return chains_;
 }
 
 bool GlPresentLoop::stopping() const

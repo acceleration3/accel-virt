@@ -13,6 +13,7 @@
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
 #include "um/gdi_kmt.hpp"
+#include "um/icd/dxgi_window_chains.hpp"
 #include "um/icd/file_log.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
@@ -71,6 +72,10 @@ private:
         GdiWindowSurface  surface;
         TlsThreadSlot     slot;
         LoadedOpengl32    opengl32;
+        /* Before the present loop, which presents through them, and the
+         * root, whose presenters open and close them. */
+        SrwLock              chains_lock;
+        DxgiWindowChains     chains;
         /* Before the root, which settles every presenter on it as it goes. */
         SrwLock              present_lock;
         GdiKmt               present_kmt;

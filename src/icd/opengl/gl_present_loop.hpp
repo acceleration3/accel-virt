@@ -33,6 +33,7 @@ namespace av::icd {
 class LogSink;
 class ThreadLock;
 class WakeSignal;
+class WindowChains;
 class WindowSurface;
 }  // namespace av::icd
 
@@ -53,7 +54,8 @@ public:
     static constexpr uint32_t slot_looks = 500u;
 
     GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
-                  icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::LogSink &log);
+                  icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::WindowChains &chains,
+                  icd::LogSink &log);
     ~GlPresentLoop();
     GlPresentLoop(const GlPresentLoop &) = delete;
     GlPresentLoop &operator=(const GlPresentLoop &) = delete;
@@ -74,6 +76,9 @@ public:
      * room or its pixels change, and before it goes. What the thread will not
      * show - it stopped, or showed nothing for slot_looks looks - is dropped. */
     void     settle(const BackBufferPresenter &owner);
+    /* The windows' chains a presenter opens its slots in, and this thread
+     * presents a frame drawn into a slot through. */
+    icd::WindowChains &chains();
     /* For a reader of what the thread writes - a presenter's front buffer. */
     void     acquire();
     void     release();
@@ -103,7 +108,8 @@ private:
      * times out on a host that is behind: false for a context that is gone,
      * or once stopping. */
     bool     wait_for(const BatchMark &mark);
-    /* Shows the frame taken from `row`: blitted when its batch is done. */
+    /* Shows the frame taken from `row` when its batch is done: a slot of its
+     * window's chain presented, or its pixels blitted. */
     void     show(uint32_t row, const HandedFrame &frame);
     bool     stopping() const;
     void     log_refusal();
@@ -114,6 +120,7 @@ private:
     icd::ThreadLock    &lock_;
     Kmt                &kmt_;
     icd::WindowSurface &surface_;
+    icd::WindowChains  &chains_;
     icd::LogSink       &log_;
     HandedFrame         frames_[max_frames];
     Stage               stages_[max_frames];

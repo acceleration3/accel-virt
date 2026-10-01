@@ -15,6 +15,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
@@ -75,6 +76,7 @@ private:
     RecordingThreadLock   send_lock_;
     RecordingLog          log_;
     ScriptedWindowSurface surface_;
+    ScriptedWindowChains  chains_;
     ScriptedThreadSlot    threads_;
     FakeOpengl32          opengl32_;
     RecordingThreadLock   present_lock_;

@@ -84,7 +84,7 @@ public:
      * (BackBufferPresenter::present). false for a window this context never
      * drew on. */
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                     icd::WindowSurface &surface, GlPresentLoop *loop);
+                     icd::WindowSurface &surface, GlPresentLoop *loop, uint64_t luid);
     /* The frame the last present read for the present thread goes to it, to
      * show once the batch `mark` names is done. */
     void     hand_over(const BatchMark &mark);

@@ -23,6 +23,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
@@ -102,7 +103,7 @@ class GlProcess {
 public:
     explicit GlProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), present_lock_(trace_, 'P'), opengl32_(threads_),
-          presents_(present_thread_, handed_, shown_, present_lock_, kmt, surface_, log_),
+          presents_(present_thread_, handed_, shown_, present_lock_, kmt, surface_, chains_, log_),
           root_(memory_, kmt, lock_, send_lock_, log_, surface_, threads_, opengl32_, presents_,
                 av::glicd::gl_icd_binding)
     {
@@ -126,6 +127,7 @@ private:
     RecordingThreadLock   present_lock_;
     RecordingLog          log_;
     ScriptedWindowSurface surface_;
+    av::ScriptedWindowChains chains_;
     ScriptedThreadSlot    threads_;
     FakeOpengl32          opengl32_;
     av::ScriptedThread       present_thread_;

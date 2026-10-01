@@ -219,12 +219,48 @@ void D3dBackend::abandon(ImportedBlob &blob)
     blob.record(0u, 0u);
 }
 
-bool D3dBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int &fd)
+/* A texture the guest shared is made over memory OpenGL and Vulkan can open
+ * (feature 053), so a window those APIs draw can be presented through it;
+ * null for anything else, which DXVK makes as it makes any texture. */
+ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc)
+{
+    AV_SCOPE("D3dBackend::shareable");
+    if ((guest_misc & D3D11_RESOURCE_MISC_SHARED) == 0u) return nullptr;
+    D3D11_TEXTURE2D_DESC1 described = {};
+    described.Width = texture.Width;
+    described.Height = texture.Height;
+    described.MipLevels = texture.MipLevels;
+    described.ArraySize = texture.ArraySize;
+    described.Format = texture.Format;
+    described.SampleDesc = texture.SampleDesc;
+    described.Usage = texture.Usage;
+    described.BindFlags = texture.BindFlags;
+    described.MiscFlags = texture.MiscFlags;
+    return device11_->make_shareable(described);
+}
+
+/* A shared texture's memory, as the dma-buf OpenGL and Vulkan import. The
+ * Direct3D 11 lock a batch holds is held across this command too; one that
+ * arrives on its own takes it. */
+bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
 {
     AV_SCOPE("D3dBackend::export_object");
     handle_kind = 0u;
     fd = -1;
-    return false;
+    if (device11_ == nullptr || kind != RVK_SHARED_MEMORY || wire_handle == 0u || wire_handle > UINT32_MAX)
+        return false;
+    ID3D11Resource *const resource = object<ID3D11Resource>(static_cast<uint32_t>(wire_handle), D3dObjectKind::resource);
+    ID3D11Texture2D *texture = nullptr;
+    if (resource == nullptr ||
+        FAILED(resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture))))
+        return false;
+    const bool locked = !held_;
+    if (locked) device11_->lock(nullptr);
+    const bool exported = device11_->export_memory(texture, fd);
+    if (locked) device11_->unlock();
+    texture->Release();
+    if (exported) handle_kind = RVK_SHARED_HANDLE_DMA_BUF;
+    return exported;
 }
 
 bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle)
@@ -684,8 +720,8 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
                                               desc.bind_flags,
                                               0u,
                                               misc};
-        ID3D11Texture2D *out = nullptr;
-        result = device->CreateTexture2D(&texture, nullptr, &out);
+        ID3D11Texture2D *out = shareable(texture, desc.misc_flags);
+        result = out != nullptr ? S_OK : device->CreateTexture2D(&texture, nullptr, &out);
         made = out;
     } else if (desc.dimension == dimension_texture3d) {
         if (desc.width > 2048u || desc.height > 2048u || desc.depth_or_array > 2048u) return false;

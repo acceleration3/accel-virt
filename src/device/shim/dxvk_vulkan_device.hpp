@@ -4,7 +4,7 @@
  *
  * One per host GPU, beside the Direct3D 11 device it is DXVK's: what makes the
  * scanout's dma-bufs (HostImageExport) and what shows a Direct3D 12 surface
- * (ImportedTextures) both reach Vulkan through it. The entry points are the
+ * (InteropTextures) both reach Vulkan through it. The entry points are the
  * loader's for DXVK's device, which the fd ones need: DXVK is built with them
  * enabled (tools/dxvk-patches). */
 #ifndef AV_DXVK_VULKAN_DEVICE_HPP

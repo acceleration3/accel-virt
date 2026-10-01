@@ -47,7 +47,7 @@ The host has more than one owner for that id, and each is tied to one API:
 | Owner | Holds | Scope | Who uses it |
 |---|---|---|---|
 | `D3dSharedResources` (in `D3d11HostDevice`) | key → `IUnknown*`, 4096 rows | per GPU, per process | Direct3D `CreateResource(shared_key)`, `OpenResource`, `ShareResource12`; scanout `export_image` / `read_image` |
-| `ImportedTextures` (in `D3d11HostDevice`) | a D3D12 texture remade on DXVK's device over vkd3d-proton's exported memory | per GPU | `ShareResource12` |
+| `InteropTextures` (in `D3d11HostDevice`) | a D3D12 texture remade on DXVK's device over vkd3d-proton's exported memory | per GPU | `ShareResource12` |
 | `D3d12Presentation` | a shared `ID3D12Fence`, imported into DXVK as a timeline | per D3D12 session | `PresentResource12`: DXVK waits for the presenting queue |
 | `SnapshotPool` (in `D3d11HostDevice`) | 16 staging textures, keyed by a *random* key the UMD chose | per GPU | D3D11 blt presents (`PresentSnapshot`); the present engine's `map_snapshot` |
 | `HostImageExport` | one linear dma-buf image on DXVK's device | per GPU | scanout to QEMU's display |
@@ -135,7 +135,7 @@ A row is one guest id:
   other API's view is made over. D3D12 already exports one (vkd3d-proton
   `0003-shared-image-fd`); D3D11 and Vulkan make shared resources exportable;
 - **views:** the surface as each API that opened it sees it, made on first
-  open and released with the row. `ImportedTextures` becomes the D3D11 view
+  open and released with the row. `InteropTextures` becomes the D3D11 view
   maker, and the rest follow it;
 - **points:** the last point written and the last one each reader finished
   (§2.4);
@@ -223,7 +223,7 @@ read-back too.
 
 - **Release.** `SharedReleaseRequest(id)` releases the row. The row's views and
   canonical memory are freed once no reader holds them and the GPUs are done
-  with them. `ImportedTextures::collect` is the model.
+  with them. `InteropTextures::collect` is the model.
 - **Reset.** A reset (id 0) releases every row.
 - **Destroying sessions.** A row outlives the session that made it, for as long
   as the guest holds the id. DWM opens surfaces whose creators are already gone,
@@ -283,7 +283,7 @@ dma-bufs already do.
    runtime's queue. Now each present is one blt (123 of 123), and the frames
    are black instead of missing.
 1. **`SharedSurfaces` with D3D11 and D3D12 behind `SurfaceApi`.** This
-   replaces `D3dSharedResources`, `ImportedTextures` and `D3d12Presentation`'s
+   replaces `D3dSharedResources`, `InteropTextures` and `D3d12Presentation`'s
    fence. Behaviour is unchanged, except that the self-deadlock goes.
 2. **Points and blt reads.** This adds `read_surface` and `PresentPointRecord`,
    with staging for blt-read surfaces. D3D11 blts move onto it, and
@@ -310,8 +310,27 @@ dma-bufs already do.
 4. **Feature 053 joins.** `HostSharedObjects` becomes the rows' descriptor
    store, and Vulkan, OpenGL and OpenCL open Direct3D surfaces and the reverse.
    Fence kinds are reconciled in one place (§1.3).
+
+   Begun, Direct3D 11 to the others: a shared texture of one 2D mip, layer and
+   sample (`ExportableImageInfo`) is made by `InteropTextures` over dedicated
+   memory exported as a dma-buf, wrapped for DXVK, and the UMD publishes it
+   with SHARE_OBJECT under the key the miniport minted, so OpenGL and Vulkan
+   open it by that id like any shared object. OpenGL imports memory as
+   *dedicated*, which is what makes radeonsi read RADV's layout from the
+   dma-buf (`test_d3d_gl_interop_device`). The reverse - Direct3D opening a
+   Vulkan or OpenGL object - is still refused.
 5. **Vulkan and OpenGL swap chains present surfaces.** They stop reading back
    into guest memory and GDI-blitting.
+
+   OpenGL done: each window gets a DXGI flip chain on the context's own
+   adapter (`icd::WindowChains`, `DxgiWindowChains` in the guest), whose two
+   slots are such shared textures. A swap copies its frame into a free slot
+   with glCopyImageSubData - a copy, so the application's scissor and masks
+   cannot touch it, as they did a blit - and sends glFinish one-way; the
+   present thread, once the batch is done, draws the slot into the chain's
+   back buffer the right way up and presents it, and DWM composes it from
+   the host's texture. A window whose chain cannot be had reads back as
+   before. Vulkan is next.
 6. **The renderer and other GPUs.** Staging slots cross to QEMU, and a surface
    opened on another GPU gets a copy path.
 

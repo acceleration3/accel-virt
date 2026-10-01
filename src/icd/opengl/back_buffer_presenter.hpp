@@ -17,6 +17,7 @@
 
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
+#include "icd/opengl/chained_frames.hpp"
 #include "icd/opengl/front_buffer.hpp"
 #include "icd/opengl/pixel_format.hpp"
 #include "proto/client_blob_arena.hpp"
@@ -89,13 +90,14 @@ public:
     uint32_t width() const;
     uint32_t height() const;
     bool     double_buffered() const;
-    /* The frame onto `dc`: resolved, then either read one-way into a slot for
-     * `loop` (hand_over gives it the frame) or, with no loop, thread or room,
-     * read back in rows the transport carries and put on the window bottom
-     * row first. false before a prepare; a DC that refuses the frame is logged
-     * once and the swap still happened. */
+    /* The frame onto `dc`: resolved, then drawn into a slot of the window's
+     * chain on the adapter `luid` (ChainedFrames), or read one-way into a slot
+     * for `loop` - either way hand_over gives the thread the frame - or, with
+     * no loop, thread or room, read back in rows the transport carries and put
+     * on the window bottom row first. false before a prepare; a DC that
+     * refuses the frame is logged once and the swap still happened. */
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, icd::WindowSurface &surface,
-                     GlPresentLoop *loop);
+                     GlPresentLoop *loop, uint64_t luid);
     /* The frame the last present read into a slot goes to the present thread,
      * to be shown once the batch `mark` names is done. Nothing without one. */
     void     hand_over(const BatchMark &mark);
@@ -123,6 +125,9 @@ private:
     /* The pack state a read-back needs, or the application's again. */
     void                 set_pack(ClientTransport &wire, const ClientArrayState &state, bool plain);
     void                 read_back(ClientTransport &wire);
+    /* The frame drawn into a free slot of the window's chain for `loop`, the
+     * chain opened first; false when there is no thread or no chain. */
+    bool                 draw_chained(ClientTransport &wire, GlPresentLoop &loop, uint64_t luid);
     /* The frame read one-way into a free slot for `loop`; false when there is
      * no thread or no room, and the swap shows the frame itself. */
     bool                 queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentLoop &loop);
@@ -155,6 +160,12 @@ private:
     /* The slot the last present read into, until handed over; slot_count
      * when none. */
     uint32_t         pending_;
+    /* That slot is one of the chain's, not of the room. */
+    bool             pending_chained_;
+    ChainedFrames    chained_;
+    /* The chain could not be had at this size: frames are read back until the
+     * window's size changes. */
+    bool             chain_refused_;
 
     friend struct BackBufferPresenterProbe;
 };

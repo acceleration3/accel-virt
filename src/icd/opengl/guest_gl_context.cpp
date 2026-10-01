@@ -7,6 +7,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "guest/kmt/kmt.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "proto/context/sub_api.hpp"
@@ -32,7 +33,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
       staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
       strings_{},
-      debug_callback_(0u), debug_user_(0u)
+      debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
     AV_SCOPE("GuestGlContext::GuestGlContext");
 }
@@ -420,9 +421,17 @@ Status GuestGlContext::build()
     static_cast<void>(pacer_.construct(connection_.device(link_).kmt(), log_, connection_.device(link_).adapter(),
                                        connection_.device(link_).device()));
     static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
+    GuestConnection &device = connection_.device(link_);
+    if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
     if (arena_.object().open(arena_bytes) != Status::ok)
         log_.write("rvkgl: no blob arena for the context; bulk data crosses inline");
     return Status::ok;
+}
+
+uint64_t GuestGlContext::adapter_luid() const
+{
+    AV_SCOPE("GuestGlContext::adapter_luid");
+    return luid_;
 }
 
 bool GuestGlContext::learn()
