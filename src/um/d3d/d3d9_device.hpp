@@ -28,7 +28,7 @@
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/d3d9_records.hpp"
 #include "um/d3d/paging_queue.hpp"
-#include "um/icd/srw_lock.hpp"
+#include "um/icd/reentrant_call_lock.hpp"
 
 #include <stdint.h>
 
@@ -63,7 +63,7 @@ public:
      * over. Anything but S_OK leaves the device out of the session. */
     HRESULT initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVICE &create);
     d3d::UmdAdapter &adapter() const;
-    /* One runtime call at a time (D3d9DeviceCall). */
+    /* One runtime call at a time (d3d::DeviceCall). */
     void lock_calls();
     void unlock_calls();
 
@@ -197,7 +197,7 @@ private:
     KeyedLog                        lines_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
-    SrwLock                              lock_;
+    ReentrantCallLock                    lock_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
     ObjectStorage<d3d11::PagingQueue>    paging_;
     ObjectStorage<d3d::BatchFollower>    follower_;

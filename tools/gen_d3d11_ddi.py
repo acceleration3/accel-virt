@@ -125,7 +125,8 @@ def thunks(table):
             lines.append(f"{{ {keyword}d3d::umd_binding.root().{ROOT_SLOTS[name]}(device.pDrvPrivate); }}")
             lines.append("")
             continue
-        lines.append(f"{{ {keyword}DeviceCall(device.pDrvPrivate).device().{snake(name)}({arguments}); }}")
+        lines.append(f"{{ {keyword}d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).device()"
+                     f".{snake(name)}({arguments}); }}")
         lines.append("")
     lines += ["}  // namespace", "", f"void fill_device_funcs({TABLE} &table)", "{", '    AV_SCOPE("fill_device_funcs");']
     for name, _pfn, _ret, _parameters in table:

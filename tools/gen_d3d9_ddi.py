@@ -139,7 +139,7 @@ def ret_type(ret):
 
 def thunks(table):
     lines = [HEADER, "/* The ABI boundary C requires: the runtime calls each slot with the device", " * handle CreateDevice handed back and nothing else, so each thunk is one line", " * into the device that handle is. */",
-             '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/umd_binding.hpp"', '#include "icd/d3d/umd_root.hpp"', '#include "um/d3d/d3d9_ddi.hpp"', '#include "um/d3d/d3d9_device.hpp"', '#include "um/d3d/d3d9_device_call.hpp"', '#include "um/d3d/d3d9_tables.hpp"', "", "namespace av::d3d9 {", "", "namespace {", ""]
+             '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/umd_binding.hpp"', '#include "icd/d3d/umd_root.hpp"', '#include "um/d3d/d3d9_ddi.hpp"', '#include "um/d3d/d3d9_device.hpp"', '#include "um/d3d/device_call.hpp"', '#include "um/d3d/d3d9_tables.hpp"', "", "namespace av::d3d9 {", "", "namespace {", ""]
     for name, _pfn, ret, parameters in table:
         names = ["device"] + [f"a{index}" for index in range(1, len(parameters))]
         declared = ", ".join(f"{kind} {label}" for kind, label in zip(parameters, names))
@@ -150,7 +150,8 @@ def thunks(table):
             lines.append(f"{{ {keyword}d3d::umd_binding.root().{ROOT_SLOTS[name]}(device); }}")
             lines.append("")
             continue
-        lines.append(f"{{ {keyword}D3d9DeviceCall(device).device().{snake(name)}({arguments}); }}")
+        lines.append(f"{{ {keyword}d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device()"
+                     f".{snake(name)}({arguments}); }}")
         lines.append("")
     lines += ["}  // namespace", "", f"void fill_device_funcs9({TABLE} &table)", "{", '    AV_SCOPE("fill_device_funcs9");']
     for name, _pfn, _ret, _parameters in table:

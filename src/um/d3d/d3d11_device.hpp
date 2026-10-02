@@ -24,6 +24,7 @@
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "um/icd/reentrant_call_lock.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_records.hpp"
@@ -68,7 +69,7 @@ public:
     HRESULT initialize_deferred(D3d11Device &parent, const D3D11DDIARG_CREATEDEFERREDCONTEXT &create);
     /* The runtime is done with this deferred context. */
     void    retire();
-    /* One runtime call at a time into this object (DeviceCall). */
+    /* One runtime call at a time into this object (d3d::DeviceCall). */
     void    lock_calls();
     void    unlock_calls();
 
@@ -222,12 +223,9 @@ private:
     static constexpr size_t most_recording_bytes = 256u << 20u;
     D3d11Device                          *parent_;
     SrwLock                               recording_lock_;
-    SrwLock                               calls_;
-    /* The thread inside a call, and how deep: the runtime answers some calls
-     * by calling the same device back on the same thread (a rotate asks it to
-     * bind its state again), which must not wait on itself. */
-    uint32_t                              calls_owner_;
-    uint32_t                              calls_depth_;
+    /* The runtime answers some calls by calling the same device back on the
+     * same thread (a rotate asks it to bind its state again). */
+    ReentrantCallLock                     calls_;
     ObjectStorage<d3d::D3dCommandStream>  recording_;
     ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;

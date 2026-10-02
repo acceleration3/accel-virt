@@ -8,7 +8,7 @@
 #include "icd/d3d/umd_root.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/d3d9_device.hpp"
-#include "um/d3d/d3d9_device_call.hpp"
+#include "um/d3d/device_call.hpp"
 #include "um/d3d/d3d9_tables.hpp"
 
 namespace av::d3d9 {
@@ -16,310 +16,310 @@ namespace av::d3d9 {
 namespace {
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetRenderState(HANDLE device, const D3DDDIARG_RENDERSTATE * a1)
-{ return D3d9DeviceCall(device).device().set_render_state(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_render_state(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_UpdateWInfo(HANDLE device, const D3DDDIARG_WINFO * a1)
-{ return D3d9DeviceCall(device).device().update_w_info(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().update_w_info(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ValidateDevice(HANDLE device, D3DDDIARG_VALIDATETEXTURESTAGESTATE * a1)
-{ return D3d9DeviceCall(device).device().validate_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().validate_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetTextureStageState(HANDLE device, const D3DDDIARG_TEXTURESTAGESTATE * a1)
-{ return D3d9DeviceCall(device).device().set_texture_stage_state(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_texture_stage_state(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetTexture(HANDLE device, UINT a1, HANDLE a2)
-{ return D3d9DeviceCall(device).device().set_texture(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_texture(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShader(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().set_pixel_shader(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShaderConst(HANDLE device, const D3DDDIARG_SETPIXELSHADERCONST * a1, const FLOAT * a2)
-{ return D3d9DeviceCall(device).device().set_pixel_shader_const(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader_const(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetStreamSourceUm(HANDLE device, const D3DDDIARG_SETSTREAMSOURCEUM * a1, const void * a2)
-{ return D3d9DeviceCall(device).device().set_stream_source_um(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_stream_source_um(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetIndices(HANDLE device, const D3DDDIARG_SETINDICES * a1)
-{ return D3d9DeviceCall(device).device().set_indices(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_indices(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetIndicesUm(HANDLE device, UINT a1, const void * a2)
-{ return D3d9DeviceCall(device).device().set_indices_um(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_indices_um(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawPrimitive(HANDLE device, const D3DDDIARG_DRAWPRIMITIVE * a1, const UINT * a2)
-{ return D3d9DeviceCall(device).device().draw_primitive(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_primitive(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawIndexedPrimitive(HANDLE device, const D3DDDIARG_DRAWINDEXEDPRIMITIVE * a1)
-{ return D3d9DeviceCall(device).device().draw_indexed_primitive(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_indexed_primitive(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawRectPatch(HANDLE device, const D3DDDIARG_DRAWRECTPATCH * a1, const D3DDDIRECTPATCH_INFO * a2, const FLOAT * a3)
-{ return D3d9DeviceCall(device).device().draw_rect_patch(a1, a2, a3); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_rect_patch(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawTriPatch(HANDLE device, const D3DDDIARG_DRAWTRIPATCH * a1, const D3DDDITRIPATCH_INFO * a2, const FLOAT * a3)
-{ return D3d9DeviceCall(device).device().draw_tri_patch(a1, a2, a3); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_tri_patch(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawPrimitive2(HANDLE device, const D3DDDIARG_DRAWPRIMITIVE2 * a1)
-{ return D3d9DeviceCall(device).device().draw_primitive2(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_primitive2(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawIndexedPrimitive2(HANDLE device, const D3DDDIARG_DRAWINDEXEDPRIMITIVE2 * a1, UINT a2, const void * a3, const UINT * a4)
-{ return D3d9DeviceCall(device).device().draw_indexed_primitive2(a1, a2, a3, a4); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_indexed_primitive2(a1, a2, a3, a4); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VolBlt(HANDLE device, const D3DDDIARG_VOLUMEBLT * a1)
-{ return D3d9DeviceCall(device).device().vol_blt(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().vol_blt(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_BufBlt(HANDLE device, const D3DDDIARG_BUFFERBLT * a1)
-{ return D3d9DeviceCall(device).device().buf_blt(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().buf_blt(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_TexBlt(HANDLE device, const D3DDDIARG_TEXBLT * a1)
-{ return D3d9DeviceCall(device).device().tex_blt(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().tex_blt(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_StateSet(HANDLE device, D3DDDIARG_STATESET * a1)
-{ return D3d9DeviceCall(device).device().state_set(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().state_set(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPriority(HANDLE device, const D3DDDIARG_SETPRIORITY * a1)
-{ return D3d9DeviceCall(device).device().set_priority(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_priority(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Clear(HANDLE device, const D3DDDIARG_CLEAR * a1, UINT a2, const RECT * a3)
-{ return D3d9DeviceCall(device).device().clear(a1, a2, a3); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().clear(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_UpdatePalette(HANDLE device, const D3DDDIARG_UPDATEPALETTE * a1, const PALETTEENTRY * a2)
-{ return D3d9DeviceCall(device).device().update_palette(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().update_palette(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPalette(HANDLE device, const D3DDDIARG_SETPALETTE * a1)
-{ return D3d9DeviceCall(device).device().set_palette(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_palette(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderConst(HANDLE device, const D3DDDIARG_SETVERTEXSHADERCONST * a1, const void * a2)
-{ return D3d9DeviceCall(device).device().set_vertex_shader_const(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_const(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_MultiplyTransform(HANDLE device, const D3DDDIARG_MULTIPLYTRANSFORM * a1)
-{ return D3d9DeviceCall(device).device().multiply_transform(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().multiply_transform(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetTransform(HANDLE device, const D3DDDIARG_SETTRANSFORM * a1)
-{ return D3d9DeviceCall(device).device().set_transform(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_transform(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetViewport(HANDLE device, const D3DDDIARG_VIEWPORTINFO * a1)
-{ return D3d9DeviceCall(device).device().set_viewport(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_viewport(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetZRange(HANDLE device, const D3DDDIARG_ZRANGE * a1)
-{ return D3d9DeviceCall(device).device().set_z_range(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_z_range(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetMaterial(HANDLE device, const D3DDDIARG_SETMATERIAL * a1)
-{ return D3d9DeviceCall(device).device().set_material(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_material(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetLight(HANDLE device, const D3DDDIARG_SETLIGHT * a1, const D3DDDI_LIGHT * a2)
-{ return D3d9DeviceCall(device).device().set_light(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_light(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateLight(HANDLE device, const D3DDDIARG_CREATELIGHT * a1)
-{ return D3d9DeviceCall(device).device().create_light(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_light(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyLight(HANDLE device, const D3DDDIARG_DESTROYLIGHT * a1)
-{ return D3d9DeviceCall(device).device().destroy_light(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_light(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetClipPlane(HANDLE device, const D3DDDIARG_SETCLIPPLANE * a1)
-{ return D3d9DeviceCall(device).device().set_clip_plane(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_clip_plane(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GetInfo(HANDLE device, UINT a1, void * a2, UINT a3)
-{ return D3d9DeviceCall(device).device().get_info(a1, a2, a3); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().get_info(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Lock(HANDLE device, D3DDDIARG_LOCK * a1)
-{ return D3d9DeviceCall(device).device().lock(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().lock(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Unlock(HANDLE device, const D3DDDIARG_UNLOCK * a1)
-{ return D3d9DeviceCall(device).device().unlock(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().unlock(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateResource(HANDLE device, D3DDDIARG_CREATERESOURCE * a1)
-{ return D3d9DeviceCall(device).device().create_resource(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_resource(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyResource(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().destroy_resource(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_resource(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetDisplayMode(HANDLE device, const D3DDDIARG_SETDISPLAYMODE * a1)
-{ return D3d9DeviceCall(device).device().set_display_mode(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_display_mode(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Present(HANDLE device, const D3DDDIARG_PRESENT * a1)
-{ return D3d9DeviceCall(device).device().present(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().present(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Flush(HANDLE device)
-{ return D3d9DeviceCall(device).device().flush(); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().flush(); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateVertexShaderFunc(HANDLE device, D3DDDIARG_CREATEVERTEXSHADERFUNC * a1, const UINT * a2)
-{ return D3d9DeviceCall(device).device().create_vertex_shader_func(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_vertex_shader_func(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DeleteVertexShaderFunc(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().delete_vertex_shader_func(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().delete_vertex_shader_func(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderFunc(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().set_vertex_shader_func(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_func(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateVertexShaderDecl(HANDLE device, D3DDDIARG_CREATEVERTEXSHADERDECL * a1, const D3DDDIVERTEXELEMENT * a2)
-{ return D3d9DeviceCall(device).device().create_vertex_shader_decl(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_vertex_shader_decl(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DeleteVertexShaderDecl(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().delete_vertex_shader_decl(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().delete_vertex_shader_decl(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderDecl(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().set_vertex_shader_decl(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_decl(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderConstI(HANDLE device, const D3DDDIARG_SETVERTEXSHADERCONSTI * a1, const INT * a2)
-{ return D3d9DeviceCall(device).device().set_vertex_shader_const_i(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_const_i(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderConstB(HANDLE device, const D3DDDIARG_SETVERTEXSHADERCONSTB * a1, const BOOL * a2)
-{ return D3d9DeviceCall(device).device().set_vertex_shader_const_b(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_const_b(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetScissorRect(HANDLE device, const RECT * a1)
-{ return D3d9DeviceCall(device).device().set_scissor_rect(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_scissor_rect(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetStreamSource(HANDLE device, const D3DDDIARG_SETSTREAMSOURCE * a1)
-{ return D3d9DeviceCall(device).device().set_stream_source(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_stream_source(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetStreamSourceFreq(HANDLE device, const D3DDDIARG_SETSTREAMSOURCEFREQ * a1)
-{ return D3d9DeviceCall(device).device().set_stream_source_freq(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_stream_source_freq(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetConvolutionKernelMono(HANDLE device, const D3DDDIARG_SETCONVOLUTIONKERNELMONO * a1)
-{ return D3d9DeviceCall(device).device().set_convolution_kernel_mono(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_convolution_kernel_mono(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ComposeRects(HANDLE device, const D3DDDIARG_COMPOSERECTS * a1)
-{ return D3d9DeviceCall(device).device().compose_rects(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().compose_rects(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Blt(HANDLE device, const D3DDDIARG_BLT * a1)
-{ return D3d9DeviceCall(device).device().blt(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().blt(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ColorFill(HANDLE device, const D3DDDIARG_COLORFILL * a1)
-{ return D3d9DeviceCall(device).device().color_fill(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().color_fill(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DepthFill(HANDLE device, const D3DDDIARG_DEPTHFILL * a1)
-{ return D3d9DeviceCall(device).device().depth_fill(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().depth_fill(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateQuery(HANDLE device, D3DDDIARG_CREATEQUERY * a1)
-{ return D3d9DeviceCall(device).device().create_query(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_query(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyQuery(HANDLE device, const HANDLE a1)
-{ return D3d9DeviceCall(device).device().destroy_query(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_query(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_IssueQuery(HANDLE device, const D3DDDIARG_ISSUEQUERY * a1)
-{ return D3d9DeviceCall(device).device().issue_query(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().issue_query(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GetQueryData(HANDLE device, const D3DDDIARG_GETQUERYDATA * a1)
-{ return D3d9DeviceCall(device).device().get_query_data(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().get_query_data(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetRenderTarget(HANDLE device, const D3DDDIARG_SETRENDERTARGET * a1)
-{ return D3d9DeviceCall(device).device().set_render_target(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_render_target(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetDepthStencil(HANDLE device, const D3DDDIARG_SETDEPTHSTENCIL * a1)
-{ return D3d9DeviceCall(device).device().set_depth_stencil(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_depth_stencil(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GenerateMipSubLevels(HANDLE device, const D3DDDIARG_GENERATEMIPSUBLEVELS * a1)
-{ return D3d9DeviceCall(device).device().generate_mip_sub_levels(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().generate_mip_sub_levels(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShaderConstI(HANDLE device, const D3DDDIARG_SETPIXELSHADERCONSTI * a1, const INT * a2)
-{ return D3d9DeviceCall(device).device().set_pixel_shader_const_i(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader_const_i(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShaderConstB(HANDLE device, const D3DDDIARG_SETPIXELSHADERCONSTB * a1, const BOOL * a2)
-{ return D3d9DeviceCall(device).device().set_pixel_shader_const_b(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader_const_b(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreatePixelShader(HANDLE device, D3DDDIARG_CREATEPIXELSHADER * a1, const UINT * a2)
-{ return D3d9DeviceCall(device).device().create_pixel_shader(a1, a2); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_pixel_shader(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DeletePixelShader(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().delete_pixel_shader(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().delete_pixel_shader(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateDecodeDevice(HANDLE device, D3DDDIARG_CREATEDECODEDEVICE * a1)
-{ return D3d9DeviceCall(device).device().create_decode_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_decode_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyDecodeDevice(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().destroy_decode_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_decode_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetDecodeRenderTarget(HANDLE device, const D3DDDIARG_SETDECODERENDERTARGET * a1)
-{ return D3d9DeviceCall(device).device().set_decode_render_target(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_decode_render_target(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeBeginFrame(HANDLE device, D3DDDIARG_DECODEBEGINFRAME * a1)
-{ return D3d9DeviceCall(device).device().decode_begin_frame(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_begin_frame(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeEndFrame(HANDLE device, D3DDDIARG_DECODEENDFRAME * a1)
-{ return D3d9DeviceCall(device).device().decode_end_frame(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_end_frame(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeExecute(HANDLE device, const D3DDDIARG_DECODEEXECUTE * a1)
-{ return D3d9DeviceCall(device).device().decode_execute(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_execute(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeExtensionExecute(HANDLE device, const D3DDDIARG_DECODEEXTENSIONEXECUTE * a1)
-{ return D3d9DeviceCall(device).device().decode_extension_execute(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_extension_execute(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateVideoProcessDevice(HANDLE device, D3DDDIARG_CREATEVIDEOPROCESSDEVICE * a1)
-{ return D3d9DeviceCall(device).device().create_video_process_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_video_process_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyVideoProcessDevice(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().destroy_video_process_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_video_process_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VideoProcessBeginFrame(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().video_process_begin_frame(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().video_process_begin_frame(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VideoProcessEndFrame(HANDLE device, D3DDDIARG_VIDEOPROCESSENDFRAME * a1)
-{ return D3d9DeviceCall(device).device().video_process_end_frame(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().video_process_end_frame(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVideoProcessRenderTarget(HANDLE device, const D3DDDIARG_SETVIDEOPROCESSRENDERTARGET * a1)
-{ return D3d9DeviceCall(device).device().set_video_process_render_target(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_video_process_render_target(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VideoProcessBlt(HANDLE device, const D3DDDIARG_VIDEOPROCESSBLT * a1)
-{ return D3d9DeviceCall(device).device().video_process_blt(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().video_process_blt(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateExtensionDevice(HANDLE device, D3DDDIARG_CREATEEXTENSIONDEVICE * a1)
-{ return D3d9DeviceCall(device).device().create_extension_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_extension_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyExtensionDevice(HANDLE device, HANDLE a1)
-{ return D3d9DeviceCall(device).device().destroy_extension_device(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_extension_device(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ExtensionExecute(HANDLE device, const D3DDDIARG_EXTENSIONEXECUTE * a1)
-{ return D3d9DeviceCall(device).device().extension_execute(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().extension_execute(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateOverlay(HANDLE device, D3DDDIARG_CREATEOVERLAY * a1)
-{ return D3d9DeviceCall(device).device().create_overlay(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_overlay(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_UpdateOverlay(HANDLE device, const D3DDDIARG_UPDATEOVERLAY * a1)
-{ return D3d9DeviceCall(device).device().update_overlay(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().update_overlay(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_FlipOverlay(HANDLE device, const D3DDDIARG_FLIPOVERLAY * a1)
-{ return D3d9DeviceCall(device).device().flip_overlay(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().flip_overlay(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GetOverlayColorControls(HANDLE device, D3DDDIARG_GETOVERLAYCOLORCONTROLS * a1)
-{ return D3d9DeviceCall(device).device().get_overlay_color_controls(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().get_overlay_color_controls(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetOverlayColorControls(HANDLE device, const D3DDDIARG_SETOVERLAYCOLORCONTROLS * a1)
-{ return D3d9DeviceCall(device).device().set_overlay_color_controls(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_overlay_color_controls(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyOverlay(HANDLE device, const D3DDDIARG_DESTROYOVERLAY * a1)
-{ return D3d9DeviceCall(device).device().destroy_overlay(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_overlay(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyDevice(HANDLE device)
 { return d3d::umd_binding.root().destroy_device9(device); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_QueryResourceResidency(HANDLE device, const D3DDDIARG_QUERYRESOURCERESIDENCY * a1)
-{ return D3d9DeviceCall(device).device().query_resource_residency(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().query_resource_residency(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_OpenResource(HANDLE device, D3DDDIARG_OPENRESOURCE * a1)
-{ return D3d9DeviceCall(device).device().open_resource(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().open_resource(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ResolveSharedResource(HANDLE device, const D3DDDIARG_RESOLVESHAREDRESOURCE * a1)
-{ return D3d9DeviceCall(device).device().resolve_shared_resource(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().resolve_shared_resource(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Discard(HANDLE device, const D3DDDIARG_DISCARD * a1)
-{ return D3d9DeviceCall(device).device().discard(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().discard(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_OfferResources(HANDLE device, const D3DDDIARG_OFFERRESOURCES * a1)
-{ return D3d9DeviceCall(device).device().offer_resources(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().offer_resources(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ReclaimResources(HANDLE device, const D3DDDIARG_RECLAIMRESOURCES * a1)
-{ return D3d9DeviceCall(device).device().reclaim_resources(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().reclaim_resources(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CheckDirectFlipSupport(HANDLE device, D3DDDIARG_CHECKDIRECTFLIPSUPPORT * a1)
-{ return D3d9DeviceCall(device).device().check_direct_flip_support(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().check_direct_flip_support(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CheckMultiPlaneOverlaySupport(HANDLE device, D3DDDIARG_CHECKMULTIPLANEOVERLAYSUPPORT * a1)
-{ return D3d9DeviceCall(device).device().check_multi_plane_overlay_support(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().check_multi_plane_overlay_support(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_PresentMultiPlaneOverlay(HANDLE device, const D3DDDIARG_PRESENTMULTIPLANEOVERLAY * a1)
-{ return D3d9DeviceCall(device).device().present_multi_plane_overlay(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().present_multi_plane_overlay(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CheckPresentDurationSupport(HANDLE device, D3DDDIARG_CHECKPRESENTDURATIONSUPPORT * a1)
-{ return D3d9DeviceCall(device).device().check_present_duration_support(a1); }
+{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().check_present_duration_support(a1); }
 
 }  // namespace
 

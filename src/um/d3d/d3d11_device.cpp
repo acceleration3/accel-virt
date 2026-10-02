@@ -39,7 +39,7 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), shadows_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
-      core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
+      core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), present_flags_(~0u), follow_refused_(false), frame_(1u)
 {
@@ -182,21 +182,12 @@ HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_
 void D3d11Device::lock_calls()
 {
     AV_SCOPE("D3d11Device::lock_calls");
-    const uint32_t self = GetCurrentThreadId();
-    if (__atomic_load_n(&calls_owner_, __ATOMIC_ACQUIRE) == self) {
-        calls_depth_++;
-        return;
-    }
     calls_.acquire();
-    __atomic_store_n(&calls_owner_, self, __ATOMIC_RELEASE);
-    calls_depth_ = 1u;
 }
 
 void D3d11Device::unlock_calls()
 {
     AV_SCOPE("D3d11Device::unlock_calls");
-    if (--calls_depth_ != 0u) return;
-    __atomic_store_n(&calls_owner_, 0u, __ATOMIC_RELEASE);
     calls_.release();
 }
 
