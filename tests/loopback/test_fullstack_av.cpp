@@ -51,7 +51,6 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libgallium\n";
 }
 
-using av::AdapterScenario;
 using av::AdapterSearch;
 using av::FullStackRig;
 using av::GuestReport;

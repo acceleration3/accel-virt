@@ -21,6 +21,7 @@
 #include <cstdint>
 
 using av::AdapterScenario;
+using av::AdapterSearch;
 using av::FakeD3dRuntime;
 using av::PciIdentity;
 using av::Status;

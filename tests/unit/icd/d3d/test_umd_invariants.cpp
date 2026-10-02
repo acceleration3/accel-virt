@@ -29,6 +29,7 @@
 #include <cstring>
 
 using av::AdapterScenario;
+using av::AdapterSearch;
 using av::FakeD3dRuntime;
 using av::MockKmt;
 using av::MockPlatform;

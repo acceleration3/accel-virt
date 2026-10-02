@@ -26,6 +26,7 @@
 #include <cstring>
 
 using av::AdapterScenario;
+using av::AdapterSearch;
 using av::GuestReport;
 using av::MockKmt;
 using av::PciIdentity;

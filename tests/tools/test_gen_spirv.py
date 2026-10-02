@@ -1,4 +1,4 @@
-"""The guest suite's SPIR-V headers are what their GLSL compiles to.
+"""The guest probes' SPIR-V headers are what their GLSL compiles to.
 
 Most tests put a fake glslangValidator on PATH, so what the tool does with a
 module - the header it writes, what --check says - is judged without depending
@@ -16,7 +16,7 @@ import unittest
 from tool_run import ROOT
 
 GEN = ROOT / "tools" / "gen_spirv.py"
-SHADERS = ROOT / "src" / "guest" / "suite" / "shaders"
+SHADERS = ROOT / "src" / "guest" / "probe" / "shaders"
 
 # Words: SPIR-V's magic, a version, the source's length in bytes, then ten
 # counting words, so a module spans more than one line of the header.
