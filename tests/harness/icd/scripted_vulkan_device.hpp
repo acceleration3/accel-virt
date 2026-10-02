@@ -166,7 +166,6 @@ private:
     Memory        memories_[max_memories];
     std::uint8_t  buffer_bytes_[max_image_bytes];
     VkDeviceSize  buffer_size_;
-    bool          buffer_made_;
     bool          device_local_;
     bool          host_visible_;
     bool          any_type_;

@@ -60,7 +60,6 @@ public:
     AvContextOptions last_options();
     AvExecutor      *last_share();
     bool              last_share_live();
-    bool              is_live(AvExecutor *executor);
     /* The Nth create from now answers NULL (either spelling). */
     void          fail_create_at(std::uint32_t nth);
     std::uint32_t created();

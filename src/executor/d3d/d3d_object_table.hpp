@@ -90,6 +90,9 @@ public:
     T                 *find_as(uint32_t id, D3dObjectKind kind) const;
     /* The object `id` names and its kind, whatever it is. */
     IUnknown          *find_any(uint32_t id, D3dObjectKind &kind) const;
+    /* The view `id` names, of whichever of the four view kinds; null for
+     * anything that is not a view. */
+    IUnknown          *find_view(uint32_t id) const;
     /* Puts `object` under `id` in place of what it named, if that was of
      * `kind`, and hands the old reference back; null, with `object` still the
      * caller's, otherwise. */

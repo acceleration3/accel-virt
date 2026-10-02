@@ -107,6 +107,13 @@ IUnknown *D3dObjectTable::find_any(uint32_t id, D3dObjectKind &kind) const
     return slot == capacity ? nullptr : objects_[slot];
 }
 
+IUnknown *D3dObjectTable::find_view(uint32_t id) const
+{
+    AV_SCOPE("D3dObjectTable::find_view");
+    const uint32_t slot = id == 0u ? capacity : slot_of(id);
+    return slot == capacity || !view_kind(kinds_[slot]) ? nullptr : objects_[slot];
+}
+
 IUnknown *D3dObjectTable::exchange(uint32_t id, D3dObjectKind kind, IUnknown *object)
 {
     AV_SCOPE("D3dObjectTable::exchange");

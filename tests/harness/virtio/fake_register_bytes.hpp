@@ -25,7 +25,6 @@ public:
     void          write_u64(std::uint64_t offset, std::uint64_t value) override;
 
     void          set_u32(std::uint64_t offset, std::uint32_t value);
-    void          set_u8(std::uint64_t offset, std::uint8_t value);
     std::uint32_t writes() const;
     std::uint64_t last_write_offset() const;
     std::uint64_t last_write_value() const;

@@ -90,12 +90,6 @@ UINT D3d12HostCaps::format_support(DXGI_FORMAT format) const
     return formats_.format_support(static_cast<uint32_t>(format));
 }
 
-UINT D3d12HostCaps::descriptor_size(uint32_t type) const
-{
-    AV_SCOPE("D3d12HostCaps::descriptor_size");
-    return type < 4u ? caps_.descriptor_sizes[type] : 0u;
-}
-
 uint32_t D3d12HostCaps::pipeline_level() const
 {
     AV_SCOPE("D3d12HostCaps::pipeline_level");

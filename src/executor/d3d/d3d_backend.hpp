@@ -196,7 +196,6 @@ private:
     void rebind_remade();
     bool swap_remade(IUnknown **bound, uint32_t count) const;
     void release_all(IUnknown **held, uint32_t count) const;
-    bool                     is_view(D3dObjectKind kind) const;
     /* A view like `view`, of `kind`, on `texture`; null when the host refuses one. */
     IUnknown                *remake_view(D3dObjectKind kind, IUnknown *view, ID3D11Resource *texture);
     /* The kind of object a shader of `stage` is; none for no stage. */

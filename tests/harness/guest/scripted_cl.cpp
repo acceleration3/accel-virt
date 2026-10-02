@@ -39,7 +39,7 @@ ScriptedCl::ScriptedCl()
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), defers_callbacks_(false), deferred_(nullptr),
       objects_{}, live_(0u), misuses_(0u), exported_handle_(nullptr), exported_words_{},
-      shared_{}, shared_live_(false), shared_argument_(nullptr)
+      shared_{}, shared_live_(false)
 {
     suffixes_[0] = "AV";
 }
@@ -542,7 +542,6 @@ void ScriptedCl::svm_free(void *context, void *pointer)
         return;
     }
     shared_live_ = false;
-    shared_argument_ = nullptr;
     live_--;
 }
 
@@ -554,9 +553,7 @@ std::int32_t ScriptedCl::set_kernel_svm(void *kernel, std::uint32_t index, void 
         misuses_++;
         return refused;
     }
-    if (failed != 0) return failed;
-    shared_argument_ = pointer;
-    return 0;
+    return failed;
 }
 
 void *ScriptedCl::create_user_event(void *context, std::int32_t &error)

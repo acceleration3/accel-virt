@@ -162,7 +162,6 @@ private:
     Shown show_frame(void *dc);
     uint64_t take_pending(uint32_t thread);
     bool     put_pending(uint32_t thread, uint64_t handle);
-    int32_t  format_of_dc(void *dc);
     void     fail(uint32_t error);
     uint32_t made_error(Status status) const;
     uint32_t make_error(Status status, const GlContextOptions &options) const;

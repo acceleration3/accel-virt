@@ -53,7 +53,6 @@ void FakeRegisterBytes::set_u32(std::uint64_t offset, std::uint32_t value)
     for (unsigned i = 0u; i < 4u; i++) bytes_[offset + i] = static_cast<std::uint8_t>(value >> (8u * i));
 }
 
-void FakeRegisterBytes::set_u8(std::uint64_t offset, std::uint8_t value) { bytes_[offset] = value; }
 
 std::uint32_t FakeRegisterBytes::writes() const            { return writes_; }
 std::uint64_t FakeRegisterBytes::last_write_offset() const { return last_write_offset_; }

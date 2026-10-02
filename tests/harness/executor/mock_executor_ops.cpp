@@ -294,7 +294,6 @@ std::uint32_t     MockExecutorOps::option_creates() { Lock lock(lock_); return o
 AvContextOptions MockExecutorOps::last_options() { Lock lock(lock_); return last_options_; }
 AvExecutor      *MockExecutorOps::last_share() { Lock lock(lock_); return last_share_; }
 bool              MockExecutorOps::last_share_live() { Lock lock(lock_); return last_share_live_; }
-bool              MockExecutorOps::is_live(AvExecutor *executor) { return alive(executor); }
 
 /* Whether `handle` is a live executor of this table, asked from any thread:
  * sharing reads another context's executor without calling into it. */

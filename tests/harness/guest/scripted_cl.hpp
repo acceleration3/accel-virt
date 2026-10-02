@@ -272,7 +272,6 @@ private:
     /* The one shared allocation svm_alloc hands out, and who holds it. */
     float         shared_[max_elements];
     bool          shared_live_;
-    void         *shared_argument_;
 };
 
 }  // namespace av

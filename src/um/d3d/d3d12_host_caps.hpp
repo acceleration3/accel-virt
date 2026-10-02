@@ -53,7 +53,6 @@ public:
      * format there is at all, and at more samples a level count its whole cast
      * family shares, or none. */
     UINT    quality_levels(DXGI_FORMAT format, UINT samples) const;
-    UINT    descriptor_size(uint32_t type) const;
 
 private:
     /* The host's level counts past one sample, into the format table. */

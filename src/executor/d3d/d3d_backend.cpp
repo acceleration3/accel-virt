@@ -456,8 +456,8 @@ void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
         const uint32_t slot = objects_.view_slot(view);
         uint32_t      id = 0u;
         D3dObjectKind kind = D3dObjectKind::none;
+        /* The table lists only slots holding a view, so `object` is one. */
         IUnknown *const object = objects_.at(slot, id, kind);
-        if (object == nullptr || !is_view(kind)) continue;
         IUnknown *viewed = objects_.viewed(slot);
         if (viewed == nullptr) {
             ID3D11Resource *resource = nullptr;
@@ -548,13 +548,6 @@ void D3dBackend::release_all(IUnknown **held, uint32_t count) const
     AV_SCOPE("D3dBackend::release_all");
     for (uint32_t slot = 0u; slot < count; slot++)
         if (held[slot] != nullptr) held[slot]->Release();
-}
-
-bool D3dBackend::is_view(D3dObjectKind kind) const
-{
-    AV_SCOPE("D3dBackend::is_view");
-    return kind == D3dObjectKind::shader_resource_view || kind == D3dObjectKind::render_target_view ||
-           kind == D3dObjectKind::depth_stencil_view || kind == D3dObjectKind::unordered_access_view;
 }
 
 IUnknown *D3dBackend::remake_view(D3dObjectKind kind, IUnknown *view, ID3D11Resource *texture)
@@ -1471,11 +1464,8 @@ bool D3dBackend::on_ClearView(uint32_t view, const d3dproto::Float4 &color, uint
                               const d3dproto::Rect *rects)
 {
     AV_SCOPE("D3dBackend::on_ClearView");
-    D3dObjectKind kind = D3dObjectKind::none;
-    IUnknown *const found = objects_.find_any(view, kind);
-    const bool is_view = kind == D3dObjectKind::render_target_view || kind == D3dObjectKind::unordered_access_view ||
-                         kind == D3dObjectKind::shader_resource_view || kind == D3dObjectKind::depth_stencil_view;
-    if (!ready() || !is_view) return false;
+    IUnknown *const found = objects_.find_view(view);
+    if (!ready() || found == nullptr) return false;
     D3D11_RECT bound[16] = {};
     for (uint32_t index = 0u; index < rect_count; index++)
         bound[index] = D3D11_RECT{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
@@ -1494,9 +1484,7 @@ bool D3dBackend::on_Discard(uint32_t id, uint32_t rect_count, const d3dproto::Re
         device11_->context()->DiscardResource(static_cast<ID3D11Resource *>(static_cast<void *>(found)));
         return true;
     }
-    const bool is_view = kind == D3dObjectKind::render_target_view || kind == D3dObjectKind::unordered_access_view ||
-                         kind == D3dObjectKind::shader_resource_view || kind == D3dObjectKind::depth_stencil_view;
-    if (!is_view) return false;
+    if (objects_.find_view(id) == nullptr) return false;
     D3D11_RECT bound[16] = {};
     for (uint32_t index = 0u; index < rect_count; index++)
         bound[index] = D3D11_RECT{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};

@@ -139,7 +139,7 @@ const Named entries[] = {
 
 ScriptedVulkanDevice::ScriptedVulkanDevice()
     : outer_(bound), refusal_{nullptr, 0u, VK_SUCCESS}, calls_(0u), images_{}, memories_{}, buffer_bytes_{}, buffer_size_(0u),
-      buffer_made_(false), device_local_(true), host_visible_(true), any_type_(true), overcount_(false), stall_(false), pool_made_(false),
+      device_local_(true), host_visible_(true), any_type_(true), overcount_(false), stall_(false), pool_made_(false),
       fence_made_(false), recording_(false), image_count_(0u), memory_count_(0u), mappings_(0u), pools_(0u), fences_(0u),
       submits_(0u), wait_count_(0u), wait_(VK_NULL_HANDLE), family_(0u), barriers_{}, barrier_count_(0u), copies_{},
       copy_count_(0u), image_copies_{}, image_copy_count_(0u)
@@ -303,12 +303,11 @@ VkResult ScriptedVulkanDevice::make_buffer(const VkBufferCreateInfo *info, VkBuf
     if (refused != VK_SUCCESS) return refused;
     if (info->size > max_image_bytes) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     buffer_size_ = info->size;
-    buffer_made_ = true;
     *buffer = reinterpret_cast<VkBuffer>(&buffer_size_);
     return VK_SUCCESS;
 }
 
-void ScriptedVulkanDevice::destroy_buffer(VkBuffer) { buffer_made_ = false; }
+void ScriptedVulkanDevice::destroy_buffer(VkBuffer) {}
 
 VkResult ScriptedVulkanDevice::map(VkDeviceMemory, void **view)
 {

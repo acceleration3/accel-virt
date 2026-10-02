@@ -84,6 +84,19 @@ TEST(d3d_object_table_find_any, answers_the_object_and_its_kind_or_none)
   CHECK(kind == D3dObjectKind::none);
   table.clear(); }
 
+TEST(d3d_object_table_find_view, answers_each_view_kind_and_nothing_else)
+{ D3dObjectTable &table = fresh_table();
+  Counted         views[4], buffer;
+  const D3dObjectKind kinds[4] = {D3dObjectKind::shader_resource_view, D3dObjectKind::render_target_view,
+                                  D3dObjectKind::depth_stencil_view, D3dObjectKind::unordered_access_view};
+  for (std::uint32_t index = 0u; index < 4u; index++) CHECK(table.insert(index + 1u, kinds[index], &views[index]));
+  CHECK(table.insert(9u, D3dObjectKind::resource, &buffer));
+  for (std::uint32_t index = 0u; index < 4u; index++) CHECK(table.find_view(index + 1u) == &views[index]);
+  CHECK(table.find_view(9u) == nullptr);
+  CHECK(table.find_view(10u) == nullptr);
+  CHECK(table.find_view(0u) == nullptr);
+  table.clear(); }
+
 TEST(d3d_object_table_remove, gives_the_reference_back_and_a_probe_carries_on_past_the_hole)
 { D3dObjectTable &table = fresh_table();
   /* A removal leaves a tombstone, so every id placed past the removed one's
