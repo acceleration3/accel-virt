@@ -7,9 +7,9 @@
 #ifndef AV_FAKE_MODE_SET_HPP
 #define AV_FAKE_MODE_SET_HPP
 
-#include "core/ddi/d3dkmdt_monitor_source_mode_record.hpp"
-#include "core/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
-#include "core/ddi/d3dkmdt_vidpn_target_mode_record.hpp"
+#include "miniport/ddi/d3dkmdt_monitor_source_mode_record.hpp"
+#include "miniport/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
+#include "miniport/ddi/d3dkmdt_vidpn_target_mode_record.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>

@@ -3,7 +3,7 @@
 #ifndef AV_ADDRESS_SPACE_FIXTURE_HPP
 #define AV_ADDRESS_SPACE_FIXTURE_HPP
 
-#include "core/memory/gpu_virtual_address_space.hpp"
+#include "miniport/memory/gpu_virtual_address_space.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>

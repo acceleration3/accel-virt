@@ -112,7 +112,7 @@ class ScopeMarks(unittest.TestCase):
                     'extern "C" {\nint AvOther(int x)\n{ return x; }\n}\n\n'
                     "constexpr int twice(int x)\n{\n    return 2 * x;\n}\n\n"
                     "struct Plain {\n    Plain() = default;\n    Plain(const Plain &) = delete;\n    int n_;\n};\n")
-        self.tree.write("src/core/ddi/entry.cpp", original)
+        self.tree.write("src/miniport/ddi/entry.cpp", original)
         self.tree.write("src/core/trace/table.cpp", "struct Table {\n    void f();\n    int n_;\n};\n"
                                                     "void Table::f()\n{\n}\n")
         self.tree.write("src/proto/generated/vulkan/wrap.cpp", "struct G {\n    void f();\n    int n_;\n};\n"
@@ -122,8 +122,8 @@ class ScopeMarks(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.apply().returncode, 0)
-        self.assertEqual(self.read("src/core/ddi/entry.cpp"), original)
-        self.tree.write("src/core/ddi/entry.cpp", INCLUDE + "\n" + original.replace(
+        self.assertEqual(self.read("src/miniport/ddi/entry.cpp"), original)
+        self.tree.write("src/miniport/ddi/entry.cpp", INCLUDE + "\n" + original.replace(
             "constexpr int twice(int x)\n{\n", 'constexpr int twice(int x)\n{\n    AV_SCOPE("twice");\n'))
         result = self.check()
         self.assertEqual(result.returncode, 1)

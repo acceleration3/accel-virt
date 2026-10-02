@@ -1,9 +1,9 @@
 #include "harness/device/mapped_virtio_function.hpp"
 
-#include "core/ddi/dxgk_device_info_record.hpp"
-#include "core/pci/pci_base_addresses.hpp"
-#include "core/pci/resource_list.hpp"
-#include "core/virtio/virtio_capability_walk.hpp"
+#include "miniport/ddi/dxgk_device_info_record.hpp"
+#include "miniport/pci/pci_base_addresses.hpp"
+#include "miniport/pci/resource_list.hpp"
+#include "miniport/virtio/virtio_capability_walk.hpp"
 
 namespace av {
 

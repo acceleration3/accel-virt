@@ -5,7 +5,7 @@
 #ifndef AV_FAKE_DXGMONITOR_HPP
 #define AV_FAKE_DXGMONITOR_HPP
 
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>

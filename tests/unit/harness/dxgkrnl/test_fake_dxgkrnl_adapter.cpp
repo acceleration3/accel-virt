@@ -1,11 +1,11 @@
 /* The harness is trusted by every adapter test, so it is tested against the
  * core classes that consume it. */
-#include "core/miniport/dxgkrnl_interface.hpp"
-#include "core/pci/mapped_register_window.hpp"
-#include "core/pci/pci_base_addresses.hpp"
-#include "core/pci/resource_list.hpp"
-#include "core/virtio/virtio_capability_walk.hpp"
-#include "core/virtio/virtio_pci_layout.hpp"
+#include "miniport/driver/dxgkrnl_interface.hpp"
+#include "miniport/pci/mapped_register_window.hpp"
+#include "miniport/pci/pci_base_addresses.hpp"
+#include "miniport/pci/resource_list.hpp"
+#include "miniport/virtio/virtio_capability_walk.hpp"
+#include "miniport/virtio/virtio_pci_layout.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/framework/test_registry.hpp"

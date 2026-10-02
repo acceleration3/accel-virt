@@ -3,7 +3,7 @@
  * as private data; a command sent async lands a batch in the ring and a
  * submission on the context; a synchronous command reads back the answer the
  * device wrote to the reply slot (the test plays the device). */
-#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
 #include "guest/transport/guest_connection.hpp"

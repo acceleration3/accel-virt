@@ -3,10 +3,10 @@
 #ifndef AV_MAPPED_VIRTIO_FUNCTION_HPP
 #define AV_MAPPED_VIRTIO_FUNCTION_HPP
 
-#include "core/miniport/dxgkrnl_interface.hpp"
-#include "core/pci/bar_mappings.hpp"
+#include "miniport/driver/dxgkrnl_interface.hpp"
+#include "miniport/pci/bar_mappings.hpp"
 #include "core/support/status.hpp"
-#include "core/virtio/virtio_pci_layout.hpp"
+#include "miniport/virtio/virtio_pci_layout.hpp"
 #include "harness/device/fake_common_config.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"

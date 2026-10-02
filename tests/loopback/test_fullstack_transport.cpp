@@ -5,8 +5,8 @@
  * control queue the real device core answers; a submission rings the doorbell
  * page the core's worker waits on, and the fence interrupt it raises reaches
  * the driver's ISR and DPC, whose DMA_COMPLETED is what the wait sees. */
-#include "core/miniport/ddi_slot.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_slot.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
 #include "guest/kmt/memory_segment_group.hpp"

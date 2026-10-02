@@ -1,12 +1,12 @@
 /* L4: the guest core's av objects against the device core in one process.
  * Requests travel as bytes, doorbell stores ring the device's worker, and the
  * test serves each fence interrupt as the driver's DPC would. */
-#include "core/av/capset_query.hpp"
-#include "core/av/device_identity.hpp"
-#include "core/av/context_memory.hpp"
+#include "miniport/av_context/capset_query.hpp"
+#include "miniport/av_context/device_identity.hpp"
+#include "miniport/av_context/context_memory.hpp"
 #include "proto/resources/guest_page_list.hpp"
-#include "core/av/context_pages.hpp"
-#include "core/av/guest_context.hpp"
+#include "miniport/av_context/context_pages.hpp"
+#include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/module/driver_status.hpp"
 #include "harness/executor/mock_executor_ops.hpp"

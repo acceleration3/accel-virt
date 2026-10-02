@@ -5,7 +5,7 @@
 #include <ntddk.h>
 #include <dispmprt.h>
 
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_table.hpp"
 
 static_assert(sizeof(av::DdiTable) == sizeof(DRIVER_INITIALIZATION_DATA),
               "DdiTable size differs from DRIVER_INITIALIZATION_DATA");

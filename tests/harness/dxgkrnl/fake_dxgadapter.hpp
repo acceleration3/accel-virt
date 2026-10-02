@@ -10,11 +10,11 @@
 #ifndef AV_FAKE_DXGADAPTER_HPP
 #define AV_FAKE_DXGADAPTER_HPP
 
-#include "core/ddi/dxgk_driver_caps_record.hpp"
-#include "core/ddi/dxgk_node_metadata_record.hpp"
-#include "core/ddi/dxgk_physical_adapter_caps_record.hpp"
-#include "core/ddi/dxgkarg_control_mode_behavior_record.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/ddi/dxgk_driver_caps_record.hpp"
+#include "miniport/ddi/dxgk_node_metadata_record.hpp"
+#include "miniport/ddi/dxgk_physical_adapter_caps_record.hpp"
+#include "miniport/ddi/dxgkarg_control_mode_behavior_record.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
 #include "harness/platform/mock_platform.hpp"
 

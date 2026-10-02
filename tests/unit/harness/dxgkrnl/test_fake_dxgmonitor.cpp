@@ -1,8 +1,8 @@
 /* The harness's monitor link information handling, proven against crafted
  * answers so a driver claiming more than dxgkrnl trusts is caught. */
-#include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
-#include "core/miniport/ddi_slot.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/ddi/dxgkarg_update_monitor_link_info_record.hpp"
+#include "miniport/driver/ddi_slot.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/fake_dxgmonitor.hpp"
 #include "harness/framework/test_registry.hpp"

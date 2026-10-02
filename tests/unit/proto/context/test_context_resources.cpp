@@ -1,6 +1,6 @@
 /* A context's resource ids, as the driver names them and the device reads them
  * back: three transport resources, then 64 chunk slots, and nothing else. */
-#include "core/av/av_context_binding.hpp"
+#include "miniport/av_context/av_context_binding.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/context_resources.hpp"
 

@@ -2,7 +2,7 @@
  * accepted says exactly what the bytes at the documented offsets say, every
  * enabled scanout has a rectangle a display could have, and a refused answer
  * leaves the last accepted one untouched. */
-#include "core/display/display_info_response.hpp"
+#include "miniport/display/display_info_response.hpp"
 #include "core/support/status.hpp"
 
 #include <cstddef>

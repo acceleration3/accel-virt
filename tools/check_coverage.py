@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate for constitution Principle IV.1: 100% branch coverage of src/core,
+"""Gate for constitution Principle IV.1: 100% branch coverage of src/core, src/miniport,
 src/device, src/proto, src/guest and src/icd - headers included - and an
 AV_UNTESTABLE mark count
 that only moves down.
@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 
-SOURCE_DIRECTORIES = ("src/core/", "src/device/", "src/proto/", "src/guest/", "src/icd/")
+SOURCE_DIRECTORIES = ("src/core/", "src/miniport/", "src/device/", "src/proto/", "src/guest/", "src/icd/")
 # The same rule the design gate keeps, by the same name: what a generator wrote
 # is held to the compiler and to check_generated.py, not to a branch count no
 # test could reach across thousands of registry commands (feature 063).

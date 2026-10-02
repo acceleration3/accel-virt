@@ -6,8 +6,8 @@
 #ifndef AV_REGISTERED_DRIVER_HPP
 #define AV_REGISTERED_DRIVER_HPP
 
-#include "core/miniport/ddi_table.hpp"
-#include "core/miniport/driver_image.hpp"
+#include "miniport/driver/ddi_table.hpp"
+#include "miniport/driver/driver_image.hpp"
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl.hpp"
 #include "harness/platform/mock_platform.hpp"

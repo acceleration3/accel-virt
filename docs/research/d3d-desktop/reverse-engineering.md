@@ -164,7 +164,7 @@ if (b94 && !c01 && !pfnMPO1 && !pfnMPO2) b94 = 0;
 `GetMultiPlaneOverlayCaps` reports MaxPlanes=1 unless `IsMultiPlaneOverlaySupported()` (b94) and the caps DDI both
 hold. **Inferred:** VIDSCH_GLOBAL[0x9c] (MPO3 in dxgmms2) mirrors adapter[0xc01].
 
-**Consequence for avgpu.** The driver registers only MPO1 (slot 81, `src/core/miniport/miniport.cpp:91`). The MPO1
+**Consequence for avgpu.** The driver registers only MPO1 (slot 81, `src/miniport/driver/miniport.cpp:91`). The MPO1
 DDI must:
 - always return STATUS_SUCCESS;
 - treat a disabled plane (or PlaneCount 0) as "turn the plane off / keep the last frame";

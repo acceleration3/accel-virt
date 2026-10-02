@@ -1,11 +1,11 @@
 /* The harness's DXGADAPTER::Initialize model, proven against crafted answers so
  * a later feature that claims a capability without its DDIs fails for the
  * reason dxgkrnl would give. */
-#include "core/ddi/dxgk_driver_caps_record.hpp"
-#include "core/ddi/dxgkarg_control_mode_behavior_record.hpp"
-#include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
-#include "core/miniport/ddi_slot.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/ddi/dxgk_driver_caps_record.hpp"
+#include "miniport/ddi/dxgkarg_control_mode_behavior_record.hpp"
+#include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "miniport/driver/ddi_slot.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
 #include "harness/dxgkrnl/fake_dxgadapter.hpp"

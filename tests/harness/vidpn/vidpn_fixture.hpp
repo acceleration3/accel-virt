@@ -4,7 +4,7 @@
 #ifndef AV_VIDPN_FIXTURE_HPP
 #define AV_VIDPN_FIXTURE_HPP
 
-#include "core/miniport/dxgkrnl_interface.hpp"
+#include "miniport/driver/dxgkrnl_interface.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/platform/mock_platform.hpp"

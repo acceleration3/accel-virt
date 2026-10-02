@@ -1,10 +1,10 @@
 /* The harness's VidMm segment model, proven against crafted answers, then
  * against the driver's own through the registered table. */
-#include "core/ddi/dxgk_query_segment_out4_record.hpp"
-#include "core/ddi/dxgk_segment_descriptor4_record.hpp"
-#include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
-#include "core/miniport/ddi_slot.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/ddi/dxgk_query_segment_out4_record.hpp"
+#include "miniport/ddi/dxgk_segment_descriptor4_record.hpp"
+#include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "miniport/driver/ddi_slot.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/fake_dxgadapter.hpp"
 #include "harness/framework/test_registry.hpp"

@@ -1,18 +1,18 @@
 #include "harness/vidsch/fake_vidsch.hpp"
 
-#include "core/scheduling/hw_queue_submissions.hpp"
+#include "miniport/scheduling/hw_queue_submissions.hpp"
 
-#include "core/ddi/dxgkarg_present_record.hpp"
+#include "miniport/ddi/dxgkarg_present_record.hpp"
 
-#include "core/ddi/dxgkarg_create_context_record.hpp"
-#include "core/ddi/dxgkarg_create_device_record.hpp"
-#include "core/ddi/dxgkarg_patch_record.hpp"
-#include "core/ddi/dxgkarg_preempt_command_record.hpp"
-#include "core/ddi/dxgkarg_query_current_fence_record.hpp"
-#include "core/ddi/dxgkarg_render_record.hpp"
-#include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
-#include "core/ddi/dxgkarg_submit_command_record.hpp"
-#include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
+#include "miniport/ddi/dxgkarg_create_context_record.hpp"
+#include "miniport/ddi/dxgkarg_create_device_record.hpp"
+#include "miniport/ddi/dxgkarg_patch_record.hpp"
+#include "miniport/ddi/dxgkarg_preempt_command_record.hpp"
+#include "miniport/ddi/dxgkarg_query_current_fence_record.hpp"
+#include "miniport/ddi/dxgkarg_render_record.hpp"
+#include "miniport/ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "miniport/ddi/dxgkarg_submit_command_record.hpp"
+#include "miniport/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstring>

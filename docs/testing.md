@@ -408,7 +408,7 @@ This runs natively on Linux because the table is core's `DdiTable`, a mirror of
 proves, per slot, that its layout is byte-for-byte the WDK's
 (`src/km/ddi_table_layout.cpp`, generated), so the table the harness drives is
 the table `dxgkrnl` reads. The structures the DDIs exchange are DDI records in
-`src/core/ddi/` whose every field offset `src/km/ddi_record_layout.cpp` proves
+`src/miniport/ddi/` whose every field offset `src/km/ddi_record_layout.cpp` proves
 the same way.
 
 **The scenarios are derived from reverse engineering, not from guesswork.**

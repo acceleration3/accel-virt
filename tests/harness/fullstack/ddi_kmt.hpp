@@ -17,10 +17,10 @@
 #ifndef AV_DDI_KMT_HPP
 #define AV_DDI_KMT_HPP
 
-#include "core/miniport/ddi_slot.hpp"
+#include "miniport/driver/ddi_slot.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
-#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 #include "harness/fullstack/doorbell_fabric.hpp"
 #include "harness/fullstack/node_fences.hpp"
 

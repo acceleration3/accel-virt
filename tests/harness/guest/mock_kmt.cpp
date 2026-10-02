@@ -1,6 +1,6 @@
 #include "harness/guest/mock_kmt.hpp"
 
-#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 
 #include "core/support/nt_status.hpp"
 #include "proto/context/av_context_record.hpp"

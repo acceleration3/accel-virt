@@ -9,7 +9,7 @@
 #ifndef AV_NODE_FENCES_HPP
 #define AV_NODE_FENCES_HPP
 
-#include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
+#include "miniport/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 #include "core/support/status.hpp"
 
 #include <cstdint>

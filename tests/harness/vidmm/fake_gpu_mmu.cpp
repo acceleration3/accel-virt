@@ -1,7 +1,7 @@
 #include "harness/vidmm/fake_gpu_mmu.hpp"
 
-#include "core/ddi/dxgk_node_metadata_record.hpp"
-#include "core/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
+#include "miniport/ddi/dxgk_node_metadata_record.hpp"
+#include "miniport/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 
 namespace av {
 

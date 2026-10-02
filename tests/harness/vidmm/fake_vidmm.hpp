@@ -6,8 +6,8 @@
 #ifndef AV_FAKE_VIDMM_HPP
 #define AV_FAKE_VIDMM_HPP
 
-#include "core/ddi/dxgk_query_segment_out4_record.hpp"
-#include "core/ddi/dxgk_segment_descriptor4_record.hpp"
+#include "miniport/ddi/dxgk_query_segment_out4_record.hpp"
+#include "miniport/ddi/dxgk_segment_descriptor4_record.hpp"
 #include "harness/dxgkrnl/fake_dxgadapter.hpp"
 #include "harness/vidmm/segment_rule.hpp"
 

@@ -1,7 +1,7 @@
 #include "harness/vidsch/fake_hw_queue.hpp"
 
-#include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
-#include "core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
+#include "miniport/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "miniport/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "harness/framework/test_registry.hpp"
 
 namespace av {

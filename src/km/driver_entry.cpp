@@ -1,6 +1,6 @@
 #include <ntddk.h>
 
-#include "core/miniport/driver_image.hpp"
+#include "miniport/driver/driver_image.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/image_range.hpp"
 #include "km/kernel_platform.hpp"

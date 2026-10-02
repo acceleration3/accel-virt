@@ -113,7 +113,7 @@ A feature counts as complete for "pick the work" when it is merged into
 **Design (constitution III, `CLAUDE.md`).** Everything is a class that owns
 state. No static member functions. No stateless class used as a namespace. No
 free functions outside the two ABI boundaries — the `DxgkDdi*` entry points in
-`src/core/ddi/` and `extern "C"` entry points — and each of those is one line
+`src/miniport/ddi/` and `extern "C"` entry points — and each of those is one line
 with no logic. The only process-lifetime state is `MiniportBinding`'s pointer
 and the shim's static storage for the root; placement new only in
 `ObjectStorage` and `ObjectPool`. If functions thread the same handle, buffer or platform through their
@@ -140,8 +140,8 @@ tools/gate.sh            # the full verdict: the above, plus coverage_gate
 `tools/check_symbol_tests.py` (public API no test names) run inside `ctest`;
 run either directly for a faster answer.
 
-`src/core/memory/gpu_virtual_address_space.cpp` with
-`tests/unit/core/memory/test_gpu_virtual_address_space.cpp` is the worked example of the
+`src/miniport/memory/gpu_virtual_address_space.cpp` with
+`tests/unit/miniport/memory/test_gpu_virtual_address_space.cpp` is the worked example of the
 standard. Match it.
 
 **Two more things that are easy to get wrong:**

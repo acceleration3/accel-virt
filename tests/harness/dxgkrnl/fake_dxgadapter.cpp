@@ -1,6 +1,6 @@
 #include "harness/dxgkrnl/fake_dxgadapter.hpp"
 
-#include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstring>

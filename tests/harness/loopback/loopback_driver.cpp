@@ -1,7 +1,7 @@
 #include "harness/loopback/loopback_driver.hpp"
 
-#include "core/av/capset_query.hpp"
-#include "core/av/guest_context.hpp"
+#include "miniport/av_context/capset_query.hpp"
+#include "miniport/av_context/guest_context.hpp"
 #include "harness/loopback/loopback_device.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"

@@ -1,6 +1,6 @@
 #include "icd/common/frame_pacer.hpp"
 
-#include "core/display/display_mode.hpp"
+#include "miniport/display/display_mode.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"

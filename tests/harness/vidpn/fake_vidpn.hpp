@@ -11,7 +11,7 @@
 #ifndef AV_FAKE_VIDPN_HPP
 #define AV_FAKE_VIDPN_HPP
 
-#include "core/ddi/dxgk_vidpn_interface_records.hpp"
+#include "miniport/ddi/dxgk_vidpn_interface_records.hpp"
 #include "harness/vidpn/fake_mode_set.hpp"
 #include "harness/vidpn/vidpn_call.hpp"
 

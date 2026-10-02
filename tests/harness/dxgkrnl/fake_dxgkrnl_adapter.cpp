@@ -1,8 +1,8 @@
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 
-#include "core/ddi/dxgk_child_status_record.hpp"
+#include "miniport/ddi/dxgk_child_status_record.hpp"
 
-#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
+#include "miniport/ddi/dxgkargcb_query_feature_support_record.hpp"
 
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/framework/test_registry.hpp"

@@ -347,7 +347,7 @@ the UMD, which is what makes option 2 reachable.
 The desktop's own presents are a separate matter: dxgkrnl writes them as DMA
 buffers for the miniport's node, and this driver's `ExecutionNode` completes
 anything that is not an av context as a loopback, so nothing ever executed the
-blits. `PresentBlit` (`src/core/present/`) now moves those pixels in the
+blits. `PresentBlit` (`src/miniport/present/`) now moves those pixels in the
 miniport, between allocations whose guest pages the aperture mapping recorded,
 and `adapter/0 present_rows` in a state dump says how many rows it moved.
 

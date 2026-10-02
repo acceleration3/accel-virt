@@ -264,7 +264,7 @@ GPUs, which nothing does yet.
 
 | Class | Kind | Where | State | Responsibility |
 |---|---|---|---|---|
-| `HostImageScanout` | object | `src/core/display/` | the key shown and whether a frame waits | shows a keyed primary through `SET_SCANOUT_IMAGE` |
+| `HostImageScanout` | object | `src/miniport/display/` | the key shown and whether a frame waits | shows a keyed primary through `SET_SCANOUT_IMAGE` |
 | `ImageScanout` | system | `src/device/display/` | each head's key and its surface | keeps each head's console surface showing its image |
 | `D3dHostImages` | system | `src/device/executor/` | a staging texture per size | reads a keyed image into memory the device gives |
 | `DeviceRemoval` | object | `src/device/executor/` | removed reason per device | says which device a refused command removed |

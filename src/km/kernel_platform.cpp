@@ -17,7 +17,7 @@ extern "C" {
 #include <initguid.h>
 #include <devpkey.h>
 
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/platform/mutex.hpp"
 #include "core/platform/wait_mutex.hpp"
 #include "core/support/scope_exit.hpp"

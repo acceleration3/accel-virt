@@ -14,7 +14,7 @@
 #ifndef AV_GUEST_DOORBELL_HPP
 #define AV_GUEST_DOORBELL_HPP
 
-#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
 #include "guest/kmt/guest_hw_queue.hpp"
 

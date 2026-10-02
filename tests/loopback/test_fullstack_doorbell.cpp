@@ -10,7 +10,7 @@
  * instead - once, at the tail the process already published, which is what
  * makes "no record executed twice and none lost" a property and not a hope.
  */
-#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"

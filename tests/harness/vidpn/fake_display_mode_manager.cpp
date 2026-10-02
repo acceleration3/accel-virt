@@ -1,14 +1,14 @@
 #include "harness/vidpn/fake_display_mode_manager.hpp"
 
-#include "core/ddi/dxgk_device_descriptor_record.hpp"
-#include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
-#include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
-#include "core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
-#include "core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
-#include "core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
-#include "core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
-#include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
-#include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
+#include "miniport/ddi/dxgk_device_descriptor_record.hpp"
+#include "miniport/ddi/dxgkarg_commit_vidpn_record.hpp"
+#include "miniport/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "miniport/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "miniport/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
+#include "miniport/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
+#include "miniport/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
+#include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 
 namespace av {
 

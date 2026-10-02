@@ -1,9 +1,9 @@
 #include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
 
-#include "core/ddi/dxgk_child_descriptor_record.hpp"
-#include "core/ddi/dxgk_child_status_record.hpp"
-#include "core/ddi/dxgk_device_descriptor_record.hpp"
-#include "core/ddi/linked_device_record.hpp"
+#include "miniport/ddi/dxgk_child_descriptor_record.hpp"
+#include "miniport/ddi/dxgk_child_status_record.hpp"
+#include "miniport/ddi/dxgk_device_descriptor_record.hpp"
+#include "miniport/ddi/linked_device_record.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstring>

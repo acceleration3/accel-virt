@@ -2,12 +2,12 @@
  * buffers exactly as large as the sizes they claim (a larger claim is a
  * dxgkrnl contract breach nothing can detect). Whatever is refused, nothing
  * may be written outside the DMA buffer or the output patch list. */
-#include "core/ddi/d3dddi_patch_location_list_record.hpp"
-#include "core/ddi/dxgk_allocation_list_record.hpp"
-#include "core/ddi/dxgkarg_patch_record.hpp"
-#include "core/ddi/dxgkarg_render_record.hpp"
-#include "core/scheduling/patch_request.hpp"
-#include "core/scheduling/render_request.hpp"
+#include "miniport/ddi/d3dddi_patch_location_list_record.hpp"
+#include "miniport/ddi/dxgk_allocation_list_record.hpp"
+#include "miniport/ddi/dxgkarg_patch_record.hpp"
+#include "miniport/ddi/dxgkarg_render_record.hpp"
+#include "miniport/scheduling/patch_request.hpp"
+#include "miniport/scheduling/render_request.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/wire/wire_reader.hpp"
 

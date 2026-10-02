@@ -7,7 +7,7 @@
 #ifndef AV_BASE_VIRTIO_GPU_HPP
 #define AV_BASE_VIRTIO_GPU_HPP
 
-#include "core/display/display_info_response.hpp"
+#include "miniport/display/display_info_response.hpp"
 
 #include <cstdint>
 

@@ -637,7 +637,7 @@ SCANOUT_WAIT_SECONDS = 30.0
 """Long enough for the DPC that follows a commit to have run."""
 OFFERED_MODES = ["1024x768", "1280x800"]
 """The modes this run works with, both of which
-src/core/display/display_mode_list.cpp offers for a 1280x800 display.
+src/miniport/display/display_mode_list.cpp offers for a 1280x800 display.
 EnumDisplaySettings is not the driver's list - Windows adds sizes of its own
 above the display (1920x1200, 2560x1600) and drops some of the driver's
 (1280x720) - so the run asserts that these two are offered, not that the list

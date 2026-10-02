@@ -7,8 +7,8 @@
 #ifndef AV_FAKE_DXGKRNL_ADAPTER_HPP
 #define AV_FAKE_DXGKRNL_ADAPTER_HPP
 
-#include "core/ddi/dxgk_device_info_record.hpp"
-#include "core/ddi/dxgkrnl_interface_record.hpp"
+#include "miniport/ddi/dxgk_device_info_record.hpp"
+#include "miniport/ddi/dxgkrnl_interface_record.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/platform/mock_platform.hpp"
 

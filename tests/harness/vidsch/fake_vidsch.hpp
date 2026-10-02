@@ -8,11 +8,11 @@
 #ifndef AV_FAKE_VIDSCH_HPP
 #define AV_FAKE_VIDSCH_HPP
 
-#include "core/ddi/d3dddi_patch_location_list_record.hpp"
-#include "core/ddi/dxgk_allocation_list_record.hpp"
-#include "core/ddi/dxgk_present_allocation_info_record.hpp"
-#include "core/ddi/rect_record.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/ddi/d3dddi_patch_location_list_record.hpp"
+#include "miniport/ddi/dxgk_allocation_list_record.hpp"
+#include "miniport/ddi/dxgk_present_allocation_info_record.hpp"
+#include "miniport/ddi/rect_record.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/platform/mock_platform.hpp"
 

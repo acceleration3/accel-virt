@@ -164,7 +164,7 @@ copied the table.
 ## As built: the driver
 
 - `DriverImage<KernelPlatform, KernelTraceHost>::enter` starts `DriverTrace`
-  (`src/core/miniport/`) right after the platform and before the miniport, so
+  (`src/miniport/driver/`) right after the platform and before the miniport, so
   every DDI's scopes land in the table: 64 slots in `allocate_contiguous`
   memory, bound for `AV_SCOPE`, and the line
   `avgpu: trace table at physical 0x<16 hex digits> bytes 52832` logged. The

@@ -4,7 +4,7 @@
 #ifndef AV_DDI_TABLE_PROBE_HPP
 #define AV_DDI_TABLE_PROBE_HPP
 
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_table.hpp"
 
 #include <cstdint>
 

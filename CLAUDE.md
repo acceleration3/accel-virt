@@ -25,7 +25,7 @@ inject its dependencies at construction. `Alignment` owns an alignment,
 take what they own as a parameter.
 
 The two exceptions are ABI boundaries that C requires, and they are one line
-each: the `DxgkDdi*` entry points in `src/core/ddi/`, which forward to the
+each: the `DxgkDdi*` entry points in `src/miniport/ddi/`, which forward to the
 adapter behind the context pointer (or, for AddDevice and Unload, the root
 registered in `MiniportBinding`), and the `extern "C"` entry points that
 libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer,
@@ -55,10 +55,10 @@ a collection and is injected where it is needed - `GpuVirtualAddressSpace`,
 `Scheduler`, `PagingEngine`, `DisplayEngine`, `TimeoutDetector`. Both hold
 state. A class with no members is a mistake being written down.
 
-**Files.** Each class lives in the semantic folder for its area (`src/core/memory/`,
-`src/core/display/`, ... - README.md lists them), and its test mirrors that path under
+**Files.** Each class lives in the semantic folder for its area (`src/miniport/memory/`,
+`src/miniport/display/`, ... - README.md lists them), and its test mirrors that path under
 `tests/unit/`. Includes name the path from `src/` or `tests/` -
-`"core/display/edid.hpp"`, `"harness/vidsch/fake_vidsch.hpp"` - never a relative
+`"miniport/display/edid.hpp"`, `"harness/vidsch/fake_vidsch.hpp"` - never a relative
 one. One class per header, named after the class in snake_case; nested and
 private helper types stay with their owner. A header declares, it does not
 define - no function bodies inside a class declaration, not one-line getters,
@@ -177,7 +177,7 @@ Changed, because the DDI boundary is C structures:
 
 - **Private data members** do not apply to DDI records: the structs named
   `*Record` in a DDI record directory, which overlay memory their caller owns.
-  `src/core/ddi/` holds dxgkrnl's (`DXGKRNL_INTERFACE`,
+  `src/miniport/ddi/` holds dxgkrnl's (`DXGKRNL_INTERFACE`,
   `DXGK_CHILD_DESCRIPTOR`, ...), proven in `src/km/ddi_record_layout.cpp`;
   `src/icd/d3d/ddi/` holds the Direct3D runtimes'
   (`D3D10DDIARG_OPENADAPTER`, `DXGI1_6_1_DDI_BASE_FUNCTIONS`, ...), proven in

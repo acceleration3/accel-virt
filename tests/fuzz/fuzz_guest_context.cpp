@@ -8,8 +8,8 @@
  * next request with the bytes, 1 writes the ring's head, 2 writes the fence
  * page, 3 submits the next batch of `count` bytes, 4 serves, 5 answers OK. */
 #include "core/platform/platform.hpp"
-#include "core/av/context_memory.hpp"
-#include "core/av/guest_context.hpp"
+#include "miniport/av_context/context_memory.hpp"
+#include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/device/fake_doorbell_pages.hpp"
 #include "harness/platform/mock_platform.hpp"

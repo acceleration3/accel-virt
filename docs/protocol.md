@@ -1039,7 +1039,7 @@ driver starts from nothing. A context the guest wants to stop without a fault
 
 ## The driver's sequence
 
-The order a guest driver follows (`src/core/av/`), checked end to end against
+The order a guest driver follows (`src/miniport/av_context/`), checked end to end against
 the device core by the loopback suite (`tests/loopback/`):
 
 1. **Capset.** `GET_CAPSET_INFO` for index 0, then `GET_CAPSET` for the id and

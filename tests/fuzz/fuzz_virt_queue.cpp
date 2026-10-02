@@ -3,8 +3,8 @@
  * driver's shadow: invariants hold, free descriptors never exceed the size,
  * and a harvested head was always one the driver published. */
 #include "core/support/status.hpp"
-#include "core/virtio/virt_queue.hpp"
-#include "core/virtio/virtq_segment.hpp"
+#include "miniport/virtio/virt_queue.hpp"
+#include "miniport/virtio/virtq_segment.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/wire/wire_reader.hpp"

@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-SOURCE_DIRECTORIES = ("src/core", "src/device", "src/proto", "src/guest", "src/icd")
+SOURCE_DIRECTORIES = ("src/core", "src/miniport", "src/device", "src/proto", "src/guest", "src/icd")
 # What a generator wrote is not this project's design and is not judged as such:
 # the registries decide its shape, `tools/check_generated.py` decides that it is
 # what the generator would write, and the compiler judges it like any other
@@ -48,7 +48,7 @@ STATIC_METHOD_RE = re.compile(r"^\s*static\s+(?!constexpr\b|inline\s+constexpr\b
 MEMBER_RE = re.compile(r"^\s*(?:mutable\s+)?[\w:<>,\s\[\]]+[\s*&]+(\w+_)\s*(?:\[[^\]]*\])*\s*(?:=[^;]*)?;")
 ACCESS_RE = re.compile(r"^\s*(private|protected|public)\s*:")
 PURE_RE = re.compile(r"=\s*0\s*;")
-RECORD_DIRECTORIES = ("src/core/ddi/", "src/icd/d3d/ddi/")
+RECORD_DIRECTORIES = ("src/miniport/ddi/", "src/icd/d3d/ddi/")
 RECORD_FIELD_RE = re.compile(r"^\s*[\w:]+(?:\s*\*+\s*|\s+)[A-Za-z_]\w*(?:\[\w+\])?\s*;")
 
 

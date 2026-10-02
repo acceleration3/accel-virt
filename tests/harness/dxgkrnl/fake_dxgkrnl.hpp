@@ -7,8 +7,8 @@
 #ifndef AV_FAKE_DXGKRNL_HPP
 #define AV_FAKE_DXGKRNL_HPP
 
-#include "core/miniport/ddi_slot.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_slot.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/registration_rule.hpp"
 

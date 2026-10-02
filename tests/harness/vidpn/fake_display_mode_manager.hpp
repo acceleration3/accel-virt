@@ -7,9 +7,9 @@
 #ifndef AV_FAKE_DISPLAY_MODE_MANAGER_HPP
 #define AV_FAKE_DISPLAY_MODE_MANAGER_HPP
 
-#include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
-#include "core/ddi/dxgkarg_get_scan_line_record.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/ddi/d3dkmdt_vidpn_present_path_record.hpp"
+#include "miniport/ddi/dxgkarg_get_scan_line_record.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
 

@@ -6,8 +6,8 @@
 #ifndef AV_FAKE_GPU_MMU_HPP
 #define AV_FAKE_GPU_MMU_HPP
 
-#include "core/ddi/dxgk_gpu_mmu_caps_record.hpp"
-#include "core/ddi/dxgk_page_table_level_desc_record.hpp"
+#include "miniport/ddi/dxgk_gpu_mmu_caps_record.hpp"
+#include "miniport/ddi/dxgk_page_table_level_desc_record.hpp"
 #include "harness/dxgkrnl/fake_dxgadapter.hpp"
 #include "harness/vidmm/gpu_mmu_rule.hpp"
 

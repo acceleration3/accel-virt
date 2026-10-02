@@ -11,8 +11,8 @@
 #ifndef AV_FAKE_HANDLE_TABLE_HPP
 #define AV_FAKE_HANDLE_TABLE_HPP
 
-#include "core/ddi/dxgkargcb_get_handle_data_record.hpp"
-#include "core/ddi/dxgkargcb_release_handle_data_record.hpp"
+#include "miniport/ddi/dxgkargcb_get_handle_data_record.hpp"
+#include "miniport/ddi/dxgkargcb_release_handle_data_record.hpp"
 
 #include <cstdint>
 

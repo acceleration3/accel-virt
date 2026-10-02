@@ -47,7 +47,7 @@ Dependencies are injected at construction, never reached for. Nothing consults
 a global, a singleton, or file-scope state.
 
 The only exceptions are the ABI boundaries C requires, and each is one line
-with no logic: the `DxgkDdi*` entry points in `src/core/ddi/`, which forward to
+with no logic: the `DxgkDdi*` entry points in `src/miniport/ddi/`, which forward to
 the adapter behind the context pointer, and the `extern "C"` entry points QEMU
 and libFuzzer call. The DDI entry points live in core, over mirror types whose
 layout `src/km` proves against the WDK, so the L2 harness drives the same entry

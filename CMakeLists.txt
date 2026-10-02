@@ -55,9 +55,9 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 
 # ---- portable code: no platform headers, compiled into every target --------
 # src/device and src/proto join the same gates the moment they hold a source.
-# Includes name a path from src/ ("core/display/edid.hpp"), from any file.
+# Includes name a path from src/ ("miniport/display/edid.hpp"), from any file.
 file(GLOB_RECURSE AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
-  src/core/*.cpp src/proto/*.cpp src/device/*.cpp src/guest/*.cpp)
+  src/core/*.cpp src/miniport/*.cpp src/proto/*.cpp src/device/*.cpp src/guest/*.cpp)
 
 # What the generators wrote is committed, but it includes the API's own header,
 # and that arrives with tools/fetch_khronos_registries.py. A clean checkout

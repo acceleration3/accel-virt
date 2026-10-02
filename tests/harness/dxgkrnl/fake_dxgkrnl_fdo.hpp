@@ -5,7 +5,7 @@
 #ifndef AV_FAKE_DXGKRNL_FDO_HPP
 #define AV_FAKE_DXGKRNL_FDO_HPP
 
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "harness/dxgkrnl/fake_dxgadapter.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/platform/mock_platform.hpp"

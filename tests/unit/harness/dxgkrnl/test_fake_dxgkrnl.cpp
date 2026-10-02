@@ -1,5 +1,5 @@
-#include "core/miniport/ddi_slot.hpp"
-#include "core/miniport/ddi_table.hpp"
+#include "miniport/driver/ddi_slot.hpp"
+#include "miniport/driver/ddi_table.hpp"
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/ddi_table_probe.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl.hpp"

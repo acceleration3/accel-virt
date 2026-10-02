@@ -1,6 +1,6 @@
 #include "harness/fullstack/registered_driver.hpp"
 
-#include "core/miniport/ddi_slot.hpp"
+#include "miniport/driver/ddi_slot.hpp"
 
 namespace av {
 

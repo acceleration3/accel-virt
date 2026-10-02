@@ -1,6 +1,6 @@
 #include "harness/dxgkrnl/fake_dxgmonitor.hpp"
 
-#include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
+#include "miniport/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 
 namespace av {
 

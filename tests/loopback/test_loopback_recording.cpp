@@ -2,7 +2,7 @@
  * guest core, writes down what crossed the wire. The recording is read back
  * with the same format classes the device wrote it with; what the reader and
  * the tools make of a recording is their own suites' business. */
-#include "core/av/guest_context.hpp"
+#include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/recording/record_header.hpp"
 #include "device/recording/record_kind.hpp"

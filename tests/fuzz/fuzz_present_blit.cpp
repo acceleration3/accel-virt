@@ -4,10 +4,10 @@
  * every one of them is hostile. Whatever is refused, nothing may be written
  * outside the destination's own pages, no page may be left mapped, and no IRQL
  * rule may break. */
-#include "core/ddi/rect_record.hpp"
-#include "core/present/mapped_pixels.hpp"
-#include "core/present/present_blit.hpp"
-#include "core/present/present_surface.hpp"
+#include "miniport/ddi/rect_record.hpp"
+#include "miniport/present/mapped_pixels.hpp"
+#include "miniport/present/present_blit.hpp"
+#include "miniport/present/present_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/commands/rectangle.hpp"
 #include "proto/resources/guest_page_list.hpp"
