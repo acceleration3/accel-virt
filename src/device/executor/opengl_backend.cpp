@@ -107,13 +107,17 @@ bool OpenGlBackend::granted_fixed_function()
 void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
-    /* What this context imported is deleted while the context is still open:
-     * after the close there is nothing left to delete it with. */
+    /* What this context imported, and every GLsync it made, is deleted while
+     * the context is still open: after the close there is nothing left to
+     * delete it with, and a sync of a context sharing objects with another
+     * would outlive this one. */
     uint32_t kind = 0u;
     uint32_t name = 0u;
     while (objects_.take_any(kind, name)) destroy_made(kind, name);
     import_.give_back();
-    fences_.forget_all();
+    void *fence = nullptr;
+    while (fences_.take_any(fence))
+        if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
     region_.give_back();
     context_.close();
     gl_ = glproto::RealGl{};

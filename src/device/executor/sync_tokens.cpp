@@ -45,10 +45,16 @@ void SyncTokens::forget(uint64_t token)
     }
 }
 
-void SyncTokens::forget_all()
+bool SyncTokens::take_any(void *&fence)
 {
-    AV_SCOPE("SyncTokens::forget_all");
-    count_ = 0u;
+    AV_SCOPE("SyncTokens::take_any");
+    fence = nullptr;
+    if (count_ == 0u) return false;
+    count_--;
+    fence = fences_[count_];
+    tokens_[count_] = 0u;
+    fences_[count_] = nullptr;
+    return true;
 }
 
 uint32_t SyncTokens::count() const

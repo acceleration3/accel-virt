@@ -31,7 +31,10 @@ public:
     void              *fence_for(uint64_t token) const;
     /* Drops a binding. Nothing for a token nobody bound. */
     void               forget(uint64_t token);
-    void               forget_all();
+    /* Any binding, dropped, with the fence it named: how a closing context
+     * deletes each GLsync while it still has a context to delete it with.
+     * False once none is left. */
+    [[nodiscard]] bool take_any(void *&fence);
 
     uint32_t count() const;
 

@@ -58,9 +58,30 @@ TEST(sync_tokens, forgetting_one_leaves_the_rest)
   CHECK(tokens.fence_for(2u) == &second);
   tokens.forget(9u);
   CHECK_EQ(tokens.count(), 1u);
-  tokens.forget_all();
-  CHECK_EQ(tokens.count(), 0u);
   CHECK(tokens.invariants_hold()); }
+
+/* A closing context takes every binding back with its fence, each once, so
+ * it can delete them while it still has a context to delete them with. */
+TEST(sync_tokens, take_any_gives_every_fence_back_once)
+{ SyncTokens tokens;
+  CHECK(tokens.bind(1u, &first));
+  CHECK(tokens.bind(2u, &second));
+  void *fence = nullptr;
+  bool  seen_first = false, seen_second = false;
+  std::uint32_t taken = 0u;
+  while (tokens.take_any(fence)) {
+      seen_first = seen_first || fence == &first;
+      seen_second = seen_second || fence == &second;
+      taken++;
+      CHECK(tokens.invariants_hold());
+  }
+  CHECK_EQ(taken, 2u);
+  CHECK(seen_first && seen_second);
+  CHECK(fence == nullptr);
+  CHECK_EQ(tokens.count(), 0u);
+  CHECK(tokens.fence_for(1u) == nullptr);
+  /* Emptied, it binds again. */
+  CHECK(tokens.bind(1u, &first)); }
 
 /* A guest that never deletes a fence has to be bounded somewhere. */
 TEST(sync_tokens, a_guest_that_never_deletes_is_refused_not_served)
