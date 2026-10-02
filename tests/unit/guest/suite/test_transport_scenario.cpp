@@ -6,7 +6,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/transport_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -27,8 +27,8 @@ using av::TransportScenario;
 
 namespace {
 
-const PciIdentity av_gpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity av_gpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 /* Microsoft Basic Render, enumerated before av as it is in a real guest. */
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 constexpr std::uint32_t unsuccessful = 0xC0000001u;

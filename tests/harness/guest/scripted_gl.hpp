@@ -8,7 +8,7 @@
 #ifndef AV_SCRIPTED_GL_HPP
 #define AV_SCRIPTED_GL_HPP
 
-#include "guest/suite/gl_entry.hpp"
+#include "guest/probe/gl_entry.hpp"
 
 #include <cstdint>
 

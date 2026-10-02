@@ -8,7 +8,7 @@
  * nothing here to judge, and the test returns without checking. */
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
-#include "guest/suite/gl_probe.hpp"
+#include "guest/probe/gl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "harness/guest/directory_image_sink.hpp"
 #include "harness/executor/executor_library_file.hpp"

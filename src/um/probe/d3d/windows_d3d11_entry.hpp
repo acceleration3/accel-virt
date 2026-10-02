@@ -2,11 +2,11 @@
  * the guest is DXVK's: one device, one swap chain on the probe's window, one
  * render target view of its back buffer and one staging texture to read it
  * back through. Translation only - what the probe decides is in
- * src/guest/suite/d3d11_work.cpp. */
+ * src/guest/probe/d3d11_work.cpp. */
 #ifndef AV_WINDOWS_D3D11_ENTRY_HPP
 #define AV_WINDOWS_D3D11_ENTRY_HPP
 
-#include "guest/suite/d3d11_entry.hpp"
+#include "guest/probe/d3d11_entry.hpp"
 
 #include <d3d11.h>
 

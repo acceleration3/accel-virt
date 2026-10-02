@@ -131,7 +131,6 @@ file(GLOB_RECURSE AVVK_SOURCES CONFIGURE_DEPENDS
 list(REMOVE_ITEM AVVK_SOURCES ${AVTEST_GENERATED})
 list(APPEND AVVK_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_icd_entries.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatch_client.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
@@ -189,7 +188,6 @@ file(GLOB_RECURSE AVGL_SOURCES CONFIGURE_DEPENDS
 list(REMOVE_ITEM AVGL_SOURCES ${AVTEST_GENERATED})
 list(APPEND AVGL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
 add_library(avgl SHARED ${AVGL_SOURCES} ${AV_STACK_PROBE})
@@ -228,7 +226,6 @@ list(REMOVE_ITEM AVCL_SOURCES ${AVTEST_GENERATED}
   ${CMAKE_CURRENT_SOURCE_DIR}/icd/gdi_window_surface.cpp)
 list(APPEND AVCL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
   ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
 add_library(avcl SHARED ${AVCL_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(avcl avtest_imports)
@@ -438,8 +435,7 @@ list(APPEND AVUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d/d3d_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d9/d3d9_dispatch_client.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp)
 add_library(avumd SHARED ${AVUMD_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(avumd avtest_imports)
 set_target_properties(avumd PROPERTIES PREFIX "")

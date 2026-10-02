@@ -26,18 +26,18 @@ EXCLUDE = {
                                     "exercised through every transport test",
     "src/guest/kmt/kmt.hpp": "the D3DKMT contract, implemented by src/um over gdi32 and by MockKmt "
                              "in tests/harness, and exercised through every guest suite test",
-    "src/guest/suite/vulkan_entry.hpp": "the Vulkan the probe calls, implemented by LoaderVulkan and by "
+    "src/guest/probe/vulkan_entry.hpp": "the Vulkan the probe calls, implemented by LoaderVulkan and by "
                              "ScriptedVulkan in tests/harness, and exercised through every probe test",
-    "src/guest/suite/gl_entry.hpp": "the WGL and GL the GL probe calls, implemented by the system opengl32 in "
+    "src/guest/probe/gl_entry.hpp": "the WGL and GL the GL probe calls, implemented by the system opengl32 in "
                              "src/um, by Opengl32GlEntry over FakeOpengl32 and by ScriptedGl in tests/harness, "
                              "and exercised through every GL probe test",
-    "src/guest/suite/d3d11_entry.hpp": "the Direct3D 11 the D3D probe calls, implemented by "
+    "src/guest/probe/d3d11_entry.hpp": "the Direct3D 11 the D3D probe calls, implemented by "
                              "WindowsD3d11Entry over DXVK's d3d11.dll in src/um and by ScriptedD3d11 in "
                              "tests/harness, and exercised through every D3d11Work test",
-    "src/guest/suite/d3d12_entry.hpp": "the Direct3D 12 the D3D probe calls, implemented by "
+    "src/guest/probe/d3d12_entry.hpp": "the Direct3D 12 the D3D probe calls, implemented by "
                              "WindowsD3d12Entry over vkd3d-proton's d3d12.dll in src/um and by ScriptedD3d12 "
                              "in tests/harness, and exercised through every D3d12Work test",
-    "src/guest/suite/d3d9_entry.hpp": "the Direct3D 9 the D3D probe calls, implemented by "
+    "src/guest/probe/d3d9_entry.hpp": "the Direct3D 9 the D3D probe calls, implemented by "
                              "WindowsD3d9Entry over DXVK's d3d9.dll in src/um and by ScriptedD3d9 in "
                              "tests/harness, and exercised through every D3d9Work test",
     "src/executor/session_backend.hpp": "what a session requires of a host API, implemented "

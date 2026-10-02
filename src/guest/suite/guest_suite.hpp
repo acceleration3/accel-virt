@@ -4,7 +4,7 @@
 #define AV_GUEST_SUITE_HPP
 
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/allocation_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"

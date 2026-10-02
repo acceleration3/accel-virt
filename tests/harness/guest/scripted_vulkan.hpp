@@ -10,7 +10,7 @@
 #ifndef AV_SCRIPTED_VULKAN_HPP
 #define AV_SCRIPTED_VULKAN_HPP
 
-#include "guest/suite/vulkan_entry.hpp"
+#include "guest/probe/vulkan_entry.hpp"
 
 #include <cstdint>
 

@@ -16,7 +16,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/host_channel.hpp"

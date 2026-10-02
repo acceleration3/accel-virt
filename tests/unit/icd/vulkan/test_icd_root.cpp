@@ -6,6 +6,7 @@
  * Invariants after every call that changes the root. */
 #include "core/support/status.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -493,8 +494,8 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::ScriptedWindowChains chains;
       IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows, chains);
       if (!refusal.no_adapter) {
-          kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                          av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
+          kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
+                                          av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
                           av::AdapterScenario::wddm_3_2);
       }
       if (refusal.no_luid) kmt.fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);

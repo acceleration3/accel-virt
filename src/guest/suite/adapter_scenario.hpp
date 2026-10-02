@@ -15,9 +15,6 @@ class Kmt;
 
 class AdapterScenario {
 public:
-    static constexpr uint32_t virtio_vendor = 0x1AF4u;
-    static constexpr uint32_t virtio_gpu_device = 0x1050u;
-    static constexpr uint32_t av_subsystem = 0x5256u;
     static constexpr uint32_t wddm_3_2 = 3200u;
 
     AdapterScenario(Kmt &kmt, GuestReport &report, AdapterSearch &search);

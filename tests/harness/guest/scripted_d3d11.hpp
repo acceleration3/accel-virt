@@ -6,7 +6,7 @@
 #ifndef AV_SCRIPTED_D3D11_HPP
 #define AV_SCRIPTED_D3D11_HPP
 
-#include "guest/suite/d3d11_entry.hpp"
+#include "guest/probe/d3d11_entry.hpp"
 
 #include <cstdint>
 

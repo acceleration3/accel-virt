@@ -8,6 +8,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "core/support/object_storage.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/host_window_chunk.hpp"
@@ -84,8 +85,8 @@ using av::icd::HostChannelProbe;
 
 namespace {
 
-const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 /* The avgpu adapter is the second one added. */
 constexpr std::uint32_t avgpu_index = 1u;

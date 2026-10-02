@@ -1,7 +1,7 @@
 #include "core/support/status.hpp"
 #include "guest/inspect/escape_reader.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_kernel_trace.hpp"
@@ -42,8 +42,8 @@ struct Rig {
     Rig()
     {
         kmt.add_adapter(av::PciIdentity(0x10DEu, 0x2684u, 0x10DEu, 0x0001u), 1u);
-        kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                        av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
+        kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
+                                        av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         for (std::size_t byte = 0u; byte < sizeof data; byte++) data[byte] = static_cast<std::uint8_t>(byte * 7u + 1u);

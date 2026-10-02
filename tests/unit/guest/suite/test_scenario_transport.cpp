@@ -5,7 +5,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
@@ -34,8 +34,8 @@ namespace {
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-const PciIdentity av_gpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity av_gpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 
 }  // namespace
 

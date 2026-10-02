@@ -4,7 +4,7 @@
 #ifndef AV_SCRIPTED_D3D12_HPP
 #define AV_SCRIPTED_D3D12_HPP
 
-#include "guest/suite/d3d12_entry.hpp"
+#include "guest/probe/d3d12_entry.hpp"
 
 #include <cstdint>
 

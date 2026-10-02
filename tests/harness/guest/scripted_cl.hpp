@@ -12,7 +12,7 @@
 #define AV_SCRIPTED_CL_HPP
 
 #include "core/support/runtime_call.hpp"
-#include "guest/suite/cl_entry.hpp"
+#include "guest/probe/cl_entry.hpp"
 
 #include <cstddef>
 #include <cstdint>

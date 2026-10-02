@@ -8,7 +8,7 @@
 #ifndef AV_OPENGL32_GL_ENTRY_HPP
 #define AV_OPENGL32_GL_ENTRY_HPP
 
-#include "guest/suite/gl_entry.hpp"
+#include "guest/probe/gl_entry.hpp"
 
 #include <cstdint>
 

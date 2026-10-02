@@ -5,7 +5,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
@@ -48,8 +48,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 constexpr std::int32_t vk_error_incompatible_driver = -9;
 
 class Rig {

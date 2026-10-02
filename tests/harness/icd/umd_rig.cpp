@@ -2,14 +2,15 @@
 
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "icd/d3d/umd_binding.hpp"
 
 namespace av {
 
 namespace {
 
-const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 
 }  // namespace
 

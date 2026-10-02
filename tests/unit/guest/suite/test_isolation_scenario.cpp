@@ -8,7 +8,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/isolation_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -33,8 +33,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 /* What D3DKMT answers a wait on a device that was removed. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 /* The healthy context's three waits, then the faulted command's. */

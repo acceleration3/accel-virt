@@ -6,7 +6,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/scenario_transport.hpp"
@@ -36,8 +36,8 @@ using namespace av::clproto;
 
 namespace {
 
-const PciIdentity av(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                      AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 constexpr std::uint32_t elements = OpenClScenario::elements;
 /* The commands a whole run sends before its first release. */

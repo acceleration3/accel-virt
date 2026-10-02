@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compile the guest suite's GLSL into SPIR-V headers, or check the committed ones.
+"""Compile the guest probes' GLSL into SPIR-V headers, or check the committed ones.
 
-Every *.comp, *.vert and *.frag in src/guest/suite/shaders/ is compiled with
+Every *.comp, *.vert and *.frag in src/guest/probe/shaders/ is compiled with
 `glslangValidator -V` into <name>_spv.hpp beside it: the module as a constexpr
 uint32_t array and its word count, in namespace av. The guest suite is
 freestanding and pushed alone into a guest, so the module is compiled in.
@@ -21,7 +21,7 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEFAULT_SHADERS = ROOT / "src" / "guest" / "suite" / "shaders"
+DEFAULT_SHADERS = ROOT / "src" / "guest" / "probe" / "shaders"
 STAGES = (".comp", ".vert", ".frag")
 HEADER_SUFFIX = "_spv.hpp"
 COMPILER = "glslangValidator"

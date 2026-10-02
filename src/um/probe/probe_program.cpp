@@ -1,9 +1,9 @@
 #include "um/probe/probe_program.hpp"
 
-#include "guest/suite/shared_object_probe.hpp"
+#include "guest/probe/shared_object_probe.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "guest/suite/vulkan_probe.hpp"
+#include "guest/probe/vulkan_probe.hpp"
 #include "um/probe/cl/windows_cl_entry.hpp"
 
 #include <windows.h>

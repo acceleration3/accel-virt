@@ -3,7 +3,7 @@
 #ifndef AV_SCRIPTED_IMAGE_SINK_HPP
 #define AV_SCRIPTED_IMAGE_SINK_HPP
 
-#include "guest/suite/image_sink.hpp"
+#include "guest/probe/image_sink.hpp"
 
 #include <cstddef>
 #include <cstdint>

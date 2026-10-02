@@ -8,8 +8,8 @@
  * Vulkan has nothing here to judge, and the test returns without checking. */
 #include "device/abi/av_executor.h"
 #include "guest/suite/guest_report.hpp"
-#include "guest/suite/loader_vulkan.hpp"
-#include "guest/suite/vulkan_probe.hpp"
+#include "guest/probe/loader_vulkan.hpp"
+#include "guest/probe/vulkan_probe.hpp"
 #include "harness/guest/directory_image_sink.hpp"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"

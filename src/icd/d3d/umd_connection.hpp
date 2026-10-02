@@ -14,7 +14,7 @@
 #define AV_D3D_UMD_CONNECTION_HPP
 
 #include "core/support/status.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 
 #include <stdint.h>
 

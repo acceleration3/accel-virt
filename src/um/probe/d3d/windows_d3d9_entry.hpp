@@ -5,7 +5,7 @@
 #ifndef AV_WINDOWS_D3D9_ENTRY_HPP
 #define AV_WINDOWS_D3D9_ENTRY_HPP
 
-#include "guest/suite/d3d9_entry.hpp"
+#include "guest/probe/d3d9_entry.hpp"
 
 #include <d3d9.h>
 

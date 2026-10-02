@@ -5,7 +5,7 @@
 #ifndef AV_SURFACE_WINDOW_FRAME_HPP
 #define AV_SURFACE_WINDOW_FRAME_HPP
 
-#include "guest/suite/window_frame.hpp"
+#include "guest/probe/window_frame.hpp"
 
 #include <cstdint>
 

@@ -5,6 +5,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "icd/common/frame_pacer.hpp"
 
 #include <cstdint>
@@ -18,8 +19,8 @@ namespace {
 const char *const unpaced = "avvk: FIFO present unpaced";
 
 av::PciIdentity av_identity()
-{ return av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                         av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem); }
+{ return av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
+                         av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem); }
 
 /* An adapter and a D3DKMT device on it, as the ICD's connection holds. */
 class PacerRig {

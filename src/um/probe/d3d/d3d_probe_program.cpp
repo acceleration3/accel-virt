@@ -1,9 +1,9 @@
 #include "um/probe/d3d/d3d_probe_program.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "guest/suite/d3d11_work.hpp"
-#include "guest/suite/d3d12_work.hpp"
-#include "guest/suite/d3d9_work.hpp"
+#include "guest/probe/d3d11_work.hpp"
+#include "guest/probe/d3d12_work.hpp"
+#include "guest/probe/d3d9_work.hpp"
 #include "guest/suite/scenario_steps.hpp"
 
 #include <windows.h>

@@ -5,7 +5,7 @@
 #ifndef AV_WINDOWS_D3D12_ENTRY_HPP
 #define AV_WINDOWS_D3D12_ENTRY_HPP
 
-#include "guest/suite/d3d12_entry.hpp"
+#include "guest/probe/d3d12_entry.hpp"
 
 #include <d3d12.h>
 #include <dxgi1_4.h>

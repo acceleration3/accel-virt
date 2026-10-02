@@ -11,7 +11,7 @@
 #include "um/probe/probe_window.hpp"
 #include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
-#include "guest/suite/loader_vulkan.hpp"
+#include "guest/probe/loader_vulkan.hpp"
 #include "um/gdi_kmt.hpp"
 
 #include <stdint.h>

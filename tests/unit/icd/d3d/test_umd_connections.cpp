@@ -3,6 +3,7 @@
  * them opens each. */
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "icd/d3d/umd_connection.hpp"
@@ -21,8 +22,8 @@ using av::d3d::UmdConnections;
 
 namespace {
 
-const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
 
 constexpr std::uint64_t first_luid = 0x0000000200001234ull;
 constexpr std::uint64_t second_luid = 0x0000000300005678ull;

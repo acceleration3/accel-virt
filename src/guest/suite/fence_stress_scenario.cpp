@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/client_descriptor.hpp"
 #include "guest/suite/guest_session.hpp"
 

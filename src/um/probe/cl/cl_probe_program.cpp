@@ -2,7 +2,7 @@
 
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
-#include "guest/suite/cl_probe.hpp"
+#include "guest/probe/cl_probe.hpp"
 
 #include <windows.h>
 

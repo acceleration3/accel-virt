@@ -909,7 +909,7 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opencl.release\r\n"
                  "avclprobe: 26 passed, 0 failed\r\n")
     """What avclprobe.exe prints when every step of feature 052 passed, in the
-    probe's own order (src/guest/suite/cl_probe.cpp)."""
+    probe's own order (src/guest/probe/cl_probe.cpp)."""
 
     def opencl_loader(self, pinned=True, missing=()):
         """A fetched OpenCL loader source tree and the pins it was fetched by, as

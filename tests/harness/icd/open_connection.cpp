@@ -3,6 +3,7 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "harness/framework/test_registry.hpp"
 
 namespace av {
@@ -10,8 +11,8 @@ namespace av {
 OpenConnection::OpenConnection()
     : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_)
 {
-    kmt_.add_adapter(PciIdentity(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                                 AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem),
+    kmt_.add_adapter(PciIdentity(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                                 AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem),
                      AdapterScenario::wddm_3_2);
     CHECK_STATUS(connection_.open(), Status::ok);
 }

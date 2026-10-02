@@ -6,7 +6,7 @@
 #ifndef AV_UM_WINDOWS_GL_ENTRY_HPP
 #define AV_UM_WINDOWS_GL_ENTRY_HPP
 
-#include "guest/suite/gl_entry.hpp"
+#include "guest/probe/gl_entry.hpp"
 
 #include <stdint.h>
 

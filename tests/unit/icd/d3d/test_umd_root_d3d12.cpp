@@ -7,6 +7,7 @@
  * reaches it naming the D3D12 adapter it was asked on. */
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
 #include "harness/icd/recording_host_driver.hpp"
@@ -71,8 +72,8 @@ TEST(umd_root_d3d12, a_create_adopts_the_block_and_hands_the_device_to_the_host_
  * GPU, under keys the first's kernel adapter already gave out. */
 TEST(umd_root_d3d12, a_device_is_built_on_the_kernel_adapter_its_runtime_opened)
 { constexpr std::uint64_t second_luid = 0x0000000300005678ull;
-  const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                           AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+  const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
+                           AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
   RecordingHostDriver host;
   UmdRig rig(&host);
   rig.kmt().add_adapter(avgpu, AdapterScenario::wddm_3_2);

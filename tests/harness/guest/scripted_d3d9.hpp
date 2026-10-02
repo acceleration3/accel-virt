@@ -4,7 +4,7 @@
 #ifndef AV_SCRIPTED_D3D9_HPP
 #define AV_SCRIPTED_D3D9_HPP
 
-#include "guest/suite/d3d9_entry.hpp"
+#include "guest/probe/d3d9_entry.hpp"
 
 #include <cstdint>
 

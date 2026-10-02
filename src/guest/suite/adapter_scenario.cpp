@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 
 namespace av {
 

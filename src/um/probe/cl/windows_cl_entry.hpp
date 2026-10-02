@@ -8,7 +8,7 @@
 #define AV_UM_WINDOWS_CL_ENTRY_HPP
 
 #include "core/support/runtime_call.hpp"
-#include "guest/suite/cl_entry.hpp"
+#include "guest/probe/cl_entry.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

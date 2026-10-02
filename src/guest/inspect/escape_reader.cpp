@@ -3,7 +3,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/suite/adapter_search.hpp"
+#include "guest/kmt/adapter_search.hpp"
 
 namespace av {
 

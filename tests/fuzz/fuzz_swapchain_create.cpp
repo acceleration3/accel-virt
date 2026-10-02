@@ -11,6 +11,7 @@
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "icd/vulkan/surface_properties.hpp"
 #include "icd/vulkan/swapchain.hpp"
 
@@ -49,8 +50,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::ScriptedWindowSurface windows;
     void *const               window = reinterpret_cast<void *>(0x10u);
     windows.add_dc(reinterpret_cast<void *>(0x20u), window, width, height);
-    kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
-                                    av::AdapterScenario::virtio_vendor, av::AdapterScenario::av_subsystem),
+    kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
+                                    av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
                     av::AdapterScenario::wddm_3_2);
     std::uint32_t adapters[2] = {};
     std::uint32_t found = 0u;
