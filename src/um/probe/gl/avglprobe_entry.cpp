@@ -1,6 +1,4 @@
-/* avglprobe.exe's entry points: the process entry lld-link is told about,
- * and what the MSVC ABI references with no C runtime to define it, as for
- * avtest.exe (program_entry.cpp). `--discovery` runs T008's experiment
+/* avglprobe.exe's process entry, which lld-link is told about. `--discovery` runs T008's experiment
  * (GlDiscoveryProbe); anything else runs the proof (GlProbeProgram). With no
  * C runtime there is no argv: the word is looked for in the command line. */
 #include "core/trace/function_scope.hpp"
@@ -25,7 +23,3 @@ extern "C" void avglprobe_entry()
 {
     ExitProcess(avglprobe_discovery(GetCommandLineW()) ? av::GlDiscoveryProbe().run() : av::GlProbeProgram().run());
 }
-
-extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-
-extern "C" [[gnu::used]] int _fltused = 0;

@@ -53,6 +53,13 @@ else()
   set(AV_STACK_PROBE ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
 endif()
 
+# What the MSVC ABI references with no C runtime: the programs take it from
+# avguest, which globs it; each DLL names it. Native code, not bitcode: the
+# references to it are made by LTO's own code generation, after which the
+# linker can no longer pull a bitcode member out of an archive.
+set(AV_CRT_STUBS ${CMAKE_CURRENT_SOURCE_DIR}/crt_stubs.cpp)
+set_source_files_properties(${AV_CRT_STUBS} PROPERTIES COMPILE_OPTIONS -fno-lto)
+
 # Import libraries naming exactly what the programs call; the SDK's own are
 # not in the kit. vulkan-1 is the Khronos loader, which only the probe calls.
 set(AVTEST_IMPORTS "")
@@ -140,7 +147,7 @@ list(APPEND AVVK_SOURCES
 # The probe's module-level assembly is Intel syntax that LTO's IR assembler
 # reads as AT&T: it stays an ordinary object.
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp PROPERTIES COMPILE_OPTIONS -fno-lto)
-add_library(avvk SHARED ${AVVK_SOURCES} ${AV_STACK_PROBE})
+add_library(avvk SHARED ${AVVK_SOURCES} ${AV_STACK_PROBE} ${AV_CRT_STUBS})
 add_dependencies(avvk avtest_imports)
 set_target_properties(avvk PROPERTIES PREFIX "")
 target_include_directories(avvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -191,7 +198,7 @@ list(APPEND AVGL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
-add_library(avgl SHARED ${AVGL_SOURCES} ${AV_STACK_PROBE})
+add_library(avgl SHARED ${AVGL_SOURCES} ${AV_STACK_PROBE} ${AV_CRT_STUBS})
 add_dependencies(avgl avtest_imports avglprobe_imports)
 set_target_properties(avgl PROPERTIES PREFIX "")
 target_include_directories(avgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -228,7 +235,7 @@ list(REMOVE_ITEM AVCL_SOURCES ${AVTEST_GENERATED}
 list(APPEND AVCL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
-add_library(avcl SHARED ${AVCL_SOURCES} ${AV_STACK_PROBE})
+add_library(avcl SHARED ${AVCL_SOURCES} ${AV_STACK_PROBE} ${AV_CRT_STUBS})
 add_dependencies(avcl avtest_imports)
 set_target_properties(avcl PROPERTIES PREFIX "")
 # compat/ first: it answers the <type_traits> the generated ICD stubs include,
@@ -437,7 +444,7 @@ list(APPEND AVUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d9/d3d9_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp)
-add_library(avumd SHARED ${AVUMD_SOURCES} ${AV_STACK_PROBE})
+add_library(avumd SHARED ${AVUMD_SOURCES} ${AV_STACK_PROBE} ${AV_CRT_STUBS})
 add_dependencies(avumd avtest_imports)
 set_target_properties(avumd PROPERTIES PREFIX "")
 target_include_directories(avumd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..

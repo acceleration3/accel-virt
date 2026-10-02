@@ -8,9 +8,7 @@
  * The pinned loader resolves only clGetExtensionFunctionAddress by name and
  * asks it for clIcdGetPlatformIDsKHR (khrIcdVendorAdd, loader/icd.c:111-119);
  * older loaders looked the second up directly, and exporting it costs a line.
- *
- * _purecall and _fltused are what the MSVC ABI references with no C runtime to
- * define them, as for avvk.dll (avvk_exports.cpp). */
+ */
 #include "core/trace/function_scope.hpp"
 #include "um/opencl/cl_icd_library.hpp"
 
@@ -38,7 +36,3 @@ extern "C" CL_API_ENTRY cl_int CL_API_CALL clIcdGetPlatformIDsKHR(cl_uint num_en
                                                                   cl_platform_id *platforms,
                                                                   cl_uint *num_platforms)
 { return avcl_library.platform_ids(num_entries, platforms, num_platforms); }
-
-extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-
-extern "C" [[gnu::used]] int _fltused = 0;

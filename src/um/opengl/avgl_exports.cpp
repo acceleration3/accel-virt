@@ -4,9 +4,7 @@
  * (constitution III) - and a DLL entry that does nothing at attach or detach,
  * where the loader lock allows nothing. No C runtime runs constructors, so the
  * storage is constinit and the library constructs itself on the first call.
- *
- * _purecall and _fltused are what the MSVC ABI references with no C runtime to
- * define them, as for avvk.dll (avvk_exports.cpp). */
+ */
 #include "core/trace/function_scope.hpp"
 #include "um/opengl/gl_icd_library.hpp"
 
@@ -68,7 +66,3 @@ extern "C" BOOL APIENTRY DrvDescribeLayerPlane(HDC dc, INT format, INT plane, UI
 extern "C" BOOL APIENTRY DrvSwapLayerBuffers(HDC dc, UINT planes) { return avgl_library.swap_layer_buffers(dc, planes); }
 
 extern "C" BOOL APIENTRY DrvSwapBuffers(HDC dc) { return avgl_library.swap_buffers(dc); }
-
-extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-
-extern "C" [[gnu::used]] int _fltused = 0;

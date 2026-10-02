@@ -61,7 +61,6 @@ private:
         ProcessTrace trace;
     };
 
-    icd::IcdRoot *root();
 
     LazyDriver<Seams> driver_;
 };

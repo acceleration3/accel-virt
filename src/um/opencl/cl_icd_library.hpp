@@ -65,7 +65,6 @@ private:
         ProcessTrace     trace;
     };
 
-    clicd::ClIcdRoot *root();
 
     LazyDriver<Seams> driver_;
 };

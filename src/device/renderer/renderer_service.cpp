@@ -106,7 +106,7 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     AV_SCOPE("RendererService::hello");
     HelloMessage hello;
     if (ready_ || hello.decode(body, header.body_length(), count) != Status::ok ||
-        hello.version() != protocol_version || capset_.decode(hello.capset(), hello.capset_length()) != Status::ok)
+        hello.version() != HelloMessage::protocol_version || capset_.decode(hello.capset(), hello.capset_length()) != Status::ok)
         return Status::malformed;
     const AvExecutorOps *ops = nullptr;
     const Status loaded = resources_.load_executor(hello.executor_path(), hello.executor_path_length(), ops);
@@ -120,7 +120,7 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     for (uint32_t lane = 0u; lane < ReadyMessage::lanes; lane++)
         if ((sub_apis & (1u << lane)) != 0u)
             import_kinds[lane] = plane_.import_kinds(static_cast<SubApi>(1u << lane), hello.gpu_uuid());
-    const ReadyMessage ready(protocol_version, ops->abi_version, sub_apis, import_kinds);
+    const ReadyMessage ready(HelloMessage::protocol_version, ops->abi_version, sub_apis, import_kinds);
     const RendererMessageHeader out(RendererMessageHeader::Kind::ready, ReadyMessage::encoded_size,
                                     header.sequence());
     if (capacity < RendererMessageHeader::encoded_size + ReadyMessage::encoded_size ||

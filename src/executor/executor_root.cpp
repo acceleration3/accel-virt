@@ -17,7 +17,7 @@ namespace {
 /* One decode block per session, in the library's own storage rather than in
  * the root: sixty four megabytes is not something to carry inside the object
  * that owns the sessions, and nothing but this file ever names it. */
-alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_bytes];
+alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][ContextSession::arena_bytes];
 
 }  // namespace
 
@@ -124,7 +124,7 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
         /* A slot in use refuses to be bound again, which is the test for in use
          * rather than a second one beside it. */
         if (sessions_[slot].initialize(*backend_in(slot, sub_api), decode_blocks[slot],
-                                       DecodeArena::arena_bytes) != Status::ok)
+                                       ContextSession::arena_bytes) != Status::ok)
             continue;
         /* Opened here, at the context's setup, on what the host found when it
          * was asked: the guest's first batch waits behind this, inside

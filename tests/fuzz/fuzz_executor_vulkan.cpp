@@ -18,7 +18,6 @@
  * point. */
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
-#include "executor/decode_arena.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 
 #include <cstddef>

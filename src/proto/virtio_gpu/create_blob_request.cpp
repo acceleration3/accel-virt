@@ -15,7 +15,7 @@ Status CreateBlobRequest::decode(WireReader &reader)
 {
     AV_SCOPE("CreateBlobRequest::decode");
     if (reader.remaining() < fixed_size) return Status::malformed;
-    for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size);
     resource_id_ = reader.read_u32();
     memory_ = reader.read_u32();
     flags_ = reader.read_u32();

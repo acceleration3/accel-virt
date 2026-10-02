@@ -35,7 +35,6 @@ public:
     /* One message's answer: its header and body. */
     static constexpr size_t answer_capacity = RendererMessageHeader::encoded_size + 64u;
     static constexpr uint32_t image_slots = ExportedImageMessage::slots;
-    static constexpr uint32_t protocol_version = 1u;
 
     RendererService(Host &host, RendererResources &resources, GuestMemoryTable &memory, DoorbellOffers &doorbells);
     ~RendererService();

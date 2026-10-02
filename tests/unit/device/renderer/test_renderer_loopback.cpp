@@ -44,7 +44,7 @@ std::size_t hello(std::uint8_t (&datagram)[datagram_capacity], std::uint64_t seq
                                                 "mock gpu"));
     std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
     CHECK_STATUS(capset.encode(capset_bytes, sizeof capset_bytes), Status::ok);
-    const av::HelloMessage message(av::RendererService::protocol_version, 1u, av::DeviceUuid(uuid), executor_path,
+    const av::HelloMessage message(av::HelloMessage::protocol_version, 1u, av::DeviceUuid(uuid), executor_path,
                                    sizeof executor_path - 1u, capset_bytes, sizeof capset_bytes);
     const RendererMessageHeader header(RendererMessageHeader::Kind::hello,
                                        static_cast<std::uint32_t>(message.encoded_length()), sequence);
@@ -95,7 +95,7 @@ TEST(renderer_loopback, a_hello_loads_the_executor_and_is_answered_ready)
   CHECK_EQ(header.sequence(), 9u);
   av::ReadyMessage ready;
   CHECK_STATUS(ready.decode(answer + RendererMessageHeader::encoded_size, header.body_length(), 0u), Status::ok);
-  CHECK_EQ(ready.version(), av::RendererService::protocol_version);
+  CHECK_EQ(ready.version(), av::HelloMessage::protocol_version);
   CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(AV_EXECUTOR_ABI_VERSION));
   CHECK_EQ(ready.sub_apis(), static_cast<std::uint32_t>(av::SubApi::vulkan));
   /* One hello, one answer: the next receive has nothing to take. */

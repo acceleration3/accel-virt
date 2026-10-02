@@ -11,7 +11,7 @@
 namespace av {
 
 ContextSession::ContextSession()
-    : backend_(nullptr), clocks_(nullptr), arena_(), imports_(), starved_(0u), faulted_(false)
+    : backend_(nullptr), clocks_(nullptr), arena_(nullptr, 0u), imports_(), starved_(0u), faulted_(false)
 {
     AV_SCOPE("ContextSession::ContextSession");
 }
@@ -102,7 +102,7 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
     const size_t refused = arena_.refusals();
     WireReader reader(payload, size);
     WireWriter writer(reply, reply_capacity);
-    const bool ran = backend_->run(command_id, reader, writer, arena_.arena());
+    const bool ran = backend_->run(command_id, reader, writer, arena_);
     if (!ran) {
         /* The block being too small and the frame being malformed are the same
          * answer on the wire on purpose, and two different problems here. */

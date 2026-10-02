@@ -14,7 +14,7 @@ Status DisplayTimingRequest::decode(WireReader &reader)
 {
     AV_SCOPE("DisplayTimingRequest::decode");
     if (reader.remaining() < encoded_size) return Status::malformed;
-    for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size);
     const uint32_t head = reader.read_u32();
     const uint32_t refresh = reader.read_u32();
     if (refresh < least_millihz || refresh > most_millihz) return Status::malformed;

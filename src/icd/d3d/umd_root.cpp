@@ -20,6 +20,7 @@
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "icd/d3d/ddi/dxgi1_6_1_ddi_base_functions_record.hpp"
+#include "proto/escape/umd_adapter_info.hpp"
 #include "icd/d3d/dxgi_entry_points.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/umd_binding.hpp"
@@ -52,7 +53,6 @@ UmdRoot::~UmdRoot()
 uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
 {
     AV_SCOPE("UmdRoot::adapter_luid");
-    constexpr uint64_t umd_private_tag = 0x0044494C555641ull;
     struct QueryAdapterInfo {
         void    *pPrivateDriverData;
         uint32_t PrivateDriverDataSize;
@@ -60,11 +60,13 @@ uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
     using QueryAdapterInfoCb = int32_t(AV_RUNTIME_CALL *)(void *, QueryAdapterInfo *);
     const auto query = reinterpret_cast<QueryAdapterInfoCb>(
         static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks)->pfnQueryAdapterInfoCb);
-    uint64_t         words[2] = {};
-    QueryAdapterInfo info = {words, sizeof(words)};
-    if (query == nullptr || query(runtime_adapter, &info) < 0 || words[0] != umd_private_tag) return 0u;
-    lines_.note("adapter luid", words[1]);
-    return words[1];
+    uint8_t          answer[UmdAdapterInfo::base_size] = {};
+    QueryAdapterInfo info = {answer, sizeof answer};
+    UmdAdapterInfo   adapter;
+    if (query == nullptr || query(runtime_adapter, &info) < 0 || adapter.decode(answer, sizeof answer) != Status::ok)
+        return 0u;
+    lines_.note("adapter luid", adapter.luid());
+    return adapter.luid();
 }
 
 Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_adapter, const void *callbacks,

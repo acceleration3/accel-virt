@@ -8,8 +8,8 @@
 #define AV_CONTEXT_SESSION_HPP
 
 #include "core/support/status.hpp"
-#include "executor/decode_arena.hpp"
 #include "executor/import_table.hpp"
+#include "proto/wire/wire_arena.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,6 +23,17 @@ class SessionBackend;
 
 class ContextSession {
 public:
+    /* The block one command decodes into. The generated decoders allocate
+     * every indirect argument - arrays, strings, chained structs - from it,
+     * and every count that sizes one comes off the wire, so there is no
+     * largest command to derive a size from: this is a policy, sized from
+     * cost. A megabyte across the sixty four sessions the device can ever ask
+     * for is sixty four megabytes of address space, and a command that wants
+     * more is refused and counted (starved()) rather than served. The block is
+     * handed in rather than held here, because sixty four megabytes is not
+     * something to carry inside the object that owns the sessions. */
+    static constexpr size_t arena_bytes = 1u << 20;
+
     ContextSession();
     ContextSession(const ContextSession &) = delete;
     ContextSession &operator=(const ContextSession &) = delete;
@@ -84,7 +95,7 @@ private:
 
     SessionBackend *backend_;
     GpuClockHold   *clocks_;
-    DecodeArena     arena_;
+    WireArena       arena_;
     ImportTable     imports_;
     size_t          starved_;
     bool            faulted_;

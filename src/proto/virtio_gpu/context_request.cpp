@@ -13,7 +13,7 @@ ContextRequest::ContextRequest() : context_id_(0u), name_length_(0u), context_in
 void ContextRequest::read_header(WireReader &reader)
 {
     AV_SCOPE("ContextRequest::read_header");
-    for (size_t byte = 0u; byte < context_id_offset; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(context_id_offset);
     context_id_ = reader.read_u32();
     static_cast<void>(reader.read_u32());   /* ring_idx and padding */
 }
@@ -33,7 +33,7 @@ Status ContextRequest::decode_create(WireReader &reader)
     read_header(reader);
     name_length_ = reader.read_u32();
     context_init_ = reader.read_u32();
-    for (size_t byte = 0u; byte < name_capacity; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(name_capacity);
     return Status::ok;
 }
 

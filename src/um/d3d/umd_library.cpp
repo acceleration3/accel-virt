@@ -22,17 +22,10 @@ Status UmdLibrary::Seams::initialize()
     return kmt.initialize();
 }
 
-d3d::UmdRoot *UmdLibrary::root()
-{
-    AV_SCOPE("UmdLibrary::root");
-    Seams *const seams = driver_.seams();
-    return seams == nullptr ? nullptr : &seams->root;
-}
-
 d3d::Hresult UmdLibrary::open_adapter10_2(void *args)
 {
     AV_SCOPE("UmdLibrary::open_adapter10_2");
-    d3d::UmdRoot *const answering = root();
+    d3d::UmdRoot *const answering = driver_.root();
     if (answering == nullptr) return d3d::hr_fail;
     return answering->open_adapter10_2(static_cast<d3d::D3d10ddiargOpenAdapterRecord *>(args));
 }
@@ -40,7 +33,7 @@ d3d::Hresult UmdLibrary::open_adapter10_2(void *args)
 d3d::Hresult UmdLibrary::open_adapter12(void *args)
 {
     AV_SCOPE("UmdLibrary::open_adapter12");
-    d3d::UmdRoot *const answering = root();
+    d3d::UmdRoot *const answering = driver_.root();
     if (answering == nullptr) return d3d::hr_fail;
     return answering->open_adapter12(static_cast<d3d::D3d12ddiargOpenAdapterRecord *>(args));
 }
@@ -48,7 +41,7 @@ d3d::Hresult UmdLibrary::open_adapter12(void *args)
 d3d::Hresult UmdLibrary::open_adapter9(void *args)
 {
     AV_SCOPE("UmdLibrary::open_adapter9");
-    d3d::UmdRoot *const answering = root();
+    d3d::UmdRoot *const answering = driver_.root();
     if (answering == nullptr) return d3d::hr_fail;
     return answering->open_adapter9(static_cast<d3d::D3dddiargOpenAdapterRecord *>(args));
 }

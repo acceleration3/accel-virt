@@ -7,9 +7,7 @@
  * at attach or detach, where the loader lock allows nothing. No C runtime runs
  * constructors, so the storage is constinit and the library constructs itself
  * on the first call.
- *
- * _purecall and _fltused are what the MSVC ABI references with no C runtime to
- * define them, as for avvk.dll (avvk_exports.cpp). */
+ */
 #include "core/trace/function_scope.hpp"
 #include "um/d3d/umd_library.hpp"
 
@@ -33,7 +31,3 @@ extern "C" HRESULT APIENTRY OpenAdapter10_2(void *args) { return avumd_library.o
 extern "C" HRESULT APIENTRY OpenAdapter12(void *args) { return avumd_library.open_adapter12(args); }
 
 extern "C" HRESULT APIENTRY OpenAdapter(void *args) { return avumd_library.open_adapter9(args); }
-
-extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-
-extern "C" [[gnu::used]] int _fltused = 0;

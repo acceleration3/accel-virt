@@ -83,9 +83,6 @@ public:
      * same reason. Nothing is left behind unless it answers true. */
     [[nodiscard]] bool import_shared_semaphore(VkDevice device, int fd, uint64_t &semaphore);
     void               destroy_semaphore(VkDevice device, uint64_t semaphore);
-    /* The memory types `fd` may be imported into on `device` as `type`, or 0
-     * where the device cannot be asked. */
-    uint32_t           shared_memory_types(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type);
 
     /* Imports that succeeded and have not been released, which is what a test
      * or a teardown can ask about without a driver. */

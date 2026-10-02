@@ -614,7 +614,7 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     if (kind != AV_SHARED_MEMORY || size == 0u) return false;
     if (handle_kind != AV_SHARED_HANDLE_DMA_BUF) return false;
     const uint32_t memory_type =
-        first_memory_type(import_.shared_memory_types(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
+        first_memory_type(import_.dmabuf_types(device_, fd));
     if (memory_type == max_memory_types) return false;
     const bool imported =
         import_.import_shared_memory(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size,

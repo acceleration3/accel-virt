@@ -24,6 +24,9 @@ public:
     static constexpr uint32_t max_path_length = 4095u;
     static constexpr uint32_t max_capset_length = 4096u;
     static constexpr uint32_t descriptors = 0u;
+    /* What QEMU and av-renderer must agree on to talk at all: the Hello
+     * carries it and the Ready answers it. */
+    static constexpr uint32_t protocol_version = 1u;
 
     HelloMessage();
     /* A null path or capset is an empty one. */

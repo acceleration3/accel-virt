@@ -13,7 +13,7 @@ CapsetRequest::CapsetRequest() : index_(0u), capset_id_(0u), capset_version_(0u)
 void CapsetRequest::skip_header(WireReader &reader)
 {
     AV_SCOPE("CapsetRequest::skip_header");
-    for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size);
 }
 
 Status CapsetRequest::decode_info(WireReader &reader)

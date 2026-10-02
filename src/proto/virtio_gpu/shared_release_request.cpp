@@ -14,7 +14,7 @@ Status SharedReleaseRequest::decode(WireReader &reader)
 {
     AV_SCOPE("SharedReleaseRequest::decode");
     if (reader.remaining() < encoded_size) return Status::malformed;
-    for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size);
     const uint64_t object_id = reader.read_u64();
     if (object_id == 0u) return Status::malformed;
     object_id_ = object_id;

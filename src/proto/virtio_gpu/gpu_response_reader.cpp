@@ -17,7 +17,7 @@ Status GpuResponseReader::decode(const uint8_t *bytes, size_t length)
     WireReader reader(bytes, length);
     GpuResponseReader candidate;
     candidate.type_ = reader.read_u32();
-    for (size_t byte = 4u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size - 4u);
     if (candidate.type_ == ok_capset_info) {
         candidate.capset_id_ = reader.read_u32();
         candidate.capset_max_version_ = reader.read_u32();

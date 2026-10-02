@@ -19,12 +19,6 @@
 
 namespace av {
 
-namespace {
-
-constexpr uint32_t protocol_version = 1u;
-
-}  // namespace
-
 RendererContextPlane::RendererContextPlane(Host &host, BlobTable &blobs, FenceInterrupts &interrupts)
     : host_(host), blobs_(blobs), interrupts_(interrupts), link_(host), renderer_{}, executor_{},
       executor_length_(0u), gpu_uuid_(), capset_{}, capset_length_(0u), ready_(), configured_(false), alive_(false),
@@ -91,7 +85,7 @@ Status RendererContextPlane::launch()
     Status status = host_.start_renderer(renderer_);
     if (status != Status::ok) return status;
     epoch_++;
-    const HelloMessage hello(protocol_version, epoch_, gpu_uuid_, executor_, executor_length_, capset_, capset_length_);
+    const HelloMessage hello(HelloMessage::protocol_version, epoch_, gpu_uuid_, executor_, executor_length_, capset_, capset_length_);
     status = hello.encode(body_, sizeof body_);
     if (status == Status::ok) status = link_.greet(body_, static_cast<uint32_t>(hello.encoded_length()), ready_);
     if (status == Status::ok) status = send_regions();

@@ -54,7 +54,6 @@ private:
         ProcessTrace  trace;
     };
 
-    d3d::UmdRoot *root();
 
     LazyDriver<Seams> driver_;
 };

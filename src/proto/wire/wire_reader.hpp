@@ -50,6 +50,9 @@ public:
     }
     /* Reserved fields: any non-zero byte is malformed. */
     void expect_zero(size_t count);
+    /* Bytes a decoder has no use for - the header a request starts with, a
+     * field it ignores: malformed when they are not there. */
+    void skip(size_t count);
 
     Status status() const;
     size_t offset() const;

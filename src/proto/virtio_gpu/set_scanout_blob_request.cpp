@@ -15,7 +15,7 @@ SetScanoutBlobRequest::SetScanoutBlobRequest()
 Status SetScanoutBlobRequest::decode(WireReader &reader)
 {
     AV_SCOPE("SetScanoutBlobRequest::decode");
-    for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size);
     if (rect_.decode(reader) != Status::ok) {
         forget();
         return Status::malformed;

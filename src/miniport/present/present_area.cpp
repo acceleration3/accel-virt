@@ -56,11 +56,7 @@ int64_t PresentArea::height() const
 PresentArea PresentArea::clipped_to(uint32_t width, uint32_t height) const
 {
     AV_SCOPE("PresentArea::clipped_to");
-    const int64_t left = left_ > 0 ? left_ : 0;
-    const int64_t top = top_ > 0 ? top_ : 0;
-    const int64_t right = right_ < static_cast<int64_t>(width) ? right_ : static_cast<int64_t>(width);
-    const int64_t bottom = bottom_ < static_cast<int64_t>(height) ? bottom_ : static_cast<int64_t>(height);
-    return PresentArea(left, top, right > left ? right : left, bottom > top ? bottom : top);
+    return intersected_with(PresentArea(0, 0, width, height));
 }
 
 PresentArea PresentArea::intersected_with(const PresentArea &other) const

@@ -88,6 +88,21 @@ TEST(wire_reader_expect_zero, a_short_buffer_is_malformed)
   CHECK_STATUS(reader.status(), Status::malformed);
   CHECK_EQ(reader.offset(), 0u); }
 
+TEST(wire_reader_skip, passes_over_bytes_whatever_they_hold)
+{ const std::uint8_t bytes[6] = {0xFF, 0x01, 0x02, 0x03, 0x34, 0x12};
+  WireReader reader(bytes, sizeof bytes);
+  reader.skip(4u);
+  CHECK_STATUS(reader.status(), Status::ok);
+  CHECK_EQ(reader.read_u16(), 0x1234u); }
+
+TEST(wire_reader_skip, a_short_buffer_is_malformed_without_advancing)
+{ const std::uint8_t bytes[3] = {};
+  WireReader reader(bytes, sizeof bytes);
+  reader.skip(4u);
+  CHECK_STATUS(reader.status(), Status::malformed);
+  CHECK_EQ(reader.offset(), 0u);
+  CHECK_EQ(reader.remaining(), 0u); }
+
 TEST(wire_reader_copy_bytes, copies_the_next_bytes)
 { WireReader reader(sample, sizeof sample);
   std::uint8_t out[3] = {};

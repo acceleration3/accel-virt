@@ -1,8 +1,5 @@
-/* What the Windows toolchain references with no C runtime to supply it: the
- * process entry point lld-link is told about, the target of a pure virtual
- * call, which the MSVC ABI puts in every abstract vtable, and _fltused, which
- * every object that touches floating point names (the OpenCL client's
- * cl_float arguments) and which only says the floating-point support is linked.
+/* avtest.exe's process entry point, which lld-link is told about (what the
+ * MSVC ABI references besides is crt_stubs.cpp).
  *
  * With no C runtime there is no argv: what avtest takes - the seconds of fence
  * stress to run, 0 for none, the word `tdr` for a run of the timeout scenario
@@ -65,7 +62,3 @@ extern "C" void avtest_entry()
     const wchar_t *const line = GetCommandLineW();
     ExitProcess(av::GuestProgram(avtest_stress_seconds(line), avtest_run(line), avtest_trace, &avtest_crashed).run());
 }
-
-extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-
-extern "C" [[gnu::used]] int _fltused = 0;

@@ -7,6 +7,7 @@
 #include "icd/d3d/ddi/d3dddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/dxgi_ddi_args_record.hpp"
 #include "icd/d3d/umd_root.hpp"
+#include "proto/escape/umd_adapter_info.hpp"
 
 #include <cstring>
 
@@ -39,7 +40,8 @@ void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
  * name, so -fsanitize=function would see a mismatch that the ABI does not. */
 __attribute__((no_sanitize("function"))) std::int32_t refuse_adapter_info(void *, void *) { return -1; }
 
-/* UMDRIVERPRIVATE as avgpu.sys writes it: its tag, then the adapter's LUID. */
+/* UMDRIVERPRIVATE as avgpu.sys writes it for a caller with room for two
+ * words: the tag, then the adapter's LUID. */
 struct AdapterInfoQuery {
     void         *private_data;
     std::uint32_t private_bytes;
@@ -47,12 +49,13 @@ struct AdapterInfoQuery {
 
 __attribute__((no_sanitize("function"))) std::int32_t answer_adapter_info(void *adapter, void *query)
 {
-    constexpr std::uint64_t umd_private_tag = 0x0044494C555641ull;
-    auto *const asked = static_cast<AdapterInfoQuery *>(query);
-    if (asked->private_bytes < 2u * sizeof(std::uint64_t)) return -1;
-    const std::uint64_t words[2] = {umd_private_tag, *static_cast<const std::uint64_t *>(adapter)};
-    std::memcpy(asked->private_data, words, sizeof words);
-    return 0;
+    auto *const  asked = static_cast<AdapterInfoQuery *>(query);
+    std::size_t written = 0u;
+    return UmdAdapterInfo(*static_cast<const std::uint64_t *>(adapter), 0u)
+                       .encode(static_cast<std::uint8_t *>(asked->private_data), asked->private_bytes, written) ==
+                   Status::ok
+               ? 0
+               : -1;
 }
 
 }  // namespace

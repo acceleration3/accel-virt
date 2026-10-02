@@ -21,17 +21,10 @@ Status ClIcdLibrary::Seams::initialize()
     return kmt.initialize();
 }
 
-clicd::ClIcdRoot *ClIcdLibrary::root()
-{
-    AV_SCOPE("ClIcdLibrary::root");
-    Seams *const seams = driver_.seams();
-    return seams == nullptr ? nullptr : &seams->root;
-}
-
 cl_int ClIcdLibrary::platform_ids(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
 {
     AV_SCOPE("ClIcdLibrary::platform_ids");
-    clicd::ClIcdRoot *const answering = root();
+    clicd::ClIcdRoot *const answering = driver_.root();
     return answering != nullptr ? answering->platform_ids(num_entries, platforms, num_platforms)
                                 : CL_PLATFORM_NOT_FOUND_KHR;
 }
@@ -39,7 +32,7 @@ cl_int ClIcdLibrary::platform_ids(cl_uint num_entries, cl_platform_id *platforms
 void *ClIcdLibrary::extension_function(const char *name)
 {
     AV_SCOPE("ClIcdLibrary::extension_function");
-    clicd::ClIcdRoot *const answering = root();
+    clicd::ClIcdRoot *const answering = driver_.root();
     return answering != nullptr ? answering->extension_function(name) : nullptr;
 }
 

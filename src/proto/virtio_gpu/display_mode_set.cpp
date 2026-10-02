@@ -100,7 +100,7 @@ Status DisplayModeSet::decode(const uint8_t *bytes, size_t length)
     if (bytes == nullptr || length < fixed_size) return Status::malformed;
     WireReader reader(bytes, length);
     if (reader.read_u32() != response_type) return Status::malformed;
-    for (size_t byte = sizeof(uint32_t); byte < header_size; byte++) static_cast<void>(reader.read_u8());
+    reader.skip(header_size - sizeof(uint32_t));
     const uint32_t count = reader.read_u32();
     const uint32_t preferred = reader.read_u32();
     if (count == 0u || count > max_modes || preferred >= count) return Status::malformed;

@@ -1,12 +1,6 @@
-/* avvkprobe.exe's entry points: the process entry lld-link is told about,
- * and what the MSVC ABI references with no C runtime to define it, as for
- * avtest.exe (program_entry.cpp). */
+/* avvkprobe.exe's process entry, which lld-link is told about. */
 #include "um/probe/vk/probe_program.hpp"
 
 #include <windows.h>
 
 extern "C" void avvkprobe_entry() { ExitProcess(av::ProbeProgram().run()); }
-
-extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-
-extern "C" [[gnu::used]] int _fltused = 0;

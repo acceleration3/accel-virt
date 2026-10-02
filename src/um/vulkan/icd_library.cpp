@@ -20,24 +20,17 @@ Status IcdLibrary::Seams::initialize()
     return kmt.initialize();
 }
 
-icd::IcdRoot *IcdLibrary::root()
-{
-    AV_SCOPE("IcdLibrary::root");
-    Seams *const seams = driver_.seams();
-    return seams == nullptr ? nullptr : &seams->root;
-}
-
 VkResult IcdLibrary::negotiate(uint32_t *version)
 {
     AV_SCOPE("IcdLibrary::negotiate");
-    icd::IcdRoot *const answering = root();
+    icd::IcdRoot *const answering = driver_.root();
     return answering != nullptr ? answering->negotiate(version) : VK_ERROR_INCOMPATIBLE_DRIVER;
 }
 
 PFN_vkVoidFunction IcdLibrary::instance_proc_addr(VkInstance instance, const char *name)
 {
     AV_SCOPE("IcdLibrary::instance_proc_addr");
-    icd::IcdRoot *const answering = root();
+    icd::IcdRoot *const answering = driver_.root();
     return answering != nullptr ? answering->instance_proc_addr(instance, name) : nullptr;
 }
 

@@ -4,7 +4,6 @@
 #include "executor/context_session.hpp"
 #include "harness/wire/wire_arena_probe.hpp"
 #include "proto/wire/wire_arena.hpp"
-#include "executor/decode_arena.hpp"
 #include "executor/gpu_clock_hold.hpp"
 #include "executor/import_table.hpp"
 #include "executor/imported_blob.hpp"

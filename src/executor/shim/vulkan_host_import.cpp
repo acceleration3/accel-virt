@@ -233,18 +233,6 @@ bool VulkanHostImport::export_semaphore(VkDevice device, uint64_t semaphore, int
     return true;
 }
 
-uint32_t VulkanHostImport::shared_memory_types(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type)
-{
-    AV_SCOPE("VulkanHostImport::shared_memory_types");
-    auto *const properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
-        ::vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
-    if (properties == nullptr || fd < 0) return 0u;
-    VkMemoryFdPropertiesKHR answered = {};
-    answered.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
-    if (properties(device, type, fd, &answered) != VK_SUCCESS) return 0u;
-    return answered.memoryTypeBits;
-}
-
 bool VulkanHostImport::import_shared_memory(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type,
                                             uint64_t size, uint32_t memory_type, uint64_t &memory)
 {

@@ -35,6 +35,8 @@ public:
 
     /* The seams, made on the first call; null in a refused process. */
     Seams *seams();
+    /* Their root, or null, likewise. */
+    auto   root() -> decltype(Seams::root) *;
     /* The process is crashing: the crash file, if tracing started. */
     long   crashed(void *pointers);
     void   run_once() override;
@@ -58,6 +60,14 @@ Seams *LazyDriver<Seams>::seams()
     AV_SCOPE("LazyDriver::seams");
     if (!once_.run(*this) || !seams_.constructed()) return nullptr;
     return &seams_.object();
+}
+
+template <typename Seams>
+auto LazyDriver<Seams>::root() -> decltype(Seams::root) *
+{
+    AV_SCOPE("LazyDriver::root");
+    Seams *const made = seams();
+    return made == nullptr ? nullptr : &made->root;
 }
 
 template <typename Seams>

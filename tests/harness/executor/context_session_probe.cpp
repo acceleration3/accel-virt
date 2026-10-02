@@ -4,7 +4,7 @@ namespace av {
 
 ContextSessionProbe::ContextSessionProbe(ContextSession &target) : session(target) {}
 
-WireArena &ContextSessionProbe::arena() { return session.arena_.arena(); }
+WireArena &ContextSessionProbe::arena() { return session.arena_; }
 
 ImportTable &ContextSessionProbe::imports() { return session.imports_; }
 

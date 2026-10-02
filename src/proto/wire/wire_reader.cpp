@@ -48,6 +48,8 @@ void WireReader::expect_zero(size_t count)
     }
 }
 
+void WireReader::skip(size_t count) { static_cast<void>(take(count)); }
+
 bool WireReader::read(void *destination, size_t count)
 {
     /* A decoder whose arena refused it has nowhere to put the bytes. Reading
