@@ -224,7 +224,13 @@ void OpenGlBackend::abandon(ImportedBlob &blob)
 bool     OpenGlBackend::bind_fence(uint64_t token, void *fence)
 {
     AV_SCOPE("OpenGlBackend::bind_fence");
-    return fences_.bind(token, fence);
+    if (fences_.bind(token, fence)) return true;
+    /* A sync no token names is one nothing would ever delete: a guest past
+     * the table's bound, or reusing a live token, gets none rather than the
+     * host keeping one for good. */
+    if (fence != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
+    lines_.write("a GLsync no token could keep was deleted as it was made");
+    return false;
 }
 void    *OpenGlBackend::fence_for(uint64_t token) const
 {

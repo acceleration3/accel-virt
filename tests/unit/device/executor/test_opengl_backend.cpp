@@ -337,3 +337,27 @@ TEST(opengl_backend, a_signal_changes_nothing_it_waits_on)
   backend.gpu_progress(marked, reached);
   CHECK_EQ(marked, 0u);
   CHECK_EQ(reached, 0u); }
+
+namespace {
+
+std::uint32_t deleted_syncs = 0u;
+
+void count_deleted_sync(GLsync) { deleted_syncs++; }
+
+}  // namespace
+
+/* A sync the table cannot keep - its token already live - is deleted as it
+ * is made, not left for ever with no token to name it. */
+TEST(opengl_backend, a_sync_no_token_can_keep_is_deleted_at_once)
+{ OpenGlBackend backend;
+  OpenGlBackendProbe::gl(backend).glDeleteSync = count_deleted_sync;
+  deleted_syncs = 0u;
+  int first = 0, second = 0;
+  CHECK(backend.bind_fence(7u, &first));
+  CHECK(!backend.bind_fence(7u, &second));
+  CHECK_EQ(deleted_syncs, 1u);
+  CHECK(backend.fence_for(7u) == &first);
+  /* A failed glFenceSync made nothing to delete. */
+  CHECK(!backend.bind_fence(8u, nullptr));
+  CHECK_EQ(deleted_syncs, 1u);
+  backend.forget_fence(7u); }
