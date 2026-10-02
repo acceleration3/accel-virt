@@ -5,7 +5,7 @@
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/memory/blob_table.hpp"
-#include "harness/ring/ring_blob_writer.hpp"
+#include "harness/context/ring_blob_writer.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gpu_identity.hpp"

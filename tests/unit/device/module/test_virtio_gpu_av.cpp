@@ -22,7 +22,7 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
-#include "harness/ring/ring_blob_writer.hpp"
+#include "harness/context/ring_blob_writer.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"

@@ -5,7 +5,7 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/loopback/loopback_rig.hpp"
-#include "harness/ring/guest_ring.hpp"
+#include "harness/context/guest_ring.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/fence_page.hpp"
 

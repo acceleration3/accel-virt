@@ -12,7 +12,7 @@
 #include "device/fence/fence_window.hpp"
 #include "device/host/stdio_log.hpp"
 #include "device/recording/wire_recorder.hpp"
-#include "device/ring/ring_window.hpp"
+#include "device/context/ring_window.hpp"
 #include "device/threading/work_item.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"

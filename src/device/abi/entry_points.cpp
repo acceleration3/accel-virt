@@ -5,7 +5,7 @@
 #include "device/present/present_engine.hpp"
 #include "device/module/device_module.hpp"
 #include "device/module/virtio_gpu_av.hpp"
-#include "device/ring/ring_consumer.hpp"
+#include "device/context/ring_consumer.hpp"
 #include "device/shim/device_trace.hpp"
 #include "device/threading/worker.hpp"
 

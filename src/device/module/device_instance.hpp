@@ -3,7 +3,7 @@
 #ifndef AV_DEVICE_INSTANCE_HPP
 #define AV_DEVICE_INSTANCE_HPP
 
-#include "device/abi/table_host.hpp"
+#include "device/host/table_host.hpp"
 #include "device/module/virtio_gpu_av.hpp"
 
 namespace av {

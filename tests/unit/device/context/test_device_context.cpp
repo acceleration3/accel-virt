@@ -20,7 +20,7 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
-#include "harness/ring/guest_ring.hpp"
+#include "harness/context/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_resources.hpp"
 #include "proto/context/context_setup.hpp"

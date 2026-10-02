@@ -1,7 +1,7 @@
 #include "device/fence/fence_interrupts.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/probe/interrupt_stress_probe.hpp"
+#include "device/feasibility/interrupt_stress_probe.hpp"
 
 #include "device/abi/av_device.h"
 #include "device/host/host.hpp"

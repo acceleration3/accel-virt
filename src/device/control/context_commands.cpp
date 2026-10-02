@@ -1,7 +1,7 @@
 #include "device/control/context_commands.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/capset/device_capset.hpp"
+#include "device/gpu/device_capset.hpp"
 #include "device/context/device_context.hpp"
 #include "device/context/context_plane.hpp"
 #include "device/control/control_request.hpp"

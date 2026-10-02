@@ -5,7 +5,7 @@
 #include "device/abi/entry_points.hpp"
 #include "device/context/context_signal.hpp"
 #include "device/host/host.hpp"
-#include "device/ring/ring_consumer.hpp"
+#include "device/context/ring_consumer.hpp"
 
 namespace av {
 

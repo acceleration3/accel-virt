@@ -20,11 +20,11 @@
 #include "device/memory/blob_table.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/memory/blob_window.hpp"
-#include "device/ring/ring_window.hpp"
+#include "device/context/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
-#include "harness/ring/guest_ring.hpp"
+#include "harness/context/guest_ring.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/reply_header.hpp"
 

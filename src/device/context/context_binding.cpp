@@ -6,7 +6,7 @@
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
-#include "device/ring/ring_window.hpp"
+#include "device/context/ring_window.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/submission/fence_page.hpp"

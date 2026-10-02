@@ -2,7 +2,7 @@
  * connecting and releasing the notifiers that carry them. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
-#include "device/probe/interrupt_stress_probe.hpp"
+#include "device/feasibility/interrupt_stress_probe.hpp"
 #include "device/threading/doorbell.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"

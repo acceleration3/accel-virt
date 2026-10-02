@@ -6,7 +6,7 @@
  * Input: the recording's bytes, from its file header on. */
 #include "core/support/status.hpp"
 #include "device/recording/record_header.hpp"
-#include "device/recording/recording_reader.hpp"
+#include "device/replay/recording_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

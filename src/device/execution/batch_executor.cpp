@@ -10,7 +10,7 @@
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/recording/wire_recorder.hpp"
-#include "device/ring/ring_window.hpp"
+#include "device/context/ring_window.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"

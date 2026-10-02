@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/control/control_request.hpp"
-#include "device/control/region_mover.hpp"
+#include "device/present/region_mover.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/present/present_frames.hpp"

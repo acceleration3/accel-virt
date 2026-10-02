@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
-#include "device/ring/ring_consumer.hpp"
+#include "device/context/ring_consumer.hpp"
 #include "device/threading/worker.hpp"
 
 #include <time.h>

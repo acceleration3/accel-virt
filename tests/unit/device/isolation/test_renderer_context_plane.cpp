@@ -21,7 +21,7 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/host/scripted_renderer_peer.hpp"
-#include "harness/ring/guest_ring.hpp"
+#include "harness/context/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gpu_identity.hpp"

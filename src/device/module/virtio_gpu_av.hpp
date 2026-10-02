@@ -5,7 +5,7 @@
 #define AV_VIRTIO_GPU_AV_HPP
 
 #include "core/support/status.hpp"
-#include "device/capset/device_capset.hpp"
+#include "device/gpu/device_capset.hpp"
 #include "device/context/local_context_plane.hpp"
 #include "device/isolation/renderer_context_plane.hpp"
 #include "device/display/display_clock.hpp"
@@ -17,7 +17,7 @@
 #include "device/gpu/host_pci_identity.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/present/present_engine.hpp"
-#include "device/probe/host_feasibility.hpp"
+#include "device/feasibility/host_feasibility.hpp"
 #include "device/recording/wire_recorder.hpp"
 
 #include <stdint.h>

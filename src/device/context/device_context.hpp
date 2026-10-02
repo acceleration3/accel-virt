@@ -15,7 +15,7 @@
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
-#include "device/ring/ring_consumer.hpp"
+#include "device/context/ring_consumer.hpp"
 #include "device/threading/worker.hpp"
 
 #include <stdint.h>

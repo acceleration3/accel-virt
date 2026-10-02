@@ -1,7 +1,7 @@
 /* The context commands the core answers, request byte by request byte: the
  * capset queries, context creation and destruction, and context setup. */
 #include "core/support/status.hpp"
-#include "device/capset/device_capset.hpp"
+#include "device/gpu/device_capset.hpp"
 #include "device/context/device_context.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/control/context_commands.hpp"
@@ -19,7 +19,7 @@
 #include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
-#include "harness/ring/ring_blob_writer.hpp"
+#include "harness/context/ring_blob_writer.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gl_context_options.hpp"

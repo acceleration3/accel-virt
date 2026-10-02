@@ -12,7 +12,7 @@
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/loopback/loopback_rig.hpp"
-#include "harness/ring/guest_ring.hpp"
+#include "harness/context/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/submission/fault_code.hpp"
 #include "proto/context/context_setup.hpp"

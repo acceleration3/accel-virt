@@ -79,7 +79,7 @@ which is how the driver package and the guest's programs recognise the device.
 A GPU with no PCI function (llvmpipe) leaves virtio-gpu's `1af4:1050`.
 
 Each feature bit is something the host **proved**, not something it hopes for
-(`src/device/probe/host_feasibility.cpp`):
+(`src/device/feasibility/host_feasibility.cpp`):
 
 | Bit | Name | What the device had to show |
 |---|---|---|

@@ -4,8 +4,8 @@
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
-#include "device/ring/ring_consumer.hpp"
-#include "device/ring/ring_window.hpp"
+#include "device/context/ring_consumer.hpp"
+#include "device/context/ring_window.hpp"
 #include "device/threading/work_item.hpp"
 #include "device/threading/doorbell.hpp"
 #include "device/threading/worker.hpp"
@@ -14,7 +14,7 @@
 #include "harness/host/host_violation.hpp"
 #include "harness/executor/mock_context_execution.hpp"
 #include "harness/host/mock_host.hpp"
-#include "harness/ring/guest_ring.hpp"
+#include "harness/context/guest_ring.hpp"
 
 #include <atomic>
 #include <cstdint>
