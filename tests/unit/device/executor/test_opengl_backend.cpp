@@ -27,6 +27,7 @@ namespace av {
 struct OpenGlBackendProbe {
     static glproto::RealGl &gl(OpenGlBackend &backend) { return backend.gl_; }
     static bool granted_fixed_function(OpenGlBackend &backend) { return backend.granted_fixed_function(); }
+    static void made_current(OpenGlBackend &backend) { backend.current_ = true; }
 };
 
 }  // namespace av
@@ -92,6 +93,13 @@ GLenum pending_error()
     if (errors_left == 0u) return 0u;
     errors_left--;
     return gl_invalid_enum;
+}
+
+/* A context the driver lost answers GL_CONTEXT_LOST to every look. */
+GLenum lost_context_error()
+{
+    errors_asked++;
+    return 0x0507u;
 }
 
 /* A backend whose table answers the mask and the errors given. */
@@ -361,3 +369,24 @@ TEST(opengl_backend, a_sync_no_token_can_keep_is_deleted_at_once)
   CHECK(!backend.bind_fence(8u, nullptr));
   CHECK_EQ(deleted_syncs, 1u);
   backend.forget_fence(7u); }
+
+/* A batch whose context answers GL_CONTEXT_LOST is a lost device, as a lost
+ * Vulkan or OpenCL device is: the session faults, which is how the guest's
+ * context learns it. Ordinary errors are only counted. */
+TEST(opengl_backend, a_lost_context_is_a_lost_device_and_an_error_is_not)
+{ { OpenGlBackend backend;
+    av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+    gl.glGetError = pending_error;
+    errors_left = 3u;
+    OpenGlBackendProbe::made_current(backend);
+    backend.end_batch();
+    CHECK(!backend.lost()); }
+  { OpenGlBackend backend;
+    av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+    gl.glGetError = lost_context_error;
+    errors_asked = 0u;
+    OpenGlBackendProbe::made_current(backend);
+    backend.end_batch();
+    CHECK(backend.lost());
+    /* Every flag asked once, never forever. */
+    CHECK_EQ(errors_asked, 8u); } }

@@ -18,6 +18,7 @@ constexpr uint32_t gl_context_profile_mask = 0x9126u, gl_context_core_profile_bi
 /* GL's error flags are one per kind: past this many, what is left is a lost
  * context answering GL_CONTEXT_LOST to every look. */
 constexpr uint32_t error_flags = 8u;
+constexpr uint32_t gl_context_lost = 0x0507u;
 
 /* The generated table's loader signature: a name and whatever the caller wants
  * to reach, which here is the context the entry points come from. */
@@ -195,6 +196,9 @@ void OpenGlBackend::publish_errors()
     for (uint32_t flag = 0u; flag < error_flags; flag++) {
         const uint32_t error = gl_.glGetError();
         if (error == 0u) break;
+        /* A lost context is the device lost, as Vulkan's and OpenCL's are:
+         * the session faults and the guest's context learns it from that. */
+        if (error == gl_context_lost) lost_ = true;
         errors_.record(error);
     }
     if (region_.length() < sizeof(uint64_t)) return;
