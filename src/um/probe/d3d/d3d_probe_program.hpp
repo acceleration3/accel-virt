@@ -10,7 +10,7 @@
 #define AV_D3D_PROBE_PROGRAM_HPP
 
 #include "guest/suite/guest_report.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 #include "um/probe/d3d/windows_d3d11_entry.hpp"
 #include "um/probe/d3d/windows_d3d12_entry.hpp"
 #include "um/probe/d3d/windows_d3d9_entry.hpp"

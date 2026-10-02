@@ -1,4 +1,4 @@
-#include "um/icd/gdi_window_surface.hpp"
+#include "um/common/gdi_window_surface.hpp"
 
 #include "core/trace/function_scope.hpp"
 

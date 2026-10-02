@@ -7,7 +7,7 @@
 
 #include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 #include "um/probe/probe_window.hpp"
 #include "um/probe/gl/windows_gl_entry.hpp"
 

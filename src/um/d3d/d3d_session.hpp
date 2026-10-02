@@ -20,7 +20,7 @@
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "core/support/object_pool.hpp"
-#include "um/icd/srw_lock.hpp"
+#include "um/common/srw_lock.hpp"
 
 #include <stdint.h>
 

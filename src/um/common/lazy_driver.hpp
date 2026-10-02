@@ -16,8 +16,8 @@
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/driver_log.hpp"
-#include "um/icd/once_body.hpp"
-#include "um/icd/run_once.hpp"
+#include "um/common/once_body.hpp"
+#include "um/common/run_once.hpp"
 #include "um/trace/process_trace.hpp"
 
 namespace av {

@@ -1,7 +1,7 @@
 #include "um/d3d/d3d12_recorder.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "icd/common/list_pieces.hpp"
+#include "icd/d3d/list_pieces.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"

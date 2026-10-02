@@ -22,7 +22,7 @@
 
 #include "core/log/keyed_log.hpp"
 #include "icd/common/window_chains.hpp"
-#include "um/icd/com_reference.hpp"
+#include "um/common/com_reference.hpp"
 
 #include <stdint.h>
 

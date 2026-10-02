@@ -85,7 +85,7 @@ that binary's root above - is reached through the single pointer
 exists and unbound only when no thread can still be inside the binary. A
 Windows binary's tracing is started from that root's storage; `avtest.exe`,
 which has no other root, keeps its `ProcessTrace` in one `ObjectStorage` in
-its entry's translation unit (`src/um/program_entry.cpp`), because its
+its entry's translation unit (`src/um/avtest/program_entry.cpp`), because its
 unhandled-exception filter is handed no context either. The QEMU device
 module's trace services live beside its `DeviceModule`, in a
 `DeviceTraceRoot` in `src/device/abi/entry_points.cpp`, whose fatal-signal

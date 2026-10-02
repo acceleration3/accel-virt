@@ -9,7 +9,7 @@
 #include <windows.h>
 
 /* The kit's user-mode headers define no NTSTATUS, and d3dkmddi.h - which
- * d3d10umddi.h includes - is written in it, as src/um/gdi_kmt.cpp does for
+ * d3d10umddi.h includes - is written in it, as src/um/kmt/gdi_kmt.cpp does for
  * d3dkmthk.h. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 

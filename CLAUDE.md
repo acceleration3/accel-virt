@@ -34,7 +34,7 @@ the kernel shim's static storage for the root, the device module's
 Vulkan ICD's root behind `vk_icdGetInstanceProcAddr` and `IcdBinding`'s pointer to
 it, `scope_binding`'s pointer to the binary's trace table (with the device
 module's `DeviceTraceRoot` beside `DeviceModule`), avtest.exe's
-`ProcessTrace` in `src/um/program_entry.cpp`'s storage, and the OpenGL ICD's
+`ProcessTrace` in `src/um/avtest/program_entry.cpp`'s storage, and the OpenGL ICD's
 root behind the `Drv*` exports (`src/um/opengl/avgl_exports.cpp`) and
 `GlIcdBinding`'s pointer to it (`src/icd/opengl/gl_hooks.cpp`), and the D3D
 user-mode driver's root behind `OpenAdapter10_2` and `OpenAdapter12`

@@ -1,7 +1,7 @@
-#include "um/icd/run_once.hpp"
+#include "um/common/run_once.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "um/icd/once_body.hpp"
+#include "um/common/once_body.hpp"
 
 #include <windows.h>
 

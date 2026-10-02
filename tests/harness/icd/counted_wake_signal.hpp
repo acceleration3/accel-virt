@@ -4,7 +4,7 @@
 #ifndef AV_COUNTED_WAKE_SIGNAL_HPP
 #define AV_COUNTED_WAKE_SIGNAL_HPP
 
-#include "icd/common/wake_signal.hpp"
+#include "icd/opengl/wake_signal.hpp"
 
 #include <cstdint>
 

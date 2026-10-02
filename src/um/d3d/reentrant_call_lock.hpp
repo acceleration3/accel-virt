@@ -6,7 +6,7 @@
 #ifndef AV_UM_REENTRANT_CALL_LOCK_HPP
 #define AV_UM_REENTRANT_CALL_LOCK_HPP
 
-#include "um/icd/srw_lock.hpp"
+#include "um/common/srw_lock.hpp"
 
 #include <stdint.h>
 

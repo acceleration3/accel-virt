@@ -7,7 +7,7 @@
 #define AV_UM_CL_PROBE_PROGRAM_HPP
 
 #include "guest/suite/guest_report.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 #include "um/probe/cl/windows_cl_entry.hpp"
 
 #include <stdint.h>

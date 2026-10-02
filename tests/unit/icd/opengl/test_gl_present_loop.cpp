@@ -17,7 +17,7 @@
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
-#include "icd/common/wake_signal.hpp"
+#include "icd/opengl/wake_signal.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
 #include "icd/opengl/guest_gl_context.hpp"

@@ -10,7 +10,7 @@
  * command line itself, which is the last run of digits in it and whether one of
  * those words is in it. */
 #include "core/trace/function_scope.hpp"
-#include "um/guest_program.hpp"
+#include "um/avtest/guest_program.hpp"
 
 #include <windows.h>
 

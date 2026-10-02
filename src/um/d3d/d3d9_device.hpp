@@ -32,7 +32,7 @@
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d9_records.hpp"
 #include "um/d3d/paging_queue.hpp"
-#include "um/icd/reentrant_call_lock.hpp"
+#include "um/d3d/reentrant_call_lock.hpp"
 
 #include <stdint.h>
 

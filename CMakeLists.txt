@@ -447,13 +447,10 @@ add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
   ${CMAKE_SOURCE_DIR}/src/icd/common/batched_transport.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/framed_block.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/host_channel.cpp
-  ${CMAKE_SOURCE_DIR}/src/icd/common/list_pieces.cpp
-  ${CMAKE_SOURCE_DIR}/src/icd/common/locked_transport.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/pieces.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/report_gate.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/row_pieces.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/shared_bytes.cpp
-  ${CMAKE_SOURCE_DIR}/src/icd/common/sliced_wait.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/thread_lock_hold.cpp)
 target_link_libraries(av_d3d_umd PUBLIC av_core)
 target_compile_options(av_d3d_umd PRIVATE ${AV_TEST_FLAGS})

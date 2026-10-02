@@ -7,7 +7,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "guest/suite/guest_suite.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 #include "um/trace/process_trace.hpp"
 
 #include <stdint.h>

@@ -8,13 +8,13 @@
 #define AV_UM_ICD_LIBRARY_HPP
 
 #include "icd/vulkan/icd_root.hpp"
-#include "um/gdi_kmt.hpp"
-#include "um/icd/dxgi_window_chains.hpp"
-#include "um/icd/file_log.hpp"
-#include "um/icd/lazy_driver.hpp"
-#include "um/icd/gdi_window_surface.hpp"
-#include "um/icd/process_heap.hpp"
-#include "um/icd/srw_lock.hpp"
+#include "um/kmt/gdi_kmt.hpp"
+#include "um/common/dxgi_window_chains.hpp"
+#include "um/common/file_log.hpp"
+#include "um/common/lazy_driver.hpp"
+#include "um/common/gdi_window_surface.hpp"
+#include "um/common/process_heap.hpp"
+#include "um/common/srw_lock.hpp"
 #include "um/trace/process_trace.hpp"
 
 #include <stdint.h>

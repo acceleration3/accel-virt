@@ -1,4 +1,4 @@
-#include "um/icd/reentrant_call_lock.hpp"
+#include "um/d3d/reentrant_call_lock.hpp"
 
 #include "core/trace/function_scope.hpp"
 

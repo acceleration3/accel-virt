@@ -1,4 +1,4 @@
-#include "um/icd/process_heap.hpp"
+#include "um/common/process_heap.hpp"
 
 #include "core/trace/function_scope.hpp"
 

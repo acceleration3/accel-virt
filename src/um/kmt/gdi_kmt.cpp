@@ -1,4 +1,4 @@
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 
 
 #include "core/support/nt_status.hpp"

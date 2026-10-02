@@ -3,7 +3,7 @@
  * a zero status here, never the inner transport's reply. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/transport/mock_transport.hpp"
-#include "icd/common/unanswered_transport.hpp"
+#include "icd/opencl/unanswered_transport.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"

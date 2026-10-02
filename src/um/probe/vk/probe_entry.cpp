@@ -1,7 +1,7 @@
 /* avvkprobe.exe's entry points: the process entry lld-link is told about,
  * and what the MSVC ABI references with no C runtime to define it, as for
  * avtest.exe (program_entry.cpp). */
-#include "um/probe/probe_program.hpp"
+#include "um/probe/vk/probe_program.hpp"
 
 #include <windows.h>
 

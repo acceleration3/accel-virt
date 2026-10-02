@@ -9,13 +9,13 @@
 #define AV_UM_CL_ICD_LIBRARY_HPP
 
 #include "icd/opencl/cl_icd_root.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 #include "um/opencl/windows_gl_share_source.hpp"
-#include "um/icd/file_log.hpp"
-#include "um/icd/lazy_driver.hpp"
-#include "um/icd/process_heap.hpp"
-#include "um/icd/srw_lock.hpp"
-#include "um/icd/windows_service_thread.hpp"
+#include "um/common/file_log.hpp"
+#include "um/common/lazy_driver.hpp"
+#include "um/common/process_heap.hpp"
+#include "um/common/srw_lock.hpp"
+#include "um/common/windows_service_thread.hpp"
 #include "um/trace/process_trace.hpp"
 
 #include <stdint.h>

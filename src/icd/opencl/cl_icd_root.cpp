@@ -14,7 +14,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
-#include "icd/common/unanswered_transport.hpp"
+#include "icd/opencl/unanswered_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_image_region.hpp"

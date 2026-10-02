@@ -5,9 +5,9 @@
 #define AV_UM_INSPECT_SESSION_HPP
 
 #include "guest/inspect/inspect_program.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 #include "um/inspect/windows_inspect_host.hpp"
-#include "um/icd/process_heap.hpp"
+#include "um/common/process_heap.hpp"
 
 #include <stdint.h>
 

@@ -1,4 +1,4 @@
-#include "um/guest_program.hpp"
+#include "um/avtest/guest_program.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"

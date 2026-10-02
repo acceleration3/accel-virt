@@ -2,7 +2,7 @@
  * one command on the batch. Handles become the ids their records hold; a null
  * handle is id 0, which the host reads as unbinding. */
 #include "core/trace/function_scope.hpp"
-#include "icd/common/list_pieces.hpp"
+#include "icd/d3d/list_pieces.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"

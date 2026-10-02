@@ -1,4 +1,4 @@
-#include "um/probe/probe_program.hpp"
+#include "um/probe/vk/probe_program.hpp"
 
 #include "guest/probe/shared_object_probe.hpp"
 

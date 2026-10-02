@@ -16,7 +16,7 @@
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
-#include "um/icd/srw_lock.hpp"
+#include "um/common/srw_lock.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

@@ -3,7 +3,7 @@
 #define AV_WINDOWS_WAKE_SIGNAL_HPP
 
 #include "core/support/status.hpp"
-#include "icd/common/wake_signal.hpp"
+#include "icd/opengl/wake_signal.hpp"
 
 #include <windows.h>
 

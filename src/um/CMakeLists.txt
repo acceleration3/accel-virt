@@ -18,7 +18,7 @@ file(GLOB_RECURSE AVTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # The ICDs' shims, avvkprobe.exe's and avinspect.exe's are their own
 # targets below.
-list(FILTER AVTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|opencl|d3d|probe|inspect)/")
+list(FILTER AVTEST_SOURCES EXCLUDE REGEX "/um/(common|vulkan|opengl|opencl|d3d|probe|inspect|sample)/")
 # Of the generated tree, only the guest's encoders: the av scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -68,7 +68,7 @@ add_custom_target(avtest_imports DEPENDS ${AVTEST_IMPORTS} ${VULKAN_LOADER_IMPOR
 
 # The suite and the probe share everything but their entry points, as one
 # archive the linker takes only what each program calls from.
-set(AVTEST_ENTRY ${CMAKE_CURRENT_SOURCE_DIR}/program_entry.cpp ${CMAKE_CURRENT_SOURCE_DIR}/guest_program.cpp)
+set(AVTEST_ENTRY ${CMAKE_CURRENT_SOURCE_DIR}/avtest/program_entry.cpp ${CMAKE_CURRENT_SOURCE_DIR}/avtest/guest_program.cpp)
 list(REMOVE_ITEM AVTEST_SOURCES ${AVTEST_ENTRY})
 add_library(avguest STATIC ${AVTEST_SOURCES})
 add_dependencies(avguest avtest_imports)
@@ -96,7 +96,8 @@ endforeach()
 add_custom_target(avclprobe_imports DEPENDS ${AVCLPROBE_IMPORTS})
 
 # avvkprobe.exe, feature 045's proof through the Khronos loader.
-file(GLOB AVVKPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/*.cpp)
+file(GLOB AVVKPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/probe/vk/*.cpp)
 # And the OpenCL seam from the CL probe's directory - the entry point and the
 # CL probe's own program stay there. Feature 053's shared-object steps need
 # both APIs in one process: Vulkan is the only one that exports, and OpenCL is
@@ -111,7 +112,7 @@ target_link_libraries(avvkprobe PRIVATE avguest ${AVTEST_IMPORTS} ${VULKAN_LOADE
 add_dependencies(avvkprobe avclprobe_imports)
 
 # avvk.dll, the Vulkan ICD (feature 045): the ICD's decisions in src/icd over
-# the transport, D3DKMT through gdi32, the shim both ICDs share in icd/ and its
+# the transport, D3DKMT through gdi32, the shim both ICDs share in common/ and its
 # own in vulkan/. The generated
 # default handle_to_wire of the dispatchable types is not linked: icd_hooks.cpp
 # answers the host's own handle for those.
@@ -126,11 +127,11 @@ file(GLOB_RECURSE AVVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/*.cpp)
 list(REMOVE_ITEM AVVK_SOURCES ${AVTEST_GENERATED})
 list(APPEND AVVK_SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_icd_entries.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatch_client.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
@@ -152,7 +153,7 @@ target_link_libraries(avvk PRIVATE ${AVTEST_IMPORTS})
 # avinspect.exe, the guest's reader of trace tables and state dumps
 # (docs/trace.md): InspectProgram over the Windows host.
 file(GLOB AVINSPECT_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/inspect/*.cpp)
-add_executable(avinspect ${AVINSPECT_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/icd/process_heap.cpp)
+add_executable(avinspect ${AVINSPECT_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/common/process_heap.cpp)
 target_link_options(avinspect PRIVATE /ENTRY:avinspect_entry)
 target_link_libraries(avinspect PRIVATE avguest ${AVTEST_IMPORTS})
 
@@ -171,7 +172,7 @@ list(GET AVGLPROBE_IMPORTS 1 USER32_IMPORT)
 
 # avgl.dll, the OpenGL ICD (feature 050): the ICD's decisions in src/icd over
 # the transport, D3DKMT through gdi32, windows through user32, the shim both
-# ICDs share in icd/ and its own in opengl/.
+# ICDs share in common/ and its own in opengl/.
 file(GLOB_RECURSE AVGL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opengl/*.cpp
@@ -183,11 +184,11 @@ file(GLOB_RECURSE AVGL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/opengl/*.cpp)
 list(REMOVE_ITEM AVGL_SOURCES ${AVTEST_GENERATED})
 list(APPEND AVGL_SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
 add_library(avgl SHARED ${AVGL_SOURCES} ${AV_STACK_PROBE})
@@ -202,7 +203,7 @@ set_property(TARGET avgl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR
 target_link_libraries(avgl PRIVATE ${AVTEST_IMPORTS} ${USER32_IMPORT})
 
 # avcl.dll, the OpenCL ICD (feature 052): the ICD's decisions in src/icd over
-# the transport, D3DKMT through gdi32, the shim both ICDs share in icd/ and its
+# the transport, D3DKMT through gdi32, the shim both ICDs share in common/ and its
 # own in opencl/. gdi32, kernel32 and ntdll are the whole import list - this ICD
 # makes no window, so no user32.
 file(GLOB_RECURSE AVCL_SOURCES CONFIGURE_DEPENDS
@@ -216,16 +217,16 @@ file(GLOB_RECURSE AVCL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/opencl/*.cpp)
 # The recursive proto glob above sweeps the generated tree, the host's server
 # dispatch included; only the OpenCL client belongs in a guest DLL. The window
-# surface goes too: it is the one thing in icd/ that calls user32, and an
+# surface goes too: it is the one thing in common/ that calls user32, and an
 # OpenCL ICD presents nothing.
 list(REMOVE_ITEM AVCL_SOURCES ${AVTEST_GENERATED}
-  ${CMAKE_CURRENT_SOURCE_DIR}/icd/gdi_window_surface.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/gdi_window_surface.cpp)
 list(APPEND AVCL_SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
 add_library(avcl SHARED ${AVCL_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(avcl avtest_imports)
@@ -411,7 +412,7 @@ endif()
 
 # avumd.dll, the Direct3D user-mode driver (feature 055): the driver's
 # decisions in src/icd/d3d over the transport, D3DKMT through gdi32, and the
-# shim all three user-mode drivers share in icd/. Unlike the two ICDs it links
+# shim all three user-mode drivers share in common/. Unlike the two ICDs it links
 # no generated tree - the D3D DDI is the WDK's shape, not a registry's - and
 # unlike them it imports no user32: nothing here touches a window.
 file(GLOB_RECURSE AVUMD_SOURCES CONFIGURE_DEPENDS
@@ -425,7 +426,7 @@ file(GLOB_RECURSE AVUMD_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/d3d/*.cpp)
 list(REMOVE_ITEM AVUMD_SOURCES ${AVTEST_GENERATED})
 # ExtensionPolicy reports Khronos extensions, which a Direct3D driver has none
@@ -435,7 +436,7 @@ list(APPEND AVUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d/d3d_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d9/d3d9_dispatch_client.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp)
 add_library(avumd SHARED ${AVUMD_SOURCES} ${AV_STACK_PROBE})
 add_dependencies(avumd avtest_imports)
 set_target_properties(avumd PROPERTIES PREFIX "")

@@ -5,7 +5,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
-#include "icd/common/wake_signal.hpp"
+#include "icd/opengl/wake_signal.hpp"
 #include "icd/common/window_chains.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"

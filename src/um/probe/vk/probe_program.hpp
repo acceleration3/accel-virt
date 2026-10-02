@@ -12,7 +12,7 @@
 #include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/loader_vulkan.hpp"
-#include "um/gdi_kmt.hpp"
+#include "um/kmt/gdi_kmt.hpp"
 
 #include <stdint.h>
 
