@@ -12,11 +12,11 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
-#include "icd/d3d/byte_pieces.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
+#include "icd/common/pieces.hpp"
+#include "icd/common/row_pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/pitched_rows.hpp"
-#include "icd/d3d/row_pieces.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
@@ -376,10 +376,10 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     AV_SCOPE("D3d9Device::write_buffer");
     const auto *const from = static_cast<const uint8_t *>(data);
     written_ += bytes;
-    d3d::BytePieces pieces(bytes, d3d::D3dCommandStream::arena_piece);
+    icd::Pieces pieces(bytes, d3d::D3dCommandStream::arena_piece);
     while (pieces.next()) {
         const uint32_t done = static_cast<uint32_t>(pieces.offset());
-        const uint32_t piece = static_cast<uint32_t>(pieces.bytes());
+        const uint32_t piece = static_cast<uint32_t>(pieces.count());
         if (!wire().make_room_for(piece)) return lost(__func__);
         if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, pieces.first() ? flags : flags & ~write_discard,
                                              from + done, piece))
@@ -404,7 +404,7 @@ HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, 
         D3DDDIBOX plane = box;
         plane.Front = slice;
         plane.Back = slice + 1u;
-        const HRESULT written = write_rows(resource.id, index, plane, rows, line,
+        const HRESULT written = write_rows(resource.id, index, plane, layout,
                                            data + size_t{slice - box.Front} * slice_pitch, row_pitch,
                                            slice == box.Front ? flags : flags & ~write_discard);
         if (FAILED(written)) return written;
@@ -412,14 +412,15 @@ HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, 
     return S_OK;
 }
 
-HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, uint32_t rows, uint32_t line,
+HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, const TexelLayout &layout,
                                const uint8_t *data, uint32_t row_pitch, uint32_t flags)
 {
     AV_SCOPE("D3d9Device::write_rows");
-    d3d::RowPieces pieces(rows, box.Bottom - box.Top, line, row_pitch, d3d::D3dCommandStream::arena_piece);
+    icd::RowPieces pieces(layout, box.Right - box.Left, box.Bottom - box.Top, row_pitch,
+                          d3d::D3dCommandStream::arena_piece);
     while (pieces.next()) {
-        const d3d9proto::Box part = {box.Left, box.Top + pieces.top(), box.Front, box.Right,
-                                     box.Top + pieces.bottom(), box.Back};
+        const d3d9proto::Box part = {box.Left + pieces.left(), box.Top + pieces.top(), box.Front,
+                                     box.Left + pieces.right(), box.Top + pieces.bottom(), box.Back};
         const size_t bytes = static_cast<size_t>(pieces.bytes());
         written_ += bytes;
         const uint64_t started = microseconds();

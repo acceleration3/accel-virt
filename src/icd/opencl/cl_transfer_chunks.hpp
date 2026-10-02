@@ -48,11 +48,11 @@ public:
     /* The first failure, or CL_SUCCESS once every chunk has gone. */
     cl_int read(uint64_t buffer, size_t offset, size_t bytes, void *into);
     cl_int write(uint64_t buffer, size_t offset, size_t bytes, const void *from);
-    /* The same for an image, `region` saying where each row of it is. A run of
-     * whole rows goes as one command where it fits, and a row too long for one
-     * goes in pieces. A read into rows with a gap between them goes a row at a
-     * time: what comes back is packed, and the gap is the application's
-     * memory, not the host's to write. */
+    /* The same for an image, `region` saying where each row of it is, in
+     * RowPieces: a run of whole rows as one command where it fits, and a row
+     * too long for one in runs of whole texels. A read into rows with a gap
+     * between them goes a row at a time: what comes back is packed, and the
+     * gap is the application's memory, not the host's to write. */
     cl_int read_image(uint64_t image, const ClImageRegion &region, void *into);
     cl_int write_image(uint64_t image, const ClImageRegion &region, const void *from);
 
@@ -60,16 +60,6 @@ public:
     uint32_t commands() const;
 
 private:
-    /* Rows of `region` one command carries from row `row` on: as many as fit
-     * `room` at `pitch` apart, at least one and no more than are left. Zero
-     * when one row alone does not fit. */
-    size_t rows_that_fit(const ClImageRegion &region, size_t row, size_t room, size_t pitch) const;
-    /* One row of the region in pieces of whole texels that fit `room`. */
-    cl_int read_row(uint64_t image, const ClImageRegion &region, size_t row, size_t slice,
-                    uint8_t *into);
-    cl_int write_row(uint64_t image, const ClImageRegion &region, size_t row, size_t slice,
-                     const uint8_t *from);
-
     ClientTransport &wire_;
     uint64_t         queue_;
     uint32_t         commands_;

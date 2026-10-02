@@ -1,4 +1,4 @@
-#include "proto/d3d/texel_layout.hpp"
+#include "proto/resources/texel_layout.hpp"
 
 #include "core/trace/function_scope.hpp"
 
@@ -11,6 +11,12 @@ constexpr uint32_t word_bytes = 4u;
 }  // namespace
 
 TexelLayout::TexelLayout() : bytes_(0u), width_(1u), height_(1u)
+{
+    AV_SCOPE("TexelLayout::TexelLayout");
+}
+
+TexelLayout::TexelLayout(uint32_t bytes, uint32_t width, uint32_t height)
+    : bytes_(bytes), width_(width == 0u ? 1u : width), height_(height == 0u ? 1u : height)
 {
     AV_SCOPE("TexelLayout::TexelLayout");
 }

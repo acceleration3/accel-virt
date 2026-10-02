@@ -203,6 +203,28 @@ TEST(cl_transfer_chunks, an_image_row_longer_than_a_reply_comes_back_in_pieces_o
           every_texel = every_texel && into.texel((y * width + x) * element) == host.texel_of(10u + x, 3u + y, 2u);
   CHECK(every_texel); }
 
+/* Rows with a gap that are each wider than a reply: every row in runs of whole
+ * texels that fit one, and the gap after each row still the application's. */
+TEST(cl_transfer_chunks, wide_image_rows_with_a_gap_come_back_in_runs_and_leave_the_gap)
+{ ClTransferHost host;
+  host.fill(0u);
+  ClTransferChunks    chunks(host, queue);
+  const std::size_t   width = ClTransferChunks::read_room / element + 3u;
+  const std::size_t   origin[3] = {0u, 1u, 0u}, extent[3] = {width, 2u, 1u};
+  const std::size_t   pitch = width * element + 8u;
+  const ClImageRegion region(origin, extent, pitch, 0u, element);
+  Memory              into(2u * pitch);
+  CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, region, into.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 4u);
+  CHECK_EQ(host.command(1u).region[0], 3u);
+  CHECK_EQ(host.command(2u).origin[1], 2u);
+  for (std::size_t y = 0u; y < 2u; ++y) {
+      CHECK_EQ(into.texel(y * pitch), host.texel_of(0u, 1u + y, 0u));
+      CHECK_EQ(into.texel(y * pitch + (width - 1u) * element), host.texel_of(width - 1u, 1u + y, 0u));
+      CHECK_EQ(*into.at(y * pitch + width * element), 0xEEu);
+      CHECK_EQ(*into.at(y * pitch + pitch - 1u), 0xEEu);
+  } }
+
 TEST(cl_transfer_chunks, image_rows_go_to_the_host_in_runs_at_the_applications_own_pitch)
 { ClTransferHost host;
   ClTransferChunks    chunks(host, queue);

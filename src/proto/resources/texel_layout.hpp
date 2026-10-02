@@ -6,7 +6,9 @@
  * texel each: its rows are its texel rows and take no bytes, so a caller sees
  * the format is unknown rather than a wrong size.
  *
- * Made only from a runtime's format: D3d9FormatLayout, DxgiFormatLayout. */
+ * A runtime's format names one (D3d9FormatLayout, DxgiFormatLayout); an API
+ * whose elements are plain texels of a known size makes one directly - an
+ * OpenCL image's pixels are one element each. */
 #ifndef AV_TEXEL_LAYOUT_HPP
 #define AV_TEXEL_LAYOUT_HPP
 
@@ -16,6 +18,12 @@ namespace av {
 
 class TexelLayout {
 public:
+    /* Elements of `bytes`, each `width` x `height` texels; both at least 1. */
+    TexelLayout(uint32_t bytes, uint32_t width, uint32_t height);
+    TexelLayout(const TexelLayout &) = default;
+    TexelLayout &operator=(const TexelLayout &) = default;
+    ~TexelLayout() = default;
+
     /* Zero for a format with no layout of whole bytes per element. */
     uint32_t element_bytes() const;
     uint32_t element_width() const;
@@ -33,9 +41,6 @@ public:
 protected:
     /* No layout: what a format the runtime's table does not name has. */
     TexelLayout();
-    ~TexelLayout() = default;
-    TexelLayout(const TexelLayout &) = default;
-    TexelLayout &operator=(const TexelLayout &) = default;
 
     void lay_out(uint32_t bytes, uint32_t width, uint32_t height);
 

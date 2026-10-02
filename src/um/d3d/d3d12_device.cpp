@@ -6,6 +6,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
+#include "icd/common/pieces.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/submission/present_point_record.hpp"
@@ -326,10 +327,11 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
     AV_SCOPE("D3d12Device::execute_command_lists");
     constexpr UINT most_lists = 64u;
     QueueRecord &queue = *static_cast<QueueRecord *>(handle.pDrvPrivate);
-    for (UINT first = 0u; lists != nullptr && first < count; first += most_lists) {
-        uint32_t ids[most_lists] = {};
-        const UINT batch = count - first < most_lists ? count - first : most_lists;
-        for (UINT index = 0u; index < batch; index++) ids[index] = id_of(lists[first + index].pDrvPrivate);
+    icd::Pieces pieces(lists == nullptr ? 0u : count, most_lists);
+    while (pieces.next()) {
+        uint32_t   ids[most_lists] = {};
+        const auto batch = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < batch; index++) ids[index] = id_of(lists[pieces.offset() + index].pDrvPrivate);
         if (!sent(d3d12proto::av_d3d12_ExecuteCommandLists12(wire(), queue.header.id, batch, ids),
                   "ExecuteCommandLists12"))
             return;

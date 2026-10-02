@@ -6,7 +6,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
-#include "proto/d3d/texel_layout.hpp"
+#include "proto/resources/texel_layout.hpp"
 
 #include <cstdint>
 
@@ -69,3 +69,15 @@ TEST(texel_layout, a_copied_layout_counts_the_same)
   CHECK_EQ(again.rows(10u), 3u);
   CHECK_EQ(again.row_bytes(10u), 24u);
   CHECK_EQ(again.element_width(), 4u); }
+
+/* An element is at least one texel each way: a layout made with none is
+ * counted as one, never divided by. */
+TEST(texel_layout, an_element_of_no_texels_is_one)
+{ const TexelLayout flat(4u, 0u, 0u);
+  CHECK_EQ(flat.element_width(), 1u);
+  CHECK_EQ(flat.element_height(), 1u);
+  CHECK_EQ(flat.row_bytes(3u), 12u);
+  CHECK_EQ(flat.rows(5u), 5u);
+  const TexelLayout block(8u, 4u, 4u);
+  CHECK_EQ(block.element_width(), 4u);
+  CHECK_EQ(block.rows(5u), 2u); }

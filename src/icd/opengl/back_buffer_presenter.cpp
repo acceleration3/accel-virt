@@ -5,11 +5,13 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/support/log_sink.hpp"
+#include "icd/common/row_pieces.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
+#include "proto/resources/texel_layout.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -308,17 +310,16 @@ void BackBufferPresenter::set_pack(ClientTransport &wire, const ClientArrayState
 void BackBufferPresenter::read_back(ClientTransport &wire)
 {
     AV_SCOPE("BackBufferPresenter::read_back");
-    const size_t   row_bytes = static_cast<size_t>(width_) * bytes_per_pixel;
-    const size_t   chunk = wire.blobs().ready() ? blob_read_bytes : inline_read_bytes;
-    /* At least one row: the widest window's row fits the smaller chunk. */
-    const auto     rows = static_cast<uint32_t>(chunk / row_bytes);
-    for (uint32_t row = 0u; row < height_; row += rows) {
-        const uint32_t taken = height_ - row < rows ? height_ - row : rows;
-        glproto::av_glGetTextureSubImage(wire, texture_, 0, 0, static_cast<GLint>(row), 0,
-                                          static_cast<GLsizei>(width_), static_cast<GLsizei>(taken), 1, gl_bgra,
-                                          gl_unsigned_byte, static_cast<GLsizei>(row_bytes * taken),
-                                          pixels_ + row_bytes * row);
-    }
+    const TexelLayout pixels(bytes_per_pixel, 1u, 1u);
+    const size_t      chunk = wire.blobs().ready() ? blob_read_bytes : inline_read_bytes;
+    icd::RowPieces    pieces(pixels, width_, height_, width_ * bytes_per_pixel, chunk);
+    while (pieces.next())
+        glproto::av_glGetTextureSubImage(wire, texture_, 0, static_cast<GLint>(pieces.left()),
+                                          static_cast<GLint>(pieces.top()), 0,
+                                          static_cast<GLsizei>(pieces.right() - pieces.left()),
+                                          static_cast<GLsizei>(pieces.bottom() - pieces.top()), 1, gl_bgra,
+                                          gl_unsigned_byte, static_cast<GLsizei>(pieces.bytes()),
+                                          pixels_ + pieces.offset());
 }
 
 /* Opened at the window's size the first time a frame is drawn, and again

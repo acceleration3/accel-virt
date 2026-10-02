@@ -6,6 +6,7 @@
 #include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
+#include "icd/common/pieces.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -244,8 +245,9 @@ bool D3d9Device::send_states()
 bool D3d9Device::send_pieces(StatesCommand send, uint32_t count, const uint32_t *values, uint32_t piece)
 {
     AV_SCOPE("D3d9Device::send_pieces");
-    for (uint32_t done = 0u; done < count; done += piece)
-        if (!send(wire(), count - done < piece ? count - done : piece, values + done)) return false;
+    icd::Pieces pieces(count, piece);
+    while (pieces.next())
+        if (!send(wire(), static_cast<uint32_t>(pieces.count()), values + pieces.offset())) return false;
     return true;
 }
 

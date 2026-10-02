@@ -1,3 +1,4 @@
+#include "icd/common/pieces.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
 
 #include "core/platform/block_source.hpp"
@@ -162,12 +163,10 @@ void BufferMapping::start(ClientTransport &wire)
 void BufferMapping::read(ClientTransport &wire)
 {
     AV_SCOPE("BufferMapping::read");
-    for (uint64_t at = 0u; at < length_; at += read_bytes) {
-        const uint64_t left = length_ - at;
-        const size_t   chunk = left < read_bytes ? static_cast<size_t>(left) : read_bytes;
-        glproto::av_glGetNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
-                                             static_cast<GLsizeiptr>(chunk), block_ + at);
-    }
+    icd::Pieces pieces(length_, read_bytes);
+    while (pieces.next())
+        glproto::av_glGetNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + pieces.offset()),
+                                             static_cast<GLsizeiptr>(pieces.count()), block_ + pieces.offset());
 }
 
 void BufferMapping::send(ClientTransport &wire, uint64_t at, uint64_t end)

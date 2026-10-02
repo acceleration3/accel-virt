@@ -1,6 +1,8 @@
 #include "um/d3d/d3d12_recorder.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/list_pieces.hpp"
+#include "icd/common/pieces.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d12_records.hpp"
@@ -131,12 +133,20 @@ VOID D3d12Recorder::clear_render_target_view(D3D12DDI_HCOMMANDLIST handle, D3D12
     AV_SCOPE("D3d12Recorder::clear_render_target_view");
     Float4 value = {};
     for (uint32_t channel = 0u; color != nullptr && channel < 4u; channel++) value.v[channel] = color[channel];
-    Rect   areas[most_views] = {};
-    const UINT count = rects == nullptr ? 0u : (rect_count < most_views ? rect_count : most_views);
-    for (UINT index = 0u; index < count; index++)
-        areas[index] = Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    sent(av_d3d12_ClearRenderTargetView12(device_.wire(), list(handle), device_.descriptor(view), value, count, areas),
-         "ClearRenderTargetView12");
+    /* A longer list is cleared most_views at a time, and none clears the
+     * whole view. */
+    icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, most_views);
+    while (pieces.next()) {
+        Rect       areas[most_views] = {};
+        const auto count = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < count; index++) {
+            const D3D12DDI_RECT &from = rects[pieces.offset() + index];
+            areas[index] = Rect{from.left, from.top, from.right, from.bottom};
+        }
+        sent(av_d3d12_ClearRenderTargetView12(device_.wire(), list(handle), device_.descriptor(view), value, count,
+                                              areas),
+             "ClearRenderTargetView12");
+    }
 }
 
 VOID D3d12Recorder::clear_depth_stencil_view(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view,
@@ -144,13 +154,18 @@ VOID D3d12Recorder::clear_depth_stencil_view(D3D12DDI_HCOMMANDLIST handle, D3D12
                                              const D3D12DDI_RECT *rects)
 {
     AV_SCOPE("D3d12Recorder::clear_depth_stencil_view");
-    Rect       areas[most_views] = {};
-    const UINT count = rects == nullptr ? 0u : (rect_count < most_views ? rect_count : most_views);
-    for (UINT index = 0u; index < count; index++)
-        areas[index] = Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    sent(av_d3d12_ClearDepthStencilView12(device_.wire(), list(handle), device_.descriptor(view), flags, depth, stencil,
-                                           count, areas),
-         "ClearDepthStencilView12");
+    icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, most_views);
+    while (pieces.next()) {
+        Rect       areas[most_views] = {};
+        const auto count = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < count; index++) {
+            const D3D12DDI_RECT &from = rects[pieces.offset() + index];
+            areas[index] = Rect{from.left, from.top, from.right, from.bottom};
+        }
+        sent(av_d3d12_ClearDepthStencilView12(device_.wire(), list(handle), device_.descriptor(view), flags, depth,
+                                               stencil, count, areas),
+             "ClearDepthStencilView12");
+    }
 }
 
 /* ---------------------------------------------------------------- copies */
@@ -265,11 +280,12 @@ VOID D3d12Recorder::resource_barrier(D3D12DDI_HCOMMANDLIST handle, UINT count,
                                      const D3D12DDIARG_RESOURCE_BARRIER_0022 *barriers)
 {
     AV_SCOPE("D3d12Recorder::resource_barrier");
-    for (UINT first = 0u; barriers != nullptr && first < count; first += most_barriers) {
+    icd::Pieces pieces(barriers == nullptr ? 0u : count, most_barriers);
+    while (pieces.next()) {
         Barrier    batch[most_barriers] = {};
-        const UINT taken = count - first < most_barriers ? count - first : most_barriers;
+        const auto taken = static_cast<UINT>(pieces.count());
         for (UINT index = 0u; index < taken; index++) {
-            const D3D12DDIARG_RESOURCE_BARRIER_0022 &from = barriers[first + index];
+            const D3D12DDIARG_RESOURCE_BARRIER_0022 &from = barriers[pieces.offset() + index];
             Barrier                                 &to = batch[index];
             to.flags = static_cast<uint32_t>(from.Flags);
             if (from.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION) {

@@ -4,10 +4,10 @@
 #include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
+#include "icd/common/pieces.hpp"
+#include "icd/common/row_pieces.hpp"
 #include "icd/common/thread_lock.hpp"
-#include "icd/d3d/byte_pieces.hpp"
 #include "icd/d3d/device_table.hpp"
-#include "icd/d3d/row_pieces.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
@@ -296,12 +296,12 @@ void D3d11Device::upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &r
                                        uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload_buffer_pieces");
-    d3d::BytePieces pieces(static_cast<uint32_t>(region.right - region.left), piece_bytes());
+    icd::Pieces pieces(static_cast<uint32_t>(region.right - region.left), piece_bytes());
     while (pieces.next()) {
         D3D10_DDI_BOX part = region;
         part.left = region.left + static_cast<LONG>(pieces.offset());
-        part.right = part.left + static_cast<LONG>(pieces.bytes());
-        upload_piece_of(resource, 0u, &part, data + pieces.offset(), static_cast<size_t>(pieces.bytes()), 0u, 0u,
+        part.right = part.left + static_cast<LONG>(pieces.count());
+        upload_piece_of(resource, 0u, &part, data + pieces.offset(), static_cast<size_t>(pieces.count()), 0u, 0u,
                         pieces.first() ? copy_flags : copy_flags & ~copy_discard);
     }
 }
@@ -312,17 +312,21 @@ void D3d11Device::upload_row_pieces(const ResourceRecord &resource, uint32_t sub
                                     const uint8_t *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload_row_pieces");
+    const uint32_t width = static_cast<uint32_t>(region.right - region.left);
     const uint32_t height = static_cast<uint32_t>(region.bottom - region.top);
-    const uint32_t lines = rows(resource, height);
-    const uint32_t line = row_bytes(resource, static_cast<uint32_t>(region.right - region.left));
-    if (lines == 0u || row_pitch == 0u) return;
+    if (row_pitch == 0u) return;
+    /* A format with no layout is still copied, a byte a texel. */
+    const DxgiFormatLayout format(resource.format);
+    const TexelLayout      layout = format.element_bytes() != 0u ? TexelLayout(format) : TexelLayout(1u, 1u, 1u);
     for (LONG slice = region.front; slice < region.back; slice++) {
         const uint8_t *const plane = data + static_cast<size_t>(slice - region.front) * depth_pitch;
-        d3d::RowPieces       pieces(lines, height, line, row_pitch, piece_bytes());
+        icd::RowPieces       pieces(layout, width, height, row_pitch, piece_bytes());
         while (pieces.next()) {
             D3D10_DDI_BOX part = region;
             part.front = slice;
             part.back = slice + 1;
+            part.left = region.left + static_cast<LONG>(pieces.left());
+            part.right = region.left + static_cast<LONG>(pieces.right());
             part.top = region.top + static_cast<LONG>(pieces.top());
             part.bottom = region.top + static_cast<LONG>(pieces.bottom());
             const bool first = slice == region.front && pieces.first();

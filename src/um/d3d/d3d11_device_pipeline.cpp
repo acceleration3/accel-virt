@@ -2,6 +2,7 @@
  * one command on the batch. Handles become the ids their records hold; a null
  * handle is id 0, which the host reads as unbinding. */
 #include "core/trace/function_scope.hpp"
+#include "icd/common/list_pieces.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -486,21 +487,33 @@ VOID D3d11Device::clear_view(D3D11DDI_HANDLETYPE, void *view, const FLOAT *color
 {
     AV_SCOPE("D3d11Device::clear_view");
     const d3dproto::Float4 value = {{color[0], color[1], color[2], color[3]}};
-    d3dproto::Rect bound[max_viewports] = {};
-    const UINT used = rect_count > max_viewports ? max_viewports : rect_count;
-    for (UINT index = 0u; index < used; index++)
-        bound[index] = d3dproto::Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    static_cast<void>(d3dproto::av_d3d_ClearView(wire(), id_of(view), value, used, bound));
+    /* The wire carries a pipeline's worth of rectangles a command; a longer
+     * list is cleared that many at a time, and none clears the whole view. */
+    icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, max_viewports);
+    while (pieces.next()) {
+        d3dproto::Rect bound[max_viewports] = {};
+        const auto     used = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < used; index++) {
+            const D3D10_DDI_RECT &from = rects[pieces.offset() + index];
+            bound[index] = d3dproto::Rect{from.left, from.top, from.right, from.bottom};
+        }
+        static_cast<void>(d3dproto::av_d3d_ClearView(wire(), id_of(view), value, used, bound));
+    }
 }
 
 VOID D3d11Device::discard(D3D11DDI_HANDLETYPE, void *object, const D3D10_DDI_RECT *rects, UINT rect_count)
 {
     AV_SCOPE("D3d11Device::discard");
-    d3dproto::Rect bound[max_viewports] = {};
-    const UINT used = rect_count > max_viewports ? max_viewports : rect_count;
-    for (UINT index = 0u; index < used; index++)
-        bound[index] = d3dproto::Rect{rects[index].left, rects[index].top, rects[index].right, rects[index].bottom};
-    static_cast<void>(d3dproto::av_d3d_Discard(wire(), id_of(object), used, bound));
+    icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, max_viewports);
+    while (pieces.next()) {
+        d3dproto::Rect bound[max_viewports] = {};
+        const auto     used = static_cast<UINT>(pieces.count());
+        for (UINT index = 0u; index < used; index++) {
+            const D3D10_DDI_RECT &from = rects[pieces.offset() + index];
+            bound[index] = d3dproto::Rect{from.left, from.top, from.right, from.bottom};
+        }
+        static_cast<void>(d3dproto::av_d3d_Discard(wire(), id_of(object), used, bound));
+    }
 }
 
 /* ---------------------------------------------------------------- copies */

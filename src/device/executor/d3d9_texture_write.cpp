@@ -1,7 +1,7 @@
 #include "device/executor/d3d9_texture_write.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/d3d/texel_layout.hpp"
+#include "proto/resources/texel_layout.hpp"
 
 namespace av {
 

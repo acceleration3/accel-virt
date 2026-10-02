@@ -9,6 +9,7 @@
  * bound when a draw needs them and only where the host's binding differs. */
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
+#include "icd/common/list_pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
@@ -268,16 +269,14 @@ HRESULT D3d9Device::clear(const D3DDDIARG_CLEAR *args, UINT count, const RECT *r
 {
     AV_SCOPE("D3d9Device::clear");
     if (!send_states()) return lost(__func__);
-    const uint32_t total = rects == nullptr ? 0u : count;
-    uint32_t       done = 0u;
-    do {
-        const uint32_t piece = total - done < clear_rects ? total - done : clear_rects;
-        if (!d3d9proto::av_d3d9_Clear9(wire(), piece, reinterpret_cast<const d3d9proto::Rect *>(rects) + done,
+    const auto *const listed = reinterpret_cast<const d3d9proto::Rect *>(rects);
+    icd::ListPieces   pieces(rects == nullptr ? 0u : count, clear_rects);
+    while (pieces.next()) {
+        if (!d3d9proto::av_d3d9_Clear9(wire(), static_cast<uint32_t>(pieces.count()), listed + pieces.offset(),
                                        args->Flags & clear_flags, args->FillColor, args->FillDepth,
                                        args->FillStencil))
             return lost(__func__);
-        done += piece;
-    } while (done < total);
+    }
     return S_OK;
 }
 

@@ -40,6 +40,7 @@ class LogSink;
 
 namespace av {
 class BlockSource;
+class TexelLayout;
 }  // namespace av
 
 
@@ -155,7 +156,7 @@ private:
      * when it is larger than a piece of the arena. */
     HRESULT write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box, const uint8_t *data,
                           uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags);
-    HRESULT write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, uint32_t rows, uint32_t line,
+    HRESULT write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, const TexelLayout &layout,
                        const uint8_t *data, uint32_t row_pitch, uint32_t flags);
     HRESULT write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags);
     /* A subresource's pixels as the host has them, into the device's
