@@ -532,3 +532,21 @@ TEST(guest_cl_context, a_driver_that_refuses_the_contexts_transport_makes_no_con
   /* Nothing is held: the adapter and the device it opened are given back. */
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(context.invariants_hold()); }
+
+/* A staged mapping's block is zeros, not what the heap held there: a
+ * write-invalidate map is never read from the host, and the application may
+ * read what it has not written yet. */
+TEST(guest_cl_context, a_staged_mapping_starts_as_zeros)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint8_t *const block = context.take_mapping(0x6600u, 0x7000u, 0u, 64u, CL_MAP_WRITE_INVALIDATE_REGION);
+  CHECK(block != nullptr);
+  bool zeros = true;
+  for (std::uint32_t at = 0u; at < 64u; at++) zeros = zeros && block[at] == 0u;
+  CHECK(zeros);
+  av::clicd::MappedRegion *const region = context.mapping_at(block);
+  CHECK(region != nullptr);
+  context.give_back_mapping(*region);
+  CHECK_EQ(context.mappings(), 0u); }

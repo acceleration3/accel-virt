@@ -173,6 +173,11 @@ uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t off
     if (slot == max_mappings) return nullptr;
     uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     if (block == nullptr) return nullptr;
+    /* A write-invalidate map is never read from the host, and a read may
+     * answer short: what nothing fills is still the application's to read,
+     * so it reads zeros, never what the heap last held there. OpenGL's
+     * staged maps do the same (BufferMapping). */
+    __builtin_memset(block, 0, bytes);
     mappings_[slot].take(buffer, host, offset, bytes, flags, block, true);
     return block;
 }
