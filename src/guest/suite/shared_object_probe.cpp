@@ -5,8 +5,6 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_scenario.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/probe_commands.hpp"
@@ -313,10 +311,8 @@ void SharedObjectProbe::carrier_size_steps(uint32_t device)
 void SharedObjectProbe::carrier_steps()
 {
     AV_SCOPE("SharedObjectProbe::carrier_steps");
-    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
-    AdapterSearch     search(kmt_);
-    if (steps_.check("carrier_adapter", search.find(avgpu)) != Status::ok) return;
+    AdapterSearch search(kmt_);
+    if (steps_.check("carrier_adapter", search.find_avgpu(0u)) != Status::ok) return;
     uint32_t device = 0u;
     if (steps_.check("carrier_device", kmt_.create_device(search.adapter(), device)) != Status::ok) return;
 
@@ -373,11 +369,9 @@ void SharedObjectProbe::run()
     AV_SCOPE("SharedObjectProbe::run");
     /* The avgpu adapter's own physical device: an export on anybody else's
      * would prove nothing about this driver. */
-    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
-    AdapterSearch     search(kmt_);
-    uint64_t          luid = 0u;
-    Status            found = search.find(avgpu);
+    AdapterSearch search(kmt_);
+    uint64_t      luid = 0u;
+    Status        found = search.find_avgpu(0u);
     if (found == Status::ok) found = kmt_.adapter_luid(search.adapter(), luid);
     if (steps_.check("adapter", found) != Status::ok) return;
 

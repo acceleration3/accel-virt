@@ -34,6 +34,9 @@ public:
      * opened, where a guest has one avgpu adapter per host GPU. A `luid` of 0
      * takes the first match. */
     [[nodiscard]] Status find(const PciIdentity &identity, uint64_t luid);
+    /* The same for this driver's own adapter, avgpu's PCI identity: what
+     * every ICD, the guest suite and the inspector look for. */
+    [[nodiscard]] Status find_avgpu(uint64_t luid);
     /* Closes the kept adapter, if any. */
     [[nodiscard]] Status close();
     bool                 found() const;

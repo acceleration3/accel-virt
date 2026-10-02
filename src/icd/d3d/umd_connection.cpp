@@ -2,8 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_scenario.hpp"
 
 namespace av::d3d {
 
@@ -29,9 +27,7 @@ Status UmdConnection::acquire(uint64_t luid)
      * run a static constructor, so a global one would stay zeroed in the guest
      * and match no adapter - while every Linux test, whose runtime does run
      * it, passed. */
-    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
-    const Status found = search_.find(avgpu, luid);
+    const Status found = search_.find_avgpu(luid);
     if (found != Status::ok) return found == Status::not_found ? Status::not_supported : found;
     luid_ = luid;
     opens_ = 1u;

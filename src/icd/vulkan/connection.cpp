@@ -5,8 +5,6 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_scenario.hpp"
 #include "guest/transport/host_window_chunk.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/common/thread_lock_hold.hpp"
@@ -33,9 +31,7 @@ Status Connection::open()
     AV_SCOPE("Connection::open");
     if (opened()) return Status::invalid_state;
     ScopeExit undo([&] { close(); });
-    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
-    if (search_.find(avgpu) != Status::ok) return Status::not_supported;
+    if (search_.find_avgpu(0u) != Status::ok) return Status::not_supported;
     if (kmt_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
     const Status opened = channel_.open(connection_);

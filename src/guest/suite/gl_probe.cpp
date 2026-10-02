@@ -3,8 +3,6 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_scenario.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/bmp_image.hpp"
 #include "guest/suite/gl_entry.hpp"
@@ -271,10 +269,8 @@ void GlProbe::resized_step()
 uint64_t GlProbe::blank_ticks()
 {
     AV_SCOPE("GlProbe::blank_ticks");
-    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
-    AdapterSearch     search(kmt_);
-    if (search.find(avgpu) != Status::ok) return 0u;
+    AdapterSearch search(kmt_);
+    if (search.find_avgpu(0u) != Status::ok) return 0u;
     uint32_t device = 0u;
     uint64_t ticks = 0u;
     if (kmt_.create_device(search.adapter(), device) == Status::ok) {

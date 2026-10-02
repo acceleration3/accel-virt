@@ -3,8 +3,6 @@
 #include "core/platform/block_source.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/kmt/pci_identity.hpp"
-#include "guest/suite/adapter_scenario.hpp"
 #include "guest/suite/adapter_search.hpp"
 
 namespace av {
@@ -26,9 +24,7 @@ Status EscapeReader::read(TraceEscapeRecord::Kind kind)
     AV_SCOPE("EscapeReader::read");
     drop();
     AdapterSearch     search(kmt_);
-    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                             AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
-    if (search.find(avgpu) != Status::ok) return Status::not_found;
+    if (search.find_avgpu(0u) != Status::ok) return Status::not_found;
     const Status status = read_from(search.adapter(), kind);
     if (status != Status::ok) drop();
     /* The dump is read; a failure to close the adapter changes nothing in it. */

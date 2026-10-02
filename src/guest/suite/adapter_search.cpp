@@ -1,6 +1,7 @@
 #include "guest/suite/adapter_search.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 
@@ -78,6 +79,14 @@ uint32_t AdapterSearch::adapter() const
 {
     AV_SCOPE("AdapterSearch::adapter");
     return adapter_;
+}
+
+Status AdapterSearch::find_avgpu(uint64_t luid)
+{
+    AV_SCOPE("AdapterSearch::find_avgpu");
+    const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                            AdapterScenario::virtio_vendor, AdapterScenario::av_subsystem);
+    return find(avgpu, luid);
 }
 
 }  // namespace av

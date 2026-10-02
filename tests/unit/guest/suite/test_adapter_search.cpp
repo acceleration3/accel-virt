@@ -4,6 +4,8 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 
+#include <cstdint>
+
 using av::AdapterSearch;
 using av::MockKmt;
 using av::PciIdentity;
@@ -89,5 +91,31 @@ TEST(adapter_search, a_real_card_of_the_same_model_is_not_the_device)
   kmt.add_adapter(real_radeon, 3200u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find(av_gpu), Status::not_found);
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* avgpu's own identity is the search's to know: any adapter presenting the
+ * device's subsystem, the first or the one whose LUID a runtime opened, and
+ * never a stock virtio-gpu or a real card of the same model. */
+TEST(adapter_search, finds_avgpu_by_its_own_identity_and_by_luid)
+{ MockKmt kmt;
+  kmt.add_adapter(real_radeon, 3200u);
+  kmt.add_adapter(stock, 1300u);
+  kmt.add_adapter(on_radeon, 3200u);
+  kmt.add_adapter(on_raphael, 3200u);
+  kmt.set_adapter_luid(2u, 0x22u);
+  kmt.set_adapter_luid(3u, 0x33u);
+  { AdapterSearch search(kmt);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
+    std::uint64_t luid = 0u;
+    CHECK_STATUS(kmt.adapter_luid(search.adapter(), luid), Status::ok);
+    CHECK_EQ(luid, 0x22u); }
+  { AdapterSearch search(kmt);
+    CHECK_STATUS(search.find_avgpu(0x33u), Status::ok);
+    std::uint64_t luid = 0u;
+    CHECK_STATUS(kmt.adapter_luid(search.adapter(), luid), Status::ok);
+    CHECK_EQ(luid, 0x33u); }
+  { AdapterSearch search(kmt);
+    CHECK_STATUS(search.find_avgpu(0x99u), Status::not_found); }
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
