@@ -15,6 +15,7 @@
 #include "icd/d3d/byte_pieces.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "icd/d3d/pitched_rows.hpp"
 #include "icd/d3d/row_pieces.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -315,10 +316,8 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
     if (locked->kind == D3d9Resource::Kind::surface && !args->Flags.Discard && !args->Flags.WriteOnly) {
         uint32_t pitch = 0u, rows = 0u;
         if (SUCCEEDED(read_surface(*locked, args->SubResourceIndex, pitch, rows)))
-            for (uint32_t row = 0u; row < rows && size_t{row + 1u} * subresource.shadow_pitch <= subresource.shadow_bytes;
-                 row++)
-                memcpy(subresource.shadow + size_t{row} * subresource.shadow_pitch, readback_ + size_t{row} * pitch,
-                       pitch < subresource.shadow_pitch ? pitch : subresource.shadow_pitch);
+            static_cast<void>(d3d::PitchedRows(subresource.shadow, subresource.shadow_pitch, subresource.shadow_bytes)
+                                  .copy_from(d3d::PitchedRows(readback_, pitch, size_t{rows} * pitch), rows));
     }
     args->pSurfData =
         subresource.shadow + lock_offset(*locked, *args, subresource.shadow_pitch, subresource.shadow_slice_pitch);
