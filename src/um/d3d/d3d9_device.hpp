@@ -24,6 +24,7 @@
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "icd/d3d/device_removal.hpp"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/kernel_device.hpp"
@@ -196,6 +197,8 @@ private:
     BlockSource                         &memory_;
     LogSink                        &log_;
     KeyedLog                        lines_;
+    /* Why the device is gone, said once, by the first call that found it. */
+    d3d::DeviceRemoval              removal_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
     ReentrantCallLock                    lock_;

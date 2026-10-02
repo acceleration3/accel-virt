@@ -172,3 +172,13 @@ TEST(kernel_surface, an_open_of_anything_but_this_driver_s_shared_surface_finds_
   std::memset(garbage, 0xff, sizeof garbage);
   CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, garbage, sizeof garbage), Status::ok);
   CHECK_EQ(opened.key(), 0u); }
+
+/* The allocation of a primary is scanned out at its source; any other
+ * surface is no primary and names source 0. */
+TEST(kernel_surface, a_primary_says_where_it_is_scanned_out_and_any_other_is_none)
+{ const KernelSurface primary(64u, 64u, b8g8r8a8, ScanoutTarget(2u, 60u, 1u));
+  CHECK(primary.primary());
+  CHECK_EQ(primary.source(), 2u);
+  const KernelSurface plain(64u, 64u, b8g8r8a8);
+  CHECK(!plain.primary());
+  CHECK_EQ(plain.source(), 0u); }

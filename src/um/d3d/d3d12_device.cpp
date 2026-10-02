@@ -48,7 +48,7 @@ D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, L
                          const D3d12HostCaps &caps,
                          void *const &list_table)
     : session_(session), heaps_(heaps), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
-      recorder_(*this), null_resource_{}, lost_(false)
+      recorder_(*this), null_resource_{}, removal_()
 {
     AV_SCOPE("D3d12Device::D3d12Device");
     null_resource_.depth_or_array = 1u;
@@ -137,12 +137,9 @@ uint32_t D3d12Device::id_of(const void *block) const
 void D3d12Device::lost(const char *what)
 {
     AV_SCOPE("D3d12Device::lost");
-    if (lost_) return;
-    lost_ = true;
-    LogLine(lines_)
-        .text("Direct3D 12 device lost: ")
-        .text(what)
-        .write();
+    if (removal_.removed()) return;
+    removal_.remove(static_cast<d3d::Hresult>(D3DDDIERR_DEVICEREMOVED));
+    static_cast<void>(removal_.check(log_, what));
     if (core_ != nullptr) core_->pfnSetErrorCb(runtime_, D3DDDIERR_DEVICEREMOVED);
 }
 

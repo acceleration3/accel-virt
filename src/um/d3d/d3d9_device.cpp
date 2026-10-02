@@ -21,7 +21,6 @@ namespace {
 
 constexpr uint32_t stage_vertex = 0u;
 /* What a lost device's line is logged once under. */
-constexpr char lost_key[] = "lost";
 /* Calls the trace logs, and what says it is off. */
 constexpr uint32_t trace_most = 20000u;
 constexpr uint32_t trace_none = ~0u;
@@ -57,7 +56,7 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter)
-    : session_(session), memory_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
+    : session_(session), memory_(memory), log_(log), lines_(log, "avumd: "), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
@@ -213,8 +212,8 @@ HANDLE D3d9Device::handle_of(uint32_t id) const
 HRESULT D3d9Device::lost(const char *call)
 {
     AV_SCOPE("D3d9Device::lost");
-    if (lines_.first(lost_key, 0)) lines_.name("Direct3D 9 device lost: could not send", call);
-    return D3DDDIERR_DEVICEREMOVED;
+    removal_.remove(static_cast<d3d::Hresult>(D3DDDIERR_DEVICEREMOVED));
+    return static_cast<HRESULT>(removal_.check(log_, call));
 }
 
 void D3d9Device::not_implemented(const char *call)
