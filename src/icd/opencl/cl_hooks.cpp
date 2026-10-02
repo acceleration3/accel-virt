@@ -880,12 +880,4 @@ void stub_called(const char *api, const char *entry_point, const char *why) noex
     if (clicd::cl_icd_binding.bound()) clicd::cl_icd_binding.root().note_refused(entry_point);
 }
 
-void payload_dropped(const char *api, const char *command, size_t written) noexcept
-{
-    AV_SCOPE("payload_dropped");
-    static_cast<void>(api);
-    static_cast<void>(command);
-    static_cast<void>(written);
-}
-
 }  // namespace av::icd

@@ -63,10 +63,6 @@ void stub_called(const char *api, const char *entry_point, const char *why) noex
     ++refusals.count;
 }
 
-/* Not called here; the OpenCL client never reports a dropped payload. Defined
- * so a translation unit that links this one links at all. */
-void payload_dropped(const char *, const char *, size_t) noexcept {}
-
 }  // namespace av::icd
 
 TEST(icd_stub_report, a_slot_the_driver_claimed_is_not_overwritten)
