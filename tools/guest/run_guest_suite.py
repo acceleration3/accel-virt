@@ -390,8 +390,8 @@ def arguments():
                         help="minutes of fences awaited while the blank's interrupt is masked and unmasked "
                              "(feature 039, US3); 0 leaves the long run out")
     parser.add_argument("--accel", default="kvm")
-    parser.add_argument("--no-cpu-pm", dest="cpu_pm", action="store_false",
-                        help="let an idle vCPU exit to the host (QEMU's default) instead of -overcommit cpu-pm=on")
+    parser.add_argument("--cpu-pm", action="store_true",
+                        help="-overcommit cpu-pm=on: an idle vCPU halts inside the guest and holds its host core")
     parser.add_argument("--boot-timeout", type=float, default=900.0)
     parser.add_argument("--step-timeout", type=float, default=600.0)
     parser.add_argument("--agent-timeout", type=float, default=30.0)
@@ -529,11 +529,10 @@ def qemu_command(args, work, disk, rescue, gpus=()):
     if args.audio:
         command += ["-audiodev", "pipewire,id=audio", "-device", "ich9-intel-hda",
                     "-device", "hda-output,audiodev=audio"]
-    # An idle vCPU halts inside the guest instead of exiting to the host: a
-    # completion's interrupt then reaches a vCPU still on its core, not a host
-    # thread the scheduler must wake first. A guest that waits on every frame
-    # pays that wake on each one - the Direct3D 12 samples ran 11 to 23% faster
-    # without it. The vCPU threads hold their cores while the guest idles.
+    # Opt-in: an idle vCPU halting inside the guest lets a completion's
+    # interrupt reach a vCPU still on its core - the Direct3D 12 samples ran 11
+    # to 23% faster - but every vCPU thread then holds its host core while the
+    # guest idles, which kept an idle 12-vCPU desktop at 40% of the host.
     if args.cpu_pm and args.accel == "kvm":
         command += ["-overcommit", "cpu-pm=on"]
     if args.vnc is not None:

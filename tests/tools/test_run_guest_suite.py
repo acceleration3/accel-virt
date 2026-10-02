@@ -210,7 +210,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn(",hv-crash", argv)
         self.assertIn("-action panic=none", argv)
         self.assertIn("-msg timestamp=on", argv)
-        self.assertIn("-overcommit cpu-pm=on", argv)
+        self.assertNotIn("-overcommit", argv)
         self.assertNotIn("-gdb", argv)
         events = [line.split(" ")[0] if line.startswith(("exec", "file", "pull")) else line for line in lines[1:]]
         self.assertEqual(self.stage_calls(),
@@ -2306,11 +2306,11 @@ class GuestSuiteRun(unittest.TestCase):
                       self.journal_lines()[0])
         self.assert_clean()
 
-    def test_no_cpu_pm_lets_an_idle_vcpu_exit_to_the_host(self):
+    def test_cpu_pm_halts_an_idle_vcpu_inside_the_guest(self):
         self.script()
-        result = self.run_suite("--no-cpu-pm")
+        result = self.run_suite("--cpu-pm")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertNotIn("-overcommit", self.journal_lines()[0])
+        self.assertIn("-overcommit cpu-pm=on", self.journal_lines()[0])
         self.assert_clean()
 
     def test_record_writes_a_wire_recording_beside_the_qemu_log(self):
