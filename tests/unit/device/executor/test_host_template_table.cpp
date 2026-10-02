@@ -144,6 +144,26 @@ TEST(host_template_table, a_handle_reused_is_the_template_it_is_now)
   CHECK_EQ(table.live(), 0u);
   CHECK(table.invariants_hold()); }
 
+/* A closing context forgets every template, its devices' and a reservation
+ * the driver never answered alike, and the table is whole again. */
+TEST(host_template_table, forgetting_all_empties_every_slot)
+{ HostTemplateTable               table;
+  VkDescriptorUpdateTemplateEntry entry = {};
+  VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
+  CHECK_STATUS(table.reserve(device, &info), Status::ok);
+  table.name(handle(0x41u));
+  CHECK_STATUS(table.reserve(other_device, &info), Status::ok);
+  table.name(handle(0x42u));
+  CHECK_STATUS(table.reserve(device, &info), Status::ok);
+  table.forget_all();
+  CHECK_EQ(table.live(), 0u);
+  CHECK_EQ(table.bytes_of(handle(0x41u)), 0u);
+  CHECK_EQ(table.bytes_of(handle(0x42u)), 0u);
+  CHECK(table.invariants_hold());
+  CHECK_STATUS(table.reserve(device, &info), Status::ok);
+  table.name(handle(0x41u));
+  CHECK_EQ(table.bytes_of(handle(0x41u)), image_bytes); }
+
 TEST(host_template_table, a_table_with_no_room_refuses_rather_than_forgetting_one)
 { HostTemplateTable               table;
   VkDescriptorUpdateTemplateEntry entry = {};

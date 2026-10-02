@@ -1285,6 +1285,40 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
   }
 }
 
+/* A context that dies with an export the guest never imported closes it: the
+ * backend outlives the context in its slot, and an fd still listed would be
+ * one the next context there could import - this context's memory. */
+TEST(vulkan_backend_device, shutting_down_closes_every_fd_the_context_exported)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_memory_fd"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+      VkExportMemoryAllocateInfo exportable = {};
+      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &exportable;
+      allocate.allocationSize = page;
+      VkDeviceMemory shared = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      VkMemoryGetFdInfoKHR get = {};
+      get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+      get.memory = shared;
+      get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      int fd = -1;
+      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
+      CHECK(made.probe().holds_fd(fd));
+      made.backend().shut_down();
+      CHECK(!made.probe().holds_fd(fd));
+      CHECK(::fcntl(fd, F_GETFD) == -1);
+  }
+}
+
 /* A semaphore import names an fd this context exported too, and one it did not
  * is refused before the driver is handed it. */
 TEST(vulkan_backend_device, a_semaphore_import_names_an_fd_this_context_exported)

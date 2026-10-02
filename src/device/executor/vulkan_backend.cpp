@@ -687,11 +687,15 @@ void VulkanBackend::shut_down()
 {
     AV_SCOPE("VulkanBackend::shut_down");
     /* Device before instance, which is the order the API requires and the
-     * order a guest would have used had it bothered. */
-    if (device_ != VK_NULL_HANDLE) {
-        ::vkDestroyDevice(device_, nullptr);
-        device_ = VK_NULL_HANDLE;
-    }
+     * order a guest would have used had it bothered - and through the guest's
+     * own destroy, which forgets what the device exported. The backend
+     * outlives the context in its slot: an fd left listed here is one the
+     * next context could import, another context's memory. A device the
+     * guest replaced and never destroyed is not this backend's to name, so
+     * the tables are emptied whichever device filled them. */
+    if (device_ != VK_NULL_HANDLE) on_vkDestroyDevice(device_, nullptr);
+    fds_.forget_all();
+    templates_.forget_all();
     if (instance_ != VK_NULL_HANDLE) {
         ::vkDestroyInstance(instance_, nullptr);
         instance_ = VK_NULL_HANDLE;

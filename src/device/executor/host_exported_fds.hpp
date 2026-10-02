@@ -59,6 +59,9 @@ public:
     [[nodiscard]] bool take(int fd);
     /* Every fd `device` exported and nothing imported, closed with it. */
     void               forget_device(VkDevice device);
+    /* Every fd, closed, whichever device exported it: a closing context's,
+     * which the next context made in its slot must not be able to name. */
+    void               forget_all();
     uint32_t           live() const;
 
     /* A slot is empty or holds one fd of one device, and no fd appears

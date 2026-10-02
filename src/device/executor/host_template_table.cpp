@@ -62,6 +62,12 @@ void HostTemplateTable::forget_device(VkDevice device)
         if (slot.device_ == device && device != VK_NULL_HANDLE) slot = HostTemplateSlot{};
 }
 
+void HostTemplateTable::forget_all()
+{
+    AV_SCOPE("HostTemplateTable::forget_all");
+    for (HostTemplateSlot &slot : slots_) slot = HostTemplateSlot{};
+}
+
 uint64_t HostTemplateTable::bytes_of(VkDescriptorUpdateTemplate made) const
 {
     AV_SCOPE("HostTemplateTable::bytes_of");

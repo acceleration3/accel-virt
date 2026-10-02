@@ -114,6 +114,29 @@ TEST(host_exported_fds, a_device_closes_the_fds_it_exported)
   CHECK_EQ(table.live(), 0u);
   CHECK(table.invariants_hold()); }
 
+/* A closing context forgets every fd, whichever of its devices exported it:
+ * the next context in its slot must not be able to name one. */
+TEST(host_exported_fds, forgetting_all_closes_every_device_s_fds)
+{ HostExportedFds table;
+  const int       kept = an_fd();
+  const int       other = an_fd();
+  CHECK(kept >= 0 && other >= 0);
+  CHECK(table.keep(device, kept));
+  CHECK(table.keep(other_device, other));
+  table.forget_all();
+  CHECK_EQ(table.live(), 0u);
+  CHECK(!table.holds(kept));
+  CHECK(!table.holds(other));
+  CHECK(!open_still(kept));
+  CHECK(!open_still(other));
+  CHECK(table.invariants_hold());
+  /* Emptied, it keeps again. */
+  const int again = an_fd();
+  CHECK(table.keep(device, again));
+  CHECK(table.holds(again));
+  table.forget_all();
+  CHECK(!open_still(again)); }
+
 /* Nothing to keep, and nowhere to keep it: a refused export is the caller's
  * fd to close, which is why it is told rather than left to assume. */
 TEST(host_exported_fds, an_export_with_nowhere_to_go_is_refused)

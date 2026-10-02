@@ -54,6 +54,12 @@ void HostExportedFds::forget_device(VkDevice device)
         if (slot.device_ == device) release(slot);
 }
 
+void HostExportedFds::forget_all()
+{
+    AV_SCOPE("HostExportedFds::forget_all");
+    for (HostExportedFdSlot &slot : slots_) release(slot);
+}
+
 uint32_t HostExportedFds::live() const
 {
     AV_SCOPE("HostExportedFds::live");

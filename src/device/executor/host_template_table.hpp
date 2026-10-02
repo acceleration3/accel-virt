@@ -56,6 +56,8 @@ public:
     void                 forget(VkDescriptorUpdateTemplate made);
     /* Every template of `device`, as its destruction does. */
     void                 forget_device(VkDevice device);
+    /* Every slot, whichever device it was for: a closing context's. */
+    void                 forget_all();
     /* The bytes one update through `made` reads; 0 for a handle this context
      * never made, which refuses any blob but an empty one. */
     uint64_t             bytes_of(VkDescriptorUpdateTemplate made) const;
