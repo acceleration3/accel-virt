@@ -59,6 +59,12 @@ uint32_t TexelLayout::rows(uint32_t height) const
     return (height + height_ - 1u) / height_;
 }
 
+uint64_t TexelLayout::offset_of(uint32_t x, uint32_t y, uint32_t pitch) const
+{
+    AV_SCOPE("TexelLayout::offset_of");
+    return uint64_t{y / height_} * pitch + uint64_t{x / width_} * bytes_;
+}
+
 uint32_t TexelLayout::copied_row_bytes(uint32_t width) const
 {
     AV_SCOPE("TexelLayout::copied_row_bytes");

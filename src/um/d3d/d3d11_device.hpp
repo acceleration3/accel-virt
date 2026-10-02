@@ -24,6 +24,8 @@
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "icd/d3d/upload_sink.hpp"
+#include "icd/d3d/write_maps.hpp"
 #include "um/icd/reentrant_call_lock.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
@@ -87,6 +89,22 @@ public:
 #include "um/d3d/generated/d3d11_device_ddi.inc"
 
 private:
+    /* An upload's pieces as UpdateSubresource commands (TextureUpload): the
+     * resource, the subresource and the copy flags, of which only the first
+     * piece keeps DISCARD. */
+    class UpdateWriter final : public d3d::UploadSink {
+    public:
+        UpdateWriter(D3d11Device &device, uint32_t resource, uint32_t subresource, uint32_t flags);
+        [[nodiscard]] bool piece(const d3dproto::Box &box, const uint8_t *data, uint64_t bytes, uint32_t row_pitch,
+                                 uint32_t slice_pitch, bool first) override;
+
+    private:
+        D3d11Device &device_;
+        uint32_t     resource_;
+        uint32_t     subresource_;
+        uint32_t     flags_;
+    };
+
     static constexpr uint32_t stage_count = 6u;
     /* D3DWDDM2_0DDI's MipLevelSwizzleTransition for a layout with no swizzled
      * levels, as the runtime's own removed-device answer writes it. */
@@ -129,23 +147,18 @@ private:
     size_t   subresource_offset(const ResourceRecord &resource, uint32_t subresource) const;
     uint32_t subresource_count(const ResourceRecord &resource) const;
 
-    [[nodiscard]] bool upload_written(const ResourceRecord &resource);
-    /* `bytes` of data for one subresource, as UpdateSubresource1 takes it,
-     * crossing through the blob arena when it is large. */
+    [[nodiscard]] bool upload_written(const ResourceRecord &resource, uint32_t flags);
+    /* `box` (or the whole subresource) of one subresource from `data` at
+     * these pitches, as UpdateSubresource1 takes it, in as many pieces as one
+     * command of this context carries (TextureUpload). */
     void upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
-                size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
-    /* An upload larger than a piece of the arena, crossing in pieces. */
-    void upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &region, const uint8_t *data, uint32_t copy_flags);
-    void upload_row_pieces(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX &region,
-                           const uint8_t *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
+                uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
     void publish_shared(const ResourceRecord &resource);
     size_t piece_bytes() const;
-    void upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
-                         size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
-    /* What the upload of `box` (or the whole subresource) reads at these
-     * pitches. */
-    size_t upload_bytes(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box,
-                        uint32_t row_pitch, uint32_t depth_pitch) const;
+    /* One piece, sent; false when the encoder refused it. */
+    [[nodiscard]] bool upload_piece_of(uint32_t resource, uint32_t subresource, const d3dproto::Box &box,
+                                       const void *data, size_t bytes, uint32_t row_pitch, uint32_t depth_pitch,
+                                       uint32_t copy_flags);
     /* A subresource read back from the host, tightly packed, into `out`. */
     bool   read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity);
     void   map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP type, UINT flags,
@@ -209,6 +222,8 @@ private:
     d3d::D3dSession          &session_;
     BlockSource           &memory_;
     WatchedShadows         shadows_;
+    /* The subresources mapped for writing, and how (WriteMaps). */
+    d3d::WriteMaps         maps_;
     LogSink          &log_;
     KeyedLog         lines_;
     const D3d11HostCaps   &caps_;

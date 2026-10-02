@@ -4,10 +4,9 @@
 #include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
-#include "icd/common/pieces.hpp"
-#include "icd/common/row_pieces.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/device_table.hpp"
+#include "icd/d3d/texture_upload.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
@@ -34,7 +33,7 @@ constexpr uint32_t copy_discard = 0x2u;
 }  // namespace
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps)
-    : session_(session), memory_(memory), shadows_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
+    : session_(session), memory_(memory), shadows_(memory), maps_(), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), present_flags_(~0u), follow_refused_(false), frame_(1u)
@@ -253,87 +252,44 @@ size_t D3d11Device::subresource_offset(const ResourceRecord &resource, uint32_t 
     return offset;
 }
 
-size_t D3d11Device::upload_bytes(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box,
-                                 uint32_t row_pitch, uint32_t depth_pitch) const
+D3d11Device::UpdateWriter::UpdateWriter(D3d11Device &device, uint32_t resource, uint32_t subresource,
+                                        uint32_t flags)
+    : device_(device), resource_(resource), subresource_(subresource), flags_(flags)
 {
-    AV_SCOPE("D3d11Device::upload_bytes");
-    uint32_t width = 0u, height = 0u, depth = 0u;
-    extent(resource, subresource, width, height, depth);
-    if (box != nullptr) {
-        width = static_cast<uint32_t>(box->right - box->left);
-        height = static_cast<uint32_t>(box->bottom - box->top);
-        depth = static_cast<uint32_t>(box->back - box->front);
-    }
-    if (width == 0u || height == 0u || depth == 0u) return 0u;
-    const uint32_t line = row_bytes(resource, width);
-    const uint32_t lines = rows(resource, height);
-    return static_cast<size_t>(depth - 1u) * depth_pitch + static_cast<size_t>(lines - 1u) * row_pitch + line;
+    AV_SCOPE("D3d11Device::UpdateWriter::UpdateWriter");
 }
 
+bool D3d11Device::UpdateWriter::piece(const d3dproto::Box &box, const uint8_t *data, uint64_t bytes,
+                                      uint32_t row_pitch, uint32_t slice_pitch, bool first)
+{
+    AV_SCOPE("D3d11Device::UpdateWriter::piece");
+    return device_.upload_piece_of(resource_, subresource_, box, data, static_cast<size_t>(bytes), row_pitch,
+                                   slice_pitch, first ? flags_ : flags_ & ~copy_discard);
+}
+
+/* A buffer's box is in bytes; a texture of a format with no layout is still
+ * copied, a byte a texel. */
 void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box,
-                         const void *data, size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags)
+                         const void *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload");
-    if (data == nullptr || bytes == 0u) return;
-    if (bytes <= d3d::D3dCommandStream::arena_piece) {
-        upload_piece_of(resource.id, subresource, box, data, bytes, row_pitch, depth_pitch, copy_flags);
-        return;
-    }
+    if (data == nullptr) return;
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
-    const D3D10_DDI_BOX whole = {0, 0, 0, static_cast<LONG>(width), static_cast<LONG>(height), static_cast<LONG>(depth)};
-    const D3D10_DDI_BOX region = box != nullptr ? *box : whole;
-    if (resource.dimension == D3D10DDIRESOURCE_BUFFER) {
-        upload_buffer_pieces(resource.id, region, static_cast<const uint8_t *>(data), copy_flags);
-        return;
-    }
-    upload_row_pieces(resource, subresource, region, static_cast<const uint8_t *>(data), row_pitch, depth_pitch,
-                      copy_flags);
-}
-
-/* A buffer's box is in bytes, so a piece is a run of them. */
-void D3d11Device::upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &region, const uint8_t *data,
-                                       uint32_t copy_flags)
-{
-    AV_SCOPE("D3d11Device::upload_buffer_pieces");
-    icd::Pieces pieces(static_cast<uint32_t>(region.right - region.left), piece_bytes());
-    while (pieces.next()) {
-        D3D10_DDI_BOX part = region;
-        part.left = region.left + static_cast<LONG>(pieces.offset());
-        part.right = part.left + static_cast<LONG>(pieces.count());
-        upload_piece_of(resource, 0u, &part, data + pieces.offset(), static_cast<size_t>(pieces.count()), 0u, 0u,
-                        pieces.first() ? copy_flags : copy_flags & ~copy_discard);
-    }
-}
-
-/* A texture goes a depth slice at a time and, within one, as many rows (block
- * rows, for a compressed format) as fit a piece. */
-void D3d11Device::upload_row_pieces(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX &region,
-                                    const uint8_t *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags)
-{
-    AV_SCOPE("D3d11Device::upload_row_pieces");
-    const uint32_t width = static_cast<uint32_t>(region.right - region.left);
-    const uint32_t height = static_cast<uint32_t>(region.bottom - region.top);
-    if (row_pitch == 0u) return;
-    /* A format with no layout is still copied, a byte a texel. */
+    const d3dproto::Box region =
+        box == nullptr ? d3dproto::Box{0u, 0u, 0u, width, height, depth}
+                       : d3dproto::Box{static_cast<uint32_t>(box->left),  static_cast<uint32_t>(box->top),
+                                       static_cast<uint32_t>(box->front), static_cast<uint32_t>(box->right),
+                                       static_cast<uint32_t>(box->bottom), static_cast<uint32_t>(box->back)};
     const DxgiFormatLayout format(resource.format);
-    const TexelLayout      layout = format.element_bytes() != 0u ? TexelLayout(format) : TexelLayout(1u, 1u, 1u);
-    for (LONG slice = region.front; slice < region.back; slice++) {
-        const uint8_t *const plane = data + static_cast<size_t>(slice - region.front) * depth_pitch;
-        icd::RowPieces       pieces(layout, width, height, row_pitch, piece_bytes());
-        while (pieces.next()) {
-            D3D10_DDI_BOX part = region;
-            part.front = slice;
-            part.back = slice + 1;
-            part.left = region.left + static_cast<LONG>(pieces.left());
-            part.right = region.left + static_cast<LONG>(pieces.right());
-            part.top = region.top + static_cast<LONG>(pieces.top());
-            part.bottom = region.top + static_cast<LONG>(pieces.bottom());
-            const bool first = slice == region.front && pieces.first();
-            upload_piece_of(resource.id, subresource, &part, plane + pieces.offset(), static_cast<size_t>(pieces.bytes()),
-                            row_pitch, depth_pitch, first ? copy_flags : copy_flags & ~copy_discard);
-        }
-    }
+    const bool             bytes = resource.dimension == D3D10DDIRESOURCE_BUFFER || format.element_bytes() == 0u;
+    const TexelLayout      layout = bytes ? TexelLayout(1u, 1u, 1u) : TexelLayout(format);
+    const d3d::TextureUpload upload(layout, region, row_pitch, depth_pitch, piece_bytes());
+    /* An empty box uploads nothing, and is no error. */
+    if (upload.bytes() == 0u) return;
+    UpdateWriter writer(*this, resource.id, subresource, copy_flags);
+    if (!upload.send(writer, static_cast<const uint8_t *>(data)))
+        lines_.once("an upload whose rows are closer together than a row of them");
 }
 
 /* A deferred context records its uploads inline, so a piece is what one
@@ -344,20 +300,19 @@ size_t D3d11Device::piece_bytes() const
     return parent_ != nullptr ? d3d::D3dCommandStream::recorded_data : d3d::D3dCommandStream::arena_piece;
 }
 
-void D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
-                                  size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags)
+bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const d3dproto::Box &box,
+                                  const void *data, size_t bytes, uint32_t row_pitch, uint32_t depth_pitch,
+                                  uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload_piece_of");
     /* Large data leases the arena; an arena short of room is emptied first,
      * which is one round trip rather than a refused upload. */
-    if (!wire().make_room_for(bytes)) lines_.write("an upload larger than the arena");
-    const d3dproto::Box region =
-        box == nullptr ? d3dproto::Box{} : d3dproto::Box{static_cast<uint32_t>(box->left), static_cast<uint32_t>(box->top), static_cast<uint32_t>(box->front),
-                                     static_cast<uint32_t>(box->right), static_cast<uint32_t>(box->bottom),
-                                     static_cast<uint32_t>(box->back)};
-    if (!d3dproto::av_d3d_UpdateSubresource(wire(), resource, subresource, box != nullptr ? 1u : 0u, region, row_pitch,
-                                             depth_pitch, copy_flags, data, bytes))
-        set_error(E_OUTOFMEMORY);
+    if (!wire().make_room_for(bytes)) lines_.once("an upload larger than the arena");
+    if (d3dproto::av_d3d_UpdateSubresource(wire(), resource, subresource, 1u, box, row_pitch, depth_pitch, copy_flags,
+                                            data, bytes))
+        return true;
+    set_error(E_OUTOFMEMORY);
+    return false;
 }
 
 bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity)

@@ -39,10 +39,9 @@ struct ResourceRecord {
     uint32_t samples;
     d3d::SwapChainBuffer::Model present_model; /* how a presented buffer's frames reach the screen */
     uint32_t vidpn_source;
-    uint32_t mapped_write; /* subresources written through a map since their last upload, a bit each (first 32) */
     uint32_t allocation;   /* D3DKMT_HANDLE, 0 for none */
     uint32_t allocation_pitch;
-    uint32_t reserved;
+    uint32_t refreshed; /* the frame a guest surface was last refreshed in (refresh_bound_guest_surfaces) */
     uint32_t shadow_watched; /* the shadow is WatchedShadows' write-watched region */
     uint64_t shared_key;
     /* The presents of this surface so far: the point the last one published

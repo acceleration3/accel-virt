@@ -25,6 +25,8 @@
 #include "icd/d3d/d3d9_state_shadow.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/device_removal.hpp"
+#include "icd/d3d/upload_sink.hpp"
+#include "proto/generated/d3d9/d3d9_wire_types.h"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/kernel_device.hpp"
@@ -73,6 +75,22 @@ public:
 #include "um/d3d/generated/d3d9_device_ddi.inc"
 
 private:
+    /* A texture write's pieces as WriteTexture9 commands (TextureUpload):
+     * the resource, the subresource and the lock's flags, of which only the
+     * first piece keeps DISCARD. */
+    class TextureWriter final : public d3d::UploadSink {
+    public:
+        TextureWriter(D3d9Device &device, uint32_t id, uint32_t index, uint32_t flags);
+        [[nodiscard]] bool piece(const d3dproto::Box &box, const uint8_t *data, uint64_t bytes, uint32_t row_pitch,
+                                 uint32_t slice_pitch, bool first) override;
+
+    private:
+        D3d9Device &device_;
+        uint32_t    id_;
+        uint32_t    index_;
+        uint32_t    flags_;
+    };
+
     static constexpr uint32_t streams = 16u;
     static constexpr uint32_t render_targets = 4u;
     /* The most words one state command carries (d3d9.toml), in whole
@@ -156,8 +174,10 @@ private:
      * when it is larger than a piece of the arena. */
     HRESULT write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box, const uint8_t *data,
                           uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags);
-    HRESULT write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, const TexelLayout &layout,
-                       const uint8_t *data, uint32_t row_pitch, uint32_t flags);
+    /* One piece of a texture write, sent; false when it could not be, after
+     * saying why. */
+    [[nodiscard]] bool write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &box, const uint8_t *data,
+                                   size_t bytes, uint32_t row_pitch, uint32_t flags);
     HRESULT write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags);
     /* A subresource's pixels as the host has them, into the device's
      * read-back buffer; its pitch and rows. */

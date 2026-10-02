@@ -14,8 +14,8 @@
 #include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/common/pieces.hpp"
-#include "icd/common/row_pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "icd/d3d/texture_upload.hpp"
 #include "icd/d3d/pitched_rows.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -253,14 +253,12 @@ size_t D3d9Device::lock_offset(const D3d9Resource &resource, const D3DDDIARG_LOC
     AV_SCOPE("D3d9Device::lock_offset");
     if (lock.Flags.RangeValid) return lock.Range.Offset;
     const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
-    const uint32_t         element_width = layout.element_width();
-    const uint32_t         element_height = layout.element_height();
     if (lock.Flags.BoxValid)
-        return size_t{lock.Box.Front} * slice_pitch + size_t{lock.Box.Top / element_height} * pitch +
-               size_t{lock.Box.Left / element_width} * layout.element_bytes();
+        return size_t{lock.Box.Front} * slice_pitch +
+               static_cast<size_t>(layout.offset_of(lock.Box.Left, lock.Box.Top, pitch));
     if (lock.Flags.AreaValid)
-        return size_t{static_cast<uint32_t>(lock.Area.top) / element_height} * pitch +
-               size_t{static_cast<uint32_t>(lock.Area.left) / element_width} * layout.element_bytes();
+        return static_cast<size_t>(layout.offset_of(static_cast<uint32_t>(lock.Area.left),
+                                                    static_cast<uint32_t>(lock.Area.top), pitch));
     return 0u;
 }
 
@@ -388,58 +386,54 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     return S_OK;
 }
 
-/* A texture goes a depth slice at a time and, within one, as many rows
- * (block rows, for a compressed format) as fit a piece. */
+D3d9Device::TextureWriter::TextureWriter(D3d9Device &device, uint32_t id, uint32_t index, uint32_t flags)
+    : device_(device), id_(id), index_(index), flags_(flags)
+{
+    AV_SCOPE("D3d9Device::TextureWriter::TextureWriter");
+}
+
+bool D3d9Device::TextureWriter::piece(const d3dproto::Box &box, const uint8_t *data, uint64_t bytes,
+                                      uint32_t row_pitch, uint32_t, bool first)
+{
+    AV_SCOPE("D3d9Device::TextureWriter::piece");
+    const d3d9proto::Box part = {box.left, box.top, box.front, box.right, box.bottom, box.back};
+    return device_.write_piece(id_, index_, part, data, static_cast<size_t>(bytes), row_pitch,
+                               first ? flags_ : flags_ & ~write_discard);
+}
+
+/* A Direct3D 9 box with Back on Front is a 2D one: one slice. */
 HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box,
                                   const uint8_t *data, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags)
 {
     AV_SCOPE("D3d9Device::write_texture");
     if (box.Right <= box.Left || box.Bottom <= box.Top) return S_OK;
-    const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
-    const uint32_t         rows = layout.rows(box.Bottom - box.Top);
-    const uint32_t         line = layout.row_bytes(box.Right - box.Left);
-    if (rows == 0u || line == 0u || row_pitch < line) return E_INVALIDARG;
-    const uint32_t back = box.Back > box.Front ? box.Back : box.Front + 1u;
-    for (uint32_t slice = box.Front; slice < back; slice++) {
-        D3DDDIBOX plane = box;
-        plane.Front = slice;
-        plane.Back = slice + 1u;
-        const HRESULT written = write_rows(resource.id, index, plane, layout,
-                                           data + size_t{slice - box.Front} * slice_pitch, row_pitch,
-                                           slice == box.Front ? flags : flags & ~write_discard);
-        if (FAILED(written)) return written;
-    }
-    return S_OK;
+    const uint32_t           back = box.Back > box.Front ? box.Back : box.Front + 1u;
+    const d3dproto::Box      region = {box.Left, box.Top, box.Front, box.Right, box.Bottom, back};
+    const d3d::TextureUpload upload(D3d9FormatLayout(static_cast<uint32_t>(resource.format)), region, row_pitch,
+                                    slice_pitch, d3d::D3dCommandStream::arena_piece);
+    if (!upload.readable()) return E_INVALIDARG;
+    TextureWriter writer(*this, resource.id, index, flags);
+    return upload.send(writer, data) ? S_OK : lost(__func__);
 }
 
-HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box, const TexelLayout &layout,
-                               const uint8_t *data, uint32_t row_pitch, uint32_t flags)
+bool D3d9Device::write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &box, const uint8_t *data,
+                             size_t bytes, uint32_t row_pitch, uint32_t flags)
 {
-    AV_SCOPE("D3d9Device::write_rows");
-    icd::RowPieces pieces(layout, box.Right - box.Left, box.Bottom - box.Top, row_pitch,
-                          d3d::D3dCommandStream::arena_piece);
-    while (pieces.next()) {
-        const d3d9proto::Box part = {box.Left + pieces.left(), box.Top + pieces.top(), box.Front,
-                                     box.Left + pieces.right(), box.Top + pieces.bottom(), box.Back};
-        const size_t bytes = static_cast<size_t>(pieces.bytes());
-        written_ += bytes;
-        const uint64_t started = microseconds();
-        const bool     room = wire().make_room_for(bytes);
-        trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
-        if (!room || !d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
-                                                       pieces.first() ? flags : flags & ~write_discard,
-                                                       data + pieces.offset(), bytes)) {
-            LogLine(lines_)
-                .text("a texture write of ")
-                .number(bytes)
-                .text(" bytes, pitch ")
-                .number(row_pitch)
-                .text(room ? " was refused by the encoder" : " found no room in the arena")
-                .write();
-            return lost(__func__);
-        }
-    }
-    return S_OK;
+    AV_SCOPE("D3d9Device::write_piece");
+    written_ += bytes;
+    const uint64_t started = microseconds();
+    const bool     room = wire().make_room_for(bytes);
+    trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
+    if (room && d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, box, row_pitch, 0u, flags, data, bytes))
+        return true;
+    LogLine(lines_)
+        .text("a texture write of ")
+        .number(bytes)
+        .text(" bytes, pitch ")
+        .number(row_pitch)
+        .text(room ? " was refused by the encoder" : " found no room in the arena")
+        .write();
+    return false;
 }
 
 bool D3d9Device::readback_room(size_t bytes)
@@ -535,8 +529,7 @@ HRESULT D3d9Device::blt_level(const D3d9Resource &source, uint32_t source_index,
     if (right <= left || bottom <= top || x >= to.width || y >= to.height) return S_OK;
     if (x + (right - left) > to.width) right = left + (to.width - x);
     if (y + (bottom - top) > to.height) bottom = top + (to.height - y);
-    const uint8_t *const data = from.system + size_t{top / block_height} * from.system_pitch +
-                                size_t{left / block_width} * layout.element_bytes();
+    const uint8_t *const data = from.system + layout.offset_of(left, top, from.system_pitch);
     const D3DDDIBOX box = {x, y, x + (right - left), y + (bottom - top), 0u, 1u};
     return write_texture(destination, destination_index, box, data, from.system_pitch, from.system_slice_pitch, 0u);
 }
@@ -562,8 +555,10 @@ HRESULT D3d9Device::vol_blt(const D3DDDIARG_VOLUMEBLT *args)
         if (right <= left || bottom <= top || back <= front || from.system == nullptr) break;
         const uint32_t x = args->DstX >> level, y = args->DstY >> level, z = args->DstZ >> level;
         if (x + (right - left) > to.width || y + (bottom - top) > to.height || z + (back - front) > to.depth) break;
+        /* A block format's box starts on a block: the texel's element is
+         * where its bytes are. */
         const uint8_t *const data = from.system + size_t{front} * from.system_slice_pitch +
-                                    size_t{top} * from.system_pitch + size_t{left} * layout.element_bytes();
+                                    layout.offset_of(left, top, from.system_pitch);
         const D3DDDIBOX box = {x, y, x + (right - left), y + (bottom - top), z, z + (back - front)};
         const HRESULT copied =
             write_texture(*destination, level, box, data, from.system_pitch, from.system_slice_pitch, 0u);
@@ -636,17 +631,21 @@ HRESULT D3d9Device::blt_to_system(const D3d9Resource &source, const D3d9Resource
     uint32_t pitch = 0u, rows = 0u;
     const HRESULT read = read_surface(source, blt.SrcSubResourceIndex, pitch, rows);
     if (FAILED(read)) return read;
+    /* Rows of elements, not texels: a block format's rectangle is whole rows
+     * of blocks, each the line of its blocks. */
     const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
-    const uint32_t         element = layout.element_bytes();
     const uint32_t         left = static_cast<uint32_t>(blt.SrcRect.left), top = static_cast<uint32_t>(blt.SrcRect.top);
     const uint32_t width = static_cast<uint32_t>(blt.SrcRect.right - blt.SrcRect.left);
     const uint32_t height = static_cast<uint32_t>(blt.SrcRect.bottom - blt.SrcRect.top);
     auto *const    out = const_cast<uint8_t *>(to.system);
-    const size_t   line = size_t{width} * element;
-    for (uint32_t row = 0u; row < height && top + row < rows; row++) {
-        const size_t from = size_t{top + row} * pitch + size_t{left} * element;
-        const size_t into = size_t{static_cast<uint32_t>(blt.DstRect.top) + row} * to.system_pitch +
-                            size_t{static_cast<uint32_t>(blt.DstRect.left)} * element;
+    const size_t   line = layout.row_bytes(width);
+    const size_t   first = static_cast<size_t>(layout.offset_of(left, top, pitch));
+    const size_t   start = static_cast<size_t>(layout.offset_of(static_cast<uint32_t>(blt.DstRect.left),
+                                                                static_cast<uint32_t>(blt.DstRect.top),
+                                                                to.system_pitch));
+    for (uint32_t row = 0u; row < layout.rows(height) && top / layout.element_height() + row < rows; row++) {
+        const size_t from = first + size_t{row} * pitch;
+        const size_t into = start + size_t{row} * to.system_pitch;
         if (from + line > readback_bytes_ || line > to.system_pitch) break;
         memcpy(out + into, readback_ + from, line);
     }

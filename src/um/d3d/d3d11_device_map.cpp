@@ -17,7 +17,6 @@ namespace {
  * map gave. */
 constexpr uint32_t copy_no_overwrite = 0x1u;
 constexpr uint32_t copy_discard = 0x2u;
-constexpr uint32_t tracked_subresources = 32u;
 
 }  // namespace
 
@@ -28,6 +27,16 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     ResourceRecord &resource = record(handle);
     if (resource.shadow == nullptr || subresource >= subresource_count(resource) || mapped == nullptr) {
         set_error(E_INVALIDARG);
+        return;
+    }
+    const uint32_t flags = type == D3D10_DDI_MAP_WRITE_DISCARD      ? copy_discard
+                           : type == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? copy_no_overwrite
+                                                                     : 0u;
+    /* Refused before the application is handed memory: a write the unmap
+     * could not find would never reach the host. */
+    if (type != D3D10_DDI_MAP_READ && !maps_.open(resource.id, subresource, flags)) {
+        lines_.once("a map past every subresource a device can hold open for writing");
+        set_error(E_OUTOFMEMORY);
         return;
     }
     uint8_t *const at = resource.shadow + subresource_offset(resource, subresource);
@@ -50,33 +59,26 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     mapped->pData = at;
     mapped->RowPitch = row_bytes(resource, width);
     mapped->DepthPitch = mapped->RowPitch * rows(resource, height);
-    if (type != D3D10_DDI_MAP_READ && subresource < tracked_subresources) {
-        resource.mapped_write |= 1u << subresource;
-        resource.reserved = type == D3D10_DDI_MAP_WRITE_DISCARD      ? copy_discard
-                            : type == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? copy_no_overwrite
-                                                                      : 0u;
-    }
 }
 
 void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
 {
     AV_SCOPE("D3d11Device::unmap");
     ResourceRecord &resource = record(handle);
-    if (resource.shadow == nullptr || subresource >= tracked_subresources) return;
-    if ((resource.mapped_write & (1u << subresource)) == 0u) return;
-    resource.mapped_write &= ~(1u << subresource);
-    if (resource.shadow_watched != 0u && upload_written(resource)) return;
+    uint32_t        flags = 0u;
+    if (resource.shadow == nullptr || !maps_.close(resource.id, subresource, flags)) return;
+    if (resource.shadow_watched != 0u && upload_written(resource, flags)) return;
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
     const uint32_t line = row_bytes(resource, width);
-    upload(resource, subresource, nullptr, resource.shadow + subresource_offset(resource, subresource),
-           subresource_bytes(resource, subresource), line, line * rows(resource, height), resource.reserved);
+    upload(resource, subresource, nullptr, resource.shadow + subresource_offset(resource, subresource), line,
+           line * rows(resource, height), flags);
 }
 
 /* The pages of a watched buffer the application wrote, a box each run; the
  * first carries the map's DISCARD, as a whole upload's first piece does.
  * False when the watch cannot tell, and the buffer then goes whole. */
-bool D3d11Device::upload_written(const ResourceRecord &resource)
+bool D3d11Device::upload_written(const ResourceRecord &resource, uint32_t flags)
 {
     AV_SCOPE("D3d11Device::upload_written");
     WatchedShadows::Run runs[WatchedShadows::max_runs];
@@ -85,8 +87,8 @@ bool D3d11Device::upload_written(const ResourceRecord &resource)
     for (uint32_t index = 0u; index < count; index++) {
         const D3D10_DDI_BOX box = {static_cast<LONG>(runs[index].offset), 0, 0,
                                    static_cast<LONG>(runs[index].offset + runs[index].bytes), 1, 1};
-        upload(resource, 0u, &box, resource.shadow + runs[index].offset, runs[index].bytes, 0u, 0u,
-               index == 0u ? resource.reserved : resource.reserved & ~copy_discard);
+        upload(resource, 0u, &box, resource.shadow + runs[index].offset, 0u, 0u,
+               index == 0u ? flags : flags & ~copy_discard);
     }
     return true;
 }
@@ -181,8 +183,7 @@ VOID D3d11Device::resource_update_subresource_up(D3D10DDI_HRESOURCE handle, UINT
 {
     AV_SCOPE("D3d11Device::resource_update_subresource_up");
     const ResourceRecord &resource = record(handle);
-    upload(resource, subresource, box, data, upload_bytes(resource, subresource, box, row_pitch, depth_pitch),
-           row_pitch, depth_pitch, flags);
+    upload(resource, subresource, box, data, row_pitch, depth_pitch, flags);
 }
 
 VOID D3d11Device::default_constant_buffer_update_subresource_up(D3D10DDI_HRESOURCE handle, UINT subresource,

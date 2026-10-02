@@ -81,3 +81,16 @@ TEST(texel_layout, an_element_of_no_texels_is_one)
   const TexelLayout block(8u, 4u, 4u);
   CHECK_EQ(block.element_width(), 4u);
   CHECK_EQ(block.rows(5u), 2u); }
+
+/* A texel's offset is its element's: in 4x4 blocks of 8 bytes at a pitch of
+ * 256, texel (9, 6) is in block column 2 of block row 1; a plain texel's is
+ * its own. */
+TEST(texel_layout, a_texel_starts_where_its_element_does)
+{ const TexelLayout block(8u, 4u, 4u);
+  CHECK_EQ(block.offset_of(9u, 6u, 256u), 256u + 16u);
+  CHECK_EQ(block.offset_of(8u, 4u, 256u), 256u + 16u);
+  CHECK_EQ(block.offset_of(0u, 0u, 256u), 0u);
+  const TexelLayout word(4u, 1u, 1u);
+  CHECK_EQ(word.offset_of(9u, 6u, 256u), 6u * 256u + 36u);
+  /* A pitch the size of a large image does not wrap 32 bits. */
+  CHECK_EQ(word.offset_of(0u, 70000u, 70000u), 70000ull * 70000ull); }

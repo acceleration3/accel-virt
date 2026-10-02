@@ -32,6 +32,10 @@ public:
      * rows of elements `height` texels are. */
     uint32_t row_bytes(uint32_t width) const;
     uint32_t rows(uint32_t height) const;
+    /* Where texel (`x`, `y`) starts in memory whose rows of elements are
+     * `pitch` apart: the element holding it, so a block format's offset is
+     * its block's. */
+    uint64_t offset_of(uint32_t x, uint32_t y, uint32_t pitch) const;
     /* The bytes a copy moves for one row: a format with no layout is still
      * copied, a byte a texel, rather than dropped. */
     uint32_t copied_row_bytes(uint32_t width) const;

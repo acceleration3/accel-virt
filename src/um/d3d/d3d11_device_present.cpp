@@ -295,7 +295,6 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         to.shadow = from.shadow;
         to.shadow_bytes = from.shadow_bytes;
         to.shadow_watched = from.shadow_watched;
-        to.mapped_write = from.mapped_write;
         to.present_model = from.present_model;
         to.vidpn_source = from.vidpn_source;
     }
@@ -422,8 +421,8 @@ void D3d11Device::refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIE
         if (view == nullptr) continue;
         for (uint32_t index = 0u; index < guest_surface_count_; index++) {
             ResourceRecord &surface = *guest_surfaces_[index];
-            if (surface.id != view->resource || surface.reserved == frame_) continue;
-            surface.reserved = frame_;
+            if (surface.id != view->resource || surface.refreshed == frame_) continue;
+            surface.refreshed = frame_;
             refresh_guest_surface(surface);
         }
     }
@@ -452,7 +451,7 @@ void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
         __builtin_memcpy(resource.shadow + offset, pixels + offset, bytes);
         const D3D10_DDI_BOX band = {0, static_cast<LONG>(first), 0, static_cast<LONG>(resource.width),
                                     static_cast<LONG>(last + 1u), 1};
-        upload(resource, 0u, &band, resource.shadow + offset, bytes, resource.allocation_pitch, 0u, 0u);
+        upload(resource, 0u, &band, resource.shadow + offset, resource.allocation_pitch, 0u, 0u);
     }
     kernel_.unlock(resource.allocation);
 }

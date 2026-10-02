@@ -153,8 +153,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (args->pInitialDataUP != nullptr) {
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) {
             const D3D10_DDIARG_SUBRESOURCE_UP &initial = args->pInitialDataUP[sub];
-            const size_t bytes = upload_bytes(resource, sub, nullptr, initial.SysMemPitch, initial.SysMemSlicePitch);
-            upload(resource, sub, nullptr, initial.pSysMem, bytes, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
+            upload(resource, sub, nullptr, initial.pSysMem, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
             if (resource.shadow == nullptr) continue;
             /* The shadow is packed; the application's rows are at its pitch. */
             uint32_t width = 0u, height = 0u, depth = 0u;
@@ -263,6 +262,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     if (parent_ != nullptr) return;
     ResourceRecord &resource = record(handle);
     forget_guest_surface(resource);
+    maps_.forget(resource.id);
     destroy_object(resource.id);
     if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     if (resource.shared_key == 0u) kernel_.deallocate(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
