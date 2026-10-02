@@ -6,7 +6,7 @@ namespace av {
 
 ClEventSignals::ClEventSignals()
     : slots_(), generation_(1u), taken_(0u), signalled_(0u), stale_(0u),
-      signal_(nullptr), context_(nullptr)
+      wake_()
 {
     AV_SCOPE("ClEventSignals::ClEventSignals");
     for (uint32_t index = 0u; index < max_registrations; ++index) slots_[index].bind(*this);
@@ -15,14 +15,13 @@ ClEventSignals::ClEventSignals()
 void ClEventSignals::bind(void (*signal)(void *context), void *context)
 {
     AV_SCOPE("ClEventSignals::bind");
-    signal_ = signal;
-    context_ = context;
+    wake_.bind(signal, context);
 }
 
 bool ClEventSignals::bound() const
 {
     AV_SCOPE("ClEventSignals::bound");
-    return signal_ != nullptr;
+    return wake_.bound();
 }
 
 ClEventRegistration *ClEventSignals::take()
@@ -53,8 +52,7 @@ void ClEventSignals::shut_down()
     ++generation_;
     for (uint32_t index = 0u; index < max_registrations; ++index) slots_[index].disarm();
     taken_ = 0u;
-    signal_ = nullptr;
-    context_ = nullptr;
+    wake_.clear();
 }
 
 /* Marked like anything else, though this runs on the host driver's own thread:
@@ -68,11 +66,7 @@ void ClEventSignals::signal_from_host(uint64_t generation)
         __atomic_fetch_add(&stale_, uint64_t{1}, __ATOMIC_RELAXED);
         return;
     }
-    void (*signal)(void *) = __atomic_load_n(&signal_, __ATOMIC_ACQUIRE);
-    void *context = __atomic_load_n(&context_, __ATOMIC_ACQUIRE);
-    if (signal == nullptr) return;
-    __atomic_fetch_add(&signalled_, uint64_t{1}, __ATOMIC_RELAXED);
-    signal(context);
+    if (wake_.raise()) __atomic_fetch_add(&signalled_, uint64_t{1}, __ATOMIC_RELAXED);
 }
 
 uint32_t ClEventSignals::outstanding() const

@@ -117,6 +117,23 @@ TEST(d3d12_fence_wake_watch, a_reached_mark_raises_the_signal_once_per_reach)
   wake.stop();
   wake.stop(); }
 
+/* A session that ends unbinds: the thread goes, nothing it watched raises
+ * the old context, and a watch before the next binding watches nothing. */
+TEST(d3d12_fence_wake_watch, an_ended_session_unbinds_and_watches_nothing_more)
+{ woken = 0u;
+  D3d12FenceWake wake;
+  wake.bind(&::wake, &woken);
+  ScriptedFence fence;
+  CHECK(wake.watch(&fence, 5u));
+  const int first = fence.descriptor;
+  wake.unbind();
+  CHECK_EQ(fcntl(first, F_GETFD), -1);
+  fence.descriptor = -1;
+  CHECK(wake.watch(&fence, 6u));
+  CHECK_EQ(fence.descriptor, -1);
+  CHECK_EQ(woken.load(), 0u);
+  wake.unbind(); }
+
 TEST(d3d12_fence_wake_watch, a_mark_vkd3d_proton_refuses_is_refused)
 { woken = 0u;
   D3d12FenceWake wake;

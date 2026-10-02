@@ -131,7 +131,7 @@ void D3d12Session::shut_down()
     presentation_.bind(nullptr, nullptr);
     fences_.clear();
     progress_.clear();
-    wake_.stop();
+    wake_.unbind();
     addresses_.clear();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
     arena_heaps_.close();

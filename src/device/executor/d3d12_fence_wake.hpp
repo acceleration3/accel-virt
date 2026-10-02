@@ -12,6 +12,8 @@
 #ifndef AV_D3D12_FENCE_WAKE_HPP
 #define AV_D3D12_FENCE_WAKE_HPP
 
+#include "device/executor/wake_signal.hpp"
+
 #include <pthread.h>
 #include <stdint.h>
 
@@ -34,14 +36,17 @@ public:
     [[nodiscard]] bool watch(ID3D12Fence *fence, uint64_t value);
     /* Worker: the thread goes; the next watch starts another. */
     void               stop();
+    /* Worker, as its session ends: the thread goes and so does the binding,
+     * so nothing watched for this session wakes the next one in its slot,
+     * which binds its own. */
+    void               unbind();
     /* The thread's own: sleeps until a mark is reached or stop() is asked. */
     void               run();
 
 private:
     bool start();
 
-    void (*signal_)(void *context);
-    void     *context_;
+    WakeSignal signal_;
     int       reached_fd_;
     int       stop_fd_;
     pthread_t thread_;

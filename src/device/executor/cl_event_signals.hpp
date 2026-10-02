@@ -21,6 +21,7 @@
 #define AV_CL_EVENT_SIGNALS_HPP
 
 #include "device/executor/cl_event_registration.hpp"
+#include "device/executor/wake_signal.hpp"
 
 #include <stdint.h>
 
@@ -81,9 +82,8 @@ private:
     /* Written by the worker, read by both; the counters are for reporting and
      * are allowed to be a little behind. */
     uint64_t signalled_;
-    uint64_t stale_;
-    void (*signal_)(void *context);
-    void *context_;
+    uint64_t   stale_;
+    WakeSignal wake_;
 };
 
 }  // namespace av

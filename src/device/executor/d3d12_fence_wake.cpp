@@ -21,7 +21,7 @@ void *run_d3d12_fence_wake(void *wake)
 }  // namespace
 
 D3d12FenceWake::D3d12FenceWake()
-    : signal_(nullptr), context_(nullptr), reached_fd_(-1), stop_fd_(-1), thread_{}, running_(false)
+    : signal_(), reached_fd_(-1), stop_fd_(-1), thread_{}, running_(false)
 {
     AV_SCOPE("D3d12FenceWake::D3d12FenceWake");
 }
@@ -35,14 +35,13 @@ D3d12FenceWake::~D3d12FenceWake()
 void D3d12FenceWake::bind(void (*signal)(void *context), void *context)
 {
     AV_SCOPE("D3d12FenceWake::bind");
-    signal_ = signal;
-    context_ = context;
+    signal_.bind(signal, context);
 }
 
 bool D3d12FenceWake::watch(ID3D12Fence *fence, uint64_t value)
 {
     AV_SCOPE("D3d12FenceWake::watch");
-    if (signal_ == nullptr) return true;
+    if (!signal_.bound()) return true;
     if (!running_ && !start()) return false;
     const HANDLE event = reinterpret_cast<HANDLE>(static_cast<intptr_t>(reached_fd_));
     return SUCCEEDED(fence->SetEventOnCompletion(value, event));
@@ -51,7 +50,7 @@ bool D3d12FenceWake::watch(ID3D12Fence *fence, uint64_t value)
 bool D3d12FenceWake::start()
 {
     AV_SCOPE("D3d12FenceWake::start");
-    if (signal_ == nullptr) return false;
+    if (!signal_.bound()) return false;
     reached_fd_ = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
     stop_fd_ = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
     /* vkd3d-proton reads descriptor 0 as no event at all. */
@@ -78,6 +77,13 @@ void D3d12FenceWake::stop()
     running_ = false;
 }
 
+void D3d12FenceWake::unbind()
+{
+    AV_SCOPE("D3d12FenceWake::unbind");
+    stop();
+    signal_.clear();
+}
+
 void D3d12FenceWake::run()
 {
     AV_SCOPE("D3d12FenceWake::run");
@@ -86,7 +92,7 @@ void D3d12FenceWake::run()
         if (poll(watched, 2u, -1) < 0) continue;
         if (watched[1].revents != 0) return;
         uint64_t count = 0u;
-        if (read(reached_fd_, &count, sizeof count) == sizeof count) signal_(context_);
+        if (read(reached_fd_, &count, sizeof count) == sizeof count) static_cast<void>(signal_.raise());
     }
 }
 
