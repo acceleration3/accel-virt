@@ -11,6 +11,7 @@
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/submission/present_point_record.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
+#include "um/d3d/query_results.hpp"
 #include "um/d3d/d3d_session.hpp"
 
 namespace av::d3d12 {
@@ -24,9 +25,8 @@ constexpr uint32_t list_compute = 2u;
 constexpr uint32_t list_copy = 3u;
 /* What of the session's arena is lent to bulk data (pipeline code, root
  * constants too large to cross inline); the rest holds heaps, up to the
- * query result slots the session keeps at its end. */
+ * query result slots the session keeps at its end (QueryResults). */
 constexpr uint64_t lent_bytes = uint64_t{32} << 20u;
-constexpr uint64_t query_slot_bytes = uint64_t{64} << 10u;
 /* Executes between the host's verdicts on what the device was sent. */
 constexpr uint64_t verdict_every = 64u;
 
@@ -83,10 +83,10 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
      * it has gone. */
     uint8_t *const  view = session_.arena_view();
     const uint64_t  arena = session_.arena_bytes();
-    if (view != nullptr && arena > lent_bytes + query_slot_bytes && heaps_.placed() == 0u &&
+    if (view != nullptr && arena > lent_bytes + d3d11::QueryResults::reserved_bytes && heaps_.placed() == 0u &&
         session_.blobs().used() == 0u) {
         session_.blobs().lend(view, static_cast<size_t>(lent_bytes));
-        heaps_.take(lent_bytes, arena - query_slot_bytes);
+        heaps_.take(lent_bytes, arena - d3d11::QueryResults::reserved_bytes);
     }
     uint32_t           hresult = 1u;
     d3d12proto::Caps12 host = {};

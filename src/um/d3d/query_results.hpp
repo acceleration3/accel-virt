@@ -20,6 +20,9 @@ class QueryResults {
 public:
     static constexpr uint32_t slots = 512u;
     static constexpr uint32_t slot_bytes = 128u;
+    /* What the slots take off the end of the session's arena, which
+     * Direct3D 12's heaps stop short of. */
+    static constexpr uint64_t reserved_bytes = uint64_t{slots} * slot_bytes;
     static constexpr uint32_t data_at = 16u;
 
     QueryResults();
