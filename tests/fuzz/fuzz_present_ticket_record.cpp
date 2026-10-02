@@ -4,7 +4,7 @@
  * re-encode to exactly the bytes read and name an epoch and a ticket; a
  * refusal leaves the record as it was. */
 #include "core/support/status.hpp"
-#include "proto/submission/present_ticket_record.hpp"
+#include "miniport/present/present_ticket_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

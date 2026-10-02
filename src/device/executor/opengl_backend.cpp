@@ -1,6 +1,6 @@
 #include "device/executor/opengl_backend.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/executor/gl_context_attributes.hpp"
 #include "device/executor/imported_blob.hpp"

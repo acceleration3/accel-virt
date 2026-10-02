@@ -8,7 +8,7 @@
 #ifndef AV_OPENGL_BACKEND_HPP
 #define AV_OPENGL_BACKEND_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"

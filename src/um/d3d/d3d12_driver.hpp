@@ -9,7 +9,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "um/d3d/adapter_sessions.hpp"

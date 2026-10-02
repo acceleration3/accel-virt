@@ -1,7 +1,7 @@
 /* Reading the device's av capset, one request and one answer at a time, and
  * every answer a device might give judged. */
 #include "core/platform/platform.hpp"
-#include "miniport/av_context/capset_query.hpp"
+#include "miniport/adapter/capset_query.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"

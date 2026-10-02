@@ -1,13 +1,13 @@
 #include "icd/d3d/adapter_identity.hpp"
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 namespace av::d3d {
 namespace {

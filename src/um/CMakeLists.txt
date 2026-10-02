@@ -12,6 +12,7 @@ file(GLOB_RECURSE AVTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
@@ -121,6 +122,7 @@ file(GLOB_RECURSE AVVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
@@ -178,6 +180,7 @@ file(GLOB_RECURSE AVGL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
@@ -211,6 +214,7 @@ file(GLOB_RECURSE AVCL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
@@ -420,6 +424,7 @@ file(GLOB_RECURSE AVUMD_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp

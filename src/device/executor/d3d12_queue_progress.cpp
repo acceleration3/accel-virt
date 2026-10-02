@@ -1,6 +1,6 @@
 #include "device/executor/d3d12_queue_progress.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 
 #include "device/executor/d3d12_fence_wake.hpp"

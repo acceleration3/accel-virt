@@ -1,6 +1,6 @@
 #include "miniport/memory/gpu_virtual_address_space.hpp"
 
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

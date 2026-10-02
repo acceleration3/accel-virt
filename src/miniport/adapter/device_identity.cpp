@@ -1,4 +1,4 @@
-#include "miniport/av_context/device_identity.hpp"
+#include "miniport/adapter/device_identity.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/context/gpu_identity.hpp"

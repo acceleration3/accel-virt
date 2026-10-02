@@ -15,7 +15,7 @@
 #ifndef AV_D3D12_SESSION_HPP
 #define AV_D3D12_SESSION_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/d3d12_address_map.hpp"

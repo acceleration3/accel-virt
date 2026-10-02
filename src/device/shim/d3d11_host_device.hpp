@@ -17,7 +17,7 @@
 #ifndef AV_D3D11_HOST_DEVICE_HPP
 #define AV_D3D11_HOST_DEVICE_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
 #include "device/shim/d3d11_capabilities.hpp"
 #include "device/shim/d3d_shared_resources.hpp"

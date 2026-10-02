@@ -1,6 +1,6 @@
 #include "miniport/av_context/context_memory.hpp"
 
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/context/av_context_record.hpp"

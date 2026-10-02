@@ -2,7 +2,7 @@
 
 #include "miniport/driver/interrupt_notification.hpp"
 #include "core/platform/spin_lock_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

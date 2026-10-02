@@ -1,7 +1,7 @@
 #include "miniport/scheduling/hw_queue_contexts.hpp"
 
 #include "core/platform/spin_lock_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

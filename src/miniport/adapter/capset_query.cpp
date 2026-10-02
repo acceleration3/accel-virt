@@ -1,4 +1,4 @@
-#include "miniport/av_context/capset_query.hpp"
+#include "miniport/adapter/capset_query.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/context/protocol_version.hpp"

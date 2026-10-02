@@ -2,7 +2,7 @@
 
 #include "miniport/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "miniport/memory/gpu_mmu_geometry.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

@@ -7,7 +7,7 @@
 #ifndef AV_CLICD_CL_REFUSAL_LOG_HPP
 #define AV_CLICD_CL_REFUSAL_LOG_HPP
 
-#include "core/support/keyed_log.hpp"
+#include "core/log/keyed_log.hpp"
 
 #include <stdint.h>
 

@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"

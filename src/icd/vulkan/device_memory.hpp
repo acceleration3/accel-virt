@@ -9,7 +9,7 @@
 #define AV_ICD_DEVICE_MEMORY_HPP
 
 #include "core/support/status.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/vulkan/chunk_allocator.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 

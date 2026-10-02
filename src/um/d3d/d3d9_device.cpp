@@ -3,9 +3,9 @@
 #include "um/d3d/d3d9_device.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"

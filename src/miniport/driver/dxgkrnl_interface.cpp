@@ -3,7 +3,7 @@
 #include "miniport/ddi/dxgk_child_status_record.hpp"
 
 #include "miniport/ddi/dxgkargcb_query_feature_support_record.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/trace/function_scope.hpp"
 

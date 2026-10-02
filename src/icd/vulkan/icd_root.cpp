@@ -20,7 +20,7 @@
 #include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/vulkan/memory_allocate_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"

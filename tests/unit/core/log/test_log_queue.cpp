@@ -1,7 +1,7 @@
 /* Log lines queued for a slow sink: a line goes in whole with its newline or
  * not at all, the bytes come out oldest first across the wrap, and what could
  * not be queued is counted until it is asked for. */
-#include "core/support/log_queue.hpp"
+#include "core/log/log_queue.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>

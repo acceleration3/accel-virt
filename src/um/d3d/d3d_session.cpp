@@ -3,7 +3,7 @@
 #include "core/platform/block_source.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::d3d {

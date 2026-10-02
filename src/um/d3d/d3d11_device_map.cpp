@@ -4,9 +4,9 @@
  * UpdateSubresource runs in command order, so a draw recorded before the
  * unmap still reads the old contents - which is what NO_OVERWRITE promises
  * and DISCARD allows. */
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "um/d3d/d3d11_device.hpp"
 
 namespace av::d3d11 {

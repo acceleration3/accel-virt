@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"

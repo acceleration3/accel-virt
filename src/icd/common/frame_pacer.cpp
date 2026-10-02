@@ -4,7 +4,7 @@
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 namespace av::icd {
 

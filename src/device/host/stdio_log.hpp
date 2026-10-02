@@ -4,7 +4,7 @@
 #ifndef AV_STDIO_LOG_HPP
 #define AV_STDIO_LOG_HPP
 
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 #include <stdio.h>
 

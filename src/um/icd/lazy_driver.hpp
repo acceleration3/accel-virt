@@ -15,7 +15,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "um/icd/once_body.hpp"
 #include "um/icd/run_once.hpp"
 #include "um/trace/process_trace.hpp"

@@ -12,7 +12,7 @@
 #ifndef AV_KEYED_LOG_HPP
 #define AV_KEYED_LOG_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 
 #include <stdint.h>
 

@@ -2,7 +2,7 @@
 
 #include "miniport/display/display_mode.hpp"
 #include "core/platform/log_budget.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"

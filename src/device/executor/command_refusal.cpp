@@ -1,6 +1,6 @@
 #include "device/executor/command_refusal.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

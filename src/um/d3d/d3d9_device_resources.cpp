@@ -8,10 +8,10 @@
  * The runtime keeps the managed pool itself and fills it with TexBlt and
  * BufBlt from system memory of its own, which is copied from where it lies. */
 #include "core/platform/block_source.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/common/pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"

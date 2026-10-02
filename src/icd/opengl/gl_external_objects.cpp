@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
 namespace av::glicd {

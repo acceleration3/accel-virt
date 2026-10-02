@@ -9,7 +9,7 @@
 
 #include <ntddk.h>
 
-#include "core/support/log_queue.hpp"
+#include "core/log/log_queue.hpp"
 #include "core/support/status.hpp"
 
 #include <stddef.h>

@@ -4,7 +4,7 @@
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/device_handle.hpp"
 

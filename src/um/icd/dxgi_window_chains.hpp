@@ -20,7 +20,7 @@
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
-#include "core/support/keyed_log.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/common/window_chains.hpp"
 #include "um/icd/com_reference.hpp"
 

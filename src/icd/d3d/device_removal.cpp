@@ -1,8 +1,8 @@
 #include "icd/d3d/device_removal.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 namespace av::d3d {
 namespace {

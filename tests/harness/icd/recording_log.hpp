@@ -3,7 +3,7 @@
 #ifndef AV_RECORDING_LOG_HPP
 #define AV_RECORDING_LOG_HPP
 
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 #include <cstdint>
 

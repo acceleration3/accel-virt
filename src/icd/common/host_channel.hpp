@@ -18,7 +18,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/batched_transport.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 

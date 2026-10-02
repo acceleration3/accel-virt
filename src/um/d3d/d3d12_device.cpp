@@ -2,9 +2,9 @@
  * them, fences, queries, and the slots that answer a fixed fact. */
 #include "um/d3d/d3d12_device.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/client_blob_arena.hpp"

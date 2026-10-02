@@ -1,7 +1,7 @@
 /* The capset read over a real control queue: the device answers each request
  * from the stall between the driver's polls, as it does at StartDevice. */
 #include "core/platform/platform.hpp"
-#include "miniport/av_context/capset_exchange.hpp"
+#include "miniport/adapter/capset_exchange.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"

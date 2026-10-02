@@ -19,7 +19,7 @@
 #ifndef AV_ICD_OPENED_OBJECTS_HPP
 #define AV_ICD_OPENED_OBJECTS_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>

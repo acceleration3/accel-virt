@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 

@@ -1,8 +1,8 @@
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 namespace av {
 

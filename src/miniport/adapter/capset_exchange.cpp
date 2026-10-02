@@ -1,4 +1,4 @@
-#include "miniport/av_context/capset_exchange.hpp"
+#include "miniport/adapter/capset_exchange.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"

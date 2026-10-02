@@ -1,7 +1,7 @@
 /* What a Direct3D session does with a command it refused (CommandRefusal):
  * it removes the device that sent it, and fails the session only when there
  * is no device to blame - saying which, the first time for each device. */
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"

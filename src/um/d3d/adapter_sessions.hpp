@@ -7,7 +7,7 @@
 #ifndef AV_UM_ADAPTER_SESSIONS_HPP
 #define AV_UM_ADAPTER_SESSIONS_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/scope_exit.hpp"
 #include "guest/transport/guest_connection.hpp"

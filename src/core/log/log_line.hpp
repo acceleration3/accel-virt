@@ -5,7 +5,7 @@
 #ifndef AV_LOG_LINE_HPP
 #define AV_LOG_LINE_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/support/text_buffer.hpp"
 
 #include <stdint.h>

@@ -16,7 +16,7 @@
 #define AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 
 #include "icd/common/once_latch.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
 #include "icd/opengl/chained_frames.hpp"

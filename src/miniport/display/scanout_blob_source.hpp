@@ -20,7 +20,7 @@
 #include "miniport/display/hardware_cursor.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/object_storage.hpp"
-#include "core/support/request_room.hpp"
+#include "miniport/display/request_room.hpp"
 #include "core/support/status.hpp"
 
 #include <stddef.h>

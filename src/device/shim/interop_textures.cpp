@@ -1,6 +1,6 @@
 #include "device/shim/interop_textures.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/dxvk_vulkan_device.hpp"

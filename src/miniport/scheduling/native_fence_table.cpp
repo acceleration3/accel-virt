@@ -3,7 +3,7 @@
 #include "miniport/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/platform/mutex_guard.hpp"
 #include "core/platform/mutex_try_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 

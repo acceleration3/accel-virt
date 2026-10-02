@@ -12,7 +12,7 @@
 #ifndef AV_GLICD_GL_ICD_ROOT_HPP
 #define AV_GLICD_GL_ICD_ROOT_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/common/icd_connection.hpp"

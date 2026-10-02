@@ -6,7 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 

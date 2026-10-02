@@ -1,10 +1,10 @@
 #include "um/icd/dxgi_window_chains.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"

@@ -7,7 +7,7 @@
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "proto/submission/present_ticket_record.hpp"
+#include "miniport/present/present_ticket_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

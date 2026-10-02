@@ -28,7 +28,7 @@
 #define AV_UM_D3D12_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "core/support/keyed_log.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/device_removal.hpp"

@@ -6,7 +6,7 @@
 #ifndef AV_LOOPBACK_RIG_HPP
 #define AV_LOOPBACK_RIG_HPP
 
-#include "miniport/av_context/capset_query.hpp"
+#include "miniport/adapter/capset_query.hpp"
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"

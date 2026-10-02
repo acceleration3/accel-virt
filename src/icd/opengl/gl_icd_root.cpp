@@ -1,6 +1,6 @@
 #include "icd/opengl/gl_icd_root.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "icd/common/report_gate.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "icd/opengl/granted_profile.hpp"
@@ -9,7 +9,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/extension_policy.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/opengl/context_attributes.hpp"

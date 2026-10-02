@@ -6,7 +6,7 @@
 #define AV_CAPSET_EXCHANGE_HPP
 
 #include "core/platform/platform.hpp"
-#include "miniport/av_context/capset_query.hpp"
+#include "miniport/adapter/capset_query.hpp"
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"

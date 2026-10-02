@@ -3,7 +3,7 @@
 #include "miniport/memory/allocation.hpp"
 #include "core/platform/mutex_guard.hpp"
 #include "core/platform/mutex_try_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "proto/resources/shared_object_record.hpp"

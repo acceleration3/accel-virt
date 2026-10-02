@@ -1,4 +1,4 @@
-#include "core/support/request_room.hpp"
+#include "miniport/display/request_room.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"

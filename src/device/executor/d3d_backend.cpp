@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "device/executor/dxbc_container.hpp"

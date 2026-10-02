@@ -106,7 +106,7 @@
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/submission/present_point_record.hpp"
-#include "proto/submission/present_ticket_record.hpp"
+#include "miniport/present/present_ticket_record.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"

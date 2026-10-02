@@ -4,7 +4,7 @@
 #include "miniport/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/memory/memory_segments.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

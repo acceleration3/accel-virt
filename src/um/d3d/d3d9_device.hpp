@@ -19,7 +19,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
-#include "core/support/keyed_log.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"

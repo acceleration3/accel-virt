@@ -1,6 +1,6 @@
 #include "miniport/virtio/virtio_pci_transport.hpp"
 
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virt_queue.hpp"
 

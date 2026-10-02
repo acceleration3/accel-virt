@@ -2,7 +2,7 @@
  * A hibernated guest is restored onto whatever QEMU is running now (feature
  * 040, FR-005). */
 #include "core/platform/platform.hpp"
-#include "miniport/av_context/device_identity.hpp"
+#include "miniport/adapter/device_identity.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"

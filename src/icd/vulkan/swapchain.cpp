@@ -1,9 +1,9 @@
 #include "icd/vulkan/swapchain.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/surface_properties.hpp"

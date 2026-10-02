@@ -17,7 +17,7 @@
 #ifndef AV_INTEROP_TEXTURES_HPP
 #define AV_INTEROP_TEXTURES_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
 
 #include <stdint.h>

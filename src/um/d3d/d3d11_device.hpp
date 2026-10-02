@@ -20,7 +20,7 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "core/support/keyed_log.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"

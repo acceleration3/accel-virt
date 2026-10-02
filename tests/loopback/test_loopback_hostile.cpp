@@ -1,6 +1,6 @@
 /* L4: each side of the protocol against the other misbehaving - a guest
  * publishing what it should not, and a device answering what it should not. */
-#include "miniport/av_context/capset_query.hpp"
+#include "miniport/adapter/capset_query.hpp"
 #include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"

@@ -1,8 +1,8 @@
 #include "um/d3d/d3d9_driver.hpp"
 
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/umd_adapter.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"

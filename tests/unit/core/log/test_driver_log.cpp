@@ -1,7 +1,7 @@
 /* DriverLog: every line carries its driver's prefix. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 
 #include <cstdint>
 #include <cstring>

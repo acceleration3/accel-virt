@@ -10,7 +10,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/ddi/d3d10_2ddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"

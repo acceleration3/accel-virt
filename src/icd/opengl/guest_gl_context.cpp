@@ -5,7 +5,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"

@@ -12,7 +12,7 @@
 #include "core/platform/wait_mutex_guard.hpp"
 #include "miniport/av_context/context_pages.hpp"
 #include "miniport/scheduling/execution_node.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"

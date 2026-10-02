@@ -10,7 +10,7 @@
 #include "miniport/display/display_sources.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "core/platform/mutex_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"

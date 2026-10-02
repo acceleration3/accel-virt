@@ -3,7 +3,7 @@
  * on while it is not removed; and the first reason each was removed for. An
  * id of 0, one kept twice or a full table refuses; invariants after every
  * mutation. The handles are never touched, so stand-ins do. */
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "device/executor/command_refusal.hpp"
 #include "device/executor/guest_devices.hpp"
 #include "harness/framework/test_registry.hpp"

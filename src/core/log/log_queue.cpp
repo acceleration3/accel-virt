@@ -1,4 +1,4 @@
-#include "core/support/log_queue.hpp"
+#include "core/log/log_queue.hpp"
 
 #include "core/trace/function_scope.hpp"
 

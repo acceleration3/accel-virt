@@ -1,5 +1,5 @@
 #include "miniport/driver/dxgkrnl_interface.hpp"
-#include "miniport/pci/bar_mappings.hpp"
+#include "miniport/virtio/bar_mappings.hpp"
 #include "miniport/pci/pci_base_addresses.hpp"
 #include "miniport/pci/resource_list.hpp"
 #include "core/support/status.hpp"

@@ -1,6 +1,6 @@
 #include "miniport/adapter/adapter_description.hpp"
 
-#include "core/support/utf16_text.hpp"
+#include "miniport/adapter/utf16_text.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/context/gpu_identity.hpp"
 

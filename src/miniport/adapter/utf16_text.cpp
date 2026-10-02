@@ -1,4 +1,4 @@
-#include "core/support/utf16_text.hpp"
+#include "miniport/adapter/utf16_text.hpp"
 
 #include "core/trace/function_scope.hpp"
 

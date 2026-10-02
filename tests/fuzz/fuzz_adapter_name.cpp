@@ -5,7 +5,7 @@
  * said, fit the capset's field, and never end inside a character; the UTF-16
  * must be terminated where bytes() says and hold no unpaired surrogate. Any
  * breach traps. */
-#include "core/support/utf16_text.hpp"
+#include "miniport/adapter/utf16_text.hpp"
 #include "device/gpu/adapter_name.hpp"
 #include "proto/context/gpu_identity.hpp"
 

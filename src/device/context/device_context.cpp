@@ -1,7 +1,7 @@
 #include "device/context/device_context.hpp"
 
-#include "core/support/driver_log.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "device/context/d3d_ordering.hpp"
 
 #include "core/trace/function_scope.hpp"

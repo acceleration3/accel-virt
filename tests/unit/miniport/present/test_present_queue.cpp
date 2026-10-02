@@ -25,7 +25,7 @@
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/resources/surface_point.hpp"
-#include "proto/submission/present_ticket_record.hpp"
+#include "miniport/present/present_ticket_record.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 
 #include <cstdint>

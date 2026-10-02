@@ -12,7 +12,7 @@
 #include "miniport/driver/acquired_handle_data.hpp"
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "core/platform/mutex_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"

@@ -1,7 +1,7 @@
 #include "miniport/memory/aperture_segment.hpp"
 
 #include "miniport/ddi/dxgk_segment_descriptor4_record.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {

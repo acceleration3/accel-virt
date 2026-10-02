@@ -1,9 +1,9 @@
 #include "um/d3d/d3d11_device.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/texture_upload.hpp"

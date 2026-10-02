@@ -9,7 +9,7 @@
 #include "miniport/virtio/virtq_segment.hpp"
 #include "proto/commands/present_region.hpp"
 #include "proto/display/present_progress.hpp"
-#include "proto/submission/present_ticket_record.hpp"
+#include "miniport/present/present_ticket_record.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"

@@ -3,7 +3,7 @@
  * every call of an application that keeps calling. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
-#include "core/support/keyed_log.hpp"
+#include "core/log/keyed_log.hpp"
 
 #include <cstdint>
 #include <cstring>

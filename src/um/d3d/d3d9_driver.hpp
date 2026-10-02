@@ -10,7 +10,7 @@
 #ifndef AV_UM_D3D9_DRIVER_HPP
 #define AV_UM_D3D9_DRIVER_HPP
 
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"

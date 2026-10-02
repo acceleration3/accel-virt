@@ -14,7 +14,7 @@
 #define AV_D3D_UMD_ROOT_HPP
 
 #include "core/trace/state_reporter.hpp"
-#include "core/support/driver_log.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/hresult.hpp"

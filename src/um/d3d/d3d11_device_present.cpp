@@ -8,9 +8,9 @@
  * and every present hands the allocation to dxgkrnl through DXGI's present
  * callback, on a context of the device's own. */
 #include "core/platform/block_source.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"

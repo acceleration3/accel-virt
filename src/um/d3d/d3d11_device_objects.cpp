@@ -1,10 +1,10 @@
 /* The creation slots: every object the runtime makes is made on the host under
  * an id this device hands out, and its record kept in the runtime's block. */
 #include "core/platform/block_source.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/shared_object_call.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"

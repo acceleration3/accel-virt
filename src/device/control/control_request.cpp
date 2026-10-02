@@ -1,7 +1,7 @@
 #include "device/control/control_request.hpp"
 
-#include "core/support/driver_log.hpp"
-#include "core/support/log_line.hpp"
+#include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 #include "device/host/stdio_log.hpp"

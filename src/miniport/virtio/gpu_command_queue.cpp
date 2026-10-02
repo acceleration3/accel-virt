@@ -1,7 +1,7 @@
 #include "miniport/virtio/gpu_command_queue.hpp"
 
 #include "core/platform/spin_lock_guard.hpp"
-#include "core/support/invariant_scope.hpp"
+#include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_pci_transport.hpp"
 #include "miniport/virtio/virtq_segment.hpp"

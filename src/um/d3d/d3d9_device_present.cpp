@@ -7,9 +7,9 @@
  * kernel copies the frame from the allocation's pages into the window, so
  * the host's pixels are read back into them first. A buffer gets its
  * allocation the first time it is presented. */
-#include "core/support/log_line.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "icd/d3d/pitched_rows.hpp"

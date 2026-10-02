@@ -6,7 +6,7 @@
 #ifndef AV_UM_FILE_LOG_HPP
 #define AV_UM_FILE_LOG_HPP
 
-#include "core/support/log_sink.hpp"
+#include "core/log/log_sink.hpp"
 
 namespace av {
 
