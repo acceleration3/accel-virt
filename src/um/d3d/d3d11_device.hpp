@@ -21,6 +21,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/keyed_log.hpp"
+#include "icd/common/once_latch.hpp"
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
@@ -251,12 +252,12 @@ private:
     static constexpr uint32_t max_guest_surfaces = 256u;
     ResourceRecord *guest_surfaces_[max_guest_surfaces];
     uint32_t        guest_surface_count_;
-    bool            guest_lock_refused_;
-    bool            present_refused_;
+    icd::OnceLatch  guest_lock_refused_;
+    icd::OnceLatch  present_refused_;
     /* The flags of the last present, ~0 before any: a fullscreen change shows
      * in the log as a change of these. */
     uint32_t        present_flags_;
-    bool            follow_refused_;
+    icd::OnceLatch  follow_refused_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
 };

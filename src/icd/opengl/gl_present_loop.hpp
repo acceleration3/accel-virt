@@ -19,6 +19,7 @@
 #ifndef AV_GLICD_GL_PRESENT_LOOP_HPP
 #define AV_GLICD_GL_PRESENT_LOOP_HPP
 
+#include "icd/common/once_latch.hpp"
 #include "icd/common/service_thread.hpp"
 #include "icd/opengl/handed_frame.hpp"
 
@@ -134,7 +135,7 @@ private:
     /* Read by the thread, written by the destructor on another. */
     uint32_t            stopping_;
     bool                refused_;
-    bool                refusal_logged_;
+    icd::OnceLatch      refusal_logged_;
 
     friend struct GlPresentLoopProbe;
 };

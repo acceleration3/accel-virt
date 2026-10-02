@@ -470,6 +470,13 @@ TEST(swapchain, a_window_that_refuses_the_frame_is_not_a_present)
   CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
   CHECK_EQ(chain.presented(), 0u);
   CHECK_EQ(rig.log().holding("a presented frame was refused by its window"), 1u);
+  /* A window that refuses one frame refuses the next: not said again. */
+  std::uint32_t again = 0u;
+  CHECK_EQ(chain.acquire(0u, again), VK_SUCCESS);
+  rig.windows().refuse_next_blit();
+  CHECK_EQ(chain.present(rig.host().queue(), again, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(chain.presented(), 0u);
+  CHECK_EQ(rig.log().holding("a presented frame was refused by its window"), 1u);
   /* The copy itself failing is the device's own error, and nothing is drawn. */
   std::uint32_t next = 0u;
   CHECK_EQ(chain.acquire(0u, next), VK_SUCCESS);

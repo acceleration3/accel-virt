@@ -172,8 +172,7 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
     const HRESULT presented = dxgi_->pfnPresentCb(runtime_.handle, &present);
     /* The runtime turns a refused present into a removed device without
      * saying why; the answer is only ever seen here. */
-    if (FAILED(presented) && !present_refused_) {
-        present_refused_ = true;
+    if (FAILED(presented) && present_refused_.first()) {
         log_present("the kernel refused a present", static_cast<uint32_t>(presented), source);
     }
     return presented;
@@ -205,8 +204,7 @@ HRESULT D3d11Device::follow_host()
 {
     AV_SCOPE("D3d11Device::follow_host");
     const HRESULT followed = follower_.constructed() ? follower_.object().follow(context_) : E_FAIL;
-    if (SUCCEEDED(followed) || follow_refused_) return followed;
-    follow_refused_ = true;
+    if (SUCCEEDED(followed) || !follow_refused_.first()) return followed;
     LogLine(lines_)
         .text("the kernel refused the packet that waits for the host ")
         .hex(static_cast<uint32_t>(followed), 8u)
@@ -435,8 +433,7 @@ void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
     if (resource.allocation == 0u || resource.shadow == nullptr) return;
     const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
     if (pixels == nullptr) {
-        if (!guest_lock_refused_) log_.write("avumd: a GDI surface the kernel would not lock");
-        guest_lock_refused_ = true;
+        if (guest_lock_refused_.first()) log_.write("avumd: a GDI surface the kernel would not lock");
         return;
     }
     const size_t pitch = resource.allocation_pitch;

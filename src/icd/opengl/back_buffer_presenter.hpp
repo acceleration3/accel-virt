@@ -15,6 +15,7 @@
 #ifndef AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 #define AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 
+#include "icd/common/once_latch.hpp"
 #include "core/support/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
@@ -158,7 +159,7 @@ private:
     uint8_t      *pixels_;
     FrontBuffer   front_;
     size_t        capacity_;
-    bool          refusal_logged_;
+    icd::OnceLatch refusal_logged_;
     GlPresentLoop   *loop_;
     ClientBlobArena *arena_;
     ClientBlobLease  room_;

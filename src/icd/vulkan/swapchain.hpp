@@ -9,6 +9,7 @@
 #define AV_SWAPCHAIN_HPP
 
 #include "icd/common/frame_pacer.hpp"
+#include "icd/common/once_latch.hpp"
 #include "icd/vulkan/chained_image.hpp"
 #include "icd/vulkan/present_device.hpp"
 
@@ -109,6 +110,10 @@ private:
     bool           through_chain_;
     bool           retired_;
     uint64_t       presented_;
+    /* A window, or its chain, that refuses one frame refuses the next: said
+     * once each. */
+    icd::OnceLatch window_refused_;
+    icd::OnceLatch chain_refused_;
 
     friend struct SwapchainProbe;
 };

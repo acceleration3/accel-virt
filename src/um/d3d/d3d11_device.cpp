@@ -36,7 +36,7 @@ D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink 
     : session_(session), memory_(memory), shadows_(memory), maps_(), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
-      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), present_flags_(~0u), follow_refused_(false), frame_(1u)
+      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), frame_(1u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }

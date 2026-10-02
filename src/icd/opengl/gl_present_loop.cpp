@@ -18,7 +18,7 @@ GlPresentLoop::GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed
     : thread_(thread), handed_(handed), shown_(shown), lock_(lock), kmt_(kmt), surface_(surface), chains_(chains),
       log_(log),
       frames_{}, stages_{}, orders_{}, next_order_(1u), shown_frames_(0u), dropped_frames_(0u), stopping_(0u),
-      refused_(false), refusal_logged_(false)
+      refused_(false), refusal_logged_()
 {
     AV_SCOPE("GlPresentLoop::GlPresentLoop");
 }
@@ -273,8 +273,7 @@ bool GlPresentLoop::stopping() const
 void GlPresentLoop::log_refusal()
 {
     AV_SCOPE("GlPresentLoop::log_refusal");
-    if (refusal_logged_) return;
-    refusal_logged_ = true;
+    if (!refusal_logged_.first()) return;
     log_.write("avgl: a window refused a frame the present thread blitted; later ones are not logged");
 }
 

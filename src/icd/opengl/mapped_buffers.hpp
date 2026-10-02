@@ -8,6 +8,7 @@
 #ifndef AV_GLICD_MAPPED_BUFFERS_HPP
 #define AV_GLICD_MAPPED_BUFFERS_HPP
 
+#include "icd/common/once_latch.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
 
@@ -87,7 +88,7 @@ private:
     LogSink                  &log_;
     ObjectStorage<BufferMapping>   mappings_[max_mappings];
     uint32_t                       persistent_writers_;
-    bool                           logged_;
+    icd::OnceLatch                 logged_;
 
     friend struct MappedBuffersProbe;
 };

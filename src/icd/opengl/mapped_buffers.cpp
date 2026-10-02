@@ -32,7 +32,7 @@ uint32_t access_error(uint32_t access)
 }  // namespace
 
 MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, LogSink &log)
-    : memory_(memory), shadows_(shadows), log_(log), mappings_{}, persistent_writers_(0u), logged_(false)
+    : memory_(memory), shadows_(shadows), log_(log), mappings_{}, persistent_writers_(0u), logged_()
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");
 }
@@ -223,8 +223,7 @@ void MappedBuffers::drop(uint32_t slot)
 void MappedBuffers::log_once()
 {
     AV_SCOPE("MappedBuffers::log_once");
-    if (logged_) return;
-    logged_ = true;
+    if (!logged_.first()) return;
     log_.write("avgl: buffer maps are guest copies: filled at map from what the host holds, the bytes that "
                "changed written back at unmap, and before every command that reads buffers while a persistent "
                "map writes");

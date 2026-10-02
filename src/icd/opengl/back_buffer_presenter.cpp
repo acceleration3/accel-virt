@@ -27,7 +27,7 @@ static_assert(BackBufferPresenter::max_edge * 4u <= BackBufferPresenter::inline_
 
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, LogSink &log)
     : memory_(memory), log_(log), lines_(log, "avgl: "), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
-      framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(false),
+      framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(),
       loop_(nullptr), arena_(nullptr), room_(), pending_(slot_count), pending_chained_(false), chained_(),
       chain_refused_(false)
 {
@@ -123,9 +123,8 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     if (!plain) set_pack(wire, state, false);
     /* What the window is showing now is what a read of GL_FRONT answers. */
     front_.presented(pixels_, width_, height_);
-    if (surface.blit(dc, width_, height_, pixels_) || refusal_logged_) return true;
+    if (surface.blit(dc, width_, height_, pixels_) || !refusal_logged_.first()) return true;
     LogLine(lines_).text("the window's DC refused a frame of ").number(width_).text("x").number(height_).write();
-    refusal_logged_ = true;
     return true;
 }
 

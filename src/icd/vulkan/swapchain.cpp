@@ -24,7 +24,7 @@ Swapchain::Swapchain(BlockSource &memory, WindowSurface &windows, WindowChains &
       pacer_(kmt, log, connection.adapter(), connection.device()), log_(log), luid_(connection.luid()),
       app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
       mode_(static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)), held_{}, count_(0u), next_(0u), frame_(nullptr),
-      through_chain_(false), retired_(false), presented_(0u)
+      through_chain_(false), retired_(false), presented_(0u), window_refused_(), chain_refused_()
 {
     AV_SCOPE("Swapchain::Swapchain");
 }
@@ -181,7 +181,7 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
         rows = frame_;
     }
     if (!windows_.blit_window_top_down(window_, extent_.width, extent_.height, rows)) {
-        log_.write("avvk: a presented frame was refused by its window");
+        if (window_refused_.first()) log_.write("avvk: a presented frame was refused by its window; later ones are not logged");
         return window_state();
     }
     presented_++;
@@ -202,7 +202,8 @@ VkResult Swapchain::present_chained(VkQueue queue, uint32_t index, uint32_t wait
         device_.copy_into(queue, device_.made(index).image_, chained_.slot(), extent_, wait_count, waits);
     if (copied != VK_SUCCESS) return copied;
     if (!chained_.show()) {
-        log_.write("avvk: a presented frame was refused by its window's chain");
+        if (chain_refused_.first())
+            log_.write("avvk: a presented frame was refused by its window's chain; later ones are not logged");
         return window_state();
     }
     presented_++;
