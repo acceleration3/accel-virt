@@ -88,3 +88,15 @@ TEST(dxgi_format_layout, rounds_rows_and_their_bytes_up_to_whole_elements)
   CHECK_EQ(rgba.rows(800u), 800u);
   const DxgiFormatLayout unknown(0u);
   CHECK_EQ(unknown.row_bytes(64u), 0u); }
+
+/* DXGI_FORMAT's values end at A4B4G4R4_UNORM (191): a guest naming one past
+ * it names no format, while a typeless or planar one is known and has no
+ * layout. */
+TEST(dxgi_format_layout, knows_every_value_dxgi_has_and_none_past_it)
+{ CHECK(DxgiFormatLayout(0u).known());
+  CHECK(DxgiFormatLayout(28u).known());
+  CHECK(DxgiFormatLayout(130u).known());     /* a planar format, past the table */
+  CHECK_EQ(DxgiFormatLayout(130u).element_bytes(), 0u);
+  CHECK(DxgiFormatLayout(191u).known());
+  CHECK(!DxgiFormatLayout(192u).known());
+  CHECK(!DxgiFormatLayout(0xFFFFFFFFu).known()); }

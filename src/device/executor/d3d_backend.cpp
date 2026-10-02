@@ -50,7 +50,6 @@ constexpr uint32_t known_bind_flags = D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDE
                                       D3D11_BIND_CONSTANT_BUFFER | D3D11_BIND_SHADER_RESOURCE |
                                       D3D11_BIND_STREAM_OUTPUT | D3D11_BIND_RENDER_TARGET |
                                       D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
-constexpr uint32_t max_format = 191u;
 constexpr uint32_t max_dimension = 16384u;
 constexpr uint32_t max_buffer_bytes = 1u << 30u;
 constexpr uint32_t no_stream = 0xffffffffu;
@@ -653,7 +652,7 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
 bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &desc, uint64_t shared_key)
 {
     AV_SCOPE("D3dBackend::on_CreateResource");
-    if (!has_device() || desc.format > max_format || (desc.bind_flags & ~known_bind_flags) != 0u) return false;
+    if (!has_device() || !DxgiFormatLayout(desc.format).known() || (desc.bind_flags & ~known_bind_flags) != 0u) return false;
     if (desc.width == 0u || desc.mip_levels > 16u) return false;
     const uint32_t misc = desc.misc_flags & kept_misc_flags;
     ID3D11Device5 *const device = device11_->device();
@@ -790,7 +789,7 @@ bool D3dBackend::on_CreateShaderResourceView(uint32_t id, const d3dproto::ViewDe
 {
     AV_SCOPE("D3dBackend::on_CreateShaderResourceView");
     ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
-    if (resource == nullptr || desc.format > max_format) return false;
+    if (resource == nullptr || !DxgiFormatLayout(desc.format).known()) return false;
     D3D11_SHADER_RESOURCE_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
     view.ViewDimension = static_cast<D3D11_SRV_DIMENSION>(desc.dimension);
@@ -809,7 +808,7 @@ bool D3dBackend::on_CreateRenderTargetView(uint32_t id, const d3dproto::ViewDesc
 {
     AV_SCOPE("D3dBackend::on_CreateRenderTargetView");
     ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
-    if (resource == nullptr || desc.format > max_format || desc.dimension > D3D11_RTV_DIMENSION_TEXTURE3D)
+    if (resource == nullptr || !DxgiFormatLayout(desc.format).known() || desc.dimension > D3D11_RTV_DIMENSION_TEXTURE3D)
         return false;
     D3D11_RENDER_TARGET_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
@@ -824,7 +823,7 @@ bool D3dBackend::on_CreateDepthStencilView(uint32_t id, const d3dproto::ViewDesc
 {
     AV_SCOPE("D3dBackend::on_CreateDepthStencilView");
     ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
-    if (resource == nullptr || desc.format > max_format || desc.dimension > D3D11_DSV_DIMENSION_TEXTURE2DMSARRAY)
+    if (resource == nullptr || !DxgiFormatLayout(desc.format).known() || desc.dimension > D3D11_DSV_DIMENSION_TEXTURE2DMSARRAY)
         return false;
     D3D11_DEPTH_STENCIL_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
@@ -840,7 +839,7 @@ bool D3dBackend::on_CreateUnorderedAccessView(uint32_t id, const d3dproto::ViewD
 {
     AV_SCOPE("D3dBackend::on_CreateUnorderedAccessView");
     ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(desc.resource, D3dObjectKind::resource);
-    if (resource == nullptr || desc.format > max_format || desc.dimension > D3D11_UAV_DIMENSION_TEXTURE3D)
+    if (resource == nullptr || !DxgiFormatLayout(desc.format).known() || desc.dimension > D3D11_UAV_DIMENSION_TEXTURE3D)
         return false;
     D3D11_UNORDERED_ACCESS_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
@@ -956,7 +955,7 @@ bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const
     uint32_t distinct = 0u;
     for (uint32_t index = 0u; index < element_count; index++) {
         const d3dproto::InputElement &element = elements[index];
-        if (element.format > max_format || element.input_slot >= 32u || element.input_register >= 32u)
+        if (!DxgiFormatLayout(element.format).known() || element.input_slot >= 32u || element.input_register >= 32u)
             return false;
         descs[index].SemanticName = "AV";
         descs[index].SemanticIndex = element.input_register * 4u;
@@ -1247,7 +1246,7 @@ bool D3dBackend::on_SetIndexBuffer(uint32_t buffer, uint32_t format, uint32_t of
 {
     AV_SCOPE("D3dBackend::on_SetIndexBuffer");
     ID3D11Buffer *const found = objects_.find_as<ID3D11Buffer>(buffer, D3dObjectKind::resource);
-    if (!ready() || (buffer != 0u && found == nullptr) || format > max_format) return false;
+    if (!ready() || (buffer != 0u && found == nullptr) || !DxgiFormatLayout(format).known()) return false;
     device11_->context()->IASetIndexBuffer(found, static_cast<DXGI_FORMAT>(format), offset);
     return true;
 }
@@ -1541,7 +1540,7 @@ bool D3dBackend::on_ResolveSubresource(uint32_t destination, uint32_t destinatio
     AV_SCOPE("D3dBackend::on_ResolveSubresource");
     ID3D11Resource *const to = objects_.find_as<ID3D11Resource>(destination, D3dObjectKind::resource);
     ID3D11Resource *const from = objects_.find_as<ID3D11Resource>(source, D3dObjectKind::resource);
-    if (!ready() || to == nullptr || from == nullptr || format > max_format) return false;
+    if (!ready() || to == nullptr || from == nullptr || !DxgiFormatLayout(format).known()) return false;
     device11_->context()->ResolveSubresource(to, destination_subresource, from, source_subresource,
                                              static_cast<DXGI_FORMAT>(format));
     return true;

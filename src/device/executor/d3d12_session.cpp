@@ -10,6 +10,7 @@
 #include "device/shim/surface_identity.hpp"
 #include "device/surfaces/shared_surfaces.hpp"
 #include "device/surfaces/staged_frame.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d12/d3d12_command_names.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
 #include "proto/resources/surface_point.hpp"
@@ -24,7 +25,6 @@ namespace {
 
 /* Direct3D 12's commands name no device: a session is its guest's one. */
 constexpr uint32_t only_device = 1u;
-constexpr uint32_t max_format = 191u;
 constexpr uint32_t descriptor_heap_types = 4u;
 /* D3D12_HEAP_TYPE and D3D12_CPU_PAGE_PROPERTY values the wire carries. */
 constexpr uint32_t heap_default = 1u;
@@ -63,7 +63,7 @@ D3D12_HEAP_PROPERTIES host_properties(const d3d12proto::HeapProperties &properti
 bool resource_holds(const d3d12proto::ResourceDesc &desc)
 {
     AV_SCOPE("resource_holds");
-    if (desc.dimension == 0u || desc.dimension > most_dimension || desc.format > max_format) return false;
+    if (desc.dimension == 0u || desc.dimension > most_dimension || !DxgiFormatLayout(desc.format).known()) return false;
     if (desc.dimension == buffer_dimension) return desc.height == 1u && desc.depth_or_array == 1u;
     return desc.width != 0u && desc.width <= max_texture_dimension && desc.height <= max_texture_dimension &&
            desc.depth_or_array != 0u && desc.sample_count != 0u;
@@ -90,7 +90,7 @@ D3D12_RESOURCE_DESC host_desc(const d3d12proto::ResourceDesc &desc)
 const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_CLEAR_VALUE &made)
 {
     AV_SCOPE("host_clear");
-    if (clear.present == 0u || clear.format > max_format) return nullptr;
+    if (clear.present == 0u || !DxgiFormatLayout(clear.format).known()) return nullptr;
     made = {};
     made.Format = static_cast<DXGI_FORMAT>(clear.format);
     for (uint32_t channel = 0u; channel < 4u; channel++) made.Color[channel] = clear.color[channel];
@@ -311,7 +311,7 @@ bool D3d12Session::on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t 
 {
     AV_SCOPE("D3d12Session::on_QueryFormat12");
     support1 = support2 = quality_levels = 0u;
-    if (device_ == nullptr || format > max_format) return device_ != nullptr;
+    if (device_ == nullptr || !DxgiFormatLayout(format).known()) return device_ != nullptr;
     D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {};
     support.Format = static_cast<DXGI_FORMAT>(format);
     if (SUCCEEDED(device_->device()->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support)))) {

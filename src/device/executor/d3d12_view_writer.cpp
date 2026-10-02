@@ -4,12 +4,12 @@
 #include "device/executor/d3d12_address_map.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 
 namespace av {
 
 namespace {
 
-constexpr uint32_t max_format = 191u;
 constexpr uint32_t wire_args = 6u;
 constexpr uint32_t buffer_dimension = 1u;
 /* CBVs are 256-byte aligned and at most 64 KiB, as Direct3D 12 has them. */
@@ -84,7 +84,7 @@ bool D3d12ViewWriter::shader_resource(size_t at, bool has_desc, const d3d12proto
         return true;
     }
     const Shape *const shape = shape_of(srv_shapes, desc.dimension);
-    if (shape == nullptr || desc.format > max_format) return false;
+    if (shape == nullptr || !DxgiFormatLayout(desc.format).known()) return false;
     D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
     view.ViewDimension = static_cast<D3D12_SRV_DIMENSION>(desc.dimension);
@@ -116,7 +116,7 @@ bool D3d12ViewWriter::unordered_access(size_t at, bool has_desc, const d3d12prot
         return true;
     }
     const Shape *const shape = shape_of(uav_shapes, desc.dimension);
-    if (shape == nullptr || desc.format > max_format) return false;
+    if (shape == nullptr || !DxgiFormatLayout(desc.format).known()) return false;
     D3D12_UNORDERED_ACCESS_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
     view.ViewDimension = static_cast<D3D12_UAV_DIMENSION>(desc.dimension);
@@ -146,7 +146,7 @@ bool D3d12ViewWriter::render_target(size_t at, bool has_desc, const d3d12proto::
         return true;
     }
     const Shape *const shape = shape_of(rtv_shapes, desc.dimension);
-    if (shape == nullptr || desc.format > max_format) return false;
+    if (shape == nullptr || !DxgiFormatLayout(desc.format).known()) return false;
     D3D12_RENDER_TARGET_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
     view.ViewDimension = static_cast<D3D12_RTV_DIMENSION>(desc.dimension);
@@ -173,7 +173,7 @@ bool D3d12ViewWriter::depth_stencil(size_t at, bool has_desc, const d3d12proto::
         return true;
     }
     const Shape *const shape = shape_of(dsv_shapes, desc.dimension);
-    if (shape == nullptr || desc.format > max_format) return false;
+    if (shape == nullptr || !DxgiFormatLayout(desc.format).known()) return false;
     D3D12_DEPTH_STENCIL_VIEW_DESC view = {};
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
     view.ViewDimension = static_cast<D3D12_DSV_DIMENSION>(desc.dimension);

@@ -43,6 +43,12 @@ DxgiFormatLayout::DxgiFormatLayout(uint32_t format) : format_(format)
     lay_out(element_sizes[format_], paired() ? 2u : side, side);
 }
 
+bool DxgiFormatLayout::known() const
+{
+    AV_SCOPE("DxgiFormatLayout::known");
+    return format_ <= a4b4g4r4;
+}
+
 bool DxgiFormatLayout::paired() const
 {
     AV_SCOPE("DxgiFormatLayout::paired");

@@ -7,6 +7,7 @@
 #include "device/executor/dxbc_signature_reader.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 #include "proto/wire/wire_arena.hpp"
 
@@ -14,7 +15,6 @@ namespace av {
 
 namespace {
 
-constexpr uint32_t max_format = 191u;
 constexpr uint32_t max_parameters = 64u;
 constexpr uint32_t max_samplers = 64u;
 constexpr uint32_t max_elements = 32u;
@@ -181,7 +181,7 @@ bool D3d12PipelineBuilder::layout(const d3d12proto::InputElement *elements, uint
     const DxbcContainer names(nullptr, 0u);
     for (uint32_t index = 0u; index < count; index++) {
         const d3d12proto::InputElement &element = elements[index];
-        if (element.format > max_format || element.classification > 1u) return false;
+        if (!DxgiFormatLayout(element.format).known() || element.classification > 1u) return false;
         uint32_t    semantic_index = element.input_register * 4u;
         const char *semantic = reader.semantic_at(element.input_register, semantic_index);
         for (uint32_t entry = 0u; semantic == nullptr && entry < signature_count; entry++) {
@@ -209,11 +209,11 @@ bool D3d12PipelineBuilder::layout(const d3d12proto::InputElement *elements, uint
 bool D3d12PipelineBuilder::state_holds(const d3d12proto::GraphicsState &state) const
 {
     AV_SCOPE("D3d12PipelineBuilder::state_holds");
-    if (state.render_targets > 8u || state.topology_type > most_topology_type || state.dsv_format > max_format)
+    if (state.render_targets > 8u || state.topology_type > most_topology_type || !DxgiFormatLayout(state.dsv_format).known())
         return false;
     if (state.sample_count == 0u || state.sample_count > most_samples) return false;
     for (uint32_t target = 0u; target < 8u; target++)
-        if (state.rtv_formats[target] > max_format) return false;
+        if (!DxgiFormatLayout(state.rtv_formats[target]).known()) return false;
     return true;
 }
 

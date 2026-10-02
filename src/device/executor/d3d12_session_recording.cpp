@@ -9,6 +9,7 @@
 #include "device/executor/d3d12_indirect_stride.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 
 
 namespace av {
@@ -24,7 +25,6 @@ constexpr uint32_t view_shader_resource = 1u;
 constexpr uint32_t view_unordered = 2u;
 constexpr uint32_t copy_subresource = 0u;
 constexpr uint32_t copy_footprint = 1u;
-constexpr uint32_t max_format = 191u;
 /* D3D_PRIMITIVE_TOPOLOGY runs to the 32-control-point patch list. */
 constexpr uint32_t most_topology = 64u;
 /* PIX: 0 a UTF-16 string, 1 an ANSI one, 2 PIX3's own encoding. */
@@ -397,7 +397,7 @@ bool D3d12Session::copy_location(const d3d12proto::CopyLocation &location, D3D12
         made.SubresourceIndex = location.subresource;
         return true;
     }
-    if (location.type != copy_footprint || location.format > max_format) return false;
+    if (location.type != copy_footprint || !DxgiFormatLayout(location.format).known()) return false;
     made.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     made.PlacedFootprint.Offset = location.offset;
     made.PlacedFootprint.Footprint = {static_cast<DXGI_FORMAT>(location.format), location.width, location.height,
@@ -434,7 +434,7 @@ bool D3d12Session::on_ResolveSubresource12(uint32_t id, uint32_t destination, ui
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12Resource *const to = objects_.find_as<ID3D12Resource>(destination, D3dObjectKind::resource12);
     ID3D12Resource *const from = objects_.find_as<ID3D12Resource>(source, D3dObjectKind::resource12);
-    if (recorded == nullptr || to == nullptr || from == nullptr || format > max_format) return false;
+    if (recorded == nullptr || to == nullptr || from == nullptr || !DxgiFormatLayout(format).known()) return false;
     recorded->ResolveSubresource(to, destination_subresource, from, source_subresource, static_cast<DXGI_FORMAT>(format));
     return true;
 }
