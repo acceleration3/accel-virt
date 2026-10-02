@@ -1,6 +1,7 @@
 #include "device/surfaces/shared_surfaces.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/host/poll_budget.hpp"
 #include "device/surfaces/staged_frame.hpp"
 
 #include <time.h>
@@ -10,7 +11,7 @@ namespace av {
 namespace {
 
 /* How often a present waiting for its frame looks again. */
-constexpr long     poll_nanoseconds = 100000;
+constexpr uint32_t poll_nanoseconds = 100000u;
 constexpr uint32_t polls_per_ms = 10u;
 
 }  // namespace
@@ -74,11 +75,10 @@ bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameVie
 {
     AV_SCOPE("SharedSurfaces::map");
     if (!frame.names()) return false;
-    for (uint32_t poll = 0u; poll <= wait_ms * polls_per_ms; poll++) {
+    PollBudget polls(poll_nanoseconds, wait_ms * polls_per_ms + 1u);
+    while (polls.next()) {
         const Look found = look(frame, view);
         if (found != Look::wait) return found == Look::mapped;
-        const timespec pause = {0, poll_nanoseconds};
-        nanosleep(&pause, nullptr);
     }
     return false;
 }

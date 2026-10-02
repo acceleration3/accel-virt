@@ -1,12 +1,12 @@
 #include "device/shim/d3d11_host_device.hpp"
 
 #include <stdio.h>
-#include <time.h>
 
 #include "core/support/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "device/host/poll_budget.hpp"
 #include "device/shim/d3d_runtime.hpp"
 #include "device/shim/vkd3d_image_export.hpp"
 
@@ -102,7 +102,7 @@ bool D3d11HostDevice::read_image(uint64_t key, void *pixels, uint32_t stride, ui
 bool D3d11HostDevice::export_image(uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_image");
-    constexpr long     poll_nanoseconds = 50000;
+    constexpr uint32_t poll_nanoseconds = 50000u;
     constexpr uint32_t most_polls = 400u;   /* 20 ms */
     if (device_ == nullptr) return false;
     lock(nullptr);
@@ -116,13 +116,12 @@ bool D3d11HostDevice::export_image(uint64_t key, AvExportedImage &image)
     if (texture != nullptr) texture->Release();
     unlock();
     if (!staged) return false;
-    for (uint32_t poll = 0u; poll < most_polls; poll++) {
+    PollBudget polls(poll_nanoseconds, most_polls);
+    while (polls.next()) {
         lock(nullptr);
         const bool done = exports_.copied(context_, slot);
         unlock();
         if (done) break;
-        const timespec pause = {0, poll_nanoseconds};
-        nanosleep(&pause, nullptr);
     }
     exports_.describe(slot, image);
     return true;
@@ -188,16 +187,24 @@ bool D3d11HostDevice::drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels,
                             uint32_t height)
 {
     AV_SCOPE("D3d11HostDevice::drain");
-    constexpr long poll_nanoseconds = 200000;
+    /* Five seconds still drawing is a hung GPU, as Direct3D 12's drain
+     * judges one: the scanout's reader gives up rather than hang. */
+    constexpr uint32_t       poll_nanoseconds = 200000u;
+    constexpr uint32_t       most_polls = 25000u;
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    for (;;) {
+    PollBudget               polls(poll_nanoseconds, most_polls);
+    bool                     mapped_now = false;
+    while (polls.next()) {
         lock(nullptr);
         const HRESULT result = context_->Map(staging_, 0u, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
-        if (SUCCEEDED(result)) break;
+        mapped_now = SUCCEEDED(result);
+        if (mapped_now) break;
         unlock();
         if (result != DXGI_ERROR_WAS_STILL_DRAWING) return false;
-        const timespec pause = {0, poll_nanoseconds};
-        nanosleep(&pause, nullptr);
+    }
+    if (!mapped_now) {
+        lines_.write("a readback still drawing after five seconds; the GPU is taken for hung");
+        return false;
     }
     const uint32_t columns = wanted.Width < width ? wanted.Width : width;
     const uint32_t rows = wanted.Height < height ? wanted.Height : height;
