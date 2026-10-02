@@ -17,6 +17,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/transport/mock_transport.hpp"
+#include "icd/common/opened_objects.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_property_list.hpp"
@@ -34,12 +35,24 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av::icd {
+
+struct OpenedObjectsProbe {
+    static void fill(OpenedObjects &opened, std::uint64_t made, std::uint64_t bytes)
+    {
+        for (std::uint32_t index = 0u; index < OpenedObjects::max_objects; index++)
+            opened.rows_[index] = OpenedObjectRow{index + 1u, made + index, bytes, SharedObjectKind::memory};
+        opened.live_ = OpenedObjects::max_objects;
+    }
+    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
+};
+
+}  // namespace av::icd
+
 namespace av::clicd {
 
 struct ClExternalMemoryProbe {
-    static ClImportedMemoryRow &row(ClExternalMemory &memory, std::uint32_t index)
-    { return memory.rows_[index]; }
-    static void set_live(ClExternalMemory &memory, std::uint32_t live) { memory.live_ = live; }
+    static icd::OpenedObjects &opened(ClExternalMemory &memory) { return memory.opened_; }
 };
 
 }  // namespace av::clicd
@@ -443,10 +456,7 @@ TEST(cl_external_memory, an_object_this_context_already_holds_is_not_opened_agai
  * allocations than the kernel this runs on holds. */
 TEST(cl_external_memory, it_holds_as_many_as_its_table_and_no_more)
 { Process process;
-  for (std::uint32_t index = 0u; index < ClExternalMemory::max_objects; index++)
-      ClExternalMemoryProbe::row(process.memory(), index) =
-          av::clicd::ClImportedMemoryRow{index + 1u, host_buffer + index, object_bytes};
-  ClExternalMemoryProbe::set_live(process.memory(), ClExternalMemory::max_objects);
+  av::icd::OpenedObjectsProbe::fill(ClExternalMemoryProbe::opened(process.memory()), host_buffer, object_bytes);
   CHECK(process.memory().invariants_hold());
 
   const std::uint64_t named = process.handle();
@@ -457,30 +467,13 @@ TEST(cl_external_memory, it_holds_as_many_as_its_table_and_no_more)
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(made, 0u);
   CHECK_EQ(process.wire().sends(), sends);
-  CHECK_EQ(process.memory().live(), ClExternalMemory::max_objects);
+  CHECK_EQ(process.memory().live(), av::icd::OpenedObjects::max_objects);
   CHECK(process.memory().invariants_hold()); }
 
-/* Every way a row can be wrong, made by hand: the invariant exists to fail. */
+/* The table's invariants are the opened objects' own (OpenedObjects): a row
+ * of nothing fails them through this table too. */
 TEST(cl_external_memory, invariants_reject_rows_no_open_leaves_behind)
 { Process process;
   CHECK(process.memory().invariants_hold());
-  ClExternalMemoryProbe::set_live(process.memory(), 1u);
-  CHECK(!process.memory().invariants_hold());          /* a row of nothing */
-  ClExternalMemoryProbe::row(process.memory(), 0u).object_id_ = 7u;
-  CHECK(!process.memory().invariants_hold());          /* no cl_mem behind it */
-  ClExternalMemoryProbe::row(process.memory(), 0u).made_ = host_buffer;
-  CHECK(!process.memory().invariants_hold());          /* and no size */
-  ClExternalMemoryProbe::row(process.memory(), 0u).size_ = object_bytes;
-  CHECK(process.memory().invariants_hold());
-  /* One cl_mem naming two objects is a table no give-back could unpick. */
-  ClExternalMemoryProbe::set_live(process.memory(), 2u);
-  ClExternalMemoryProbe::row(process.memory(), 1u) =
-      av::clicd::ClImportedMemoryRow{8u, host_buffer, object_bytes};
-  CHECK(!process.memory().invariants_hold());
-  ClExternalMemoryProbe::row(process.memory(), 1u).made_ = host_buffer + 1u;
-  CHECK(process.memory().invariants_hold());
-  /* And one object twice is the same table from the other side. */
-  ClExternalMemoryProbe::row(process.memory(), 1u).object_id_ = 7u;
-  CHECK(!process.memory().invariants_hold());
-  ClExternalMemoryProbe::set_live(process.memory(), ClExternalMemory::max_objects + 1u);
+  av::icd::OpenedObjectsProbe::set_live(ClExternalMemoryProbe::opened(process.memory()), 1u);
   CHECK(!process.memory().invariants_hold()); }

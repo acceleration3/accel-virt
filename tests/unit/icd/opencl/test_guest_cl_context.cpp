@@ -8,6 +8,7 @@
  * becomes a lost context there rather than wherever somebody remembered to
  * look. */
 #include "harness/framework/test_registry.hpp"
+#include "icd/common/opened_objects.hpp"
 #include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
 #include "harness/icd/cl_context_rig.hpp"
@@ -31,11 +32,20 @@ using av::MockKmt;
 using av::Status;
 using av::clicd::GuestClContext;
 
-namespace av::clicd {
+namespace av::icd {
 
 /* Rows an open never leaves behind, for the invariant the context folds in. */
+struct OpenedObjectsProbe {
+    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
+};
+
+}  // namespace av::icd
+
+namespace av::clicd {
+
 struct ClExternalMemoryProbe {
-    static void set_live(ClExternalMemory &memory, std::uint32_t live) { memory.live_ = live; }
+    static void set_live(ClExternalMemory &memory, std::uint32_t live)
+    { icd::OpenedObjectsProbe::set_live(memory.opened_, live); }
 };
 
 }  // namespace av::clicd

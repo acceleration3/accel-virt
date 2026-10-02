@@ -1023,8 +1023,6 @@ TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releas
   CHECK_STATUS(rig.kmt().create_shared_allocation(elsewhere, bytes, sizeof bytes, allocation), av::Status::ok);
   std::uint64_t sent = 0u;
   CHECK_STATUS(rig.kmt().share_object(elsewhere, allocation, sent), av::Status::ok);
-  std::uint64_t id = 0u;
-  CHECK_STATUS(rig.handles().adopt(rig.connection().device(0u).device(), sent, id), av::Status::ok);
 
   GLuint memory = 0u;
   calls.create_memory_objects(1, &memory);
@@ -1083,8 +1081,6 @@ void *openable_handle(av::GlContextRig &rig)
     CHECK_STATUS(rig.kmt().create_shared_allocation(device, bytes, sizeof bytes, allocation), av::Status::ok);
     std::uint64_t named = 0u;
     CHECK_STATUS(rig.kmt().share_object(device, allocation, named), av::Status::ok);
-    std::uint64_t id = 0u;
-    CHECK_STATUS(rig.handles().adopt(device, named, id), av::Status::ok);
     return reinterpret_cast<void *>(static_cast<std::uintptr_t>(named));
 }
 

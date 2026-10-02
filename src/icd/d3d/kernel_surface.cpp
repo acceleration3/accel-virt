@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/present_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
+#include "proto/resources/shared_bytes.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/surface_layout.hpp"
 
@@ -48,7 +49,7 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, c
     const uint64_t         rows = (uint64_t{height} + down - 1u) / down;
     pitch_ = row > UINT32_MAX ? 0u : static_cast<uint32_t>(row);
     rows_ = static_cast<uint32_t>(rows);
-    bytes_ = (uint64_t{pitch_} * rows_ + page_bytes - 1u) / page_bytes * page_bytes;
+    bytes_ = SharedBytes(uint64_t{pitch_} * rows_).pages();
 }
 
 /* Both are encoded into buffers of exactly their encoded sizes, which is the

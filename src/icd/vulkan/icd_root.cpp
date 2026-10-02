@@ -7,6 +7,7 @@
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_bytes.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/surface_layout.hpp"
 
@@ -647,14 +648,6 @@ VkFlags IcdRoot::memory_share_type(const Connection &connection) const
     return memory_handles_.host_type();
 }
 
-uint64_t IcdRoot::shared_bytes(uint64_t size) const
-{
-    AV_SCOPE("IcdRoot::shared_bytes");
-    constexpr uint64_t page = SharedObjectRecord::page_size;
-    if (size == 0u || size > ~uint64_t{0} - (page - 1u)) return 0u;
-    return (size + page - 1u) & ~(page - 1u);
-}
-
 /* 047's path, unchanged in what it does: a fresh fd of the memory this process
  * holds, imported on the asking device as the host's own structure. The fd is
  * asked for each time, because a driver takes ownership of one it imports. */
@@ -751,10 +744,9 @@ uint64_t IcdRoot::object_of(LoaderHandle &made, void *handle)
     AV_SCOPE("IcdRoot::object_of");
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
     uint64_t       object_id = 0u;
-    if (shared_handles_.resolve(named, object_id)) return object_id;
-    /* Not one of this process's: the kernel is asked whether it may open it,
-     * which is the only thing that can tell a handle another process sent from
-     * a number an application invented. */
+    /* One this process holds answers its id; any other, the kernel is asked
+     * whether this process may open it, which is the only thing that can tell
+     * a handle another process sent from a number an application invented. */
     const Status adopted = shared_handles_.adopt(made.connection()->device(), named, object_id);
     if (adopted == Status::ok) return object_id;
     refused("a Win32 handle this process may not open, NTSTATUS");
@@ -1021,7 +1013,7 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
                                     const VkAllocationCallbacks *allocator, VkDeviceMemory &memory)
 {
     AV_SCOPE("IcdRoot::shared_allocation");
-    const uint64_t size = shared_bytes(info.allocationSize);
+    const uint64_t size = SharedBytes(info.allocationSize).pages();
     if (size == 0u) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     const ImportMemoryWin32HandleRecord *const importing = imported_memory_record(info.pNext);
     if (importing != nullptr)

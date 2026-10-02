@@ -19,6 +19,8 @@
 #ifndef AV_GLICD_GL_EXTERNAL_OBJECTS_HPP
 #define AV_GLICD_GL_EXTERNAL_OBJECTS_HPP
 
+#include "icd/common/opened_objects.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -45,13 +47,9 @@ struct GlSharedObjectRow {
     /* What the application holds, which this ICD chose. Never 0. */
     uint32_t name_;
     /* The host's own name, learnt at the import; 0 for a name created and not
-     * yet imported, which every use of must refuse. */
+     * yet imported, which every use of must refuse. What the object is and
+     * the bytes it was opened as are the opened objects' (OpenedObjects). */
     uint32_t made_;
-    /* What the object is called on the wire; 0 before the import. */
-    uint64_t object_id_;
-    /* The bytes it was opened as, which a release names again: whole pages for
-     * memory, and 0 for a semaphore, as the wire body demands of each. */
-    uint64_t size_;
     /* Which GL namespace the name is in: memory, or a semaphore. */
     bool     memory_;
     /* GL_DEDICATED_MEMORY_OBJECT_EXT and GL_PROTECTED_MEMORY_OBJECT_EXT as the
@@ -96,14 +94,18 @@ public:
      * application would read whole. */
     uint32_t create(uint32_t kind, int32_t count, uint32_t *names);
     /* glImportMemoryWin32HandleEXT and glImportSemaphoreWin32HandleEXT: the
-     * handle resolved to the object behind it, opened on the device, and the
-     * name it answered remembered against `name`. GL_INVALID_VALUE for a name
-     * this context did not create or one already imported, GL_INVALID_OPERATION
-     * for a handle type this path does not take and for a handle from nowhere,
-     * GL_OUT_OF_MEMORY when the device would not open it. `size` is ignored
-     * for a semaphore, which has none. */
-    uint32_t import(ClientTransport &wire, uint32_t kind, uint32_t name, uint64_t size, uint32_t handle_type,
-                    void *handle);
+     * handle turned into the object behind it - one another process sent is
+     * opened through `device` - opened on the device, and the name it
+     * answered remembered against `name`. A memory object's `size` is rounded
+     * up to the whole pages it was published as; a semaphore has none.
+     *
+     * GL_INVALID_VALUE for a name this context did not create or one already
+     * imported, and for a memory size of 0; GL_INVALID_OPERATION for a handle
+     * type this path does not take, a handle this process may not open, and
+     * an object this context already imported under another name;
+     * GL_OUT_OF_MEMORY when the device would not open it. */
+    uint32_t import(ClientTransport &wire, uint32_t device, uint32_t kind, uint32_t name, uint64_t size,
+                    uint32_t handle_type, void *handle);
     /* glDeleteMemoryObjectsEXT and glDeleteSemaphoresEXT: each name's object
      * released on the device and the row dropped. A name this context did not
      * create is ignored, as GL ignores a name it never made; a negative count
@@ -137,8 +139,9 @@ public:
     void     report(StateWriter &writer) const;
 
     /* A row is empty or holds one non-zero name of one namespace, no name
-     * appears twice in one namespace, and an imported row has both a host name
-     * and an object id while an unimported one has neither. */
+     * appears twice in one namespace, an imported row's host name is one the
+     * device answered for its namespace, and as many objects are open as rows
+     * are imported. */
     bool invariants_hold() const;
 
 private:
@@ -151,9 +154,12 @@ private:
     const GlSharedObjectRow *row_of(bool memory, uint32_t name) const;
     /* The object of one row given back to the device, and the row emptied. */
     void                     give_back(ClientTransport &wire, GlSharedObjectRow &row);
+    /* What a row's namespace is opened as on the wire. */
+    uint32_t                 wire_kind(const GlSharedObjectRow &row) const;
+    uint32_t                 imported() const;
 
-    icd::SharedHandles &handles_;
-    LogSink       &log_;
+    LogSink           &log_;
+    icd::OpenedObjects opened_;
     GlSharedObjectRow   rows_[max_objects];
     uint32_t            live_;
     /* The next name this ICD hands out. Its own counter, because the only

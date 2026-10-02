@@ -8,6 +8,7 @@
 #include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "guest/kmt/kmt.hpp"
+#include "guest/transport/guest_connection.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "proto/context/sub_api.hpp"
@@ -185,6 +186,13 @@ void GuestGlContext::flush()
     const TransportResult sent = channel_.batched().flush();
     send_lock_.release();
     if (sent != TransportResult::ok) log_.write("avgl: the held calls could not be sent");
+}
+
+uint32_t GuestGlContext::guest_device() const
+{
+    AV_SCOPE("GuestGlContext::guest_device");
+    if (!link_.held()) return 0u;
+    return link_.device().device();
 }
 
 ClientTransport *GuestGlContext::wire()

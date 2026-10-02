@@ -63,7 +63,6 @@ public:
 
 private:
     static constexpr uint64_t mark = 0x53564B52u;   /* "RKVS" */
-    static constexpr uint64_t page_bytes = 4096u;
 
     /* The D3DDDIFORMAT the miniport's descriptors name the surface by. */
     uint32_t kernel_format() const;

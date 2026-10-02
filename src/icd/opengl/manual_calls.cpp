@@ -663,8 +663,8 @@ void ManualCalls::import_memory_win32(uint32_t memory, uint64_t size, uint32_t h
     AV_SCOPE("ManualCalls::import_memory_win32");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    const uint32_t error = context->externals().import(*context->wire(), SharedObjectKind::memory, memory,
-                                                       size, handle_type, handle);
+    const uint32_t error = context->externals().import(*context->wire(), context->guest_device(),
+                                                       SharedObjectKind::memory, memory, size, handle_type, handle);
     if (error != GlExternalObjects::gl_no_error) context->record(error);
 }
 
@@ -673,8 +673,9 @@ void ManualCalls::import_semaphore_win32(uint32_t semaphore, uint32_t handle_typ
     AV_SCOPE("ManualCalls::import_semaphore_win32");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    const uint32_t error = context->externals().import(*context->wire(), SharedObjectKind::monitored_fence,
-                                                       semaphore, 0u, handle_type, handle);
+    const uint32_t error = context->externals().import(*context->wire(), context->guest_device(),
+                                                       SharedObjectKind::monitored_fence, semaphore, 0u, handle_type,
+                                                       handle);
     if (error != GlExternalObjects::gl_no_error) context->record(error);
 }
 

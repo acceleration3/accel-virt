@@ -2,9 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "guest/transport/shared_object_call.hpp"
 #include "core/support/log_sink.hpp"
-#include "icd/common/shared_handles.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
 namespace av::glicd {
@@ -18,7 +16,7 @@ constexpr uint32_t semaphore_kind = SharedObjectKind::monitored_fence;
 }  // namespace
 
 GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, LogSink &log)
-    : handles_(handles), log_(log), rows_{}, live_(0u), next_name_(1u)
+    : log_(log), opened_(handles, log, "avgl: "), rows_{}, live_(0u), next_name_(1u)
 {
     AV_SCOPE("GlExternalObjects::GlExternalObjects");
 }
@@ -64,7 +62,7 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
      * whole, and the names it did not get would be numbers of its own stack. */
     if (wanted > max_objects - live_) return gl_out_of_memory;
     for (uint32_t index = 0u; index < wanted; index++) {
-        rows_[live_] = GlSharedObjectRow{next_name_, 0u, 0u, 0u, memory, false, false};
+        rows_[live_] = GlSharedObjectRow{next_name_, 0u, memory, false, false};
         names[index] = next_name_;
         next_name_++;
         live_++;
@@ -108,8 +106,14 @@ uint32_t GlExternalObjects::get_parameter(uint32_t kind, uint32_t name, uint32_t
     return gl_no_error;
 }
 
-uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t kind, uint32_t name, uint64_t size,
-                                   uint32_t handle_type, void *handle)
+uint32_t GlExternalObjects::wire_kind(const GlSharedObjectRow &row) const
+{
+    AV_SCOPE("GlExternalObjects::wire_kind");
+    return row.memory_ ? SharedObjectKind::memory : semaphore_kind;
+}
+
+uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint32_t kind, uint32_t name,
+                                   uint64_t size, uint32_t handle_type, void *handle)
 {
     AV_SCOPE("GlExternalObjects::import");
     bool memory = false;
@@ -133,39 +137,26 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t kind, uint32_
         return gl_invalid_operation;
     }
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
-    uint64_t       object_id = 0u;
-    if (!handles_.resolve(named, object_id)) {
-        log_.write("avgl: a Win32 handle this process neither exported nor opened");
-        return gl_invalid_operation;
-    }
-    SharedObjectCall call(wire);
-    uint64_t         opened = 0u;
-    const uint64_t   asked = memory ? size : 0u;
-    if (call.open(object_id, kind, asked, opened) != Status::ok) {
-        log_.write("avgl: the device would not open a shared object for this context");
-        return gl_out_of_memory;
-    }
+    uint64_t       opened = 0u;
+    const Status   taken = opened_.open(wire, device, named, wire_kind(*row), size, opened);
+    if (taken == Status::invalid_parameter) return gl_invalid_value;
+    if (taken == Status::not_found || taken == Status::conflict) return gl_invalid_operation;
+    if (taken != Status::ok) return gl_out_of_memory;
     /* A GL name is 32 bits; a device that answered anything else answered no
      * name this context could ever use. */
     const uint32_t made = static_cast<uint32_t>(opened);
-    if (made == 0u || opened != made) {
-        static_cast<void>(call.release(object_id, kind, asked));
+    if (opened != made) {
+        static_cast<void>(opened_.give_back(wire, wire_kind(*row), opened));
         return gl_out_of_memory;
     }
     row->made_ = made;
-    row->object_id_ = object_id;
-    row->size_ = asked;
     return gl_no_error;
 }
 
 void GlExternalObjects::give_back(ClientTransport &wire, GlSharedObjectRow &row)
 {
     AV_SCOPE("GlExternalObjects::give_back");
-    if (row.object_id_ != 0u) {
-        SharedObjectCall call(wire);
-        const uint32_t   kind = row.memory_ ? SharedObjectKind::memory : semaphore_kind;
-        static_cast<void>(call.release(row.object_id_, kind, row.size_));
-    }
+    static_cast<void>(opened_.give_back(wire, wire_kind(row), row.made_));
     live_--;
     row = rows_[live_];
 }
@@ -214,19 +205,22 @@ void GlExternalObjects::report(StateWriter &writer) const
     writer.close();
 }
 
+uint32_t GlExternalObjects::imported() const
+{
+    AV_SCOPE("GlExternalObjects::imported");
+    uint32_t found = 0u;
+    for (uint32_t index = 0u; index < live_; index++) found += rows_[index].made_ != 0u ? 1u : 0u;
+    return found;
+}
+
 bool GlExternalObjects::invariants_hold() const
 {
     AV_SCOPE("GlExternalObjects::invariants_hold");
-    if (live_ > max_objects) return false;
+    if (live_ > max_objects || !opened_.invariants_hold() || opened_.live() != imported()) return false;
     for (uint32_t index = 0u; index < live_; index++) {
         const GlSharedObjectRow &row = rows_[index];
         if (row.name_ == 0u || row.name_ >= next_name_) return false;
-        /* Both halves of an import, or neither: a row with a host name and no
-         * object could not be released, and one with an id and no name could
-         * not be used. */
-        if ((row.made_ == 0u) != (row.object_id_ == 0u)) return false;
-        /* Each kind's own size rule, which is the wire body's. */
-        if (row.memory_ ? (row.object_id_ != 0u && row.size_ == 0u) : row.size_ != 0u) return false;
+        if (row.made_ != 0u && !opened_.answered(wire_kind(row), row.made_)) return false;
         for (uint32_t earlier = 0u; earlier < index; earlier++)
             if (rows_[earlier].memory_ == row.memory_ && rows_[earlier].name_ == row.name_) return false;
     }

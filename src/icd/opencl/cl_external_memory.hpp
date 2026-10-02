@@ -26,6 +26,8 @@
 #ifndef AV_CLICD_CL_EXTERNAL_MEMORY_HPP
 #define AV_CLICD_CL_EXTERNAL_MEMORY_HPP
 
+#include "icd/common/opened_objects.hpp"
+
 #include <CL/cl.h>
 
 #include <stdint.h>
@@ -48,26 +50,8 @@ namespace av::clicd {
 class ClPropertyList;
 struct ClExternalMemoryProbe;
 
-/* One object this context opened, and what the device made of it. A type of
- * its own so the table's rows are complete (tools/header_scan.py reads a
- * class's members only to its first nested type). */
-struct ClImportedMemoryRow {
-    /* What the object is called on the wire. Never 0 in a live row. */
-    uint64_t object_id_;
-    /* The cl_mem the device answered, which the guest names it by. */
-    uint64_t made_;
-    /* The bytes it was opened as, which a release names again. */
-    uint64_t size_;
-};
-
 class ClExternalMemory {
 public:
-    /* As many as a context can share, matching icd::SharedHandles: an object
-     * whose handle the process could not hold is one it could not name. */
-    static constexpr uint32_t max_objects = 64u;
-    /* The wire body wants whole pages of a memory object, and so does the
-     * record the publisher wrote. */
-    static constexpr uint64_t page_bytes = 4096u;
     /* Every external handle property `cl_khr_external_memory` defines. The
      * caller that judges a property list needs them to let one through to
      * `open`, which is where the four this path cannot take are refused with
@@ -123,8 +107,7 @@ public:
     uint32_t live() const;
     void     report(StateWriter &writer) const;
 
-    /* A live row names an object, a cl_mem and a size, and neither the object
-     * nor the cl_mem appears twice. */
+    /* The objects it opened hold their own (OpenedObjects). */
     bool invariants_hold() const;
 
 private:
@@ -135,15 +118,9 @@ private:
      * there is one buffer. False when the list names no external handle at
      * all. */
     bool                names_handle(const ClPropertyList &list, uint64_t &handle, bool &taken) const;
-    ClImportedMemoryRow       *row_of(uint64_t made);
-    const ClImportedMemoryRow *row_of(uint64_t made) const;
-    /* Whether this context already holds the object `object_id` names. */
-    bool                 holds(uint64_t object_id) const;
 
-    icd::SharedHandles &handles_;
-    LogSink       &log_;
-    ClImportedMemoryRow rows_[max_objects];
-    uint32_t            live_;
+    LogSink           &log_;
+    icd::OpenedObjects opened_;
 };
 
 }  // namespace av::clicd

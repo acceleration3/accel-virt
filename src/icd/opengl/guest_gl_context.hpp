@@ -115,6 +115,9 @@ public:
     /* What a GL call sends through: null unless made and not lost. A faulted
      * transport makes the context lost here. */
     ClientTransport     *wire();
+    /* The kernel's device this context's link holds, which opens a handle
+     * another process sent; 0 before the context is linked. */
+    uint32_t             guest_device() const;
     /* The calls held so far go to the host: at glFlush, and before another
      * context may depend on them. */
     void                 flush();

@@ -16,6 +16,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/transport/mock_transport.hpp"
+#include "icd/common/opened_objects.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -31,12 +32,21 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av::icd {
+
+struct OpenedObjectsProbe {
+    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
+};
+
+}  // namespace av::icd
+
 namespace av::glicd {
 
 struct GlExternalObjectsProbe {
     static GlSharedObjectRow &row(GlExternalObjects &objects, std::uint32_t index)
     { return objects.rows_[index]; }
     static void set_live(GlExternalObjects &objects, std::uint32_t live) { objects.live_ = live; }
+    static icd::OpenedObjects &opened(GlExternalObjects &objects) { return objects.opened_; }
 };
 
 }  // namespace av::glicd
@@ -86,9 +96,11 @@ public:
     GlExternalObjects &objects() { return objects_; }
     MockTransport     &wire() { return wire_; }
     av::RecordingLog  &log() { return log_; }
+    std::uint32_t      device() const { return device_; }
 
     /* A handle this process may open: an allocation the kernel minted an
-     * identity into, shared, and adopted into the ICD's table. */
+     * identity into and shared - as another process would send it, so the
+     * import is what adopts it into the ICD's table. */
     void *handle()
     {
         const av::AllocationDescriptor descriptor(av::AllocationKind::client, true, av::SurfaceLayout(),
@@ -104,8 +116,6 @@ public:
         CHECK_STATUS(kmt_.create_shared_allocation(device_, bytes, sizeof bytes, allocation), Status::ok);
         std::uint64_t named = 0u;
         CHECK_STATUS(kmt_.share_object(device_, allocation, named), Status::ok);
-        std::uint64_t id = 0u;
-        CHECK_STATUS(handles_.adopt(device_, named, id), Status::ok);
         return reinterpret_cast<void *>(static_cast<std::uintptr_t>(named));
     }
 
@@ -170,7 +180,7 @@ TEST(gl_external_objects_create, the_two_namespaces_are_separate)
            GlExternalObjects::gl_no_error);
   const Answer opened(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, memory, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, memory, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, memory), host_name);
@@ -184,7 +194,7 @@ TEST(gl_external_objects_import, opens_the_object_the_handle_names_and_remembers
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
   const Answer opened(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   CHECK_EQ(one.wire().last_command(), av::CommandHeader::open_shared_object_id);
@@ -198,7 +208,7 @@ TEST(gl_external_objects_import, opens_the_object_the_handle_names_and_remembers
 
   /* Imported twice would leak the first object, and GL has no error that says
    * so: the second is refused as a bad name. */
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_invalid_value);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), host_name); }
@@ -210,7 +220,7 @@ TEST(gl_external_objects_import, a_semaphore_is_opened_with_no_size_at_all)
   CHECK_EQ(one.objects().create(SharedObjectKind::monitored_fence, 1, &name), GlExternalObjects::gl_no_error);
   const Answer opened(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::monitored_fence, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::monitored_fence, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   CHECK_EQ(u64_at(one.wire().last_payload(), 24u), 0u);
@@ -222,12 +232,12 @@ TEST(gl_external_objects_import, a_handle_from_nowhere_is_an_invalid_operation_a
 { Process       one;
   std::uint32_t name = 0u;
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, reinterpret_cast<void *>(0xDEADu)),
            GlExternalObjects::gl_invalid_operation);
   CHECK_EQ(one.wire().sends(), 0u);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
-  CHECK_EQ(one.log().holding("neither exported nor opened"), 1u); }
+  CHECK_EQ(one.log().holding("avgl: a Win32 handle this process may not open"), 1u); }
 
 TEST(gl_external_objects_import, refuses_a_handle_type_a_name_and_a_kind_it_does_not_take)
 { Process       one;
@@ -235,17 +245,17 @@ TEST(gl_external_objects_import, refuses_a_handle_type_a_name_and_a_kind_it_does
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
   void *const handle = one.handle();
   /* GL_HANDLE_TYPE_OPAQUE_FD_EXT: a type this path does not answer. */
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes, 0x9586u, handle),
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes, 0x9586u, handle),
            GlExternalObjects::gl_invalid_operation);
   /* A name this context never created, and one of the other namespace. */
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name + 0x1000u, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name + 0x1000u, object_bytes,
                                 GlExternalObjects::opaque_win32, handle),
            GlExternalObjects::gl_invalid_value);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::monitored_fence, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::monitored_fence, name, object_bytes,
                                 GlExternalObjects::opaque_win32, handle),
            GlExternalObjects::gl_invalid_value);
   /* A kind the wire does not have. */
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::native_fence + 1u, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::native_fence + 1u, name, object_bytes,
                                 GlExternalObjects::opaque_win32, handle),
            GlExternalObjects::gl_invalid_value);
   CHECK_EQ(one.wire().sends(), 0u); }
@@ -258,7 +268,7 @@ TEST(gl_external_objects_import, a_device_that_answers_no_usable_name_leaves_the
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
   const Answer refused(SharedObjectAnswer::unknown_object, 0u);
   one.wire().set_reply(refused.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_out_of_memory);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
@@ -266,7 +276,7 @@ TEST(gl_external_objects_import, a_device_that_answers_no_usable_name_leaves_the
 
   const Answer too_wide(SharedObjectAnswer::done, 0x1'0000'0001ull);
   one.wire().set_reply(too_wide.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_out_of_memory);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
@@ -278,7 +288,7 @@ TEST(gl_external_objects_destroy, releases_what_it_imported_and_ignores_a_name_i
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
   const Answer opened(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   const Answer done(SharedObjectAnswer::done, 0u);
@@ -345,7 +355,7 @@ TEST(gl_external_objects_release_all, gives_back_every_object_it_still_holds)
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 2, names), GlExternalObjects::gl_no_error);
   const Answer opened(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, names[0], object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[0], object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   const Answer done(SharedObjectAnswer::done, 0u);
@@ -388,22 +398,30 @@ TEST(gl_external_objects_invariants, refuse_each_state_a_create_or_an_import_nev
   second.name_ = 0xFFFFu;
   CHECK(!one.objects().invariants_hold());
   second = whole;
-  /* Half an import either way. */
+  /* A host name nothing was opened for. */
   second.made_ = host_name;
   CHECK(!one.objects().invariants_hold());
   second = whole;
-  second.object_id_ = 9u;
-  CHECK(!one.objects().invariants_hold());
-  second = whole;
-  /* Memory imported with no size, and a semaphore claiming one. */
-  second.made_ = host_name;
-  second.object_id_ = 9u;
-  CHECK(!one.objects().invariants_hold());
-  second.size_ = object_bytes;
+  /* One opened under the other namespace's kind is not this row's. */
+  const Answer opened(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[1], object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_no_error);
   CHECK(one.objects().invariants_hold());
   second.memory_ = false;
   CHECK(!one.objects().invariants_hold());
-  second = whole;
+  second.memory_ = true;
+  /* An open with no row imported to answer for it. */
+  second.made_ = 0u;
+  CHECK(!one.objects().invariants_hold());
+  second.made_ = host_name;
+  CHECK(one.objects().invariants_hold());
+  /* The opened objects' own invariants are this table's too. */
+  av::icd::OpenedObjectsProbe::set_live(GlExternalObjectsProbe::opened(one.objects()),
+                                        av::icd::OpenedObjects::max_objects + 1u);
+  CHECK(!one.objects().invariants_hold());
+  av::icd::OpenedObjectsProbe::set_live(GlExternalObjectsProbe::opened(one.objects()), 1u);
   CHECK(one.objects().invariants_hold());
   GlExternalObjectsProbe::set_live(one.objects(), GlExternalObjects::max_objects + 1u);
   CHECK(!one.objects().invariants_hold()); }
@@ -419,7 +437,7 @@ TEST(gl_external_objects, a_native_fence_is_a_semaphore_and_an_unknown_kind_is_n
   CHECK(name != 0u);
   const Answer opened(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::native_fence, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::native_fence, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   /* Asked for with no size, as both fence kinds are. */
@@ -457,7 +475,7 @@ TEST(gl_external_objects, the_zero_name_belongs_to_no_row)
   std::uint32_t name = 0u;
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, 0u), 0u);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, 0u, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, 0u, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_invalid_value);
   /* And destroying it is the same silence as destroying any name it never
@@ -478,7 +496,7 @@ TEST(gl_external_objects_import, a_device_that_answers_a_name_of_zero_in_32_bits
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
   const Answer truncating(SharedObjectAnswer::done, 0x1'0000'0000ull);
   one.wire().set_reply(truncating.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_out_of_memory);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
@@ -510,7 +528,7 @@ TEST(gl_external_objects, a_created_name_is_an_object_before_it_is_imported)
   /* Imported, it is still an object. */
   const Answer made(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(made.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, memory, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, memory, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   CHECK(one.objects().holds(SharedObjectKind::memory, memory));
@@ -542,7 +560,7 @@ TEST(gl_external_objects, a_parameter_this_path_cannot_keep_is_refused_at_the_im
   /* The import is refused, nothing is sent, and the name is still importable
    * once the application stops asking for dedicated memory. */
   const std::uint32_t sends = one.wire().sends();
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_invalid_operation);
   CHECK_EQ(one.wire().sends(), sends);
@@ -553,7 +571,7 @@ TEST(gl_external_objects, a_parameter_this_path_cannot_keep_is_refused_at_the_im
            GlExternalObjects::gl_no_error);
   const Answer made(SharedObjectAnswer::done, host_name);
   one.wire().set_reply(made.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_no_error);
   CHECK(one.objects().invariants_hold()); }
@@ -571,7 +589,7 @@ TEST(gl_external_objects, protected_memory_is_refused_at_the_import_too)
                                        GlExternalObjects::protected_memory, &read),
            GlExternalObjects::gl_no_error);
   CHECK_EQ(read, 1);
-  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, object_bytes,
                                 GlExternalObjects::opaque_win32, one.handle()),
            GlExternalObjects::gl_invalid_operation);
   CHECK(one.objects().invariants_hold()); }
@@ -618,4 +636,55 @@ TEST(gl_external_objects, a_parameter_of_the_wrong_kind_name_or_pname_is_refused
                                        GlExternalObjects::dedicated, &read),
            GlExternalObjects::gl_invalid_value);
   CHECK_EQ(read, 9);
+  CHECK(one.objects().invariants_hold()); }
+
+/* The handle another process sent - one this process never held - is opened
+ * through the kernel at the import, and a memory size the application gave in
+ * bytes is named as the whole pages it was published as: the wire refuses
+ * anything else. */
+TEST(gl_external_objects_import, a_handle_another_process_sent_opens_and_its_size_is_whole_pages)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
+  const Answer opened(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, 4097u,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(u64_at(one.wire().last_payload(), 24u), 2u * 4096u);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), host_name);
+  CHECK(one.objects().invariants_hold()); }
+
+/* A memory object of no bytes names nothing, and is refused before the kernel
+ * or the device is asked. */
+TEST(gl_external_objects_import, a_memory_object_of_no_bytes_is_an_invalid_value)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, name, 0u,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(one.wire().sends(), 0u);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u); }
+
+/* One object imported under two names is two GL names a context could release
+ * one object through twice: the second is refused, and only the first is
+ * open. */
+TEST(gl_external_objects_import, one_object_under_a_second_name_is_an_invalid_operation)
+{ Process       one;
+  std::uint32_t names[2] = {};
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 2, names), GlExternalObjects::gl_no_error);
+  void *const  handle = one.handle();
+  const Answer opened(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[0], object_bytes,
+                                GlExternalObjects::opaque_win32, handle),
+           GlExternalObjects::gl_no_error);
+  const std::uint32_t sends = one.wire().sends();
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[1], object_bytes,
+                                GlExternalObjects::opaque_win32, handle),
+           GlExternalObjects::gl_invalid_operation);
+  CHECK_EQ(one.wire().sends(), sends);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, names[1]), 0u);
+  CHECK_EQ(one.log().holding("avgl: an object this context already imported"), 1u);
   CHECK(one.objects().invariants_hold()); }
