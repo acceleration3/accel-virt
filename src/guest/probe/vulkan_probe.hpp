@@ -20,6 +20,7 @@
 #include "guest/probe/compute_work.hpp"
 #include "guest/probe/draw_work.hpp"
 #include "guest/probe/present_work.hpp"
+#include "guest/probe/vblank_clock.hpp"
 #include "guest/suite/scenario_steps.hpp"
 
 #include <stdint.h>
@@ -68,12 +69,9 @@ private:
     bool                 present_step(PresentWork &present);
     void                 pacing_step();
     void                 resized_step(PresentWork &present);
-    /* The adapter's vertical blank period in the performance counter's ticks;
-     * zero when the adapter cannot be waited on. */
-    uint64_t             blank_ticks();
-    uint64_t             counter() const;
 
     Kmt          &kmt_;
+    VblankClock   clock_;
     VulkanEntry  &vulkan_;
     ImageSink    &images_;
     WindowFrame  &windows_;

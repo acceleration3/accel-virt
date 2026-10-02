@@ -3,7 +3,6 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/kmt/adapter_search.hpp"
 #include "guest/probe/bmp_image.hpp"
 #include "guest/probe/gl_entry.hpp"
 #include "guest/suite/guest_report.hpp"
@@ -71,7 +70,7 @@ uint32_t matching(const uint8_t *rgba, uint32_t count)
 }  // namespace
 
 GlProbe::GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl, ImageSink &images)
-    : kmt_(kmt), report_(report), gl_(gl), images_(images), steps_(kmt, report, "opengl")
+    : clock_(kmt), report_(report), gl_(gl), images_(images), steps_(kmt, report, "opengl")
 {
     AV_SCOPE("GlProbe::GlProbe");
 }
@@ -219,7 +218,7 @@ void GlProbe::interval_step()
         static_cast<void>(steps_.check_measured("interval", Status::not_supported, 0u));
         return;
     }
-    const uint64_t period = blank_ticks();
+    const uint64_t period = clock_.period();
     if (period == 0u) {
         static_cast<void>(steps_.check_measured("interval", Status::not_found, 0u));
         return;
@@ -227,9 +226,9 @@ void GlProbe::interval_step()
     /* What interval 0 does instead is the ICD's to prove, and its own test
      * does (gl_icd_root.a_swap_waits_for_the_blanks_its_interval_asks_for);
      * here the question is only whether the driver held the frames. */
-    const uint64_t started = counter();
+    const uint64_t started = clock_.now();
     for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
-    const uint64_t paced = counter() - started;
+    const uint64_t paced = clock_.now() - started;
     const uint64_t least = period * (paced_frames - 1u);
     static_cast<void>(steps_.check_measured("interval", paced >= least ? Status::ok : Status::conflict,
                                             static_cast<uint32_t>(paced / period)));
@@ -264,31 +263,6 @@ void GlProbe::resized_step()
     const bool resized = swapped && gl_.width() == widened;
     static_cast<void>(steps_.check_measured("resized", resized ? Status::ok : Status::invalid_state, gl_.width()));
     static_cast<void>(gl_.resize(width, height));
-}
-
-uint64_t GlProbe::blank_ticks()
-{
-    AV_SCOPE("GlProbe::blank_ticks");
-    AdapterSearch search(kmt_);
-    if (search.find_avgpu(0u) != Status::ok) return 0u;
-    uint32_t device = 0u;
-    uint64_t ticks = 0u;
-    if (kmt_.create_device(search.adapter(), device) == Status::ok) {
-        if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) {
-            const uint64_t started = counter();
-            if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) ticks = counter() - started;
-        }
-        static_cast<void>(kmt_.destroy_device(device));
-    }
-    static_cast<void>(search.close());
-    return ticks;
-}
-
-uint64_t GlProbe::counter() const
-{
-    AV_SCOPE("GlProbe::counter");
-    uint64_t frequency = 0u;
-    return kmt_.performance_counter(frequency);
 }
 
 /* Both contexts are shared before either is made, as the ICD requires. */

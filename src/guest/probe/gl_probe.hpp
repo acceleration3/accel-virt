@@ -18,6 +18,7 @@
 #define AV_GL_PROBE_HPP
 
 #include "core/support/status.hpp"
+#include "guest/probe/vblank_clock.hpp"
 #include "guest/suite/scenario_steps.hpp"
 
 #include <stdint.h>
@@ -72,17 +73,13 @@ private:
     void                 compat_step();
     void                 interval_step();
     void                 resized_step();
-    /* One vertical blank in performance-counter ticks, 0 where the adapter
-     * answers none. */
-    uint64_t             blank_ticks();
-    uint64_t             counter() const;
     void                 lost_step();
     void                 recreated_step();
     /* The triangle's program, 0 when a shader or the link failed. */
     uint32_t             program();
     uint32_t             shader(uint32_t type, const char *source);
 
-    Kmt          &kmt_;
+    VblankClock   clock_;
     GuestReport  &report_;
     GlEntry      &gl_;
     ImageSink    &images_;

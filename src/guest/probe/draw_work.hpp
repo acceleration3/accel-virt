@@ -8,6 +8,7 @@
 #include "guest/probe/probe_buffer.hpp"
 #include "guest/probe/probe_commands.hpp"
 #include "guest/probe/probe_image.hpp"
+#include "guest/probe/triangle_pipeline.hpp"
 
 #include <stdint.h>
 
@@ -43,8 +44,6 @@ public:
 
 private:
     bool make_render_pass(ProbeOutcome &outcome);
-    bool make_shaders(ProbeOutcome &outcome);
-    bool make_pipeline(ProbeOutcome &outcome);
     void record();
     uint32_t coloured() const;
 
@@ -55,10 +54,7 @@ private:
     ProbeCommands    commands_;
     VkRenderPass     render_pass_;
     VkFramebuffer    framebuffer_;
-    VkShaderModule   vertex_;
-    VkShaderModule   fragment_;
-    VkPipelineLayout layout_;
-    VkPipeline       pipeline_;
+    TrianglePipeline triangle_;
 
     friend struct DrawWorkProbe;
 };

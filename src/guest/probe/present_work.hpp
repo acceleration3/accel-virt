@@ -7,6 +7,7 @@
 #define AV_PRESENT_WORK_HPP
 
 #include "guest/probe/draw_work.hpp"
+#include "guest/probe/triangle_pipeline.hpp"
 
 #include <stdint.h>
 
@@ -66,8 +67,6 @@ public:
 
 private:
     bool     make_render_pass(ProbeOutcome &outcome);
-    bool     make_shaders(ProbeOutcome &outcome);
-    bool     make_pipeline(ProbeOutcome &outcome);
     bool     make_framebuffers(ProbeOutcome &outcome);
     VkResult draw_and_present(uint32_t index, ProbeOutcome &outcome);
     void     release_pipeline();
@@ -87,10 +86,7 @@ private:
     VkFramebuffer    framebuffers_[images];
     uint32_t         count_;
     VkRenderPass     render_pass_;
-    VkShaderModule   vertex_;
-    VkShaderModule   fragment_;
-    VkPipelineLayout layout_;
-    VkPipeline       pipeline_;
+    TrianglePipeline triangle_;
     uint32_t         presented_;
     uint8_t          frame_[max_frame_bytes];
 

@@ -24,7 +24,7 @@ uint32_t low_part(uint64_t luid)
 
 VulkanProbe::VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ImageSink &images, WindowFrame &windows,
                          void *module, void *window)
-    : kmt_(kmt), vulkan_(vulkan), images_(images), windows_(windows), module_(module), window_(window),
+    : kmt_(kmt), clock_(kmt), vulkan_(vulkan), images_(images), windows_(windows), module_(module), window_(window),
       steps_(kmt, report, "vulkan"), adapter_luid_(0u), elapsed_(0u)
 {
     AV_SCOPE("VulkanProbe::VulkanProbe");
@@ -89,9 +89,9 @@ bool VulkanProbe::present_step(PresentWork &present)
         outcome.report(steps_, "present");
         return false;
     }
-    const uint64_t started = counter();
+    const uint64_t started = clock_.now();
     const bool     presented = outcome.accept(present.present_frames(frames, outcome));
-    elapsed_ = counter() - started;
+    elapsed_ = clock_.now() - started;
     if (!presented) {
         outcome.report(steps_, "present");
         return false;
@@ -108,7 +108,7 @@ bool VulkanProbe::present_step(PresentWork &present)
 void VulkanProbe::pacing_step()
 {
     AV_SCOPE("VulkanProbe::pacing_step");
-    const uint64_t period = blank_ticks();
+    const uint64_t period = clock_.period();
     if (period == 0u) {
         static_cast<void>(steps_.check_measured("pacing", Status::not_found, 0u));
         return;
@@ -147,31 +147,6 @@ void VulkanProbe::resized_step(PresentWork &present)
 }
 
 /* One vertical blank, timed on an adapter and device of this step's own. */
-uint64_t VulkanProbe::blank_ticks()
-{
-    AV_SCOPE("VulkanProbe::blank_ticks");
-    AdapterSearch search(kmt_);
-    if (search.find_avgpu(0u) != Status::ok) return 0u;
-    uint32_t device = 0u;
-    uint64_t ticks = 0u;
-    if (kmt_.create_device(search.adapter(), device) == Status::ok) {
-        if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) {
-            const uint64_t started = counter();
-            if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) ticks = counter() - started;
-        }
-        static_cast<void>(kmt_.destroy_device(device));
-    }
-    static_cast<void>(search.close());
-    return ticks;
-}
-
-uint64_t VulkanProbe::counter() const
-{
-    AV_SCOPE("VulkanProbe::counter");
-    uint64_t frequency = 0u;
-    return kmt_.performance_counter(frequency);
-}
-
 
 Status VulkanProbe::adapter_step()
 {

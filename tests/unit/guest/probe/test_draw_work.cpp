@@ -19,9 +19,18 @@
 
 namespace av {
 
+struct TrianglePipelineProbe {
+    static VkPipelineLayout forget_layout(TrianglePipeline &pipeline)
+    {
+        const VkPipelineLayout layout = pipeline.layout_;
+        pipeline.layout_ = VK_NULL_HANDLE;
+        return layout;
+    }
+};
+
 struct DrawWorkProbe {
     static void framebuffer_without_pass(DrawWork &work) { work.render_pass_ = VK_NULL_HANDLE; }
-    static void pipeline_without_layout(DrawWork &work) { work.layout_ = VK_NULL_HANDLE; }
+    static TrianglePipeline &triangle(DrawWork &work) { return work.triangle_; }
     /* The readback's mapping, to play a driver's rounding into. */
     static unsigned char *readback(DrawWork &work) { return work.readback_.bytes(); }
     static std::uint32_t coloured(const DrawWork &work) { return work.coloured(); }
@@ -187,5 +196,6 @@ TEST(draw_work, invariants_refuse_objects_without_what_they_stand_on)
   CHECK(!one.invariants_hold());
   DrawWork two(device, images);
   two.run(outcome);
-  DrawWorkProbe::pipeline_without_layout(two);
-  CHECK(!two.invariants_hold()); }
+  const VkPipelineLayout layout = av::TrianglePipelineProbe::forget_layout(DrawWorkProbe::triangle(two));
+  CHECK(!two.invariants_hold());
+  vulkan.destroy_pipeline_layout(device.device(), layout); }
