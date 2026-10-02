@@ -1,12 +1,12 @@
 #include "device/executor/d3d9_texture_write.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/d3d/d3d9_format_layout.hpp"
+#include "proto/d3d/texel_layout.hpp"
 
 namespace av {
 
 D3d9TextureWrite::D3d9TextureWrite(const d3d9proto::Box &box, uint32_t row_pitch, uint32_t slice_pitch,
-                                   uint64_t data_size, const D3d9FormatLayout &layout)
+                                   uint64_t data_size, const TexelLayout &layout)
     : box_(box), row_pitch_(row_pitch), slice_pitch_(slice_pitch), data_size_(data_size), layout_(layout)
 {
     AV_SCOPE("D3d9TextureWrite::D3d9TextureWrite");

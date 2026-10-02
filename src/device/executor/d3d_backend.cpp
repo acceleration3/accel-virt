@@ -1591,8 +1591,8 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
         depth = box.back - box.front;
     }
     const DxgiFormatLayout layout(format);
-    const uint64_t row = layout.element_bytes() == 0u ? width : layout.row_bytes(width);
-    const uint64_t rows = layout.element_bytes() == 0u ? height : layout.rows(height);
+    const uint64_t row = layout.copied_row_bytes(width);
+    const uint64_t rows = layout.rows(height);
     const uint64_t needed = static_cast<uint64_t>(depth - 1u) * depth_pitch +
                             static_cast<uint64_t>(rows - 1u) * row_pitch + row;
     if (needed > data_size) return false;
@@ -1648,8 +1648,7 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
     uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
     if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !extent_of(found, subresource, width, height, depth, format))
         return true;
-    const DxgiFormatLayout layout(format);
-    if (layout.element_bytes() != 4u || layout.element_width() != 1u) return true;
+    if (!DxgiFormatLayout(format).word_texels()) return true;
     static_cast<void>(surfaces_->presented(frame));
     StagedFrame *const staged =
         device11_->stage_frame(static_cast<ID3D11Texture2D *>(found), subresource, width, height, format);
@@ -1686,8 +1685,8 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
         return true;
     }
     const DxgiFormatLayout layout(format);
-    const uint32_t row = layout.element_bytes() == 0u ? width : layout.row_bytes(width);
-    const uint32_t rows = layout.element_bytes() == 0u ? height : layout.rows(height);
+    const uint32_t row = layout.copied_row_bytes(width);
+    const uint32_t rows = layout.rows(height);
     const uint64_t total = static_cast<uint64_t>(row) * rows * depth;
     if (total <= data_capacity) {
         for (uint32_t slice = 0u; slice < depth; slice++)

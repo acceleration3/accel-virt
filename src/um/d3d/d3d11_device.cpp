@@ -221,16 +221,14 @@ uint32_t D3d11Device::row_bytes(const ResourceRecord &resource, uint32_t width) 
 {
     AV_SCOPE("D3d11Device::row_bytes");
     if (resource.dimension == D3D10DDIRESOURCE_BUFFER) return width;
-    const DxgiFormatLayout layout(resource.format);
-    return layout.element_bytes() == 0u ? width : layout.row_bytes(width);
+    return DxgiFormatLayout(resource.format).copied_row_bytes(width);
 }
 
 uint32_t D3d11Device::rows(const ResourceRecord &resource, uint32_t height) const
 {
     AV_SCOPE("D3d11Device::rows");
     if (resource.dimension == D3D10DDIRESOURCE_BUFFER) return 1u;
-    const DxgiFormatLayout layout(resource.format);
-    return layout.element_bytes() == 0u ? height : layout.rows(height);
+    return DxgiFormatLayout(resource.format).rows(height);
 }
 
 size_t D3d11Device::subresource_bytes(const ResourceRecord &resource, uint32_t subresource) const

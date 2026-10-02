@@ -31,52 +31,28 @@ constexpr uint32_t block = 4u;
 
 }  // namespace
 
-DxgiFormatLayout::DxgiFormatLayout(uint32_t format) : bytes_(0u), width_(1u), height_(1u)
+DxgiFormatLayout::DxgiFormatLayout(uint32_t format) : format_(format)
 {
     AV_SCOPE("DxgiFormatLayout::DxgiFormatLayout");
-    if (format == a4b4g4r4) {
-        bytes_ = 2u;
+    if (format_ == a4b4g4r4) {
+        lay_out(2u, 1u, 1u);
         return;
     }
-    if (format > b4g4r4a4) return;
-    bytes_ = element_sizes[format];
-    if (format == r8g8_b8g8 || format == g8r8_g8b8 || format == yuy2 || format == y210 || format == y216) {
-        width_ = 2u;
-    }
-    if ((format >= first_bc && format <= last_bc1_3) || (format >= first_bc6 && format <= last_bc)) {
-        width_ = block;
-        height_ = block;
-    }
+    if (format_ > b4g4r4a4) return;
+    const uint32_t side = block_compressed() ? block : 1u;
+    lay_out(element_sizes[format_], paired() ? 2u : side, side);
 }
 
-uint32_t DxgiFormatLayout::element_bytes() const
+bool DxgiFormatLayout::paired() const
 {
-    AV_SCOPE("DxgiFormatLayout::element_bytes");
-    return bytes_;
+    AV_SCOPE("DxgiFormatLayout::paired");
+    return format_ == r8g8_b8g8 || format_ == g8r8_g8b8 || format_ == yuy2 || format_ == y210 || format_ == y216;
 }
 
-uint32_t DxgiFormatLayout::element_width() const
+bool DxgiFormatLayout::block_compressed() const
 {
-    AV_SCOPE("DxgiFormatLayout::element_width");
-    return width_;
-}
-
-uint32_t DxgiFormatLayout::element_height() const
-{
-    AV_SCOPE("DxgiFormatLayout::element_height");
-    return height_;
-}
-
-uint32_t DxgiFormatLayout::row_bytes(uint32_t width) const
-{
-    AV_SCOPE("DxgiFormatLayout::row_bytes");
-    return (width + width_ - 1u) / width_ * bytes_;
-}
-
-uint32_t DxgiFormatLayout::rows(uint32_t height) const
-{
-    AV_SCOPE("DxgiFormatLayout::rows");
-    return (height + height_ - 1u) / height_;
+    AV_SCOPE("DxgiFormatLayout::block_compressed");
+    return (format_ >= first_bc && format_ <= last_bc1_3) || (format_ >= first_bc6 && format_ <= last_bc);
 }
 
 }  // namespace av

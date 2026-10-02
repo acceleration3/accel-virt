@@ -3,7 +3,7 @@
  * elements (a block format's box starts on a block and ends on one or at the
  * level's edge), pitches no shorter than what they step over, and data that
  * reaches the last row of the last slice. Rows and bytes are counted in
- * elements, as the format lays them out (D3d9FormatLayout). */
+ * elements, as the format lays them out (TexelLayout). */
 #ifndef AV_D3D9_TEXTURE_WRITE_HPP
 #define AV_D3D9_TEXTURE_WRITE_HPP
 
@@ -13,12 +13,12 @@
 
 namespace av {
 
-class D3d9FormatLayout;
+class TexelLayout;
 
 class D3d9TextureWrite {
 public:
     D3d9TextureWrite(const d3d9proto::Box &box, uint32_t row_pitch, uint32_t slice_pitch, uint64_t data_size,
-                     const D3d9FormatLayout &layout);
+                     const TexelLayout &layout);
 
     /* Whether it lands inside a level of this size. */
     bool     fits(uint32_t width, uint32_t height, uint32_t depth) const;
@@ -35,7 +35,7 @@ private:
     uint32_t                row_pitch_;
     uint32_t                slice_pitch_;
     uint64_t                data_size_;
-    const D3d9FormatLayout &layout_;
+    const TexelLayout      &layout_;
 };
 
 }  // namespace av

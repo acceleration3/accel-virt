@@ -253,8 +253,8 @@ size_t D3d9Device::lock_offset(const D3d9Resource &resource, const D3DDDIARG_LOC
     AV_SCOPE("D3d9Device::lock_offset");
     if (lock.Flags.RangeValid) return lock.Range.Offset;
     const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
-    const uint32_t         element_width = layout.element_width() == 0u ? 1u : layout.element_width();
-    const uint32_t         element_height = layout.element_height() == 0u ? 1u : layout.element_height();
+    const uint32_t         element_width = layout.element_width();
+    const uint32_t         element_height = layout.element_height();
     if (lock.Flags.BoxValid)
         return size_t{lock.Box.Front} * slice_pitch + size_t{lock.Box.Top / element_height} * pitch +
                size_t{lock.Box.Left / element_width} * layout.element_bytes();
@@ -523,8 +523,8 @@ HRESULT D3d9Device::blt_level(const D3d9Resource &source, uint32_t source_index,
     const D3d9Subresource &to = destination.subresources[destination_index];
     if (from.system == nullptr) return E_INVALIDARG;
     const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
-    const uint32_t         block_width = layout.element_width() == 0u ? 1u : layout.element_width();
-    const uint32_t         block_height = layout.element_height() == 0u ? 1u : layout.element_height();
+    const uint32_t         block_width = layout.element_width();
+    const uint32_t         block_height = layout.element_height();
     uint32_t left = static_cast<uint32_t>(area.left) / block_width * block_width;
     uint32_t top = static_cast<uint32_t>(area.top) / block_height * block_height;
     uint32_t right = static_cast<uint32_t>(area.right) < from.width ? static_cast<uint32_t>(area.right) : from.width;

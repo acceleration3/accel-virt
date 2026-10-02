@@ -30,78 +30,37 @@ constexpr uint32_t fourcc(char a, char b, char c, char d)
 
 }  // namespace
 
-D3d9FormatLayout::D3d9FormatLayout(uint32_t format) : bytes_(0u), width_(1u), height_(1u)
+D3d9FormatLayout::D3d9FormatLayout(uint32_t format) : format_(format)
 {
     AV_SCOPE("D3d9FormatLayout::D3d9FormatLayout");
-    if (format >= first_texel_format && format <= last_texel_format) {
-        bytes_ = texel_sizes[format - first_texel_format];
+    if (format_ >= first_texel_format && format_ <= last_texel_format) {
+        lay_out(texel_sizes[format_ - first_texel_format], 1u, 1u);
         return;
     }
-    four_cc(format);
+    four_cc();
 }
 
-void D3d9FormatLayout::four_cc(uint32_t format)
+void D3d9FormatLayout::four_cc()
 {
     AV_SCOPE("D3d9FormatLayout::four_cc");
-    switch (format) {
+    switch (format_) {
     case fourcc('D', 'X', 'T', '1'):
-    case fourcc('A', 'T', 'I', '1'):
-        bytes_ = 8u;
-        width_ = block;
-        height_ = block;
-        return;
+    case fourcc('A', 'T', 'I', '1'): lay_out(8u, block, block); return;
     case fourcc('D', 'X', 'T', '2'):
     case fourcc('D', 'X', 'T', '3'):
     case fourcc('D', 'X', 'T', '4'):
     case fourcc('D', 'X', 'T', '5'):
-    case fourcc('A', 'T', 'I', '2'):
-        bytes_ = 16u;
-        width_ = block;
-        height_ = block;
-        return;
+    case fourcc('A', 'T', 'I', '2'): lay_out(16u, block, block); return;
     case fourcc('U', 'Y', 'V', 'Y'):
     case fourcc('Y', 'U', 'Y', '2'):
     case fourcc('R', 'G', 'B', 'G'):
-    case fourcc('G', 'R', 'G', 'B'):
-        bytes_ = 4u;
-        width_ = pair;
-        return;
+    case fourcc('G', 'R', 'G', 'B'): lay_out(4u, pair, 1u); return;
     case fourcc('I', 'N', 'T', 'Z'):
     case fourcc('D', 'F', '2', '4'):
-    case fourcc('R', 'A', 'W', 'Z'): bytes_ = 4u; return;
-    case fourcc('D', 'F', '1', '6'): bytes_ = 2u; return;
+    case fourcc('R', 'A', 'W', 'Z'): lay_out(4u, 1u, 1u); return;
+    case fourcc('D', 'F', '1', '6'): lay_out(2u, 1u, 1u); return;
     default: return;
     }
-}
-
-uint32_t D3d9FormatLayout::element_bytes() const
-{
-    AV_SCOPE("D3d9FormatLayout::element_bytes");
-    return bytes_;
-}
-
-uint32_t D3d9FormatLayout::element_width() const
-{
-    AV_SCOPE("D3d9FormatLayout::element_width");
-    return width_;
-}
-
-uint32_t D3d9FormatLayout::element_height() const
-{
-    AV_SCOPE("D3d9FormatLayout::element_height");
-    return height_;
-}
-
-uint32_t D3d9FormatLayout::row_bytes(uint32_t width) const
-{
-    AV_SCOPE("D3d9FormatLayout::row_bytes");
-    return (width + width_ - 1u) / width_ * bytes_;
-}
-
-uint32_t D3d9FormatLayout::rows(uint32_t height) const
-{
-    AV_SCOPE("D3d9FormatLayout::rows");
-    return (height + height_ - 1u) / height_;
 }
 
 }  // namespace av

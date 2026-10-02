@@ -32,11 +32,9 @@ StagedFrame *D3d12FramePool::stage(ID3D12CommandQueue *queue, ID3D12Resource *so
     if (device_ == nullptr || queue == nullptr || source == nullptr) return nullptr;
     if (queue->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT) return nullptr;
     const D3D12_RESOURCE_DESC desc = source->GetDesc();
-    const DxgiFormatLayout    layout(static_cast<uint32_t>(desc.Format));
     const bool                resolve = desc.SampleDesc.Count > 1u;
     const uint32_t            typed = DxgiResolveFormat(static_cast<uint32_t>(desc.Format)).typed();
-    if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || layout.element_bytes() != 4u ||
-        layout.element_width() != 1u || (resolve && typed == 0u))
+    if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || !DxgiFormatLayout(static_cast<uint32_t>(desc.Format)).word_texels() || (resolve && typed == 0u))
         return nullptr;
     /* The frame's image: the source's first subresource at one sample. */
     D3D12_RESOURCE_DESC single = desc;

@@ -6,6 +6,7 @@
 #ifndef AV_D3D12_FOOTPRINT_HPP
 #define AV_D3D12_FOOTPRINT_HPP
 
+#include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 
 #include <stdint.h>
@@ -26,12 +27,12 @@ public:
     bool            holds(const d3d12proto::Box &region, uint64_t buffer_bytes) const;
 
 private:
-    uint32_t format_;
-    uint32_t width_;
-    uint32_t height_;
-    uint32_t depth_;
-    uint32_t row_pitch_;
-    uint64_t offset_;
+    DxgiFormatLayout layout_;
+    uint32_t         width_;
+    uint32_t         height_;
+    uint32_t         depth_;
+    uint32_t         row_pitch_;
+    uint64_t         offset_;
 };
 
 }  // namespace av

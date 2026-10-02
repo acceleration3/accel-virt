@@ -42,8 +42,8 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, c
     const DxgiFormatLayout layout(format);
     const bool             sized = layout.element_bytes() != 0u;
     const uint64_t         element = sized ? layout.element_bytes() : unsized_element_bytes;
-    const uint64_t         across = sized ? layout.element_width() : 1u;
-    const uint64_t         down = sized ? layout.element_height() : 1u;
+    const uint64_t         across = layout.element_width();
+    const uint64_t         down = layout.element_height();
     const uint64_t         row = (uint64_t{width} + across - 1u) / across * element;
     const uint64_t         rows = (uint64_t{height} + down - 1u) / down;
     pitch_ = row > UINT32_MAX ? 0u : static_cast<uint32_t>(row);

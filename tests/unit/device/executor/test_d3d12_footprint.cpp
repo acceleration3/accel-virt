@@ -53,7 +53,11 @@ TEST(d3d12_footprint, the_last_row_of_the_last_slice_ends_inside_the_buffer)
   CHECK(deep.holds(deep.whole(), 512u + 256u * 7u + 64u));
   CHECK(!deep.holds(deep.whole(), 512u + 256u * 7u + 63u));
   CHECK(!D3d12Footprint(bgra, 1u, 1u, 1u, 256u, 4097u).holds(Box{0u, 0u, 0u, 1u, 1u, 1u}, 4096u));
-  CHECK(D3d12Footprint(bgra, 16u, 4u, 1u, 256u, 4096u).holds(Box{3u, 1u, 0u, 3u, 4u, 1u}, 4096u)); }
+  const D3d12Footprint at_end(bgra, 16u, 4u, 2u, 256u, 4096u);
+  CHECK(at_end.holds(Box{3u, 1u, 0u, 3u, 4u, 1u}, 4096u));
+  CHECK(at_end.holds(Box{0u, 2u, 0u, 16u, 2u, 2u}, 4096u));
+  CHECK(at_end.holds(Box{0u, 0u, 1u, 16u, 4u, 1u}, 4096u));
+  CHECK(!at_end.holds(Box{0u, 0u, 1u, 16u, 4u, 2u}, 4096u)); }
 
 /* A region outside the footprint, inverted, or past Direct3D 12's limits
  * holds nothing, however big the buffer: a hostile size cannot wrap a count
