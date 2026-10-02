@@ -7,9 +7,9 @@
 #include "miniport/virtio/bar_mappings.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virtio_pci_layout.hpp"
-#include "harness/device/fake_common_config.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
-#include "harness/device/fake_virtqueue_device.hpp"
+#include "harness/virtio/fake_common_config.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/platform/mock_platform.hpp"
 

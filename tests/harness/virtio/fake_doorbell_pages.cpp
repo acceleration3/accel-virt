@@ -1,4 +1,4 @@
-#include "harness/device/fake_doorbell_pages.hpp"
+#include "harness/virtio/fake_doorbell_pages.hpp"
 
 namespace av {
 

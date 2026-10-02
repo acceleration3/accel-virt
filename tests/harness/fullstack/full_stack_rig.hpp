@@ -13,7 +13,7 @@
 #ifndef AV_FULL_STACK_RIG_HPP
 #define AV_FULL_STACK_RIG_HPP
 
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
 #include "harness/fullstack/ddi_kmt.hpp"

@@ -19,7 +19,7 @@
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "miniport/scheduling/device_table.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/platform/mock_platform.hpp"

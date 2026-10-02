@@ -28,7 +28,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/allocation_kind.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
 #include "harness/fullstack/interrupt_pump.hpp"

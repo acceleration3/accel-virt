@@ -1,7 +1,7 @@
 #include "miniport/driver/acquired_handle_data.hpp"
 
 #include "miniport/driver/dxgkrnl_interface.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/framework/test_registry.hpp"

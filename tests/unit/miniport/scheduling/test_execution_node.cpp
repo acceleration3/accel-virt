@@ -2,7 +2,7 @@
 #include "miniport/driver/interrupt_notification.hpp"
 #include "miniport/scheduling/execution_node.hpp"
 #include "core/support/status.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "core/platform/lock_rank.hpp"
 #include "core/trace/state_writer.hpp"

@@ -1,6 +1,6 @@
 #include "harness/fullstack/interrupt_pump.hpp"
 
-#include "harness/device/fake_common_config.hpp"
+#include "harness/virtio/fake_common_config.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
 #include "harness/fullstack/virtio_bridge.hpp"

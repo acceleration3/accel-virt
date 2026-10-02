@@ -1,4 +1,4 @@
-#include "harness/device/fake_common_config.hpp"
+#include "harness/virtio/fake_common_config.hpp"
 
 #include "harness/framework/test_registry.hpp"
 

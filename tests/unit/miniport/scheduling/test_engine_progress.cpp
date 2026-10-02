@@ -6,7 +6,7 @@
 #include "miniport/scheduling/engine_progress.hpp"
 #include "miniport/scheduling/execution_node.hpp"
 #include "core/support/status.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"

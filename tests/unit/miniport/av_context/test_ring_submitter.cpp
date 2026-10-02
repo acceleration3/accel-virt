@@ -2,7 +2,7 @@
  * device has not consumed, with a head the device cannot lie about. */
 #include "miniport/av_context/ring_submitter.hpp"
 #include "core/support/status.hpp"
-#include "harness/device/fake_doorbell_pages.hpp"
+#include "harness/virtio/fake_doorbell_pages.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"

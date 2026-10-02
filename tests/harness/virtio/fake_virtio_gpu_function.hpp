@@ -5,11 +5,11 @@
 #ifndef AV_FAKE_VIRTIO_GPU_FUNCTION_HPP
 #define AV_FAKE_VIRTIO_GPU_FUNCTION_HPP
 
-#include "harness/device/fake_common_config.hpp"
-#include "harness/device/fake_doorbell_pages.hpp"
-#include "harness/device/fake_isr_register.hpp"
-#include "harness/device/fake_register_bytes.hpp"
-#include "harness/device/fake_resource_list.hpp"
+#include "harness/virtio/fake_common_config.hpp"
+#include "harness/virtio/fake_doorbell_pages.hpp"
+#include "harness/virtio/fake_isr_register.hpp"
+#include "harness/virtio/fake_register_bytes.hpp"
+#include "harness/virtio/fake_resource_list.hpp"
 
 #include <cstddef>
 #include <cstdint>

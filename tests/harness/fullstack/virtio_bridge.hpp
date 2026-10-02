@@ -13,8 +13,8 @@
 #define AV_VIRTIO_BRIDGE_HPP
 
 #include "core/platform/register_window.hpp"
-#include "harness/device/fake_common_config.hpp"
-#include "harness/device/fake_virtqueue_device.hpp"
+#include "harness/virtio/fake_common_config.hpp"
+#include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/fullstack/base_virtio_gpu.hpp"
 
 #include <cstdint>

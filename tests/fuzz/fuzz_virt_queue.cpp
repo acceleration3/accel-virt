@@ -5,7 +5,7 @@
 #include "core/support/status.hpp"
 #include "miniport/virtio/virt_queue.hpp"
 #include "miniport/virtio/virtq_segment.hpp"
-#include "harness/device/fake_virtqueue_device.hpp"
+#include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/wire/wire_reader.hpp"
 

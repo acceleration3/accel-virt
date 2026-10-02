@@ -1,5 +1,5 @@
 #include "miniport/pci/mapped_register_window.hpp"
-#include "harness/device/fake_register_bytes.hpp"
+#include "harness/virtio/fake_register_bytes.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"

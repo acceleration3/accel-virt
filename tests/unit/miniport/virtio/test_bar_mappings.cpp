@@ -6,7 +6,7 @@
 #include "miniport/virtio/virtio_capability_walk.hpp"
 #include "miniport/virtio/virtio_pci_layout.hpp"
 #include "miniport/virtio/virtio_region.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"

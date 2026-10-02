@@ -9,7 +9,7 @@
 #include "miniport/present/present_ticket.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
 #include "proto/resources/surface_point.hpp"
-#include "harness/device/mapped_virtio_function.hpp"
+#include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/dma/present_region.hpp"

@@ -1,4 +1,4 @@
-#include "harness/device/fake_resource_list.hpp"
+#include "harness/virtio/fake_resource_list.hpp"
 
 #include "harness/framework/test_registry.hpp"
 

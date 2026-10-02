@@ -15,7 +15,7 @@
 #include "miniport/scheduling/device.hpp"
 #include "miniport/scheduling/device_table.hpp"
 #include "core/support/status.hpp"
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "core/platform/lock_rank.hpp"

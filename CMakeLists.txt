@@ -508,11 +508,11 @@ foreach(src ${AV_UNIT_TESTS})
   # The ICD's tests link its core, which no other test may: its hooks replace
   # the generated defaults every other binary relies on. The probe's loader
   # seam is tested through the ICD's own entry point, so it links it too.
-  if(src MATCHES "/tests/unit/icd/opencl/" OR name MATCHES "^test_(cl_seams|fake_cl_loader|fullstack_opencl_icd)$")
+  if(src MATCHES "/tests/unit/icd/opencl/" OR name STREQUAL "test_fullstack_opencl_icd")
       target_link_libraries(${name} PRIVATE av_cl_icd)
     elseif(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
     target_link_libraries(${name} PRIVATE av_gl_icd)
-  elseif(src MATCHES "/tests/unit/icd/d3d/" OR name MATCHES "^test_(umd_rig|fake_d3d_runtime|fullstack_umd)$")
+  elseif(src MATCHES "/tests/unit/icd/d3d/")
     target_link_libraries(${name} PRIVATE av_d3d_umd)
   elseif(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)

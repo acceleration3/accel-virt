@@ -1,4 +1,4 @@
-#include "harness/device/fake_register_bytes.hpp"
+#include "harness/virtio/fake_register_bytes.hpp"
 
 #include "harness/framework/test_registry.hpp"
 

@@ -1,6 +1,6 @@
-#include "harness/device/fake_display_clock.hpp"
+#include "harness/virtio/fake_display_clock.hpp"
 
-#include "harness/device/fake_virtqueue_device.hpp"
+#include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/pages/clock_page_header.hpp"
 #include "proto/pages/vblank_record.hpp"

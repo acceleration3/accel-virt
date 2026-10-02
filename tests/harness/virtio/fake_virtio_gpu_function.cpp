@@ -1,4 +1,4 @@
-#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/fake_virtio_gpu_function.hpp"
 
 #include "harness/framework/fixture_file.hpp"
 

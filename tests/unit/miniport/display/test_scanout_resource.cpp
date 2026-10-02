@@ -4,7 +4,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
-#include "harness/device/mapped_virtio_function.hpp"
+#include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/resources/guest_page_list.hpp"

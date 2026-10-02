@@ -1,4 +1,4 @@
-#include "harness/device/fake_virtqueue_device.hpp"
+#include "harness/virtio/fake_virtqueue_device.hpp"
 
 #include "harness/framework/test_registry.hpp"
 

@@ -1,6 +1,6 @@
 #include "miniport/pci/resource_list.hpp"
 #include "core/support/status.hpp"
-#include "harness/device/fake_resource_list.hpp"
+#include "harness/virtio/fake_resource_list.hpp"
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"

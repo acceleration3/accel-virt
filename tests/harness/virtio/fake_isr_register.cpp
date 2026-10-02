@@ -1,4 +1,4 @@
-#include "harness/device/fake_isr_register.hpp"
+#include "harness/virtio/fake_isr_register.hpp"
 
 #include "harness/framework/test_registry.hpp"
 

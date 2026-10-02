@@ -1,4 +1,4 @@
-#include "harness/device/mapped_virtio_function.hpp"
+#include "harness/virtio/mapped_virtio_function.hpp"
 
 #include "miniport/ddi/dxgk_device_info_record.hpp"
 #include "miniport/pci/pci_base_addresses.hpp"

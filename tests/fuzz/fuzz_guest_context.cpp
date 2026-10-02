@@ -11,7 +11,7 @@
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
-#include "harness/device/fake_doorbell_pages.hpp"
+#include "harness/virtio/fake_doorbell_pages.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/context/capset_info.hpp"

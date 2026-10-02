@@ -4,7 +4,7 @@
 #include "miniport/virtio/gpu_command_queue.hpp"
 #include "miniport/virtio/virtio_pci_transport.hpp"
 #include "miniport/virtio/virtq_segment.hpp"
-#include "harness/device/mapped_virtio_function.hpp"
+#include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
