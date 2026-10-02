@@ -430,3 +430,115 @@ TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_n
   std::uint32_t hresult = 0u;
   CHECK(!fixture.a().open9(hresult));
   CHECK(!fixture.lock().held()); }
+
+/* A Direct3D 9 device the host would not make is not the one it selected:
+ * its next command selects it first. */
+TEST(d3d_device_channel, a_refused_direct3d_9_open_leaves_the_next_command_to_select)
+{ Fixture fixture;
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
+                            av::d3d9proto::kCmd_Flush9);
+  answer_create9(fixture, 0x8876086Cu);
+  std::uint32_t hresult = 0u;
+  CHECK(fixture.a().open9(hresult));
+  CHECK_EQ(hresult, 0x8876086Cu);
+  CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.a()));
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  std::uint32_t ids[4] = {}, selected[4] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
+  CHECK_EQ(ids[0], av::d3d9proto::kCmd_SelectDevice9);
+  CHECK(!fixture.lock().held()); }
+
+/* A stream the kernel failed sends nothing more, an application's flush
+ * included; and a call that never began ends without a lock to let go. */
+TEST(d3d_device_channel, a_failed_streams_application_flush_fails_and_an_idle_call_ends_quietly)
+{ Fixture fixture;
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK_STATUS(fixture.a().flush(), Status::invalid_state);
+  CHECK_STATUS(fixture.b().application_flush(), Status::invalid_state);
+  fixture.a().end_call();
+  CHECK(!fixture.lock().held()); }
+
+namespace {
+
+/* A command list of `draws` draws, as a deferred context records it on its
+ * own fixture's stream. */
+std::size_t recorded_draws(std::uint8_t *out, std::size_t capacity, std::uint32_t draws)
+{
+    Fixture         recorder;
+    av::MockPlatform platform;
+    av::d3d::CommandRecording recording(platform, block_bytes, block_bytes);
+    CHECK_STATUS(recording.initialize(), Status::ok);
+    recorder.stream().record(recording);
+    for (std::uint32_t draw = 0u; draw < draws; draw++) CHECK(av_d3d_Draw(recorder.a(), 3u, 0u));
+    std::size_t length = 0u;
+    CHECK_STATUS(recorder.a().take_recorded(out, capacity, length), Status::ok);
+    return length;
+}
+
+}  // namespace
+
+/* A command list runs from and back to the default state: the state cleared
+ * before it only when something was recorded since the last clear, and after
+ * it always. Bytes that are no commands are refused; a failed stream runs
+ * nothing. */
+TEST(d3d_device_channel, a_command_list_runs_between_cleared_states)
+{ std::uint8_t list[256] = {};
+  const std::size_t length = recorded_draws(list, sizeof list, 1u);
+  CHECK(length > 0u);
+  Fixture fixture;
+  /* The selection is recorded too: the list starts from a cleared state. */
+  CHECK_STATUS(fixture.a().execute(list, length), Status::ok);
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  std::uint32_t ids[8] = {}, selected[8] = {};
+  const std::uint32_t first[5] = {kCmd_SelectDevice11, kCmd_ClearState11, kCmd_SelectDevice11, kCmd_Draw,
+                                  kCmd_ClearState11};
+  CHECK_EQ(fixture.shipped(ids, selected, 8u), 5u);
+  for (std::uint32_t at = 0u; at < 5u; at++) CHECK_EQ(ids[at], first[at]);
+  /* Straight after a list nothing was recorded since its clear: none before
+   * the next. */
+  CHECK_STATUS(fixture.a().execute(list, length), Status::ok);
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  const std::uint32_t again[3] = {kCmd_SelectDevice11, kCmd_Draw, kCmd_ClearState11};
+  CHECK_EQ(fixture.shipped(ids, selected, 8u), 3u);
+  for (std::uint32_t at = 0u; at < 3u; at++) CHECK_EQ(ids[at], again[at]);
+  /* A draw since: cleared again first. */
+  CHECK(av_d3d_Draw(fixture.a(), 6u, 0u));
+  CHECK_STATUS(fixture.a().execute(list, length), Status::ok);
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  const std::uint32_t after_draw[5] = {kCmd_Draw, kCmd_ClearState11, kCmd_SelectDevice11, kCmd_Draw,
+                                       kCmd_ClearState11};
+  CHECK_EQ(fixture.shipped(ids, selected, 8u), 5u);
+  for (std::uint32_t at = 0u; at < 5u; at++) CHECK_EQ(ids[at], after_draw[at]);
+  const std::uint8_t junk[4] = {1u, 2u, 3u, 4u};
+  CHECK_STATUS(fixture.a().execute(junk, sizeof junk), Status::malformed);
+  CHECK(!fixture.lock().held()); }
+
+TEST(d3d_device_channel, a_failed_stream_runs_no_command_list)
+{ std::uint8_t list[256] = {};
+  const std::size_t length = recorded_draws(list, sizeof list, 1u);
+  Fixture fixture;
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK_STATUS(fixture.a().flush(), Status::invalid_state);
+  CHECK_STATUS(fixture.b().execute(list, length), Status::invalid_state);
+  CHECK(!fixture.lock().held()); }
+
+/* The stream holds one command's room past what it has recorded, so a list
+ * longer than that makes room by flushing - for the list itself behind a
+ * pile of draws, or for the clear after it - and a flush the kernel refuses
+ * fails the command list, with no lock kept. */
+TEST(d3d_device_channel, a_flush_the_kernel_refuses_fails_the_command_list)
+{ static std::uint8_t list[16384] = {};
+  const std::size_t length = recorded_draws(list, sizeof list, 300u);
+  CHECK(length > 4096u);
+  { Fixture fixture;
+    for (std::uint32_t draw = 0u; draw < 300u; draw++) CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+    fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+    CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
+    CHECK(!fixture.lock().held()); }
+  { Fixture fixture;
+    fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+    CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
+    CHECK(fixture.stream().failed());
+    CHECK(!fixture.lock().held()); } }
