@@ -10,8 +10,8 @@
 #ifndef AV_ICD_HANDLE_REGISTRY_HPP
 #define AV_ICD_HANDLE_REGISTRY_HPP
 
-#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "icd/common/handle_tree.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 
 #include <stdint.h>
@@ -71,7 +71,7 @@ private:
     bool          parent_fits(LoaderHandle::Kind kind, const Connection *connection, LoaderHandle *parent) const;
     bool          unique(const LoaderHandle &handle) const;
 
-    ObjectPool<LoaderHandle> pool_;
+    HandleTree<LoaderHandle> tree_;
 
     friend struct HandleRegistryProbe;
 };

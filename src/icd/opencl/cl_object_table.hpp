@@ -4,8 +4,14 @@
  * An application passes back whatever it likes: an object it already released,
  * one of another kind, a stack address, a number it made up. None of those may
  * be dereferenced to find out - so nothing is read through the pointer at all.
- * The table searches what it made for that address, which is the same thing
- * the Vulkan ICD's registry does and for the same reason.
+ * The table searches what it made for that address, as the Vulkan ICD's
+ * registry does: both are a HandleTree.
+ *
+ * Every entry point looks its arguments up here, on whatever thread the
+ * application calls from, while another may be making or releasing objects -
+ * which grows and frees the pool's chunks under a search. So the table takes
+ * a lock of its own around everything it does; what it answers is the
+ * application's to keep alive while it uses it, as OpenCL's counting says.
  *
  * An object holds what it was made on, as OpenCL's reference counting says: a
  * context whose application let go of it lives on, unreachable, while a buffer
@@ -14,7 +20,7 @@
 #ifndef AV_CLICD_CL_OBJECT_TABLE_HPP
 #define AV_CLICD_CL_OBJECT_TABLE_HPP
 
-#include "core/support/object_pool.hpp"
+#include "icd/common/handle_tree.hpp"
 #include "icd/opencl/cl_object.hpp"
 
 #include <stdint.h>
@@ -24,13 +30,17 @@ class BlockSource;
 class StateWriter;
 }  // namespace av
 
+namespace av::icd {
+class ThreadLock;
+}  // namespace av::icd
+
 namespace av::clicd {
 
 struct ClObjectTableProbe;
 
 class ClObjectTable {
 public:
-    ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table);
+    ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table, icd::ThreadLock &lock);
     ClObjectTable(const ClObjectTable &) = delete;
     ClObjectTable &operator=(const ClObjectTable &) = delete;
 
@@ -66,9 +76,12 @@ public:
 private:
     friend struct ClObjectTableProbe;
 
-    ObjectPool<ClObject>   pool_;
-    const cl_icd_dispatch &table_;
-    uint32_t               live_;
+    /* `object` and its subtree destroyed; the caller holds the lock. */
+    void destroy_held(ClObject &object);
+
+    icd::HandleTree<ClObject> tree_;
+    const cl_icd_dispatch    &table_;
+    icd::ThreadLock          &lock_;
 };
 
 }  // namespace av::clicd

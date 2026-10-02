@@ -141,8 +141,8 @@ public:
 class ClProcess {
 public:
     explicit ClProcess(DdiKmt &kmt)
-        : lock_(trace_, 'H'), send_lock_(trace_, 'S'),
-          root_(memory_, kmt, lock_, send_lock_, log_, watcher_, gl_share_, av::clicd::cl_icd_binding),
+        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), objects_lock_(trace_, 'O'),
+          root_(memory_, kmt, lock_, send_lock_, objects_lock_, log_, watcher_, gl_share_, av::clicd::cl_icd_binding),
           loader_(root_)
     {
     }
@@ -159,6 +159,7 @@ private:
     LockTrace           trace_;
     RecordingThreadLock lock_;
     RecordingThreadLock send_lock_;
+    RecordingThreadLock objects_lock_;
     RecordingLog        log_;
     ScriptedThread      watcher_;
     av::ScriptedGlShareSource gl_share_;

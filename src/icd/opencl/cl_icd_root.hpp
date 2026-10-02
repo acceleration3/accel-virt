@@ -75,8 +75,10 @@ public:
      * cannot confirm a single extension against, which is its own answer. */
     static constexpr size_t  host_extensions_bytes = 4096u;
 
+    /* `objects_lock` is the object table's own (ClObjectTable): every entry
+     * point looks its arguments up there without `lock`. */
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-              LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+              icd::ThreadLock &objects_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
               ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;

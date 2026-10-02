@@ -10,6 +10,8 @@
  * die with it, and a guest that releases a context while holding a buffer must
  * not be left holding one whose context is gone. */
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 
@@ -21,6 +23,24 @@ using av::clicd::ClObject;
 using av::clicd::ClObjectProbe;
 using av::clicd::ClObjectTableProbe;
 
+namespace av {
+
+struct ObjectPoolProbe {
+    template <typename T>
+    static void miscount(ObjectPool<T> &pool) { pool.live_ += 1u; }
+};
+
+}  // namespace av
+
+namespace av::icd {
+
+struct HandleTreeProbe {
+    template <typename Node>
+    static ObjectPool<Node> &pool(HandleTree<Node> &tree) { return tree.pool_; }
+};
+
+}  // namespace av::icd
+
 namespace av::clicd {
 
 /* The states the table never builds. An object with no dispatch table is one
@@ -29,9 +49,9 @@ namespace av::clicd {
  * context unbounded; and a platform on a context is a platform the loader
  * enumerated from somewhere this ICD never opened. */
 struct ClObjectTableProbe {
-    /* A count that disagrees with what the pool holds: a slot leaked, or one
-     * counted twice. */
-    static void miscount(ClObjectTable &table) { table.live_ += 1u; }
+    /* A pool whose count disagrees with what its chunks hold: a slot leaked,
+     * or one counted twice. */
+    static void miscount(ClObjectTable &table) { ObjectPoolProbe::miscount(icd::HandleTreeProbe::pool(table.tree_)); }
 };
 
 struct ClObjectProbe {
@@ -69,7 +89,7 @@ av::clicd::GuestClContext *const some_context =
 
 class Table {
 public:
-    Table() : platform_(), table_(platform_, dispatch) {}
+    Table() : platform_(), trace_(), lock_(trace_, 'O'), table_(platform_, dispatch, lock_) {}
 
     ClObjectTable &objects() { return table_; }
     MockPlatform  &platform() { return platform_; }
@@ -84,8 +104,10 @@ public:
     }
 
 private:
-    MockPlatform  platform_;
-    ClObjectTable table_;
+    MockPlatform            platform_;
+    av::LockTrace           trace_;
+    av::RecordingThreadLock lock_;
+    ClObjectTable           table_;
 };
 
 }  // namespace
@@ -369,8 +391,8 @@ TEST(cl_object_table, a_reference_count_that_cannot_say_how_many_never_reaches_z
   CHECK_EQ(spent->references(), 0u);
   CHECK(spent->invariants_hold()); }
 
-/* The table's own invariant: what it counts and what the pool holds are one
- * number, and every object in it is sound. */
+/* The table's own invariant: the pool under it is sound, and every object in
+ * it is. */
 TEST(cl_object_table, the_invariant_catches_a_count_that_disagrees_with_the_pool)
 { Table rig;
   CHECK(rig.make(ClObject::Kind::context, 0x900u) != nullptr);

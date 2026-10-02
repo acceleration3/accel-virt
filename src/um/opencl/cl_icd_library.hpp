@@ -54,6 +54,7 @@ private:
         ProcessHeap      heap;
         SrwLock          lock;
         SrwLock          send_lock;
+        SrwLock          objects_lock;
         FileLog          log;
         GdiKmt           kmt;
         /* Declared before the root, so it is stopped after the root has let

@@ -1358,6 +1358,24 @@ TEST(cl_icd_root, a_callback_on_a_non_blocking_read_sees_the_bytes)
 
 /* ---- the root's own invariant ------------------------------------------- */
 
+namespace av {
+
+struct ObjectPoolProbe {
+    template <typename T>
+    static void miscount(ObjectPool<T> &pool) { pool.live_ += 1u; }
+};
+
+}  // namespace av
+
+namespace av::icd {
+
+struct HandleTreeProbe {
+    template <typename Node>
+    static ObjectPool<Node> &pool(HandleTree<Node> &tree) { return tree.pool_; }
+};
+
+}  // namespace av::icd
+
 namespace av::clicd {
 
 /* One corruption per thing the root owns. Each is defined here rather than
@@ -1373,7 +1391,7 @@ struct ClExtensionPolicyProbe {
 };
 
 struct ClObjectTableProbe {
-    static void miscount(ClObjectTable &table) { table.live_ += 1u; }
+    static void miscount(ClObjectTable &table) { ObjectPoolProbe::miscount(icd::HandleTreeProbe::pool(table.tree_)); }
 };
 
 struct ClDeviceReportProbe {

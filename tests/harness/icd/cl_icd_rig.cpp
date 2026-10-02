@@ -7,8 +7,8 @@ namespace av {
 
 ClIcdRig::ClIcdRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'),
-      log_(), watcher_(), gl_share_(),
-      root_(platform_, kmt_, lock_, send_lock_, log_, watcher_, gl_share_, clicd::cl_icd_binding),
+      objects_lock_(trace_, 'O'), log_(), watcher_(), gl_share_(),
+      root_(platform_, kmt_, lock_, send_lock_, objects_lock_, log_, watcher_, gl_share_, clicd::cl_icd_binding),
       loader_(root_)
 {
     const PciIdentity avgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,

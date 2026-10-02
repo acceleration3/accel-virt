@@ -8,8 +8,8 @@
 namespace av {
 
 ClIcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), log(L"avcl"), kmt(), watcher(), gl_share(),
-      root(heap, kmt, lock, send_lock, log, watcher, gl_share, clicd::cl_icd_binding), trace()
+    : heap(), lock(), send_lock(), objects_lock(), log(L"avcl"), kmt(), watcher(), gl_share(),
+      root(heap, kmt, lock, send_lock, objects_lock, log, watcher, gl_share, clicd::cl_icd_binding), trace()
 {
     AV_SCOPE("ClIcdLibrary::Seams::Seams");
     log.open();

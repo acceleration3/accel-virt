@@ -52,8 +52,13 @@ struct LoaderHandleProbe {
     static void restore_memories(LoaderHandle &handle, ObjectPool<DeviceMemory> *pool) { handle.memories_ = pool; }
 };
 
+struct HandleTreeProbe {
+    template <typename Node>
+    static ObjectPool<Node> &pool(HandleTree<Node> &tree) { return tree.pool_; }
+};
+
 struct HandleRegistryProbe {
-    static ObjectPool<LoaderHandle> &pool(HandleRegistry &registry) { return registry.pool_; }
+    static ObjectPool<LoaderHandle> &pool(HandleRegistry &registry) { return HandleTreeProbe::pool(registry.tree_); }
 };
 
 }  // namespace av::icd

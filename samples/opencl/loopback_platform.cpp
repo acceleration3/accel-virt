@@ -239,10 +239,11 @@ int main(int argc, char **argv)
         av::LockTrace             trace;
         av::RecordingThreadLock   lock(trace, 'H');
         av::RecordingThreadLock   send_lock(trace, 'S');
+        av::RecordingThreadLock   objects_lock(trace, 'O');
         av::RecordingLog          icd_log;
         av::ScriptedThread        watcher;
         av::ScriptedGlShareSource no_gl;
-        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, icd_log, watcher, no_gl,
+        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, objects_lock, icd_log, watcher, no_gl,
                                        av::clicd::cl_icd_binding);
         samples::icd = &root;
         code = samples::run(argc, argv);
