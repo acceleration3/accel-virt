@@ -263,8 +263,6 @@ public:
     /* The LUID of the adapter added `index`th (0-based); past the adapters
      * kept, nothing. */
     void          set_adapter_luid(std::uint32_t index, std::uint64_t luid);
-    /* What UMDRIVERPRIVATE says every adapter's device offers (UmdAdapterInfo). */
-    void          set_adapter_features(std::uint64_t features);
     /* What a video memory query of `group` answers for every adapter; a group
      * D3DKMT does not define is not kept. */
     void          set_video_memory(MemorySegmentGroup group, std::uint64_t budget, std::uint64_t usage);
@@ -287,11 +285,9 @@ public:
      * creator's private data, which a caller reading the id must catch rather
      * than trust the status (feature 053). */
     void          scribble_the_next_record();
-    /* Every one-way create from here on keeps the record it was given rather
-     * than minting into it, and the next open hands back fewer bytes than a
-     * record needs: two things a driver could do that leave a caller reading
-     * an identity that is not there (feature 053). */
-    void          keep_the_next_record();
+    /* The next open hands back fewer bytes than a record needs: what a driver
+     * could do that leaves a caller reading an identity that is not there
+     * (feature 053). */
     void          hand_back_a_short_record();
     /* The next share carries these bytes rather than the carrier's own: what
      * the *creating* process's kernel wrote is the only thing that crosses to
@@ -583,7 +579,6 @@ private:
     std::uint64_t next_shared_handle_;
     std::uint64_t next_object_id_;
     bool          scribble_record_;
-    bool          keep_record_;
     bool          short_record_;
     std::uint8_t  carried_next_[max_allocation_private];
     std::uint32_t carried_next_size_;
@@ -639,7 +634,6 @@ private:
     std::uint32_t journal_sizes_[max_journal];
     std::uint8_t  journal_bytes_[max_journal][journal_bytes];
     std::uint32_t journal_count_;
-    std::uint64_t adapter_features_ = 0u;
 };
 
 }  // namespace av

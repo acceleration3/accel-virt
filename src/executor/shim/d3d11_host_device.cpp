@@ -289,7 +289,6 @@ void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
          * releasing its own would not free it; a fresh state is swapped in so
          * this one's bindings - resources the session is about to destroy -
          * are let go now rather than at the next session's swap. */
-        uint32_t level = 0u;
         const D3D_FEATURE_LEVEL wanted = static_cast<D3D_FEATURE_LEVEL>(feature_level_);
         D3D_FEATURE_LEVEL chosen = wanted;
         ID3DDeviceContextState *blank = nullptr;
@@ -298,7 +297,6 @@ void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
             context_->SwapDeviceContextState(blank, nullptr);
             blank->Release();
         }
-        static_cast<void>(level);
         active_ = nullptr;
     }
     pthread_mutex_unlock(&mutex_);

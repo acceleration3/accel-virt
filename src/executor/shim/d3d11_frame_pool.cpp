@@ -54,12 +54,6 @@ void D3d11FramePool::Frame::bind(D3d11HostDevice &device)
     device_ = &device;
 }
 
-bool D3d11FramePool::Frame::out() const
-{
-    AV_SCOPE("D3d11FramePool::Frame::out");
-    return claim_.out();
-}
-
 bool D3d11FramePool::Frame::claim()
 {
     AV_SCOPE("D3d11FramePool::Frame::claim");

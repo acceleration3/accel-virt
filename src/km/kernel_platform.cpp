@@ -425,14 +425,6 @@ void KernelPlatform::release_wait_mutex(void *storage, LockRank)
     static_cast<void>(KeReleaseMutex(static_cast<PKMUTEX>(storage), FALSE));
 }
 
-/* A zero timeout polls the mutex: STATUS_SUCCESS only when it was free. */
-bool KernelPlatform::try_acquire_wait_mutex(void *storage, LockRank)
-{
-    AV_SCOPE("KernelPlatform::try_acquire_wait_mutex");
-    LARGE_INTEGER now = {};
-    return KeWaitForSingleObject(storage, Executive, KernelMode, FALSE, &now) == STATUS_SUCCESS;
-}
-
 /* Precise, not KeQueryInterruptTime: that one moves only on the clock tick -
  * 15.6 ms unless some process asked the system for finer - and the display's
  * phase and scanline are read off this clock (VblankPhase). */

@@ -30,8 +30,6 @@ public:
     void    *address_at(uint64_t offset) const;
 
 private:
-    void *at(uint64_t offset) const;
-
     Platform &platform_;
     uint8_t  *base_;
     uint64_t  length_;

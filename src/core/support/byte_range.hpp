@@ -25,7 +25,6 @@ public:
 
     bool contains(uint64_t address) const;
     bool encloses(const ByteRange &inner) const;
-    bool starts_below(const ByteRange &other) const;
 
 private:
     uint64_t base_;

@@ -8,7 +8,7 @@
 namespace av {
 
 RootPageTable::RootPageTable(Platform &platform, const GpuMmuGeometry &geometry)
-    : platform_(platform), geometry_(geometry), segment_id_(0u), segment_offset_(0u), entries_(0u)
+    : platform_(platform), geometry_(geometry), entries_(0u)
     {
         AV_SCOPE("RootPageTable::RootPageTable");
     }
@@ -19,8 +19,6 @@ Status RootPageTable::assign(const DxgkargSetRootPageTableRecord &root)
     platform_.require_irql_at_most(Irql::passive, "RootPageTable::assign");
     InvariantScope<RootPageTable> guard(platform_, *this, "assign");
     if (root.NumEntries == 0u || root.NumEntries > GpuMmuGeometry::entries_per_table) return Status::invalid_parameter;
-    segment_id_ = root.AddressSegmentId;
-    segment_offset_ = root.AddressSegmentOffset;
     entries_ = root.NumEntries;
     return Status::ok;
 }

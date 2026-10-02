@@ -113,9 +113,6 @@ public:
      * fetches: the same reply shape, without pretending the buffer holds
      * anything in particular. */
     void cl_bytes(std::int32_t result, const void *values, std::uint32_t count);
-    /* The same with the event the enqueue asked for after it. */
-    void cl_bytes_for(std::int32_t result, const void *values, std::uint32_t count,
-                      std::uint64_t event);
     /* An enqueue that answers only a result and the event it made: a marker,
      * a kernel, a write. */
     void cl_enqueued(std::int32_t result, std::uint64_t event);

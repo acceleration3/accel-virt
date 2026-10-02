@@ -105,7 +105,6 @@ public:
     /* A loader with no ICD registered at all, which lists nothing. */
     void          list_no_platforms();
     void          set_device_count(std::uint32_t count);
-    void          set_device_name(const char *name);
     /* What the device answers CL_DEVICE_EXTENSIONS with: nothing until a test
      * says otherwise, which is what a driver reporting no extension row
      * answers. */

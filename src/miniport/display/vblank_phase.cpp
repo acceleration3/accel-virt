@@ -54,19 +54,6 @@ uint64_t VblankPhase::period() const
     return known_ ? period_ns_ / ns_per_tick : 0u;
 }
 
-bool VblankPhase::next(uint64_t now, uint64_t &sequence, uint64_t &at) const
-{
-    AV_SCOPE("VblankPhase::next");
-    if (!known_) return false;
-    const int64_t elapsed = static_cast<int64_t>(now * ns_per_tick) - anchor_;
-    const int64_t period = static_cast<int64_t>(period_ns_);
-    /* Rounded toward the blank after `now` whichever side of zero it is. */
-    const int64_t count = elapsed >= 0 ? elapsed / period + 1 : -((-elapsed) / period);
-    sequence = static_cast<uint64_t>(count);
-    at = static_cast<uint64_t>(anchor_ + count * period) / ns_per_tick;
-    return true;
-}
-
 void VblankPhase::forget()
 {
     AV_SCOPE("VblankPhase::forget");

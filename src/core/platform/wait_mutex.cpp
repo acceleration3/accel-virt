@@ -20,15 +20,6 @@ void WaitMutex::acquire()
     marks_.acquired();
 }
 
-bool WaitMutex::try_acquire()
-{
-    AV_SCOPE("WaitMutex::try_acquire");
-    platform_.require_irql_at_most(Irql::passive, "WaitMutex::try_acquire");
-    if (!platform_.try_acquire_wait_mutex(storage_, rank_)) return false;
-    marks_.acquired();
-    return true;
-}
-
 void WaitMutex::release()
 {
     AV_SCOPE("WaitMutex::release");

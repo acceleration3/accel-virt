@@ -30,7 +30,6 @@ struct PresentBlitProbe;
 
 class PresentBlit {
 public:
-    static constexpr uint32_t pixel_bytes = PresentSurface::pixel_bytes;
     /* Regions handed over at once: a present with more sub-rectangles is
      * moved in as many batches. */
     static constexpr uint32_t batch = 64u;

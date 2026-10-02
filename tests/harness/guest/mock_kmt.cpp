@@ -34,7 +34,7 @@ MockKmt::MockKmt()
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), window_(nullptr), window_pages_(0u), window_chunks_{}, window_opens_(0u), window_refusal_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), shared_{},
       next_shared_handle_(first_shared_handle),
-      next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), carried_next_(),
+      next_object_id_(first_object_id), scribble_record_(false), short_record_(false), carried_next_(),
       carried_next_size_(0u), carry_next_(false), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), idle_reads_(0u), clock_step_(0u), clock_reader_(nullptr),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
@@ -431,7 +431,7 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
          * sees an id. */
         created->created_size = size;
         for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = descriptor[index];
-        if (size == shareable && !keep_record_) {
+        if (size == shareable) {
             SharedObjectRecord record;
             if (record.decode(created->created_with + AllocationDescriptor::encoded_size,
                               SharedObjectRecord::encoded_size) == Status::ok &&
@@ -1303,7 +1303,6 @@ void MockKmt::fail_first(Call call, std::uint32_t count, std::uint32_t code)
 
 void MockKmt::scribble_the_next_record() { scribble_record_ = true; }
 
-void MockKmt::keep_the_next_record() { keep_record_ = true; }
 
 void MockKmt::hand_back_a_short_record() { short_record_ = true; }
 
@@ -1379,11 +1378,10 @@ std::uint32_t       MockKmt::last_private_size() const { return private_size_; }
 
 Status MockKmt::query_adapter_features(std::uint32_t, UmdAdapterInfo &info)
 {
-    info = UmdAdapterInfo(0u, adapter_features_);
+    info = UmdAdapterInfo(0u, 0u);
     return Status::ok;
 }
 
-void MockKmt::set_adapter_features(std::uint64_t features) { adapter_features_ = features; }
 
 Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 {

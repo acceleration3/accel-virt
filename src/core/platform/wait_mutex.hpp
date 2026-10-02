@@ -24,8 +24,6 @@ public:
     WaitMutex &operator=(const WaitMutex &) = delete;
 
     void acquire();
-    /* The lock if it is free, without waiting; whether it was taken. */
-    [[nodiscard]] bool try_acquire();
     void release();
 
 private:

@@ -4,7 +4,6 @@
 #include "core/platform/spin_lock.hpp"
 #include "core/platform/spin_lock_try_guard.hpp"
 #include "core/platform/wait_mutex.hpp"
-#include "core/platform/wait_mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/trace_snapshot.hpp"
@@ -29,7 +28,6 @@ using av::Status;
 using av::TraceSnapshot;
 using av::Violation;
 using av::WaitMutex;
-using av::WaitMutexTryGuard;
 
 namespace {
 
@@ -205,23 +203,6 @@ TEST(mutex_try_acquire, takes_a_free_mutex_and_refuses_one_held_elsewhere)
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
 
-TEST(wait_mutex_try_acquire, takes_a_free_mutex_and_refuses_one_held_elsewhere)
-{ MockPlatform platform;
-  Marked marked;
-  const av::FunctionScope scope(av::scope_binding, ScopeName("test::try"));
-  WaitMutex wait(platform, LockRank{30});
-  CHECK(wait.try_acquire());
-  CHECK_EQ(marked.holding(), address_of(&wait));
-  CHECK(platform.current_irql() == Irql::passive);
-  wait.release();
-  platform.hold_elsewhere(LockRank{30});
-  CHECK(!wait.try_acquire());
-  CHECK_EQ(platform.locks_held(), 0u);
-  platform.set_irql(Irql::apc);
-  CHECK(!wait.try_acquire());
-  CHECK(platform.claim(Violation::irql_ceiling));
-  platform.set_irql(Irql::passive); }
-
 TEST(spin_lock_try_guard, releases_only_what_it_took)
 { MockPlatform platform; SpinLock spin(platform, LockRank{10});
   {
@@ -255,17 +236,3 @@ TEST(mutex_try_guard, releases_only_what_it_took)
   }
   CHECK_EQ(platform.locks_held(), 0u); }
 
-TEST(wait_mutex_try_guard, releases_only_what_it_took)
-{ MockPlatform platform; WaitMutex wait(platform, LockRank{30});
-  {
-      const WaitMutexTryGuard guard(wait);
-      CHECK(guard.held());
-      CHECK_EQ(platform.locks_held(), 1u);
-  }
-  CHECK_EQ(platform.locks_held(), 0u);
-  platform.hold_elsewhere(LockRank{30});
-  {
-      const WaitMutexTryGuard guard(wait);
-      CHECK(!guard.held());
-  }
-  CHECK_EQ(platform.locks_held(), 0u); }

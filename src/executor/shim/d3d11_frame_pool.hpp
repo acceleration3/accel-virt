@@ -48,7 +48,6 @@ private:
         ~Frame();
 
         void    bind(D3d11HostDevice &device);
-        bool    out() const;
         /* Taken for a present (FramePool). */
         bool    claim();
         bool    fits(uint32_t width, uint32_t height, uint32_t format) const;

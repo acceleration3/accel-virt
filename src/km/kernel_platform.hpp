@@ -50,7 +50,6 @@ public:
     void     initialize_wait_mutex(void *storage) override;
     void     acquire_wait_mutex(void *storage, LockRank rank) override;
     void     release_wait_mutex(void *storage, LockRank rank) override;
-    bool     try_acquire_wait_mutex(void *storage, LockRank rank) override;
     uint64_t interrupt_time() const override;
     uint64_t performance_counter(uint64_t &frequency) const override;
     void     store_atomic(uint64_t &target, uint64_t value) override;

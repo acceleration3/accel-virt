@@ -50,10 +50,4 @@ bool ByteRange::encloses(const ByteRange &inner) const
     return inner.base_ >= base_ && inner.end() <= end();
 }
 
-bool ByteRange::starts_below(const ByteRange &other) const
-{
-    AV_SCOPE("ByteRange::starts_below");
-    return base_ < other.base_;
-}
-
 }  // namespace av

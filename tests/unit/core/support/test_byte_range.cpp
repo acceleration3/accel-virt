@@ -49,6 +49,3 @@ TEST(byte_range_encloses, accepts_an_exact_fit_and_a_strict_subset)
   CHECK(outer.encloses(outer));
   CHECK(outer.encloses(ByteRange(8192u, 4096u))); }
 
-TEST(byte_range, orders_by_base)
-{ CHECK(ByteRange(0u, 1u).starts_below(ByteRange(1u, 1u)));
-  CHECK(!ByteRange(1u, 1u).starts_below(ByteRange(1u, 1u))); }

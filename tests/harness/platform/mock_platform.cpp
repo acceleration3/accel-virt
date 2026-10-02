@@ -607,13 +607,6 @@ void MockPlatform::acquire_wait_mutex(void *, LockRank rank)
 
 void MockPlatform::release_wait_mutex(void *, LockRank rank) { static_cast<void>(pop_lock(rank)); }
 
-bool MockPlatform::try_acquire_wait_mutex(void *storage, LockRank rank)
-{
-    if (holding_elsewhere_ && held_elsewhere_ == rank) return false;
-    acquire_wait_mutex(storage, rank);
-    return true;
-}
-
 void MockPlatform::hold_elsewhere(LockRank rank)
 {
     holding_elsewhere_ = true;

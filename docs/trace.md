@@ -187,9 +187,9 @@ copied the table.
   `KeGetCurrentIrql`, `InterlockedCompareExchange64` - all legal at any IRQL.
 - `SpinLock`, `Mutex` and `WaitMutex` mark the table through `LockMarks`:
   `waiting` before the platform's acquire, `acquired` after, `released` before
-  the release. Each gained `try_acquire` (`KeTryToAcquireSpinLockAtDpcLevel`
-  after raising to DISPATCH, `ExTryToAcquireFastMutex`, `KeWaitForSingleObject`
-  with a zero timeout) and a `*TryGuard`.
+  the release. `SpinLock` and `Mutex` gained `try_acquire`
+  (`KeTryToAcquireSpinLockAtDpcLevel` after raising to DISPATCH,
+  `ExTryToAcquireFastMutex`) and a `*TryGuard`.
 - `Adapter::escape` tells the two escapes apart by their first four bytes: the
   host-visible bind still needs a context; `AVD` goes to `TraceEscape`, which
   answers with only the adapter named. A table request copies the window from

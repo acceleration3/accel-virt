@@ -89,7 +89,6 @@ void ScriptedCl::set_device_count(std::uint32_t count)
     devices_ = count < max_devices ? count : max_devices;
 }
 
-void ScriptedCl::set_device_name(const char *name) { device_name_ = name; }
 void ScriptedCl::set_device_extensions(const char *names) { device_extensions_ = names; }
 void ScriptedCl::set_luid(std::uint64_t luid) { luid_ = luid; }
 void ScriptedCl::set_vendor(std::uint64_t vendor) { vendor_ = vendor; }

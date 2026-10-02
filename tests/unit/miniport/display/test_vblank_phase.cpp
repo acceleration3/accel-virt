@@ -27,8 +27,6 @@ TEST(vblank_phase, nothing_is_known_before_a_blank_is_seen)
   CHECK(phase.invariants_hold());
   CHECK_EQ(phase.since_blank(123456u), 0u);
   CHECK_EQ(phase.period(), 0u);
-  std::uint64_t sequence = 0u, at = 0u;
-  CHECK(!phase.next(123456u, sequence, at));
   phase.observe(1u, blank_at(1u), 0u);   /* no period: nothing to go on */
   CHECK(!phase.known()); }
 
@@ -58,18 +56,9 @@ TEST(vblank_phase, a_window_later_the_phase_is_taken_afresh_so_drift_is_followed
   CHECK_EQ(phase.since_blank(blank_at(2u * VblankPhase::window + 1u) + 500u), 0u);
   CHECK(phase.invariants_hold()); }
 
-TEST(vblank_phase, the_next_blank_is_the_one_after_now)
+TEST(vblank_phase, before_blank_zero_the_time_since_a_blank_still_counts_back)
 { VblankPhase phase;
   phase.observe(5u, blank_at(5u), period_ns);
-  std::uint64_t sequence = 0u, at = 0u;
-  CHECK(phase.next(blank_at(7u) + 10u, sequence, at));
-  CHECK_EQ(sequence, 8u);
-  CHECK_EQ(at, blank_at(8u));
-  CHECK(phase.next(blank_at(7u), sequence, at));   /* exactly on a blank: the one after it */
-  CHECK_EQ(sequence, 8u);
-  CHECK(phase.next(origin - 10u, sequence, at));   /* before blank 0 */
-  CHECK_EQ(sequence, 0u);
-  CHECK_EQ(at, origin);
   CHECK_EQ(phase.since_blank(origin - 10u), period_ticks - 10u); }
 
 TEST(vblank_phase, a_new_period_starts_over_and_forgetting_leaves_nothing)

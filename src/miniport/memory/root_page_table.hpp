@@ -34,8 +34,6 @@ public:
 private:
     Platform             &platform_;
     const GpuMmuGeometry &geometry_;
-    uint32_t              segment_id_;
-    uint64_t              segment_offset_;
     uint32_t              entries_;
 
     friend struct RootPageTableProbe;

@@ -28,9 +28,6 @@ public:
     uint64_t since_blank(uint64_t now) const;
     /* The period in 100 ns units, rounded down; 0 while no phase is known. */
     uint64_t period() const;
-    /* The blank after the one at `now`: its sequence and its time, 100 ns
-     * units. False while no phase is known. */
-    bool     next(uint64_t now, uint64_t &sequence, uint64_t &at) const;
     void     forget();
 
     bool invariants_hold() const;
