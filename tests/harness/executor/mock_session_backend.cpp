@@ -4,7 +4,7 @@
 
 #include <unistd.h>
 
-#include "device/executor/imported_blob.hpp"
+#include "executor/imported_blob.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"

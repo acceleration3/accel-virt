@@ -1,6 +1,6 @@
 #include "harness/executor/widest_host_gpu.hpp"
 
-#include "device/shim/loader_host_apis.hpp"
+#include "executor/shim/loader_host_apis.hpp"
 
 namespace av {
 

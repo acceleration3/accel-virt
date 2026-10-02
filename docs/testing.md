@@ -161,7 +161,7 @@ overflows its stack inside traced frames dies of `SIGSEGV` leaving the crash
 file with those frames and a native stack. Skipping the install fails it.
 `tests/unit/device/shim/test_state_socket.cpp` serves a reporter's dump, a
 source's refusal, an unknown request and a name too long for a socket path;
-`tests/unit/device/executor/test_executor_state.cpp` checks `ExecutorRoot`'s
+`tests/unit/executor/test_executor_state.cpp` checks `ExecutorRoot`'s
 exact dump.
 
 Live, `qemu_smoke` and `qemu_virtio_gpu` still pass with tracing started in
@@ -641,7 +641,7 @@ What it cannot see, and L5 still must:
 
 - the av scenarios on this machine's GPU (`test_fullstack_av.cpp`, 044):
   `FullStackRig(executor table, host GPU)` realizes the device core on the
-  executor library's own root - `src/device/shim/executor_ops.cpp` linked into
+  executor library's own root - `src/executor/shim/executor_ops.cpp` linked into
   the test and `av_executor_ops()` handed over, not a dlopen - bound to the
   GPU the host's loaders say runs the most sub-APIs (`WidestHostGpu`). The
   generated clients encode in the guest code, the generated server decodes on

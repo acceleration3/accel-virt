@@ -5,7 +5,7 @@
  * process's session for its adapter (d3d::D3dSession), as a host device of its
  * own on the session's stream (D3dDeviceChannel): the host makes the
  * resources, compiles the shaders and draws, on its GPU's shared Direct3D 11
- * device (src/device/executor/d3d_backend.hpp). The guest keeps only what the
+ * device (src/executor/d3d/d3d_backend.hpp). The guest keeps only what the
  * runtime must see - a kernel allocation for a resource that is presented,
  * scanned out or shared, and a shadow in guest memory for one the CPU maps.
  *

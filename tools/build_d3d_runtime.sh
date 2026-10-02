@@ -2,7 +2,7 @@
 # Builds the host's Direct3D - DXVK (Direct3D 11, DXGI) and vkd3d-proton
 # (Direct3D 12) - natively for Linux from the submodules in third_party/, and
 # installs the shared objects into one directory, build-d3d/lib, which is what
-# the executor library loads them from (AV_D3D_PATH; src/device/shim/
+# the executor library loads them from (AV_D3D_PATH; src/executor/shim/
 # d3d_runtime.hpp).
 #
 #   tools/build_d3d_runtime.sh            # configure if needed, build, install

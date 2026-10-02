@@ -3,7 +3,7 @@
 #ifndef AV_IMPORTED_BLOB_PROBE_HPP
 #define AV_IMPORTED_BLOB_PROBE_HPP
 
-#include "device/executor/imported_blob.hpp"
+#include "executor/imported_blob.hpp"
 
 #include <stdint.h>
 

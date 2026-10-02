@@ -3,7 +3,7 @@
 #ifndef AV_SYNC_TOKENS_PROBE_HPP
 #define AV_SYNC_TOKENS_PROBE_HPP
 
-#include "device/executor/sync_tokens.hpp"
+#include "executor/opengl/sync_tokens.hpp"
 
 #include <stdint.h>
 

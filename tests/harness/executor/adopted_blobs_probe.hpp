@@ -3,7 +3,7 @@
 #ifndef AV_ADOPTED_BLOBS_PROBE_HPP
 #define AV_ADOPTED_BLOBS_PROBE_HPP
 
-#include "device/executor/adopted_blobs.hpp"
+#include "executor/vulkan/adopted_blobs.hpp"
 
 #include <stdint.h>
 

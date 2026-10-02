@@ -3,7 +3,7 @@
 #ifndef AV_EXTENSION_LIST_PROBE_HPP
 #define AV_EXTENSION_LIST_PROBE_HPP
 
-#include "device/executor/extension_list.hpp"
+#include "executor/vulkan/extension_list.hpp"
 
 #include <stdint.h>
 

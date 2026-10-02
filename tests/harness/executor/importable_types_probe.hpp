@@ -3,7 +3,7 @@
 #ifndef AV_IMPORTABLE_TYPES_PROBE_HPP
 #define AV_IMPORTABLE_TYPES_PROBE_HPP
 
-#include "device/executor/importable_types.hpp"
+#include "executor/vulkan/importable_types.hpp"
 
 #include <stdint.h>
 

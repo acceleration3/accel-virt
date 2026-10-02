@@ -17,9 +17,9 @@
  * and it goes on standing for it after the guest destroyed it, which is the
  * point. */
 #include "device/abi/av_executor.h"
-#include "device/executor/context_session.hpp"
-#include "device/executor/decode_arena.hpp"
-#include "device/executor/vulkan_backend.hpp"
+#include "executor/context_session.hpp"
+#include "executor/decode_arena.hpp"
+#include "executor/vulkan/vulkan_backend.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -29,7 +29,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
 /* This target makes real VkInstances through the decoder, and the drivers
  * behind them allocate from modules that carry no symbols, so a suppression by
  * name cannot name them. Leak detection is therefore off here and on in
- * tests/unit/device/executor/test_vulkan_backend.cpp, where the same objects
+ * tests/unit/executor/vulkan/test_vulkan_backend.cpp, where the same objects
  * are made and the drivers involved can be named. It did its work first: the
  * leak it found - a backend shared by every session, so a context that died
  * owning a VkInstance left it behind - is fixed, and the input that showed it

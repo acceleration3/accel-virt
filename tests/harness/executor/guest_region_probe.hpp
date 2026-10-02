@@ -3,7 +3,7 @@
 #ifndef AV_GUEST_REGION_PROBE_HPP
 #define AV_GUEST_REGION_PROBE_HPP
 
-#include "device/executor/guest_region.hpp"
+#include "executor/guest_region.hpp"
 
 #include <stdint.h>
 

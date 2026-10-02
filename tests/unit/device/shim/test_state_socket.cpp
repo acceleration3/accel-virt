@@ -3,7 +3,7 @@
  * does not know, and names it refuses. */
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
-#include "device/shim/reporter_state_source.hpp"
+#include "executor/shim/reporter_state_source.hpp"
 #include "device/shim/state_socket.hpp"
 #include "device/shim/state_source.hpp"
 #include "harness/framework/test_registry.hpp"

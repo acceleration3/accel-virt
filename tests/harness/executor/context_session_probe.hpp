@@ -4,7 +4,7 @@
 #ifndef AV_CONTEXT_SESSION_PROBE_HPP
 #define AV_CONTEXT_SESSION_PROBE_HPP
 
-#include "device/executor/context_session.hpp"
+#include "executor/context_session.hpp"
 
 namespace av {
 

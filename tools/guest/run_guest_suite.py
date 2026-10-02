@@ -1007,7 +1007,7 @@ class GuestRun:
         environment = dict(os.environ, QEMU_MODULE_DIR=os.path.dirname(os.path.abspath(self.args.qemu)))
         # Where the executor library loads the host's Direct3D from: DXVK and
         # vkd3d-proton as tools/build_d3d_runtime.sh installs them. A checkout
-        # without them runs every other sub-API (src/device/shim/d3d_runtime.hpp).
+        # without them runs every other sub-API (src/executor/shim/d3d_runtime.hpp).
         if os.path.isdir(self.args.d3d_runtime) and "AV_D3D_PATH" not in environment:
             environment["AV_D3D_PATH"] = os.path.abspath(self.args.d3d_runtime)
         # DXVK writes its logs to the working directory unless told otherwise.

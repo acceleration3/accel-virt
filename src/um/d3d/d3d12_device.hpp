@@ -5,7 +5,7 @@
  * The device speaks the Direct3D 12 wire (tools/codegen/registry/d3d12.toml)
  * on its process's Direct3D 12 session for the adapter (D3dSession), and the
  * host makes every object on its GPU's vkd3d-proton device
- * (src/device/executor/d3d12_session.hpp). The guest keeps what the runtime
+ * (src/executor/d3d/d3d12_session.hpp). The guest keeps what the runtime
  * must be able to ask without a round trip: the records in the runtime's
  * blocks (d3d12_records.hpp), the GPU virtual addresses it hands out
  * (D3d12AddressSpace), and the pages of upload and readback heaps, which are

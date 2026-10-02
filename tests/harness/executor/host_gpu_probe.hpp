@@ -3,7 +3,7 @@
 #ifndef AV_HOST_GPU_PROBE_HPP
 #define AV_HOST_GPU_PROBE_HPP
 
-#include "device/executor/host_gpu.hpp"
+#include "executor/host_gpu.hpp"
 
 #include <stdint.h>
 

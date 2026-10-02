@@ -2,7 +2,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
-#include "device/executor/executor_root.hpp"
+#include "executor/executor_root.hpp"
 #include "harness/framework/test_registry.hpp"
 
 namespace av {

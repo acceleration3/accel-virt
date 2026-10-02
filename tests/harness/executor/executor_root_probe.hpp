@@ -4,7 +4,7 @@
 #ifndef AV_EXECUTOR_ROOT_PROBE_HPP
 #define AV_EXECUTOR_ROOT_PROBE_HPP
 
-#include "device/executor/executor_root.hpp"
+#include "executor/executor_root.hpp"
 
 #include <stdint.h>
 

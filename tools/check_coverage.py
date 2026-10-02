@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 
-SOURCE_DIRECTORIES = ("src/core/", "src/miniport/", "src/device/", "src/proto/", "src/guest/", "src/icd/")
+SOURCE_DIRECTORIES = ("src/core/", "src/miniport/", "src/device/", "src/executor/", "src/proto/", "src/guest/", "src/icd/")
 # The same rule the design gate keeps, by the same name: what a generator wrote
 # is held to the compiler and to check_generated.py, not to a branch count no
 # test could reach across thousands of registry commands (feature 063).

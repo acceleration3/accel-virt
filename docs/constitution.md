@@ -62,7 +62,7 @@ glue cannot hold a C++ object, so the device module keeps its devices in a
 `DeviceModule` in the ABI translation unit's static storage
 (`src/device/abi/entry_points.cpp`), handing the glue opaque handles; the
 executor library's `av_executor_ops()` takes no argument, so its root lives in
-that entry point's translation unit (`src/device/shim/executor_ops.cpp`); and the
+that entry point's translation unit (`src/executor/shim/executor_ops.cpp`); and the
 Windows Vulkan loader calls `vk_icdGetInstanceProcAddr(NULL, ...)` with no
 context, so the Vulkan ICD's root lives in its exports' translation unit
 (`src/um/vulkan/avvk_exports.cpp`, feature 045), and the generated wrappers'
@@ -90,7 +90,7 @@ unhandled-exception filter is handed no context either. The QEMU device
 module's trace services live beside its `DeviceModule`, in a
 `DeviceTraceRoot` in `src/device/abi/entry_points.cpp`, whose fatal-signal
 handler is handed no context; the executor library's table is part of its
-root's storage in `src/device/shim/executor_ops.cpp`.
+root's storage in `src/executor/shim/executor_ops.cpp`.
 An object whose
 lifetime cannot be a scope is held in `ObjectStorage<T>`; an object whose count
 has no fixed bound - a device, an allocation - lives in an `ObjectPool<T>`,

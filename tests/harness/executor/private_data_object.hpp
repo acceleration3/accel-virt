@@ -7,7 +7,7 @@
 #ifndef AV_PRIVATE_DATA_OBJECT_HPP
 #define AV_PRIVATE_DATA_OBJECT_HPP
 
-#include "device/shim/d3d_headers.hpp"
+#include "executor/shim/d3d_headers.hpp"
 
 #include <cstddef>
 #include <cstdint>

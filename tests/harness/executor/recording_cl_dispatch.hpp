@@ -16,8 +16,8 @@
 #ifndef AV_RECORDING_CL_DISPATCH_HPP
 #define AV_RECORDING_CL_DISPATCH_HPP
 
-#include "device/executor/cl_handle_registry.hpp"
-#include "device/executor/host_svm_ranges.hpp"
+#include "executor/opencl/cl_handle_registry.hpp"
+#include "executor/opencl/host_svm_ranges.hpp"
 #include "proto/generated/opencl/cl_default_dispatch.h"
 
 #include <cstddef>

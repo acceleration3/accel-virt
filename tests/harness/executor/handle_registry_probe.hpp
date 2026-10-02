@@ -3,7 +3,7 @@
 #ifndef AV_HANDLE_REGISTRY_PROBE_HPP
 #define AV_HANDLE_REGISTRY_PROBE_HPP
 
-#include "device/executor/handle_registry.hpp"
+#include "executor/vulkan/handle_registry.hpp"
 
 #include <stdint.h>
 

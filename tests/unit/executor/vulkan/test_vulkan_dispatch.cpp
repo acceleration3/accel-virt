@@ -1,0 +1,227 @@
+/* What the generated Vulkan decoder answers for a call the driver failed, or
+ * answered past the room it was given (feature 044, T033).
+ *
+ * A driver that fails may leave anything in an output, and serializing a
+ * handle is what makes the backend accept it back: a failed create whose
+ * output held a stale pointer would hand the guest a number the host then
+ * dereferences. And a driver that reports more entries than the array it was
+ * handed would have the reply serialize the arena past the array. Decoded into
+ * a driver with no GPU behind it that fails the way a careless one does, with
+ * the backend deciding the handles - which numbers it knows is what a guest can
+ * reach. */
+#include "executor/vulkan/vulkan_backend.hpp"
+#include "harness/executor/vulkan_backend_probe.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "proto/generated/vulkan/vk_default_dispatch.h"
+#include "proto/generated/vulkan/vk_dispatch_server.h"
+#include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/generated/vulkan/vk_serialize.h"
+#include "proto/wire/wire_arena.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
+using av::VulkanBackend;
+using av::VulkanBackendProbe;
+using av::WireArena;
+using av::WireReader;
+using av::WireWriter;
+namespace vkproto = av::vkproto;
+
+namespace {
+
+constexpr std::size_t   block_bytes = 65536u;
+constexpr std::size_t   frame_bytes = 256u;
+constexpr std::uint64_t stale = 0xA5A5A5A5A5A5A5A5u;
+constexpr std::uint64_t first_invented = 0x10100u;
+
+template <typename H>
+H as_handle(std::uint64_t raw)
+{ H handle = VK_NULL_HANDLE;
+  std::memcpy(&handle, &raw, sizeof handle);
+  return handle; }
+
+/* A driver that makes an instance and a device, lists its physical devices the
+ * way a test tells it to, and fails every buffer create with a stale pointer
+ * left in the output. */
+class CarelessDriver final : public vkproto::DefaultServerDispatch {
+public:
+    VkResult on_vkCreateInstance(const VkInstanceCreateInfo *, const VkAllocationCallbacks *,
+                                 VkInstance *out) override
+    { *out = as_handle<VkInstance>(first_invented); return VK_SUCCESS; }
+    VkResult on_vkCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo *,
+                               const VkAllocationCallbacks *, VkDevice *out) override
+    { *out = as_handle<VkDevice>(first_invented + 0x200u); return VK_SUCCESS; }
+    /* Every slot of the array stale, then the first `listed_` of them real,
+     * for a call that succeeds; the count the driver claims either way. */
+    VkResult on_vkEnumeratePhysicalDevices(VkInstance, uint32_t *count, VkPhysicalDevice *out) override
+    { if (out != nullptr) {
+          for (uint32_t i = 0u; i < *count; i++) out[i] = as_handle<VkPhysicalDevice>(stale);
+          for (uint32_t i = 0u; result_ >= 0 && i < listed_ && i < *count; i++)
+              out[i] = as_handle<VkPhysicalDevice>(first_invented + 0x100u + i);
+      }
+      *count = claimed_;
+      return result_; }
+    VkResult on_vkCreateBuffer(VkDevice, const VkBufferCreateInfo *, const VkAllocationCallbacks *,
+                               VkBuffer *out) override
+    { *out = as_handle<VkBuffer>(stale); return VK_ERROR_OUT_OF_DEVICE_MEMORY; }
+
+    /* The next enumeration answers `result`, writes `listed` devices and
+     * claims `claimed`. */
+    void enumerate(VkResult result, std::uint32_t listed, std::uint32_t claimed)
+    { result_ = result;
+      listed_ = listed;
+      claimed_ = claimed; }
+
+private:
+    VkResult      result_ = VK_SUCCESS;
+    std::uint32_t listed_ = 1u;
+    std::uint32_t claimed_ = 1u;
+};
+
+/* One guest context: a frame in, the answer out, the registry judged after
+ * every one. */
+class GuestContext {
+public:
+    GuestContext() : backend_(), probe_(backend_), driver_(), block_{}, frame_{}, reply_{}, answered_(0u) {}
+
+    CarelessDriver &driver() { return driver_; }
+    bool            knows(std::uint64_t handle) const { return backend_.knows_handle(handle); }
+    WireWriter      frame() { return WireWriter(frame_, sizeof frame_); }
+    WireReader      answer() const { return WireReader(reply_, answered_); }
+
+    bool send(std::uint32_t command, const WireWriter &frame)
+    { WireArena  arena(block_, sizeof block_);
+      WireReader payload(frame_, frame.offset());
+      WireWriter answer(reply_, sizeof reply_);
+      const bool ran = probe_.run_through(driver_, command, payload, answer, arena);
+      answered_ = answer.offset();
+      CHECK(probe_.handles().invariants_hold());
+      return ran; }
+
+    /* The handle a create answered, after its result. */
+    std::uint64_t created() const
+    { WireReader reply = answer();
+      std::int32_t  result = 0;
+      std::uint64_t handle = stale;
+      CHECK(reply.read_pod(result));
+      CHECK(reply.read_pod(handle));
+      return handle; }
+
+    std::uint64_t instance()
+    { WireWriter writer = frame();
+      VkInstanceCreateInfo create = {};
+      create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+      vkproto::serialize_VkInstanceCreateInfo(writer, create);
+      CHECK(send(vkproto::kCmd_vkCreateInstance, writer));
+      return created(); }
+
+    /* vkEnumeratePhysicalDevices with room for `room`. */
+    bool enumerate(std::uint64_t instance, std::uint32_t room)
+    { WireWriter writer = frame();
+      writer.write_pod(instance);
+      writer.write_pod<std::uint8_t>(1u);
+      writer.write_pod(room);
+      return send(vkproto::kCmd_vkEnumeratePhysicalDevices, writer); }
+
+    std::uint64_t device(std::uint64_t physical)
+    { WireWriter writer = frame();
+      writer.write_pod(physical);
+      VkDeviceCreateInfo create = {};
+      create.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+      vkproto::serialize_VkDeviceCreateInfo(writer, create);
+      CHECK(send(vkproto::kCmd_vkCreateDevice, writer));
+      return created(); }
+
+private:
+    VulkanBackend      backend_;
+    VulkanBackendProbe probe_;
+    CarelessDriver     driver_;
+    std::uint8_t       block_[block_bytes];
+    std::uint8_t       frame_[frame_bytes];
+    std::uint8_t       reply_[frame_bytes];
+    std::size_t        answered_;
+};
+
+/* An enumeration's answer: its result and count, into `listed` as many
+ * handles as fit; how many followed the count. */
+std::uint32_t read_enumeration(const GuestContext &guest, std::int32_t &result, std::uint32_t &count,
+                               std::uint64_t *listed, std::uint32_t room)
+{ WireReader reply = guest.answer();
+  CHECK(reply.read_pod(result));
+  CHECK(reply.read_pod(count));
+  std::uint32_t followed = 0u;
+  while (followed < room && reply.remaining() >= sizeof(std::uint64_t)) {
+      CHECK(reply.read_pod(listed[followed]));
+      followed++;
+  }
+  CHECK_EQ(reply.remaining(), 0u);
+  return followed; }
+
+}  // namespace
+
+TEST(vulkan_dispatch, a_failed_create_answers_a_null_handle_the_host_never_learns)
+{ GuestContext guest;
+  const std::uint64_t instance = guest.instance();
+  CHECK(guest.enumerate(instance, 1u));
+  std::int32_t  result = 0;
+  std::uint32_t count = 0u;
+  std::uint64_t physical = 0u;
+  CHECK_EQ(read_enumeration(guest, result, count, &physical, 1u), 1u);
+  const std::uint64_t device = guest.device(physical);
+  CHECK(guest.knows(device));
+
+  WireWriter writer = guest.frame();
+  writer.write_pod(device);
+  VkBufferCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  create.size = 4096u;
+  vkproto::serialize_VkBufferCreateInfo(writer, create);
+  CHECK(guest.send(vkproto::kCmd_vkCreateBuffer, writer));
+  WireReader reply = guest.answer();
+  std::int32_t  failed = 0;
+  std::uint64_t buffer = stale;
+  CHECK(reply.read_pod(failed));
+  CHECK(reply.read_pod(buffer));
+  CHECK_EQ(failed, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+  CHECK_EQ(buffer, 0u);
+  CHECK(!guest.knows(stale)); }
+
+/* The driver failed and claims seven devices over an array of stale pointers:
+ * the answer is the failure and an empty list, whether or not the guest gave
+ * room. */
+TEST(vulkan_dispatch, a_failed_enumeration_answers_no_devices_whatever_the_driver_claims)
+{ GuestContext guest;
+  const std::uint64_t instance = guest.instance();
+  for (std::uint32_t room = 0u; room < 3u; room += 2u) {
+      guest.driver().enumerate(VK_ERROR_INITIALIZATION_FAILED, 0u, 7u);
+      CHECK(guest.enumerate(instance, room));
+      std::int32_t  result = 0;
+      std::uint32_t count = ~std::uint32_t{0};
+      std::uint64_t listed[4] = {};
+      CHECK_EQ(read_enumeration(guest, result, count, listed, 4u), 0u);
+      CHECK_EQ(result, VK_ERROR_INITIALIZATION_FAILED);
+      CHECK_EQ(count, 0u);
+  }
+  CHECK(!guest.knows(stale)); }
+
+/* A driver that claims more devices than the array it was handed is held to
+ * the array: the reply lists the room the guest gave and not a slot past it.
+ * VK_INCOMPLETE is a success, and what it listed is answered. */
+TEST(vulkan_dispatch, an_enumeration_answers_no_more_devices_than_the_guest_had_room_for)
+{ GuestContext guest;
+  const std::uint64_t instance = guest.instance();
+  guest.driver().enumerate(VK_INCOMPLETE, 2u, 5u);
+  CHECK(guest.enumerate(instance, 2u));
+  std::int32_t  result = 0;
+  std::uint32_t count = 0u;
+  std::uint64_t listed[4] = {};
+  CHECK_EQ(read_enumeration(guest, result, count, listed, 4u), 2u);
+  CHECK_EQ(result, VK_INCOMPLETE);
+  CHECK_EQ(count, 2u);
+  CHECK(guest.knows(listed[0]));
+  CHECK(guest.knows(listed[1]));
+  CHECK(!guest.knows(stale)); }

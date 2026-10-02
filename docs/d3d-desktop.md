@@ -266,13 +266,13 @@ GPUs, which nothing does yet.
 |---|---|---|---|---|
 | `HostImageScanout` | object | `src/miniport/display/` | the key shown and whether a frame waits | shows a keyed primary through `SET_SCANOUT_IMAGE` |
 | `ImageScanout` | system | `src/device/display/` | each head's key and its surface | keeps each head's console surface showing its image |
-| `D3dHostImages` | system | `src/device/executor/` | a staging texture per size | reads a keyed image into memory the device gives |
-| `DeviceRemoval` | object | `src/device/executor/` | removed reason per device | says which device a refused command removed |
+| `D3dHostImages` | system | `src/executor/d3d/` | a staging texture per size | reads a keyed image into memory the device gives |
+| `DeviceRemoval` | object | `src/icd/d3d/` | removed reason per device | says which device a refused command removed |
 | `StandardAllocationBlob` | object | `src/proto/resources/` | the fields of the KMD's standard blob | encodes and decodes it for the KMD and the UMD |
 | `KernelSurface` | object | `src/icd/d3d/` | a surface's allocation and resource private data | writes and reads what a presented or shared surface's kernel allocation carries, for both UMDs |
-| `DxvkVulkanDevice` | system | `src/device/shim/` | DXVK's Vulkan device and its entry points | makes, imports and wraps images on DXVK's device and waits on its queue |
-| `InteropTextures` | system | `src/device/shim/` | a slot per imported image | keeps a Direct3D 12 image shown by DXVK alive as long as its texture is |
-| `D3d12Presentation` | object | `src/device/shim/` | the session's shared fence and DXVK's semaphore of it | shares a session's swap chain buffers and orders DXVK after its presents |
+| `DxvkVulkanDevice` | system | `src/executor/shim/` | DXVK's Vulkan device and its entry points | makes, imports and wraps images on DXVK's device and waits on its queue |
+| `InteropTextures` | system | `src/executor/shim/` | a slot per imported image | keeps a Direct3D 12 image shown by DXVK alive as long as its texture is |
+| `D3d12Presentation` | object | `src/executor/shim/` | the session's shared fence and DXVK's semaphore of it | shares a session's swap chain buffers and orders DXVK after its presents |
 | `BatchFollower` | object | `src/um/d3d/` | the kernel thunks, the device and the session's transport | queues a packet on a kernel context that waits for the newest batch the session published, for both UMDs; none when that context already follows it |
 | `UmdConnections` | system | `src/icd/d3d/` | the Kmt | one held kernel adapter per LUID a runtime opened, shared by every open of it |
 

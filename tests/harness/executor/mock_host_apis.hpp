@@ -3,9 +3,9 @@
 #ifndef AV_MOCK_HOST_APIS_HPP
 #define AV_MOCK_HOST_APIS_HPP
 
-#include "device/executor/host_apis.hpp"
-#include "device/shim/d3d11_host_device.hpp"
-#include "device/surfaces/shared_surfaces.hpp"
+#include "executor/host_apis.hpp"
+#include "executor/shim/d3d11_host_device.hpp"
+#include "executor/d3d/shared_surfaces.hpp"
 
 #include <stdint.h>
 

@@ -40,7 +40,7 @@ EXCLUDE = {
     "src/guest/suite/d3d9_entry.hpp": "the Direct3D 9 the D3D probe calls, implemented by "
                              "WindowsD3d9Entry over DXVK's d3d9.dll in src/um and by ScriptedD3d9 in "
                              "tests/harness, and exercised through every D3d9Work test",
-    "src/device/executor/session_backend.hpp": "what a session requires of a host API, implemented "
+    "src/executor/session_backend.hpp": "what a session requires of a host API, implemented "
                              "by the Vulkan, OpenGL and OpenCL backends and by MockSessionBackend "
                              "in tests/harness, and exercised through every session test",
     "src/device/context/context_plane.hpp": "where a device's contexts run, implemented by LocalContextPlane, "

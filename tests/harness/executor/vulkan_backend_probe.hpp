@@ -5,7 +5,7 @@
 #ifndef AV_VULKAN_BACKEND_PROBE_HPP
 #define AV_VULKAN_BACKEND_PROBE_HPP
 
-#include "device/executor/vulkan_backend.hpp"
+#include "executor/vulkan/vulkan_backend.hpp"
 
 #include "core/support/status.hpp"
 

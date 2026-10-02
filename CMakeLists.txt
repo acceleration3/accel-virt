@@ -57,7 +57,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 # src/device and src/proto join the same gates the moment they hold a source.
 # Includes name a path from src/ ("miniport/display/edid.hpp"), from any file.
 file(GLOB_RECURSE AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
-  src/core/*.cpp src/miniport/*.cpp src/proto/*.cpp src/device/*.cpp src/guest/*.cpp)
+  src/core/*.cpp src/miniport/*.cpp src/proto/*.cpp src/device/*.cpp src/executor/*.cpp src/guest/*.cpp)
 
 # What the generators wrote is committed, but it includes the API's own header,
 # and that arrives with tools/fetch_khronos_registries.py. A clean checkout
@@ -113,7 +113,7 @@ endif()
 # belong to that shared object and to nothing else: linked into av_core or
 # av_device they would export av_executor_ops from a library nobody loads by
 # that name (feature 042).
-set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/executor_ops.cpp)
+set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/executor/shim/executor_ops.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
 # avrecord's own entry point, for the same reason: a main() in a library is a
 # second main wherever that library is linked (feature 065).
@@ -226,12 +226,8 @@ target_link_libraries(avd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Thre
 # device lock marks it (LockMarks).
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp src/core/trace/*.cpp)
 list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
-list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp src/core/support/byte_range.cpp)
-# The Direct3D translation runs in the executor library, never in the device:
-# it loads DXVK through the environment the freestanding device cannot read.
-list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim|executor)/(d3d|dxbc)[^/]*\\.cpp$")
 # The renderer's own process code: it is linked into av-renderer, never into
 # the freestanding module QEMU loads.
 list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim/(posix_renderer|renderer_main)|renderer/)[^/]*\\.cpp$")

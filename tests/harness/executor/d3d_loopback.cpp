@@ -1,7 +1,7 @@
 #include "harness/executor/d3d_loopback.hpp"
 
 #include "device/abi/av_executor.h"
-#include "device/executor/d3d_backend.hpp"
+#include "executor/d3d/d3d_backend.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

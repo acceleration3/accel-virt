@@ -3,7 +3,7 @@
 #ifndef AV_CL_HANDLE_REGISTRY_PROBE_HPP
 #define AV_CL_HANDLE_REGISTRY_PROBE_HPP
 
-#include "device/executor/cl_handle_registry.hpp"
+#include "executor/opencl/cl_handle_registry.hpp"
 
 #include <stdint.h>
 
