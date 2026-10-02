@@ -1,3 +1,4 @@
+#include "icd/common/report_gate.hpp"
 #include "icd/vulkan/icd_root.hpp"
 
 #include "guest/transport/shared_object_call.hpp"
@@ -1651,14 +1652,8 @@ uint32_t IcdRoot::handles_on_connections() const
 void IcdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("IcdRoot::report");
-    writer.open("root", 0u);
-    if (!lock_.try_acquire()) {
-        writer.flag("busy", true);
-        writer.close();
-        return;
-    }
-    ScopeExit release([&] { lock_.release(); });
-    writer.flag("busy", false);
+    const ReportGate gate(lock_, writer, "root");
+    if (!gate.held()) return;
     writer.number("connections", connections_.live());
     writer.number("handles", handles_.live());
     writer.number("batches", handles_.batches());

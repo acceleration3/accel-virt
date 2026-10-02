@@ -219,7 +219,7 @@ TEST(umd_root_open, a_state_dump_names_the_adapters_and_the_connection)
   char bytes[1024] = {};
   av::StateWriter writer(bytes, sizeof bytes);
   rig.root().report(writer);
-  CHECK(std::strstr(writer.dump(), "umd/0 adapters=1 devices=0") != nullptr);
+  CHECK(std::strstr(writer.dump(), "umd/0 busy=false adapters=1 devices=0") != nullptr);
   CHECK(std::strstr(writer.dump(), "opens=1") != nullptr);
   CHECK(std::strstr(writer.dump(), "luid=0x0000000200001234") != nullptr);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }

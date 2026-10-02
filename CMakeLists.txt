@@ -454,6 +454,7 @@ add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
   ${CMAKE_SOURCE_DIR}/src/icd/common/list_pieces.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/locked_transport.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/pieces.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/report_gate.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/row_pieces.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/sliced_wait.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/thread_lock_hold.cpp)

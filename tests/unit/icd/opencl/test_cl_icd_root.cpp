@@ -11,6 +11,7 @@
  * The host is played by ScriptedHost: every round trip takes one queued
  * answer, so a test that queues none is a test of what happens when the device
  * says nothing. */
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -1848,3 +1849,22 @@ TEST(cl_icd_root, a_creation_that_fails_is_named_even_with_nowhere_to_put_its_er
   error = CL_INVALID_VALUE;
   CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_NUM_DEVICES, sizeof count, &count, nullptr), CL_SUCCESS);
   CHECK_EQ(rig.log().lines() - before, 2u); }
+
+/* The state dump reads under the root's lock, as every root's does: held
+ * elsewhere - the process hung with it - the dump says busy and nothing else,
+ * rather than read what an application thread may be changing. */
+TEST(cl_icd_root, a_state_dump_reads_under_the_lock_or_says_busy)
+{ ClIcdRig rig;
+  char            free_bytes[2048] = {};
+  av::StateWriter free_writer(free_bytes, sizeof free_bytes);
+  rig.root().report(free_writer);
+  CHECK(std::strstr(free_writer.dump(), "clicd/0 busy=false device=false") != nullptr);
+  CHECK(std::strstr(free_writer.dump(), "reads_outstanding=0") != nullptr);
+  CHECK(!rig.lock().held());
+  rig.lock().held_elsewhere(true);
+  char            busy_bytes[256] = {};
+  av::StateWriter busy_writer(busy_bytes, sizeof busy_bytes);
+  rig.root().report(busy_writer);
+  CHECK(std::strstr(busy_writer.dump(), "clicd/0 busy=true") != nullptr);
+  CHECK(std::strstr(busy_writer.dump(), "reads_outstanding") == nullptr);
+  rig.lock().held_elsewhere(false); }

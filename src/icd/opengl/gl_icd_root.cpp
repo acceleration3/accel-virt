@@ -1,3 +1,4 @@
+#include "icd/common/report_gate.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 
 #include "core/support/log_line.hpp"
@@ -5,7 +6,6 @@
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/window_visibility.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/extension_policy.hpp"
@@ -643,14 +643,8 @@ void GlIcdRoot::note_dropped(const char *api, const char *command, size_t writte
 void GlIcdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("GlIcdRoot::report");
-    writer.open("root", 0u);
-    if (!lock_.try_acquire()) {
-        writer.flag("busy", true);
-        writer.close();
-        return;
-    }
-    ScopeExit release([&] { lock_.release(); });
-    writer.flag("busy", false);
+    const icd::ReportGate gate(lock_, writer, "root");
+    if (!gate.held()) return;
     writer.number("callbacks", callback_count_);
     writer.number("current_anywhere", currents_.anywhere());
     writer.close();

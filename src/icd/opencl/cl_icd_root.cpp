@@ -1,3 +1,4 @@
+#include "icd/common/report_gate.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "icd/opencl/cl_info_request.hpp"
@@ -585,7 +586,10 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
 void ClIcdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("ClIcdRoot::report");
-    writer.open("clicd", 0u);
+    /* Read under the root's lock, as every root's dump is: the trace thread
+     * runs while application threads release objects and open devices. */
+    const icd::ReportGate gate(lock_, writer, "clicd");
+    if (!gate.held()) return;
     writer.flag("device", device_object_ != nullptr);
     objects_.report(writer);
     writer.number("reads_outstanding", reads_.outstanding());

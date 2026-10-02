@@ -1,3 +1,4 @@
+#include "icd/common/report_gate.hpp"
 #include "icd/d3d/umd_root.hpp"
 
 #include "icd/common/thread_lock_hold.hpp"
@@ -343,13 +344,8 @@ UmdDevice *UmdRoot::device_of(void *block) const
 void UmdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("UmdRoot::report");
-    writer.open("umd", 0u);
-    if (!lock_.try_acquire()) {
-        writer.flag("busy", true);
-        writer.close();
-        return;
-    }
-    ScopeExit release([this] { lock_.release(); });
+    const icd::ReportGate gate(lock_, writer, "umd");
+    if (!gate.held()) return;
     writer.number("adapters", adapters_.open_adapters());
     writer.number("devices", devices_.live_devices());
     connections_.report(writer);

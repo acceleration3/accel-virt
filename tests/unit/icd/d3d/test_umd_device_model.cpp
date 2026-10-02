@@ -261,6 +261,6 @@ TEST(umd_device_model, a_state_dump_names_the_device)
   char bytes[1024] = {};
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.rig().root().report(writer);
-  CHECK(std::strstr(writer.dump(), "umd/0 adapters=1 devices=1") != nullptr);
+  CHECK(std::strstr(writer.dump(), "umd/0 busy=false adapters=1 devices=1") != nullptr);
   CHECK(std::strstr(writer.dump(), "removed=0x0000000000000000") != nullptr);
   UmdRootProbe::release(fixture.rig().root(), fixture.block()); }
