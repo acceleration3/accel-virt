@@ -42,7 +42,8 @@ public:
     /* The same for a Direct3D 9 device (CreateDevice9), on a stream told to
      * speak Direct3D 9's selection (D3dCommandStream::speak_with). */
     [[nodiscard]] bool   open9(uint32_t &hresult);
-    /* The stream's flush and make_room_for, under the lock. */
+    /* The stream's flush, and its make_room_for for data past what crosses
+     * inline (D3dCommandStream::inline_data), under the lock. */
     [[nodiscard]] Status flush();
     [[nodiscard]] Status application_flush();
     /* A deferred context's recording, taken out of its stream. */

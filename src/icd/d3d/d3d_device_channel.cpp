@@ -89,6 +89,7 @@ Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
 bool D3dDeviceChannel::make_room_for(size_t bytes)
 {
     AV_SCOPE("D3dDeviceChannel::make_room_for");
+    if (bytes <= D3dCommandStream::inline_data) return true;
     const icd::ThreadLockHold release(lock_);
     return stream_.make_room_for(bytes);
 }

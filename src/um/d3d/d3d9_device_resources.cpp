@@ -12,7 +12,10 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
+#include "icd/d3d/byte_pieces.hpp"
+#include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "icd/d3d/row_pieces.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
@@ -52,11 +55,6 @@ constexpr uint32_t write_no_overwrite = 0x1000u;
 /* D3DTEXF_POINT and D3DTEXF_LINEAR. */
 constexpr uint32_t filter_point = 1u;
 constexpr uint32_t filter_linear = 2u;
-/* Past this a command's data crosses through the blob arena. */
-constexpr size_t inline_limit = 32u * 1024u;
-/* The most one write carries: half the session's blob arena, so a piece
- * always fits once the arena is emptied. */
-constexpr size_t write_piece = 16u << 20u;
 
 }  // namespace
 
@@ -384,13 +382,14 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     AV_SCOPE("D3d9Device::write_buffer");
     const auto *const from = static_cast<const uint8_t *>(data);
     written_ += bytes;
-    for (uint32_t done = 0u; done < bytes;) {
-        const uint32_t piece = bytes - done < write_piece ? bytes - done : static_cast<uint32_t>(write_piece);
-        if (piece > inline_limit && !wire().make_room_for(piece)) return lost(__func__);
-        if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, done == 0u ? flags : flags & ~write_discard,
+    d3d::BytePieces pieces(bytes, d3d::D3dCommandStream::arena_piece);
+    while (pieces.next()) {
+        const uint32_t done = static_cast<uint32_t>(pieces.offset());
+        const uint32_t piece = static_cast<uint32_t>(pieces.bytes());
+        if (!wire().make_room_for(piece)) return lost(__func__);
+        if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, pieces.first() ? flags : flags & ~write_discard,
                                              from + done, piece))
             return lost(__func__);
-        done += piece;
     }
     return S_OK;
 }
@@ -423,22 +422,18 @@ HRESULT D3d9Device::write_rows(uint32_t id, uint32_t index, const D3DDDIBOX &box
                                const uint8_t *data, uint32_t row_pitch, uint32_t flags)
 {
     AV_SCOPE("D3d9Device::write_rows");
-    const uint32_t texels_per_row = (box.Bottom - box.Top + rows - 1u) / rows;
-    const uint32_t rows_per_piece = row_pitch >= write_piece ? 1u : static_cast<uint32_t>(write_piece / row_pitch);
-    for (uint32_t done = 0u; done < rows; done += rows_per_piece) {
-        const uint32_t count = rows - done < rows_per_piece ? rows - done : rows_per_piece;
-        const uint32_t top = box.Top + done * texels_per_row;
-        const uint32_t bottom = box.Top + (done + count) * texels_per_row;
-        const d3d9proto::Box part = {box.Left, top, box.Front, box.Right, bottom < box.Bottom ? bottom : box.Bottom,
-                                     box.Back};
-        const size_t bytes = size_t{count - 1u} * row_pitch + line;
+    d3d::RowPieces pieces(rows, box.Bottom - box.Top, line, row_pitch, d3d::D3dCommandStream::arena_piece);
+    while (pieces.next()) {
+        const d3d9proto::Box part = {box.Left, box.Top + pieces.top(), box.Front, box.Right,
+                                     box.Top + pieces.bottom(), box.Back};
+        const size_t bytes = static_cast<size_t>(pieces.bytes());
         written_ += bytes;
         const uint64_t started = microseconds();
-        const bool     room = bytes <= inline_limit || wire().make_room_for(bytes);
+        const bool     room = wire().make_room_for(bytes);
         trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
         if (!room || !d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, part, row_pitch, 0u,
-                                                       done == 0u ? flags : flags & ~write_discard,
-                                                       data + size_t{done} * row_pitch, bytes)) {
+                                                       pieces.first() ? flags : flags & ~write_discard,
+                                                       data + pieces.offset(), bytes)) {
             LogLine(lines_)
                 .text("a texture write of ")
                 .number(bytes)
@@ -477,7 +472,7 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     constexpr uint32_t pitch_slack = 256u;
     const size_t capacity = (size_t{layout.row_bytes(level.width)} + pitch_slack) * layout.rows(level.height);
     if (capacity == 0u || !readback_room(capacity)) return E_OUTOFMEMORY;
-    if (capacity > inline_limit && !wire().make_room_for(capacity)) return lost(__func__);
+    if (!wire().make_room_for(capacity)) return lost(__func__);
     uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
     uint64_t read = 0u;
     const uint64_t started = microseconds();

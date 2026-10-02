@@ -149,9 +149,10 @@ TEST(d3d_device_channel, the_lock_is_held_for_each_call_and_no_longer)
   CHECK(!fixture.lock().held());
   CHECK(av_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK_STATUS(fixture.b().flush(), Status::ok);
-  CHECK(fixture.b().make_room_for(0u) == fixture.transport().blobs().ready());
+  /* Data that crosses inline needs no room, and takes no lock to say so. */
+  CHECK(fixture.b().make_room_for(av::d3d::D3dCommandStream::inline_data));
   CHECK(!fixture.lock().held());
-  CHECK(std::strcmp(fixture.trace().text(), "PpPpPpPp") == 0); }
+  CHECK(std::strcmp(fixture.trace().text(), "PpPpPp") == 0); }
 
 /* The device's answer is written before the call reads it: the first batch
  * that asks for one is fence 1. */
@@ -173,7 +174,7 @@ TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
  * upload that needed it (DWM's "an upload larger than the arena"). */
 TEST(d3d_device_channel, room_is_made_by_one_finish_in_a_full_arena)
 { Fixture fixture;
-  alignas(64) static std::uint8_t block[4096];
+  alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
   av::ClientBlobArena &arena = fixture.transport().blobs();
   arena.lend(block, sizeof block);
   CHECK(arena.take(arena.room()).taken());
@@ -183,8 +184,9 @@ TEST(d3d_device_channel, room_is_made_by_one_finish_in_a_full_arena)
   static_cast<void>(av::ReplyHeader(1u, 4u).encode(reply, av::ReplyHeader::encoded_size));
   const std::uint32_t answered = 0u;
   std::memcpy(reply + av::ReplyHeader::encoded_size, &answered, sizeof answered);
-  CHECK(fixture.a().make_room_for(1024u));
-  CHECK(arena.room() >= 1024u);
+  const std::size_t past_inline = av::d3d::D3dCommandStream::inline_data + 1u;
+  CHECK(fixture.a().make_room_for(past_inline));
+  CHECK(arena.room() >= past_inline);
   CHECK(!fixture.lock().held()); }
 
 TEST(d3d_device_channel, a_command_given_up_before_it_was_sent_lets_the_lock_go)

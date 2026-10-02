@@ -46,6 +46,13 @@ public:
      * so its data goes inline, and half a command's room leaves the rest for
      * the command's other fields. */
     static constexpr size_t recorded_data = command_room / 2u;
+    /* Data up to this needs no room made in the blob arena: sent, it crosses
+     * in its command when the arena has none (the generated put_bytes falls
+     * back inline), and asked for, it comes back in the reply slot. */
+    static constexpr size_t inline_data = 32u * 1024u;
+    /* The most data one command carries through the arena: half the
+     * smallest session's arena, so a piece always fits once it is emptied. */
+    static constexpr size_t arena_piece = 16u << 20u;
     /* What is recorded before an idle host is sent it: a few dozen draws, so
      * a submission's cost is spread over enough of them to stay small. */
     static constexpr size_t stream_bytes = 1024u;

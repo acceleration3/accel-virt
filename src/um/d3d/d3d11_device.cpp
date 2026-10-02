@@ -5,7 +5,9 @@
 #include "core/trace/function_scope.hpp"
 #include "core/support/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/d3d/byte_pieces.hpp"
 #include "icd/d3d/device_table.hpp"
+#include "icd/d3d/row_pieces.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
@@ -26,12 +28,6 @@ namespace {
 constexpr uint32_t feature_levels[] = {0xa000u, 0xa100u, 0xb000u, 0xb100u, 0x9100u,
                                        0x9200u, 0x9300u, 0xc000u, 0xc100u};
 
-/* Past this the host's answer crosses through the blob arena rather than the
- * reply slot. */
-constexpr size_t inline_limit = 32u * 1024u;
-/* The most one UpdateSubresource carries: half the session's blob arena, so
- * a piece always fits once the arena is emptied. */
-constexpr size_t upload_piece = 16u << 20u;
 /* D3D11_COPY_DISCARD: only the first piece of an upload may discard. */
 constexpr uint32_t copy_discard = 0x2u;
 
@@ -285,7 +281,7 @@ void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, c
 {
     AV_SCOPE("D3d11Device::upload");
     if (data == nullptr || bytes == 0u) return;
-    if (bytes <= upload_piece) {
+    if (bytes <= d3d::D3dCommandStream::arena_piece) {
         upload_piece_of(resource.id, subresource, box, data, bytes, row_pitch, depth_pitch, copy_flags);
         return;
     }
@@ -306,14 +302,13 @@ void D3d11Device::upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &r
                                        uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload_buffer_pieces");
-    const uint32_t length = static_cast<uint32_t>(region.right - region.left);
-    const uint32_t most = static_cast<uint32_t>(piece_bytes());
-    for (uint32_t done = 0u; done < length; done += most) {
-        const uint32_t piece = length - done < most ? length - done : most;
+    d3d::BytePieces pieces(static_cast<uint32_t>(region.right - region.left), piece_bytes());
+    while (pieces.next()) {
         D3D10_DDI_BOX part = region;
-        part.left = region.left + static_cast<LONG>(done);
-        part.right = part.left + static_cast<LONG>(piece);
-        upload_piece_of(resource, 0u, &part, data + done, piece, 0u, 0u, done == 0u ? copy_flags : copy_flags & ~copy_discard);
+        part.left = region.left + static_cast<LONG>(pieces.offset());
+        part.right = part.left + static_cast<LONG>(pieces.bytes());
+        upload_piece_of(resource, 0u, &part, data + pieces.offset(), static_cast<size_t>(pieces.bytes()), 0u, 0u,
+                        pieces.first() ? copy_flags : copy_flags & ~copy_discard);
     }
 }
 
@@ -327,25 +322,18 @@ void D3d11Device::upload_row_pieces(const ResourceRecord &resource, uint32_t sub
     const uint32_t lines = rows(resource, height);
     const uint32_t line = row_bytes(resource, static_cast<uint32_t>(region.right - region.left));
     if (lines == 0u || row_pitch == 0u) return;
-    /* Texel rows per stored row: 4 for a block-compressed format, 1 otherwise. */
-    const uint32_t texels_per_line = (height + lines - 1u) / lines;
-    const size_t   most = piece_bytes();
-    const uint32_t lines_per_piece = row_pitch >= most ? 1u : static_cast<uint32_t>(most / row_pitch);
-    bool first = true;
     for (LONG slice = region.front; slice < region.back; slice++) {
         const uint8_t *const plane = data + static_cast<size_t>(slice - region.front) * depth_pitch;
-        for (uint32_t done = 0u; done < lines; done += lines_per_piece) {
-            const uint32_t count = lines - done < lines_per_piece ? lines - done : lines_per_piece;
+        d3d::RowPieces       pieces(lines, height, line, row_pitch, piece_bytes());
+        while (pieces.next()) {
             D3D10_DDI_BOX part = region;
             part.front = slice;
             part.back = slice + 1;
-            part.top = region.top + static_cast<LONG>(done * texels_per_line);
-            const LONG bottom = region.top + static_cast<LONG>((done + count) * texels_per_line);
-            part.bottom = bottom < region.bottom ? bottom : region.bottom;
-            const size_t bytes = static_cast<size_t>(count - 1u) * row_pitch + line;
-            upload_piece_of(resource.id, subresource, &part, plane + static_cast<size_t>(done) * row_pitch, bytes,
+            part.top = region.top + static_cast<LONG>(pieces.top());
+            part.bottom = region.top + static_cast<LONG>(pieces.bottom());
+            const bool first = slice == region.front && pieces.first();
+            upload_piece_of(resource.id, subresource, &part, plane + pieces.offset(), static_cast<size_t>(pieces.bytes()),
                             row_pitch, depth_pitch, first ? copy_flags : copy_flags & ~copy_discard);
-            first = false;
         }
     }
 }
@@ -355,7 +343,7 @@ void D3d11Device::upload_row_pieces(const ResourceRecord &resource, uint32_t sub
 size_t D3d11Device::piece_bytes() const
 {
     AV_SCOPE("D3d11Device::piece_bytes");
-    return parent_ != nullptr ? d3d::D3dCommandStream::recorded_data : upload_piece;
+    return parent_ != nullptr ? d3d::D3dCommandStream::recorded_data : d3d::D3dCommandStream::arena_piece;
 }
 
 void D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
@@ -364,7 +352,7 @@ void D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
     AV_SCOPE("D3d11Device::upload_piece_of");
     /* Large data leases the arena; an arena short of room is emptied first,
      * which is one round trip rather than a refused upload. */
-    if (bytes > inline_limit && !wire().make_room_for(bytes)) log_.write("avumd: an upload larger than the arena");
+    if (!wire().make_room_for(bytes)) lines_.write("an upload larger than the arena");
     const d3dproto::Box region =
         box == nullptr ? d3dproto::Box{} : d3dproto::Box{static_cast<uint32_t>(box->left), static_cast<uint32_t>(box->top), static_cast<uint32_t>(box->front),
                                      static_cast<uint32_t>(box->right), static_cast<uint32_t>(box->bottom),
@@ -377,7 +365,7 @@ void D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
 bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity)
 {
     AV_SCOPE("D3d11Device::read_back");
-    if (capacity > inline_limit && !wire().make_room_for(capacity)) return false;
+    if (!wire().make_room_for(capacity)) return false;
     uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
     uint64_t read = 0u;
     if (!d3dproto::av_d3d_ReadSubresource(wire(), resource.id, subresource, &hresult, &row_pitch, &depth_pitch, out,
