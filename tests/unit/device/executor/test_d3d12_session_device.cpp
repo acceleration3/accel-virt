@@ -131,6 +131,10 @@ void make_frame(av::D3dLoopback &wire)
     CHECK_EQ(hresult, 0u);
     CHECK(caps.feature_level >= 0xb000u);
     CHECK(caps.descriptor_sizes[descriptors_rtv] != 0u);
+    /* The GPU's own description, as Direct3D 11 reports it. */
+    CHECK(caps.vendor_id != 0u);
+    CHECK(caps.device_id != 0u);
+    CHECK(caps.dedicated_video_memory_mb != 0u);
     CHECK(av_d3d12_CreateCommandQueue12(wire, queue, 0u, 0u, 0u));
     CHECK(av_d3d12_CreateCommandAllocator12(wire, allocator, 0u));
     CHECK(av_d3d12_CreateCommandList12(wire, list, allocator, 0u, 0u));

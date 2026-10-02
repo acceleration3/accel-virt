@@ -36,9 +36,16 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
     runtime_ = &runtime;
     device_ = static_cast<ID3D12Device *>(made);
     frames_.bind(device_);
-    /* The vendor and device ids come from the GPU's Direct3D 11 answer; a
-     * Direct3D 12 device has no adapter description natively. */
-    measure(0u, 0u, 0u);
+    /* What the GPU is - its vendor, device and memory - is its DXGI adapter's
+     * answer, as Direct3D 11's is: a Direct3D 12 device has no adapter
+     * description of its own. No DXGI is no answer, and zeroes. */
+    DXGI_ADAPTER_DESC1   description = {};
+    IDXGIAdapter1 *const adapter = runtime.adapter_for(uuid);
+    if (adapter != nullptr) {
+        adapter->GetDesc1(&description);
+        adapter->Release();
+    }
+    measure(description.VendorId, description.DeviceId, description.DedicatedVideoMemory);
     return true;
 }
 
