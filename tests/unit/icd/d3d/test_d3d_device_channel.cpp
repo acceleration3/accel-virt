@@ -542,3 +542,24 @@ TEST(d3d_device_channel, a_flush_the_kernel_refuses_fails_the_command_list)
     CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
     CHECK(fixture.stream().failed());
     CHECK(!fixture.lock().held()); } }
+
+/* The clear before a list asks a command's room like any command: behind as
+ * many draws as fit, it flushes them, and a flush the kernel refuses fails
+ * the list before a byte of it is recorded. */
+TEST(d3d_device_channel, a_refused_flush_for_the_clear_before_a_list_fails_it)
+{ std::uint8_t list[256] = {};
+  const std::size_t length = recorded_draws(list, sizeof list, 1u);
+  std::uint32_t fitting = 0u;
+  { Fixture probe;
+    for (std::size_t before = 0u; probe.a().recorded_bytes() >= before; fitting++) {
+        before = probe.a().recorded_bytes();
+        CHECK(av_d3d_Draw(probe.a(), 3u, 0u));
+    }
+    fitting--; }
+  CHECK(fitting > 1u);
+  Fixture fixture;
+  for (std::uint32_t draw = 0u; draw < fitting; draw++) CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
+  CHECK(fixture.stream().failed());
+  CHECK(!fixture.lock().held()); }
