@@ -25,13 +25,13 @@ void check_request(const std::uint8_t *data, std::size_t size)
     av::WireReader           reader(data, size);
     av::QueuedPresentRequest request;
     if (request.decode(reader) != av::Status::ok) {
-        if (request.ticket() != 0u || request.key() != 0u || request.copy().regions() != 0u) __builtin_trap();
+        if (request.ticket() != 0u || request.image().names() || request.copy().regions() != 0u) __builtin_trap();
         return;
     }
     const av::PresentCopyRequest &copy = request.copy();
     const bool image = request.source() == av::QueuedPresentRequest::Source::image;
     if (reader.offset() != av::QueuedPresentRequest::encoded_size || request.ticket() == 0u) __builtin_trap();
-    if (image != (request.key() != 0u)) __builtin_trap();
+    if (image != request.image().names()) __builtin_trap();
     if (image && (copy.operation() != av::PresentOperation::blt || copy.source_entries() != 0u)) __builtin_trap();
     if (copy.regions() == 0u || copy.regions() > av::QueuedPresentRequest::max_regions) __builtin_trap();
     if (request.size() <= request.regions_offset() || request.regions_offset() < request.destination_entries_offset())

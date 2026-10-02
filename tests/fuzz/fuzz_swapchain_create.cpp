@@ -5,13 +5,11 @@
  * size the fuzzer chooses too. A swapchain that says it was made must hold its
  * invariants and have exactly the images it promised; one that refuses must
  * leave no host object and no guest memory behind. */
-#include "harness/guest/mock_kmt.hpp"
-#include "harness/icd/recording_log.hpp"
+#include "harness/icd/open_connection.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
+#include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
-#include "guest/suite/adapter_scenario.hpp"
-#include "guest/kmt/adapter_search.hpp"
 #include "icd/vulkan/surface_properties.hpp"
 #include "icd/vulkan/swapchain.hpp"
 
@@ -44,20 +42,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     const std::uint32_t height = read_u32(data + 40u) % (max_side + 1u);
 
     av::MockPlatform          memory;
-    av::MockKmt               kmt;
-    av::RecordingLog          log;
+    av::OpenConnection        open;
     av::ScriptedVulkanDevice  host;
     av::ScriptedWindowSurface windows;
+    av::ScriptedWindowChains  chains;
     void *const               window = reinterpret_cast<void *>(0x10u);
     windows.add_dc(reinterpret_cast<void *>(0x20u), window, width, height);
-    kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
-                                    av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
-                    av::AdapterScenario::wddm_3_2);
-    std::uint32_t adapters[2] = {};
-    std::uint32_t found = 0u;
-    if (kmt.enumerate_adapters(adapters, 2u, found) != av::Status::ok || found == 0u) return 0;
-    std::uint32_t kmt_device = 0u;
-    if (kmt.create_device(adapters[0], kmt_device) != av::Status::ok) return 0;
 
     VkSwapchainCreateInfoKHR info = {};
     info.sType = static_cast<VkStructureType>(read_u32(data));
@@ -79,7 +69,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (refused != nullptr) host.refuse(refused, 1u + (data[41u] % 2u), VK_ERROR_OUT_OF_DEVICE_MEMORY);
     if ((data[42u] & 1u) != 0u) memory.fail_allocation_at(1u);
 
-    av::icd::Swapchain chain(memory, windows, host, host.device(), host.physical(), kmt, log, adapters[0], kmt_device);
+    av::icd::Swapchain chain(memory, windows, chains, host, host.device(), host.physical(), open.kmt(), open.log(),
+                             open.connection());
     av::icd::SurfaceProperties properties(windows, window);
     const VkResult made = chain.initialize(info, window, properties);
     if (!chain.invariants_hold()) __builtin_trap();
