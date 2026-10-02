@@ -56,6 +56,10 @@ public:
     /* The identity the miniport minted into the allocation's data; 0 until it
      * has, and for a surface it minted none for. */
     uint64_t        key() const;
+    /* Whether it is a primary, and the VidPn source a primary is scanned out
+     * at; 0 for any other. */
+    bool            primary() const;
+    uint32_t        source() const;
 
 private:
     static constexpr uint64_t mark = 0x53564B52u;   /* "RKVS" */

@@ -197,12 +197,7 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     }
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
-    if (resource.allocation != 0u && kernel_ != nullptr) {
-        D3DDDICB_DEALLOCATE deallocate = {};
-        deallocate.NumAllocations = 1u;
-        deallocate.HandleList = &resource.allocation;
-        static_cast<void>(kernel_->pfnDeallocateCb(runtime_, &deallocate));
-    }
+    kernel_.deallocate(resource.allocation, nullptr);
 }
 
 /* Another process's resource opens through the host's object, which nothing

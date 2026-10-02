@@ -22,16 +22,9 @@ namespace av::d3d9 {
 HRESULT D3d9Device::make_context()
 {
     AV_SCOPE("D3d9Device::make_context");
-    D3DDDICB_CREATECONTEXTVIRTUAL create = {};
-    create.NodeOrdinal = 0u;
-    create.EngineAffinity = 1u;
-    const HRESULT made = kernel_->pfnCreateContextVirtualCb(runtime_, &create);
-    if (FAILED(made)) {
-        log_.write("avumd: the kernel refused the Direct3D 9 device's context");
-        return made;
-    }
-    context_ = create.hContext;
-    return S_OK;
+    const HRESULT made = kernel_.make_context(context_);
+    if (FAILED(made)) lines_.write("the kernel refused the Direct3D 9 device's context");
+    return made;
 }
 
 HRESULT D3d9Device::follow_host()
@@ -61,22 +54,17 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
     if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
     d3d::KernelSurface surface(top.width, top.height, presented.dxgi());
     if (surface.make() != Status::ok) return E_INVALIDARG;
-    D3DDDI_ALLOCATIONINFO2 info = {};
-    info.pPrivateDriverData = surface.allocation_data();
-    info.PrivateDriverDataSize = d3d::KernelSurface::allocation_bytes;
     /* An allocation of its own, made long after the runtime made the
      * resource: it belongs to no kernel resource. */
-    D3DDDICB_ALLOCATE allocate = {};
-    allocate.NumAllocations = 1u;
-    allocate.pAllocationInfo2 = &info;
-    const HRESULT made = kernel_->pfnAllocateCb(runtime_, &allocate);
+    D3DKMT_HANDLE allocation = 0u;
+    const HRESULT made = kernel_.allocate(surface, nullptr, allocation);
     if (FAILED(made)) return made;
-    resource.allocation = info.hAllocation;
+    resource.allocation = allocation;
     resource.allocation_pitch = surface.pitch();
     resource.shared_key = surface.key();
     /* A blt names the allocation in a DMA buffer, which dxgkrnl refuses
      * unless it was asked to be resident (PagingQueue). */
-    const HRESULT resident = paging_.object().make_resident(info.hAllocation);
+    const HRESULT resident = paging_.object().make_resident(allocation);
     if (FAILED(resident)) log_.write("avumd: the kernel would not keep a presented Direct3D 9 buffer resident");
     return S_OK;
 }
@@ -88,20 +76,14 @@ HRESULT D3d9Device::publish(D3d9Resource &resource, uint32_t index)
     uint32_t      pitch = 0u, rows = 0u;
     const HRESULT read = read_surface(resource, index, pitch, rows);
     if (FAILED(read)) return read;
-    D3DDDICB_LOCK lock = {};
-    lock.hAllocation = resource.allocation;
-    lock.Flags.WriteOnly = 1u;
-    const HRESULT locked = kernel_->pfnLockCb(runtime_, &lock);
-    if (FAILED(locked) || lock.pData == nullptr) return FAILED(locked) ? locked : E_FAIL;
+    auto *const pixels = static_cast<uint8_t *>(kernel_.lock_to_write(resource.allocation));
+    if (pixels == nullptr) return E_FAIL;
     const uint32_t height = resource.subresources[index].height;
     const uint32_t line = pitch < resource.allocation_pitch ? pitch : resource.allocation_pitch;
     for (uint32_t row = 0u; row < rows && row < height; row++)
-        memcpy(static_cast<uint8_t *>(lock.pData) + size_t{row} * resource.allocation_pitch,
+        memcpy(pixels + size_t{row} * resource.allocation_pitch,
                readback_ + size_t{row} * pitch, line);
-    D3DDDICB_UNLOCK unlock = {};
-    unlock.NumAllocations = 1u;
-    unlock.phAllocations = &resource.allocation;
-    static_cast<void>(kernel_->pfnUnlockCb(runtime_, &unlock));
+    kernel_.unlock(resource.allocation);
     return S_OK;
 }
 
@@ -148,7 +130,7 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     present.hSrcAllocation = source->allocation;
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
     present.hContext = context_;
-    const HRESULT presented = kernel_->pfnPresentCb(runtime_, &present);
+    const HRESULT presented = kernel_.present(present);
     trace("presented", static_cast<uint32_t>(presented), static_cast<uint32_t>(microseconds() - began), 0u, 0u);
     return presented;
 }

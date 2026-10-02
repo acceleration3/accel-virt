@@ -27,6 +27,7 @@
 #include "um/icd/reentrant_call_lock.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
+#include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
 #include "um/d3d/batch_follower.hpp"
@@ -213,7 +214,7 @@ private:
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;
-    const D3DDDI_DEVICECALLBACKS               *kernel_;
+    d3d::KernelDevice                           kernel_;
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;

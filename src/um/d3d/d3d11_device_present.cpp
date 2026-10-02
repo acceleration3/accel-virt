@@ -37,20 +37,8 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
                                                                             mode->RefreshRate.Denominator))
                                          : d3d::KernelSurface(resource.width, resource.height, resource.format);
     if (surface.make() != Status::ok) return E_INVALIDARG;
-    D3DDDI_ALLOCATIONINFO2 info = {};
-    info.pPrivateDriverData = surface.allocation_data();
-    info.PrivateDriverDataSize = d3d::KernelSurface::allocation_bytes;
-    if (primary) {
-        info.VidPnSourceId = create.pPrimaryDesc->VidPnSourceId;
-        info.Flags.Primary = 1u;
-    }
-    D3DDDICB_ALLOCATE allocate = {};
-    allocate.pPrivateDriverData = surface.resource_data();
-    allocate.PrivateDriverDataSize = d3d::KernelSurface::resource_bytes;
-    allocate.hResource = runtime.handle;
-    allocate.NumAllocations = 1u;
-    allocate.pAllocationInfo2 = &info;
-    const HRESULT made = kernel_->pfnAllocateCb(runtime_.handle, &allocate);
+    D3DKMT_HANDLE allocation = 0u;
+    const HRESULT made = kernel_.allocate(surface, runtime.handle, allocation);
     if (FAILED(made)) {
         log_.write("avumd: the kernel refused a presented resource's allocation");
         return made;
@@ -58,13 +46,13 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     resource.shared_key = surface.key();
     if (resource.shared_key == 0u)
         log_.write("avumd: the miniport minted no identity for a presented resource; nothing can open it");
-    resource.allocation = info.hAllocation;
+    resource.allocation = allocation;
     resource.allocation_pitch = surface.pitch();
     /* A blt present names this allocation in a DMA buffer, which dxgkrnl
      * refuses - and puts the device in error for - unless it was asked to be
      * resident (PagingQueue). A flip never names it, so a refusal is logged
      * and the resource still made. */
-    const HRESULT resident = paging_.object().make_resident(info.hAllocation);
+    const HRESULT resident = paging_.object().make_resident(allocation);
     if (FAILED(resident)) {
         LogLine(lines_)
             .text("the kernel would not keep a presented resource resident ")
@@ -79,35 +67,22 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
 HRESULT D3d11Device::make_context()
 {
     AV_SCOPE("D3d11Device::make_context");
-    D3DDDICB_CREATECONTEXTVIRTUAL create = {};
-    create.NodeOrdinal = 0u;
-    create.EngineAffinity = 1u;
-    const HRESULT made = kernel_->pfnCreateContextVirtualCb(runtime_.handle, &create);
-    if (FAILED(made)) {
-        log_.write("avumd: the kernel refused the device's context");
-        return made;
-    }
-    context_ = create.hContext;
-    return S_OK;
+    const HRESULT made = kernel_.make_context(context_);
+    if (FAILED(made)) lines_.write("the kernel refused the device's context");
+    return made;
 }
 
 HRESULT D3d11Device::publish(ResourceRecord &resource, uint32_t subresource)
 {
     AV_SCOPE("D3d11Device::publish");
     if (resource.allocation == 0u) return E_INVALIDARG;
-    D3DDDICB_LOCK lock = {};
-    lock.hAllocation = resource.allocation;
-    lock.Flags.WriteOnly = 1u;
-    const HRESULT locked = kernel_->pfnLockCb(runtime_.handle, &lock);
-    if (FAILED(locked) || lock.pData == nullptr) return FAILED(locked) ? locked : E_FAIL;
+    auto *const pixels = static_cast<uint8_t *>(kernel_.lock_to_write(resource.allocation));
+    if (pixels == nullptr) return E_FAIL;
     const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
     /* The allocation's pitch is the packed row the host reads back, so the
      * answer lands in it directly. */
-    const bool read = read_back(resource, subresource, static_cast<uint8_t *>(lock.pData), bytes);
-    D3DDDICB_UNLOCK unlock = {};
-    unlock.NumAllocations = 1u;
-    unlock.phAllocations = &resource.allocation;
-    static_cast<void>(kernel_->pfnUnlockCb(runtime_.handle, &unlock));
+    const bool read = read_back(resource, subresource, pixels, bytes);
+    kernel_.unlock(resource.allocation);
     return read ? S_OK : E_FAIL;
 }
 
@@ -346,7 +321,7 @@ HRESULT D3d11Device::set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
     if (FAILED(published)) return published;
     D3DDDICB_SETDISPLAYMODE mode = {};
     mode.hPrimaryAllocation = resource.allocation;
-    const HRESULT set = kernel_->pfnSetDisplayModeCb(runtime_.handle, &mode);
+    const HRESULT set = kernel_.set_display_mode(mode);
     log_present("display mode set", static_cast<uint32_t>(set), resource);
     return set;
 }
@@ -459,15 +434,12 @@ void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::refresh_guest_surface");
     if (resource.allocation == 0u || resource.shadow == nullptr) return;
-    D3DDDICB_LOCK lock = {};
-    lock.hAllocation = resource.allocation;
-    lock.Flags.ReadOnly = 1u;
-    if (FAILED(kernel_->pfnLockCb(runtime_.handle, &lock)) || lock.pData == nullptr) {
+    const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
+    if (pixels == nullptr) {
         if (!guest_lock_refused_) log_.write("avumd: a GDI surface the kernel would not lock");
         guest_lock_refused_ = true;
         return;
     }
-    const uint8_t *const pixels = static_cast<const uint8_t *>(lock.pData);
     const size_t pitch = resource.allocation_pitch;
     uint32_t first = resource.height, last = 0u;
     for (uint32_t row = 0u; row < resource.height; row++) {
@@ -482,10 +454,7 @@ void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
                                     static_cast<LONG>(last + 1u), 1};
         upload(resource, 0u, &band, resource.shadow + offset, bytes, resource.allocation_pitch, 0u, 0u);
     }
-    D3DDDICB_UNLOCK unlock = {};
-    unlock.NumAllocations = 1u;
-    unlock.phAllocations = &resource.allocation;
-    static_cast<void>(kernel_->pfnUnlockCb(runtime_.handle, &unlock));
+    kernel_.unlock(resource.allocation);
 }
 
 }  // namespace av::d3d11

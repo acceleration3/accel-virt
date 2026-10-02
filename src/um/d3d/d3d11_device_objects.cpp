@@ -265,13 +265,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     forget_guest_surface(resource);
     destroy_object(resource.id);
     if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
-    if (resource.allocation != 0u && resource.shared_key == 0u) {
-        D3DDDICB_DEALLOCATE deallocate = {};
-        deallocate.hResource = static_cast<HANDLE>(resource.runtime_resource);
-        deallocate.NumAllocations = 1u;
-        deallocate.HandleList = &resource.allocation;
-        kernel_->pfnDeallocateCb(runtime_.handle, &deallocate);
-    }
+    if (resource.shared_key == 0u) kernel_.deallocate(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
     resource = ResourceRecord{};
 }
 

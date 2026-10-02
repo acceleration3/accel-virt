@@ -34,7 +34,7 @@ constexpr uint32_t copy_discard = 0x2u;
 }  // namespace
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps)
-    : session_(session), memory_(memory), shadows_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
+    : session_(session), memory_(memory), shadows_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), present_flags_(~0u), follow_refused_(false), frame_(1u)
@@ -59,11 +59,7 @@ D3d11Device::~D3d11Device()
     }
     if (paging_.constructed()) paging_.destroy();
     follower_.destroy();
-    if (context_ != nullptr && kernel_ != nullptr) {
-        D3DDDICB_DESTROYCONTEXT destroy = {};
-        destroy.hContext = context_;
-        kernel_->pfnDestroyContextCb(runtime_.handle, &destroy);
-    }
+    kernel_.destroy_context(context_);
 }
 
 HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE &create)
@@ -71,11 +67,11 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     AV_SCOPE("D3d11Device::initialize");
     runtime_ = create.hRTDevice;
     core_layer_ = create.hRTCoreLayer;
-    kernel_ = create.pKTCallbacks;
+    kernel_.bind(create.pKTCallbacks, runtime_.handle);
     core_ = create.p11UMCallbacks;
     dxgi_ = create.DXGIBaseDDI.pDXGIBaseCallbacks;
-    static_cast<void>(paging_.construct(*kernel_, runtime_.handle));
-    static_cast<void>(follower_.construct(*kernel_, runtime_.handle, session_.transport()));
+    static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime()));
+    static_cast<void>(follower_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport()));
     const HRESULT context = make_context();
     if (FAILED(context)) return context;
     const uint32_t level = D3D11DDI_EXTRACT_3DPIPELINELEVEL_FROM_FLAGS(create.Flags);
@@ -161,7 +157,7 @@ HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_
     runtime_ = parent.runtime_;
     core_layer_ = create.hRTCoreLayer;
     core_ = create.p11UMCallbacks;
-    kernel_ = parent.kernel_;
+    kernel_.bind(&parent.kernel_.callbacks(), runtime_.handle);
     feature_level_ = parent.feature_level_;
     static_cast<void>(recorded_.construct(memory_, recording_bytes, most_recording_bytes));
     if (recorded_.object().initialize() != Status::ok) return E_OUTOFMEMORY;

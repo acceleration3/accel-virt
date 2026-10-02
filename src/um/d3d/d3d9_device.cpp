@@ -59,7 +59,7 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &l
                        d3d::UmdAdapter &adapter)
     : session_(session), memory_(memory), log_(log), lines_(log, "avumd: "), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
-      callbacks_{}, kernel_(nullptr), runtime_(nullptr), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
+      callbacks_{}, kernel_(), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), traced_(trace_none),
@@ -91,11 +91,7 @@ D3d9Device::~D3d9Device()
     if (readback_ != nullptr) memory_.release(readback_);
     if (follower_.constructed()) follower_.destroy();
     if (paging_.constructed()) paging_.destroy();
-    if (context_ != nullptr && kernel_ != nullptr) {
-        D3DDDICB_DESTROYCONTEXT destroy = {};
-        destroy.hContext = context_;
-        static_cast<void>(kernel_->pfnDestroyContextCb(runtime_, &destroy));
-    }
+    kernel_.destroy_context(context_);
 }
 
 HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVICE &create)
@@ -107,16 +103,15 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     QueryPerformanceCounter(&now);
     trace("device", static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)), create.Version, create.Flags.Value,
           static_cast<uint32_t>(now.QuadPart / 10000));
-    runtime_ = create.hDevice;
     if (create.pCallbacks == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
     callbacks_ = *create.pCallbacks;
-    kernel_ = &callbacks_;
-    static_cast<void>(paging_.construct(*kernel_, runtime_));
+    kernel_.bind(&callbacks_, create.hDevice);
+    static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime()));
     const HRESULT context = make_context();
     if (FAILED(context)) return context;
     const HRESULT joined = session_.join(kmt_adapter);
     if (FAILED(joined)) return joined;
-    static_cast<void>(follower_.construct(*kernel_, runtime_, session_.transport()));
+    static_cast<void>(follower_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport()));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u;
     if (!channel_.object().open9(hresult) || hresult != 0u) {

@@ -26,6 +26,7 @@
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
+#include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d9_records.hpp"
 #include "um/d3d/paging_queue.hpp"
 #include "um/icd/reentrant_call_lock.hpp"
@@ -211,8 +212,7 @@ private:
      * (reverse-engineering.md §3.2): the device keeps a copy, and kernel_
      * points at it once made. */
     D3DDDI_DEVICECALLBACKS               callbacks_;
-    const D3DDDI_DEVICECALLBACKS        *kernel_;
-    HANDLE                               runtime_;
+    d3d::KernelDevice                    kernel_;
     HANDLE                               context_;
     D3DDDIARG_VIEWPORTINFO               viewport_;
     D3DDDIARG_ZRANGE                     z_range_;

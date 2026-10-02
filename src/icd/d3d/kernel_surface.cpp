@@ -112,6 +112,18 @@ uint64_t KernelSurface::key() const
     return minted.assigned() ? minted.object_id() : 0u;
 }
 
+bool KernelSurface::primary() const
+{
+    AV_SCOPE("KernelSurface::primary");
+    return primary_;
+}
+
+uint32_t KernelSurface::source() const
+{
+    AV_SCOPE("KernelSurface::source");
+    return primary_ ? scanout_.source() : 0u;
+}
+
 uint32_t KernelSurface::kernel_format() const
 {
     AV_SCOPE("KernelSurface::kernel_format");
