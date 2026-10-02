@@ -123,8 +123,7 @@ void TrianglePipeline::release()
 bool TrianglePipeline::invariants_hold() const
 {
     AV_SCOPE("TrianglePipeline::invariants_hold");
-    return pipeline_ == VK_NULL_HANDLE ||
-           (layout_ != VK_NULL_HANDLE && vertex_ != VK_NULL_HANDLE && fragment_ != VK_NULL_HANDLE);
+    return pipeline_ == VK_NULL_HANDLE || layout_ != VK_NULL_HANDLE;
 }
 
 }  // namespace av

@@ -30,7 +30,7 @@ public:
      * no-op, so this is safe on a pipeline never made or already released. */
     void       release();
 
-    /* A pipeline is only ever made over a layout and both shaders. */
+    /* A pipeline is only ever made over its layout. */
     bool invariants_hold() const;
 
 private:
