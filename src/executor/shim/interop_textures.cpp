@@ -224,14 +224,6 @@ void InteropTextures::release()
         if (!slot.vacant()) slot.empty(vulkan_);
 }
 
-uint32_t InteropTextures::held() const
-{
-    AV_SCOPE("InteropTextures::held");
-    uint32_t count = 0u;
-    for (const Slot &slot : slots_) count += slot.vacant() ? 0u : 1u;
-    return count;
-}
-
 InteropTextures::Slot *InteropTextures::vacant_slot()
 {
     AV_SCOPE("InteropTextures::vacant_slot");

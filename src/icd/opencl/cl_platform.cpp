@@ -79,12 +79,6 @@ void ClPlatform::cap_version(uint32_t major, uint32_t minor)
     version_[at] = '\0';
 }
 
-const char *ClPlatform::version() const
-{
-    AV_SCOPE("ClPlatform::version");
-    return version_;
-}
-
 cl_int ClPlatform::answer(const char *text, size_t value_bytes, void *value, size_t *size_ret) const
 {
     AV_SCOPE("ClPlatform::answer");

@@ -39,7 +39,6 @@ public:
     ClObject        *event() const;
     uint64_t         wire() const;
     ClientTransport *transport() const;
-    cl_int           status_wanted() const;
     /* Runs the application's callback with `status`. The caller has already
      * given this registration up. */
     void             run(cl_int status) const;

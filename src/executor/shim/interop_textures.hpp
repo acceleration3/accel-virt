@@ -56,7 +56,6 @@ public:
     void             collect();
     /* Every image freed, its texture gone or not: the device is closing. */
     void             release();
-    uint32_t         held() const;
 
 private:
     /* One image and its memory, and what the texture over them holds: a COM

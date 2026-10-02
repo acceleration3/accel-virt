@@ -153,12 +153,6 @@ uint64_t ScanoutBinding::frames() const
     return frames_;
 }
 
-const ScanoutFramebuffer &ScanoutBinding::framebuffer() const
-{
-    AV_SCOPE("ScanoutBinding::framebuffer");
-    return framebuffer_;
-}
-
 void ScanoutBinding::report(StateWriter &writer) const
 {
     AV_SCOPE("ScanoutBinding::report");

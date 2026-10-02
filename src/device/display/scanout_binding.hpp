@@ -56,8 +56,7 @@ public:
     uint32_t blob() const;
     /* Frames this head has been shown, which is what a state dump reports. */
     uint64_t frames() const;
-    const ScanoutFramebuffer &framebuffer() const;
-    void                      report(StateWriter &writer) const;
+    void     report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 

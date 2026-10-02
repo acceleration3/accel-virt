@@ -36,9 +36,6 @@ public:
      * here serves anything. vkd3d-proton missing only takes Direct3D 12. */
     [[nodiscard]] bool open();
     void               close();
-    bool               has_d3d11() const;
-    bool               has_d3d12() const;
-    bool               has_d3d9() const;
 
     /* The DXGI adapter whose Vulkan device has this UUID, with a reference the
      * caller owns; null for none. */
@@ -52,9 +49,6 @@ public:
     /* A vkd3d-proton device of its own on the Vulkan device with this UUID;
      * `device` is an ID3D12Device, null on failure. */
     int32_t create_device12(const uint8_t *uuid, void *&device) const;
-    /* Whether this vkd3d-proton imports host memory as a heap: the patched
-     * one does (tools/vkd3d-proton-patches), a stock one does not. */
-    bool    imports_host_heaps() const;
     /* `size` bytes of host memory at `address` as an ID3D12Heap of `device`'s
      * that only buffers can be placed in; the HRESULT, `heap` null on failure. */
     int32_t open_host_heap(void *device, void *address, uint64_t size, void *&heap) const;

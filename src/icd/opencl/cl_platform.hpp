@@ -61,7 +61,6 @@ public:
     /* What the version says, which is the host's capped at the version this
      * ICD implements. Until a device says otherwise it is this ICD's own. */
     void        cap_version(uint32_t major, uint32_t minor);
-    const char *version() const;
 
     bool invariants_hold() const;
 

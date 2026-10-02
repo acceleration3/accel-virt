@@ -108,24 +108,6 @@ void D3dRuntime::close()
     d3d9_ = nullptr;
 }
 
-bool D3dRuntime::has_d3d11() const
-{
-    AV_SCOPE("D3dRuntime::has_d3d11");
-    return create_device11_ != nullptr;
-}
-
-bool D3dRuntime::has_d3d12() const
-{
-    AV_SCOPE("D3dRuntime::has_d3d12");
-    return get_interface12_ != nullptr;
-}
-
-bool D3dRuntime::has_d3d9() const
-{
-    AV_SCOPE("D3dRuntime::has_d3d9");
-    return create9_ != nullptr;
-}
-
 IDirect3D9 *D3dRuntime::create_d3d9() const
 {
     AV_SCOPE("D3dRuntime::create_d3d9");
@@ -227,12 +209,6 @@ int32_t D3dRuntime::create_device12(const uint8_t *uuid, void *&device) const
     factory->Release();
     if (FAILED(made)) device = nullptr;
     return made;
-}
-
-bool D3dRuntime::imports_host_heaps() const
-{
-    AV_SCOPE("D3dRuntime::imports_host_heaps");
-    return open_host_heap_ != nullptr;
 }
 
 int32_t D3dRuntime::open_host_heap(void *device, void *address, uint64_t size, void *&heap) const

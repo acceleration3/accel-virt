@@ -65,12 +65,6 @@ size_t MappedRegion::bytes() const
     return bytes_;
 }
 
-cl_map_flags MappedRegion::flags() const
-{
-    AV_SCOPE("MappedRegion::flags");
-    return flags_;
-}
-
 uint8_t *MappedRegion::at() const
 {
     AV_SCOPE("MappedRegion::at");

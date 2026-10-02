@@ -41,7 +41,6 @@ public:
     uint64_t     host() const;
     size_t       offset() const;
     size_t       bytes() const;
-    cl_map_flags flags() const;
     uint8_t     *at() const;
     bool         staged() const;
 

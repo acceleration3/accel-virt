@@ -42,9 +42,8 @@ public:
      * it. Imports nothing afterwards. */
     void give_back();
     /* Whether this host lists GL_EXT_memory_object_fd and resolved everything
-     * a memory import needs, and the same for GL_EXT_semaphore_fd. */
+     * a memory import needs. */
     bool imports_memory() const;
-    bool imports_fences() const;
 
     /* `size` bytes of `fd` as a memory object of the current context, named in
      * `name`. GL takes the descriptor on success, so what is handed to it is a

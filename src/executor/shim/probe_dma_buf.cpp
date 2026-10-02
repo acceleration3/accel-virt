@@ -71,11 +71,4 @@ int ProbeDmaBuf::handle() const
     return shared_;
 }
 
-/* A descriptor exists only over memory that does. */
-bool ProbeDmaBuf::invariants_hold() const
-{
-    AV_SCOPE("ProbeDmaBuf::invariants_hold");
-    return shared_ < 0 || memory_ >= 0;
-}
-
 }  // namespace av

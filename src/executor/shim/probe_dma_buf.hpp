@@ -32,8 +32,6 @@ public:
     /* The descriptor, or -1 before one is made. */
     int                handle() const;
 
-    bool invariants_hold() const;
-
 private:
     int memory_;
     int shared_;

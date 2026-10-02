@@ -63,12 +63,6 @@ ClientTransport *ClWatchedEvent::transport() const
     return transport_;
 }
 
-cl_int ClWatchedEvent::status_wanted() const
-{
-    AV_SCOPE("ClWatchedEvent::status_wanted");
-    return status_wanted_;
-}
-
 bool ClWatchedEvent::reached_by(cl_int status) const
 {
     AV_SCOPE("ClWatchedEvent::reached_by");

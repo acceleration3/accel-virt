@@ -95,12 +95,6 @@ bool GlHostImport::imports_memory() const
     return memory_;
 }
 
-bool GlHostImport::imports_fences() const
-{
-    AV_SCOPE("GlHostImport::imports_fences");
-    return fences_;
-}
-
 bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
 {
     AV_SCOPE("GlHostImport::import_memory");
