@@ -648,17 +648,16 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * and a read across enqueues under one acquire, and what OpenCL wrote read
      * back through the exporting Vulkan device's own mapping. */
     const bool taken = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS && ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;  // AV_UNTESTABLE("no host beside a test here refuses an acquire")
-    if (!taken || !shared_.remember(reinterpret_cast<uint64_t>(shared), buffer, memory)) { AV_UNTESTABLE("the acquire above, and a table no guest fills without sixty-four live imports");
+    /* Named in the guest's commands from now on, as any cl_mem the host made
+     * is: one the registry did not hold would resolve to nothing in every
+     * enqueue that names it. */
+    if (!taken || !handles_.remember(clproto::HandleKind::mem, shared) || !shared_.remember(reinterpret_cast<uint64_t>(shared), buffer, memory)) { AV_UNTESTABLE("the acquire above, and tables no guest fills without thousands of live objects");
+        handles_.release(clproto::HandleKind::mem, shared);
         static_cast<void>(::clReleaseMemObject(shared));
         buffers_.destroy(buffer);
         import_.delete_memory(memory);
         return false;
     }
-    /* Named in the guest's commands from now on, as any cl_mem the host made
-     * is: one the registry did not hold would resolve to nothing in every
-     * enqueue that names it. A registry with no room loses the device, as
-     * made() does. */
-    if (!handles_.remember(clproto::HandleKind::mem, shared)) lost_ = true;
     wire_handle = reinterpret_cast<uint64_t>(shared);
     return true;
 }

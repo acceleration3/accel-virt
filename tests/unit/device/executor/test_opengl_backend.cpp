@@ -95,6 +95,10 @@ GLenum pending_error()
     return gl_invalid_enum;
 }
 
+/* glDeleteSync as the stand-in driver answers it: counted. */
+std::uint32_t syncs_deleted = 0u;
+void delete_sync(GLsync) { syncs_deleted++; }
+
 /* A context the driver lost answers GL_CONTEXT_LOST to every look. */
 GLenum lost_context_error()
 {
@@ -390,3 +394,24 @@ TEST(opengl_backend, a_lost_context_is_a_lost_device_and_an_error_is_not)
     CHECK(backend.lost());
     /* Every flag asked once, never forever. */
     CHECK_EQ(errors_asked, 8u); } }
+
+/* A closing context deletes every GLsync it still holds, each once, while it
+ * still has a context to delete them with. */
+TEST(opengl_backend, shutting_down_deletes_every_sync_it_holds)
+{ OpenGlBackend backend;
+  av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+  gl.glDeleteSync = delete_sync;
+  syncs_deleted = 0u;
+  int first_sync = 0, second_sync = 0;
+  CHECK(backend.bind_fence(3u, &first_sync));
+  CHECK(backend.bind_fence(4u, &second_sync));
+  backend.shut_down();
+  CHECK_EQ(syncs_deleted, 2u);
+  CHECK(backend.fence_for(3u) == nullptr);
+  CHECK(backend.fence_for(4u) == nullptr);
+  /* A table resolved without glDeleteSync still lets go of what it held. */
+  OpenGlBackend unresolved;
+  CHECK(unresolved.bind_fence(5u, &first_sync));
+  unresolved.shut_down();
+  CHECK(unresolved.fence_for(5u) == nullptr);
+  CHECK_EQ(syncs_deleted, 2u); }

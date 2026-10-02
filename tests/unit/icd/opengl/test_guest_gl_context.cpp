@@ -93,6 +93,8 @@ TEST(guest_gl_context, nothing_is_on_the_host_until_made)
   CHECK(context->string(GuestGlContext::gl_renderer) == nullptr);
   CHECK_EQ(context->pixel_format(), 7);
   CHECK_EQ(context->owner(), 0u);
+  /* No link yet, so no kernel device to open a shared handle through. */
+  CHECK_EQ(context->guest_device(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.connection().users(), 0u); }
 

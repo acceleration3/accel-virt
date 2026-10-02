@@ -544,6 +544,10 @@ TEST(swapchain, a_frame_the_chain_refuses_is_said_and_a_failed_copy_is_the_devic
   CHECK_EQ(rig.log().holding("a presented frame was refused by its window's chain"), 1u);
   CHECK_EQ(chain.presented(), 0u);
   CHECK_EQ(rig.windows().blits(), 0u);
+  /* A chain that refuses one frame refuses the next: not said again. */
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(rig.log().holding("a presented frame was refused by its window's chain"), 1u);
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
   rig.host().refuse("vkQueueSubmit", 1u, VK_ERROR_DEVICE_LOST);
   CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_DEVICE_LOST);
