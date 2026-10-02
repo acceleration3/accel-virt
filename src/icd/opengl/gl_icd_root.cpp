@@ -1,7 +1,7 @@
-#include "icd/common/report_gate.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 
 #include "core/support/log_line.hpp"
+#include "icd/common/report_gate.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/window_visibility.hpp"

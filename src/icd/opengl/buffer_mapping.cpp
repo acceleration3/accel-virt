@@ -1,9 +1,9 @@
-#include "icd/common/pieces.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
 
 #include "core/platform/block_source.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "icd/common/pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"

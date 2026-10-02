@@ -1,10 +1,10 @@
-#include "icd/common/report_gate.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "icd/opencl/cl_info_request.hpp"
 
 #include "proto/cl_blob_backing.hpp"
 
+#include "icd/common/report_gate.hpp"
 #include "icd/common/sliced_wait.hpp"
 
 #include "core/support/scope_exit.hpp"

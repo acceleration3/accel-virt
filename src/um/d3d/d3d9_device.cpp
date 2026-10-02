@@ -182,8 +182,13 @@ uint64_t D3d9Device::microseconds() const
     LARGE_INTEGER now = {}, frequency = {};
     QueryPerformanceCounter(&now);
     QueryPerformanceFrequency(&frequency);
-    return frequency.QuadPart != 0 ? static_cast<uint64_t>(now.QuadPart) * 1000000u / static_cast<uint64_t>(frequency.QuadPart)
-                                   : 0u;
+    if (frequency.QuadPart == 0) return 0u;
+    /* Whole seconds and the ticks left over, each scaled on its own: the
+     * product of the whole count and a million passes 64 bits after three
+     * weeks of uptime on a 10 MHz counter. */
+    const auto ticks = static_cast<uint64_t>(now.QuadPart);
+    const auto per_second = static_cast<uint64_t>(frequency.QuadPart);
+    return ticks / per_second * 1000000u + ticks % per_second * 1000000u / per_second;
 }
 
 void D3d9Device::trace_wait(const char *call, uint64_t started, uint32_t detail)

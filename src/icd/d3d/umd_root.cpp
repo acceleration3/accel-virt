@@ -1,6 +1,6 @@
-#include "icd/common/report_gate.hpp"
 #include "icd/d3d/umd_root.hpp"
 
+#include "icd/common/report_gate.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "icd/d3d/ddi/d3dddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_funcs_record.hpp"

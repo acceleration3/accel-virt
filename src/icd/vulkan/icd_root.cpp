@@ -1,7 +1,7 @@
-#include "icd/common/report_gate.hpp"
 #include "icd/vulkan/icd_root.hpp"
 
 #include "guest/transport/shared_object_call.hpp"
+#include "icd/common/report_gate.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -24,6 +24,7 @@
 #include "icd/vulkan/memory_allocate_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
+#include "icd/common/counter_wait.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -1507,11 +1508,9 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         return VK_ERROR_DEVICE_LOST;
     }
     if (lost(*made->connection(), "vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
-    uint64_t       frequency = 0u;
-    const uint64_t start = kmt_.performance_counter(frequency);
-    SlicedWait     wait(timeout, start, frequency);
-    uint64_t       slice = 0u;
-    while (wait.next(kmt_.performance_counter(frequency), slice)) {
+    CounterWait wait(kmt_, timeout);
+    uint64_t    slice = 0u;
+    while (wait.next(slice)) {
         const VkResult result = vkproto::av_vkWaitForFences(made->connection()->transport(), device, count, fences,
                                                              wait_all, slice);
         if (result != VK_TIMEOUT) return result;
@@ -1528,11 +1527,9 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
         return VK_ERROR_DEVICE_LOST;
     }
     if (lost(*made->connection(), "vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
-    uint64_t       frequency = 0u;
-    const uint64_t start = kmt_.performance_counter(frequency);
-    SlicedWait     wait(timeout, start, frequency);
-    uint64_t       slice = 0u;
-    while (wait.next(kmt_.performance_counter(frequency), slice)) {
+    CounterWait wait(kmt_, timeout);
+    uint64_t    slice = 0u;
+    while (wait.next(slice)) {
         const VkResult result = vkproto::av_vkWaitSemaphores(made->connection()->transport(), device, info, slice);
         if (result != VK_TIMEOUT) return result;
     }

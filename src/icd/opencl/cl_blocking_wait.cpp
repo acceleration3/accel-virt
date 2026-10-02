@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/sliced_wait.hpp"
+#include "icd/common/counter_wait.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
@@ -46,12 +46,10 @@ cl_int ClBlockingWait::until_complete(ClientTransport &wire, const uint64_t *eve
 {
     AV_SCOPE("ClBlockingWait::until_complete");
     if (events == nullptr || count == 0u) return CL_INVALID_VALUE;
-    uint64_t        frequency = 0u;
-    const uint64_t  start = kmt_.performance_counter(frequency);
-    icd::SlicedWait slices(timeout, start, frequency);
-    uint64_t        slice = 0u;
-    cl_int          answer = CL_SUCCESS;
-    while (slices.next(kmt_.performance_counter(frequency), slice)) {
+    icd::CounterWait slices(kmt_, timeout);
+    uint64_t         slice = 0u;
+    cl_int           answer = CL_SUCCESS;
+    while (slices.next(slice)) {
         if (settled(wire, events, count, answer)) return answer;
     }
     /* The deadline passed with work still outstanding. The two APIs this
