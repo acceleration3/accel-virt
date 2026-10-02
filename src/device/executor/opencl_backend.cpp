@@ -412,20 +412,17 @@ cl_int OpenClBackend::answers_type(cl_device_type device_type) const
 void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");
-    handles_.release_all(*this);
-    /* Before the ranges go: a release may free an allocation, and nothing
-     * afterwards may resolve one. */
-    svm_.forget_all();
-    mapped_.forget_all();
-    arena_.give_back();
     /* The shared objects before the handles, because each holds a cl_mem the
-     * registry would otherwise release underneath it, and its GL objects go
-     * with it while the vehicle context is still there to delete them. */
+     * registry would otherwise release underneath it - and the registry lets
+     * go of each first, so release_all does not release it again - and its
+     * GL objects go with it while the vehicle context is still there to
+     * delete them. */
     uint64_t mem = 0u;
     uint32_t buffer = 0u;
     uint32_t memory = 0u;
     while (shared_.take_any(mem, buffer, memory)) {
         cl_mem const shared = reinterpret_cast<cl_mem>(mem);
+        handles_.release(clproto::HandleKind::mem, shared);
         static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
                                                       nullptr, nullptr));
         static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
@@ -433,6 +430,12 @@ void OpenClBackend::shut_down()
         buffers_.destroy(buffer);
         import_.delete_memory(memory);
     }
+    handles_.release_all(*this);
+    /* Before the ranges go: a release may free an allocation, and nothing
+     * afterwards may resolve one. */
+    svm_.forget_all();
+    mapped_.forget_all();
+    arena_.give_back();
     if (queue_ != nullptr) {
         static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(queue_)));
         queue_ = nullptr;
@@ -651,6 +654,11 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         import_.delete_memory(memory);
         return false;
     }
+    /* Named in the guest's commands from now on, as any cl_mem the host made
+     * is: one the registry did not hold would resolve to nothing in every
+     * enqueue that names it. A registry with no room loses the device, as
+     * made() does. */
+    if (!handles_.remember(clproto::HandleKind::mem, shared)) lost_ = true;
     wire_handle = reinterpret_cast<uint64_t>(shared);
     return true;
 }
@@ -666,6 +674,7 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle)
     /* The queue is the import's own and outlives every row it made, so a row
      * to give back is a queue to give it back on. */
     cl_mem const shared = reinterpret_cast<cl_mem>(wire_handle);
+    handles_.release(clproto::HandleKind::mem, shared);
     static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
                                                   nullptr, nullptr));
     static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));

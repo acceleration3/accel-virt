@@ -258,6 +258,8 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
           continue;
       }
       CHECK(shared != 0u);
+      /* A cl_mem the guest names in its commands like any it made. */
+      CHECK(backend.handle_for(av::clproto::HandleKind::mem, shared) == reinterpret_cast<void *>(shared));
 
       /* What the guest would do with it: read it on a queue of its own. The
        * object is acquired for its whole life, so nothing brackets this. */
@@ -286,6 +288,7 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
       /* Released, and the descriptor is still the caller's: an import took a
        * duplicate, as every other import on this device does. */
       backend.release_object(AV_SHARED_MEMORY, shared);
+      CHECK(backend.handle_for(av::clproto::HandleKind::mem, shared) == nullptr);
       CHECK(::fcntl(written.handle(), F_GETFD) != -1);
       /* A handle this context no longer holds releases nothing, twice over. */
       backend.release_object(AV_SHARED_MEMORY, shared);
@@ -351,6 +354,10 @@ TEST(opencl_backend_device, an_import_with_no_guest_context_is_refused_and_costs
       CHECK(made != 0u);
       backend.release_object(AV_SHARED_MEMORY, made);
   }
+  /* One still held when the context closes is released once: the registry
+   * lets go of it before it releases everything the guest made. */
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made))
+      CHECK(backend.handle_for(av::clproto::HandleKind::mem, made) != nullptr);
   backend.shut_down(); }
 
 /* The guest's own property list is copied into the one this driver sends, and
