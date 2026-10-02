@@ -1,6 +1,7 @@
 #include "um/d3d/d3d12_host_caps.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/caps_reply.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
@@ -106,12 +107,7 @@ uint32_t D3d12HostCaps::pipeline_level() const
 HRESULT D3d12HostCaps::fill(void *data, UINT bytes, const void *answer, UINT answer_bytes) const
 {
     AV_SCOPE("D3d12HostCaps::fill");
-    if (data == nullptr) return E_INVALIDARG;
-    uint8_t *const out = static_cast<uint8_t *>(data);
-    for (UINT index = 0u; index < bytes; index++) out[index] = 0u;
-    const UINT copied = bytes < answer_bytes ? bytes : answer_bytes;
-    __builtin_memcpy(out, answer, copied);
-    return S_OK;
+    return d3d::CapsReply(data, bytes).give_prefix(answer, answer_bytes) ? S_OK : E_INVALIDARG;
 }
 
 HRESULT D3d12HostCaps::options(void *data, UINT bytes) const

@@ -1,11 +1,11 @@
 #include "um/d3d/d3d9_host_caps.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/caps_reply.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
-#include <string.h>
 
 namespace av::d3d9 {
 
@@ -120,9 +120,7 @@ const D3DCAPS9 &D3d9HostCaps::caps() const
 HRESULT D3d9HostCaps::copy_out(const D3DDDIARG_GETCAPS &args, const void *data, size_t bytes) const
 {
     AV_SCOPE("D3d9HostCaps::copy_out");
-    if (args.pData == nullptr || args.DataSize < bytes) return E_INVALIDARG;
-    memcpy(args.pData, data, bytes);
-    return S_OK;
+    return d3d::CapsReply(args.pData, args.DataSize).give_whole(data, bytes) ? S_OK : E_INVALIDARG;
 }
 
 HRESULT D3d9HostCaps::answer_formats(const D3DDDIARG_GETCAPS &args) const

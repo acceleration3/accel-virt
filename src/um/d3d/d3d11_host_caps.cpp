@@ -1,6 +1,7 @@
 #include "um/d3d/d3d11_host_caps.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/caps_reply.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -82,8 +83,8 @@ UINT D3d11HostCaps::pipeline_levels() const
 HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
 {
     AV_SCOPE("D3d11HostCaps::answer");
-    if (args.pData == nullptr) return E_INVALIDARG;
-    UINT *const word = static_cast<UINT *>(args.pData);
+    const d3d::CapsReply reply(args.pData, args.DataSize);
+    UINT                 word = 0u;
     switch (static_cast<UINT>(args.Type)) {
     case D3D11DDICAPS_THREADING:
         /* Command lists, not free-threaded: a deferred context records its
@@ -91,56 +92,55 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
          * executed list is appended to the immediate stream, so recording runs
          * on the application's threads instead of being replayed by the
          * runtime on the immediate one. */
-        *word = D3D11DDICAPS_FREETHREADED | D3D11DDICAPS_COMMANDLISTS_BUILD_2;
-        return S_OK;
+        word = D3D11DDICAPS_FREETHREADED | D3D11DDICAPS_COMMANDLISTS_BUILD_2;
+        break;
     case D3D11DDICAPS_SHADER:
-        *word = (caps_.double_precision_float_shader_ops != 0u ? D3D11DDICAPS_SHADER_DOUBLES : 0u) |
-                (caps_.compute_shaders_on_10x != 0u
-                     ? D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X
-                     : 0u) |
-                (caps_.ps_specified_stencil_ref != 0u ? D3D11DDICAPS_SHADER_SPECIFIED_STENCIL_REF : 0u) |
-                (caps_.typed_uav_load_additional_formats != 0u ? D3D11DDICAPS_SHADER_TYPED_UAV_LOAD_ADDITIONAL_FORMATS
-                                                               : 0u) |
-                (caps_.rovs != 0u ? D3D11DDICAPS_SHADER_ROVS : 0u);
-        return S_OK;
-    case D3D11DDICAPS_3DPIPELINESUPPORT: *word = pipeline_levels(); return S_OK;
+        word = (caps_.double_precision_float_shader_ops != 0u ? D3D11DDICAPS_SHADER_DOUBLES : 0u) |
+               (caps_.compute_shaders_on_10x != 0u
+                    ? D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X
+                    : 0u) |
+               (caps_.ps_specified_stencil_ref != 0u ? D3D11DDICAPS_SHADER_SPECIFIED_STENCIL_REF : 0u) |
+               (caps_.typed_uav_load_additional_formats != 0u ? D3D11DDICAPS_SHADER_TYPED_UAV_LOAD_ADDITIONAL_FORMATS
+                                                              : 0u) |
+               (caps_.rovs != 0u ? D3D11DDICAPS_SHADER_ROVS : 0u);
+        break;
+    case D3D11DDICAPS_3DPIPELINESUPPORT: word = pipeline_levels(); break;
     case D3D11_1DDICAPS_D3D11_OPTIONS: {
-        if (args.DataSize < sizeof(D3D11_1DDI_D3D11_OPTIONS_DATA)) return E_INVALIDARG;
-        auto *const options = static_cast<D3D11_1DDI_D3D11_OPTIONS_DATA *>(args.pData);
-        options->OutputMergerLogicOp = caps_.output_merger_logic_op != 0u;
-        options->AssignDebugBinarySupport = FALSE;
-        return S_OK;
+        D3D11_1DDI_D3D11_OPTIONS_DATA options = {};
+        options.OutputMergerLogicOp = caps_.output_merger_logic_op != 0u;
+        options.AssignDebugBinarySupport = FALSE;
+        return reply.give_whole(&options, sizeof options) ? S_OK : E_INVALIDARG;
     }
-    case D3D11_1DDICAPS_ARCHITECTURE_INFO: *word = FALSE; return S_OK;
+    case D3D11_1DDICAPS_ARCHITECTURE_INFO: word = FALSE; break;
     case D3D11_1DDICAPS_SHADER_MIN_PRECISION_SUPPORT: {
-        if (args.DataSize < sizeof(D3D11_DDI_SHADER_MIN_PRECISION_SUPPORT_DATA)) return E_INVALIDARG;
-        auto *const precision = static_cast<D3D11_DDI_SHADER_MIN_PRECISION_SUPPORT_DATA *>(args.pData);
-        precision->PixelShaderMinPrecision = caps_.pixel_shader_min_precision;
-        precision->AllOtherStagesMinPrecision = caps_.all_other_shader_stages_min_precision;
-        return S_OK;
+        D3D11_DDI_SHADER_MIN_PRECISION_SUPPORT_DATA precision = {};
+        precision.PixelShaderMinPrecision = caps_.pixel_shader_min_precision;
+        precision.AllOtherStagesMinPrecision = caps_.all_other_shader_stages_min_precision;
+        return reply.give_whole(&precision, sizeof precision) ? S_OK : E_INVALIDARG;
     }
-    case D3DWDDM1_3DDICAPS_D3D11_OPTIONS1: *word = 0u; return S_OK;
-    case D3DWDDM1_3DDICAPS_MARKER: *word = 0u; return S_OK;
-    case D3DWDDM2_0DDICAPS_D3D11_OPTIONS2: *word = caps_.conservative_rasterization_tier; return S_OK;
-    case D3DWDDM2_0DDICAPS_D3D11_OPTIONS3: *word = caps_.vp_and_rt_array_index_from_any_shader; return S_OK;
+    case D3DWDDM1_3DDICAPS_D3D11_OPTIONS1: word = 0u; break;
+    case D3DWDDM1_3DDICAPS_MARKER: word = 0u; break;
+    case D3DWDDM2_0DDICAPS_D3D11_OPTIONS2: word = caps_.conservative_rasterization_tier; break;
+    case D3DWDDM2_0DDICAPS_D3D11_OPTIONS3: word = caps_.vp_and_rt_array_index_from_any_shader; break;
     case D3DWDDM2_0DDICAPS_MEMORY_ARCHITECTURE: {
-        if (args.DataSize < sizeof(D3DWDDM2_0DDI_MEMORY_ARCHITECTURE_CAPS)) return E_INVALIDARG;
-        auto *const memory = static_cast<D3DWDDM2_0DDI_MEMORY_ARCHITECTURE_CAPS *>(args.pData);
-        memory->UMA = FALSE;
-        memory->CacheCoherent = FALSE;
-        return S_OK;
+        D3DWDDM2_0DDI_MEMORY_ARCHITECTURE_CAPS memory = {};
+        memory.UMA = FALSE;
+        memory.CacheCoherent = FALSE;
+        return reply.give_whole(&memory, sizeof memory) ? S_OK : E_INVALIDARG;
     }
-    case D3DWDDM2_0DDICAPS_GPUVA_CAPS: *word = 40u; return S_OK;
-    case D3DWDDM2_2DDICAPS_SHADERCACHE: *word = FALSE; return S_OK;
+    case D3DWDDM2_0DDICAPS_GPUVA_CAPS: word = 40u; break;
+    case D3DWDDM2_2DDICAPS_SHADERCACHE: word = FALSE; break;
     default:
         /* Every other question is about a feature this driver does not
          * expose - texture layouts, swizzle patterns, ASTC - and all zeroes is
          * each one's "none": the runtime refuses a driver that fails one
          * outright (its journal: "Driver failed GetCaps with
          * D3DWDDM2_2DDICAPS_TEXTURE_LAYOUT and NULL pInfo"). */
-        for (UINT index = 0u; index < args.DataSize; index++) static_cast<uint8_t *>(args.pData)[index] = 0u;
-        return S_OK;
+        return reply.give_none() ? S_OK : E_INVALIDARG;
     }
+    /* One word, which a buffer shorter than it is refused rather than
+     * written past. */
+    return reply.give_whole(&word, sizeof word) ? S_OK : E_INVALIDARG;
 }
 
 UINT D3d11HostCaps::format_support(DXGI_FORMAT format) const
