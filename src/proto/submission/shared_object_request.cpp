@@ -42,13 +42,6 @@ uint64_t SharedObjectRequest::size() const
     return size_;
 }
 
-bool SharedObjectRequest::size_valid() const
-{
-    AV_SCOPE("SharedObjectRequest::size_valid");
-    if (kind_.is_fence()) return size_ == 0u;
-    return size_ != 0u && size_ % page_size == 0u;
-}
-
 Status SharedObjectRequest::encode(uint8_t *bytes, size_t capacity) const
 {
     AV_SCOPE("SharedObjectRequest::encode");
@@ -74,7 +67,7 @@ Status SharedObjectRequest::decode(const uint8_t *bytes, size_t length)
     candidate.wire_handle_ = reader.read_u64();
     candidate.size_ = reader.read_u64();
     if (candidate.object_id_ == 0u || !candidate.kind_.known() || reserved != 0u ||
-        !candidate.size_valid())
+        !candidate.kind_.sized(candidate.size_))
         return Status::invalid_parameter;
     *this = candidate;
     return Status::ok;

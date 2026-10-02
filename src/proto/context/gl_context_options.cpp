@@ -1,6 +1,7 @@
 #include "proto/context/gl_context_options.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/context/sub_api.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -79,6 +80,14 @@ bool GlContextOptions::valid() const
     if (major_ == 0u) return defaults();
     return major_ <= highest_major && minor_ <= highest_minor[major_ - 1u] &&
            profile_ <= static_cast<uint8_t>(Profile::compatibility) && (flags_ & ~defined_flags) == 0u;
+}
+
+bool GlContextOptions::fit_for(uint32_t sub_api) const
+{
+    AV_SCOPE("GlContextOptions::fit_for");
+    if (sub_api == static_cast<uint32_t>(SubApi::opengl)) return valid();
+    if (sub_api == static_cast<uint32_t>(SubApi::opencl)) return shares_only();
+    return defaults();
 }
 
 void GlContextOptions::write(WireWriter &writer) const

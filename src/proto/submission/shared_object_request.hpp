@@ -21,7 +21,7 @@ class SharedObjectRequest {
 public:
     static constexpr size_t   encoded_size = 32u;
     /* Memory is shared in whole pages, as every other length here is. */
-    static constexpr uint64_t page_size = 4096u;
+    static constexpr uint64_t page_size = SharedObjectKind::page_size;
 
     SharedObjectRequest();
     SharedObjectRequest(uint64_t object_id, const SharedObjectKind &kind, uint64_t wire_handle,
@@ -43,8 +43,6 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    bool size_valid() const;
-
     uint64_t         object_id_;
     SharedObjectKind kind_;
     uint64_t         wire_handle_;

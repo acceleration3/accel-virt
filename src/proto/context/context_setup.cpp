@@ -101,9 +101,7 @@ bool ContextSetup::options_fit() const
      * takes every option; OpenCL only the GL context whose objects it shares
      * (cl_khr_gl_sharing); the rest none. */
     if (size() != encoded_size) return options_.defaults();
-    if (sub_api_ == static_cast<uint32_t>(SubApi::opengl)) return options_.valid();
-    if (sub_api_ == static_cast<uint32_t>(SubApi::opencl)) return options_.shares_only();
-    return options_.defaults();
+    return options_.fit_for(sub_api_);
 }
 
 bool ContextSetup::fields_valid() const

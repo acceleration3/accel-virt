@@ -33,6 +33,19 @@ TEST(shared_object_kind, both_fence_kinds_are_fences_because_the_host_holds_one_
   CHECK(SharedObjectKind(SharedObjectKind::native_fence).is_fence());
   CHECK(!SharedObjectKind(4u).is_fence()); }
 
+TEST(shared_object_kind, memory_is_whole_non_zero_pages_and_a_fence_has_no_size)
+{ const SharedObjectKind memory(SharedObjectKind::memory);
+  CHECK(memory.sized(SharedObjectKind::page_size));
+  CHECK(memory.sized(3u * SharedObjectKind::page_size));
+  CHECK(!memory.sized(0u));
+  CHECK(!memory.sized(SharedObjectKind::page_size + 1u));
+  CHECK(!memory.sized(SharedObjectKind::page_size - 1u));
+  const std::uint32_t fences[] = {SharedObjectKind::monitored_fence, SharedObjectKind::native_fence};
+  for (const std::uint32_t fence : fences) {
+      CHECK(SharedObjectKind(fence).sized(0u));
+      CHECK(!SharedObjectKind(fence).sized(SharedObjectKind::page_size));
+  } }
+
 TEST(shared_object_kind, two_kinds_are_the_same_only_when_their_values_are)
 { CHECK(SharedObjectKind(SharedObjectKind::memory).same_as(SharedObjectKind(SharedObjectKind::memory)));
   CHECK(!SharedObjectKind(SharedObjectKind::monitored_fence)

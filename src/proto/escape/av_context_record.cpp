@@ -71,11 +71,8 @@ bool AvContextRecord::fields_valid() const
     const bool reply_fits = reply_bytes_ != 0u && reply_bytes_ <= max_reply_bytes;
     /* OpenGL takes every option; OpenCL only the OpenGL context it shares
      * objects with (cl_khr_gl_sharing); the rest none. */
-    const bool options_fit = sub_api_ == static_cast<uint32_t>(SubApi::opengl)   ? options_.valid()
-                             : sub_api_ == static_cast<uint32_t>(SubApi::opencl) ? options_.shares_only()
-                                                                                  : options_.defaults();
     return one_known_api && ring_ != 0u && reply_fits && ring_order_ >= lowest_order &&
-           ring_order_ <= highest_order && options_fit;
+           ring_order_ <= highest_order && options_.fit_for(sub_api_);
 }
 
 Status AvContextRecord::decode(const uint8_t *bytes, size_t length)

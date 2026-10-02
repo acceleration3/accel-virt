@@ -77,11 +77,7 @@ bool SharedObjectRecord::fields_valid() const
     /* An id and an adapter travel together: a record naming one without the
      * other is one no miniport ever wrote. */
     if ((object_id_ == 0u) != (adapter_id_ == 0u)) return false;
-    /* The same rule the wire body keeps, because the two describe one object
-     * and an opener compares them: memory is whole non-zero pages, and a fence
-     * has no size at all (feature 053, T031). */
-    if (kind_.is_fence()) return size_ == 0u;
-    return size_ != 0u && size_ % page_size == 0u;
+    return kind_.sized(size_);
 }
 
 Status SharedObjectRecord::decode(const uint8_t *bytes, size_t length)

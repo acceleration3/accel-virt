@@ -44,4 +44,11 @@ bool SharedObjectKind::same_as(const SharedObjectKind &other) const
     return value_ == other.value_;
 }
 
+bool SharedObjectKind::sized(uint64_t size) const
+{
+    AV_SCOPE("SharedObjectKind::sized");
+    if (is_fence()) return size == 0u;
+    return size != 0u && size % page_size == 0u;
+}
+
 }  // namespace av

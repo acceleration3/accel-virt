@@ -238,6 +238,16 @@ TEST(context_setup, the_next_minor_carries_the_options_and_the_share_contexts_de
 
 /* A minor-0 setup is 32 bytes, means the default options, and cannot carry
  * any other; every sub-API may use the new minor with the defaults. */
+TEST(gl_context_options, fit_for_takes_gl_options_for_opengl_a_share_for_opencl_and_nothing_else)
+{ const GlContextOptions share_only = GlContextOptions().sharing(share_device_id);
+  CHECK(core_46.fit_for(static_cast<std::uint32_t>(SubApi::opengl)));
+  CHECK(!core_46.fit_for(static_cast<std::uint32_t>(SubApi::opencl)));
+  CHECK(!core_46.fit_for(static_cast<std::uint32_t>(SubApi::vulkan)));
+  CHECK(share_only.fit_for(static_cast<std::uint32_t>(SubApi::opencl)));
+  CHECK(!share_only.fit_for(static_cast<std::uint32_t>(SubApi::d3d)));
+  CHECK(GlContextOptions().fit_for(static_cast<std::uint32_t>(SubApi::vulkan)));
+  CHECK(GlContextOptions().fit_for(static_cast<std::uint32_t>(SubApi::d3d))); }
+
 TEST(context_setup, the_previous_minor_is_32_bytes_of_default_options)
 { const ContextSetup old(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 5u, 19u);
   CHECK_EQ(old.size(), 32u);

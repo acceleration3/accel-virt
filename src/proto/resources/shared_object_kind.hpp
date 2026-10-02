@@ -21,6 +21,7 @@ public:
     static constexpr uint32_t memory = 1u;
     static constexpr uint32_t monitored_fence = 2u;
     static constexpr uint32_t native_fence = 3u;
+    static constexpr uint64_t page_size = 4096u;
 
     /* An unknown kind, which nothing accepts. */
     SharedObjectKind();
@@ -37,6 +38,11 @@ public:
      * semaphore, so the two differ to the guest and not to the host. */
     bool     is_fence() const;
     bool     same_as(const SharedObjectKind &other) const;
+    /* Whether an object of this kind can be `size` bytes: memory is whole
+     * non-zero pages, and a fence has no size at all (feature 053, T031). The
+     * miniport's record and the wire's request both keep this one rule,
+     * because an opener compares the two. */
+    bool     sized(uint64_t size) const;
 
 private:
     uint32_t value_;

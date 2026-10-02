@@ -85,12 +85,19 @@ void AllocationTable::destroy_created(DxgkargCreateAllocationRecord &request, ui
 {
     AV_SCOPE("AllocationTable::destroy_created");
     for (uint32_t index = 0u; index < count; index++) {
-        auto *const allocation = static_cast<Allocation *>(request.pAllocationInfo[index].hAllocation);
-        if (allocation->shared_id() != 0u) shared_.forget(*allocation);
-        if (allocation->resource() != nullptr) static_cast<void>(allocation->resource()->released_one());
-        static_cast<void>(allocations_.destroy(allocation));
+        retire(*static_cast<Allocation *>(request.pAllocationInfo[index].hAllocation));
         request.pAllocationInfo[index].hAllocation = nullptr;
     }
+}
+
+/* The identity goes with what it named, so a process holding a stale record
+ * finds nothing rather than whatever took its place. */
+void AllocationTable::retire(Allocation &allocation)
+{
+    AV_SCOPE("AllocationTable::retire");
+    if (allocation.shared_id() != 0u) shared_.forget(allocation);
+    if (allocation.resource() != nullptr) static_cast<void>(allocation.resource()->released_one());
+    static_cast<void>(allocations_.destroy(&allocation));
 }
 
 Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
@@ -156,14 +163,8 @@ Status AllocationTable::destroy(const DxgkargDestroyAllocationRecord &request)
      * list is refused here, before anything is destroyed, because this list is
      * all-or-nothing like every other. */
     if (resource != nullptr && listed_of_resource != resource->allocations()) return Status::invalid_state;
-    for (uint32_t index = 0u; index < request.NumAllocations; index++) {
-        auto *const allocation = static_cast<Allocation *>(request.pAllocationList[index]);
-        /* The identity goes with what it named, so a process holding a stale
-         * record finds nothing rather than whatever took its place. */
-        if (allocation->shared_id() != 0u) shared_.forget(*allocation);
-        if (allocation->resource() != nullptr) static_cast<void>(allocation->resource()->released_one());
-        static_cast<void>(allocations_.destroy(allocation));
-    }
+    for (uint32_t index = 0u; index < request.NumAllocations; index++)
+        retire(*static_cast<Allocation *>(request.pAllocationList[index]));
     if (resource == nullptr) return Status::ok;
     return resources_.destroy(resource);
 }

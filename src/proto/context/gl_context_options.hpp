@@ -46,6 +46,10 @@ public:
     /* A version OpenGL has (1.0-1.5, 2.0-2.1, 3.0-3.3, 4.0-4.6), a defined
      * profile and only the defined flags; or the defaults. */
     bool valid() const;
+    /* What a context of `sub_api` (SubApi) may carry: OpenGL's are valid(),
+     * OpenCL's shares_only(), and every other API's the defaults. The setup
+     * the device reads and the record the miniport keeps hold this one rule. */
+    bool fit_for(uint32_t sub_api) const;
 
     /* Its eight bytes: major, minor, profile, flags, then the share context. */
     void write(WireWriter &writer) const;

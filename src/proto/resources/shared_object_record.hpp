@@ -27,7 +27,7 @@ class SharedObjectRecord {
 public:
     static constexpr size_t   encoded_size = 40u;
     /* The size a shared object is measured in, as every other page count here. */
-    static constexpr uint64_t page_size = 4096u;
+    static constexpr uint64_t page_size = SharedObjectKind::page_size;
 
     SharedObjectRecord();
     SharedObjectRecord(uint64_t object_id, const SharedObjectKind &kind, uint64_t adapter_id, uint64_t size);

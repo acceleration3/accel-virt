@@ -78,6 +78,7 @@ private:
      * descriptor in `private_data`, and writes it back there. */
     [[nodiscard]] Status share(Allocation &allocation, const uint8_t *private_data);
     void                 destroy_created(DxgkargCreateAllocationRecord &request, uint32_t count);
+    void                 retire(Allocation &allocation);
 
     Platform               &platform_;
     const ApertureSegment  &segment_;
