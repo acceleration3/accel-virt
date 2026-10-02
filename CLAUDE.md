@@ -11,8 +11,47 @@ registries, by the generator vendored in `tools/codegen/`; what it writes is
 committed under `src/proto/generated/` and never hand-edited.
 
 **Read before writing code:** `docs/constitution.md` (the rules that
-govern the project), `docs/testing.md` (how a display miniport is unit tested),
-`docs/roadmap.md` (what to build, in order).
+govern the project), `docs/architecture.md` (the code map: which directory
+holds what, and which may include which), `docs/testing.md` (how a display
+miniport is unit tested), `docs/roadmap.md` (what to build, in order).
+
+## Repository organization
+
+`docs/architecture.md` is the map; these are the rules that keep it true.
+
+- **Organize by subsystem and domain.** A file lives in the directory of the
+  binary and subsystem that owns it (`src/miniport/vidpn/`,
+  `src/executor/d3d/`, `src/icd/opengl/`), not beside whatever calls it and
+  not by technical kind. A developer who knows the feature should be able to
+  predict the directory.
+- **The top level is one directory per binary or layer**: `core` (the
+  foundation every binary links), `proto` (what crosses a boundary),
+  `miniport` + `km` (avgpu.sys), `device` (the QEMU device), `executor`
+  (libav_executor.so), `icd` + `um` (the guest's user-mode drivers), `guest`
+  (kmt, transport and the guest programs). Search this architecture before
+  introducing a new top-level directory, and add one only for a new binary or
+  layer.
+- **Prefer shallow directories.** Two levels under `src/` is the norm. Do not
+  create a directory for one small class without a strong reason; put it
+  beside its owner.
+- **No dumping grounds.** Do not create `utils`, `helpers`, `misc`, `common`
+  or `shared` directories. `icd/common` and `um/common` exist because the
+  user-mode drivers genuinely share them: anything there has at least two
+  users among those drivers, and a file with one user moves to that user.
+  Likewise `src/core` holds only what more than one binary needs.
+- **Keep code near its owner.** A class used by one subsystem lives in that
+  subsystem even when it looks generic; it moves outward only when a second
+  owner uses it.
+- **Respect the layers**: `core` includes nothing else; `proto` only `core`;
+  nothing outside `src/km` includes `miniport`; nothing in `device` includes
+  `executor`; `icd` never includes `guest/suite` or `guest/probe`.
+- **Directory names are rules.** A directory named `shim` is exempt from the
+  coverage gate and holds translation only; `generated` holds generator
+  output; `src/miniport/ddi/` and `src/icd/d3d/ddi/` are record directories.
+  Never reuse those names for anything else.
+- **Moving files** is `git mv` plus every path the build and gates name
+  (`docs/architecture.md`, "Paths the build and the gates name"), with the
+  unit test moved to the mirrored path in the same change.
 
 ## C++ rules
 
@@ -56,7 +95,7 @@ a collection and is injected where it is needed - `GpuVirtualAddressSpace`,
 state. A class with no members is a mistake being written down.
 
 **Files.** Each class lives in the semantic folder for its area (`src/miniport/memory/`,
-`src/miniport/display/`, ... - README.md lists them), and its test mirrors that path under
+`src/miniport/display/`, ... - docs/architecture.md lists them), and its test mirrors that path under
 `tests/unit/`. Includes name the path from `src/` or `tests/` -
 `"miniport/display/edid.hpp"`, `"harness/vidsch/fake_vidsch.hpp"` - never a relative
 one. One class per header, named after the class in snake_case; nested and

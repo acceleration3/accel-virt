@@ -12,8 +12,8 @@ vendored in `tools/codegen/`; this project owns all of it.
 
 ### II. The core is portable; the shim is not
 
-All decision-making logic lives in `src/core/` (guest) and `src/device/`
-(host), compiles as freestanding C++23 with **no** WDM, dxgk, QEMU or libc
+All decision-making logic lives in `src/miniport/` and `src/core/` (guest)
+and `src/device/` (host), compiles as freestanding C++23 with **no** WDM, dxgk, QEMU or libc
 dependency, and is reachable from a native Linux test binary.
 
 `src/km/` is the Windows kernel shim and `src/device/qemu/` is the QEMU glue.

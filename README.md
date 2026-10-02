@@ -16,14 +16,14 @@ dedicated video memory.
 
 | Piece | What it is | Source |
 |---|---|---|
-| `avgpu.sys` | A WDDM 3.2 kernel-mode display miniport. It speaks virtio-gpu plus this project's av protocol. | `src/core/` (portable), `src/km/` (Windows shim) |
-| `avumd.dll` | The Direct3D 11 and 12 user-mode driver, with DXGI | `src/icd/d3d/`, `src/um/d3d/` |
+| `avgpu.sys` | A WDDM 3.2 kernel-mode display miniport. It speaks virtio-gpu plus this project's av protocol. | `src/miniport/` (portable), `src/km/` (Windows shim) |
+| `avumd.dll` | The Direct3D 9, 11 and 12 user-mode driver, with DXGI | `src/icd/d3d/`, `src/um/d3d/` |
 | `avvk.dll` | The Vulkan installable client driver | `src/icd/vulkan/`, `src/um/vulkan/` |
 | `avgl.dll` | The OpenGL installable client driver (the `Drv*` interface) | `src/icd/opengl/`, `src/um/opengl/` |
 | `avcl.dll` | The OpenCL installable client driver | `src/icd/opencl/`, `src/um/opencl/` |
 | `avumd32.dll`, `avvk32.dll`, `avgl32.dll`, `avcl32.dll` | The same four, built for x86, which 32-bit processes load | the same sources, built with `AV_GUEST_ARCH=x86` |
 | `virtio-gpu-av-pci` | A QEMU device, built into a patched QEMU 11.1.1 | `src/device/` |
-| `libav_executor.so` | The host library that runs guest commands on the host GPU | `src/device/executor/`, `src/device/shim/` |
+| `libav_executor.so` | The host library that runs guest commands on the host GPU | `src/executor/` |
 | `av-renderer` | An optional separate process for the executor, so that a host driver crash cannot take the VM | `src/device/renderer/`, `src/device/isolation/` |
 | the av protocol | Shared by both sides, specified in [`docs/protocol.md`](docs/protocol.md) | `src/proto/` |
 
@@ -739,48 +739,30 @@ and `tools/gate.sh` runs every gate.
 
 ## Source layout
 
+[`docs/architecture.md`](docs/architecture.md) is the code map: which binary
+each directory builds, what each subsystem directory holds, which directories
+may include which, and where new code goes.
+
 ```
-src/core/                     avgpu.sys's logic, portable: no platform header anywhere
-  support/                      Status, NtStatus, ObjectPool/Storage, ScopeExit, Alignment, ByteRange, TextBuffer
-  platform/                     the Platform contract, locks and lock ranks, timers
-  miniport/                     registration, the DDI table, dxgkrnl's callbacks, interrupt reports
-  ddi/                          DDI records (dxgkrnl-owned memory, layout-proven) and the DxgkDdi* entry points
-  adapter/                      the Adapter, its capabilities, power transitions, debug report
-  pci/  virtio/                 configuration space and BARs; virtio-pci transport, virtqueues, the virtio-gpu device
-  memory/                       segments, allocations, GPU virtual addresses, page tables, paging, the host window
-  scheduling/                   devices, contexts, the execution node, hardware queues, doorbells, native fences
-  display/                      modes, EDID, scanout sources, synthetic vsync, the hardware cursor
-  vidpn/                        VidPn topology, mode sets, cofunctional modality, support check, commit
-  present/                      Present, and how it addresses allocations
-  av/                          av contexts as the driver drives them: capset, setup, ring, fences
-  trace/                        AV_SCOPE, trace tables, event rings, crash reports
+src/core/                     the foundation every binary links: support/, trace/, log/, platform/
+src/miniport/                 avgpu.sys's logic, portable: driver/, ddi/, adapter/, av_context/, memory/,
+                              scheduling/, display/, vidpn/, present/, pci/, virtio/
 src/km/                       Windows kernel shim, translation only: KernelPlatform, DriverEntry, avgpu.inf
-src/icd/                      the user-mode drivers' logic, portable, tested on Linux over MockKmt
-  common/                       what they share: extension policy, locked and batched transports, sliced waits
-  vulkan/  opengl/  opencl/     avvk.dll, avgl.dll, avcl.dll
-  d3d/                          avumd.dll: adapters, devices, DXGI; ddi/ mirrors the runtimes' structures
-src/um/                       Windows user-mode shim, translation only: the DLLs' exports and roots, probes,
-                              avtest.exe, avinspect.exe, the OpenCL loader's C runtime, crash and trace hosts
-src/guest/                    the in-guest D3DKMT suite (avtest.exe) and avinspect.exe, portable
-src/device/                   the QEMU device core and host side, freestanding C++23
-  host/  abi/                   the Host contract; av_device.h and av_executor.h, the C ABIs
-  module/  gpu/  capset/        the device object; host GPU binding and identity; the capset
-  memory/  ring/  context/      blobs and their windows; ring consumption; the context table
-  threading/  fence/            per-context workers and doorbells; fence pages and interrupts
-  control/  display/            control-queue answers; display heads, modes, scanout
-  execution/  executor/         command execution; the executor library's backends (Vulkan, GL, CL, D3D)
-  shim/                         the host platform: loaders, EGL, DXVK/vkd3d-proton, dma-buf, traces
-  renderer/  isolation/         av-renderer, and the device's side of it
-  recording/  probe/            wire recordings and replay; host feasibility probes
-  qemu/                         the C glue and build patch installed into QEMU, translation only
-src/proto/                    the wire, shared by both sides
-  wire/  context/  submission/  codecs; context setup and capsets; rings and fences
-  resources/  commands/         allocation descriptors; present and paging commands
-  virtio_gpu/  renderer/        virtio-gpu requests and responses; QEMU ↔ renderer messages
-  generated/                    written by tools/codegen, never by hand
+src/proto/                    what crosses a boundary: wire/, client/, context/, submission/, resources/,
+                              dma/, pages/, virtio_gpu/, escape/ (UM<->KM), renderer/, d3d/, vulkan/, generated/
+src/device/                   the QEMU device: abi/, host/, module/, gpu/, context/, threading/, fence/,
+                              memory/, control/, display/, present/, execution/, isolation/, renderer/,
+                              recording/, replay/, feasibility/, shim/ (POSIX), qemu/ (C glue)
+src/executor/                 libav_executor.so: sessions at the root; vulkan/, opengl/, opencl/, d3d/;
+                              shim/ (the host runtimes it loads)
+src/guest/                    kmt/ (D3DKMT, AdapterSearch), transport/, suite/ (avtest), probe/, inspect/
+src/icd/                      the user-mode drivers' logic, portable, tested on Linux over MockKmt:
+                              common/ (shared by 2+ drivers), vulkan/, opengl/, opencl/, d3d/
+src/um/                       Windows user-mode shims: common/, vulkan/, opengl/, opencl/, d3d/, kmt/,
+                              avtest/, inspect/, probe/, trace/, imports/, opencl_loader/, sample/
 samples/                      d3d11, d3d12, opengl, opencl, vulkan, clgl: the same programs for host and guest
 tests/unit/                   L1, mirroring src/;  scenarios/: the driver image through its DDI table
-tests/harness/                MockPlatform, fake dxgkrnl/VidMm/VidSch/VidPn, MockHost, MockKmt, the rigs
+tests/harness/                MockPlatform, fake dxgkrnl/VidMm/VidSch/VidPn/virtio, MockHost, MockKmt, the rigs
 tests/fuzz/  tests/corpus/    L3 targets and their seed corpora
 tests/loopback/  tests/qemu/  L4 rigs; the device under qtest
 tests/conformance/            the executor ABI's conformance suite, for any executor library
@@ -801,6 +783,7 @@ third_party/                  fetched and pinned: windows-kit, khronos, qemu, dx
 
 | | |
 |---|---|
+| [`docs/architecture.md`](docs/architecture.md) | The code map: binaries, layers, every source directory, where new code goes |
 | [`docs/protocol.md`](docs/protocol.md) | The av wire protocol, normative: the capset, context setup, rings, batches, fence pages, the executor ABI, recordings |
 | [`docs/ddi-sequences.md`](docs/ddi-sequences.md) | What each DDI does and answers, and the sequences dxgkrnl drives them in |
 | [`docs/d3d-desktop.md`](docs/d3d-desktop.md) | The desktop on Direct3D: the design, from guest evidence, dxgkrnl's code and prior art |
