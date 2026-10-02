@@ -11,11 +11,15 @@
  *
  * A removed device stays kept, with the first reason it was removed for -
  * what went wrong; the rest follow from it - until the guest destroys it. It
- * is not ready: its commands are refused until the guest makes another. */
+ * is not ready: its commands are refused until the guest makes another. An id
+ * the guest selected that names no device is removed the same way, until the
+ * next selection: its commands are refused too, and the first refusal is the
+ * one that says why rather than every one after it. */
 #ifndef AV_GUEST_DEVICES_HPP
 #define AV_GUEST_DEVICES_HPP
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/command_refusal.hpp"
 
 #include <stdint.h>
 
@@ -57,14 +61,21 @@ public:
     bool               ready() const;
 
     /* The device is removed for `reason` (an HRESULT, non-zero); the first
-     * reason stands. Nothing for a device not kept. */
+     * reason stands. Nothing for a device neither kept nor selected. */
     void               mark_removed(uint32_t device, uint32_t reason);
-    /* Why the device was removed; 0 while it was not, or for one not kept. */
+    /* Why the device was removed; 0 while it was not, or for one neither
+     * kept nor selected. */
     uint32_t           removed_reason(uint32_t device) const;
+    /* A command refused while the selected device spoke: that device removed
+     * for `reason`, the first refusal logged (CommandRefusal). False when no
+     * device was selected at all, which leaves the session nobody else to
+     * blame. */
+    [[nodiscard]] bool refuse(const CommandRefusal &refusal, const char *command, uint32_t reason);
 
     /* A kept id has a handle and a free slot has neither, nor a removal; the
-     * count is the kept ones, no id is kept twice, and the selected handle is
-     * the selected id's. */
+     * count is the kept ones, no id is kept twice, the selected handle is the
+     * selected id's, and only a selected id that names nothing kept has a
+     * removal of its own. */
     bool invariants_hold() const;
 
 private:
@@ -80,11 +91,13 @@ private:
     uint32_t count_;
     uint32_t selected_id_;
     Handle  *selected_;
+    /* Why the selected id was removed, when it names no device kept. */
+    uint32_t selected_removed_;
 };
 
 template <typename Handle, uint32_t Capacity>
 GuestDevices<Handle, Capacity>::GuestDevices()
-    : ids_{}, handles_{}, removed_{}, count_(0u), selected_id_(0u), selected_(nullptr)
+    : ids_{}, handles_{}, removed_{}, count_(0u), selected_id_(0u), selected_(nullptr), selected_removed_(0u)
 {
     AV_SCOPE("GuestDevices::GuestDevices");
 }
@@ -160,8 +173,10 @@ template <typename Handle, uint32_t Capacity>
 Handle *GuestDevices<Handle, Capacity>::select(uint32_t device)
 {
     AV_SCOPE("GuestDevices::select");
+    if (device != selected_id_) selected_removed_ = 0u;
     selected_id_ = device;
     selected_ = find(device);
+    if (selected_ != nullptr) selected_removed_ = 0u;
     return selected_;
 }
 
@@ -192,7 +207,11 @@ void GuestDevices<Handle, Capacity>::mark_removed(uint32_t device, uint32_t reas
     AV_SCOPE("GuestDevices::mark_removed");
     if (device == 0u || reason == 0u) return;
     const uint32_t slot = slot_of(device);
-    if (slot != no_slot && removed_[slot] == 0u) removed_[slot] = reason;
+    if (slot != no_slot) {
+        if (removed_[slot] == 0u) removed_[slot] = reason;
+        return;
+    }
+    if (device == selected_id_ && selected_removed_ == 0u) selected_removed_ = reason;
 }
 
 template <typename Handle, uint32_t Capacity>
@@ -201,7 +220,18 @@ uint32_t GuestDevices<Handle, Capacity>::removed_reason(uint32_t device) const
     AV_SCOPE("GuestDevices::removed_reason");
     if (device == 0u) return 0u;
     const uint32_t slot = slot_of(device);
-    return slot == no_slot ? 0u : removed_[slot];
+    if (slot != no_slot) return removed_[slot];
+    return device == selected_id_ ? selected_removed_ : 0u;
+}
+
+template <typename Handle, uint32_t Capacity>
+bool GuestDevices<Handle, Capacity>::refuse(const CommandRefusal &refusal, const char *command, uint32_t reason)
+{
+    AV_SCOPE("GuestDevices::refuse");
+    const uint32_t device = selected_id_;
+    if (!refusal.removes(command, device, removed_reason(device) != 0u)) return false;
+    mark_removed(device, reason);
+    return true;
 }
 
 template <typename Handle, uint32_t Capacity>
@@ -217,6 +247,7 @@ bool GuestDevices<Handle, Capacity>::invariants_hold() const
         for (uint32_t other = slot + 1u; other < Capacity; other++)
             if (ids_[other] == ids_[slot]) return false;
     }
+    if (selected_removed_ != 0u && (selected_id_ == 0u || selected_ != nullptr)) return false;
     return kept == count_ && selected_ == find(selected_id_);
 }
 

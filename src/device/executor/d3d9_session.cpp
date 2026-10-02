@@ -62,11 +62,8 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     const bool ran = d3d9proto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
     if (ran) return true;
-    const uint32_t speaker = devices_.selected() == nullptr ? 0u : devices_.selected_id();
-    if (!refusal_.removes(d3d9proto::command_name(command_id), speaker, devices_.removed_reason(speaker) != 0u))
-        return false;
-    devices_.mark_removed(speaker, static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR));
-    return true;
+    return devices_.refuse(refusal_, d3d9proto::command_name(command_id),
+                           static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR));
 }
 
 const uint8_t *D3d9Session::guest_bytes(uint64_t offset, uint64_t size)

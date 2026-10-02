@@ -148,11 +148,8 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
     if (ran) return true;
-    const uint32_t device = states_.selected_id();
-    if (!refusal_.removes(d3dproto::command_name(command_id), device, states_.removed_reason(device) != 0u))
-        return false;
-    states_.mark_removed(device, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
-    return true;
+    return states_.refuse(refusal_, d3dproto::command_name(command_id),
+                          static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
 }
 
 /* A batch that ended queries is flushed, so DXVK starts the work their
