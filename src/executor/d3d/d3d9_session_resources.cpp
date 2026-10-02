@@ -396,11 +396,7 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
     StagedFrame *const staged = host_->stage_frame(device(), source, desc.Width, desc.Height,
                                                    static_cast<uint32_t>(desc.Format),
                                                    desc.MultiSampleType != D3DMULTISAMPLE_NONE);
-    if (staged == nullptr) {
-        surfaces_->abandon(frame);
-        return true;
-    }
-    if (!surfaces_->keep(frame, *staged)) staged->release();
+    surfaces_->hold(frame, staged);
     return true;
 }
 

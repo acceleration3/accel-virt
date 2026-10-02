@@ -38,7 +38,9 @@ public:
      * make a staging texture. */
     StagedFrame *stage(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                        uint32_t format);
-    /* Under the device's lock, as it closes: every texture released. */
+    /* As the device closes: every texture released, frames still out
+     * included, since a frame cannot release its texture once the device's
+     * context is gone. Takes no lock: nothing presents from a closing device. */
     void         clear();
 
 private:

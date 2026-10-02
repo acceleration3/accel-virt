@@ -134,6 +134,26 @@ TEST(shared_surfaces, a_point_not_reached_or_still_being_staged_is_waited_for)
   surfaces.abandon(SurfacePoint());
   CHECK(surfaces.invariants_hold()); }
 
+/* What a writer staged is held: kept for a blt to read, given back when no
+ * slot takes it, and a frame it could not stage is abandoned - a blt asking
+ * for it is refused at once rather than left waiting. */
+TEST(shared_surfaces, a_staged_frame_is_held_or_given_back_and_none_abandons)
+{ SharedSurfaces surfaces;
+  AvFrameView   view = {};
+  FakeFrame     kept, unkept;
+  surfaces.hold(SurfacePoint(surface, 1u), &kept);
+  CHECK(surfaces.map(SurfacePoint(surface, 1u), 0u, view));
+  surfaces.unmap(SurfacePoint(surface, 1u));
+  CHECK_EQ(kept.releases(), 1u);
+  surfaces.hold(SurfacePoint(), &unkept);   /* names nothing: no slot takes it */
+  CHECK_EQ(unkept.releases(), 1u);
+  CHECK(!surfaces.presented(SurfacePoint(surface, 2u)));          /* no blt has asked yet */
+  CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1000u, view));   /* passed: learned */
+  CHECK(surfaces.presented(SurfacePoint(surface, 3u)));
+  surfaces.hold(SurfacePoint(surface, 3u), nullptr);
+  CHECK(!surfaces.map(SurfacePoint(surface, 3u), 1000u, view));
+  CHECK(surfaces.invariants_hold()); }
+
 /* Keeping past the slots evicts the frame kept longest ago, never one being
  * read; with every slot being read nothing more is kept. A frame kept again
  * under the same point replaces the first, which is given back. */

@@ -71,6 +71,16 @@ void SharedSurfaces::abandon(const SurfacePoint &frame)
     unlock();
 }
 
+void SharedSurfaces::hold(const SurfacePoint &frame, StagedFrame *staged)
+{
+    AV_SCOPE("SharedSurfaces::hold");
+    if (staged == nullptr) {
+        abandon(frame);
+        return;
+    }
+    if (!keep(frame, *staged)) staged->release();
+}
+
 bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
 {
     AV_SCOPE("SharedSurfaces::map");

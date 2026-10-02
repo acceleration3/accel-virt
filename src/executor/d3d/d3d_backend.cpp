@@ -1648,11 +1648,7 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
     static_cast<void>(surfaces_->presented(frame));
     StagedFrame *const staged =
         device11_->stage_frame(static_cast<ID3D11Texture2D *>(found), subresource, width, height, format);
-    if (staged == nullptr) {
-        surfaces_->abandon(frame);
-        return true;
-    }
-    if (!surfaces_->keep(frame, *staged)) staged->release();
+    surfaces_->hold(frame, staged);
     return true;
 }
 

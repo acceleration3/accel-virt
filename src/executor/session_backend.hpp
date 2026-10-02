@@ -1,11 +1,11 @@
 /* One host API, as a session sees it.
  *
- * Virtual because there are three real implementations and they have nothing
- * in common below this line: Vulkan and OpenCL each derive from a generated
- * abstract dispatch of their own, and OpenGL has no dispatch object at all -
- * its generated decoder takes a table of function pointers. A session must not
- * know which of those it is holding, so this is where the three become one
- * thing (feature 042).
+ * Virtual because there are four real implementations and they have nothing
+ * in common below this line: Vulkan, OpenCL and Direct3D each derive from a
+ * generated abstract dispatch of their own, and OpenGL has no dispatch object
+ * at all - its generated decoder takes a table of function pointers. A session
+ * must not know which of those it is holding, so this is where the four become
+ * one thing (feature 042).
  *
  * Everything here runs on the context's worker, one call at a time. */
 #ifndef AV_SESSION_BACKEND_HPP

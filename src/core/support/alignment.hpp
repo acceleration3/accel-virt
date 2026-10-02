@@ -1,5 +1,6 @@
-/* A power-of-two alignment, validated once at construction instead of at every
- * use, and able to round up without wrapping. */
+/* A power-of-two alignment, able to round up without wrapping. Any value can
+ * be held; one that is not a power of two (is_valid) divides and aligns
+ * nothing. */
 #ifndef AV_ALIGNMENT_HPP
 #define AV_ALIGNMENT_HPP
 

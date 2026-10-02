@@ -53,6 +53,9 @@ public:
     /* A writer told to stage `frame` could not: a blt asking for it is
      * refused rather than left waiting for it. */
     void               abandon(const SurfacePoint &frame);
+    /* What a writer does with what it staged for `frame`: kept, or given back
+     * when no slot will take it; null - staging failed - abandons the frame. */
+    void               hold(const SurfacePoint &frame, StagedFrame *staged);
     /* The present engine: `frame` mapped into `view`, waiting up to `wait_ms`
      * for its writer to reach it and the GPU to copy it. False at once for a
      * point its writer passed without staging - this surface is a blt's from

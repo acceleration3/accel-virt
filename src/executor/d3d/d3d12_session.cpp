@@ -718,11 +718,7 @@ bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource, uint3
     const SurfacePoint frame(SurfaceIdentity(shown).surface(), point);
     if (surfaces_ == nullptr || !surfaces_->presented(frame)) return true;
     StagedFrame *const staged = device_->stage_frame(from, shown);
-    if (staged == nullptr) {
-        surfaces_->abandon(frame);
-        return true;
-    }
-    if (!surfaces_->keep(frame, *staged)) staged->release();
+    surfaces_->hold(frame, staged);
     return true;
 }
 

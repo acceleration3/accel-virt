@@ -19,7 +19,7 @@ public:
      * handing it to the driver; one the size of the other escape records gets
      * through. */
     static constexpr size_t   encoded_size = 32u;
-    static constexpr uint32_t magic        = 0x50564B52u;  /* "AVP" */
+    static constexpr uint32_t magic        = 0x50564B52u;  /* "RKVP" in memory order */
 
     TailPublishRecord();
     /* The ring whose tail the process will store: the driver refuses the

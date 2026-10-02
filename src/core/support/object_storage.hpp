@@ -1,8 +1,8 @@
 /* Holds one object whose lifetime is started and ended explicitly - the
  * miniport root in the kernel shim's static storage, and the adapters inside
  * the root. The kernel runs no global constructors and there is no heap new, so
- * this is the one place in the codebase a placement-new expression appears
- * (tools/check_design.py enforces it).
+ * this and ObjectPool are the only places in the codebase a placement-new
+ * expression appears (tools/check_design.py enforces it).
  *
  * The destructor is deliberately trivial: storage with static lifetime must not
  * need a destructor call at unload. Whoever constructs destroys. */
