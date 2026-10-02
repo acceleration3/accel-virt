@@ -31,6 +31,7 @@ constexpr std::uint32_t size = 64u;
 constexpr std::uint32_t red = 0xffff0000u;
 constexpr std::uint32_t blue = 0xff0000ffu;
 constexpr std::uint32_t invalid_call = 0x8876086cu;
+constexpr std::uint32_t more_data = 0x88760867u;   /* D3DERR_MOREDATA */
 
 enum Id : std::uint32_t { device = 1, target, other_device, other_target };
 
@@ -102,6 +103,14 @@ TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
     CHECK_EQ(pixels.at(size / 2u - 1u, size - 1u), red);
     CHECK_EQ(pixels.at(size / 2u, 0u), blue);
     CHECK_EQ(pixels.at(size - 1u, size - 1u), blue);
+    /* Room for all but its last row: refused whole, nothing written, rather
+     * than a surface answered with its bottom row missing. */
+    Pixels short_of_room;
+    CHECK(av_d3d9_ReadSurface9(wire, target, 0u, &short_of_room.hresult, &short_of_room.width, &short_of_room.height,
+                               &short_of_room.format, &short_of_room.pitch, short_of_room.bytes,
+                               std::uint64_t{pixels.pitch} * (size - 1u), &short_of_room.written));
+    CHECK_EQ(short_of_room.hresult, more_data);
+    CHECK_EQ(short_of_room.written, 0u);
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(wire.refused(), 0u);

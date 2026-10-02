@@ -329,10 +329,14 @@ int32_t D3d9Session::read(IDirect3DSurface9 *source, uint32_t &pitch, uint8_t *p
     if (FAILED(opened)) return opened;
     pitch = static_cast<uint32_t>(locked.Pitch);
     const uint64_t rows = D3d9FormatLayout(static_cast<uint32_t>(desc.Format)).rows(desc.Height);
-    const uint64_t fit = pitch != 0u ? capacity / pitch : 0u;
-    const uint64_t copied = fit < rows ? fit : rows;
-    memcpy(pixels, locked.pBits, copied * pitch);
-    written = copied * pitch;
+    /* All of it or none: a surface cut short at the guest's room would be
+     * presented or copied as a whole one with its bottom rows stale. */
+    if (uint64_t{pitch} * rows > capacity) {
+        locked_surface->UnlockRect();
+        return D3DERR_MOREDATA;
+    }
+    memcpy(pixels, locked.pBits, rows * pitch);
+    written = rows * pitch;
     locked_surface->UnlockRect();
     return D3D_OK;
 }
