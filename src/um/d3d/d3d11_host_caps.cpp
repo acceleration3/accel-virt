@@ -1,11 +1,7 @@
 #include "um/d3d/d3d11_host_caps.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
-#include "guest/transport/guest_connection.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/transport/kmt_transport.hpp"
-#include "proto/context/sub_api.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
@@ -13,10 +9,6 @@ namespace av::d3d11 {
 
 namespace {
 
-/* The one question answered; small enough for the stack. */
-constexpr uint8_t  ring_order = 16u;
-constexpr uint32_t reply_bytes = 64u * 1024u;
-constexpr size_t   staging_bytes = 16u * 1024u;
 constexpr uint32_t level_11_1 = 0xb100u;
 constexpr uint32_t level_11_0 = 0xb000u;
 
@@ -27,17 +19,10 @@ D3d11HostCaps::D3d11HostCaps() : caps_{}, formats_{}, snapshots_(false), learned
     AV_SCOPE("D3d11HostCaps::D3d11HostCaps");
 }
 
-bool D3d11HostCaps::learn(Kmt &kmt, uint32_t adapter)
+bool D3d11HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter)
 {
     AV_SCOPE("D3d11HostCaps::learn");
     if (learned_) return true;
-    GuestConnection connection(kmt);
-    if (connection.open(adapter) != Status::ok) return false;
-    ScopeExit closed([&] { connection.close(); });
-    uint8_t staging[staging_bytes];
-    KmtTransport transport(connection, SubApi::d3d, ring_order, reply_bytes, staging, sizeof(staging));
-    if (transport.initialize() != Status::ok) return false;
-    ScopeExit torn([&] { transport.teardown(); });
     uint64_t             answered = 0u;
     d3dproto::FormatCaps rows[format_count] = {};
     if (!d3dproto::av_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;

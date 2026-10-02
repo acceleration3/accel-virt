@@ -19,7 +19,9 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 }  // namespace
 
 D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
-    : memory_(memory), kmt_(kmt), log_(log), lines_(log, "avumd: "), devices_(memory), caps_(), sessions_(), adapters_{}
+    : memory_(memory), log_(log), lines_(log, "avumd: "), devices_(memory),
+      adapters_(kmt, memory, log, "the host answers no Direct3D 9 on this adapter", session_arena_bytes,
+                d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Finish9, d3d9proto::kCmd_Flush9)
 {
     AV_SCOPE("D3d9Driver::D3d9Driver");
 }
@@ -27,49 +29,32 @@ D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
 uint32_t D3d9Driver::slot_of(uint32_t kmt_adapter)
 {
     AV_SCOPE("D3d9Driver::slot_of");
-    for (uint32_t slot = 0u; slot < max_adapters; slot++)
-        if (adapters_[slot] == kmt_adapter && caps_[slot].learned()) return slot;
-    for (uint32_t slot = 0u; slot < max_adapters; slot++) {
-        if (caps_[slot].learned()) continue;
-        if (!caps_[slot].learn(kmt_, kmt_adapter)) {
-            log_.write("avumd: the host answers no Direct3D 9 on this adapter");
-            return max_adapters;
-        }
-        adapters_[slot] = kmt_adapter;
-        const D3DCAPS9 &learned = caps_[slot].caps();
-        LogLine(lines_)
-            .text("Direct3D 9 caps: DevCaps ")
-            .hex(learned.DevCaps, 8u)
-            .text(" Caps2 ")
-            .hex(learned.Caps2, 8u)
-            .text(" VertexProcessingCaps ")
-            .hex(learned.VertexProcessingCaps, 8u)
-            .text(" DevCaps2 ")
-            .hex(learned.DevCaps2, 8u)
-            .text(caps_[slot].present_snapshots() ? " snapshots" : " no snapshots")
-            .write();
-        return slot;
-    }
-    return max_adapters;
-}
-
-d3d::D3dSession &D3d9Driver::session(uint32_t slot)
-{
-    AV_SCOPE("D3d9Driver::session");
-    if (!sessions_[slot].constructed())
-        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, session_arena_bytes,
-                                                    d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Finish9,
-                                                    d3d9proto::kCmd_Flush9));
-    return sessions_[slot].object();
+    bool           learned = false;
+    const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
+    if (!learned) return slot;
+    const D3d9HostCaps &caps = adapters_.caps(slot);
+    const D3DCAPS9     &told = caps.caps();
+    LogLine(lines_)
+        .text("Direct3D 9 caps: DevCaps ")
+        .hex(told.DevCaps, 8u)
+        .text(" Caps2 ")
+        .hex(told.Caps2, 8u)
+        .text(" VertexProcessingCaps ")
+        .hex(told.VertexProcessingCaps, 8u)
+        .text(" DevCaps2 ")
+        .hex(told.DevCaps2, 8u)
+        .text(caps.present_snapshots() ? " snapshots" : " no snapshots")
+        .write();
+    return slot;
 }
 
 d3d::Hresult D3d9Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter)
 {
     AV_SCOPE("D3d9Driver::caps");
     const uint32_t slot = slot_of(kmt_adapter);
-    if (slot == max_adapters) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
     /* D3DDDIARG_GETCAPS is D3D10_2DDIARG_GETCAPS's shape (umd_record_layout.cpp). */
-    return static_cast<d3d::Hresult>(caps_[slot].answer(*reinterpret_cast<const D3DDDIARG_GETCAPS *>(&args)));
+    return static_cast<d3d::Hresult>(adapters_.caps(slot).answer(*reinterpret_cast<const D3DDDIARG_GETCAPS *>(&args)));
 }
 
 /* The device's handle is the device: d3d9.dll sizes no block for it. */
@@ -77,10 +62,10 @@ d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t 
 {
     AV_SCOPE("D3d9Driver::build");
     const uint32_t slot = slot_of(kmt_adapter);
-    if (slot == max_adapters) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
     auto &arguments = *static_cast<D3DDDIARG_CREATEDEVICE *>(create);
     D3d9Device *device = nullptr;
-    if (devices_.create(device, session(slot), memory_, log_, caps_[slot], adapter) != Status::ok)
+    if (devices_.create(device, adapters_.session(slot), memory_, log_, adapters_.caps(slot), adapter) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {

@@ -9,6 +9,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
+#include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -43,21 +44,10 @@ public:
     void         tear_down(void *block);
 
 private:
-    /* The slot of this kernel adapter, its host capabilities asked on first
-     * use; max_adapters when the adapter runs no Direct3D or none is free. */
-    uint32_t             slot_of(uint32_t kmt_adapter);
-    /* The slot's session, made on first use. */
-    d3d::D3dSession        &session(uint32_t slot);
-
-    static constexpr uint32_t max_adapters = 8u;
-
     BlockSource             &memory_;
-    Kmt                     &kmt_;
     LogSink            &log_;
     ObjectPool<D3d11Device>  devices_;
-    D3d11HostCaps            caps_[max_adapters];
-    ObjectStorage<d3d::D3dSession> sessions_[max_adapters];
-    uint32_t                 adapters_[max_adapters];
+    AdapterSessions<D3d11HostCaps> adapters_;
 };
 
 }  // namespace av::d3d11

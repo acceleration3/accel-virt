@@ -16,6 +16,7 @@
 #include <stdint.h>
 
 namespace av {
+class ClientTransport;
 class Kmt;
 }  // namespace av
 
@@ -32,7 +33,7 @@ public:
     /* Asks the host through `adapter` (a D3DKMT adapter handle). False when
      * the adapter runs no Direct3D, which the runtime is told as a failed
      * GetCaps. */
-    [[nodiscard]] bool learn(Kmt &kmt, uint32_t adapter);
+    [[nodiscard]] bool learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter);
     bool               learned() const;
 
     /* One GetCaps question, answered into the caller's buffer. */

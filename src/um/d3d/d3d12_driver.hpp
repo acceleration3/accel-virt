@@ -12,6 +12,7 @@
 #include "core/support/driver_log.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/d3d/hresult.hpp"
+#include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -51,23 +52,17 @@ public:
     void         tear_down(void *block);
 
 private:
-    static constexpr uint32_t max_adapters = 8u;
+    static constexpr uint32_t max_adapters = AdapterSessions<D3d12HostCaps>::max_adapters;
 
-    /* The slot of this kernel adapter, its host capabilities asked on first
-     * use; max_adapters when the adapter runs no Direct3D 12 or none is free. */
-    uint32_t         slot_of(uint32_t kmt_adapter);
-    d3d::D3dSession &session(uint32_t slot); 
+    /* The slot's session (AdapterSessions) and the heap arena over it. */
+    d3d::D3dSession &session(uint32_t slot);
 
-    BlockSource                    &memory_;
-    Kmt                            &kmt_;
     LogSink                   &log_;
     DriverLog                      lines_;
     ObjectPool<D3d12Device>         devices_;
-    D3d12HostCaps                   caps_[max_adapters];
-    ObjectStorage<d3d::D3dSession>  sessions_[max_adapters];
+    AdapterSessions<D3d12HostCaps>  adapters_;
     SrwLock                         arena_locks_[max_adapters];
     ObjectStorage<d3d::D3d12HeapArena> heaps_[max_adapters];
-    uint32_t                        adapters_[max_adapters];
     /* D3D12Core's handle for the command-list table this driver filled. */
     void                           *list_table_;
 };

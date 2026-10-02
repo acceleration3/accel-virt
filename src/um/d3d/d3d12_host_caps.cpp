@@ -1,10 +1,6 @@
 #include "um/d3d/d3d12_host_caps.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
-#include "guest/transport/guest_connection.hpp"
-#include "guest/transport/kmt_transport.hpp"
-#include "proto/context/sub_api.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
@@ -13,9 +9,6 @@ namespace av::d3d12 {
 namespace {
 
 /* The questions asked; small enough for the stack. */
-constexpr uint8_t  ring_order = 16u;
-constexpr uint32_t reply_bytes = 64u * 1024u;
-constexpr size_t   staging_bytes = 16u * 1024u;
 
 constexpr uint32_t level_11_0 = 0xb000u;
 constexpr uint32_t level_11_1 = 0xb100u;
@@ -44,17 +37,10 @@ D3d12HostCaps::D3d12HostCaps() : caps_{}, formats_(), learned_(false)
     AV_SCOPE("D3d12HostCaps::D3d12HostCaps");
 }
 
-bool D3d12HostCaps::learn(Kmt &kmt, uint32_t adapter)
+bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &, uint32_t)
 {
     AV_SCOPE("D3d12HostCaps::learn");
     if (learned_) return true;
-    GuestConnection connection(kmt);
-    if (connection.open(adapter) != Status::ok) return false;
-    ScopeExit closed([&] { connection.close(); });
-    uint8_t      staging[staging_bytes];
-    KmtTransport transport(connection, SubApi::d3d, ring_order, reply_bytes, staging, sizeof(staging));
-    if (transport.initialize() != Status::ok) return false;
-    ScopeExit torn([&] { transport.teardown(); });
     uint32_t hresult = 1u;
     if (!d3d12proto::av_d3d12_OpenDevice12(transport, 0u, &hresult, &caps_) || hresult != 0u) return false;
     for (uint32_t format = 1u; format < format_count; format++) {

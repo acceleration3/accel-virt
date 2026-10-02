@@ -14,6 +14,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
+#include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d9_device.hpp"
 #include "um/d3d/d3d9_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -51,21 +52,15 @@ public:
     d3d::UmdAdapter *tear_down(void *device);
 
 private:
-    static constexpr uint32_t max_adapters = 8u;
-
-    /* The slot of this kernel adapter, its host capabilities asked on first
-     * use; max_adapters when the adapter runs no Direct3D 9 or none is free. */
-    uint32_t         slot_of(uint32_t kmt_adapter);
-    d3d::D3dSession &session(uint32_t slot);
+    /* The slot of this kernel adapter (AdapterSessions), its capabilities
+     * said in the log the first time they are learned. */
+    uint32_t slot_of(uint32_t kmt_adapter);
 
     BlockSource                   &memory_;
-    Kmt                           &kmt_;
     LogSink                  &log_;
     DriverLog                lines_;
     ObjectPool<D3d9Device>         devices_;
-    D3d9HostCaps                   caps_[max_adapters];
-    ObjectStorage<d3d::D3dSession> sessions_[max_adapters];
-    uint32_t                       adapters_[max_adapters];
+    AdapterSessions<D3d9HostCaps>  adapters_;
 };
 
 }  // namespace av::d3d9

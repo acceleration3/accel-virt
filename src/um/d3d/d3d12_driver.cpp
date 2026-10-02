@@ -12,27 +12,12 @@
 namespace av::d3d12 {
 
 D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
-    : memory_(memory), kmt_(kmt), log_(log), lines_(log, "avumd: "), devices_(memory), caps_(), sessions_(), arena_locks_(), heaps_(),
-      adapters_{}, list_table_(nullptr)
+    : log_(log), lines_(log, "avumd: "), devices_(memory),
+      adapters_(kmt, memory, log, "the host answers no Direct3D 12 on this adapter", KmtBlobArena::max_bytes,
+                d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11, d3dproto::kCmd_Flush11),
+      arena_locks_(), heaps_(), list_table_(nullptr)
 {
     AV_SCOPE("D3d12Driver::D3d12Driver");
-}
-
-uint32_t D3d12Driver::slot_of(uint32_t kmt_adapter)
-{
-    AV_SCOPE("D3d12Driver::slot_of");
-    for (uint32_t slot = 0u; slot < max_adapters; slot++)
-        if (adapters_[slot] == kmt_adapter && caps_[slot].learned()) return slot;
-    for (uint32_t slot = 0u; slot < max_adapters; slot++) {
-        if (caps_[slot].learned()) continue;
-        if (!caps_[slot].learn(kmt_, kmt_adapter)) {
-            log_.write("avumd: the host answers no Direct3D 12 on this adapter");
-            return max_adapters;
-        }
-        adapters_[slot] = kmt_adapter;
-        return slot;
-    }
-    return max_adapters;
 }
 
 /* The arena as large as a blob arena can be: every upload and readback heap
@@ -40,21 +25,18 @@ uint32_t D3d12Driver::slot_of(uint32_t kmt_adapter)
 d3d::D3dSession &D3d12Driver::session(uint32_t slot)
 {
     AV_SCOPE("D3d12Driver::session");
-    if (!sessions_[slot].constructed())
-        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, KmtBlobArena::max_bytes,
-                                                          d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11,
-                                                    d3dproto::kCmd_Flush11));
     if (!heaps_[slot].constructed()) static_cast<void>(heaps_[slot].construct(arena_locks_[slot]));
-    return sessions_[slot].object();
+    return adapters_.session(slot);
 }
 
 d3d::Hresult D3d12Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter)
 {
     AV_SCOPE("D3d12Driver::caps");
-    const uint32_t slot = slot_of(kmt_adapter);
-    if (slot == max_adapters) return d3d::hr_fail;
+    bool           learned = false;
+    const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
+    if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::hr_fail;
     /* The record is D3D12DDIARG_GETCAPS byte for byte (umd_record_layout.cpp). */
-    const HRESULT answered = caps_[slot].answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args));
+    const HRESULT answered = adapters_.caps(slot).answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args));
     /* Which questions go unanswered is what a first run on a new D3D12Core
      * needs to know; the runtime asks each a handful of times at most. */
     if (FAILED(answered)) lines_.note("Direct3D 12 caps refused, type", args.Type);
@@ -64,12 +46,13 @@ d3d::Hresult D3d12Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t km
 d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint32_t kmt_adapter)
 {
     AV_SCOPE("D3d12Driver::build");
-    const uint32_t slot = slot_of(kmt_adapter);
-    if (slot == max_adapters) return d3d::hr_fail;
+    bool           learned = false;
+    const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
+    if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::hr_fail;
     const auto  &arguments = *reinterpret_cast<const D3D12DDIARG_CREATEDEVICE_0109 *>(&create);
     D3d12Device *device = nullptr;
     d3d::D3dSession &joined = session(slot);
-    if (devices_.create(device, joined, heaps_[slot].object(), log_, caps_[slot], list_table_) != Status::ok)
+    if (devices_.create(device, joined, heaps_[slot].object(), log_, adapters_.caps(slot), list_table_) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {

@@ -1,11 +1,7 @@
 #include "um/d3d/d3d9_host_caps.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/transport/guest_connection.hpp"
-#include "guest/transport/kmt_transport.hpp"
-#include "proto/context/sub_api.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
@@ -15,9 +11,6 @@ namespace av::d3d9 {
 
 namespace {
 
-constexpr uint8_t  ring_order = 16u;
-constexpr uint32_t reply_bytes = 64u * 1024u;
-constexpr size_t   staging_bytes = 16u * 1024u;
 /* The queries the host's Direct3D 9 runs (D3DDDIQUERYTYPE); the three timestamp
  * ones go together or not at all (reverse-engineering.md §2.3). */
 constexpr D3DDDIQUERYTYPE queries[] = {D3DDDIQUERYTYPE_VCACHE,         D3DDDIQUERYTYPE_EVENT,
@@ -51,17 +44,10 @@ D3d9HostCaps::D3d9HostCaps()
     AV_SCOPE("D3d9HostCaps::D3d9HostCaps");
 }
 
-bool D3d9HostCaps::learn(Kmt &kmt, uint32_t adapter)
+bool D3d9HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter)
 {
     AV_SCOPE("D3d9HostCaps::learn");
     if (learned_) return true;
-    GuestConnection connection(kmt);
-    if (connection.open(adapter) != Status::ok) return false;
-    ScopeExit closed([&] { connection.close(); });
-    uint8_t      staging[staging_bytes];
-    KmtTransport transport(connection, SubApi::d3d, ring_order, reply_bytes, staging, sizeof(staging));
-    if (transport.initialize() != Status::ok) return false;
-    ScopeExit torn([&] { transport.teardown(); });
     uint32_t hresult = 1u, vendor = 0u, device = 0u, subsystem = 0u, revision = 0u, memory_mb = 0u;
     uint64_t answered = 0u;
     if (!d3d9proto::av_d3d9_QueryCaps9(transport, &hresult, &vendor, &device, &subsystem, &revision, &memory_mb,
