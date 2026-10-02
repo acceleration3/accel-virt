@@ -1,19 +1,11 @@
 #include "device/recording/replay_context.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/execution/command_api.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/recording/recorded_command.hpp"
 
 namespace av {
-
-namespace {
-
-constexpr uint16_t vulkan_commands = 1u;
-constexpr uint16_t opencl_commands = 2u;
-constexpr uint16_t opengl_commands = 3u;
-constexpr uint16_t d3d_commands = 4u;
-
-}  // namespace
 
 ReplayContext::ReplayContext()
     : executor_(nullptr),
@@ -73,9 +65,7 @@ uint32_t ReplayContext::context() const
 uint16_t ReplayContext::command_api() const
 {
     AV_SCOPE("ReplayContext::command_api");
-    if (api_ == SubApi::opencl) return opencl_commands;
-    if (api_ == SubApi::d3d) return d3d_commands;
-    return api_ == SubApi::opengl ? opengl_commands : vulkan_commands;
+    return CommandApi(api_).api();
 }
 
 Status ReplayContext::execute(const ExecutorLibrary &library, const RecordedCommand &command)

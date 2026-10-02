@@ -32,14 +32,10 @@ public:
     /* The name the registry gave this id, or the transport command's own;
      * "unknown" for an id no table knows, never null. */
     const char          *name() const;
-    /* The API's name: transport, vulkan, opencl, opengl, or "api". */
+    /* The API's name: transport, vulkan, opencl, opengl, d3d, or "api". */
     const char          *api_name() const;
 
 private:
-    static constexpr uint16_t vulkan_api = 1u;
-    static constexpr uint16_t opencl_api = 2u;
-    static constexpr uint16_t opengl_api = 3u;
-
     CommandHeader  header_;
     const uint8_t *payload_;
     uint32_t       payload_length_;

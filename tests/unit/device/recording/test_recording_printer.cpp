@@ -543,16 +543,21 @@ TEST(recording_printer_next, learns_each_contexts_sub_api_and_forgets_none_of_th
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opengl, 40u, 16u, 41u, 1u, 42u)
                    .encode(opengl, sizeof opengl),
                Status::ok);
+  std::uint8_t d3d[ContextSetup::base_size] = {};
+  CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::d3d, 40u, 16u, 41u, 1u, 42u).encode(d3d, sizeof d3d),
+               Status::ok);
   const std::uint8_t nothing[1] = {};
   /* Three contexts, one of them set up twice, and a fence of a context that
    * was never set up at all. */
   made.add(av::RecordKind::context_setup, 1u, 0u, setup, sizeof setup)
       .add(av::RecordKind::context_setup, 2u, 0u, opencl, sizeof opencl)
       .add(av::RecordKind::context_setup, 3u, 0u, opengl, sizeof opengl)
+      .add(av::RecordKind::context_setup, 4u, 0u, d3d, sizeof d3d)
       .add(av::RecordKind::context_setup, 1u, 0u, setup, sizeof setup)
       .add(av::RecordKind::fence_completed, 1u, 7u, nothing, 0u)
       .add(av::RecordKind::fence_completed, 2u, 8u, nothing, 0u)
       .add(av::RecordKind::fence_completed, 3u, 10u, nothing, 0u)
+      .add(av::RecordKind::fence_completed, 4u, 11u, nothing, 0u)
       .add(av::RecordKind::fence_completed, 9u, 9u, nothing, 0u);
   /* Each sub-API names itself and keeps only its own contexts' records. The
    * printer's table pairs a sub-API bit with a command-API half, and the two
@@ -560,7 +565,8 @@ TEST(recording_printer_next, learns_each_contexts_sub_api_and_forgets_none_of_th
   struct Case { const char *api; const char *kept_fence; const char *other_fence; };
   const Case cases[] = {{"vulkan", "ctx=1 fence=7", "ctx=3 fence=10"},
                         {"opencl", "ctx=2 fence=8", "ctx=1 fence=7"},
-                        {"opengl", "ctx=3 fence=10", "ctx=2 fence=8"}};
+                        {"opengl", "ctx=3 fence=10", "ctx=2 fence=8"},
+                        {"d3d", "ctx=4 fence=11", "ctx=3 fence=10"}};
   for (const Case &c : cases) {
       RecordingFilter only;
       CHECK_STATUS(only.keep_api(c.api), Status::ok);

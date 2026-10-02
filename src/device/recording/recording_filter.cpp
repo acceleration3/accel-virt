@@ -1,36 +1,13 @@
 #include "device/recording/recording_filter.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/execution/command_api.hpp"
 #include "device/recording/record_header.hpp"
 #include "device/recording/recorded_command.hpp"
 
 namespace av {
 
 namespace {
-
-/* One sub-API's name and the API half of the command ids it owns. */
-class ApiName {
-public:
-    constexpr ApiName(const char *text, uint16_t api) : text_(text), api_(api) {}
-
-    constexpr bool named_by(const char *name, uint16_t &api) const
-    {
-        for (size_t index = 0u;; index++) {
-            if (text_[index] != name[index]) return false;
-            if (text_[index] == '\0') break;
-        }
-        api = api_;
-        return true;
-    }
-
-private:
-    const char *text_;
-    uint16_t    api_;
-};
-
-constexpr ApiName api_names[] = {ApiName("transport", 0u), ApiName("vulkan", 1u), ApiName("opencl", 2u),
-                                 ApiName("opengl", 3u)};
-constexpr uint32_t api_count = sizeof api_names / sizeof api_names[0];
 
 /* Whether `text` holds `fragment`, both NUL-terminated; `fragment` is never
  * empty, because an empty one keeps everything without looking. */
@@ -62,15 +39,10 @@ void RecordingFilter::keep_context(uint32_t context)
 Status RecordingFilter::keep_api(const char *name)
 {
     AV_SCOPE("RecordingFilter::keep_api");
-    if (name == nullptr) return Status::invalid_parameter;
-    uint16_t found = any_api;
-    for (uint32_t index = 0u; index < api_count; index++) {
-        if (api_names[index].named_by(name, found)) {
-            api_ = found;
-            return Status::ok;
-        }
-    }
-    return Status::invalid_parameter;
+    CommandApi named(any_api);
+    if (!named.take_name(name)) return Status::invalid_parameter;
+    api_ = named.api();
+    return Status::ok;
 }
 
 Status RecordingFilter::keep_fences(uint64_t first, uint64_t last)

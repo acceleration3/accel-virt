@@ -86,7 +86,7 @@ Status RecordingToolRequest::take_flag(const char *flag, const char *value, Reco
     if (same(flag, "--api"))
         return filter.keep_api(value) == Status::ok
                    ? Status::ok
-                   : refuse("--api wants transport, vulkan, opencl or opengl");
+                   : refuse("--api wants transport, vulkan, opencl, opengl or d3d");
     if (same(flag, "--fence")) return take_fences(value, filter);
     if (same(flag, "--command"))
         return filter.keep_command(value) == Status::ok ? Status::ok

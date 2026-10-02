@@ -5,6 +5,7 @@
 #ifndef AV_CONTEXT_API_HPP
 #define AV_CONTEXT_API_HPP
 
+#include "device/execution/command_api.hpp"
 #include <stdint.h>
 
 namespace av {
@@ -14,7 +15,7 @@ struct ContextApiProbe;
 class ContextApi {
 public:
     /* No sub-API this protocol knows. */
-    static constexpr uint16_t unknown_api = 0xFFFFu;
+    static constexpr uint16_t unknown_api = CommandApi::none;
 
     ContextApi();
 

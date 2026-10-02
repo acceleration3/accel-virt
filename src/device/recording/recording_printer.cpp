@@ -2,6 +2,7 @@
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "device/execution/command_api.hpp"
 #include "device/recording/record_kind.hpp"
 #include "device/recording/recording_filter.hpp"
 #include "device/recording/recording_reader.hpp"
@@ -20,28 +21,6 @@ constexpr uint32_t    fault_name_count = sizeof fault_names / sizeof fault_names
 constexpr const char *blob_actions[] = {"created", "imported", "released"};
 constexpr uint32_t    blob_action_count = sizeof blob_actions / sizeof blob_actions[0];
 constexpr const char *command_indent = "                   ";
-
-/* SubApi's bits against the API half of the command ids that sub-API sends
- * (docs/protocol.md, Execution). */
-class SubApiName {
-public:
-    constexpr SubApiName(uint32_t sub_api, uint16_t api, const char *text)
-        : sub_api_(sub_api), api_(api), text_(text)
-    {}
-
-    constexpr bool is(uint32_t sub_api) const { return sub_api_ == sub_api; }
-    constexpr uint16_t api() const { return api_; }
-    constexpr const char *text() const { return text_; }
-
-private:
-    uint32_t    sub_api_;
-    uint16_t    api_;
-    const char *text_;
-};
-
-constexpr SubApiName sub_apis[] = {SubApiName(1u, 1u, "vulkan"), SubApiName(2u, 3u, "opengl"),
-                                   SubApiName(4u, 2u, "opencl")};
-constexpr uint32_t sub_api_count = sizeof sub_apis / sizeof sub_apis[0];
 
 /* Microseconds with the nanoseconds under them, so a person reads the gaps. */
 void append_time(TextBuffer &text, uint64_t nanoseconds)
@@ -131,9 +110,7 @@ void RecordingPrinter::learn(const RecordHeader &record, const uint8_t *payload)
     if (record.kind() != RecordKind::context_setup) return;
     ContextSetup setup;
     if (setup.decode(payload, record.length()) != Status::ok) return;
-    uint16_t api = ContextApi::unknown_api;
-    for (uint32_t index = 0u; index < sub_api_count; index++)
-        if (sub_apis[index].is(static_cast<uint32_t>(setup.sub_api()))) api = sub_apis[index].api();
+    const uint16_t api = CommandApi(setup.sub_api()).api();
     for (ContextApi &known : contexts_) {
         if (known.known() && !known.names(record.context())) continue;
         known.learn(record.context(), api);
@@ -242,10 +219,7 @@ void RecordingPrinter::append_setup(TextBuffer &text) const
         return;
     }
     text.append("setup api=");
-    const char *named = "api";
-    for (uint32_t index = 0u; index < sub_api_count; index++)
-        if (sub_apis[index].is(static_cast<uint32_t>(setup.sub_api()))) named = sub_apis[index].text();
-    text.append(named);
+    text.append(CommandApi(setup.sub_api()).name());
     text.append(" ring_order=");
     text.append_decimal(setup.ring_order());
     text.append(" doorbell=");

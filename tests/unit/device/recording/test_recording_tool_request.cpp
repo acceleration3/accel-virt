@@ -190,7 +190,7 @@ TEST(recording_tool_request_parse, refuses_what_it_does_not_understand)
       {Arguments().add("print").add("run.av").add("--context").add("4294967296"), "--context"},
       {Arguments().add("print").add("run.av").add("--bytes").add("-1"), "--bytes"},
       {Arguments().add("print").add("run.av").add("--bytes").add("4294967296"), "--bytes"},
-      {Arguments().add("print").add("run.av").add("--api").add("d3d"), "--api"},
+      {Arguments().add("print").add("run.av").add("--api").add("metal"), "--api"},
   };
   for (const Case &c : cases) {
       RecordingFilter      filter;

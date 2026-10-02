@@ -1,18 +1,10 @@
 #include "device/recording/recorded_command.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/execution/command_api.hpp"
 
-#include "proto/generated/opencl/cl_command_names.h"
-#include "proto/generated/opengl/gl_command_names.h"
-#include "proto/generated/vulkan/vk_command_names.h"
 
 namespace av {
-
-namespace {
-
-constexpr const char *unknown = "unknown";
-
-}  // namespace
 
 RecordedCommand::RecordedCommand() : header_(), payload_(nullptr), payload_length_(0u), offset_(0u)
 {
@@ -66,34 +58,17 @@ uint32_t RecordedCommand::next_offset() const
 }
 
 /* The names come from the tables the generator writes from the registries
- * (FR-005); the transport's three are this repository's own, and are the only
- * ids named here. */
+ * (FR-005); the transport's three are this repository's own (CommandApi). */
 const char *RecordedCommand::name() const
 {
     AV_SCOPE("RecordedCommand::name");
-    switch (header_.api()) {
-    case CommandHeader::transport_api:
-        if (header_.id() == CommandHeader::nop_id) return "nop";
-        if (header_.id() == CommandHeader::import_blob_id) return "import_blob";
-        if (header_.id() == CommandHeader::release_blob_id) return "release_blob";
-        return unknown;
-    case vulkan_api: return vkproto::cmd_id_to_string(header_.id());
-    case opencl_api: return clproto::cmd_id_to_string(header_.id());
-    case opengl_api: return glproto::cmd_id_to_string(header_.id());
-    default: return unknown;
-    }
+    return CommandApi(header_.api()).command_name(header_.id());
 }
 
 const char *RecordedCommand::api_name() const
 {
     AV_SCOPE("RecordedCommand::api_name");
-    switch (header_.api()) {
-    case CommandHeader::transport_api: return "transport";
-    case vulkan_api: return "vulkan";
-    case opencl_api: return "opencl";
-    case opengl_api: return "opengl";
-    default: return "api";
-    }
+    return CommandApi(header_.api()).name();
 }
 
 }  // namespace av

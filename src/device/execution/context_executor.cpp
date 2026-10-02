@@ -1,6 +1,7 @@
 #include "device/execution/context_executor.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/execution/command_api.hpp"
 #include "device/context/context_signal.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
@@ -191,12 +192,7 @@ void ContextExecutor::release_object(uint32_t kind, uint64_t wire_handle)
 uint16_t ContextExecutor::command_api() const
 {
     AV_SCOPE("ContextExecutor::command_api");
-    switch (api_) {
-    case SubApi::vulkan: return vulkan_commands;
-    case SubApi::opencl: return opencl_commands;
-    case SubApi::d3d: return d3d_commands;
-    default: return opengl_commands;
-    }
+    return CommandApi(api_).api();
 }
 
 bool ContextExecutor::created() const

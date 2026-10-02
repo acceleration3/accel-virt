@@ -80,7 +80,7 @@ TEST(recording_filter_keep_context, keeps_one_context_and_no_other)
 
 TEST(recording_filter_keep_api, names_each_sub_api_and_refuses_anything_else)
 { struct Case { const char *name; std::uint16_t api; };
-  const Case cases[] = {{"transport", 0u}, {"vulkan", 1u}, {"opencl", 2u}, {"opengl", 3u}};
+  const Case cases[] = {{"transport", 0u}, {"vulkan", 1u}, {"opencl", 2u}, {"opengl", 3u}, {"d3d", 4u}};
   for (const Case &c : cases) {
       RecordingFilter filter;
       CHECK_STATUS(filter.keep_api(c.name), Status::ok);

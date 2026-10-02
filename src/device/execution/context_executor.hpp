@@ -91,12 +91,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* render-server's API ids (av/wire/api_id.hpp), not the capset's bits. */
-    static constexpr uint16_t vulkan_commands = 1u;
-    static constexpr uint16_t opencl_commands = 2u;
-    static constexpr uint16_t opengl_commands = 3u;
-    static constexpr uint16_t d3d_commands = 4u;
-
     AvExecutor *make() const;
 
     Host                  &host_;
