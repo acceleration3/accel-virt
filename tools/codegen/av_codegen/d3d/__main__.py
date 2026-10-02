@@ -9,12 +9,11 @@ tools/check_generated.py, which passes every registry that way; it is TOML.
 from __future__ import annotations
 
 import argparse
-import filecmp
 import sys
-import tempfile
 from pathlib import Path
 
 from . import emit, model
+from ..emit.common import GeneratedTree, missing_input
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,8 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if not args.xml.is_file():
-        print(f"error: --xml does not exist: {args.xml}", file=sys.stderr)
+    if missing_input(args, ("xml",)):
         return 2
     try:
         reg = model.load(args.xml)
@@ -37,30 +35,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {args.xml}: {error}", file=sys.stderr)
         return 2
     if args.check:
-        return _check(reg, args.out)
+        return GeneratedTree(args.out).check(lambda tmp: emit.emit_all(reg, tmp))
     args.out.mkdir(parents=True, exist_ok=True)
     emit.emit_all(reg, args.out)
     print(f"av-codegen-d3d: {len(reg.commands)} commands, {len(reg.structs)} structs -> {args.out}")
     return 0
-
-
-def _check(reg: model.Registry, out: Path) -> int:
-    if not out.is_dir():
-        print(f"error: --out does not exist: {out}", file=sys.stderr)
-        return 1
-    with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td)
-        emit.emit_all(reg, tmp)
-        expected = sorted(p.name for p in tmp.iterdir())
-        actual = sorted(p.name for p in out.iterdir() if not p.name.startswith("."))
-        differ = expected != actual
-        if differ:
-            print(f"error: file set differs.\n  expected: {expected}\n  actual:   {actual}", file=sys.stderr)
-        for name in expected:
-            if name in actual and not filecmp.cmp(tmp / name, out / name, shallow=False):
-                print(f"error: {name} differs from committed copy", file=sys.stderr)
-                differ = True
-        return 1 if differ else 0
 
 
 if __name__ == "__main__":

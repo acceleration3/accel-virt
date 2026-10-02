@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import filecmp
 import sys
-import tempfile
 from pathlib import Path
 
 from . import emit, lower, parse, profile
-from .model import Registry
+from ..emit.common import GeneratedTree, missing_input
 
 PROFILES = Path(__file__).resolve().parents[2] / "profiles"
 
@@ -34,18 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    if not args.xml.is_file():
-        print(f"error: --xml does not exist: {args.xml}", file=sys.stderr)
-        return 2
-    if not args.profile.is_file():
-        print(f"error: --profile does not exist: {args.profile}", file=sys.stderr)
-        return 2
-    if not args.ids.is_file():
-        print(f"error: --ids does not exist: {args.ids}", file=sys.stderr)
-        return 2
-
-    if not args.proc_table.is_file():
-        print(f"error: --proc-table does not exist: {args.proc_table}", file=sys.stderr)
+    if missing_input(args, ("xml", "profile", "ids", "proc_table")):
         return 2
     try:
         proc_table = emit.read_proc_table(args.proc_table.read_text())
@@ -72,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.check:
-            return _check(reg, values, proc_table, args.out)
+            return GeneratedTree(args.out).check(lambda tmp: emit.emit_all(reg, tmp, values, proc_table))
         emit.emit_all(reg, args.out, values, proc_table)
     except emit.GenerationError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -82,36 +69,6 @@ def main(argv: list[str] | None = None) -> int:
     print(f"av-codegen-gl: {len(reg.commands)} commands "
           f"({asynchronous} of them one-way) -> {args.out}")
     return 0
-
-
-def _check(reg: Registry, values: dict[str, int], proc_table: list[str], out: Path) -> int:
-    """Generate to a temp dir and diff the whole directory against ``out``."""
-    if not out.is_dir():
-        print(f"error: --out does not exist: {out}", file=sys.stderr)
-        return 1
-    with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td)
-        emit.emit_all(reg, tmp, values, proc_table)
-
-        differ = False
-        expected = sorted(p.name for p in tmp.iterdir())
-        # Dotfiles are configuration that lives alongside the output,
-        # not output: generated/.clang-format is what stops an editor
-        # reformatting these files and breaking this very check.
-        actual = sorted(p.name for p in out.iterdir() if not p.name.startswith("."))
-        if expected != actual:
-            print(
-                f"error: file set differs.\n  expected: {expected}\n  actual:   {actual}",
-                file=sys.stderr,
-            )
-            differ = True
-        for name in expected:
-            if name not in actual:
-                continue
-            if not filecmp.cmp(tmp / name, out / name, shallow=False):
-                print(f"error: {name} differs from committed copy", file=sys.stderr)
-                differ = True
-        return 1 if differ else 0
 
 
 if __name__ == "__main__":

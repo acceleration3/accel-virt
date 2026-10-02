@@ -8,14 +8,12 @@ committed copy; this is what CI runs.
 from __future__ import annotations
 
 import argparse
-import filecmp
 import sys
-import tempfile
 from pathlib import Path
 
 from . import lower, parse, profile
 from .emit import ALL_BACKENDS, width_audit
-from .ir import Registry
+from .emit.common import GeneratedTree, missing_input
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,17 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    if not args.xml.is_file():
-        print(f"error: --xml does not exist: {args.xml}", file=sys.stderr)
+    if missing_input(args, ("xml", "profile", "ids")):
         return 2
-    if not args.profile.is_file():
-        print(f"error: --profile does not exist: {args.profile}", file=sys.stderr)
-        return 2
-    if not args.ids.is_file():
-        print(f"error: --ids does not exist: {args.ids}", file=sys.stderr)
-        return 2
-
-    args.out.mkdir(parents=True, exist_ok=True)
 
     if args.verbose:
         print("av-codegen v0.0.1")
@@ -95,7 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     width_audit.check(reg)
 
     if args.check:
-        return _check(reg, args.out)
+        return GeneratedTree(args.out).check(lambda tmp: [backend.emit(reg, tmp) for backend in ALL_BACKENDS])
+
+    args.out.mkdir(parents=True, exist_ok=True)
 
     # Persist any newly-assigned wire IDs back to protocol_ids.toml so
     # the developer doesn't have to hand-edit it.
@@ -106,32 +97,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  emit {backend.__name__.rsplit('.', 1)[-1]}")
         backend.emit(reg, args.out)
     return 0
-
-
-def _check(reg: Registry, out: Path) -> int:
-    """Generate to a temp dir and diff the whole directory against ``out``."""
-    with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td)
-        for backend in ALL_BACKENDS:
-            backend.emit(reg, tmp)
-
-        differ = False
-        expected = sorted(p.name for p in tmp.iterdir())
-        # Dotfiles are configuration that lives alongside the output, not
-        # output: generated/.clang-format is what stops an editor
-        # reformatting these files and breaking this very check.
-        actual = sorted(p.name for p in out.iterdir() if not p.name.startswith("."))
-        if expected != actual:
-            print(
-                f"error: file set differs.\n  expected: {expected}\n  actual:   {actual}",
-                file=sys.stderr,
-            )
-            differ = True
-        for name in expected:
-            if not filecmp.cmp(tmp / name, out / name, shallow=False):
-                print(f"error: {name} differs from committed copy", file=sys.stderr)
-                differ = True
-        return 1 if differ else 0
 
 
 if __name__ == "__main__":
