@@ -1,6 +1,7 @@
 #include "icd/d3d/kernel_surface.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/present_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/surface_layout.hpp"
@@ -9,22 +10,6 @@ namespace av::d3d {
 
 namespace {
 
-/* The DXGI formats a presented surface can have, and the D3DDDIFORMAT each is
- * scanned out as. */
-constexpr uint32_t dxgi_r10g10b10a2_typeless = 23u;
-constexpr uint32_t dxgi_r10g10b10a2_unorm = 24u;
-constexpr uint32_t dxgi_r16g16b16a16_float = 10u;
-constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
-constexpr uint32_t dxgi_b8g8r8x8_unorm = 88u;
-constexpr uint32_t dxgi_b8g8r8a8_typeless = 90u;
-constexpr uint32_t dxgi_b8g8r8a8_unorm_srgb = 91u;
-constexpr uint32_t dxgi_b8g8r8x8_typeless = 92u;
-constexpr uint32_t dxgi_b8g8r8x8_unorm_srgb = 93u;
-constexpr uint32_t ddi_a8r8g8b8 = 21u;
-constexpr uint32_t ddi_x8r8g8b8 = 22u;
-constexpr uint32_t ddi_a2b10g10r10 = 31u;
-constexpr uint32_t ddi_a8b8g8r8 = 32u;
-constexpr uint32_t ddi_a16b16g16r16f = 113u;
 /* A format with no fixed element size is laid out as a 32-bit one. */
 constexpr uint32_t unsized_element_bytes = 4u;
 
@@ -130,18 +115,7 @@ uint64_t KernelSurface::key() const
 uint32_t KernelSurface::kernel_format() const
 {
     AV_SCOPE("KernelSurface::kernel_format");
-    switch (format_) {
-    case dxgi_b8g8r8a8_unorm:
-    case dxgi_b8g8r8a8_unorm_srgb:
-    case dxgi_b8g8r8a8_typeless: return ddi_a8r8g8b8;
-    case dxgi_b8g8r8x8_unorm:
-    case dxgi_b8g8r8x8_unorm_srgb:
-    case dxgi_b8g8r8x8_typeless: return ddi_x8r8g8b8;
-    case dxgi_r10g10b10a2_unorm:
-    case dxgi_r10g10b10a2_typeless: return ddi_a2b10g10r10;
-    case dxgi_r16g16b16a16_float: return ddi_a16b16g16r16f;
-    default: return ddi_a8b8g8r8;
-    }
+    return PresentFormat(format_).ddi();
 }
 
 }  // namespace av::d3d

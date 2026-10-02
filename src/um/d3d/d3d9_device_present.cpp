@@ -12,21 +12,12 @@
 #include "core/support/log_sink.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/kernel_surface.hpp"
+#include "icd/d3d/present_format.hpp"
 #include "um/d3d/d3d9_device.hpp"
 
 #include <string.h>
 
 namespace av::d3d9 {
-
-namespace {
-
-/* The DXGI format the kernel's surface describes a back buffer by. */
-constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
-constexpr uint32_t dxgi_b8g8r8x8_unorm = 88u;
-constexpr uint32_t dxgi_r10g10b10a2_unorm = 24u;
-constexpr uint32_t dxgi_r16g16b16a16_float = 10u;
-
-}  // namespace
 
 HRESULT D3d9Device::make_context()
 {
@@ -66,15 +57,9 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
 {
     AV_SCOPE("D3d9Device::allocate");
     const D3d9Subresource &top = resource.subresources[0];
-    uint32_t format = 0u;
-    switch (resource.format) {
-    case D3DDDIFMT_A8R8G8B8: format = dxgi_b8g8r8a8_unorm; break;
-    case D3DDDIFMT_X8R8G8B8: format = dxgi_b8g8r8x8_unorm; break;
-    case D3DDDIFMT_A2B10G10R10: format = dxgi_r10g10b10a2_unorm; break;
-    case D3DDDIFMT_A16B16G16R16F: format = dxgi_r16g16b16a16_float; break;
-    default: return E_INVALIDARG;
-    }
-    d3d::KernelSurface surface(top.width, top.height, format);
+    d3d::PresentFormat presented(0u);
+    if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
+    d3d::KernelSurface surface(top.width, top.height, presented.dxgi());
     if (surface.make() != Status::ok) return E_INVALIDARG;
     D3DDDI_ALLOCATIONINFO2 info = {};
     info.pPrivateDriverData = surface.allocation_data();
