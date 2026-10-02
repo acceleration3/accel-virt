@@ -175,9 +175,10 @@ private:
     HRESULT write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box, const uint8_t *data,
                           uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags);
     /* One piece of a texture write, sent; false when it could not be, after
-     * saying why. */
+     * saying why. A piece of more than one slice - a whole volume box that
+     * fits one command - names its slice pitch, which the host judges. */
     [[nodiscard]] bool write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &box, const uint8_t *data,
-                                   size_t bytes, uint32_t row_pitch, uint32_t flags);
+                                   size_t bytes, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags);
     HRESULT write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags);
     /* A subresource's pixels as the host has them, into the device's
      * read-back buffer; its pitch and rows. */

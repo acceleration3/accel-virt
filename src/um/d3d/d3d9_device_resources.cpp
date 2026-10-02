@@ -393,11 +393,11 @@ D3d9Device::TextureWriter::TextureWriter(D3d9Device &device, uint32_t id, uint32
 }
 
 bool D3d9Device::TextureWriter::piece(const d3dproto::Box &box, const uint8_t *data, uint64_t bytes,
-                                      uint32_t row_pitch, uint32_t, bool first)
+                                      uint32_t row_pitch, uint32_t slice_pitch, bool first)
 {
     AV_SCOPE("D3d9Device::TextureWriter::piece");
     const d3d9proto::Box part = {box.left, box.top, box.front, box.right, box.bottom, box.back};
-    return device_.write_piece(id_, index_, part, data, static_cast<size_t>(bytes), row_pitch,
+    return device_.write_piece(id_, index_, part, data, static_cast<size_t>(bytes), row_pitch, slice_pitch,
                                first ? flags_ : flags_ & ~write_discard);
 }
 
@@ -417,14 +417,14 @@ HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, 
 }
 
 bool D3d9Device::write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &box, const uint8_t *data,
-                             size_t bytes, uint32_t row_pitch, uint32_t flags)
+                             size_t bytes, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags)
 {
     AV_SCOPE("D3d9Device::write_piece");
     written_ += bytes;
     const uint64_t started = microseconds();
     const bool     room = wire().make_room_for(bytes);
     trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
-    if (room && d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, box, row_pitch, 0u, flags, data, bytes))
+    if (room && d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, box, row_pitch, slice_pitch, flags, data, bytes))
         return true;
     LogLine(lines_)
         .text("a texture write of ")
