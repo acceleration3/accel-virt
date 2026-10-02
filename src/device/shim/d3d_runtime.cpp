@@ -1,6 +1,7 @@
 #include "device/shim/d3d_runtime.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/host/env_setting.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/physical_device_identity.hpp"
 
@@ -22,7 +23,7 @@ constexpr size_t path_bytes = 4096u;
 void *D3dRuntime::open_library(const char *name) const
 {
     AV_SCOPE("D3dRuntime::open_library");
-    const char *const directory = getenv("AV_D3D_PATH");
+    const char *const directory = EnvSetting("AV_D3D_PATH").text();
     if (directory == nullptr || directory[0] == '\0') return dlopen(name, RTLD_NOW | RTLD_LOCAL);
     char path[path_bytes];
     const int written = snprintf(path, sizeof(path), "%s/%s", directory, name);
@@ -215,7 +216,7 @@ int32_t D3dRuntime::create_device12(const uint8_t *uuid, void *&device) const
     const GUID factory_id = __uuidof(ID3D12DeviceFactory);
     if (FAILED(get_interface12_(&factory_class, &factory_id, reinterpret_cast<void **>(&factory)))) return E_FAIL;
     char previous[index_bytes] = {};
-    const char *const was = getenv("VKD3D_VULKAN_DEVICE");
+    const char *const was = EnvSetting("VKD3D_VULKAN_DEVICE").text();
     if (was != nullptr) snprintf(previous, sizeof(previous), "%s", was);
     char chosen[index_bytes] = {};
     snprintf(chosen, sizeof(chosen), "%u", index);

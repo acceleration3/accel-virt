@@ -3,6 +3,7 @@
 #include "device/context/d3d_ordering.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/host/env_setting.hpp"
 #include "device/execution/batch_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
@@ -12,13 +13,12 @@
 #include "proto/submission/ring_header.hpp"
 
 #include <stdio.h>
-extern "C" char *getenv(const char *name);   /* freestanding: libc's own */
 #include <time.h>
 
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(getenv("AV_PERFETTO") != nullptr), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(EnvSetting("AV_PERFETTO").on()), prepared_(false),
       attached_(false), faulted_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");

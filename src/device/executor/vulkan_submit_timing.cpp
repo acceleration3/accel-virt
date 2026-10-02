@@ -1,11 +1,10 @@
 #include "device/executor/vulkan_submit_timing.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/host/env_setting.hpp"
 
 #include <stdio.h>
 #include <time.h>
-
-extern "C" char *getenv(const char *name);   /* freestanding: libc's own */
 
 namespace av {
 
@@ -16,7 +15,7 @@ constexpr uint64_t nanoseconds_per_second = 1000000000u;
 }  // namespace
 
 VulkanSubmitTiming::VulkanSubmitTiming()
-    : enabled_(getenv("AV_VK_SUBMIT_TIMING") != nullptr), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
+    : enabled_(EnvSetting("AV_VK_SUBMIT_TIMING").on()), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
       pool_(VK_NULL_HANDLE), queries_(VK_NULL_HANDLE), begin_{}, end_{}, pending_{}, next_(0u), oldest_(0u),
       period_ns_(1.0), last_end_(0u), busy_ns_(0u), gap_ns_(0u), gaps_(0u), long_gaps_(0u), timed_(0u), window_started_(0u)
 {
