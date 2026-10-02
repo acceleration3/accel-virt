@@ -21,7 +21,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/connection.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"

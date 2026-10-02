@@ -22,8 +22,8 @@
 
 #include "core/support/status.hpp"
 #include "icd/common/framed_block.hpp"
-#include "proto/client_blob_arena.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

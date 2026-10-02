@@ -4,7 +4,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "proto/resources/host_window_record.hpp"
+#include "proto/escape/host_window_record.hpp"
 
 #include <stddef.h>
 

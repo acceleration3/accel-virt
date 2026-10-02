@@ -11,7 +11,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/context/sub_api.hpp"
-#include "proto/resources/host_window_record.hpp"
+#include "proto/escape/host_window_record.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

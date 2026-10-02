@@ -9,7 +9,7 @@
 #include "miniport/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "miniport/ddi/dxgkarg_escape_record.hpp"
 #include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstddef>

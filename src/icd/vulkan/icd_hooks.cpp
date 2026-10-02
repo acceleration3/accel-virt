@@ -14,8 +14,8 @@
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 #include "proto/generated/vulkan/vk_serialize.h"
-#include "proto/icd_connection.hpp"
-#include "proto/icd_handle_registry.hpp"
+#include "proto/client/icd_connection.hpp"
+#include "proto/client/icd_handle_registry.hpp"
 
 namespace av::icd {
 

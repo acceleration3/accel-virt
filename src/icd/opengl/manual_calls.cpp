@@ -3,7 +3,7 @@
 #include "icd/opengl/gl_external_objects.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
-#include "proto/gl_icd_support.hpp"
+#include "proto/client/gl_icd_support.hpp"
 
 #include "icd/opengl/granted_profile.hpp"
 

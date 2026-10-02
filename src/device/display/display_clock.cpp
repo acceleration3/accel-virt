@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/fence/fence_interrupts.hpp"
-#include "proto/display/vblank_record.hpp"
+#include "proto/pages/vblank_record.hpp"
 
 namespace av {
 

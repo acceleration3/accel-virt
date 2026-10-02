@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/shared_object_call.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/wire/wire_writer.hpp"
 

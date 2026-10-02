@@ -776,11 +776,11 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <stddef.h>", "#include <stdint.h>", ""] + CL_PREAMBLE + ["",
-         '#include "proto/client_transport.hpp"', "",
+         '#include "proto/client/client_transport.hpp"', "",
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
          '#include "core/trace/function_scope.hpp"',
-         '#include "proto/sync_call_scope.hpp"',
+         '#include "proto/client/sync_call_scope.hpp"',
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
@@ -1640,13 +1640,13 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <type_traits>", ""] + CL_PREAMBLE + [
            "#include <CL/cl_icd.h>", "",
-           '#include "proto/icd_stub_report.hpp"', "",
+           '#include "proto/client/icd_stub_report.hpp"', "",
            "namespace av::clproto {", "",
            "// Every one of these answers CL_INVALID_OPERATION, and says so",
            "// once: an application that asks for something this driver does",
            "// not carry gets a clean refusal, and whoever is reading the log",
            "// gets the name of what it asked for. See",
-           "// proto/icd_stub_report.hpp.",
+           "// proto/client/icd_stub_report.hpp.",
            "namespace stubs {", ""]
 
     # A stub can only be written for a command whose types this

@@ -15,7 +15,7 @@
 #include "harness/icd/shipped_batch.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/submission/command_header.hpp"

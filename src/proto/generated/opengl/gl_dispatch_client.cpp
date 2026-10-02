@@ -8,12 +8,12 @@
 #include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
-#include "proto/icd_stub_report.hpp"
+#include "proto/client/icd_stub_report.hpp"
 #include "gl_helpers.h"
 #include "gl_protocol_ids.h"
 #include "gl_sizes.h"
-#include "proto/client_blob_arena.hpp"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/sync_call_scope.hpp"
 
 namespace av::glproto {
 

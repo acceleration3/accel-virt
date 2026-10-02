@@ -7,7 +7,7 @@
 
 #include "core/platform/platform.hpp"
 #include "core/support/nt_status.hpp"
-#include "proto/commands/present_operation.hpp"
+#include "proto/dma/present_operation.hpp"
 
 #include <stdint.h>
 

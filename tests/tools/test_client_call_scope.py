@@ -57,7 +57,7 @@ class VulkanClientEndsSyncCalls(unittest.TestCase):
         shutil.rmtree(cls.out)
 
     def test_the_client_includes_the_scope(self):
-        self.assertIn('#include "proto/sync_call_scope.hpp"', self.source)
+        self.assertIn('#include "proto/client/sync_call_scope.hpp"', self.source)
 
     def test_a_sync_call_opens_its_scope_after_encoding_and_before_the_send(self):
         body = function_body(self.source, "vkGetFenceStatus")
@@ -95,7 +95,7 @@ class OpenClClientEndsSyncCalls(unittest.TestCase):
         shutil.rmtree(cls.out)
 
     def test_the_client_includes_the_scope(self):
-        self.assertIn('#include "proto/sync_call_scope.hpp"', self.source)
+        self.assertIn('#include "proto/client/sync_call_scope.hpp"', self.source)
 
     def test_a_sync_call_opens_its_scope_after_encoding_and_before_the_send(self):
         body = function_body(self.source, "clFinish")

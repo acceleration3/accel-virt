@@ -1,7 +1,7 @@
 #include "device/display/vblank_schedule.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/display/vblank_record.hpp"
+#include "proto/pages/vblank_record.hpp"
 
 namespace av {
 

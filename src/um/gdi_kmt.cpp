@@ -5,7 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/beam_position.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "proto/context/umd_adapter_info.hpp"
+#include "proto/escape/umd_adapter_info.hpp"
 
 #include <windows.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;

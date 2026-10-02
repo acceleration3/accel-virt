@@ -12,7 +12,7 @@
 #include "harness/device/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
 

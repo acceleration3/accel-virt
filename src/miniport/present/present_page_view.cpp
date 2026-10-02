@@ -1,7 +1,7 @@
 #include "miniport/present/present_page_view.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/pages/present_progress.hpp"
 
 namespace av {
 

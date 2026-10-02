@@ -7,7 +7,7 @@
 #define AV_PRESENT_ADDRESSING_HPP
 
 #include "core/support/status.hpp"
-#include "proto/commands/present_address_space.hpp"
+#include "proto/dma/present_address_space.hpp"
 
 #include <stdint.h>
 

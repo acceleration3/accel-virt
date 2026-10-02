@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/present_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
-#include "proto/resources/shared_bytes.hpp"
+#include "icd/common/shared_bytes.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/surface_layout.hpp"
 

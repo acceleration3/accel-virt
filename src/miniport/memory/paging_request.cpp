@@ -17,7 +17,7 @@
 #include "core/platform/log_budget.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/paging_command_writer.hpp"
+#include "proto/dma/paging_command_writer.hpp"
 
 namespace av {
 

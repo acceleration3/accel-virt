@@ -7,8 +7,8 @@
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
-#include "proto/gl_icd_support.hpp"
-#include "proto/icd_stub_report.hpp"
+#include "proto/client/gl_icd_support.hpp"
+#include "proto/client/icd_stub_report.hpp"
 
 #include "gl_helpers.h"
 

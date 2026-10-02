@@ -10,7 +10,7 @@
 
 #include "core/support/status.hpp"
 #include "device/memory/guest_page_mapping.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 
 #include <stdint.h>

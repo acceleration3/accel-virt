@@ -22,7 +22,7 @@
 #include "icd/opengl/chained_frames.hpp"
 #include "icd/opengl/front_buffer.hpp"
 #include "icd/opengl/pixel_format.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/caps_reply.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "proto/context/umd_adapter_info.hpp"
+#include "proto/escape/umd_adapter_info.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
 namespace av::d3d11 {

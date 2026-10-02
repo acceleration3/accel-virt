@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "proto/submission/follow_record.hpp"
+#include "proto/escape/follow_record.hpp"
 
 #include <stdint.h>
 

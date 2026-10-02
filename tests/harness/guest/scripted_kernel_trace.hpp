@@ -6,7 +6,7 @@
 #define AV_SCRIPTED_KERNEL_TRACE_HPP
 
 #include "harness/guest/mock_kmt.hpp"
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

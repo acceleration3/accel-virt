@@ -2,8 +2,8 @@
 #include "vk_icd_entries.h"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/icd_connection.hpp"
-#include "proto/icd_handle_registry.hpp"
+#include "proto/client/icd_connection.hpp"
+#include "proto/client/icd_handle_registry.hpp"
 #include "vk_dispatch_client.h"
 
 namespace av::vkicd::generated {

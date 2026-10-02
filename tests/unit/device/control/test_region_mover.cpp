@@ -7,8 +7,8 @@
 #include "device/control/region_mover.hpp"
 #include "device/memory/blob_window.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "proto/commands/present_operation.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_operation.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 
 #include <cstdint>

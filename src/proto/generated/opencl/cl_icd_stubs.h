@@ -19,7 +19,7 @@
 #include <CL/cl_gl.h>
 #include <CL/cl_icd.h>
 
-#include "proto/icd_stub_report.hpp"
+#include "proto/client/icd_stub_report.hpp"
 
 namespace av::clproto {
 
@@ -27,7 +27,7 @@ namespace av::clproto {
 // once: an application that asks for something this driver does
 // not carry gets a clean refusal, and whoever is reading the log
 // gets the name of what it asked for. See
-// proto/icd_stub_report.hpp.
+// proto/client/icd_stub_report.hpp.
 namespace stubs {
 
 inline cl_int CL_API_CALL clGetPlatformIDs(cl_uint /*num_entries*/, cl_platform_id* /*platforms*/, cl_uint* /*num_platforms*/) {

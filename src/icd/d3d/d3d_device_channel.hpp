@@ -12,7 +12,7 @@
 #define AV_D3D_DEVICE_CHANNEL_HPP
 
 #include "core/support/status.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

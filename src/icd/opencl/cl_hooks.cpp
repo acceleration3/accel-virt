@@ -15,7 +15,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/cl_noted_error.hpp"
 #include "proto/generated/opencl/cl_icd_stubs.h"
-#include "proto/icd_stub_report.hpp"
+#include "proto/client/icd_stub_report.hpp"
 
 namespace av::clicd {
 

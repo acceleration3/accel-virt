@@ -5,7 +5,7 @@
 #include "device/control/region_mover.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/guest_page_mapping.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 #include "proto/wire/wire_reader.hpp"

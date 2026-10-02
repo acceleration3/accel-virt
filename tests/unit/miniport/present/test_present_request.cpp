@@ -5,7 +5,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
-#include "proto/commands/present_command.hpp"
+#include "proto/dma/present_command.hpp"
 
 #include <cstdint>
 #include <cstring>

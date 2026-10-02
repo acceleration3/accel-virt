@@ -5,7 +5,7 @@
  * a kernel's answer the process reads back: what it accepts must re-encode to
  * exactly those bytes too, and name two distinct addresses. */
 #include "core/support/status.hpp"
-#include "proto/context/context_views_record.hpp"
+#include "proto/escape/context_views_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

@@ -2,8 +2,8 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/context/context_views_record.hpp"
-#include "proto/context/tail_publish_record.hpp"
+#include "proto/escape/context_views_record.hpp"
+#include "proto/escape/tail_publish_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"

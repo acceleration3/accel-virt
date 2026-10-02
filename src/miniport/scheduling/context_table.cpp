@@ -8,7 +8,7 @@
 #include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "core/platform/invariant_scope.hpp"
 
 namespace av {

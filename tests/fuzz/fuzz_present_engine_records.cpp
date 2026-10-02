@@ -4,8 +4,8 @@
  * offsets say, holds every rule the protocol states, and encodes back to the
  * same bytes; a refusal leaves the decoder as it was. */
 #include "core/support/status.hpp"
-#include "proto/commands/present_operation.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/dma/present_operation.hpp"
+#include "proto/pages/present_progress.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"

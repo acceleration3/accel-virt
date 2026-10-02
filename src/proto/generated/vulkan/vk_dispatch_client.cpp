@@ -6,7 +6,7 @@
 #include "vk_dispatch_client.h"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "vk_protocol_ids.h"
 #include "vk_serialize.h"

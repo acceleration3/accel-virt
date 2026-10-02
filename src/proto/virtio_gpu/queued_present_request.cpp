@@ -1,7 +1,7 @@
 #include "proto/virtio_gpu/queued_present_request.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

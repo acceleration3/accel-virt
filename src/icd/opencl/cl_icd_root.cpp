@@ -2,7 +2,7 @@
 
 #include "icd/opencl/cl_info_request.hpp"
 
-#include "proto/cl_blob_backing.hpp"
+#include "proto/resources/cl_blob_backing.hpp"
 
 #include "icd/common/report_gate.hpp"
 #include "icd/common/sliced_wait.hpp"

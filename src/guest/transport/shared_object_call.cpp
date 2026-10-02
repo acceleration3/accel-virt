@@ -1,12 +1,12 @@
 #include "guest/transport/shared_object_call.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/shared_object_answer.hpp"
 #include "proto/submission/shared_object_request.hpp"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

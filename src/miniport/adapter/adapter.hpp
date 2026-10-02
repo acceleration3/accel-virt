@@ -3,7 +3,7 @@
 #ifndef AV_ADAPTER_HPP
 #define AV_ADAPTER_HPP
 
-#include "proto/commands/present_operation.hpp"
+#include "proto/dma/present_operation.hpp"
 #include "miniport/adapter/adapter_description.hpp"
 #include "miniport/adapter/driver_capabilities.hpp"
 #include "miniport/ddi/dxgkarg_control_interrupt2_record.hpp"

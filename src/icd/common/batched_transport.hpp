@@ -9,7 +9,7 @@
 #define AV_ICD_BATCHED_TRANSPORT_HPP
 
 #include "icd/common/framed_block.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

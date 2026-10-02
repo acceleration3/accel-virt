@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 
 namespace av::d3dproto {

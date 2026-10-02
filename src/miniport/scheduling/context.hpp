@@ -4,7 +4,7 @@
 #define AV_CONTEXT_HPP
 
 #include "miniport/memory/root_page_table.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
 

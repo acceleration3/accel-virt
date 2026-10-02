@@ -3,7 +3,7 @@
 #include "core/platform/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/submission/ring_header.hpp"
 

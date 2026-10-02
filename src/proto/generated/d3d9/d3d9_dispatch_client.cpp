@@ -4,9 +4,9 @@
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 
 namespace av::d3d9proto {
 

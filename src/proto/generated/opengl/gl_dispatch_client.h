@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "gl_types.h"
 
 namespace av::glproto {

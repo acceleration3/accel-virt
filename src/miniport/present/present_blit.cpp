@@ -3,7 +3,7 @@
 #include "miniport/ddi/rect_record.hpp"
 #include "miniport/present/pixel_mover.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/rectangle.hpp"
+#include "proto/dma/rectangle.hpp"
 #include "proto/resources/surface_layout.hpp"
 
 namespace av {

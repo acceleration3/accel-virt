@@ -64,7 +64,7 @@
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "harness/vidsch/fake_hw_queue.hpp"
 #include "harness/vidsch/fake_vidsch.hpp"
-#include "proto/commands/present_command.hpp"
+#include "proto/dma/present_command.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/shared_object_record.hpp"

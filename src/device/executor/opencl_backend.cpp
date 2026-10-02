@@ -15,7 +15,7 @@
 #include "device/abi/av_executor.h"
 #include "device/executor/cl_event_registration.hpp"
 #include "device/executor/imported_blob.hpp"
-#include "proto/cl_blob_backing.hpp"
+#include "proto/resources/cl_blob_backing.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "proto/generated/opencl/cl_command_names.h"
 #include "proto/generated/opencl/cl_dispatch_server.h"

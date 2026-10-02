@@ -20,7 +20,7 @@
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
-#include "proto/submission/present_point_record.hpp"
+#include "proto/escape/present_point_record.hpp"
 #include "um/d3d/d3d12_device.hpp"
 
 namespace av::d3d12 {

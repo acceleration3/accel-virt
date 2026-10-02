@@ -6,7 +6,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_kernel_trace.hpp"
 #include "harness/platform/mock_platform.hpp"
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 
 #include <cstdint>
 #include <cstring>

@@ -15,7 +15,7 @@
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
-#include "proto/submission/present_point_record.hpp"
+#include "proto/escape/present_point_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 

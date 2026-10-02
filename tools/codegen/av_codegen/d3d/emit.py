@@ -155,7 +155,7 @@ def emit_names_cpp(reg: Registry) -> str:
 
 def emit_client_h(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stdint.h>", "",
-             '#include "proto/client_transport.hpp"', f'#include {_inc("wire_types.h")}', "",
+             '#include "proto/client/client_transport.hpp"', f'#include {_inc("wire_types.h")}', "",
              f"namespace {NS} {{", "",
              "// One wrapper per command: false when it could not be encoded or sent, or -",
              "// for a command with a reply - when the answer did not decode.", ""]
@@ -263,8 +263,8 @@ def _encode(reg: Registry, p: Param, lines: list[str]) -> None:
 
 def emit_client_cpp(reg: Registry) -> str:
     lines = [HEADER, f'#include {_inc("dispatch_client.h")}', "",
-             '#include "core/trace/function_scope.hpp"', '#include "proto/client_blob_arena.hpp"',
-             f'#include {_inc("protocol_ids.h")}', '#include "proto/sync_call_scope.hpp"', "",
+             '#include "core/trace/function_scope.hpp"', '#include "proto/client/client_blob_arena.hpp"',
+             f'#include {_inc("protocol_ids.h")}', '#include "proto/client/sync_call_scope.hpp"', "",
              f"namespace {NS} {{", _helpers(reg, CLIENT_HELPERS)]
     for cmd in reg.commands:
         params = ", ".join(["::av::ClientTransport& t"] + _client_params(reg, cmd))

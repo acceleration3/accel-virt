@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/suite/scenario_steps.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
 namespace av {

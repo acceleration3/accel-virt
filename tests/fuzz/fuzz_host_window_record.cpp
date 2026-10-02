@@ -5,7 +5,7 @@
  * kernel's answer the process reads back: what an open or a close accepts must
  * re-encode to exactly those bytes too. */
 #include "core/support/status.hpp"
-#include "proto/resources/host_window_record.hpp"
+#include "proto/escape/host_window_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

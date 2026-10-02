@@ -13,7 +13,7 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/host/present_scene.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/pages/present_progress.hpp"
 
 #include <cstdint>
 #include <cstring>

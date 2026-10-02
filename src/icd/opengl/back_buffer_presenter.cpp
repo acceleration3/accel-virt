@@ -9,8 +9,8 @@
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
-#include "proto/client_blob_arena.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/resources/texel_layout.hpp"
 
 #include "gl_dispatch_client.h"

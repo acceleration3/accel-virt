@@ -10,7 +10,7 @@
 #include "device/shim/loader_host_apis.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "proto/cl_blob_backing.hpp"
+#include "proto/resources/cl_blob_backing.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"

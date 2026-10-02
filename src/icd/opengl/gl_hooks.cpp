@@ -11,8 +11,8 @@
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/manual_calls.hpp"
-#include "proto/gl_icd_support.hpp"
-#include "proto/icd_stub_report.hpp"
+#include "proto/client/gl_icd_support.hpp"
+#include "proto/client/icd_stub_report.hpp"
 
 #include "gl_dispatch_client.h"
 #include "gl_helpers.h"

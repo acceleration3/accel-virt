@@ -3,7 +3,7 @@
  * a process writes it. What decodes must re-encode to exactly the bytes read
  * and name a ring and a fence. */
 #include "core/support/status.hpp"
-#include "proto/submission/follow_record.hpp"
+#include "proto/escape/follow_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

@@ -5,8 +5,8 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
-#include "proto/client_blob_arena.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include "gl_dispatch_client.h"
 

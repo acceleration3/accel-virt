@@ -155,7 +155,7 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertNotIn("return", body[:scope])
         self.assertLess(scope, body.index("av_t.send_sync("))
         self.assertNotIn("end_call", body)
-        self.assertIn('#include "proto/sync_call_scope.hpp"', self.client)
+        self.assertIn('#include "proto/client/sync_call_scope.hpp"', self.client)
 
     def test_a_one_way_call_ends_only_when_its_payload_is_dropped(self):
         for name in ("av_glEnable", "av_glUniform1iv"):

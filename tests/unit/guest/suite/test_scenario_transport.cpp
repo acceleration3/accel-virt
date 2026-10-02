@@ -11,7 +11,7 @@
 #include "guest/suite/scenario_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

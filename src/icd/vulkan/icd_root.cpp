@@ -8,7 +8,7 @@
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/shared_object_kind.hpp"
-#include "proto/resources/shared_bytes.hpp"
+#include "icd/common/shared_bytes.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/surface_layout.hpp"
 

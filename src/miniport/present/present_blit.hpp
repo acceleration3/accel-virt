@@ -17,7 +17,7 @@
 #include "miniport/present/present_area.hpp"
 #include "miniport/present/present_surface.hpp"
 #include "core/support/status.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 
 #include <stdint.h>
 

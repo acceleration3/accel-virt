@@ -18,7 +18,7 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/submission/fence_page.hpp"

@@ -1,7 +1,7 @@
 #include "device/control/region_mover.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
 
 namespace av {

@@ -1,11 +1,11 @@
 #include "guest/transport/blob_import.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/blob_import_request.hpp"
 #include "proto/submission/command_header.hpp"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

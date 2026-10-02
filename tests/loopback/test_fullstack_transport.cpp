@@ -15,9 +15,9 @@
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/context/sub_api.hpp"
-#include "proto/resources/host_window_record.hpp"
+#include "proto/escape/host_window_record.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

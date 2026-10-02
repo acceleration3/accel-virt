@@ -1,9 +1,9 @@
 #include "guest/transport/context_fault.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 
 #include <vulkan/vulkan_core.h>
 

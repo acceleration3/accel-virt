@@ -6,7 +6,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
-#include "proto/display/vblank_record.hpp"
+#include "proto/pages/vblank_record.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"
 

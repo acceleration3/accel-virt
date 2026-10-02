@@ -12,7 +12,7 @@
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <CL/cl_gl.h>

@@ -8,7 +8,7 @@
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "harness/trace/mock_trace_host.hpp"
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 
 #include <cstdint>
 #include <cstring>

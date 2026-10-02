@@ -5,7 +5,7 @@
 #include "device/control/control_request.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/host/host.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/pages/present_progress.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/wire/wire_reader.hpp"

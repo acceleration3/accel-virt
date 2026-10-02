@@ -8,7 +8,7 @@
 #define AV_PRESENT_COPY_REQUEST_HPP
 
 #include "core/support/status.hpp"
-#include "proto/commands/present_operation.hpp"
+#include "proto/dma/present_operation.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

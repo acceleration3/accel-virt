@@ -5,7 +5,7 @@
 
 #include <vulkan/vulkan_core.h>
 
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 
 namespace av::vkproto {
 

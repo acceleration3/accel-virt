@@ -10,7 +10,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
-#include "proto/context/context_views_record.hpp"
+#include "proto/escape/context_views_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"

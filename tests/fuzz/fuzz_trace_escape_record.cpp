@@ -2,7 +2,7 @@
  * hostile answers as avinspect.exe receives them from a driver: a request is
  * decoded or refused, and an accepted one never names a window past its bytes;
  * an accepted answer's window lies inside both its bytes and its total. */
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

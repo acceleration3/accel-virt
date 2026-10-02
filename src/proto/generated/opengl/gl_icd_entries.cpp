@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #include "core/trace/function_scope.hpp"
-#include "proto/gl_icd_support.hpp"
+#include "proto/client/gl_icd_support.hpp"
 #include "gl_dispatch_client.h"
 #include "gl_helpers.h"
 

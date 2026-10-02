@@ -14,7 +14,7 @@
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include "gl_protocol_ids.h"

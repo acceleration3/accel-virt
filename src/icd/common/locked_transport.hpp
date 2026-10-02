@@ -15,7 +15,7 @@
 #ifndef AV_ICD_LOCKED_TRANSPORT_HPP
 #define AV_ICD_LOCKED_TRANSPORT_HPP
 
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include <stdint.h>
 

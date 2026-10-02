@@ -5,7 +5,7 @@
  * surface's own bounds rather than wrap. */
 #include "miniport/present/present_area.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "proto/commands/rectangle.hpp"
+#include "proto/dma/rectangle.hpp"
 
 #include <cstdint>
 

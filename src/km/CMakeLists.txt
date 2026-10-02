@@ -18,10 +18,14 @@ file(GLOB_RECURSE AVGPU_SOURCES CONFIGURE_DEPENDS
 # commands are decoded on the host, never here (feature 063). proto/vulkan/ is
 # the same rule by hand: what it holds reads an application's Vulkan
 # structures, which no miniport ever sees, and it includes Vulkan's own headers
-# (feature 047).
+# (feature 047). proto/renderer, proto/d3d and proto/client are the host's
+# and the user-mode drivers' halves of the wire; no miniport file includes them.
 file(GLOB_RECURSE AVGPU_GENERATED CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/vulkan/*.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/vulkan/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/renderer/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/d3d/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/client/*.cpp)
 list(REMOVE_ITEM AVGPU_SOURCES ${AVGPU_GENERATED})
 
 add_executable(avgpu ${AVGPU_SOURCES})

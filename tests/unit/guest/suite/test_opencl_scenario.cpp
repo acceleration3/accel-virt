@@ -14,7 +14,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"

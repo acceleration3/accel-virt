@@ -3,7 +3,7 @@
 #include "miniport/ddi/dxgkarg_create_context_record.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/submission/follow_record.hpp"
+#include "proto/escape/follow_record.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
 namespace av {

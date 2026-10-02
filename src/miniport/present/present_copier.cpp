@@ -6,7 +6,7 @@
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
 #include "miniport/virtio/virtq_segment.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"

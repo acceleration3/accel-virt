@@ -1,7 +1,7 @@
 #include "um/d3d/query_results.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
 namespace av::d3d11 {

@@ -11,7 +11,7 @@
 #include "device/present/present_frames.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/pages/present_progress.hpp"
 #include "proto/virtio_gpu/queued_present_request.hpp"
 #include "proto/wire/wire_reader.hpp"
 

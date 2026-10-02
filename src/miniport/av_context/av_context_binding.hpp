@@ -12,7 +12,7 @@
 #include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "proto/context/context_resources.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
 #include <stddef.h>

@@ -7,7 +7,7 @@
 #include "icd/common/thread_lock.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/texture_upload.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"

@@ -4,10 +4,10 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/d3d/command_recording.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 #include "proto/submission/command_header.hpp"
 
 namespace av::d3d {

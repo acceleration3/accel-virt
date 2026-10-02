@@ -7,7 +7,7 @@
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/trace/trace_table.hpp"
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 
 namespace av {
 

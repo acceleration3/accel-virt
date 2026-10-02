@@ -14,7 +14,7 @@
 #include "icd/vulkan/loader_handle.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/generated/vulkan/vk_serialize.h"
-#include "proto/icd_handle_registry.hpp"
+#include "proto/client/icd_handle_registry.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"

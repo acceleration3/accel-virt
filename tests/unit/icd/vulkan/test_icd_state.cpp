@@ -18,9 +18,9 @@
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
-#include "proto/icd_connection.hpp"
+#include "proto/client/icd_connection.hpp"
 #include "proto/submission/command_header.hpp"
-#include "proto/icd_handle_registry.hpp"
+#include "proto/client/icd_handle_registry.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>

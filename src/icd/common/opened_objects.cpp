@@ -4,7 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/shared_object_call.hpp"
 #include "icd/common/shared_handles.hpp"
-#include "proto/resources/shared_bytes.hpp"
+#include "icd/common/shared_bytes.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
 namespace av::icd {

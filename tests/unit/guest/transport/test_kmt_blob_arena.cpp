@@ -12,7 +12,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"

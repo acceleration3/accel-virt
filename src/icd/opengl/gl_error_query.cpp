@@ -1,8 +1,8 @@
 #include "icd/opengl/gl_error_query.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_transport.hpp"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/client_transport.hpp"
+#include "proto/client/sync_call_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 

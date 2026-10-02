@@ -12,7 +12,7 @@
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
-#include "proto/context/av_context_record.hpp"
+#include "proto/escape/av_context_record.hpp"
 
 #include "gl_dispatch_client.h"
 

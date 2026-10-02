@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/caps_reply.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
 namespace av::d3d12 {

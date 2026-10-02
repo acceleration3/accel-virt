@@ -10,7 +10,7 @@
 #include "icd/opengl/buffer_mapping.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 

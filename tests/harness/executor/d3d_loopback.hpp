@@ -8,8 +8,8 @@
 #define AV_D3D_LOOPBACK_HPP
 
 #include "device/executor/imported_blob.hpp"
-#include "proto/client_blob_arena.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 #include "proto/wire/wire_arena.hpp"
 
 #include <cstddef>

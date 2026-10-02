@@ -396,7 +396,7 @@ if(AV_GENERATED)
   target_link_options(av_icd PUBLIC ${AV_TEST_FLAGS})
 
   # The generated OpenGL client and ICD entries, built against the hooks the
-  # OpenGL ICD declares (src/proto/gl_icd_support.hpp, src/icd/opengl/gl_helpers.h),
+  # OpenGL ICD declares (src/proto/client/gl_icd_support.hpp, src/icd/opengl/gl_helpers.h),
   # so a change to either side that breaks the other fails the build; the
   # OpenGL ICD links them once it defines the hooks (feature 050).
   add_library(av_gl_generated OBJECT
@@ -456,6 +456,7 @@ add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
   ${CMAKE_SOURCE_DIR}/src/icd/common/pieces.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/report_gate.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/row_pieces.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/shared_bytes.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/sliced_wait.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/thread_lock_hold.cpp)
 target_link_libraries(av_d3d_umd PUBLIC av_core)

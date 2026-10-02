@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/pages/present_progress.hpp"
 
 namespace av {
 

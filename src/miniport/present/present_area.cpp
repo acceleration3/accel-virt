@@ -1,7 +1,7 @@
 #include "miniport/present/present_area.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/rectangle.hpp"
+#include "proto/dma/rectangle.hpp"
 
 namespace av {
 

@@ -12,8 +12,8 @@
 #ifndef AV_CL_TRANSFER_HOST_HPP
 #define AV_CL_TRANSFER_HOST_HPP
 
-#include "proto/client_blob_arena.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include <cstddef>
 #include <cstdint>

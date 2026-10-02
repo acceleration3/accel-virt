@@ -6,8 +6,8 @@
 #include "device/display/clock_page_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
-#include "proto/display/clock_page_header.hpp"
-#include "proto/display/vblank_record.hpp"
+#include "proto/pages/clock_page_header.hpp"
+#include "proto/pages/vblank_record.hpp"
 
 #include <cstdint>
 #include <cstring>

@@ -19,7 +19,7 @@
 #include <CL/cl.h>
 #include <CL/cl_gl.h>
 
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 
 namespace av::clproto {
 

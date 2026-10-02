@@ -11,7 +11,7 @@
 #include "core/support/status.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_transport.hpp"
 /* cl_int, with the OpenCL version the generated client targets. */
 #include "proto/generated/opencl/cl_dispatch_client.h"
 

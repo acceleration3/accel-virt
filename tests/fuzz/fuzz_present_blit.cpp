@@ -9,7 +9,7 @@
 #include "miniport/present/present_blit.hpp"
 #include "miniport/present/present_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
-#include "proto/commands/rectangle.hpp"
+#include "proto/dma/rectangle.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/wire/wire_reader.hpp"

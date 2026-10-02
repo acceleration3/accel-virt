@@ -3,8 +3,8 @@
 #include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 
 #include "core/support/nt_status.hpp"
-#include "proto/context/av_context_record.hpp"
-#include "proto/context/umd_adapter_info.hpp"
+#include "proto/escape/av_context_record.hpp"
+#include "proto/escape/umd_adapter_info.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/submission/batch_header.hpp"
@@ -13,8 +13,8 @@
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
-#include "proto/context/context_views_record.hpp"
-#include "proto/resources/host_window_record.hpp"
+#include "proto/escape/context_views_record.hpp"
+#include "proto/escape/host_window_record.hpp"
 
 #include <sys/mman.h>
 

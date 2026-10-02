@@ -2,7 +2,7 @@
  * attacker-chosen bytes: every escape's private data is tried as one. What
  * decodes must be exactly the record the encoder writes. */
 #include "core/support/status.hpp"
-#include "proto/context/tail_publish_record.hpp"
+#include "proto/escape/tail_publish_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

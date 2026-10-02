@@ -3,7 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 
 namespace av {
 

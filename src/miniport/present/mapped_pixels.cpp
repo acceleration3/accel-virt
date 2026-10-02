@@ -4,7 +4,7 @@
 #include "miniport/present/present_surface.hpp"
 #include "miniport/present/surface_view.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/present_region.hpp"
+#include "proto/dma/present_region.hpp"
 
 #include <immintrin.h>
 

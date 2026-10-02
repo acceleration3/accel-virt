@@ -7,8 +7,8 @@
 #ifndef AV_MOCK_TRANSPORT_HPP
 #define AV_MOCK_TRANSPORT_HPP
 
-#include "proto/client_blob_arena.hpp"
-#include "proto/client_transport.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 
 #include <cstddef>
 #include <cstdint>

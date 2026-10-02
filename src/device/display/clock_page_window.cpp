@@ -2,8 +2,8 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
-#include "proto/display/clock_page_header.hpp"
-#include "proto/display/vblank_record.hpp"
+#include "proto/pages/clock_page_header.hpp"
+#include "proto/pages/vblank_record.hpp"
 
 namespace av {
 

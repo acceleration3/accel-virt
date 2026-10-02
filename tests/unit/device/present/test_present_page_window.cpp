@@ -5,7 +5,7 @@
 #include "device/present/present_page_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
-#include "proto/display/present_progress.hpp"
+#include "proto/pages/present_progress.hpp"
 
 #include <cstdint>
 #include <cstring>

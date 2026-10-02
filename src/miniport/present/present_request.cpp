@@ -4,8 +4,8 @@
 #include "miniport/present/patched_present_addresses.hpp"
 #include "miniport/present/virtual_present_addresses.hpp"
 #include "core/trace/function_scope.hpp"
-#include "proto/commands/present_command.hpp"
-#include "proto/commands/rectangle.hpp"
+#include "proto/dma/present_command.hpp"
+#include "proto/dma/rectangle.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {

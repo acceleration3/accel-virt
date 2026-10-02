@@ -4,9 +4,9 @@
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/client_blob_arena.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
-#include "proto/sync_call_scope.hpp"
+#include "proto/client/sync_call_scope.hpp"
 
 namespace av::d3d12proto {
 

@@ -4,8 +4,8 @@
  * user-mode driver reads it. What decodes re-encodes to the bytes read; a
  * refusal leaves the reader as it was. */
 #include "core/support/status.hpp"
-#include "proto/context/umd_adapter_info.hpp"
-#include "proto/submission/present_point_record.hpp"
+#include "proto/escape/umd_adapter_info.hpp"
+#include "proto/escape/present_point_record.hpp"
 
 #include <cstddef>
 #include <cstdint>

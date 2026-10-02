@@ -7,7 +7,7 @@
 #define AV_ESCAPE_READER_HPP
 
 #include "core/support/status.hpp"
-#include "proto/trace/trace_escape_record.hpp"
+#include "proto/escape/trace_escape_record.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
