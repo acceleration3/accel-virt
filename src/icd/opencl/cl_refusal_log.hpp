@@ -31,6 +31,13 @@ public:
      * one entry point is one pointer. */
     void     note(const char *entry_point);
     void     note_failure(const char *entry_point, int32_t error);
+    /* A map refused for `why` (a literal, logged the first time): its size
+     * and how many of the context's mappings were held, which is what says
+     * whether a limit or the memory ran out. */
+    void     note_map(const char *why, uint64_t bytes, uint32_t held);
+    /* A buffer released with `mappings` of it never unmapped, logged the first
+     * time: what an application that runs out of mappings may be doing. */
+    void     note_released_mapped(uint32_t mappings);
     uint32_t named() const;
 
 private:

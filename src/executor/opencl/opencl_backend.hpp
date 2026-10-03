@@ -151,6 +151,9 @@ public:
      * judges an SVM address. Kept apart from the allocations on purpose: they
      * share a decoder seam but not a lifetime, and one table would let
      * clSVMFree be handed a mapping's pointer and free it. */
+    /* A buffer released while mapped takes its mappings with it: nothing names
+     * their addresses again, and each holds a row of mapped_. */
+    cl_int on_clReleaseMemObject(cl_mem memobj) override;
     void  *on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_map,
                                  cl_map_flags map_flags, size_t offset, size_t size,
                                  cl_uint num_events_in_wait_list, const cl_event *event_wait_list,

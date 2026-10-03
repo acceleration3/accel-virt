@@ -178,7 +178,7 @@ uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t off
      * so it reads zeros, never what the heap last held there. OpenGL's
      * staged maps do the same (BufferMapping). */
     __builtin_memset(block, 0, bytes);
-    mappings_[slot].take(buffer, host, offset, bytes, flags, block, true);
+    mappings_[slot].take(buffer, host, offset, bytes, flags, block, MappedRegion::Memory::staged);
     return block;
 }
 
@@ -194,8 +194,20 @@ MappedRegion *GuestClContext::take_shared_mapping(uint64_t buffer, uint64_t host
      * and the unmap has nothing to write back. The flags are the map's, but
      * they change nothing here - what a write through this mapping reaches
      * is the buffer itself. */
-    mappings_[slot].take(buffer, host, offset, bytes, 0u, at, false);
+    mappings_[slot].take(buffer, host, offset, bytes, 0u, at, MappedRegion::Memory::shared);
     return &mappings_[slot];
+}
+
+uint8_t *GuestClContext::take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+                                                  cl_map_flags flags, uint8_t *at)
+{
+    AV_SCOPE("GuestClContext::take_application_mapping");
+    if (buffer == 0u || host == 0u || bytes == 0u || at == nullptr) return nullptr;
+    uint32_t slot = 0u;
+    while (slot < max_mappings && mappings_[slot].held()) ++slot;
+    if (slot == max_mappings) return nullptr;
+    mappings_[slot].take(buffer, host, offset, bytes, flags, at, MappedRegion::Memory::application);
+    return at;
 }
 
 MappedRegion *GuestClContext::mapping_at(const void *pointer)
@@ -213,6 +225,18 @@ void GuestClContext::give_back_mapping(MappedRegion &region)
     if (!region.held()) return;
     if (region.staged()) memory_.release(region.at());
     region.give_up();
+}
+
+uint32_t GuestClContext::give_back_mappings_of(uint64_t buffer)
+{
+    AV_SCOPE("GuestClContext::give_back_mappings_of");
+    uint32_t given = 0u;
+    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
+        if (!mappings_[slot].held() || mappings_[slot].buffer() != buffer) continue;
+        give_back_mapping(mappings_[slot]);
+        ++given;
+    }
+    return given;
 }
 
 uint32_t GuestClContext::mappings() const

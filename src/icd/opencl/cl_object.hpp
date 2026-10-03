@@ -51,6 +51,12 @@ public:
     uint64_t backing_offset() const;
     uint64_t backing_bytes() const;
 
+    /* For a buffer made over the application's own memory
+     * (CL_MEM_USE_HOST_PTR): that memory, which a map hands back and the
+     * host's buffer was filled from. Null for every other object. */
+    void     use_application_memory(void *memory);
+    uint8_t *application_memory() const;
+
     /* Whether this object is `other` or is somewhere below it. */
     bool descends_from(const ClObject &other) const;
     /* This object or the closest one above it of `kind`, or null: a buffer's
@@ -84,6 +90,7 @@ private:
     uint64_t               wire_;
     uint64_t               backing_offset_;
     uint64_t               backing_bytes_;
+    uint8_t               *application_memory_;
     uint32_t               references_;
     uint32_t               children_;
     Kind                   kind_;

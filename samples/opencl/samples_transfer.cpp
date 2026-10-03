@@ -274,6 +274,67 @@ private:
     cl_mem                    counter_ = nullptr;
 };
 
+// ---------------------------------------------------------------- heldmaps
+
+// Hundreds of small host-accessible buffers, every one of them mapped at once,
+// written, and only then unmapped: what Affinity does to open a document. A
+// driver that holds only a few mappings at a time refuses it.
+class HeldMaps final : public Sample {
+public:
+    const char *name() const override { return "heldmaps"; }
+    Work        work() const override { return {1.0 * buffers * bytes / 1e9, "GB/s"}; }
+    bool        init(Gpu &gpu) override
+    {
+        for (uint32_t i = 0; i < buffers; i++)
+            buffers_[i] = gpu.buffer(bytes, nullptr, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
+        return !gpu.failed;
+    }
+    void        step(Gpu &gpu) override { round(gpu, iteration_++); }
+    const char *capture(Gpu &gpu, Capture &capture) override
+    {
+        round(gpu, 777u);
+        uint32_t sums[buffers] = {};
+        for (uint32_t i = 0; i < buffers; i++) {
+            uint32_t head[4] = {};
+            gpu.read(buffers_[i], head, sizeof head);
+            sums[i] = head[0] + head[3];
+        }
+        bool right = !gpu.failed;
+        for (uint32_t i = 0; i < buffers && right; i++) right = sums[i] == (777u ^ i) + (777u ^ (i + 3u));
+        capture.buffer(Capture::u32, sums, buffers);
+        return right ? "ok" : "mismatch";
+    }
+    void release() override
+    {
+        for (cl_mem &buffer : buffers_) samples::release(buffer);
+        iteration_ = 0;
+    }
+
+private:
+    static constexpr uint32_t buffers = 600;
+    static constexpr uint32_t bytes = 4096;
+
+    // Maps every buffer, writes seed ^ (buffer + word) into each, and unmaps
+    // them all once every one is mapped.
+    void round(Gpu &gpu, uint32_t seed)
+    {
+        uint32_t *mapped[buffers] = {};
+        for (uint32_t i = 0; i < buffers; i++) {
+            cl_int error = CL_SUCCESS;
+            mapped[i] = static_cast<uint32_t *>(cl.EnqueueMapBuffer(
+                gpu.queue, buffers_[i], CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, 0, bytes, 0, nullptr, nullptr, &error));
+            if (!gpu.check(error, "clEnqueueMapBuffer")) return;
+            for (uint32_t word = 0; word < bytes / 4u; word++) mapped[i][word] = seed ^ (i + word);
+        }
+        for (uint32_t i = 0; i < buffers; i++)
+            gpu.check(cl.EnqueueUnmapMemObject(gpu.queue, buffers_[i], mapped[i], 0, nullptr, nullptr),
+                      "clEnqueueUnmapMemObject");
+    }
+
+    cl_mem   buffers_[buffers] = {};
+    uint32_t iteration_ = 0;
+};
+
 }  // namespace
 
 void register_transfer(Sample **all, uint32_t &made)
@@ -282,6 +343,7 @@ void register_transfer(Sample **all, uint32_t &made)
     all[made++] = new ImageTransfer();
     all[made++] = new MapBuffer();
     all[made++] = new KernelLaunch();
+    all[made++] = new HeldMaps();
 }
 
 }  // namespace samples

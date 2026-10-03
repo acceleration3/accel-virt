@@ -73,8 +73,10 @@ public:
     static constexpr size_t   batch_bytes = 2u * staging_bytes;
     static constexpr uint64_t arena_bytes = KmtBlobArena::default_bytes;
     /* Mappings one context may hold at once. An application that maps more
-     * buffers than this at the same time is told so at the map. */
-    static constexpr uint32_t max_mappings = 64u;
+     * buffers than this at the same time is told so at the map. Affinity
+     * keeps a small buffer mapped for each of its tiles while a document is
+     * open - more than 64 for a new, empty one. */
+    static constexpr uint32_t max_mappings = 4096u;
 
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
                    LogSink &log, icd::SharedHandles &handles);
@@ -131,11 +133,21 @@ public:
      * one allocation. Null when there is no room for another mapping. */
     MappedRegion    *take_shared_mapping(uint64_t buffer, uint64_t host, size_t offset,
                                          size_t bytes, uint8_t *at);
+    /* Takes a mapping of a buffer made over the application's own memory
+     * (CL_MEM_USE_HOST_PTR): `at` is that memory, which the caller fills and
+     * the unmap writes back, and which is never freed here. Null when there
+     * is no room for another mapping. */
+    uint8_t         *take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+                                              cl_map_flags flags, uint8_t *at);
     /* The mapping `pointer` answers, or null for a pointer no live mapping
      * returned. */
     MappedRegion    *mapping_at(const void *pointer);
     /* Gives one back, freeing the staged block. */
     void             give_back_mapping(MappedRegion &region);
+    /* Gives back every mapping of `buffer`, which is going: an application
+     * may release a buffer it never unmapped, and nothing names those
+     * mappings again. Answers how many there were. */
+    uint32_t         give_back_mappings_of(uint64_t buffer);
     uint32_t         mappings() const;
     /* Whether the arena opened; bulk data crosses inline when it did not. */
     bool             has_arena() const;

@@ -14,6 +14,7 @@
 #include "harness/icd/fake_cl_loader.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "icd/opencl/guest_cl_context.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -30,6 +31,35 @@
 
 using av::ClIcdRig;
 using av::FakeClLoader;
+
+
+namespace av::clicd {
+
+/* The context behind an application's handle, whose mapping table a test fills
+ * directly: a script of thousands of host answers is longer than the rig
+ * holds. */
+struct ClIcdRootProbe {
+    static GuestClContext *context(ClIcdRoot &root, cl_context handle)
+    { ClObject *const held = root.judged(handle, ClObject::Kind::context);
+      return held != nullptr ? root.context_of(*held) : nullptr; }
+};
+
+}  // namespace av::clicd
+
+namespace {
+
+/* Every mapping row of `opened`'s context held, by maps the host never saw. */
+bool fill_mappings(ClIcdRig &rig, cl_context context)
+{
+    av::clicd::GuestClContext *const guest = av::clicd::ClIcdRootProbe::context(rig.root(), context);
+    if (guest == nullptr) return false;
+    static std::uint8_t somewhere[av::clicd::GuestClContext::max_mappings];
+    for (std::uint32_t row = guest->mappings(); row < av::clicd::GuestClContext::max_mappings; ++row)
+        if (guest->take_shared_mapping(0x5eedu, 0x5eedu, 0u, 1u, somewhere + row) == nullptr) return false;
+    return true;
+}
+
+}  // namespace
 
 namespace {
 
@@ -568,11 +598,15 @@ TEST(cl_buffer_paths, a_staged_map_whose_fill_fails_keeps_no_mapping)
    * back - otherwise the context keeps a mapping nobody can unmap. */
   rig.host().cl_handle(host_mapped, CL_SUCCESS);
   rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  rig.host().cl_enqueued(CL_SUCCESS, 0u);
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, buffer_bytes,
                               nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_RESOURCES);
   CHECK(rig.root().invariants_hold());
+  /* And the host's map was undone: its unmap is the last thing sent. */
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
 
   /* The slot came back, so the next map can have it. */
   rig.host().cl_handle(host_mapped, CL_SUCCESS);
@@ -583,6 +617,41 @@ TEST(cl_buffer_paths, a_staged_map_whose_fill_fails_keeps_no_mapping)
                                              buffer_bytes, nullptr, &error);
   CHECK_EQ(error, CL_SUCCESS);
   CHECK(mapped != nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A context holds max_mappings at once - Affinity holds more than the 64 it
+ * once was for an empty document - and the one past them is refused. The
+ * host had already mapped that one, so it is unmapped there too: a mapping
+ * the guest never names again would otherwise be held by the host until the
+ * context goes, and enough of them fill the host's table for every context. */
+/* An application may release a buffer it never unmapped. Nothing names those
+ * mappings again, so they go with it - each held a row of the context, and an
+ * application that does this per tile runs the context out of rows - and the
+ * first time it happens is logged, since it is what such an application is
+ * doing. */
+TEST(cl_buffer_paths, a_buffer_released_while_mapped_takes_its_mappings_with_it)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem kept = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  cl_mem released = buffer_on(rig, opened, CL_MEM_READ_WRITE, host_buffer + 1u);
+  CHECK(kept != nullptr && released != nullptr);
+  if (kept == nullptr || released == nullptr) return;
+  const cl_mem mapped_ones[] = {released, released, kept};
+  for (cl_mem buffer : mapped_ones) {
+      rig.host().cl_handle(host_mapped, CL_SUCCESS);
+      CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0u, buffer_bytes,
+                                  nullptr, nullptr) != nullptr);
+  }
+  av::clicd::GuestClContext *const context = av::clicd::ClIcdRootProbe::context(rig.root(), opened.context());
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  CHECK_EQ(context->mappings(), 3u);
+  CHECK_EQ(rig.root().release(released, av::clicd::ClObject::Kind::mem), CL_SUCCESS);
+  CHECK_EQ(context->mappings(), 1u);
+  CHECK_EQ(rig.log().holding("a buffer released while still mapped"), 1u);
+  CHECK_EQ(rig.log().holding("2 mappings went with it"), 1u);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_buffer_paths, a_write_invalidate_map_reads_nothing_because_it_promises_nothing)
@@ -716,6 +785,90 @@ TEST(cl_buffer_paths, a_write_back_goes_unanswered_after_the_unmap_it_follows)
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
+/* CL_MEM_USE_HOST_PTR: the host cannot see the application's memory and
+ * refuses the flag, so the buffer is made there as a copy of it. A map hands
+ * back that memory - at its offset, as the API says - filled from the buffer,
+ * and the unmap writes it back; the memory stays the application's, never
+ * freed. Affinity makes buffers this way when it starts, and a host that saw
+ * the flag took the context with it. */
+TEST(cl_buffer_paths, a_buffer_over_the_applications_memory_maps_to_that_memory)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  static unsigned char own[buffer_bytes];
+  std::memset(own, 0x5a, sizeof own);
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  const std::uint32_t created = rig.kmt().commands();
+  cl_mem buffer = rig.root().create_buffer(opened.context(), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, buffer_bytes,
+                                           own, nullptr, nullptr);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+  CHECK_EQ(rig.kmt().command_id(created), static_cast<std::uint32_t>(av::clproto::kCmd_clCreateBuffer));
+
+  /* Asked, it is the buffer the application made: over its memory. */
+  void *host_pointer = nullptr;
+  CHECK_EQ(rig.root().mem_object_info(buffer, CL_MEM_HOST_PTR, sizeof host_pointer, &host_pointer, nullptr),
+           CL_SUCCESS);
+  CHECK(host_pointer == own);
+  const cl_mem_flags host_flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&host_flags), sizeof host_flags);
+  cl_mem_flags flags = 0u;
+  CHECK_EQ(rig.root().mem_object_info(buffer, CL_MEM_FLAGS, sizeof flags, &flags, nullptr), CL_SUCCESS);
+  CHECK_EQ(flags, static_cast<cl_mem_flags>(CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR));
+
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  unsigned char device[32];
+  std::memset(device, 0xc3, sizeof device);
+  rig.host().cl_bytes(CL_SUCCESS, device, sizeof device);
+  cl_int error = CL_INVALID_VALUE;
+  unsigned char *const mapped = static_cast<unsigned char *>(rig.root().map_buffer(
+      opened.queue(), buffer, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, 16u, sizeof device, nullptr, &error));
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(mapped == own + 16);
+  /* Filled from the buffer where it was mapped, and only there. */
+  CHECK_EQ(own[16], 0xc3u);
+  CHECK_EQ(own[16 + sizeof device - 1u], 0xc3u);
+  CHECK_EQ(own[15], 0x5au);
+  CHECK_EQ(own[16 + sizeof device], 0x5au);
+  if (mapped == nullptr) return;
+  mapped[4] = 0x01u;
+
+  rig.host().cl_result(CL_SUCCESS);
+  const std::uint32_t unmapping = rig.kmt().commands();
+  CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(unmapping), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
+  /* The memory is still the application's, write and all. */
+  CHECK_EQ(own[20], 0x01u);
+  rig.host().cl_enqueued(CL_SUCCESS, 0x6900u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().finish(opened.queue()), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(unmapping + 1u), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueWriteBuffer));
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_buffer_over_no_memory_or_over_memory_it_also_copies_is_refused)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  static unsigned char own[buffer_bytes];
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_buffer(opened.context(), CL_MEM_USE_HOST_PTR, buffer_bytes, nullptr, nullptr, &error) ==
+        nullptr);
+  CHECK_EQ(error, CL_INVALID_HOST_PTR);
+  CHECK(rig.root().create_buffer(opened.context(), CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR, buffer_bytes, own,
+                                 nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  CHECK(rig.root().create_buffer(opened.context(), CL_MEM_USE_HOST_PTR | CL_MEM_ALLOC_HOST_PTR, buffer_bytes, own,
+                                 nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  /* None of them reached the host. */
+  CHECK_EQ(rig.kmt().commands(), sent); }
+
 /* ---- the arena path's own refusals, and the events both paths hand back --- */
 
 TEST(cl_buffer_paths, an_arena_backed_map_the_host_refuses_hands_back_nothing)
@@ -782,19 +935,21 @@ TEST(cl_buffer_paths, a_map_with_more_mappings_than_the_context_holds_is_refused
   CHECK(buffer != nullptr);
   if (buffer == nullptr) return;
 
-  /* Fill the context's mapping table through the shared path, then ask for
-   * one more: the host has already mapped it by then, so the refusal is the
-   * guest running out of rows rather than the host running out of memory. */
-  for (std::uint32_t index = 0u; index < 64u; ++index) {
-      rig.host().cl_handle(host_mapped + index, CL_SUCCESS);
-      CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
-                                  nullptr) != nullptr);
-  }
-  rig.host().cl_handle(host_mapped + 64u, CL_SUCCESS);
+  /* One map through the shared path is taken; then, with the context's
+   * mapping table full, one more: the host has already mapped it by then, so
+   * the refusal is the guest running out of rows rather than the host running
+   * out of memory - and the host's map is undone. */
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr, nullptr) != nullptr);
+  CHECK(fill_mappings(rig, opened.context()));
+  rig.host().cl_handle(host_mapped + 1u, CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, 0u);
+  const std::uint32_t sent = rig.kmt().commands();
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
                               &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_buffer_paths, a_map_asked_for_an_event_hands_one_back_on_either_path)
@@ -912,16 +1067,22 @@ TEST(cl_buffer_paths, a_staged_map_with_no_row_left_gives_its_block_back)
   CHECK(buffer != nullptr);
   if (buffer == nullptr) return;
 
-  const unsigned char filled[buffer_bytes] = {};
-  for (std::uint32_t index = 0u; index < 64u; ++index) {
-      rig.host().cl_handle(host_mapped + index, CL_SUCCESS);
-      rig.host().cl_bytes(CL_SUCCESS, filled, 1u);
-      CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
-                                  nullptr) != nullptr);
-  }
-  rig.host().cl_handle(host_mapped + 64u, CL_SUCCESS);
+  /* Affinity holds more than the 64 a context once could for an empty
+   * document; the limit is past that, and the one map beyond it is refused
+   * and undone on the host - a mapping the guest never names again would be
+   * held there until the context went, and enough of them fill the host's
+   * table for every context. */
+  CHECK(av::clicd::GuestClContext::max_mappings > 64u);
+  CHECK(fill_mappings(rig, opened.context()));
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, 0u);
+  const std::uint32_t sent = rig.kmt().commands();
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
                               &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  /* The map, then the unmap of what it mapped; no read for a block it gave
+   * back. */
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
   CHECK(rig.root().invariants_hold()); }

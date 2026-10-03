@@ -64,3 +64,23 @@ TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success
   /* A refusal and a failure of one entry point are two things to name. */
   refusals.note(image_2d);
   CHECK_EQ(log.lines(), 4u); }
+
+/* A refused map says which limit it met, its size and how many mappings were
+ * held - once for each reason - and a buffer released while mapped is named
+ * the first time with how many went with it, never for one that held none. */
+TEST(cl_refusal_log, a_refused_map_and_a_buffer_released_mapped_say_how_many_were_held)
+{ av::RecordingLog log;
+  ClRefusalLog     refusals(log);
+  static const char slot[] = "clEnqueueMapBuffer: no slot";
+  refusals.note_map(slot, 4096u, 64u);
+  refusals.note_map(slot, 8u, 65u);
+  refusals.note_map(nullptr, 1u, 1u);
+  CHECK_EQ(log.lines(), 1u);
+  CHECK(std::strcmp(log.line(0u), "avcl: clEnqueueMapBuffer: no slot of 4096 bytes, with 64 mappings held") == 0);
+  refusals.note_released_mapped(0u);
+  CHECK_EQ(log.lines(), 1u);
+  refusals.note_released_mapped(3u);
+  refusals.note_released_mapped(5u);
+  CHECK_EQ(log.lines(), 2u);
+  CHECK(std::strcmp(log.line(1u), "avcl: clReleaseMemObject: a buffer released while still mapped 3 mappings went with it") == 0); }
+

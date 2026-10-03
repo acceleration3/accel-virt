@@ -35,7 +35,7 @@ struct MappedRegionProbe {
     static void stray_buffer(MappedRegion &region) { region.buffer_ = 1u; }
     static void stray_length(MappedRegion &region) { region.bytes_ = 1u; }
     static void stray_offset(MappedRegion &region) { region.offset_ = 1u; }
-    static void stray_staging(MappedRegion &region) { region.staged_ = true; }
+    static void stray_staging(MappedRegion &region) { region.memory_ = MappedRegion::Memory::staged; }
 };
 
 }  // namespace av::clicd
@@ -59,7 +59,7 @@ TEST(mapped_region, one_that_holds_nothing_answers_for_nothing)
 TEST(mapped_region, it_answers_the_pointer_the_map_returned_and_no_other)
 { MappedRegion region;
   std::uint8_t block[64] = {};
-  region.take(host_buffer, host_address, 16u, sizeof block, CL_MAP_READ, block, true);
+  region.take(host_buffer, host_address, 16u, sizeof block, CL_MAP_READ, block, MappedRegion::Memory::staged);
   CHECK(region.held());
   CHECK(region.answers(block));
   /* An unmap takes what it was given; an address inside the mapping is not
@@ -76,14 +76,13 @@ TEST(mapped_region, a_read_only_mapping_is_thrown_away_rather_than_written_back)
   std::uint8_t block[64] = {};
   /* CL_MAP_READ is a promise not to write through the pointer, so writing the
    * bytes back would overwrite whatever the device did in the meantime. */
-  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ, block, true);
+  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ, block, MappedRegion::Memory::staged);
   CHECK(!region.writes_back());
-  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE, block, true);
+  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::staged);
   CHECK(region.writes_back());
-  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ | CL_MAP_WRITE, block, true);
+  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ | CL_MAP_WRITE, block, MappedRegion::Memory::staged);
   CHECK(region.writes_back());
-  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE_INVALIDATE_REGION, block,
-              true);
+  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE_INVALIDATE_REGION, block, MappedRegion::Memory::staged);
   CHECK(region.writes_back()); }
 
 TEST(mapped_region, a_mapping_that_was_not_staged_writes_nothing_back)
@@ -91,7 +90,7 @@ TEST(mapped_region, a_mapping_that_was_not_staged_writes_nothing_back)
   std::uint8_t block[64] = {};
   /* The bytes were already the guest's own - a host-visible blob - so there
    * is nothing to copy either way. */
-  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE, block, false);
+  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::shared);
   CHECK(!region.staged());
   CHECK(!region.writes_back());
   CHECK(region.invariants_hold()); }
@@ -99,7 +98,7 @@ TEST(mapped_region, a_mapping_that_was_not_staged_writes_nothing_back)
 TEST(mapped_region, giving_it_up_leaves_it_answering_for_nothing)
 { MappedRegion region;
   std::uint8_t block[64] = {};
-  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ, block, true);
+  region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ, block, MappedRegion::Memory::staged);
   region.give_up();
   CHECK(!region.held());
   CHECK(!region.answers(block));
@@ -142,18 +141,49 @@ TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
   CHECK_EQ(context.mappings(), 0u);
   CHECK(context.invariants_hold()); }
 
+/* A mapping of the application's own memory is handed back where it is and
+ * written back like a staged one, but never freed; and a buffer that goes
+ * takes every mapping of its own with it, and none of another's. */
+TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffer_takes_its_own)
+{ ClContextRig rig;
+  rig.host().blob_import(0u, 0x77u);
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
+  CHECK_STATUS(context.make(), Status::ok);
+  static std::uint8_t own[64];
+  std::uint8_t *const at = context.take_application_mapping(host_buffer, host_address, 16u, 8u, CL_MAP_WRITE, own + 16);
+  CHECK(at == own + 16);
+  MappedRegion *const region = context.mapping_at(at);
+  CHECK(region != nullptr);
+  if (region == nullptr) return;
+  CHECK(!region->staged());
+  CHECK(region->writes_back());
+  CHECK(context.take_application_mapping(host_buffer, host_address, 0u, 8u, CL_MAP_READ, nullptr) == nullptr);
+  CHECK(context.take_application_mapping(0u, host_address, 0u, 8u, CL_MAP_READ, own) == nullptr);
+  CHECK(context.take_mapping(host_buffer, host_address + 0x1000u, 0u, 16u, CL_MAP_READ) != nullptr);
+  CHECK(context.take_mapping(host_buffer + 1u, host_address + 0x2000u, 0u, 16u, CL_MAP_READ) != nullptr);
+  CHECK_EQ(context.mappings(), 3u);
+  /* Two of the buffer's own - one the application's memory, one staged - go,
+   * and the other buffer's stays. Giving back the application's memory frees
+   * nothing: the mock platform aborts on a release of what it never lent. */
+  CHECK_EQ(context.give_back_mappings_of(host_buffer), 2u);
+  CHECK_EQ(context.mappings(), 1u);
+  CHECK_EQ(context.give_back_mappings_of(host_buffer), 0u);
+  CHECK(context.invariants_hold()); }
+
 TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stays_usable)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
-  std::uint8_t *first = nullptr;
-  for (std::uint32_t index = 0u; index < GuestClContext::max_mappings; ++index) {
-      std::uint8_t *const at =
-          context.take_mapping(host_buffer, host_address + index * 0x1000u, 0u, 16u, CL_MAP_READ);
-      CHECK(at != nullptr);
-      if (index == 0u) first = at;
-  }
+  /* One staged mapping, then the rest of the table with mappings of memory
+   * the context already has - thousands of staged blocks are more than the
+   * mock platform lends. */
+  std::uint8_t *const first = context.take_mapping(host_buffer, host_address, 0u, 16u, CL_MAP_READ);
+  CHECK(first != nullptr);
+  static std::uint8_t shared[GuestClContext::max_mappings];
+  for (std::uint32_t index = 1u; index < GuestClContext::max_mappings; ++index)
+      CHECK(context.take_shared_mapping(host_buffer, host_address + index * 0x1000u, 0u, 1u, shared + index) !=
+            nullptr);
   CHECK_EQ(context.mappings(), GuestClContext::max_mappings);
   CHECK(context.take_mapping(host_buffer, host_address, 0u, 16u, CL_MAP_READ) == nullptr);
   CHECK(context.invariants_hold());
@@ -177,7 +207,7 @@ TEST(mapped_region, the_invariant_catches_a_live_mapping_that_could_not_be_unmap
 { std::uint8_t at[64] = {};
   const auto broken = [&at](void (*corrupt)(MappedRegion &)) {
       MappedRegion region;
-      region.take(0x6600u, 0x7000u, 0u, sizeof at, CL_MAP_WRITE, at, true);
+      region.take(0x6600u, 0x7000u, 0u, sizeof at, CL_MAP_WRITE, at, MappedRegion::Memory::staged);
       CHECK(region.invariants_hold());
       corrupt(region);
       return region.invariants_hold();

@@ -5,13 +5,13 @@
 namespace av::clicd {
 
 MappedRegion::MappedRegion()
-    : buffer_(0u), host_(0u), at_(nullptr), offset_(0u), bytes_(0u), flags_(0u), staged_(false)
+    : buffer_(0u), host_(0u), at_(nullptr), offset_(0u), bytes_(0u), flags_(0u), memory_(Memory::shared)
 {
     AV_SCOPE("MappedRegion::MappedRegion");
 }
 
 void MappedRegion::take(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
-                        cl_map_flags flags, uint8_t *at, bool staged)
+                        cl_map_flags flags, uint8_t *at, Memory memory)
 {
     AV_SCOPE("MappedRegion::take");
     buffer_ = buffer;
@@ -20,7 +20,7 @@ void MappedRegion::take(uint64_t buffer, uint64_t host, size_t offset, size_t by
     offset_ = offset;
     bytes_ = bytes;
     flags_ = flags;
-    staged_ = staged;
+    memory_ = memory;
 }
 
 void MappedRegion::give_up()
@@ -32,7 +32,7 @@ void MappedRegion::give_up()
     offset_ = 0u;
     bytes_ = 0u;
     flags_ = 0u;
-    staged_ = false;
+    memory_ = Memory::shared;
 }
 
 bool MappedRegion::held() const
@@ -74,7 +74,7 @@ uint8_t *MappedRegion::at() const
 bool MappedRegion::staged() const
 {
     AV_SCOPE("MappedRegion::staged");
-    return staged_;
+    return memory_ == Memory::staged;
 }
 
 bool MappedRegion::answers(const void *pointer) const
@@ -90,13 +90,13 @@ bool MappedRegion::writes_back() const
     AV_SCOPE("MappedRegion::writes_back");
     /* CL_MAP_READ alone is a promise not to write, so nothing goes back;
      * anything else may have been written through. */
-    return staged_ && (flags_ & (CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION)) != 0u;
+    return memory_ != Memory::shared && (flags_ & (CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION)) != 0u;
 }
 
 bool MappedRegion::invariants_hold() const
 {
     AV_SCOPE("MappedRegion::invariants_hold");
-    if (at_ == nullptr) return buffer_ == 0u && bytes_ == 0u && offset_ == 0u && !staged_;
+    if (at_ == nullptr) return buffer_ == 0u && bytes_ == 0u && offset_ == 0u && memory_ == Memory::shared;
     /* A mapping of nothing is not a mapping, and one that names neither a
      * buffer nor the host's own address could never be unmapped. */
     return bytes_ != 0u && buffer_ != 0u && host_ != 0u;

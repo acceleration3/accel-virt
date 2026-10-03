@@ -21,20 +21,27 @@ struct HostSvmRangesProbe;
 
 class HostSvmRanges {
 public:
-    /* A process that holds more shared allocations than this has had enough;
-     * the guest is refused at the allocation, where it can be told, rather
-     * than later at a kernel argument, where it cannot. */
-    static constexpr uint32_t max_ranges = 256u;
+    /* A process that holds more shared allocations - or mapped buffers, which
+     * the backend holds in one of these too - than this has had enough; the
+     * guest is refused at the allocation or the map, where it can be told,
+     * rather than later at a kernel argument, where it cannot. Twice what one
+     * guest context may map (GuestClContext::max_mappings). */
+    static constexpr uint32_t max_ranges = 8192u;
 
     HostSvmRanges();
     HostSvmRanges(const HostSvmRanges &) = delete;
     HostSvmRanges &operator=(const HostSvmRanges &) = delete;
 
-    /* Holds what clSVMAlloc just answered. False for null, for no bytes at
+    /* Holds what clSVMAlloc or a map just answered, for `owner` (the mapped
+     * buffer, or 0). False for null, for no bytes at
      * all, for a range that would run past the end of the address space, and
      * when full. The same base twice is held once, with the newer size: an
      * allocator may hand back an address it freed. */
-    [[nodiscard]] bool remember(void *base, uint64_t bytes);
+    [[nodiscard]] bool remember(void *base, uint64_t bytes, uint64_t owner);
+    /* Forgets every range remembered for `owner` - a buffer mapped and then
+     * released, whose mapped addresses nothing names again. Answers how many;
+     * owner 0 is no owner, and forgets none. */
+    uint32_t           forget_owned(uint64_t owner);
     /* What clSVMFree was given. False for an address that is not the base of
      * a live range - an address inside one is not what was allocated. */
     bool               forget(void *base);
@@ -59,6 +66,7 @@ private:
     /* One slot is the same index in both. */
     uint64_t bases_[max_ranges];
     uint64_t sizes_[max_ranges];
+    uint64_t owners_[max_ranges];
     uint32_t count_;
 };
 

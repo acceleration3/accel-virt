@@ -331,6 +331,21 @@ TEST(cl_object_table, only_a_buffer_given_arena_memory_says_it_is_backed)
   CHECK(!first->backed());
   CHECK(first->invariants_hold()); }
 
+/* A buffer made over the application's own memory (CL_MEM_USE_HOST_PTR)
+ * remembers it - a map hands it back - and every other object names none. */
+TEST(cl_object_table, only_a_buffer_made_over_application_memory_names_it)
+{ Table rig;
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x6600u);
+  ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x6601u);
+  CHECK(buffer != nullptr && queue != nullptr);
+  CHECK(buffer->application_memory() == nullptr);
+  CHECK(queue->application_memory() == nullptr);
+  static unsigned char own[64];
+  buffer->use_application_memory(own);
+  CHECK(buffer->application_memory() == own);
+  CHECK(!buffer->backed());
+  CHECK(buffer->invariants_hold()); }
+
 /* The invariant catches the states the table never builds. */
 TEST(cl_object_table, an_objects_invariant_catches_what_the_table_never_builds)
 { Table rig;

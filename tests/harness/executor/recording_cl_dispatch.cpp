@@ -201,7 +201,7 @@ std::uint64_t RecordingClDispatch::make_svm(std::size_t bytes)
 {
     if (bytes == 0u || bytes > max_shared - shared_used_) return 0u;
     unsigned char *const allocated = &shared_[shared_used_];
-    if (!svm_.remember(allocated, static_cast<std::uint64_t>(bytes))) return 0u;
+    if (!svm_.remember(allocated, static_cast<std::uint64_t>(bytes), 0u)) return 0u;
     shared_used_ += bytes;
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(allocated));
 }

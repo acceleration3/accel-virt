@@ -380,11 +380,10 @@ TEST(guest_cl_context, the_invariant_catches_two_mappings_answering_one_pointer)
   CHECK(context.invariants_hold());
   /* Both answering one address: an unmap would have two to choose between,
    * and choosing is what it must never do. */
-  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof at, 0u, at, false);
+  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof at, 0u, at, av::clicd::MappedRegion::Memory::shared);
   CHECK(!context.invariants_hold());
   /* Put it back so teardown gives back what it really holds. */
-  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof other, 0u, other,
-                                                 false);
+  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof other, 0u, other, av::clicd::MappedRegion::Memory::shared);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, the_invariant_catches_a_made_context_that_is_missing_what_a_make_holds)
@@ -448,9 +447,9 @@ TEST(guest_cl_context, the_invariant_reaches_the_allocations_and_the_mappings_it
   CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, sizeof at, at) != nullptr);
   CHECK(context.invariants_hold());
   /* A mapping that is held but names no buffer could never be unmapped. */
-  GuestClContextProbe::mapping(context, 0u).take(0u, 0x7000u, 0u, sizeof at, 0u, at, false);
+  GuestClContextProbe::mapping(context, 0u).take(0u, 0x7000u, 0u, sizeof at, 0u, at, av::clicd::MappedRegion::Memory::shared);
   CHECK(!context.invariants_hold());
-  GuestClContextProbe::mapping(context, 0u).take(0x6600u, 0x7000u, 0u, sizeof at, 0u, at, false);
+  GuestClContextProbe::mapping(context, 0u).take(0x6600u, 0x7000u, 0u, sizeof at, 0u, at, av::clicd::MappedRegion::Memory::shared);
   CHECK(context.invariants_hold()); }
 
 /* A context that says it was never made must hold none of what a make holds:

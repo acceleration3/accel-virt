@@ -478,7 +478,7 @@ void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, s
     /* An allocation this cannot remember is one whose address could never be
      * judged, so it is given back rather than handed to a guest that would
      * find every use of it refused. */
-    if (!svm_.remember(allocated, static_cast<uint64_t>(size))) {
+    if (!svm_.remember(allocated, static_cast<uint64_t>(size), 0u)) {
         ::clSVMFree(context, allocated);
         return nullptr;
     }
@@ -493,6 +493,13 @@ void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
      * that is not a pointer the host's allocator was given. */
     if (!svm_.forget(svm_pointer)) return;
     ::clSVMFree(context, svm_pointer);
+}
+
+cl_int OpenClBackend::on_clReleaseMemObject(cl_mem memobj)
+{
+    AV_SCOPE("OpenClBackend::on_clReleaseMemObject");
+    static_cast<void>(mapped_.forget_owned(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(memobj))));
+    return RealDispatch::on_clReleaseMemObject(memobj);
 }
 
 void *OpenClBackend::on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer,
@@ -510,7 +517,7 @@ void *OpenClBackend::on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_me
     /* A mapping this cannot remember is one whose unmap could never be
      * judged, and a buffer that can never be unmapped is worse than a map
      * that failed: the guest would hold it for the life of the context. */
-    if (!mapped_.remember(mapped, static_cast<uint64_t>(size))) {
+    if (!mapped_.remember(mapped, static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(buffer)))) {
         static_cast<void>(::clEnqueueUnmapMemObject(command_queue, buffer, mapped, 0u, nullptr,
                                                     nullptr));
         if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;

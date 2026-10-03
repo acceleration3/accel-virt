@@ -575,6 +575,9 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
                  * is released rather than freed on the host: what goes is this
                  * context's reference on the object, and the device destroys
                  * what it made when the last one goes (feature 053). */
+                /* Mappings it was never unmapped from go with it: nothing
+                 * names them again, and each holds a row of the context. */
+                refusals_.note_released_mapped(context->give_back_mappings_of(wire_handle));
                 if (context->external().give_back(*wire, wire_handle)) break;
                 give_back_to_host(*wire, kind, wire_handle);
                 /* A buffer made over the arena gives its block back with it,
@@ -748,6 +751,23 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         report_error(error, CL_SUCCESS);
         return static_cast<cl_mem>(static_cast<void *>(object));
     }
+    /* CL_MEM_USE_HOST_PTR asks for a buffer whose storage is the
+     * application's own memory, which the host cannot see. The host's buffer
+     * is made as a copy of it instead, and the memory is kept: a map hands it
+     * back filled from the buffer and an unmap writes it back, which is what
+     * the API promises an application that reads it - only while it is
+     * mapped. Affinity makes buffers this way at start. */
+    const bool uses_application =
+        (flags & static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR)) != 0u;
+    if (uses_application &&
+        (host_pointer == nullptr ||
+         (flags & static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR)) != 0u)) {
+        report_error(error, host_pointer == nullptr ? CL_INVALID_HOST_PTR : CL_INVALID_VALUE);
+        return nullptr;
+    }
+    if (uses_application)
+        flags = (flags & ~static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR)) |
+                static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR);
     const bool            wants_host_memory =
         (flags & static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR)) != 0u &&
         (flags & static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR)) == 0u;
@@ -807,6 +827,7 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         return nullptr;
     }
     if (backed) static_cast<ClObject *>(made)->back_with(block, bytes);
+    if (uses_application) static_cast<ClObject *>(made)->use_application_memory(host_pointer);
     return static_cast<cl_mem>(made);
 }
 
@@ -1171,6 +1192,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
                 *wire, held->wire(), named->wire(), blocking, flags, offset, bytes, 0u, nullptr,
                 event != nullptr ? &settled : nullptr, &settle_error);
             if (host_mapped == 0u) {
+                refusals_.note_map("clEnqueueMapBuffer: the host refused an arena map", bytes, context->mappings());
                 report_error(error, settle_error != CL_SUCCESS ? settle_error : CL_MAP_FAILURE);
                 return nullptr;
             }
@@ -1181,6 +1203,12 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
              * its own, so nothing is read in and nothing written out. */
             if (context->take_shared_mapping(named->wire(), host_mapped, offset, bytes, at) ==
                 nullptr) {
+                refusals_.note_map("clEnqueueMapBuffer: no mapping slot for an arena map", bytes,
+                                   context->mappings());
+                /* The host's map is undone: one the guest never names again
+                 * would be held there for the life of the context. */
+                static_cast<void>(av::clproto::av_clEnqueueUnmapMemObject(*wire, held->wire(), named->wire(),
+                                                                          host_mapped, 0u, nullptr, nullptr));
                 report_error(error, CL_OUT_OF_HOST_MEMORY);
                 return nullptr;
             }
@@ -1201,11 +1229,21 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
         *wire, held->wire(), named->wire(), blocking, flags, offset, bytes, 0u, nullptr,
         event != nullptr ? &mapped_event : nullptr, &host_error);
     if (mapped == 0u) {
+        refusals_.note_map("clEnqueueMapBuffer: the host refused a staged map", bytes, context->mappings());
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_MAP_FAILURE);
         return nullptr;
     }
-    uint8_t *const at = context->take_mapping(named->wire(), mapped, offset, bytes, flags);
+    /* A buffer over the application's own memory maps to that memory, as the
+     * API says it does; any other is staged in a block of the ICD's own.
+     * Either is filled here and written back at the unmap. */
+    uint8_t *const own = named->application_memory();
+    uint8_t *const at = own != nullptr ? context->take_application_mapping(named->wire(), mapped, offset, bytes,
+                                                                             flags, own + offset)
+                                       : context->take_mapping(named->wire(), mapped, offset, bytes, flags);
     if (at == nullptr) {
+        refusals_.note_map("clEnqueueMapBuffer: no slot or no staging block for a map", bytes, context->mappings());
+        static_cast<void>(
+            av::clproto::av_clEnqueueUnmapMemObject(*wire, held->wire(), named->wire(), mapped, 0u, nullptr, nullptr));
         report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
     }
@@ -1218,6 +1256,8 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
             /* take_mapping answered `at`, so this is the row it took. */
             MappedRegion *const region = context->mapping_at(at);
             context->give_back_mapping(*region);
+            static_cast<void>(av::clproto::av_clEnqueueUnmapMemObject(*wire, held->wire(), named->wire(), mapped,
+                                                                      0u, nullptr, nullptr));
             report_error(error, read);
             return nullptr;
         }
@@ -1543,11 +1583,26 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
         lock_.release();
         return asked.give(&count, sizeof count);
     }
-    /* The host's pointer is nothing in this process, and memory of the
-     * application's own is not carried under an object (create_image). */
+    /* The host's pointer is nothing in this process: the answer is the
+     * application's own memory a buffer was made over, and none for any
+     * other (create_image takes none). */
     case CL_MEM_HOST_PTR: {
-        const void *const none = nullptr;
-        return asked.give(&none, sizeof none);
+        const void *const own = held->application_memory();
+        return asked.give(&own, sizeof own);
+    }
+    /* The host made a buffer over the application's memory as a copy of it,
+     * and says so; the application asked for its memory to be used. */
+    case CL_MEM_FLAGS: {
+        ClientTransport *const flags_wire = wire_of(*held);
+        if (flags_wire == nullptr) return CL_OUT_OF_RESOURCES;
+        cl_mem_flags made = 0u;
+        const cl_int answered =
+            av::clproto::av_clGetMemObjectInfo(*flags_wire, held->wire(), CL_MEM_FLAGS, sizeof made, &made, nullptr);
+        if (answered != CL_SUCCESS) return answered;
+        if (held->application_memory() != nullptr)
+            made = (made & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR)) |
+                   static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR);
+        return asked.give(&made, sizeof made);
     }
     default:
         break;

@@ -8,10 +8,13 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <stdio.h>
+
 namespace av {
 
 ContextSession::ContextSession()
-    : backend_(nullptr), clocks_(nullptr), arena_(nullptr, 0u), imports_(), starved_(0u), faulted_(false)
+    : backend_(nullptr), clocks_(nullptr), arena_(nullptr, 0u), imports_(), starved_(0u), faulted_(false),
+      sink_(stderr), lines_(sink_, "virtio-gpu-av: executor: ")
 {
     AV_SCOPE("ContextSession::ContextSession");
 }
@@ -106,7 +109,10 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
     if (!ran) {
         /* The block being too small and the frame being malformed are the same
          * answer on the wire on purpose, and two different problems here. */
-        if (arena_.refusals() != refused) starved_++;
+        const bool starved = arena_.refusals() != refused;
+        if (starved) starved_++;
+        lines_.note_hex(starved ? "a command the decode arena had no room for, id" : "a command that would not decode, id",
+                        command_id, 8u);
         return AV_UNDECODABLE;
     }
     if (backend_->lost()) {
@@ -125,7 +131,10 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, const AvBlobHandle &handl
     AV_SCOPE("ContextSession::import_blob");
     if (backend_ == nullptr || faulted_) return AV_UNDECODABLE;
     ImportedBlob *taken = nullptr;
-    if (imports_.take(blob_id, handle, taken) != Status::ok) return AV_UNDECODABLE;
+    if (imports_.take(blob_id, handle, taken) != Status::ok) {
+        lines_.note("a blob the import table would not take, id", blob_id);
+        return AV_UNDECODABLE;
+    }
     if (!backend_->adopt(*taken)) {
         /* An API that cannot take this kind is not a fault: the device is told
          * no and the guest is copied through instead. The slot goes back so a

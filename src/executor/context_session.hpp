@@ -7,7 +7,9 @@
 #ifndef AV_CONTEXT_SESSION_HPP
 #define AV_CONTEXT_SESSION_HPP
 
+#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
+#include "device/host/stdio_log.hpp"
 #include "executor/import_table.hpp"
 #include "proto/wire/wire_arena.hpp"
 
@@ -99,6 +101,10 @@ private:
     ImportTable     imports_;
     size_t          starved_;
     bool            faulted_;
+    /* QEMU's stderr: a command or a blob refused here ends the context, and the
+     * device says only which batch it was in. */
+    StdioLog        sink_;
+    DriverLog       lines_;
 };
 
 }  // namespace av

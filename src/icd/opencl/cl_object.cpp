@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
                    ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), references_(1u), children_(0u), kind_(kind)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), references_(1u), children_(0u), kind_(kind)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -40,6 +40,18 @@ void ClObject::back_with(uint64_t offset, uint64_t bytes)
     AV_SCOPE("ClObject::back_with");
     backing_offset_ = offset;
     backing_bytes_ = bytes;
+}
+
+void ClObject::use_application_memory(void *memory)
+{
+    AV_SCOPE("ClObject::use_application_memory");
+    application_memory_ = static_cast<uint8_t *>(memory);
+}
+
+uint8_t *ClObject::application_memory() const
+{
+    AV_SCOPE("ClObject::application_memory");
+    return application_memory_;
 }
 
 bool ClObject::backed() const

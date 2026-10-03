@@ -530,3 +530,35 @@ TEST(opencl_backend_device, a_write_has_taken_its_bytes_by_the_time_it_returns_w
   ::clReleaseMemObject(target);
   ::clReleaseCommandQueue(queue);
   backend.shut_down(); }
+
+/* A buffer the guest releases while still mapped takes its mapping with it:
+ * nothing names that address again, and a session whose buffers all went
+ * that way would fill the table of mappings it can judge an unmap against. A
+ * buffer still held keeps its own. */
+TEST(opencl_backend_device, on_clReleaseMemObject_of_a_mapped_buffer_forgets_its_mapping)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  cl_int                 error = CL_SUCCESS;
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  cl_mem const released = ::clCreateBuffer(context, CL_MEM_READ_WRITE, 4096u, nullptr, &error);
+  cl_mem const kept = ::clCreateBuffer(context, CL_MEM_READ_WRITE, 4096u, nullptr, &error);
+  CHECK(queue != nullptr && released != nullptr && kept != nullptr);
+  void *const gone = backend.on_clEnqueueMapBuffer(queue, released, CL_TRUE, CL_MAP_WRITE, 0u, 4096u, 0u, nullptr,
+                                                   nullptr, &error);
+  void *const stays = backend.on_clEnqueueMapBuffer(queue, kept, CL_TRUE, CL_MAP_WRITE, 0u, 4096u, 0u, nullptr,
+                                                    nullptr, &error);
+  CHECK(gone != nullptr && stays != nullptr);
+  const auto address = [](void *pointer) { return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pointer)); };
+  CHECK(backend.svm_for(address(gone), 1u) != nullptr);
+  CHECK_EQ(backend.on_clReleaseMemObject(released), CL_SUCCESS);
+  CHECK(backend.svm_for(address(gone), 1u) == nullptr);
+  CHECK(backend.svm_for(address(stays), 1u) != nullptr);
+  CHECK_EQ(backend.on_clEnqueueUnmapMemObject(queue, kept, stays, 0u, nullptr, nullptr), CL_SUCCESS);
+  ::clReleaseMemObject(kept);
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down(); }

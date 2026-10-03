@@ -24,13 +24,19 @@ struct MappedRegionProbe;
 
 class MappedRegion {
 public:
+    /* Whose memory a mapping hands the application: the arena's, which the
+     * host's buffer is made over, so nothing is copied; a block of the ICD's
+     * own, copied in at the map and back at the unmap, and freed; or the
+     * application's own (CL_MEM_USE_HOST_PTR), copied the same way and never
+     * freed. */
+    enum class Memory : uint8_t { shared, staged, application };
+
     MappedRegion();
 
     /* Takes a mapping of `bytes` at `offset` into the buffer the host knows
-     * as `buffer`, whose guest memory is `at`. `staged` says the bytes were
-     * copied in and have to be copied back. */
+     * as `buffer`, whose guest memory is `at`. */
     void take(uint64_t buffer, uint64_t host, size_t offset, size_t bytes, cl_map_flags flags,
-              uint8_t *at, bool staged);
+              uint8_t *at, Memory memory);
     void give_up();
     bool held() const;
 
@@ -42,14 +48,15 @@ public:
     size_t       offset() const;
     size_t       bytes() const;
     uint8_t     *at() const;
+    /* Whether `at` is a block of the ICD's own, freed with the mapping. */
     bool         staged() const;
 
     /* Whether `pointer` is the one this mapping answered. An unmap names the
      * pointer the map returned, not an address inside it. */
     bool answers(const void *pointer) const;
-    /* Whether the application asked to write through this mapping, which is
-     * what says the bytes have to go back at the unmap. A read-only map that
-     * was staged is thrown away instead. */
+    /* Whether the application asked to write through this mapping into
+     * memory that is not the buffer's own, which is what says the bytes have
+     * to go back at the unmap. A read-only map is thrown away instead. */
     bool writes_back() const;
 
     bool invariants_hold() const;
@@ -63,7 +70,7 @@ private:
     size_t       offset_;
     size_t       bytes_;
     cl_map_flags flags_;
-    bool         staged_;
+    Memory       memory_;
 };
 
 }  // namespace av::clicd
