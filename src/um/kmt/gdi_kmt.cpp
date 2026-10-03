@@ -160,16 +160,39 @@ Status GdiKmt::enumerate_adapters(uint32_t *adapters, uint32_t capacity, uint32_
     enumeration.pAdapters = infos;
     const Status status = answer(D3DKMTEnumAdapters2(&enumeration));
     count = status == Status::ok ? enumeration.NumAdapters : 0u;
-    known_ = 0u;
     for (uint32_t index = 0u; index < count && index < max_adapters; index++) {
         const uint64_t luid = static_cast<uint64_t>(static_cast<uint32_t>(infos[index].AdapterLuid.HighPart)) << 32u |
                               infos[index].AdapterLuid.LowPart;
-        known_adapters_[known_] = infos[index].hAdapter;
-        known_luids_[known_] = luid;
-        known_++;
+        remember(infos[index].hAdapter, luid);
         if (index < capacity) adapters[index] = infos[index].hAdapter;
     }
     return status;
+}
+
+void GdiKmt::remember(uint32_t adapter, uint64_t luid)
+{
+    AV_SCOPE("GdiKmt::remember");
+    for (uint32_t index = 0u; index < known_; index++) {
+        if (known_adapters_[index] != adapter) continue;
+        known_luids_[index] = luid;
+        return;
+    }
+    if (known_ == known_capacity) return;
+    known_adapters_[known_] = adapter;
+    known_luids_[known_] = luid;
+    known_++;
+}
+
+void GdiKmt::forget(uint32_t adapter)
+{
+    AV_SCOPE("GdiKmt::forget");
+    for (uint32_t index = 0u; index < known_; index++) {
+        if (known_adapters_[index] != adapter) continue;
+        known_--;
+        known_adapters_[index] = known_adapters_[known_];
+        known_luids_[index] = known_luids_[known_];
+        return;
+    }
 }
 
 /* D3DKMTQueryAdapterInfo has no LUID query for an open adapter, so the LUID is
@@ -286,7 +309,9 @@ Status GdiKmt::close_adapter(uint32_t adapter)
     AV_SCOPE("GdiKmt::close_adapter");
     D3DKMT_CLOSEADAPTER request = {};
     request.hAdapter = adapter;
-    return answer(D3DKMTCloseAdapter(&request));
+    const Status closed = answer(D3DKMTCloseAdapter(&request));
+    if (closed == Status::ok) forget(adapter);
+    return closed;
 }
 
 Status GdiKmt::create_device(uint32_t adapter, uint32_t &device)

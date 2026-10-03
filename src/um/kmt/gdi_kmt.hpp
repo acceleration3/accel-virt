@@ -94,14 +94,20 @@ private:
 
     Status answer(int32_t code);
     Status await_event();
+    /* An open handle's LUID, kept until the handle is closed: every search
+     * enumerates afresh, and the handle an earlier one kept stays open. */
+    void   remember(uint32_t adapter, uint64_t luid);
+    void   forget(uint32_t adapter);
 
     /* D3DKMT_ENUMADAPTERS2's limit on what one enumeration answers. */
     static constexpr uint32_t max_adapters = 16u;
+    /* One enumeration's handles beside those the searches before it kept. */
+    static constexpr uint32_t known_capacity = 2u * max_adapters;
 
     void    *event_;
     uint32_t last_code_;
-    uint32_t known_adapters_[max_adapters];
-    uint64_t known_luids_[max_adapters];
+    uint32_t known_adapters_[known_capacity];
+    uint64_t known_luids_[known_capacity];
     uint32_t known_;
 };
 
