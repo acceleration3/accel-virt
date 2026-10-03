@@ -130,6 +130,31 @@ TEST(cl_icd_root, the_device_answers_the_adapters_identity_and_the_hosts_everyth
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_NAME, sizeof name, name, nullptr), CL_SUCCESS);
   CHECK_EQ(std::strcmp(name, "a host gpu"), 0); }
 
+/* A device's platform and parent are objects, and the host's handles for them
+ * are nothing in this process: an application hands the platform straight
+ * back - Affinity to clGetDeviceIDsFromD3D10KHR, through a loader that reads
+ * its dispatch table - so it is this ICD's own platform, and a root device
+ * has no parent, whatever the host would say. */
+TEST(cl_icd_root, a_devices_platform_is_this_icds_and_it_has_no_parent)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  cl_platform_id ours = nullptr;
+  CHECK_EQ(rig.root().platform_ids(1u, &ours, nullptr), CL_SUCCESS);
+  const char host_handle[8] = {0, 0, 0, 0x7f, 0, 0, 0x7f, 0};
+  rig.host().cl_info(CL_SUCCESS, host_handle, sizeof host_handle);
+  cl_platform_id platform = nullptr;
+  std::size_t    bytes = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_PLATFORM, sizeof platform, &platform, &bytes), CL_SUCCESS);
+  CHECK(platform == ours);
+  CHECK_EQ(bytes, sizeof platform);
+  cl_device_id parent = device;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_PARENT_DEVICE, sizeof parent, &parent, nullptr), CL_SUCCESS);
+  CHECK(parent == nullptr);
+  /* Room for less than a handle is refused rather than filled in part. */
+  char cramped[4] = {};
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_PLATFORM, sizeof cramped, cramped, nullptr), CL_INVALID_VALUE); }
+
 /* CL_DEVICE_EXTENSIONS is the one query that is neither the report's answer
  * nor the host's: the host says what the GPU has, a policy row says what this
  * ICD carries, and an application is shown the two intersected. Forwarding the

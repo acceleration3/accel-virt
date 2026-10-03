@@ -257,6 +257,18 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
     /* The four this ICD decides name the avgpu adapter rather than the host
      * GPU, or cap what it implements; everything else is the host's own. */
     if (device_.decides(name)) return device_.info(name, value_bytes, value, size_ret);
+    /* The answers that are objects: the host's handles for its platform and
+     * its parent device are nothing in this process - an application hands
+     * the platform straight back, to clGetDeviceIDsFromD3D10KHR among others,
+     * through a loader that dereferences it. */
+    if (name == CL_DEVICE_PLATFORM) {
+        const cl_platform_id ours = platform_.as_handle();
+        return ClInfoRequest(value_bytes, value, size_ret).give(&ours, sizeof ours);
+    }
+    if (name == CL_DEVICE_PARENT_DEVICE) {
+        const cl_device_id none = nullptr;
+        return ClInfoRequest(value_bytes, value, size_ret).give(&none, sizeof none);
+    }
     /* Except the extensions, which are neither: the host's list is what the
      * GPU has and the policy is what this ICD carries, and passing the host's
      * through would offer an application every extension rusticl implements
