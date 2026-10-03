@@ -133,7 +133,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u),
       display_changed_(0u), display_announced_(0u), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -1593,15 +1593,29 @@ PixelMover &Adapter::immediate_mover()
 void Adapter::mark_present(DxgkargPresentRecord &request, uint64_t ticket)
 {
     AV_SCOPE("Adapter::mark_present");
-    if (ticket == 0u || request.pDmaBufferPrivateData == nullptr ||
-        request.DmaBufferPrivateDataSize < PresentTicketRecord::encoded_size)
-        return;
+    if (ticket == 0u) return;
     auto *const private_data = static_cast<uint8_t *>(request.pDmaBufferPrivateData);
-    if (PresentTicketRecord(presents_.object().epoch(), ticket)
-            .encode(private_data, request.DmaBufferPrivateDataSize) != Status::ok)
+    if (private_data == nullptr || PresentTicketRecord(presents_.object().epoch(), ticket)
+                                           .encode(private_data, request.DmaBufferPrivateDataSize) != Status::ok) {
+        log_unticketed_present(request);
         return;
+    }
     request.pDmaBufferPrivateData = private_data + PresentTicketRecord::encoded_size;
     request.DmaBufferPrivateDataSize -= static_cast<uint32_t>(PresentTicketRecord::encoded_size);
+}
+
+void Adapter::log_unticketed_present(const DxgkargPresentRecord &request)
+{
+    AV_SCOPE("Adapter::log_unticketed_present");
+    presents_unticketed_++;
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("avgpu: present unticketed private data ");
+    message.append(request.pDmaBufferPrivateData != nullptr ? "given" : "absent");
+    message.append(" bytes ");
+    message.append_decimal(request.DmaBufferPrivateDataSize);
+    platform_.log(message.text());
 }
 
 void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool operation_named)
@@ -2031,14 +2045,19 @@ Status Adapter::submit_follow(const Context &context, const FollowRecord &follow
 /* Checked before the context's own kind: a present's DMA buffer comes to any
  * context, and its private data is the miniport's, written by DdiPresent. A
  * record that names no present of the queue's - another epoch, a ticket never
- * queued - holds nothing, so a process cannot park the node on one. */
+ * queued - holds nothing, so a process cannot park the node on one.
+ * dxgkrnl counts the bytes DdiPresent advanced past as the UMD's private data
+ * and passes only what was left after them as the private data's size: on a
+ * context with room for the record alone that size is 0, and the packet ran
+ * ahead of its pixels. */
 bool Adapter::submit_present(const DxgkargSubmitCommandVirtualRecord &request, Status &status, void *&owner,
                              uint64_t &awaited)
 {
     AV_SCOPE("Adapter::submit_present");
     PresentTicketRecord record;
     if (!presents_.constructed() ||
-        record.decode(static_cast<const uint8_t *>(request.pDmaBufferPrivateData), request.DmaBufferPrivateDataSize) !=
+        record.decode(static_cast<const uint8_t *>(request.pDmaBufferPrivateData),
+                      request.DmaBufferUmdPrivateDataSize) !=
             Status::ok ||
         !presents_.object().holds(record))
         return false;
@@ -2319,6 +2338,7 @@ void Adapter::report(StateWriter &writer)
     writer.number("presented_fence", presented_fence_);
     writer.number("present_rows", present_rows_);
     writer.number("presents_unmoved", presents_unmoved_);
+    writer.number("presents_unticketed", presents_unticketed_);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());

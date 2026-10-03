@@ -312,6 +312,10 @@ private:
     void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);
+    /* A present whose pixels the engine moves later but whose packet could
+     * not be told to wait for them: whatever reads the destination after the
+     * packet completes reads it before they land. */
+    void log_unticketed_present(const DxgkargPresentRecord &request);
     void log_unreadable_surfaces(const PresentSurface &read, const PresentSurface &written, AllocationKind source_kind,
                                  AllocationKind destination_kind, const Rectangle &from, const Rectangle &into);
 
@@ -529,6 +533,9 @@ private:
      * desktop's (feature 046, FR-004) - and presents it could not move. */
     uint64_t                       present_rows_;
     uint64_t                       presents_unmoved_;
+    /* Presents the engine moves whose packets had no room to name their
+     * ticket, and so complete without waiting for the pixels. */
+    uint64_t                       presents_unticketed_;
     /* Set from the interrupt when the device says its configuration changed,
      * cleared by the DDI that follows it. */
     uint64_t                       display_changed_;

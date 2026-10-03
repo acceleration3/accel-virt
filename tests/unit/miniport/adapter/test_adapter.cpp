@@ -1844,11 +1844,14 @@ TEST(adapter_present, a_queued_blt_holds_its_packet_until_the_engine_has_moved_t
   CHECK_STATUS(record.decode(private_data, sizeof private_data), av::Status::ok);
   CHECK(record.ticket() == 1u);
 
+  /* As dxgkrnl submits it: the bytes DdiPresent advanced past counted as the
+   * UMD's private data, and what it left - nothing - as the size. */
   av::DxgkargSubmitCommandVirtualRecord submit = {};
   submit.hContext = context.hContext;
   submit.DmaBufferVirtualAddress = 0x8000000000ull;
   submit.pDmaBufferPrivateData = private_data;
-  submit.DmaBufferPrivateDataSize = sizeof private_data;
+  submit.DmaBufferPrivateDataSize = present.DmaBufferPrivateDataSize;
+  submit.DmaBufferUmdPrivateDataSize = sizeof private_data;
   submit.SubmissionFenceId = 1u;
   CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
   const std::uint32_t before = fixture.dxgkrnl().interrupts();
@@ -1885,6 +1888,58 @@ TEST(adapter_present, a_queued_blt_holds_its_packet_until_the_engine_has_moved_t
       CHECK_EQ(fixture.dxgkrnl().interrupt(fixture.dxgkrnl().interrupts() - 1u).FenceId, fence);
       fence++;
   }
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A queued blt whose DMA buffer has no room to name its ticket cannot hold its
+ * packet: it is counted, and said while the log budget lasts. */
+TEST(adapter_present, a_queued_blt_with_no_room_for_its_ticket_is_counted_and_said)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  std::uint8_t             short_data[av::PresentTicketRecord::encoded_size - 1u] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("avgpu: present unticketed private data absent bytes 0"));
+  present.pDmaBuffer = dma;
+  present.pDmaBufferPrivateData = short_data;
+  present.DmaBufferPrivateDataSize = sizeof short_data;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("avgpu: present unticketed private data given bytes 15"));
+  CHECK(present.pDmaBufferPrivateData == short_data);   /* nothing written, nothing advanced */
+  CHECK_EQ(present.DmaBufferPrivateDataSize, sizeof short_data);
+
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  present.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("presents_unticketed=3"));
   CHECK(fixture.adapter().invariants_hold());
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
@@ -3047,7 +3102,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
    * source, and every table empty and free. */
   const char *const expected =
       "adapter/0 started=true present=true powering_down=false presented_fence=0 present_rows=0"
-      " presents_unmoved=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
+      " presents_unmoved=0 presents_unticketed=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
       " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
       "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
       "adapter/0/allocation_table/0 busy=false live=0\n"
