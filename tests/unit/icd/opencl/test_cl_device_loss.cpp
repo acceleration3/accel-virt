@@ -111,7 +111,12 @@ TEST(cl_device_loss, releasing_a_lost_context_costs_no_round_trip_and_gives_ever
   cl_command_queue queue = rig.loader().create_queue(context, device, nullptr);
   CHECK(queue != nullptr);
 
+  /* A call that always crosses: a finish on a queue that has run nothing
+   * sends nothing, and would never meet the fault. */
   fault_next(rig);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.loader().finish(queue), CL_OUT_OF_RESOURCES);
 
   const std::uint32_t commands = rig.kmt().commands();
@@ -209,12 +214,14 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
   CHECK(kernel != nullptr && user != nullptr);
   if (kernel == nullptr || user == nullptr) return;
 
-  /* The fault. From here the transport is gone. */
+  /* The fault, on a call that always crosses - a finish on a queue that has
+   * run nothing sends nothing. From here the transport is gone. */
   fault_next(rig);
-  CHECK_EQ(rig.loader().finish(queue), CL_OUT_OF_RESOURCES);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
 
   const std::uint32_t sent = rig.kmt().commands();
-  cl_int              error = CL_SUCCESS;
   unsigned char       bytes[8] = {};
   const std::size_t   global = 1u;
 

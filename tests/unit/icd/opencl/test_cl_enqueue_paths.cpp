@@ -56,6 +56,11 @@ bool read_asks_the_host_to_block(const av::MockKmt &kmt, std::uint32_t index)
     return blocking != 0u;
 }
 
+const cl_icd_dispatch *table_of(const void *object)
+{
+    return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
+}
+
 /* A context, a queue, a buffer, a program and a kernel: everything an enqueue
  * needs, so each test below is about the enqueue and not the setup. */
 class Running {
@@ -92,6 +97,15 @@ public:
     }
 
     bool             made() const { return kernel_ != nullptr && buffer_ != nullptr; }
+    /* Something left on the queue - a marker - so that the next transfer has
+     * a queue to drain: a queue nothing was sent to is known idle, and a
+     * transfer to it drains nothing. */
+    void leaves_work()
+    {
+        rig_.host().cl_enqueued(CL_SUCCESS, host_event);
+        cl_event marker = nullptr;
+        static_cast<void>(table_of(queue_)->clEnqueueMarkerWithWaitList(queue_, 0u, nullptr, &marker));
+    }
     cl_device_id     device() const { return device_; }
     cl_context       context() const { return context_; }
     cl_command_queue queue() const { return queue_; }
@@ -309,6 +323,7 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
+  run.leaves_work();
   unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
 
   /* Non-blocking, no event: the drain, and the write held behind it. The
@@ -324,7 +339,11 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
 
   /* With an event: the write goes with the marker after it, which is what the
-   * application holds - and the write held from before leads the next drain. */
+   * application holds. The write held from before went with the work left
+   * on the queue, which the next answered command sends. */
+  sent = rig.kmt().commands();
+  run.leaves_work();
+  CHECK(write_asks_the_host_to_block(rig.kmt(), sent));
   drains(rig);
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   cl_event event = nullptr;
@@ -333,16 +352,16 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
                                     &event),
            CL_SUCCESS);
   CHECK(event != nullptr);
-  CHECK_EQ(rig.kmt().commands(), sent + 7u);
-  CHECK(write_asks_the_host_to_block(rig.kmt(), sent));
-  CHECK_EQ(rig.kmt().command_id(sent + 1u),
+  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  CHECK_EQ(rig.kmt().command_id(sent),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
-  CHECK(write_asks_the_host_to_block(rig.kmt(), sent + 5u));
-  CHECK_EQ(rig.kmt().command_id(sent + 6u),
+  CHECK(write_asks_the_host_to_block(rig.kmt(), sent + 4u));
+  CHECK_EQ(rig.kmt().command_id(sent + 5u),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
 
   /* A marker the host would not make for the event is the application's
    * error, after the bytes were written. */
+  run.leaves_work();
   drains(rig);
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   event = nullptr;
@@ -352,6 +371,7 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
   CHECK(event == nullptr);
 
   /* A drain the host refuses sends no write at all. */
+  run.leaves_work();
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   sent = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_write(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof bytes, bytes,
@@ -393,6 +413,7 @@ TEST(cl_enqueue_paths, a_blocking_read_whose_drain_marker_the_host_refuses_answe
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
+  run.leaves_work();
   unsigned char into[8] = {};
 
   const std::uint32_t sent = rig.kmt().commands();
@@ -411,6 +432,7 @@ TEST(cl_enqueue_paths, a_blocking_read_whose_drain_the_host_will_not_flush_answe
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
+  run.leaves_work();
   unsigned char into[8] = {};
 
   const std::uint32_t sent = rig.kmt().commands();
@@ -431,6 +453,7 @@ TEST(cl_enqueue_paths, a_blocking_read_the_host_refuses_answers_its_error)
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
+  run.leaves_work();
   unsigned char into[8] = {};
 
   const std::uint32_t sent = rig.kmt().commands();
@@ -740,6 +763,7 @@ TEST(cl_enqueue_paths, a_blocking_read_is_sent_last_and_asks_the_host_to_block)
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
+  run.leaves_work();
   unsigned char into[8] = {};
   const unsigned char answered[8] = {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u};
 
