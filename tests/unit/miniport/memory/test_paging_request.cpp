@@ -105,10 +105,6 @@ public:
     {
         return PagingRequest(platform_, allocations_, budget_, request_).build().value();
     }
-    Allocation *unmapped()
-    {
-        return PagingRequest(platform_, allocations_, budget_, request_).unmapped();
-    }
 
     /* One allocation of four pages, as CreateAllocation would leave it. */
     Allocation *allocate()
@@ -449,24 +445,24 @@ TEST(paging_request_unmap_aperture, answers_an_unmapping_of_an_allocation_it_nev
   paging.place(unmap);
   CHECK_EQ(paging.build(), 0); }
 
-/* The allocation an unmap takes pages from is what the adapter ends a host
- * context over, so only an unmap from the aperture names one. */
-TEST(paging_request_unmapped, names_the_allocation_an_aperture_unmap_takes_pages_from)
-{ Paging paging(6);
+/* An unmap from another segment names nothing of the aperture's. */
+TEST(paging_request_unmap_aperture, leaves_the_pages_of_an_unmap_from_another_segment)
+{ Paging paging(5);
   Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page, 6u * page, 7u * page, 8u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 4u);
+  paging.place(aperture_map(allocation, mdl, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
   DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap = {};
   unmap.hAllocation = allocation;
-  unmap.SegmentId = ApertureSegment::segment_id;
-  unmap.NumberOfPages = 4u;
-  paging.place(unmap);
-  CHECK(paging.unmapped() == allocation);
   unmap.SegmentId = ApertureSegment::segment_id + 1u;
+  unmap.OffsetInPages = 0x30u;
+  unmap.NumberOfPages = 4u;
+  paging.request().Operation = 6;
   paging.place(unmap);
-  CHECK(paging.unmapped() == nullptr);
-  unmap.SegmentId = ApertureSegment::segment_id;
-  paging.place(unmap);
-  paging.request().Operation = 5;   /* the same record read as a map */
-  CHECK(paging.unmapped() == nullptr); }
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(allocation->pages_at(aperture_address(0x30u), 4u).count(), 4u);
+  CHECK(std::strstr(paging.platform().last_log(), "aperture unmap segment 2 offset 48 pages 4 status") != nullptr); }
 
 /* A storm of mappings the driver cannot record spends the window and then goes
  * quiet: the log is evidence, not a flood. */

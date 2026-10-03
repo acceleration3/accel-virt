@@ -156,14 +156,14 @@ Status Allocation::close()
 Status Allocation::map_aperture(const DxgkBuildPagingBufferMapApertureSegmentRecord &request)
 {
     AV_SCOPE("Allocation::map_aperture");
-    platform_.require_irql_at_most(Irql::passive, "Allocation::map_aperture");
+    platform_.require_irql_at_most(Irql::apc, "Allocation::map_aperture");
     return aperture_.map(request);
 }
 
 void Allocation::unmap_aperture(const DxgkBuildPagingBufferUnmapApertureSegmentRecord &request)
 {
     AV_SCOPE("Allocation::unmap_aperture");
-    platform_.require_irql_at_most(Irql::passive, "Allocation::unmap_aperture");
+    platform_.require_irql_at_most(Irql::apc, "Allocation::unmap_aperture");
     aperture_.unmap(request);
 }
 

@@ -28,7 +28,7 @@ void AperturePages::forget_all()
 Status AperturePages::map(const DxgkBuildPagingBufferMapApertureSegmentRecord &request)
 {
     AV_SCOPE("AperturePages::map");
-    platform_.require_irql_at_most(Irql::passive, "AperturePages::map");
+    platform_.require_irql_at_most(Irql::apc, "AperturePages::map");
     InvariantScope<AperturePages> guard(platform_, *this, "map");
     if (request.NumberOfPages == 0u || request.NumberOfPages > capacity_) return Status::invalid_parameter;
     if (request.OffsetInPages > ~uint64_t{0} - request.NumberOfPages) return Status::invalid_parameter;
@@ -50,7 +50,7 @@ Status AperturePages::map(const DxgkBuildPagingBufferMapApertureSegmentRecord &r
 void AperturePages::unmap(const DxgkBuildPagingBufferUnmapApertureSegmentRecord &request)
 {
     AV_SCOPE("AperturePages::unmap");
-    platform_.require_irql_at_most(Irql::passive, "AperturePages::unmap");
+    platform_.require_irql_at_most(Irql::apc, "AperturePages::unmap");
     InvariantScope<AperturePages> guard(platform_, *this, "unmap");
     if (frames_ == nullptr || request.NumberOfPages == 0u) return;
     const uint64_t end = request.OffsetInPages + request.NumberOfPages;

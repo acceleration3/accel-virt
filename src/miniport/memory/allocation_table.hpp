@@ -29,6 +29,8 @@ class DisplaySources;
 struct DxgkargCreateAllocationRecord;
 struct DxgkargDescribeAllocationRecord;
 struct DxgkargDestroyAllocationRecord;
+struct DxgkBuildPagingBufferMapApertureSegmentRecord;
+struct DxgkBuildPagingBufferUnmapApertureSegmentRecord;
 
 class AllocationTable {
 public:
@@ -54,6 +56,13 @@ public:
     Allocation          *find(void *handle);
     [[nodiscard]] Status open(Allocation &allocation, const void *device, const void *process);
     [[nodiscard]] Status close(Allocation &allocation);
+    /* Where VidMm placed an allocation in the aperture, or took it from:
+     * BuildPagingBuffer runs on VidMm's worker beside the DDIs that create,
+     * destroy and check the allocations, and a page record written outside
+     * the mutex was read half-written by a check on another thread. not_found
+     * for a handle the table never made. */
+    [[nodiscard]] Status map_aperture(const DxgkBuildPagingBufferMapApertureSegmentRecord &request);
+    [[nodiscard]] Status unmap_aperture(const DxgkBuildPagingBufferUnmapApertureSegmentRecord &request);
     uint32_t             live() const;
 
     /* A line for the table and one per allocation; `busy=true` and nothing

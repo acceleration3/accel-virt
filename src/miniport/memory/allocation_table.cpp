@@ -4,6 +4,8 @@
 #include "proto/resources/shared_object_record.hpp"
 
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
+#include "miniport/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
+#include "miniport/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
 #include "miniport/ddi/dxgkarg_create_allocation_record.hpp"
 #include "miniport/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "miniport/ddi/dxgkarg_destroy_allocation_record.hpp"
@@ -212,6 +214,29 @@ Status AllocationTable::close(Allocation &allocation)
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::close");
     MutexGuard lock(mutex_);
     return allocation.close();
+}
+
+Status AllocationTable::map_aperture(const DxgkBuildPagingBufferMapApertureSegmentRecord &request)
+{
+    AV_SCOPE("AllocationTable::map_aperture");
+    platform_.require_irql_at_most(Irql::passive, "AllocationTable::map_aperture");
+    MutexGuard lock(mutex_);
+    InvariantScope<AllocationTable> guard(platform_, *this, "map_aperture");
+    Allocation *const allocation = allocations_.find(request.hAllocation);
+    if (allocation == nullptr) return Status::not_found;
+    return allocation->map_aperture(request);
+}
+
+Status AllocationTable::unmap_aperture(const DxgkBuildPagingBufferUnmapApertureSegmentRecord &request)
+{
+    AV_SCOPE("AllocationTable::unmap_aperture");
+    platform_.require_irql_at_most(Irql::passive, "AllocationTable::unmap_aperture");
+    MutexGuard lock(mutex_);
+    InvariantScope<AllocationTable> guard(platform_, *this, "unmap_aperture");
+    Allocation *const allocation = allocations_.find(request.hAllocation);
+    if (allocation == nullptr) return Status::not_found;
+    allocation->unmap_aperture(request);
+    return Status::ok;
 }
 
 uint32_t AllocationTable::live() const

@@ -1,4 +1,6 @@
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
+#include "miniport/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
+#include "miniport/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
 #include "miniport/ddi/dxgkarg_create_allocation_record.hpp"
 #include "miniport/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "miniport/ddi/dxgkarg_destroy_allocation_record.hpp"
@@ -15,6 +17,7 @@
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/shared_object_record.hpp"
 
 #include <cstdint>
@@ -361,6 +364,90 @@ TEST(allocation_table_invariants, a_broken_allocation_breaks_the_table)
   CHECK(fixture.table().invariants_hold());
   AllocationTableProbe::corrupt_pool(fixture.table());
   CHECK(!fixture.table().invariants_hold()); }
+
+/* ---- aperture ------------------------------------------------------------------ */
+
+namespace {
+
+constexpr std::uint64_t aperture_page = av::GuestPageList::page_bytes;
+
+av::DxgkBuildPagingBufferMapApertureSegmentRecord placed(void *allocation, void *mdl, std::uint64_t offset)
+{
+    av::DxgkBuildPagingBufferMapApertureSegmentRecord request = {};
+    request.hAllocation = allocation;
+    request.SegmentId = ApertureSegment::segment_id;
+    request.OffsetInPages = offset;
+    request.NumberOfPages = 1u;
+    request.pMdl = mdl;
+    return request;
+}
+
+av::DxgkBuildPagingBufferUnmapApertureSegmentRecord taken(void *allocation, std::uint64_t offset)
+{
+    av::DxgkBuildPagingBufferUnmapApertureSegmentRecord request = {};
+    request.hAllocation = allocation;
+    request.SegmentId = ApertureSegment::segment_id;
+    request.OffsetInPages = offset;
+    request.NumberOfPages = 1u;
+    return request;
+}
+
+std::uint64_t aperture_at(std::uint64_t offset)
+{
+    return static_cast<std::uint64_t>(ApertureSegment::base_address) + offset * aperture_page;
+}
+
+}  // namespace
+
+TEST(allocation_table_map_aperture, records_where_vidmm_placed_an_allocation_and_unmap_forgets_it)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  void *const handle = fixture.info(0u).hAllocation;
+  const std::uint64_t frames[] = {9u * aperture_page};
+  void *mdl = fixture.platform().attach_page_frames(frames, 1u);
+  CHECK_STATUS(fixture.table().map_aperture(placed(handle, mdl, 0x30u)), Status::ok);
+  const Allocation *allocation = fixture.table().find(handle);
+  CHECK_EQ(allocation->pages_at(aperture_at(0x30u), 1u).frame(0u), 9u * aperture_page);
+  CHECK_STATUS(fixture.table().unmap_aperture(taken(handle, 0x30u)), Status::ok);
+  CHECK_EQ(allocation->pages_at(aperture_at(0x30u), 1u).count(), 0u);
+  CHECK_EQ(fixture.platform().locks_held(), 0u);
+  CHECK_STATUS(fixture.destroy(1u), Status::ok); }
+
+TEST(allocation_table_map_aperture, a_handle_the_table_never_made_is_not_found)
+{ Fixture fixture;
+  std::uint64_t stranger = 0u;
+  const std::uint64_t frames[] = {9u * aperture_page};
+  void *mdl = fixture.platform().attach_page_frames(frames, 1u);
+  CHECK_STATUS(fixture.table().map_aperture(placed(&stranger, mdl, 0u)), Status::not_found);
+  CHECK_STATUS(fixture.table().unmap_aperture(taken(&stranger, 0u)), Status::not_found); }
+
+/* VidMm's worker records pages beside the DDIs that check every allocation:
+ * both run inside the table's guard, so a check never sees a page record half
+ * written. */
+TEST(allocation_table_map_aperture, runs_inside_the_tables_guard)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  void *const handle = fixture.info(0u).hAllocation;
+  const std::uint64_t frames[] = {9u * aperture_page};
+  void *mdl = fixture.platform().attach_page_frames(frames, 1u);
+  AllocationTableProbe::corrupt_pool(fixture.table());
+  static_cast<void>(fixture.table().map_aperture(placed(handle, mdl, 0u)));
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  while (fixture.platform().claim(Violation::broken_invariant)) {}
+  static_cast<void>(fixture.table().unmap_aperture(taken(handle, 0u)));
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  while (fixture.platform().claim(Violation::broken_invariant)) {} }
+
+TEST(allocation_table_map_aperture, is_passive_only)
+{ Fixture fixture;
+  std::uint64_t stranger = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.table().map_aperture(placed(&stranger, nullptr, 0u)));
+  static_cast<void>(fixture.table().unmap_aperture(taken(&stranger, 0u)));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  while (fixture.platform().claim(Violation::blocking_at_dispatch)) {} }
 
 /* ---- report -------------------------------------------------------------------- */
 

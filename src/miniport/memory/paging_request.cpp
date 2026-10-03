@@ -9,7 +9,6 @@
 #include "miniport/ddi/dxgk_build_paging_buffer_transfer_virtual_record.hpp"
 #include "miniport/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
 #include "miniport/ddi/dxgkarg_build_paging_buffer_record.hpp"
-#include "miniport/memory/allocation.hpp"
 #include "miniport/memory/allocation_table.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/memory/gpu_mmu_geometry.hpp"
@@ -58,10 +57,8 @@ Status PagingRequest::map_aperture()
     AV_SCOPE("PagingRequest::map_aperture");
     DxgkBuildPagingBufferMapApertureSegmentRecord map;
     read_operation(map);
-    Allocation *const allocation = map.SegmentId == ApertureSegment::segment_id
-                                       ? allocations_.find(map.hAllocation)
-                                       : nullptr;
-    const Status recorded = allocation != nullptr ? allocation->map_aperture(map) : Status::not_found;
+    const Status recorded =
+        map.SegmentId == ApertureSegment::segment_id ? allocations_.map_aperture(map) : Status::not_found;
     log_aperture("map", map.SegmentId, map.OffsetInPages, map.NumberOfPages, recorded);
     return Status::ok;
 }
@@ -71,20 +68,10 @@ Status PagingRequest::unmap_aperture()
     AV_SCOPE("PagingRequest::unmap_aperture");
     DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap;
     read_operation(unmap);
-    Allocation *const allocation = unmapped();
-    if (allocation != nullptr) allocation->unmap_aperture(unmap);
-    log_aperture("unmap", unmap.SegmentId, unmap.OffsetInPages, unmap.NumberOfPages,
-                 allocation != nullptr ? Status::ok : Status::not_found);
+    const Status recorded =
+        unmap.SegmentId == ApertureSegment::segment_id ? allocations_.unmap_aperture(unmap) : Status::not_found;
+    log_aperture("unmap", unmap.SegmentId, unmap.OffsetInPages, unmap.NumberOfPages, recorded);
     return Status::ok;
-}
-
-Allocation *PagingRequest::unmapped() const
-{
-    AV_SCOPE("PagingRequest::unmapped");
-    if (request_.Operation != unmap_aperture_segment) return nullptr;
-    DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap;
-    read_operation(unmap);
-    return unmap.SegmentId == ApertureSegment::segment_id ? allocations_.find(unmap.hAllocation) : nullptr;
 }
 
 NtStatus PagingRequest::refuse()
