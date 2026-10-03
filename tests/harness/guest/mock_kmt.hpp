@@ -170,6 +170,8 @@ public:
     Status        close_adapter(std::uint32_t adapter) override;
     Status        adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
     Status        primary_display_luid(std::uint64_t &luid) override;
+    /* The adapter the primary display is on; 0, the default, answers none. */
+    void          set_primary_display_luid(std::uint64_t luid);
     Status        query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
                                      std::uint64_t &usage) override;
     Status        create_device(std::uint32_t adapter, std::uint32_t &device) override;
@@ -634,6 +636,7 @@ private:
     std::uint32_t journal_sizes_[max_journal];
     std::uint8_t  journal_bytes_[max_journal][journal_bytes];
     std::uint32_t journal_count_;
+    std::uint64_t primary_display_luid_ = 0u;
 };
 
 }  // namespace av

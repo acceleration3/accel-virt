@@ -40,7 +40,12 @@ public:
      * takes the first match. */
     [[nodiscard]] Status find(const PciIdentity &identity, uint64_t luid);
     /* The same for this driver's own adapter, avgpu's PCI identity: what
-     * every ICD, the guest suite and the inspector look for. */
+     * every ICD, the guest suite and the inspector look for. A `luid` of 0
+     * takes the one the primary display is on, as find(identity) does: the
+     * kernel's order changes from boot to boot, and an ICD on the integrated
+     * GPU while the application's Direct3D runs on the discrete one is slower,
+     * and Affinity's canvas, computing on one and drawing on the other, drew
+     * stale tiles. */
     [[nodiscard]] Status find_avgpu(uint64_t luid);
     /* Closes the kept adapter, if any. */
     [[nodiscard]] Status close();

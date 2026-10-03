@@ -119,3 +119,35 @@ TEST(adapter_search, finds_avgpu_by_its_own_identity_and_by_luid)
     CHECK_STATUS(search.find_avgpu(0x99u), Status::not_found); }
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
+
+/* With an avgpu adapter per host GPU, the kernel's order is no answer to which
+ * one an ICD should use: it changes from boot to boot. The one the primary
+ * display is on is the one a Direct3D application gets by default, so an ICD
+ * asking for no adapter in particular is given that one - and the first match
+ * only when no display names one. */
+TEST(adapter_search, avgpu_asked_for_no_luid_is_the_adapter_the_primary_display_is_on)
+{ MockKmt kmt;
+  kmt.add_adapter(on_raphael, 3200u);
+  kmt.add_adapter(on_radeon, 3200u);
+  kmt.set_adapter_luid(0u, 0x11u);
+  kmt.set_adapter_luid(1u, 0x22u);
+  { AdapterSearch search(kmt);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
+    std::uint64_t luid = 0u;
+    CHECK_STATUS(kmt.adapter_luid(search.adapter(), luid), Status::ok);
+    CHECK_EQ(luid, 0x11u); }
+  kmt.set_primary_display_luid(0x22u);
+  { AdapterSearch search(kmt);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
+    std::uint64_t luid = 0u;
+    CHECK_STATUS(kmt.adapter_luid(search.adapter(), luid), Status::ok);
+    CHECK_EQ(luid, 0x22u); }
+  /* A primary display on an adapter that is not avgpu leaves the first match. */
+  kmt.set_primary_display_luid(0x77u);
+  { AdapterSearch search(kmt);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
+    std::uint64_t luid = 0u;
+    CHECK_STATUS(kmt.adapter_luid(search.adapter(), luid), Status::ok);
+    CHECK_EQ(luid, 0x11u); }
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }

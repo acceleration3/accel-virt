@@ -85,7 +85,7 @@ Status AdapterSearch::find_avgpu(uint64_t luid)
     AV_SCOPE("AdapterSearch::find_avgpu");
     const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
                             AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
-    return find(avgpu, luid);
+    return luid != 0u ? find(avgpu, luid) : find(avgpu);
 }
 
 }  // namespace av

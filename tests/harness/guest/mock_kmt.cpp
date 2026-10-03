@@ -1394,8 +1394,10 @@ void MockKmt::sleep_briefly() {}
 /* No display here: every search takes the first adapter it finds. */
 Status MockKmt::primary_display_luid(std::uint64_t &answered)
 {
-    answered = 0u;
-    return Status::not_supported;
+    answered = primary_display_luid_;
+    return primary_display_luid_ != 0u ? Status::ok : Status::not_supported;
 }
+
+void MockKmt::set_primary_display_luid(std::uint64_t luid) { primary_display_luid_ = luid; }
 
 }  // namespace av
