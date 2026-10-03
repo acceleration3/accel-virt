@@ -198,10 +198,10 @@ Status GpuRequestWriter::update_cursor(uint32_t scanout, int32_t x, int32_t y, u
 }
 
 /* The same layout as an update, whose last fields a move leaves zero. */
-Status GpuRequestWriter::move_cursor(uint32_t scanout, int32_t x, int32_t y)
+Status GpuRequestWriter::move_cursor(uint32_t scanout, int32_t x, int32_t y, uint32_t resource_id)
 {
     AV_SCOPE("GpuRequestWriter::move_cursor");
-    const Status status = update_cursor(scanout, x, y, 0u, 0u, 0u);
+    const Status status = update_cursor(scanout, x, y, resource_id, 0u, 0u);
     if (status == Status::ok) WireWriter(bytes_, sizeof(uint32_t)).write_u32(move_cursor_type);
     return status;
 }

@@ -116,7 +116,7 @@ Status HardwareCursor::set_position(const DxgkargSetPointerPositionRecord &posit
     if (!was_visible) return update(device, resource_id);
     uint8_t          request[GpuRequestWriter::max_request_size];
     GpuRequestWriter writer(request, sizeof request);
-    static_cast<void>(writer.move_cursor(scanout, x_, y_));
+    static_cast<void>(writer.move_cursor(scanout, x_, y_, resource_id));
     return device.send_cursor(request, writer.length());
 }
 

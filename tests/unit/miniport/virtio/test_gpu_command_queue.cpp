@@ -89,7 +89,7 @@ std::uint8_t wide_request_bytes[GpuRequestWriter::max_backing_request_size];
 std::size_t move_request(std::int32_t x)
 {
     GpuRequestWriter writer(request_bytes, sizeof request_bytes);
-    static_cast<void>(writer.move_cursor(0u, x, 0));
+    static_cast<void>(writer.move_cursor(0u, x, 0, 1u));
     return writer.length();
 }
 

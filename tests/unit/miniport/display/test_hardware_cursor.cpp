@@ -114,6 +114,7 @@ TEST(hardware_cursor_set_position, shows_moves_hides_and_shows_again)
   CHECK_EQ(u32(cursor.request(0u), 48u), 1u);
   CHECK_EQ(cursor.request_type(1u), move);
   CHECK_EQ(u32(cursor.request(1u), 28u), 0xFFFFFFFBu);
+  CHECK_EQ(u32(cursor.request(1u), 40u), HardwareCursor::resource_id);   /* a move that named 0 hid it in SDL */
   CHECK_EQ(cursor.request_type(2u), update);
   CHECK_EQ(u32(cursor.request(2u), 40u), 0u);
   CHECK_EQ(cursor.request_type(3u), update);

@@ -219,20 +219,22 @@ TEST(gpu_request_writer_update_cursor, names_the_position_resource_and_hot_spot)
   CHECK_EQ(u32(buffer.bytes, 48u), 6u);
   CHECK_EQ(u32(buffer.bytes, 52u), 0u); }
 
-TEST(gpu_request_writer_move_cursor, leaves_the_update_fields_zero)
+TEST(gpu_request_writer_move_cursor, names_the_cursor_and_leaves_the_hot_spot_zero)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
-  CHECK_STATUS(writer.move_cursor(0u, 100, 50), Status::ok);
+  CHECK_STATUS(writer.move_cursor(0u, 100, 50, 7u), Status::ok);
   CHECK_EQ(writer.length(), 56u);
   CHECK(plain_header(buffer.bytes, 0x0301u));
   CHECK_EQ(u32(buffer.bytes, 28u), 100u);
   CHECK_EQ(u32(buffer.bytes, 32u), 50u);
-  CHECK_EQ(u32(buffer.bytes, 40u), 0u); }
+  CHECK_EQ(u32(buffer.bytes, 40u), 7u);
+  CHECK_EQ(u32(buffer.bytes, 44u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 48u), 0u); }
 
 TEST(gpu_request_writer, a_request_that_does_not_fit_writes_nothing)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, 55u);
-  CHECK_STATUS(writer.move_cursor(0u, 1, 1), Status::too_large);
+  CHECK_STATUS(writer.move_cursor(0u, 1, 1, 1u), Status::too_large);
   CHECK_EQ(writer.length(), 0u);
   CHECK_EQ(buffer.bytes[0], 0xEEu);
   CHECK_STATUS(writer.create_2d(1u, 1u, 1u, 1u), Status::ok);

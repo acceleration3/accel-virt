@@ -81,7 +81,10 @@ public:
     /* Resource 0 hides the cursor. */
     [[nodiscard]] Status update_cursor(uint32_t scanout, int32_t x, int32_t y, uint32_t resource_id, uint32_t hot_x,
                                        uint32_t hot_y);
-    [[nodiscard]] Status move_cursor(uint32_t scanout, int32_t x, int32_t y);
+    /* `resource_id` is the cursor being moved: QEMU's virtio-gpu reports every
+     * cursor command's resource to its display as whether the pointer shows,
+     * and SDL hides it on a move that names 0. */
+    [[nodiscard]] Status move_cursor(uint32_t scanout, int32_t x, int32_t y, uint32_t resource_id);
     /* Bytes of the last request written; zero after one that did not fit. */
     size_t               length() const;
 

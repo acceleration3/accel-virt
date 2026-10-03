@@ -104,7 +104,7 @@ class VirtioGpu2d(unittest.TestCase):
                             driver_request("transfer_to_host_2d", 1, 64, 64)):
                 self.assertEqual(response_type(gpu.control(request)), RESP_OK_NODATA)
             self.assertEqual(gpu.cursor(driver_request("update_cursor", 0, 100, 100, 1, 3, 4)), 0)
-            self.assertEqual(gpu.cursor(driver_request("move_cursor", 0, 200, 50)), 0)
+            self.assertEqual(gpu.cursor(driver_request("move_cursor", 0, 200, 50, 1)), 0)
             self.assertEqual(gpu.cursor(driver_request("update_cursor", 0, 0, 0, 0, 0, 0)), 0)
             self.assertEqual(response_type(gpu.control(header(CMD_GET_DISPLAY_INFO), 24 + 24 * MAX_SCANOUTS)),
                              RESP_OK_DISPLAY_INFO)
