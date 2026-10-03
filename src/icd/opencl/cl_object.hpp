@@ -77,6 +77,15 @@ public:
     /* Held by neither the application nor an object made on it. */
     bool     unheld() const;
 
+    /* A command queue's: whether everything sent to it is known to have
+     * completed. A new queue is; anything that leaves work on it is not, until
+     * a drain or a transfer the host answered only once done says so again. A
+     * transfer to an idle queue needs no drain first - which is most of what
+     * an application reading tiles back one blocking rect at a time pays. */
+    void     busy();
+    void     idle();
+    bool     known_idle() const;
+
     bool invariants_hold() const;
 
 private:
@@ -94,6 +103,9 @@ private:
     uint32_t               references_;
     uint32_t               children_;
     Kind                   kind_;
+    /* Atomic: an application's threads may share a queue, and the API leaves
+     * ordering their enqueues to it - each only needs to see the other's. */
+    bool                   idle_;
 };
 
 }  // namespace av::clicd

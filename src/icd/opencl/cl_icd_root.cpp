@@ -980,7 +980,7 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
                                  cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_kernel");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(kernel, ClObject::Kind::kernel);
     if (named == nullptr) return CL_INVALID_KERNEL;
@@ -1004,7 +1004,7 @@ cl_int ClIcdRoot::enqueue_external(cl_command_queue queue, cl_uint count, const 
                                    cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_external");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     if (count == 0u || objects == nullptr) return CL_INVALID_VALUE;
     GuestClContext *const context = context_of(*held);
@@ -1053,6 +1053,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
      * staging a copy of its own. */
     uint64_t     produced = 0u;
     if (blocking != CL_TRUE) {
+        held->busy();
         const cl_int marked = av::clproto::av_clEnqueueMarkerWithWaitList(
             *wire, held->wire(), 0u, nullptr, &produced);
         if (marked != CL_SUCCESS) return marked;
@@ -1085,7 +1086,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
      * first and only then is the read sent blocking, with nothing left for
      * the host to wait on - in pieces the reply slot holds. That is the same
      * order a deferred read is delivered in. */
-    const cl_int drained = drain(*wire, held->wire());
+    const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire());
     const cl_int     ran = chunks.read(named->wire(), offset, bytes, into);
@@ -1112,7 +1113,7 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
      * drained, and the write sent blocking behind nothing, in pieces the
      * staging room carries (ClTransferChunks). */
     static_cast<void>(blocking);
-    const cl_int drained = drain(*wire, held->wire());
+    const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire());
     const cl_int     ran = chunks.write(named->wire(), offset, bytes, from);
@@ -1130,7 +1131,7 @@ cl_int ClIcdRoot::finish(cl_command_queue queue)
     /* Not the host's own clFinish: that blocks the device's worker for as
      * long as the queue takes, and a guest waiting on the fence past TdrDelay
      * has dxgkrnl reset the adapter. */
-    const cl_int waited = drain(*wire, held->wire());
+    const cl_int waited = drain_unless_idle(*wire, *held);
     if (waited != CL_SUCCESS) return waited;
     /* Everything queued before the marker has run, so every read outstanding
      * on this queue is one the application may now read. */
@@ -1153,7 +1154,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
                             cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::map_buffer");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) {
         report_error(error, CL_INVALID_COMMAND_QUEUE);
         return nullptr;
@@ -1276,7 +1277,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
 cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::unmap");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
@@ -1350,7 +1351,7 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
                           void *pointer, size_t bytes, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::svm_map");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     GuestClContext *const context = held->context();
     if (context == nullptr) return CL_INVALID_CONTEXT;
@@ -1389,7 +1390,7 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
 cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::svm_unmap");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     GuestClContext *const context = held->context();
     if (context == nullptr) return CL_INVALID_CONTEXT;
@@ -1751,6 +1752,28 @@ cl_int ClIcdRoot::drain(ClientTransport &wire, uint64_t queue)
     return waited;
 }
 
+ClObject *ClIcdRoot::busied(cl_command_queue queue)
+{
+    AV_SCOPE("ClIcdRoot::busied");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held != nullptr) held->busy();
+    return held;
+}
+
+/* What a drain is for - the host never blocks on work still queued, so its
+ * worker is never held behind a kernel or a user event - is already true of a
+ * queue known idle, and an application reading tiles back one blocking rect
+ * at a time otherwise paid a marker, a flush, a poll and a release for each:
+ * five round trips where one does. */
+cl_int ClIcdRoot::drain_unless_idle(ClientTransport &wire, ClObject &queue)
+{
+    AV_SCOPE("ClIcdRoot::drain_unless_idle");
+    if (queue.known_idle()) return CL_SUCCESS;
+    const cl_int drained = drain(wire, queue.wire());
+    if (drained == CL_SUCCESS) queue.idle();
+    return drained;
+}
+
 cl_int ClIcdRoot::marker_event(ClientTransport &wire, ClObject &queue, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::marker_event");
@@ -1814,7 +1837,7 @@ cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_me
                                       cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_copy_buffer");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
@@ -1840,7 +1863,7 @@ cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, con
                                       cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_fill_buffer");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const named = judged(buffer, ClObject::Kind::mem);
     if (named == nullptr) return CL_INVALID_MEM_OBJECT;
@@ -1864,7 +1887,7 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
                                      const size_t *region, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_copy_image");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
@@ -2047,7 +2070,7 @@ cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const
     const ClImageRegion described(origin, region, row_pitch, slice_pitch,
                                   element_bytes(*wire, named->wire()));
     if (!described.valid()) return CL_INVALID_VALUE;
-    const cl_int drained = drain(*wire, held->wire());
+    const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire());
     const cl_int     read = chunks.read_image(named->wire(), described, into);
@@ -2070,7 +2093,7 @@ cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, cons
     const ClImageRegion described(origin, region, row_pitch, slice_pitch,
                                   element_bytes(*wire, named->wire()));
     if (!described.valid()) return CL_INVALID_VALUE;
-    const cl_int drained = drain(*wire, held->wire());
+    const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire());
     const cl_int     written = chunks.write_image(named->wire(), described, from);
@@ -2091,7 +2114,7 @@ cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer
     if (checked != CL_SUCCESS) return checked;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const cl_int drained = drain(*wire, held->wire());
+    const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire());
     const cl_int     read = chunks.read_buffer_rect(named->wire(), rect, into);
@@ -2112,7 +2135,7 @@ cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffe
     if (checked != CL_SUCCESS) return checked;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const cl_int drained = drain(*wire, held->wire());
+    const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
     ClTransferChunks chunks(*wire, held->wire());
     const cl_int     written = chunks.write_buffer_rect(named->wire(), rect, from);
@@ -2126,7 +2149,7 @@ cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, 
                                            size_t to_slice_pitch, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_copy_buffer_rect");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClObject *const source = judged(from, ClObject::Kind::mem);
     ClObject *const target = judged(to, ClObject::Kind::mem);
@@ -2219,7 +2242,7 @@ cl_int ClIcdRoot::enqueue_point(PointCommand command, cl_command_queue queue, cl
                                 const cl_event *events, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_point");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     GuestClContext *const context = held->context();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
@@ -2311,7 +2334,7 @@ cl_mem ClIcdRoot::create_from_d3d10(cl_context context, cl_int *error)
 cl_int ClIcdRoot::enqueue_d3d10_objects(cl_command_queue queue)
 {
     AV_SCOPE("ClIcdRoot::enqueue_d3d10_objects");
-    return judged(queue, ClObject::Kind::command_queue) != nullptr ? CL_INVALID_CONTEXT : CL_INVALID_COMMAND_QUEUE;
+    return busied(queue) != nullptr ? CL_INVALID_CONTEXT : CL_INVALID_COMMAND_QUEUE;
 }
 
 cl_mem ClIcdRoot::create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)
@@ -2392,7 +2415,7 @@ cl_int ClIcdRoot::enqueue_gl_objects(GlObjectsCommand command, cl_command_queue 
                                      const cl_mem *objects, cl_uint waits, const cl_event *events, cl_event *event)
 {
     AV_SCOPE("ClIcdRoot::enqueue_gl_objects");
-    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     GuestClContext *const context = held->context();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;

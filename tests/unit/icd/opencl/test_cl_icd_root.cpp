@@ -1236,18 +1236,9 @@ TEST(cl_icd_root, a_blocking_read_is_not_deferred_and_has_its_bytes_when_it_retu
 
   unsigned char into[8] = {};
   const unsigned char answered[8] = {9u, 8u, 7u, 6u, 5u, 4u, 3u, 2u};
-  /* A marker of its own drains the queue, so that the read the host is asked
-   * to block on has nothing in front of it. */
-  rig.host().cl_enqueued(CL_SUCCESS, host_event);
-  /* The queue is flushed before it is asked about: the application handed the
-   * ICD a blocking call and never saw a queue, so this side owes the flush. */
-  rig.host().cl_result(CL_SUCCESS);
-  const cl_int complete = CL_COMPLETE;
-  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  /* The marker is given back. */
-  rig.host().cl_result(CL_SUCCESS);
-  /* And the read is what answers the bytes, with no event: the application
-   * asked for none. */
+  /* Nothing was left on the new queue, so there is nothing to drain: the read
+   * is what answers the bytes, with no event - the application asked for
+   * none. */
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_TRUE, 0u, sizeof into, into, nullptr),
            CL_SUCCESS);

@@ -42,6 +42,11 @@ constexpr std::uint64_t own_queue = 0x6C00u;
 
 /* A context, a queue, a buffer, a program and a kernel: everything the entries
  * below act on, so each test is about the entry and not the setup. */
+const cl_icd_dispatch *table_of(const void *object)
+{
+    return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
+}
+
 class Running {
 public:
     explicit Running(ClIcdRig &rig) : rig_(rig)
@@ -94,6 +99,16 @@ public:
 
     /* What a drain of the queue answers: the marker, the flush, a complete
      * status, and the marker given back. */
+    /* Something left on the queue - a marker - so that the next transfer has
+     * a queue to drain: a queue nothing was sent to is known idle, and a
+     * transfer to it drains nothing. */
+    void leaves_work()
+    {
+        rig_.host().cl_enqueued(CL_SUCCESS, host_event);
+        cl_event marker = nullptr;
+        static_cast<void>(table_of(queue_)->clEnqueueMarkerWithWaitList(queue_, 0u, nullptr, &marker));
+    }
+
     void drains()
     {
         rig_.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -120,10 +135,6 @@ private:
 };
 
 /* What the loader dispatches through: the table in the object's first word. */
-const cl_icd_dispatch *table_of(const void *object)
-{
-    return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
-}
 
 /* The payload of the command at `index` of the journal, past its header. */
 av::WireReader payload_of(const av::MockKmt &kmt, std::uint32_t index)
@@ -523,6 +534,7 @@ TEST(cl_image_paths, an_image_read_waits_for_its_queue_and_hands_back_the_rows_i
   const unsigned char answered[32] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u,
                                       17u, 18u, 19u, 20u, 21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u, 29u, 30u, 31u, 32u};
   unsigned char       into[32] = {};
+  run.leaves_work();
   run.element_is(4u);
   run.drains();
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
@@ -550,6 +562,7 @@ TEST(cl_image_paths, an_image_write_waits_for_its_queue_and_asks_for_an_event_on
   CHECK(image != nullptr);
   const size_t        origin[3] = {0u, 0u, 0u}, region[3] = {16u, 8u, 1u};
   std::uint32_t       texels[128] = {};
+  run.leaves_work();
   run.element_is(4u);
   run.drains();
   rig.host().cl_result(CL_SUCCESS);
@@ -562,6 +575,7 @@ TEST(cl_image_paths, an_image_write_waits_for_its_queue_and_asks_for_an_event_on
   CHECK(carries(rig.kmt(), sent + 5u, host_image));
 
   /* The host's refusal of the write is the application's, and makes no event. */
+  run.leaves_work();
   run.element_is(4u);
   run.drains();
   rig.host().cl_result(CL_INVALID_OPERATION);
@@ -571,14 +585,17 @@ TEST(cl_image_paths, an_image_write_waits_for_its_queue_and_asks_for_an_event_on
   CHECK(event == nullptr);
 
   /* A drain the host refuses ends the transfer before it starts. */
+  run.leaves_work();
   run.element_is(4u);
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.root().enqueue_write_image(run.queue(), image, origin, region, 0u, 0u, texels, nullptr),
            CL_OUT_OF_RESOURCES);
+  run.leaves_work();
   run.element_is(4u);
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.root().enqueue_read_image(run.queue(), image, origin, region, 0u, 0u, texels, nullptr),
            CL_OUT_OF_RESOURCES);
+  run.leaves_work();
   run.element_is(4u);
   run.drains();
   rig.host().cl_bytes(CL_INVALID_OPERATION, texels, 0u);
@@ -927,6 +944,7 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
   unsigned char       answered[32] = {};
   for (std::size_t index = 0u; index < sizeof answered; ++index) answered[index] = static_cast<unsigned char>(index + 1u);
   unsigned char       into[32] = {};
+  run.leaves_work();
   run.drains();
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -945,6 +963,7 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
   CHECK(event != nullptr);
 
   /* The host's refusal is the application's, and makes no event. */
+  run.leaves_work();
   run.drains();
   rig.host().cl_bytes(CL_INVALID_VALUE, answered, 0u);
   cl_event refused = nullptr;
@@ -953,10 +972,75 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
            CL_INVALID_VALUE);
   CHECK(refused == nullptr);
   /* A drain the host refuses ends the read before it starts. */
+  run.leaves_work();
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
                                                ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
            CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A queue nothing was left on has nothing to drain: a tile read back one
+ * blocking rectangle at a time is the one read, not a marker, a flush, a
+ * poll and a release before it. */
+TEST(cl_image_paths, a_transfer_to_a_queue_known_idle_drains_nothing)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const size_t  corner[3] = {0u, 0u, 0u}, at[3] = {0u, 0u, 0u}, region[3] = {8u, 2u, 1u};
+  unsigned char answered[16] = {};
+  for (std::size_t index = 0u; index < sizeof answered; ++index) answered[index] = static_cast<unsigned char>(index + 7u);
+  unsigned char into[16] = {};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
+                                               ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueReadBufferRect);
+  for (std::size_t index = 0u; index < sizeof into; ++index) CHECK_EQ(into[index], answered[index]);
+  /* A write after it is the same: the read left nothing behind. */
+  rig.host().cl_result(CL_SUCCESS);
+  sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(),
+                                                ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueWriteBufferRect);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* Work left on the queue is drained before the next transfer, once: the
+ * drain leaves the queue known idle, and the transfer after it goes alone. A
+ * drain that fails leaves it as it was, so the next transfer drains again. */
+TEST(cl_image_paths, work_left_on_a_queue_is_drained_before_the_next_transfer_and_only_once)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const size_t  corner[3] = {0u, 0u, 0u}, at[3] = {0u, 0u, 0u}, region[3] = {8u, 2u, 1u};
+  unsigned char answered[16] = {};
+  unsigned char into[16] = {};
+  run.leaves_work();
+  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
+                                               ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
+           CL_OUT_OF_RESOURCES);
+  run.drains();
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
+                                               ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clEnqueueReadBufferRect);
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
+                                               ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
@@ -967,6 +1051,7 @@ TEST(cl_image_paths, a_buffer_rectangle_write_waits_for_its_queue_and_asks_for_a
   if (!run.made()) return;
   const size_t        corner[3] = {0u, 1u, 0u}, at[3] = {2u, 0u, 0u}, region[3] = {8u, 4u, 1u};
   unsigned char       from[64] = {};
+  run.leaves_work();
   run.drains();
   rig.host().cl_result(CL_SUCCESS);
   const std::uint32_t sent = rig.kmt().commands();
@@ -977,6 +1062,7 @@ TEST(cl_image_paths, a_buffer_rectangle_write_waits_for_its_queue_and_asks_for_a
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueWriteBufferRect);
   CHECK(carries(rig.kmt(), sent + 4u, host_buffer));
 
+  run.leaves_work();
   run.drains();
   rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -986,6 +1072,7 @@ TEST(cl_image_paths, a_buffer_rectangle_write_waits_for_its_queue_and_asks_for_a
            CL_SUCCESS);
   CHECK(event != nullptr);
 
+  run.leaves_work();
   run.drains();
   rig.host().cl_result(CL_INVALID_OPERATION);
   cl_event refused = nullptr;
@@ -993,6 +1080,7 @@ TEST(cl_image_paths, a_buffer_rectangle_write_waits_for_its_queue_and_asks_for_a
                                                 ClBufferRect(corner, at, region, 16u, 0u, 16u, 0u), from, &refused),
            CL_INVALID_OPERATION);
   CHECK(refused == nullptr);
+  run.leaves_work();
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(),
                                                 ClBufferRect(corner, at, region, 16u, 0u, 16u, 0u), from, nullptr),

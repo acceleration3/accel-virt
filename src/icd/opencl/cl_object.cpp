@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
                    ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), references_(1u), children_(0u), kind_(kind)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -130,6 +130,24 @@ bool ClObject::unheld() const
 {
     AV_SCOPE("ClObject::unheld");
     return references_ == 0u && children_ == 0u;
+}
+
+void ClObject::busy()
+{
+    AV_SCOPE("ClObject::busy");
+    __atomic_store_n(&idle_, false, __ATOMIC_RELEASE);
+}
+
+void ClObject::idle()
+{
+    AV_SCOPE("ClObject::idle");
+    __atomic_store_n(&idle_, true, __ATOMIC_RELEASE);
+}
+
+bool ClObject::known_idle() const
+{
+    AV_SCOPE("ClObject::known_idle");
+    return __atomic_load_n(&idle_, __ATOMIC_ACQUIRE);
 }
 
 bool ClObject::invariants_hold() const

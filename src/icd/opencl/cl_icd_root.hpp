@@ -405,6 +405,11 @@ private:
      * asks after it (ClBlockingWait). What a finish is, and what every
      * transfer that asks the host to block does first. */
     cl_int           drain(ClientTransport &wire, uint64_t queue);
+    /* A drain, unless the queue is known idle; idle after one (ClObject). */
+    [[nodiscard]] cl_int drain_unless_idle(ClientTransport &wire, ClObject &queue);
+    /* The queue, looked up for a command that leaves work on it: it is no
+     * longer known idle. */
+    ClObject        *busied(cl_command_queue queue);
     /* The event a transfer that completed inside its call hands back when one
      * was asked for: a marker in the queue, which is complete as soon as the
      * host looks. CL_SUCCESS with nothing made when `event` is null. */
