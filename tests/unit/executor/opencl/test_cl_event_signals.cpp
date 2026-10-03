@@ -115,6 +115,32 @@ TEST(cl_event_signals, a_registration_that_completes_wakes_the_device_once)
   CHECK_EQ(signals.stale(), 0u);
   CHECK(signals.invariants_hold()); }
 
+/* A registration's host callback comes once, so its slot is free again
+ * after it: a session that held every slot it ever answered refused every
+ * registration past its 128th, for the rest of its life. */
+TEST(cl_event_signals, a_completed_registration_gives_its_slot_back)
+{ forget_wakes();
+  ClEventSignals signals;
+  signals.bind(&wake, &device);
+  ClEventRegistration *held[ClEventSignals::max_registrations] = {};
+  for (ClEventRegistration *&registration : held) registration = signals.take();
+  CHECK(held[ClEventSignals::max_registrations - 1u] != nullptr);
+  CHECK(signals.take() == nullptr);
+  for (ClEventRegistration *registration : held) registration->completed();
+  CHECK_EQ(signals.outstanding(), 0u);
+  CHECK_EQ(signals.signalled(), ClEventSignals::max_registrations);
+  CHECK(!held[0]->armed());
+  CHECK(signals.invariants_hold());
+  /* A second callback for the same one is stale, and frees nothing twice. */
+  held[0]->completed();
+  CHECK_EQ(signals.stale(), 1u);
+  CHECK_EQ(signals.outstanding(), 0u);
+  /* And every slot can be taken again. */
+  for (ClEventRegistration *&registration : held) registration = signals.take();
+  CHECK(held[ClEventSignals::max_registrations - 1u] != nullptr);
+  CHECK_EQ(signals.outstanding(), ClEventSignals::max_registrations);
+  CHECK(signals.invariants_hold()); }
+
 TEST(cl_event_signals, the_device_bound_last_is_the_one_woken)
 { forget_wakes();
   ClEventSignals signals;

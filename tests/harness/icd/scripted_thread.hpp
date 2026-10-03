@@ -21,6 +21,10 @@ public:
     Status start(icd::ServiceLoop &loop) override;
     void   stop() override;
     bool   running() const override;
+    /* Counted rather than slept: the test is the one that decides when the
+     * loop turns again. */
+    void   rest() override;
+    void   wake() override;
 
     /* The next start refuses, as an OS out of threads does. What the ICD
      * does with that is a path of its own: a callback registered on a
@@ -37,12 +41,16 @@ public:
     std::uint32_t turns() const;
     std::uint32_t starts() const;
     std::uint32_t stops() const;
+    std::uint32_t rests() const;
+    std::uint32_t wakes() const;
 
 private:
     icd::ServiceLoop *loop_;
     std::uint32_t     turns_;
     std::uint32_t     starts_;
     std::uint32_t     stops_;
+    std::uint32_t     rests_;
+    std::uint32_t     wakes_;
     bool              stopping_;
     bool              refusing_;
 };

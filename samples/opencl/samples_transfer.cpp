@@ -335,6 +335,131 @@ private:
     uint32_t iteration_ = 0;
 };
 
+// ---------------------------------------------------------------- bufferrects
+
+// Rectangles of a buffer written, filled and read back with every origin and
+// pitch away from zero, judged byte by byte against the same copies done on
+// the host: the shape of what Affinity does to start a document.
+class BufferRects final : public Sample {
+public:
+    const char *name() const override { return "bufferrects"; }
+    Work        work() const override { return {1.0 * bytes / 1e9, "GB/s"}; }
+    bool        init(Gpu &gpu) override
+    {
+        buffer_ = gpu.buffer(bytes);
+        return !gpu.failed;
+    }
+    void        step(Gpu &gpu) override { round(gpu); }
+    const char *capture(Gpu &gpu, Capture &capture) override
+    {
+        const bool right = round(gpu);
+        uint32_t   verdict = right ? 1u : 0u;
+        capture.buffer(Capture::u32, &verdict, 1u);
+        return right && !gpu.failed ? "ok" : "mismatch";
+    }
+    void release() override { samples::release(buffer_); }
+
+private:
+    static constexpr size_t bytes = 64u * 1024u;
+    static constexpr size_t buffer_row = 256u, buffer_slice = 256u * 40u;
+    static constexpr size_t host_row = 300u, host_slice = 300u * 45u;
+    static constexpr size_t host_bytes = host_slice * 4u;
+
+    bool round(Gpu &gpu)
+    {
+        static unsigned char source[host_bytes], back[host_bytes], model[bytes], read[bytes];
+        for (size_t i = 0; i < host_bytes; i++) source[i] = static_cast<unsigned char>(i * 7u + 3u);
+        const unsigned char zero = 0u;
+        gpu.check(cl.EnqueueFillBuffer(gpu.queue, buffer_, &zero, 1, 0, bytes, 0, nullptr, nullptr), "clEnqueueFillBuffer");
+        for (size_t i = 0; i < bytes; i++) model[i] = 0u;
+        const size_t buffer_origin[3] = {16u, 3u, 1u}, host_origin[3] = {8u, 2u, 1u}, region[3] = {100u, 5u, 2u};
+        gpu.check(cl.EnqueueWriteBufferRect(gpu.queue, buffer_, CL_TRUE, buffer_origin, host_origin, region, buffer_row,
+                                            buffer_slice, host_row, host_slice, source, 0, nullptr, nullptr),
+                  "clEnqueueWriteBufferRect");
+        for (size_t z = 0; z < region[2]; z++)
+            for (size_t y = 0; y < region[1]; y++)
+                for (size_t x = 0; x < region[0]; x++)
+                    model[(buffer_origin[2] + z) * buffer_slice + (buffer_origin[1] + y) * buffer_row + buffer_origin[0] + x] =
+                        source[(host_origin[2] + z) * host_slice + (host_origin[1] + y) * host_row + host_origin[0] + x];
+        const uint32_t pattern = 0xA5C3E1F7u;
+        gpu.check(cl.EnqueueFillBuffer(gpu.queue, buffer_, &pattern, 4, 4096, 512, 0, nullptr, nullptr),
+                  "clEnqueueFillBuffer");
+        for (size_t i = 0; i < 512; i++) model[4096 + i] = static_cast<unsigned char>(pattern >> (8u * (i % 4u)));
+        for (size_t i = 0; i < host_bytes; i++) back[i] = 0xEEu;
+        gpu.check(cl.EnqueueReadBufferRect(gpu.queue, buffer_, CL_TRUE, buffer_origin, host_origin, region, buffer_row,
+                                           buffer_slice, host_row, host_slice, back, 0, nullptr, nullptr),
+                  "clEnqueueReadBufferRect");
+        bool right = !gpu.failed;
+        for (size_t z = 0; z < region[2] && right; z++)
+            for (size_t y = 0; y < region[1] && right; y++)
+                for (size_t x = 0; x < region[0] && right; x++) {
+                    const size_t at = (host_origin[2] + z) * host_slice + (host_origin[1] + y) * host_row + host_origin[0] + x;
+                    right = back[at] == source[at];
+                }
+        right = right && back[0] == 0xEEu && back[host_bytes - 1u] == 0xEEu;
+        gpu.read(buffer_, read, bytes);
+        for (size_t i = 0; i < bytes && right; i++) right = read[i] == model[i];
+        return right;
+    }
+
+    cl_mem buffer_ = nullptr;
+};
+
+// ---------------------------------------------------------------- eventcallback
+
+// A write's completion told through clSetEventCallback after a flush, with no
+// wait of the application's own: what Affinity waits on to make a document. A
+// round whose callback never came in two seconds is a failure, and every
+// round is one - the first callback of a process is not the only one.
+class EventCallback final : public Sample {
+public:
+    const char *name() const override { return "eventcallback"; }
+    Work        work() const override { return {1.0, "callbacks/s"}; }
+    bool        init(Gpu &gpu) override
+    {
+        buffer_ = gpu.buffer(bytes);
+        return !gpu.failed;
+    }
+    void        step(Gpu &gpu) override { round(gpu); }
+    const char *capture(Gpu &gpu, Capture &capture) override
+    {
+        const bool came = round(gpu);
+        uint32_t   verdict = came ? 1u : 0u;
+        capture.buffer(Capture::u32, &verdict, 1u);
+        return came && !gpu.failed ? "ok" : "no callback";
+    }
+    void release() override { samples::release(buffer_); }
+
+private:
+    static constexpr size_t bytes = 4096u;
+
+    static void CL_CALLBACK done(cl_event, cl_int status, void *flag)
+    {
+        __atomic_store_n(static_cast<int *>(flag), status == CL_COMPLETE ? 1 : 2, __ATOMIC_RELEASE);
+    }
+
+    bool round(Gpu &gpu)
+    {
+        static unsigned char source[bytes];
+        static int           flag;
+        __atomic_store_n(&flag, 0, __ATOMIC_RELEASE);
+        cl_event written = nullptr;
+        gpu.check(cl.EnqueueWriteBuffer(gpu.queue, buffer_, CL_FALSE, 0, bytes, source, 0, nullptr, &written),
+                  "clEnqueueWriteBuffer");
+        if (written == nullptr) return false;
+        gpu.check(cl.SetEventCallback(written, CL_COMPLETE, &done, &flag), "clSetEventCallback");
+        gpu.check(cl.Flush(gpu.queue), "clFlush");
+        const double start = seconds();
+        while (__atomic_load_n(&flag, __ATOMIC_ACQUIRE) == 0 && seconds() - start < 2.0) {}
+        const bool came = __atomic_load_n(&flag, __ATOMIC_ACQUIRE) == 1;
+        cl.ReleaseEvent(written);
+        gpu.check(cl.Finish(gpu.queue), "clFinish");
+        return came;
+    }
+
+    cl_mem buffer_ = nullptr;
+};
+
 }  // namespace
 
 void register_transfer(Sample **all, uint32_t &made)
@@ -344,6 +469,8 @@ void register_transfer(Sample **all, uint32_t &made)
     all[made++] = new MapBuffer();
     all[made++] = new KernelLaunch();
     all[made++] = new HeldMaps();
+    all[made++] = new BufferRects();
+    all[made++] = new EventCallback();
 }
 
 }  // namespace samples

@@ -124,6 +124,23 @@ cl_int CL_API_CALL fill_buffer(cl_command_queue q, cl_mem m, const void *p, size
 {
     return table(q).clEnqueueFillBuffer(q, m, p, ps, o, s, n, w, e);
 }
+cl_int CL_API_CALL read_rect(cl_command_queue q, cl_mem m, cl_bool b, const size_t *bo, const size_t *ho,
+                             const size_t *r, size_t brp, size_t bsp, size_t hrp, size_t hsp, void *p, cl_uint n,
+                             const cl_event *w, cl_event *e)
+{
+    return table(q).clEnqueueReadBufferRect(q, m, b, bo, ho, r, brp, bsp, hrp, hsp, p, n, w, e);
+}
+cl_int CL_API_CALL write_rect(cl_command_queue q, cl_mem m, cl_bool b, const size_t *bo, const size_t *ho,
+                              const size_t *r, size_t brp, size_t bsp, size_t hrp, size_t hsp, const void *p,
+                              cl_uint n, const cl_event *w, cl_event *e)
+{
+    return table(q).clEnqueueWriteBufferRect(q, m, b, bo, ho, r, brp, bsp, hrp, hsp, p, n, w, e);
+}
+cl_int CL_API_CALL set_callback(cl_event e, cl_int status, void(CL_CALLBACK *notify)(cl_event, cl_int, void *),
+                                void *data)
+{
+    return table(e).clSetEventCallback(e, status, notify, data);
+}
 cl_int CL_API_CALL read_image(cl_command_queue q, cl_mem m, cl_bool b, const size_t *o, const size_t *r, size_t rp,
                               size_t sp, void *p, cl_uint n, const cl_event *w, cl_event *e)
 {
@@ -175,6 +192,8 @@ const Entry entries[] = {
     SAMPLES_ENTRY("clEnqueueCopyImage", copy_image), SAMPLES_ENTRY("clEnqueueMapBuffer", map_buffer),
     SAMPLES_ENTRY("clEnqueueUnmapMemObject", unmap), SAMPLES_ENTRY("clFinish", finish),
     SAMPLES_ENTRY("clFlush", flush), SAMPLES_ENTRY("clReleaseEvent", release_event),
+    SAMPLES_ENTRY("clEnqueueReadBufferRect", read_rect), SAMPLES_ENTRY("clEnqueueWriteBufferRect", write_rect),
+    SAMPLES_ENTRY("clSetEventCallback", set_callback),
 };
 #undef SAMPLES_ENTRY
 

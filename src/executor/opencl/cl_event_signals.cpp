@@ -30,7 +30,7 @@ ClEventRegistration *ClEventSignals::take()
     for (uint32_t index = 0u; index < max_registrations; ++index) {
         if (slots_[index].armed()) continue;
         slots_[index].arm(generation_);
-        ++taken_;
+        __atomic_fetch_add(&taken_, 1u, __ATOMIC_ACQ_REL);
         return &slots_[index];
     }
     return nullptr;
@@ -41,7 +41,13 @@ void ClEventSignals::give_back(ClEventRegistration *registration)
     AV_SCOPE("ClEventSignals::give_back");
     if (registration == nullptr || !registration->armed()) return;
     registration->disarm();
-    --taken_;
+    __atomic_fetch_sub(&taken_, 1u, __ATOMIC_ACQ_REL);
+}
+
+void ClEventSignals::answered()
+{
+    AV_SCOPE("ClEventSignals::answered");
+    __atomic_fetch_sub(&taken_, 1u, __ATOMIC_ACQ_REL);
 }
 
 void ClEventSignals::shut_down()
@@ -51,7 +57,7 @@ void ClEventSignals::shut_down()
      * they are: the host may still hold pointers to them. */
     ++generation_;
     for (uint32_t index = 0u; index < max_registrations; ++index) slots_[index].disarm();
-    taken_ = 0u;
+    __atomic_store_n(&taken_, 0u, __ATOMIC_RELEASE);
     wake_.clear();
 }
 
@@ -72,7 +78,7 @@ void ClEventSignals::signal_from_host(uint64_t generation)
 uint32_t ClEventSignals::outstanding() const
 {
     AV_SCOPE("ClEventSignals::outstanding");
-    return taken_;
+    return __atomic_load_n(&taken_, __ATOMIC_ACQUIRE);
 }
 
 uint64_t ClEventSignals::signalled() const

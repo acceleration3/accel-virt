@@ -22,6 +22,8 @@ public:
     Status start(icd::ServiceLoop &loop) override;
     void   stop() override;
     bool   running() const override;
+    void   rest() override;
+    void   wake() override;
 
     /* What the thread runs. Public because the thread procedure C requires is
      * handed this and nothing else. */
@@ -30,6 +32,8 @@ public:
 private:
     icd::ServiceLoop *loop_;
     HANDLE            thread_;
+    /* Auto-reset: what a resting loop waits on, set by wake() and stop(). */
+    HANDLE            woken_;
     /* Read by the thread, written by whoever stops it. */
     volatile LONG     stopping_;
 };

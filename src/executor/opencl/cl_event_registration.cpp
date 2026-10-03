@@ -19,7 +19,7 @@ void ClEventRegistration::bind(ClEventSignals &owner)
 void ClEventRegistration::arm(uint64_t generation)
 {
     AV_SCOPE("ClEventRegistration::arm");
-    armed_ = true;
+    __atomic_store_n(&armed_, true, __ATOMIC_RELAXED);
     /* Published last: the host may be given this the moment the caller
      * returns, and the generation it reads must be this one. */
     __atomic_store_n(&generation_, generation, __ATOMIC_RELEASE);
@@ -31,13 +31,13 @@ void ClEventRegistration::disarm()
     /* Cleared before the slot is free, so a callback that still names it
      * finds a generation of zero and does nothing. */
     __atomic_store_n(&generation_, uint64_t{0}, __ATOMIC_RELEASE);
-    armed_ = false;
+    __atomic_store_n(&armed_, false, __ATOMIC_RELEASE);
 }
 
 bool ClEventRegistration::armed() const
 {
     AV_SCOPE("ClEventRegistration::armed");
-    return armed_;
+    return __atomic_load_n(&armed_, __ATOMIC_ACQUIRE);
 }
 
 uint64_t ClEventRegistration::generation() const
@@ -54,7 +54,16 @@ void ClEventRegistration::completed()
 {
     AV_SCOPE("ClEventRegistration::completed");
     if (owner_ == nullptr) return;
-    owner_->signal_from_host(__atomic_load_n(&generation_, __ATOMIC_ACQUIRE));
+    /* Claimed once: a slot disarmed by a shut-down already reads zero, and
+     * then neither the signal nor the slot is this callback's - the owner
+     * counts it stale and that is all. */
+    const uint64_t generation = __atomic_exchange_n(&generation_, uint64_t{0}, __ATOMIC_ACQ_REL);
+    owner_->signal_from_host(generation);
+    if (generation == 0u) return;
+    owner_->answered();
+    /* Free last: the worker may take the slot again the moment this reads
+     * false. */
+    __atomic_store_n(&armed_, false, __ATOMIC_RELEASE);
 }
 
 bool ClEventRegistration::invariants_hold() const

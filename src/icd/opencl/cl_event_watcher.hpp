@@ -64,8 +64,9 @@ public:
     cl_int watch(ClObject *event, uint64_t wire, ClientTransport *wire_of_context,
                  cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data);
 
-    /* One turn: ask what has completed and run its callbacks. Answers whether
-     * to be called again, which is while anything is still registered. */
+    /* One turn: ask what has completed and run its callbacks - or, with
+     * nothing registered, rest until a registration wakes it. Always to be
+     * called again: the thread lasts until the ICD stops it. */
     bool turn() override;
 
     /* Forgets everything registered on `context_wire`, without running any of

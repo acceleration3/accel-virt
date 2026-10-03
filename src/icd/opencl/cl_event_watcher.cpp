@@ -34,9 +34,12 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
         return CL_INVALID_VALUE;
     }
     ++held_;
-    /* The thread runs while anything is registered, and not before: a process
-     * that never asks for a callback never starts one. */
-    if (!thread_.running()) {
+    /* The thread starts with the first registration, so a process that never
+     * asks for a callback never starts one; from then on it rests while
+     * nothing is registered, and this ends the rest. */
+    if (thread_.running()) {
+        thread_.wake();
+    } else {
         const Status started = thread_.start(*this);
         if (started != Status::ok) {
             registrations_[slot].give_up();
@@ -69,6 +72,14 @@ bool ClEventWatcher::completed(const ClWatchedEvent &registration, cl_int &statu
 bool ClEventWatcher::turn()
 {
     AV_SCOPE("ClEventWatcher::turn");
+    /* Nothing registered is nothing to do for now, never the end: a thread
+     * that ended when the last callback ran was one the next registration
+     * found still "running" and never started again, and no callback after
+     * the first batch ever came (Affinity waits on one to make a document). */
+    if (held_ == 0u) {
+        thread_.rest();
+        return true;
+    }
     for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
         if (!registrations_[slot].held()) continue;
         cl_int status = CL_QUEUED;
@@ -92,7 +103,7 @@ bool ClEventWatcher::turn()
          * still be an object while it ran. */
         owner_.release_watched(*ran.event());
     }
-    return held_ != 0u;
+    return true;
 }
 
 void ClEventWatcher::forget_context(const ClientTransport *wire_of_context)

@@ -168,7 +168,7 @@ TEST(cl_event_watcher, a_callback_runs_once_when_its_event_completes)
 
   /* Now it has. */
   event_is(rig.rig(), CL_COMPLETE);
-  CHECK(!rig.thread().step());
+  CHECK(rig.thread().step());
   CHECK_EQ(ran.times, 1u);
   CHECK_EQ(ran.status, CL_COMPLETE);
   CHECK(ran.user_data == &user_data);
@@ -178,16 +178,34 @@ TEST(cl_event_watcher, a_callback_runs_once_when_its_event_completes)
   CHECK_EQ(rig.watcher().delivered(), 1u);
   CHECK(rig.watcher().invariants_hold()); }
 
-TEST(cl_event_watcher, the_loop_ends_when_nothing_is_left_to_watch)
+/* With nothing left to watch the loop rests rather than ends: a thread that
+ * ended when its last callback ran was one the next registration found still
+ * "running", so it never started again and no callback after the first batch
+ * ever came - which is what kept Affinity from making a document. A later
+ * registration wakes the rest, on the thread that never went away. */
+TEST(cl_event_watcher, the_loop_rests_when_nothing_is_left_and_a_registration_wakes_it)
 { forget();
   Watching rig;
   CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
            CL_SUCCESS);
   event_is(rig.rig(), CL_COMPLETE);
-  /* The turn answers false, which is what stops the thread: a watcher with
-   * nothing registered has nothing to wait for. */
-  CHECK(!rig.thread().step());
-  CHECK(!rig.thread().running()); }
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  CHECK_EQ(rig.thread().rests(), 0u);
+  /* Nothing registered: a rest, not an end. */
+  CHECK(rig.thread().step());
+  CHECK_EQ(rig.thread().rests(), 1u);
+  CHECK(rig.thread().running());
+  /* The second registration wakes it, and its callback comes. */
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data),
+           CL_SUCCESS);
+  CHECK_EQ(rig.thread().starts(), 1u);
+  CHECK_EQ(rig.thread().wakes(), 1u);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 2u);
+  CHECK_EQ(rig.thread().rests(), 1u);
+  CHECK(rig.watcher().invariants_hold()); }
 
 TEST(cl_event_watcher, an_event_that_ended_in_an_error_runs_its_callback_too)
 { forget();
@@ -198,7 +216,7 @@ TEST(cl_event_watcher, an_event_that_ended_in_an_error_runs_its_callback_too)
    * runs then as well - an application waiting on a completion it will never
    * get is worse than one told it failed. */
   event_is(rig.rig(), -5);
-  CHECK(!rig.thread().step());
+  CHECK(rig.thread().step());
   CHECK_EQ(ran.times, 1u);
   CHECK_EQ(ran.status, -5); }
 
@@ -215,7 +233,7 @@ TEST(cl_event_watcher, a_callback_registered_for_an_earlier_status_runs_at_that_
   CHECK(rig.thread().step());
   CHECK_EQ(ran.times, 0u);
   event_is(rig.rig(), CL_RUNNING);
-  CHECK(!rig.thread().step());
+  CHECK(rig.thread().step());
   CHECK_EQ(ran.times, 1u);
   CHECK_EQ(ran.status, CL_RUNNING); }
 
@@ -269,7 +287,7 @@ TEST(cl_event_watcher, an_event_the_host_can_no_longer_be_asked_about_is_dropped
    * registration would leave the application waiting for ever, so the
    * callback runs with what it was told. */
   rig.rig().host().cl_info(CL_INVALID_EVENT, "", 0u);
-  CHECK(!rig.thread().step());
+  CHECK(rig.thread().step());
   CHECK_EQ(ran.times, 1u);
   CHECK_EQ(rig.watcher().registered(), 0u);
   CHECK(rig.watcher().invariants_hold()); }
@@ -291,7 +309,7 @@ TEST(cl_event_watcher, a_delivered_registration_gives_its_event_back_once_and_af
   const cl_int complete = CL_COMPLETE;
   watching.rig().host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete),
                                 sizeof complete);
-  CHECK(!watching.thread().step());
+  CHECK(watching.thread().step());
   CHECK_EQ(ran.times, 1u);
   /* Once, and it is the event the callback was handed - which it could only
    * have been handed because the reference was still held while it ran. */
@@ -305,7 +323,7 @@ TEST(cl_event_watcher, a_delivered_registration_gives_its_event_back_once_and_af
   CHECK(ran.event == reinterpret_cast<cl_event>(&watching.event()));
 
   /* And a further turn delivers nothing, so nothing is given back twice. */
-  CHECK(!watching.thread().step());
+  CHECK(watching.thread().step());
   CHECK_EQ(watching.owner().releases(), 1u);
   CHECK(watching.watcher().invariants_hold()); }
 

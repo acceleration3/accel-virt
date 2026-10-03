@@ -894,7 +894,7 @@ TEST(cl_icd_root, a_callback_is_registered_with_the_host_and_watched_here)
 
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  CHECK(!rig.watcher().step());
+  CHECK(rig.watcher().step());
   CHECK_EQ(callback.times, 1u);
   CHECK_EQ(callback.status, CL_COMPLETE);
   CHECK(callback.event == event);
@@ -921,7 +921,7 @@ TEST(cl_icd_root, a_callback_still_runs_on_an_event_the_application_released_fir
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   /* The host is told to release it when that last reference goes. */
   rig.host().cl_result(CL_SUCCESS);
-  CHECK(!rig.watcher().step());
+  CHECK(rig.watcher().step());
   CHECK_EQ(callback.times, 1u);
   CHECK(callback.event == event);
   /* And now it is gone, without the application releasing it twice. */
@@ -963,7 +963,7 @@ TEST(cl_icd_root, a_context_released_under_a_watched_event_lives_for_its_callbac
   CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  CHECK(!rig.watcher().step());
+  CHECK(rig.watcher().step());
   CHECK_EQ(callback.times, 1u);
   CHECK(callback.event == event);
   CHECK(rig.root().invariants_hold()); }
@@ -1378,7 +1378,7 @@ TEST(cl_icd_root, a_callback_on_a_non_blocking_read_sees_the_bytes)
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   const unsigned char answered[4] = {4u, 5u, 6u, 7u};
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
-  CHECK(!rig.watcher().step());
+  CHECK(rig.watcher().step());
   CHECK_EQ(callback.times, 1u);
   for (std::size_t index = 0u; index < sizeof into; ++index)
       CHECK_EQ(into[index], answered[index]);

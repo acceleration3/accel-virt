@@ -13,7 +13,7 @@ extern "C" DWORD WINAPI av_service_thread_run(LPVOID service)
     return 0u;
 }
 
-WindowsServiceThread::WindowsServiceThread() : loop_(nullptr), thread_(nullptr), stopping_(0)
+WindowsServiceThread::WindowsServiceThread() : loop_(nullptr), thread_(nullptr), woken_(nullptr), stopping_(0)
 {
     AV_SCOPE("WindowsServiceThread::WindowsServiceThread");
 }
@@ -22,12 +22,15 @@ WindowsServiceThread::~WindowsServiceThread()
 {
     AV_SCOPE("WindowsServiceThread::~WindowsServiceThread");
     stop();
+    if (woken_ != nullptr) static_cast<void>(CloseHandle(woken_));
 }
 
 Status WindowsServiceThread::start(icd::ServiceLoop &loop)
 {
     AV_SCOPE("WindowsServiceThread::start");
     if (thread_ != nullptr) return Status::invalid_state;
+    if (woken_ == nullptr) woken_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (woken_ == nullptr) return Status::no_memory;
     loop_ = &loop;
     InterlockedExchange(&stopping_, 0);
     thread_ = CreateThread(nullptr, 0u, &av_service_thread_run, this, 0u, nullptr);
@@ -43,12 +46,28 @@ void WindowsServiceThread::stop()
     AV_SCOPE("WindowsServiceThread::stop");
     if (thread_ == nullptr) return;
     InterlockedExchange(&stopping_, 1);
-    /* Nothing here makes a blocked turn return; the owner has already done
-     * whatever does that before calling this. */
+    /* A resting loop returns now; nothing else here makes a blocked turn
+     * return, which the owner has already seen to before calling this. */
+    if (woken_ != nullptr) static_cast<void>(SetEvent(woken_));
     static_cast<void>(WaitForSingleObject(thread_, INFINITE));
     static_cast<void>(CloseHandle(thread_));
     thread_ = nullptr;
     loop_ = nullptr;
+}
+
+void WindowsServiceThread::rest()
+{
+    AV_SCOPE("WindowsServiceThread::rest");
+    /* A moment at most: a wake that came between the loop finding nothing and
+     * resting is an event already set, and anything else is found next turn. */
+    constexpr DWORD moment_ms = 100u;
+    if (woken_ != nullptr) static_cast<void>(WaitForSingleObject(woken_, moment_ms));
+}
+
+void WindowsServiceThread::wake()
+{
+    AV_SCOPE("WindowsServiceThread::wake");
+    if (woken_ != nullptr) static_cast<void>(SetEvent(woken_));
 }
 
 bool WindowsServiceThread::running() const

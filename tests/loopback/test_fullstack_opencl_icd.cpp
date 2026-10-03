@@ -877,8 +877,9 @@ TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_
     CHECK_EQ(run.flush(), CL_SUCCESS);
     CHECK_EQ(loader.wait_for_events(1u, &delivered), CL_SUCCESS);
     /* The watcher's own thread, turned by the test: one turn delivers the one
-     * registration and then says it need not be called again. */
-    CHECK(!process.watcher().step());
+     * registration, and the thread goes on - it rests rather than ends, so the
+     * next registration finds it. */
+    CHECK(process.watcher().step());
     CHECK_EQ(process.watcher().turns(), 1u);
     CHECK_EQ(watched.calls(), 1u);
     CHECK_EQ(watched.status(), CL_COMPLETE);

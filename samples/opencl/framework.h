@@ -46,7 +46,7 @@ struct Cl {
     X(GetProgramBuildInfo) X(ReleaseProgram) X(CreateKernel) X(ReleaseKernel) X(SetKernelArg)                         \
     X(EnqueueNDRangeKernel) X(EnqueueReadBuffer) X(EnqueueWriteBuffer) X(EnqueueCopyBuffer) X(EnqueueFillBuffer)      \
     X(EnqueueReadImage) X(EnqueueWriteImage) X(EnqueueCopyImage) X(EnqueueMapBuffer) X(EnqueueUnmapMemObject)         \
-    X(Finish) X(Flush) X(ReleaseEvent)
+    X(Finish) X(Flush) X(ReleaseEvent) X(EnqueueReadBufferRect) X(EnqueueWriteBufferRect) X(SetEventCallback)
 #define SAMPLES_CL_MEMBER(name) decltype(&::cl##name) name;
     SAMPLES_CL_ENTRIES(SAMPLES_CL_MEMBER)
 #undef SAMPLES_CL_MEMBER

@@ -53,6 +53,10 @@ public:
      * only, and only for what `take` just answered. */
     void                 give_back(ClEventRegistration *registration);
 
+    /* A registration's host callback came, so its slot is free again. Any
+     * thread: it is called from the host driver's. */
+    void answered();
+
     /* Every registration made so far goes stale, and the device's signal is
      * forgotten. Worker only. A callback still to come finds its generation
      * changed and does nothing. */

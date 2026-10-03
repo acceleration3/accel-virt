@@ -48,6 +48,14 @@ public:
      * Nothing for a thread that was never started. */
     virtual void   stop() = 0;
     virtual bool   running() const = 0;
+    /* From the loop, on its own thread: nothing to do for now, so it gives the
+     * processor up until wake() or stop() is called, or a moment passes. A
+     * loop that kept its thread this way is never one a registration made on
+     * another thread finds gone - an ended thread and a new registration
+     * racing is a registration nothing ever serves. */
+    virtual void   rest() = 0;
+    /* From any thread: the loop has something to do, so a rest ends now. */
+    virtual void   wake() = 0;
 
 protected:
     ServiceThread() = default;

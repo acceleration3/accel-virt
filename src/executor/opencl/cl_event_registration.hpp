@@ -33,7 +33,10 @@ public:
     uint64_t generation() const;
 
     /* Called from the host driver's thread when the event completes: signals
-     * the owner when this registration is still the one that was made. */
+     * the owner when this registration is still the one that was made, and
+     * gives the slot back - a host callback comes once, and a slot held after
+     * it was a slot of the session's 128 gone for good, until every
+     * registration was refused. */
     void completed();
 
     bool invariants_hold() const;
