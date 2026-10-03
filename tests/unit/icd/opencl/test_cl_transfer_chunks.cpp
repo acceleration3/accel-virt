@@ -714,3 +714,57 @@ TEST(cl_transfer_chunks, a_refused_staged_region_ends_the_transfer)
       CHECK(host.command(0u).lent);
       CHECK_EQ(arena.blocks().live(), 0u);
   } }
+
+/* A small read whose rows have gaps between them - a tile of a larger image,
+ * which is what Affinity reads back while a layer moves - would come back
+ * inline a row at a time, one round trip each, so it is staged whatever its
+ * size: one command, packed, and the gaps left alone. A small read whose rows
+ * are packed is one inline command already, and stays one. */
+TEST(cl_transfer_chunks, a_small_read_with_gapped_rows_is_one_staged_command)
+{ constexpr std::size_t width = 64u, rows = 16u, pitch = 4096u, host_pitch = 100u;
+  const std::size_t corner[3] = {32u, 1u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, rows, 1u};
+  { ClTransferHost host;
+    host.fill(3u);
+    Arena              arena(host, 8u << 20);
+    ClTransferChunks   chunks(host, queue, arena.blocks());
+    const ClBufferRect gapped(corner, host_corner, extent, pitch, 0u, host_pitch, 0u);
+    CHECK_EQ(gapped.check(), CL_SUCCESS);
+    Memory into(rows * host_pitch);
+    CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, gapped, into.at(0u)), CL_SUCCESS);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(host.command(0u).lent);
+    CHECK_EQ(host.command(0u).region[1], rows);
+    bool every_byte = true;
+    for (std::size_t y = 0u; y < rows; ++y)
+        for (std::size_t x = 0u; x < width; ++x)
+            every_byte = every_byte && *into.at(y * host_pitch + x) == host.buffer_at((1u + y) * pitch + 32u + x);
+    CHECK(every_byte);
+    CHECK_EQ(*into.at(width), 0xEEu);
+    CHECK_EQ(*into.at(host_pitch - 1u), 0xEEu);
+    CHECK_EQ(arena.blocks().live(), 0u); }
+  { ClTransferHost host;
+    host.fill(3u);
+    Arena              arena(host, 8u << 20);
+    ClTransferChunks   chunks(host, queue, arena.blocks());
+    const ClBufferRect packed(corner, host_corner, extent, pitch, 0u, 0u, 0u);
+    Memory             into(rows * width);
+    CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, packed, into.at(0u)), CL_SUCCESS);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(!host.command(0u).lent);
+    CHECK_EQ(*into.at(width), host.buffer_at(2u * pitch + 32u)); }
+  { ClTransferHost host;
+    host.fill(0u);
+    Arena               arena(host, 8u << 20);
+    ClTransferChunks    chunks(host, queue, arena.blocks());
+    const std::size_t   origin[3] = {5u, 2u, 0u}, image_extent[3] = {8u, 5u, 1u};
+    const std::size_t   gap_pitch = 8u * element + 12u;
+    const ClImageRegion region(origin, image_extent, gap_pitch, 0u, element);
+    Memory              into(5u * gap_pitch);
+    CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, region, into.at(0u)), CL_SUCCESS);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(host.command(0u).lent);
+    for (std::size_t y = 0u; y < 5u; ++y) {
+        CHECK_EQ(into.texel(y * gap_pitch), host.texel_of(5u, 2u + y, 0u));
+        CHECK_EQ(into.texel(y * gap_pitch + 7u * element), host.texel_of(12u, 2u + y, 0u));
+        CHECK_EQ(*into.at(y * gap_pitch + 8u * element), 0xEEu);
+    } } }

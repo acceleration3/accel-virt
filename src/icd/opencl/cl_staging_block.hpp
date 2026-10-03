@@ -8,9 +8,11 @@
  * The block goes back to the arena when the transfer is done with it.
  *
  * What it takes is what the arena can spare: the whole transfer up to `most`,
- * or less down to `least` when other blocks crowd it. A transfer smaller than
- * `least` is not staged at all - inside one command it costs no round trip of
- * its own, and the copies are too small to matter. */
+ * or less, halving, down to the smallest its caller finds worth staging. For
+ * a transfer one command carries inline that is `least` - below it the inline
+ * command costs no round trip of its own, and the copies are too small to
+ * matter. A read into rows with gaps between them is worth any block at all:
+ * inline it comes back a row at a time, one round trip each. */
 #ifndef AV_CLICD_CL_STAGING_BLOCK_HPP
 #define AV_CLICD_CL_STAGING_BLOCK_HPP
 
@@ -32,10 +34,10 @@ public:
     ClStagingBlock(const ClStagingBlock &) = delete;
     ClStagingBlock &operator=(const ClStagingBlock &) = delete;
 
-    /* Room for `wanted` bytes or as many as the arena has, between `least`
-     * and `most`; false for a transfer smaller than `least`, no arena, no room
-     * that large, or a block already taken. */
-    [[nodiscard]] bool take(uint64_t wanted);
+    /* Room for `wanted` bytes or as many as the arena has, between
+     * `smallest` and `most`; false for a transfer smaller than `smallest`, no
+     * arena, no room that large, or a block already taken. */
+    [[nodiscard]] bool take(uint64_t wanted, uint64_t smallest);
     uint8_t           *at() const;
     uint64_t           bytes() const;
 
