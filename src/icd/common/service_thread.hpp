@@ -54,6 +54,12 @@ public:
      * another thread finds gone - an ended thread and a new registration
      * racing is a registration nothing ever serves. */
     virtual void   rest() = 0;
+    /* From the loop, on its own thread: what it waits for is not done yet, so
+     * it gives the processor - and whatever it shares with the application -
+     * up for a millisecond, or until wake() or stop(). A loop that asked again
+     * at once held the transport it asks over for nearly all of every second,
+     * and the application's own calls queued behind it. */
+    virtual void   pause() = 0;
     /* From any thread: the loop has something to do, so a rest ends now. */
     virtual void   wake() = 0;
 

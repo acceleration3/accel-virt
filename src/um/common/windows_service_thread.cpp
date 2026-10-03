@@ -64,6 +64,13 @@ void WindowsServiceThread::rest()
     if (woken_ != nullptr) static_cast<void>(WaitForSingleObject(woken_, moment_ms));
 }
 
+void WindowsServiceThread::pause()
+{
+    AV_SCOPE("WindowsServiceThread::pause");
+    constexpr DWORD millisecond = 1u;
+    if (woken_ != nullptr) static_cast<void>(WaitForSingleObject(woken_, millisecond));
+}
+
 void WindowsServiceThread::wake()
 {
     AV_SCOPE("WindowsServiceThread::wake");

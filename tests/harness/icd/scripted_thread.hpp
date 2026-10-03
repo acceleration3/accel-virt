@@ -24,6 +24,7 @@ public:
     /* Counted rather than slept: the test is the one that decides when the
      * loop turns again. */
     void   rest() override;
+    void   pause() override;
     void   wake() override;
 
     /* The next start refuses, as an OS out of threads does. What the ICD
@@ -42,6 +43,7 @@ public:
     std::uint32_t starts() const;
     std::uint32_t stops() const;
     std::uint32_t rests() const;
+    std::uint32_t pauses() const;
     std::uint32_t wakes() const;
 
 private:
@@ -50,6 +52,7 @@ private:
     std::uint32_t     starts_;
     std::uint32_t     stops_;
     std::uint32_t     rests_;
+    std::uint32_t     pauses_;
     std::uint32_t     wakes_;
     bool              stopping_;
     bool              refusing_;

@@ -3,7 +3,7 @@
 namespace av {
 
 ScriptedThread::ScriptedThread()
-    : loop_(nullptr), turns_(0u), starts_(0u), stops_(0u), rests_(0u), wakes_(0u), stopping_(false), refusing_(false)
+    : loop_(nullptr), turns_(0u), starts_(0u), stops_(0u), rests_(0u), pauses_(0u), wakes_(0u), stopping_(false), refusing_(false)
 {
 }
 
@@ -50,8 +50,10 @@ std::uint32_t ScriptedThread::turns() const { return turns_; }
 std::uint32_t ScriptedThread::starts() const { return starts_; }
 std::uint32_t ScriptedThread::stops() const { return stops_; }
 std::uint32_t ScriptedThread::rests() const { return rests_; }
+std::uint32_t ScriptedThread::pauses() const { return pauses_; }
 std::uint32_t ScriptedThread::wakes() const { return wakes_; }
 void ScriptedThread::rest() { ++rests_; }
+void ScriptedThread::pause() { ++pauses_; }
 void ScriptedThread::wake() { ++wakes_; }
 
 void ScriptedThread::refuse_start() { refusing_ = true; }

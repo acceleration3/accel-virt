@@ -10,7 +10,7 @@
 namespace av::clicd {
 
 ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock, ClEventOwner &owner)
-    : thread_(thread), log_(log), lock_(lock), owner_(owner), registrations_(), held_(0u), delivered_(0u)
+    : thread_(thread), log_(log), lock_(lock), owner_(owner), registrations_(), held_(0u), delivered_(0u), next_(0u)
 {
     AV_SCOPE("ClEventWatcher::ClEventWatcher");
 }
@@ -92,40 +92,55 @@ bool ClEventWatcher::turn()
         thread_.rest();
         return true;
     }
-    for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
+    uint32_t asks = 0u;
+    bool     ran = false;
+    uint32_t step = 0u;
+    for (; step < max_registrations && asks < asks_per_turn; ++step) {
+        const uint32_t slot = (next_ + step) % max_registrations;
         lock_.acquire();
         const ClWatchedEvent asked = registrations_[slot];
         lock_.release();
         if (!asked.held()) continue;
         cl_int status = CL_QUEUED;
-        if (!completed(asked, status)) continue;
-        /* Claimed and given up before it runs - and only if the row is still
-         * the one asked about, since a context released meanwhile forgets it:
-         * a callback that releases its own event, or the context it belongs
-         * to, is releasing something this is no longer holding. */
-        lock_.acquire();
-        const bool still = registrations_[slot].held() && registrations_[slot].event() == asked.event() &&
-                           registrations_[slot].wire() == asked.wire();
-        if (still) {
-            registrations_[slot].give_up();
-            --held_;
-            ++delivered_;
+        if (!completed(asked, status)) {
+            ++asks;
+            continue;
         }
-        lock_.release();
-        if (!still) continue;
-        const ClWatchedEvent &ran = asked;
-        /* Whatever the event owes the application arrives before the
-         * callback does: a callback on a non-blocking read that could not
-         * see the bytes would be a callback about nothing. */
-        owner_.deliver_watched(*ran.event());
-        /* No ICD lock is held here, and the callback may call back into the
-         * ICD - which is the whole reason it is not run under one. */
-        ran.run(status);
-        /* And the reference the registration held goes back, after the
-         * callback rather than before: the cl_event it was handed had to
-         * still be an object while it ran. */
-        owner_.release_watched(*ran.event());
+        if (deliver(slot, asked, status)) ran = true;
     }
+    next_ = (next_ + step) % max_registrations;
+    if (!ran) thread_.pause();
+    return true;
+}
+
+bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int status)
+{
+    AV_SCOPE("ClEventWatcher::deliver");
+    /* Claimed and given up before it runs - and only if the row is still the
+     * one asked about, since a context released meanwhile forgets it: a
+     * callback that releases its own event, or the context it belongs to, is
+     * releasing something this is no longer holding. */
+    lock_.acquire();
+    const bool still = registrations_[slot].held() && registrations_[slot].event() == asked.event() &&
+                       registrations_[slot].wire() == asked.wire();
+    if (still) {
+        registrations_[slot].give_up();
+        --held_;
+        ++delivered_;
+    }
+    lock_.release();
+    if (!still) return false;
+    /* Whatever the event owes the application arrives before the callback
+     * does: a callback on a non-blocking read that could not see the bytes
+     * would be a callback about nothing. */
+    owner_.deliver_watched(*asked.event());
+    /* No ICD lock is held here, and the callback may call back into the ICD -
+     * which is the whole reason it is not run under one. */
+    asked.run(status);
+    /* And the reference the registration held goes back, after the callback
+     * rather than before: the cl_event it was handed had to still be an
+     * object while it ran. */
+    owner_.release_watched(*asked.event());
     return true;
 }
 

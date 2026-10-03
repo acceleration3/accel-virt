@@ -49,6 +49,16 @@ public:
     /* Events one process may be waiting on at once. Past this a registration
      * is refused, which is a call the application can see fail. */
     static constexpr uint32_t max_registrations = 256u;
+    /* Events still running that one turn asks about before it pauses. Each
+     * ask is a round trip over the context's one transport, which every
+     * application thread shares: Affinity registers a callback on every
+     * kernel it launches, hundreds a second, and a turn that asked about all
+     * of them, again at once, held the transport so much of the time that an
+     * enqueue waited behind it for over half a second and the canvas froze.
+     * The turns go round the table from where the last one stopped, so every
+     * registration is asked about in time; one that has completed never
+     * counts against this. */
+    static constexpr uint32_t asks_per_turn = 8u;
 
     /* `lock` is the ICD's: the table is written by application threads and
      * read by the watcher's own, so both hold it while they touch a row -
@@ -68,9 +78,10 @@ public:
     cl_int watch(ClObject *event, uint64_t wire, ClientTransport *wire_of_context,
                  cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data);
 
-    /* One turn: ask what has completed and run its callbacks - or, with
-     * nothing registered, rest until a registration wakes it. Always to be
-     * called again: the thread lasts until the ICD stops it. */
+    /* One turn: ask what has completed and run its callbacks, then pause if
+     * none had - or, with nothing registered, rest until a registration
+     * wakes it. Always to be called again: the thread lasts until the ICD
+     * stops it. */
     bool turn() override;
 
     /* Forgets everything registered on `context_wire`, without running any of
@@ -93,6 +104,9 @@ private:
 
     /* Whether the host says this event has reached what was asked for. */
     bool completed(const ClWatchedEvent &registration, cl_int &status) const;
+    /* Runs `asked`'s callback if the row at `slot` is still that
+     * registration, and answers whether it ran. */
+    bool deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int status);
 
     icd::ServiceThread &thread_;
     LogSink       &log_;
@@ -101,6 +115,8 @@ private:
     ClWatchedEvent      registrations_[max_registrations];
     uint32_t            held_;
     uint64_t            delivered_;
+    /* The slot the next turn starts asking from. */
+    uint32_t            next_;
 };
 
 }  // namespace av::clicd

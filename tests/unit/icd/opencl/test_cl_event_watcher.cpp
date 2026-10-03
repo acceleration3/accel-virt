@@ -475,3 +475,40 @@ TEST(cl_event_watcher, a_registration_with_nothing_to_call_runs_nothing)
   /* Nothing happens, and nothing crashes. */
   watched.run(CL_COMPLETE);
   CHECK(!watched.invariants_hold()); }
+
+/* Affinity's freeze: a callback on every kernel, hundreds a second, and a
+ * watcher that asked the host about every one of them and then at once again
+ * held the context's transport until an application's enqueue waited behind it
+ * for over half a second. A turn asks about at most asks_per_turn events still
+ * running and then pauses; the next turn goes on from where it stopped, so a
+ * completed event past the first few is still delivered - on the next turn,
+ * which then does not pause, because it ran something. */
+TEST(cl_event_watcher, a_turn_asks_about_a_few_running_events_pauses_and_the_next_goes_on_from_there)
+{ forget();
+  Watching rig;
+  constexpr std::uint32_t asks = ClEventWatcher::asks_per_turn;
+  constexpr std::uint32_t done = 4u;
+  for (std::uint32_t index = 0u; index < asks + done; ++index)
+      CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u + index, rig.wire(), CL_COMPLETE, &note, &user_data),
+               CL_SUCCESS);
+  for (std::uint32_t index = 0u; index < asks; ++index) event_is(rig.rig(), CL_RUNNING);
+  for (std::uint32_t index = 0u; index < done; ++index) event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  /* Had it asked past the bound, the completions queued behind the running
+   * answers would have run now. */
+  CHECK_EQ(ran.times, 0u);
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  CHECK_EQ(rig.watcher().registered(), asks + done);
+  /* The next turn starts where the last stopped: the four the host has
+   * finished come first, and the first eight are asked about again after. */
+  for (std::uint32_t index = 0u; index < asks; ++index) event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, done);
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  CHECK_EQ(rig.watcher().registered(), asks);
+  for (std::uint32_t slot = 0u; slot < asks; ++slot)
+      CHECK(ClEventWatcherProbe::registration(rig.watcher(), slot).held());
+  for (std::uint32_t slot = asks; slot < asks + done; ++slot)
+      CHECK(!ClEventWatcherProbe::registration(rig.watcher(), slot).held());
+  CHECK_EQ(rig.thread().rests(), 0u);
+  CHECK(rig.watcher().invariants_hold()); }

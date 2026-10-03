@@ -23,6 +23,7 @@ public:
     void   stop() override;
     bool   running() const override;
     void   rest() override;
+    void   pause() override;
     void   wake() override;
 
     /* What the thread runs. Public because the thread procedure C requires is
