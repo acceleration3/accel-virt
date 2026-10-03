@@ -11,8 +11,11 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
+#include "icd/opencl/cl_arena_blocks.hpp"
 #include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "icd/opencl/cl_object.hpp"
+#include "icd/opencl/guest_cl_context.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
@@ -772,6 +775,33 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK_EQ(error, CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
   CHECK(rig.root().invariants_hold()); }
+
+/* An application whose buffers fill the arena's part for them - one mapped
+ * buffer per tile - still has its transfers staged: they have the arena's top
+ * to themselves. The copy after a create is one staged write whatever the
+ * buffers hold. */
+TEST(cl_image_paths, transfers_are_staged_while_buffers_fill_their_part_of_the_arena)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  av::clicd::GuestClContext *const on = static_cast<av::clicd::ClObject *>(static_cast<void *>(run.context()))->context();
+  std::uint64_t full = 0u;
+  CHECK(on->blocks().take(av::clicd::GuestClContext::arena_bytes - av::clicd::GuestClContext::staging_reserve, full));
+  const std::size_t   bytes = 2u * av::clicd::ClTransferChunks::write_room + 1u;
+  static std::uint8_t from[2u * av::clicd::ClTransferChunks::write_room + 1u];
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
+  rig.host().cl_handle(own_queue, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  cl_int error = CL_INVALID_VALUE;
+  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 4u);
+  CHECK_EQ(rig.kmt().command_id(sent + 2u), av::clproto::kCmd_clEnqueueWriteBuffer);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  on->blocks().give_back(full); }
 
 TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_as_they_stand)
 { ClIcdRig rig;

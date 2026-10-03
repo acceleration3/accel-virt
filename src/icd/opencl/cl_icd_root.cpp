@@ -834,7 +834,7 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         return nullptr;
     }
     if (copies_after) {
-        const cl_int filled = fill_buffer(*wire, on->blocks(), held->wire(), buffer, bytes, host_pointer);
+        const cl_int filled = fill_buffer(*wire, on->staging(), held->wire(), buffer, bytes, host_pointer);
         if (filled != CL_SUCCESS) {
             give_back_to_host(*wire, ClObject::Kind::mem, buffer);
             report_error(error, filled);
@@ -1109,7 +1109,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
      * order a deferred read is delivered in. */
     const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
-    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     ran = chunks.read(named->wire(), offset, bytes, into);
     if (ran != CL_SUCCESS) return ran;
     return marker_event(*wire, *held, event);
@@ -1136,7 +1136,7 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     static_cast<void>(blocking);
     const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
-    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     ran = chunks.write(named->wire(), offset, bytes, from);
     if (ran != CL_SUCCESS) return ran;
     return marker_event(*wire, *held, event);
@@ -1156,7 +1156,7 @@ cl_int ClIcdRoot::finish(cl_command_queue queue)
     if (waited != CL_SUCCESS) return waited;
     /* Everything queued before the marker has run, so every read outstanding
      * on this queue is one the application may now read. */
-    return deliver_queued(*wire, context_of(*held)->blocks(), held->wire());
+    return deliver_queued(*wire, context_of(*held)->staging(), held->wire());
 }
 
 cl_int ClIcdRoot::flush(cl_command_queue queue)
@@ -1275,7 +1275,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
     /* What the application is entitled to read: the buffer's own bytes. A
      * write-invalidate map promises nothing about them, so it is not read. */
     if ((flags & CL_MAP_WRITE_INVALIDATE_REGION) == 0u) {
-        ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+        ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
         const cl_int     read = chunks.read(named->wire(), offset, bytes, at);
         if (read != CL_SUCCESS) {
             /* take_mapping answered `at`, so this is the row it took. */
@@ -1320,7 +1320,7 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
      * is the application's own writes, so it goes last and wins. */
     cl_int written = CL_SUCCESS;
     if (unmapped == CL_SUCCESS && region->writes_back()) {
-        ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+        ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
         written = chunks.write(named->wire(), region->offset(), region->bytes(), region->at());
     }
     context->give_back_mapping(*region);
@@ -1512,7 +1512,7 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     const cl_int reached = waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever);
     /* And a wait is where an application learns a non-blocking read is done,
      * so it is where the bytes have to be there. */
-    const cl_int delivered = deliver_reads(*wire, context->blocks(), handles, waited);
+    const cl_int delivered = deliver_reads(*wire, context->staging(), handles, waited);
     return reached != CL_SUCCESS ? reached : delivered;
 }
 
@@ -1531,7 +1531,7 @@ cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_by
     if (asked == CL_SUCCESS && name == CL_EVENT_COMMAND_EXECUTION_STATUS && value != nullptr &&
         value_bytes >= sizeof(cl_int) && *static_cast<const cl_int *>(value) == CL_COMPLETE) {
         const uint64_t handle = held->wire();
-        static_cast<void>(deliver_reads(*wire, context_of(*held)->blocks(), &handle, 1u));
+        static_cast<void>(deliver_reads(*wire, context_of(*held)->staging(), &handle, 1u));
     }
     return asked;
 }
@@ -1773,7 +1773,7 @@ void ClIcdRoot::deliver_watched(ClObject &event)
     ClientTransport *const wire = wire_of(event);
     if (wire == nullptr) return;
     const uint64_t handle = event.wire();
-    static_cast<void>(deliver_reads(*wire, context_of(event)->blocks(), &handle, 1u));
+    static_cast<void>(deliver_reads(*wire, context_of(event)->staging(), &handle, 1u));
 }
 
 void ClIcdRoot::release_watched(ClObject &event)
@@ -2088,7 +2088,7 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
         return nullptr;
     }
     if (copies) {
-        const cl_int filled = fill_image(*wire, context_of(*held)->blocks(), held->wire(), image, described, host_pointer);
+        const cl_int filled = fill_image(*wire, context_of(*held)->staging(), held->wire(), image, described, host_pointer);
         if (filled != CL_SUCCESS) {
             give_back_to_host(*wire, ClObject::Kind::mem, image);
             report_error(error, filled);
@@ -2115,7 +2115,7 @@ cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const
     if (!described.valid()) return CL_INVALID_VALUE;
     const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
-    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     read = chunks.read_image(named->wire(), described, into);
     if (read != CL_SUCCESS) return read;
     return marker_event(*wire, *held, event);
@@ -2138,7 +2138,7 @@ cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, cons
     if (!described.valid()) return CL_INVALID_VALUE;
     const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
-    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     written = chunks.write_image(named->wire(), described, from);
     if (written != CL_SUCCESS) return written;
     return marker_event(*wire, *held, event);
@@ -2159,7 +2159,7 @@ cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
-    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     read = chunks.read_buffer_rect(named->wire(), rect, into);
     if (read != CL_SUCCESS) return read;
     return marker_event(*wire, *held, event);
@@ -2180,7 +2180,7 @@ cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffe
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int drained = drain_unless_idle(*wire, *held);
     if (drained != CL_SUCCESS) return drained;
-    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->blocks());
+    ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
     const cl_int     written = chunks.write_buffer_rect(named->wire(), rect, from);
     if (written != CL_SUCCESS) return written;
     return marker_event(*wire, *held, event);

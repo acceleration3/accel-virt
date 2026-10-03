@@ -71,7 +71,12 @@ public:
     /* The calls held before they go as one batch (icd::BatchedTransport):
      * two of the largest a command can be, well inside the ring. */
     static constexpr size_t   batch_bytes = 2u * staging_bytes;
-    static constexpr uint64_t arena_bytes = KmtBlobArena::default_bytes;
+    static constexpr uint64_t arena_bytes = uint64_t{32} << 20u;
+    /* The arena's top, kept for transfers staged in it (ClStagingBlock) and
+     * never lent to a buffer: an application that maps a buffer per tile -
+     * Affinity does - fills the rest, and a transfer that finds no room goes
+     * inline, a gapped tile read a row per round trip. */
+    static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
     /* Mappings one context may hold at once. An application that maps more
      * buffers than this at the same time is told so at the map. Affinity
      * keeps a small buffer mapped for each of its tiles while a document is
@@ -113,6 +118,9 @@ public:
      * Empty of blocks, and not ready, where the capset offered no
      * host-visible memory - which is what makes a buffer staged instead. */
     ClArenaBlocks   &blocks();
+    /* The blocks its transfers are staged in: the arena's reserved top,
+     * likewise not ready without an arena. */
+    ClArenaBlocks   &staging();
     /* Whether the context has been lost, without asking for a transport. */
     bool             lost() const;
     /* The shared allocations made on this context. */
@@ -170,6 +178,7 @@ private:
     icd::HostChannel                     channel_;
     ObjectStorage<icd::LockedTransport>  locked_;
     ClArenaBlocks                        blocks_;
+    ClArenaBlocks                        staging_;
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     MappedRegion                         mappings_[max_mappings];

@@ -75,12 +75,19 @@ constexpr std::uint64_t host_mapped = 0x7F0000008000ull;
 
 constexpr std::size_t buffer_bytes = 256u;
 
-/* `arena` says whether the device gives the context one: a blob import that
- * fails is a device with no host-visible memory to lend, which is the staged
- * path's precondition. */
+/* What a context's make is answered for its arena: given, or refused at its
+ * size and again at the half it asks for next - a device with no host-visible
+ * memory to lend, which is the staged path's precondition. */
+void arena_answers(ClIcdRig &rig, bool arena, std::uint64_t handle)
+{
+    rig.host().blob_import(arena ? 0u : 1u, arena ? handle : 0u);
+    if (!arena) rig.host().blob_import(1u, 0u);
+}
+
+/* `arena` says whether the device gives the context one. */
 void device_opens(ClIcdRig &rig, bool arena)
 {
-    rig.host().blob_import(arena ? 0u : 1u, arena ? 0x77u : 0u);
+    arena_answers(rig, arena, 0x77u);
     rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
     rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
     rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -99,7 +106,7 @@ public:
         cl_uint      devices = 0u;
         if (rig_.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices) != CL_SUCCESS)
             return;
-        rig_.host().blob_import(arena ? 0u : 1u, arena ? 0x78u : 0u);
+        arena_answers(rig_, arena, 0x78u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_handle(host_context, CL_SUCCESS);

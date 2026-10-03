@@ -18,7 +18,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), send_lock_(send_lock), log_(log),
       link_(connection), gl_share_(0u), 
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
-      locked_(), blocks_(blocks_lock),
+      locked_(), blocks_(blocks_lock), staging_(blocks_lock),
       svm_(memory), external_(handles, log), mappings_(), properties_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -77,10 +77,12 @@ Status GuestClContext::build(uint32_t gl_share)
     }
     /* The arena is the memory a mappable buffer is made over, on both sides:
      * the device holds it as one import, so an offset names the same bytes
-     * here and there and a map costs no copy. Not its last word, which is the
-     * host's to publish errors in - and so not the page that holds it, since
-     * blocks are whole pages. */
-    blocks_.lend(channel_.arena_view(), channel_.arena_bytes() - KmtBlobArena::error_word_bytes);
+     * here and there and a map costs no copy. Its top is the transfers' own;
+     * of that, not its last word, which is the host's to publish errors in -
+     * and so not the page that holds it, since blocks are whole pages. */
+    const uint64_t buffers = channel_.arena_bytes() - staging_reserve;
+    blocks_.lend(channel_.arena_view(), buffers);
+    staging_.lend(channel_.arena_view() + buffers, staging_reserve - KmtBlobArena::error_word_bytes);
     log_.write("avcl: buffers map through the blob arena; no copy");
     return Status::ok;
 }
@@ -101,6 +103,7 @@ void GuestClContext::teardown()
     /* Before the arena goes: a block naming memory that is gone is an
      * address this context must not be able to hand out. */
     blocks_.lend(nullptr, 0u);
+    staging_.lend(nullptr, 0u);
     /* What is still held reaches the host before its context goes; a lost
      * context's arena import is forgotten rather than released, since the
      * device frees it with the context. */
@@ -126,6 +129,12 @@ ClientTransport *GuestClContext::wire()
         return nullptr;
     }
     return &locked_.object();
+}
+
+ClArenaBlocks &GuestClContext::staging()
+{
+    AV_SCOPE("GuestClContext::staging");
+    return staging_;
 }
 
 ClArenaBlocks &GuestClContext::blocks()

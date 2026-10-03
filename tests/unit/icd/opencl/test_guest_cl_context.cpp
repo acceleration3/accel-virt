@@ -60,12 +60,15 @@ GuestClContext made_context(ClContextRig &rig)
                           rig.handles());
 }
 
-/* What the device answers the context's blob arena. A make asks exactly once,
- * and a host that answers nothing faults the transport rather than declining -
- * which is a different outcome and has its own case below. */
+/* What the device answers the context's blob arena. A make asks once for an
+ * arena it is given, and once more at half the size for one it is refused -
+ * the smallest it will take - and a host that answers nothing faults the
+ * transport rather than declining, which is a different outcome and has its
+ * own case below. */
 void arena_answers(ClContextRig &rig, std::uint32_t status = 0u)
 {
     rig.host().blob_import(status, 0x77u);
+    if (status != 0u) rig.host().blob_import(status, 0x77u);
 }
 
 }  // namespace
@@ -439,23 +442,36 @@ TEST(guest_cl_context, a_context_says_whether_it_got_an_arena)
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(!context.has_arena()); } }
 
-/* The arena's last word is where the host publishes errors, so no block - a
- * buffer's or a transfer's - is ever carved over it: every page but its last
- * is lent out, and what is lent is memory the wire names by offset. */
-TEST(guest_cl_context, the_arena_s_blocks_stop_short_of_the_host_s_error_word)
+/* The arena is two regions. The buffers' is its bottom, from offset 0, so a
+ * block's offset is the one the host adds to the arena's address; the
+ * transfers' is its top, kept from the buffers, so an application whose
+ * buffers fill their part still has transfers staged. And the top stops short
+ * of the arena's last word, where the host publishes errors. Every block of
+ * either is memory the wire names by offset. */
+TEST(guest_cl_context, the_arena_lends_its_bottom_to_buffers_and_its_top_to_transfers)
 { ClContextRig rig;
   arena_answers(rig);
   GuestClContext context = made_context(rig);
   CHECK_STATUS(context.make(), Status::ok);
   const std::uint64_t page = av::clicd::ClArenaBlocks::alignment;
+  const std::uint64_t buffers = GuestClContext::arena_bytes - GuestClContext::staging_reserve;
   std::uint64_t       offset = 0u;
-  CHECK(!context.blocks().take(GuestClContext::arena_bytes, offset));
-  CHECK(!context.blocks().take(GuestClContext::arena_bytes - page + 1u, offset));
-  CHECK(context.blocks().take(GuestClContext::arena_bytes - page, offset));
+  CHECK(!context.blocks().take(buffers + 1u, offset));
+  CHECK(context.blocks().take(buffers, offset));
+  CHECK_EQ(offset, 0u);
   std::uint64_t named = ~std::uint64_t{0};
-  CHECK(context.wire()->blobs().holds(context.blocks().at(offset, GuestClContext::arena_bytes - page),
-                                      GuestClContext::arena_bytes - page, named));
-  CHECK_EQ(named, offset); }
+  CHECK(context.wire()->blobs().holds(context.blocks().at(0u, buffers), buffers, named));
+  CHECK_EQ(named, 0u);
+  /* The buffers' part is full; the transfers' is untouched. */
+  std::uint64_t staged = 0u;
+  CHECK(!context.staging().take(GuestClContext::staging_reserve, staged));
+  CHECK(!context.staging().take(GuestClContext::staging_reserve - page + 1u, staged));
+  CHECK(context.staging().take(GuestClContext::staging_reserve - page, staged));
+  CHECK_EQ(staged, 0u);
+  CHECK(context.wire()->blobs().holds(context.staging().at(staged, GuestClContext::staging_reserve - page),
+                                      GuestClContext::staging_reserve - page, named));
+  CHECK_EQ(named, buffers);
+  CHECK(context.invariants_hold()); }
 
 /* The invariant reaches what the context owns, not only its own fields: a
  * broken allocation or a broken mapping is a broken context. */
