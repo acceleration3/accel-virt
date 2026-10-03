@@ -4,6 +4,7 @@
  * its place - and then how many commands it took and what each named. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_transfer_host.hpp"
+#include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_image_region.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -14,6 +15,7 @@
 #include <cstring>
 
 using av::ClTransferHost;
+using av::clicd::ClBufferRect;
 using av::clicd::ClImageRegion;
 using av::clicd::ClTransferChunks;
 
@@ -302,3 +304,125 @@ TEST(cl_transfer_chunks, a_refused_image_piece_ends_the_transfer_with_the_hosts_
     ClTransferChunks chunks(host, queue);
     CHECK_EQ(chunks.write_image(ClTransferHost::image_handle, narrow, memory.at(0u)), CL_INVALID_OPERATION);
     CHECK_EQ(host.commands(), 1u); } }
+
+/* ---- buffer rectangles -------------------------------------------------------- */
+
+TEST(cl_transfer_chunks, packed_rectangle_rows_come_back_as_runs_that_fit_a_reply)
+{ ClTransferHost host;
+  host.fill(5u);
+  ClTransferChunks   chunks(host, queue);
+  /* 3000 bytes a row out of a buffer 4096 bytes wide, more rows than a reply. */
+  constexpr std::size_t width = 3000u, rows = 600u, pitch = 4096u;
+  const std::size_t  corner[3] = {100u, 2u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, rows, 1u};
+  const ClBufferRect rect(corner, host_corner, extent, pitch, 0u, 0u, 0u);
+  CHECK_EQ(rect.check(), CL_SUCCESS);
+  Memory into(rows * width);
+  CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, into.at(0u)), CL_SUCCESS);
+  bool every_byte = true;
+  for (std::size_t y = 0u; y < rows; ++y)
+      for (std::size_t x = 0u; x < width; ++x)
+          every_byte = every_byte && *into.at(y * width + x) == host.buffer_at((2u + y) * pitch + 100u + x);
+  CHECK(every_byte);
+  const std::size_t per_command = ClTransferChunks::read_room / width;
+  CHECK_EQ(host.commands(), static_cast<std::uint32_t>((rows + per_command - 1u) / per_command));
+  CHECK_EQ(host.command(0u).id, av::clproto::kCmd_clEnqueueReadBufferRect);
+  CHECK(host.command(0u).blocking);
+  CHECK_EQ(host.command(0u).region[1], per_command);
+  CHECK_EQ(host.command(0u).buffer_pitch[0], pitch);
+  CHECK_EQ(host.command(1u).origin[1], 2u + per_command); }
+
+TEST(cl_transfer_chunks, rectangle_rows_with_a_gap_come_back_one_at_a_time_and_the_gap_is_left_alone)
+{ ClTransferHost host;
+  host.fill(9u);
+  ClTransferChunks   chunks(host, queue);
+  const std::size_t  corner[3] = {7u, 3u, 1u}, host_corner[3] = {2u, 1u, 0u}, extent[3] = {20u, 5u, 1u};
+  /* The application's rows are 32 bytes apart, its rectangle 2 bytes and a
+   * row in; the buffer's rows 64 apart and its slices 1024. */
+  const ClBufferRect rect(corner, host_corner, extent, 64u, 1024u, 32u, 0u);
+  CHECK_EQ(rect.check(), CL_SUCCESS);
+  Memory into(8u * 32u);
+  CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, into.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 5u);
+  for (std::size_t y = 0u; y < 5u; ++y) {
+      const std::size_t row = (1u + y) * 32u + 2u;
+      CHECK_EQ(*into.at(row), host.buffer_at(1024u + (3u + y) * 64u + 7u));
+      CHECK_EQ(*into.at(row + 19u), host.buffer_at(1024u + (3u + y) * 64u + 26u));
+      /* Before the corner and past the row: the application's own. */
+      CHECK_EQ(*into.at(row - 1u), 0xEEu);
+      CHECK_EQ(*into.at(row + 20u), 0xEEu);
+  }
+  CHECK_EQ(*into.at(0u), 0xEEu);
+  CHECK_EQ(host.command(4u).origin[1], 7u);
+  CHECK_EQ(host.command(4u).origin[2], 1u);
+  CHECK_EQ(host.command(4u).buffer_pitch[1], 1024u); }
+
+TEST(cl_transfer_chunks, a_rectangle_row_longer_than_a_reply_comes_back_in_runs)
+{ ClTransferHost host;
+  host.fill(1u);
+  ClTransferChunks   chunks(host, queue);
+  const std::size_t  width = ClTransferChunks::read_room + 10u;
+  const std::size_t  corner[3] = {3u, 0u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, 2u, 1u};
+  const ClBufferRect rect(corner, host_corner, extent, width + 16u, 0u, 0u, 0u);
+  Memory             into(2u * width);
+  CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, into.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 4u);
+  CHECK_EQ(host.command(1u).region[0], 10u);
+  CHECK_EQ(host.command(1u).origin[0], 3u + ClTransferChunks::read_room);
+  CHECK_EQ(*into.at(width - 1u), host.buffer_at(3u + width - 1u));
+  CHECK_EQ(*into.at(width), host.buffer_at(width + 16u + 3u)); }
+
+TEST(cl_transfer_chunks, rectangle_rows_go_to_the_buffer_at_its_pitch_from_the_applications_corner)
+{ ClTransferHost host;
+  host.fill(0u);
+  ClTransferChunks   chunks(host, queue);
+  /* Two slices of ten 400-byte rows. The application's rows are 448 apart
+   * from 8 bytes and a row in; the buffer's 512 apart, its slices 10240. */
+  const std::size_t  corner[3] = {16u, 4u, 1u}, host_corner[3] = {8u, 1u, 0u}, extent[3] = {400u, 10u, 2u};
+  const ClBufferRect rect(corner, host_corner, extent, 512u, 10240u, 448u, 448u * 12u);
+  CHECK_EQ(rect.check(), CL_SUCCESS);
+  Memory from(2u * 448u * 12u);
+  for (std::size_t index = 0u; index < 2u * 448u * 12u; ++index) *from.at(index) = static_cast<std::uint8_t>(index * 7u);
+  CHECK_EQ(chunks.write_buffer_rect(ClTransferHost::buffer_handle, rect, from.at(0u)), CL_SUCCESS);
+  bool every_byte = true;
+  for (std::size_t z = 0u; z < 2u; ++z)
+      for (std::size_t y = 0u; y < 10u; ++y)
+          for (std::size_t x = 0u; x < 400u; ++x)
+              every_byte = every_byte && host.buffer_at((1u + z) * 10240u + (4u + y) * 512u + 16u + x) ==
+                                             *from.at(z * 448u * 12u + (1u + y) * 448u + 8u + x);
+  CHECK(every_byte);
+  /* Either side of a row the buffer keeps what it held. */
+  CHECK_EQ(host.buffer_at(10240u + 4u * 512u + 15u), static_cast<std::uint8_t>(10240u + 4u * 512u + 15u));
+  CHECK_EQ(host.buffer_at(10240u + 4u * 512u + 416u), static_cast<std::uint8_t>(10240u + 4u * 512u + 416u));
+  /* A slice fits one command, at the application's own pitch. */
+  CHECK_EQ(host.commands(), 2u);
+  CHECK_EQ(host.command(0u).id, av::clproto::kCmd_clEnqueueWriteBufferRect);
+  CHECK_EQ(host.command(0u).row_pitch, 448u);
+  CHECK_EQ(host.command(0u).bytes, 9u * 448u + 400u);
+  CHECK_EQ(host.command(1u).origin[2], 2u); }
+
+TEST(cl_transfer_chunks, a_rectangle_row_longer_than_the_staging_room_goes_in_packed_runs)
+{ ClTransferHost host;
+  ClTransferChunks   chunks(host, queue);
+  const std::size_t  width = ClTransferChunks::write_room + 5u;
+  const std::size_t  corner[3] = {0u, 1u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, 1u, 1u};
+  const ClBufferRect rect(corner, host_corner, extent, width, 0u, 0u, 0u);
+  Memory             from(width);
+  for (std::size_t index = 0u; index < width; ++index) *from.at(index) = static_cast<std::uint8_t>(index ^ 0x5Au);
+  CHECK_EQ(chunks.write_buffer_rect(ClTransferHost::buffer_handle, rect, from.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 2u);
+  CHECK_EQ(host.command(1u).region[0], 5u);
+  CHECK_EQ(host.command(1u).row_pitch, 0u);
+  CHECK_EQ(host.buffer_at(width + width - 1u), static_cast<std::uint8_t>((width - 1u) ^ 0x5Au)); }
+
+TEST(cl_transfer_chunks, a_refused_rectangle_piece_ends_the_transfer_with_the_hosts_error)
+{ ClTransferHost host;
+  ClTransferChunks   chunks(host, queue);
+  const std::size_t  corner[3] = {0u, 0u, 0u}, extent[3] = {16u, 4u, 1u};
+  const ClBufferRect rect(corner, corner, extent, 32u, 0u, 32u, 0u);
+  Memory             memory(4u * 32u);
+  host.refuse(0u, CL_INVALID_VALUE);
+  CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, memory.at(0u)), CL_INVALID_VALUE);
+  CHECK_EQ(host.commands(), 1u);
+  host.refuse(1u, CL_OUT_OF_RESOURCES);
+  CHECK_EQ(chunks.write_buffer_rect(ClTransferHost::buffer_handle, rect, memory.at(0u)), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(host.commands(), 2u); }

@@ -11,6 +11,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
+#include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -23,6 +24,7 @@
 
 using av::ClIcdRig;
 using av::FakeClLoader;
+using av::clicd::ClBufferRect;
 
 namespace {
 
@@ -912,3 +914,171 @@ TEST(cl_image_paths, the_1_1_image_calls_make_the_image_clcreateimage_would_be_d
   CHECK_EQ(error, CL_INVALID_HOST_PTR);
   CHECK_EQ(rig.kmt().commands(), at);
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- buffer rectangles -------------------------------------------------------- */
+
+TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_its_rows)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  /* Four 8-byte rows of a buffer 16 bytes wide, into packed memory. */
+  const size_t        corner[3] = {4u, 2u, 0u}, at[3] = {0u, 0u, 0u}, region[3] = {8u, 4u, 1u};
+  unsigned char       answered[32] = {};
+  for (std::size_t index = 0u; index < sizeof answered; ++index) answered[index] = static_cast<unsigned char>(index + 1u);
+  unsigned char       into[32] = {};
+  run.drains();
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event            event = nullptr;
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(table_of(run.queue())->clEnqueueReadBufferRect(run.queue(), run.buffer(), CL_FALSE, corner, at, region, 16u,
+                                                          0u, 0u, 0u, into, 0u, nullptr, &event),
+           CL_SUCCESS);
+  for (std::size_t index = 0u; index < sizeof into; ++index) CHECK_EQ(into[index], answered[index]);
+  /* The drain, the one rectangle, and the marker the event is. */
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueReadBufferRect);
+  CHECK(carries(rig.kmt(), sent + 4u, host_buffer));
+  CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  CHECK(event != nullptr);
+
+  /* The host's refusal is the application's, and makes no event. */
+  run.drains();
+  rig.host().cl_bytes(CL_INVALID_VALUE, answered, 0u);
+  cl_event refused = nullptr;
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
+                                               ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, &refused),
+           CL_INVALID_VALUE);
+  CHECK(refused == nullptr);
+  /* A drain the host refuses ends the read before it starts. */
+  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
+                                               ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_image_paths, a_buffer_rectangle_write_waits_for_its_queue_and_asks_for_an_event_only_when_wanted)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const size_t        corner[3] = {0u, 1u, 0u}, at[3] = {2u, 0u, 0u}, region[3] = {8u, 4u, 1u};
+  unsigned char       from[64] = {};
+  run.drains();
+  rig.host().cl_result(CL_SUCCESS);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(table_of(run.queue())->clEnqueueWriteBufferRect(run.queue(), run.buffer(), CL_TRUE, corner, at, region, 16u,
+                                                           0u, 16u, 0u, from, 0u, nullptr, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueWriteBufferRect);
+  CHECK(carries(rig.kmt(), sent + 4u, host_buffer));
+
+  run.drains();
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(),
+                                                ClBufferRect(corner, at, region, 16u, 0u, 16u, 0u), from, &event),
+           CL_SUCCESS);
+  CHECK(event != nullptr);
+
+  run.drains();
+  rig.host().cl_result(CL_INVALID_OPERATION);
+  cl_event refused = nullptr;
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(),
+                                                ClBufferRect(corner, at, region, 16u, 0u, 16u, 0u), from, &refused),
+           CL_INVALID_OPERATION);
+  CHECK(refused == nullptr);
+  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(),
+                                                ClBufferRect(corner, at, region, 16u, 0u, 16u, 0u), from, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_image_paths, a_buffer_rectangle_copy_is_enqueued_with_the_hosts_numbers_and_its_event)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  rig.host().cl_handle(host_buffer + 1u, CL_SUCCESS);
+  cl_mem other = rig.root().create_buffer(run.context(), CL_MEM_READ_WRITE, 256u, nullptr, nullptr, nullptr);
+  CHECK(other != nullptr);
+  const size_t from_corner[3] = {1u, 1u, 0u}, to_corner[3] = {0u, 2u, 0u}, region[3] = {8u, 3u, 1u};
+
+  /* No event asked for: sent without waiting for its answer. */
+  std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(table_of(run.queue())->clEnqueueCopyBufferRect(run.queue(), run.buffer(), other, from_corner, to_corner,
+                                                          region, 16u, 0u, 32u, 0u, 0u, nullptr, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  cl_event event = nullptr;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), other, from_corner, to_corner, region, 16u,
+                                               0u, 32u, 0u, &event),
+           CL_SUCCESS);
+  CHECK(event != nullptr);
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueCopyBufferRect);
+  CHECK(carries(rig.kmt(), sent, host_buffer));
+  CHECK(carries(rig.kmt(), sent, host_buffer + 1u));
+
+  cl_event refused = nullptr;
+  rig.host().cl_enqueued(CL_INVALID_VALUE, 0u);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), other, from_corner, to_corner, region, 4u,
+                                               0u, 32u, 0u, &refused),
+           CL_INVALID_VALUE);
+  CHECK(refused == nullptr);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_image_paths, a_buffer_rectangle_the_api_would_refuse_asks_the_host_nothing)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const std::uint32_t    sent = rig.kmt().commands();
+  const cl_mem           not_a_buffer = reinterpret_cast<cl_mem>(run.kernel());
+  const cl_command_queue not_a_queue = reinterpret_cast<cl_command_queue>(run.context());
+  const size_t           corner[3] = {0u, 0u, 0u}, region[3] = {8u, 2u, 1u};
+  const ClBufferRect     rect(corner, corner, region, 0u, 0u, 0u, 0u);
+  const ClBufferRect     too_narrow(corner, corner, region, 4u, 0u, 0u, 0u);
+  unsigned char          memory[64] = {};
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(not_a_queue, run.buffer(), rect, memory, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), not_a_buffer, rect, memory, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(), rect, nullptr, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(), too_narrow, memory, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(not_a_queue, run.buffer(), rect, memory, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), not_a_buffer, rect, memory, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(), rect, nullptr, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(), too_narrow, memory, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(not_a_queue, run.buffer(), run.buffer(), corner, corner, region, 0u,
+                                               0u, 0u, 0u, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), not_a_buffer, run.buffer(), corner, corner, region, 0u,
+                                               0u, 0u, 0u, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), not_a_buffer, corner, corner, region, 0u,
+                                               0u, 0u, 0u, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), run.buffer(), nullptr, corner, region, 0u,
+                                               0u, 0u, 0u, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), run.buffer(), corner, nullptr, region, 0u,
+                                               0u, 0u, 0u, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), run.buffer(), corner, corner, nullptr, 0u,
+                                               0u, 0u, 0u, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), sent); }

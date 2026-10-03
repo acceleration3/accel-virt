@@ -42,6 +42,12 @@ public:
     size_t row_offset(size_t row, size_t slice) const;
     /* The image's own coordinates of texel `x` of that row. */
     void   origin_of(size_t x, size_t row, size_t slice, size_t *into) const;
+    /* Where `point` - an element, a row and a slice - lies in this layout,
+     * from where the layout starts: false where that does not fit a size_t. */
+    [[nodiscard]] bool offset_of(const size_t *point, size_t &offset) const;
+    /* A buffer rectangle's rule for a pitch the application named: a slice is
+     * a whole number of rows. */
+    bool   slices_are_whole_rows() const;
 
 private:
     size_t origin_[3];

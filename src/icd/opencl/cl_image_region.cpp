@@ -91,4 +91,22 @@ void ClImageRegion::origin_of(size_t x, size_t row, size_t slice, size_t *into) 
     into[2] = origin_[2] + slice;
 }
 
+bool ClImageRegion::offset_of(const size_t *point, size_t &offset) const
+{
+    AV_SCOPE("ClImageRegion::offset_of");
+    size_t in_slices = 0u, in_rows = 0u, in_row = 0u;
+    if (__builtin_mul_overflow(point[2], slice_pitch(), &in_slices) ||
+        __builtin_mul_overflow(point[1], row_pitch(), &in_rows) ||
+        __builtin_mul_overflow(point[0], element_bytes_, &in_row))
+        return false;
+    return !__builtin_add_overflow(in_slices, in_rows, &offset) && !__builtin_add_overflow(offset, in_row, &offset);
+}
+
+bool ClImageRegion::slices_are_whole_rows() const
+{
+    AV_SCOPE("ClImageRegion::slices_are_whole_rows");
+    const size_t row = row_pitch();
+    return row != 0u && slice_pitch() % row == 0u;
+}
+
 }  // namespace av::clicd

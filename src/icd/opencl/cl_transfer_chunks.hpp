@@ -30,6 +30,7 @@ class ClientTransport;
 
 namespace av::clicd {
 
+class ClBufferRect;
 class ClImageRegion;
 
 class ClTransferChunks {
@@ -55,6 +56,12 @@ public:
      * gap is the application's memory, not the host's to write. */
     cl_int read_image(uint64_t image, const ClImageRegion &region, void *into);
     cl_int write_image(uint64_t image, const ClImageRegion &region, const void *from);
+    /* A rectangle of a buffer (checked), cut as an image's rows are, from the
+     * application's corner of it in `into` or `from`. Each piece is a
+     * rectangle of its own at the buffer's pitches, its bytes packed from its
+     * own corner. */
+    cl_int read_buffer_rect(uint64_t buffer, const ClBufferRect &rect, void *into);
+    cl_int write_buffer_rect(uint64_t buffer, const ClBufferRect &rect, const void *from);
 
     /* Commands sent, which is what a test counts a transfer's pieces by. */
     uint32_t commands() const;

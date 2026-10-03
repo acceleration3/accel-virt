@@ -59,6 +59,8 @@ class ThreadLock;
 
 namespace av::clicd {
 
+class ClBufferRect;
+
 class GlShareSource;
 struct ClIcdRootProbe;
 
@@ -194,6 +196,19 @@ public:
     cl_int enqueue_write_image(cl_command_queue queue, cl_mem image, const size_t *origin,
                                const size_t *region, size_t row_pitch, size_t slice_pitch,
                                const void *from, cl_event *event);
+    /* A buffer's rectangle, as an image's region is moved: the queue drained,
+     * then commands that fit, so a read is complete when it returns whatever
+     * the application asked for - which the API allows. */
+    cl_int enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect, void *into,
+                                    cl_event *event);
+    cl_int enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect,
+                                     const void *from, cl_event *event);
+    /* Nothing crosses but handles and the geometry: enqueued as it is, the
+     * host refusing what the API refuses. */
+    cl_int enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, cl_mem to, const size_t *from_origin,
+                                    const size_t *to_origin, const size_t *region, size_t from_row_pitch,
+                                    size_t from_slice_pitch, size_t to_row_pitch, size_t to_slice_pitch,
+                                    cl_event *event);
     /* The three sampler properties and nothing else; the deprecated
      * clCreateSampler is the same list written out. */
     cl_sampler create_sampler(cl_context context, const uint64_t *properties, cl_int *error);

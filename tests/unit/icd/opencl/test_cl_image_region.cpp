@@ -72,3 +72,36 @@ TEST(cl_image_region, extents_whose_bytes_do_not_fit_a_size_are_refused_rather_t
   CHECK(!ClImageRegion(no_origin, tall, 0u, 0u, 4u).valid());
   const std::size_t deep[3] = {1024u, 1024u, huge};
   CHECK(!ClImageRegion(no_origin, deep, 0u, 0u, 4u).valid()); }
+
+TEST(cl_image_region, a_point_is_found_at_the_layouts_own_pitches)
+{ const ClImageRegion region(no_origin, extent, 64u, 512u, 4u);
+  const std::size_t   point[3] = {3u, 2u, 1u};
+  std::size_t         offset = 0u;
+  CHECK(region.offset_of(point, offset));
+  CHECK_EQ(offset, 512u + 2u * 64u + 3u * 4u);
+  const ClImageRegion tight(no_origin, extent, 0u, 0u, 4u);
+  CHECK(tight.offset_of(point, offset));
+  CHECK_EQ(offset, 160u + 2u * 40u + 12u); }
+
+/* Every term that can wrap, and a sum of terms that each fit. */
+TEST(cl_image_region, a_point_past_what_a_size_reaches_is_not_found)
+{ const ClImageRegion region(no_origin, extent, 64u, 512u, 4u);
+  std::size_t         offset = 7u;
+  const std::size_t   slices[3] = {0u, 0u, SIZE_MAX / 256u};
+  const std::size_t   rows[3] = {0u, SIZE_MAX / 32u, 0u};
+  const std::size_t   texels[3] = {SIZE_MAX / 2u, 0u, 0u};
+  CHECK(!region.offset_of(slices, offset));
+  CHECK(!region.offset_of(rows, offset));
+  CHECK(!region.offset_of(texels, offset));
+  const std::size_t   rows_and_slices[3] = {0u, SIZE_MAX / 128u, SIZE_MAX / 512u};
+  CHECK(!region.offset_of(rows_and_slices, offset));
+  const std::size_t   all_three[3] = {SIZE_MAX / 4u, SIZE_MAX / 128u, 0u};
+  CHECK(!region.offset_of(all_three, offset)); }
+
+TEST(cl_image_region, a_slice_is_whole_rows_only_at_a_multiple_of_the_row_pitch)
+{ CHECK(ClImageRegion(no_origin, extent, 64u, 512u, 4u).slices_are_whole_rows());
+  CHECK(!ClImageRegion(no_origin, extent, 64u, 520u, 4u).slices_are_whole_rows());
+  CHECK(ClImageRegion(no_origin, extent, 0u, 0u, 4u).slices_are_whole_rows());
+  /* A region of nothing has no row to count slices in. */
+  const std::size_t nothing[3] = {0u, 4u, 3u};
+  CHECK(!ClImageRegion(no_origin, nothing, 0u, 0u, 4u).slices_are_whole_rows()); }

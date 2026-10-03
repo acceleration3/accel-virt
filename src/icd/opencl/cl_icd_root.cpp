@@ -18,6 +18,7 @@
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_image_region.hpp"
+#include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "icd/opencl/gl_share_source.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
@@ -1980,6 +1981,75 @@ cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, cons
     const cl_int     written = chunks.write_image(named->wire(), described, from);
     if (written != CL_SUCCESS) return written;
     return marker_event(*wire, *held, event);
+}
+
+cl_int ClIcdRoot::enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect,
+                                           void *into, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_read_buffer_rect");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const named = judged(buffer, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (into == nullptr) return CL_INVALID_VALUE;
+    const cl_int checked = rect.check();
+    if (checked != CL_SUCCESS) return checked;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    const cl_int drained = drain(*wire, held->wire());
+    if (drained != CL_SUCCESS) return drained;
+    ClTransferChunks chunks(*wire, held->wire());
+    const cl_int     read = chunks.read_buffer_rect(named->wire(), rect, into);
+    if (read != CL_SUCCESS) return read;
+    return marker_event(*wire, *held, event);
+}
+
+cl_int ClIcdRoot::enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect,
+                                            const void *from, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_write_buffer_rect");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const named = judged(buffer, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (from == nullptr) return CL_INVALID_VALUE;
+    const cl_int checked = rect.check();
+    if (checked != CL_SUCCESS) return checked;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    const cl_int drained = drain(*wire, held->wire());
+    if (drained != CL_SUCCESS) return drained;
+    ClTransferChunks chunks(*wire, held->wire());
+    const cl_int     written = chunks.write_buffer_rect(named->wire(), rect, from);
+    if (written != CL_SUCCESS) return written;
+    return marker_event(*wire, *held, event);
+}
+
+cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, cl_mem to,
+                                           const size_t *from_origin, const size_t *to_origin, const size_t *region,
+                                           size_t from_row_pitch, size_t from_slice_pitch, size_t to_row_pitch,
+                                           size_t to_slice_pitch, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_copy_buffer_rect");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const source = judged(from, ClObject::Kind::mem);
+    ClObject *const target = judged(to, ClObject::Kind::mem);
+    if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    uint64_t                 produced = 0u;
+    icd::UnansweredTransport unanswered(*wire);
+    const cl_int             copied = av::clproto::av_clEnqueueCopyBufferRect(
+        event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), from_origin, to_origin,
+        region, from_row_pitch, from_slice_pitch, to_row_pitch, to_slice_pitch, 0u, nullptr,
+        event != nullptr ? &produced : nullptr);
+    if (copied == CL_SUCCESS && event != nullptr) {
+        *event = static_cast<cl_event>(
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
+    }
+    return copied;
 }
 
 cl_sampler ClIcdRoot::create_sampler(cl_context context, const uint64_t *properties, cl_int *error)

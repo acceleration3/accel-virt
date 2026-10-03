@@ -2,7 +2,8 @@
  * transfers the ICD cuts into pieces (ClTransferChunks).
  *
  * It decodes what the generated client sends for clEnqueueReadBuffer,
- * clEnqueueWriteBuffer, clEnqueueReadImage and clEnqueueWriteImage, applies it
+ * clEnqueueWriteBuffer, clEnqueueReadImage, clEnqueueWriteImage and the
+ * buffer rectangles clEnqueueReadBufferRect and clEnqueueWriteBufferRect, applies it
  * to storage of its own and answers as the generated server would: a result,
  * and for a read the bytes. So a test states what the buffer or image holds
  * after a transfer, not which commands were sent - and the commands are kept
@@ -41,6 +42,10 @@ public:
         std::uint64_t origin[3];
         std::uint64_t region[3];
         std::uint64_t row_pitch;
+        /* A buffer rectangle's own: its row and slice pitch in the buffer, and
+         * the application's corner, which the ICD always sends as zero. */
+        std::uint64_t buffer_pitch[2];
+        std::uint64_t host_origin[3];
         bool          blocking;
     };
 
@@ -84,6 +89,9 @@ private:
     /* Applies one command and writes its answer; false for one it cannot read. */
     bool buffer_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer);
     bool image_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer);
+    bool rect_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer);
+    /* Where byte `x` of row `y` of slice `z` of a rectangle lies in the buffer. */
+    std::size_t rect_offset(const Command &seen, std::size_t x, std::size_t y, std::size_t z) const;
     std::size_t image_offset(std::size_t x, std::size_t y, std::size_t z) const;
 
     std::uint8_t   *request_;

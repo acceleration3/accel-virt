@@ -11,6 +11,7 @@
 #include "icd/opencl/cl_dispatch_table.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/cl_noted_error.hpp"
@@ -542,6 +543,49 @@ cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_b
                                    event));
 }
 
+cl_int CL_API_CALL enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, cl_bool,
+                                            const size_t *buffer_origin, const size_t *host_origin,
+                                            const size_t *region, size_t buffer_row_pitch, size_t buffer_slice_pitch,
+                                            size_t host_row_pitch, size_t host_slice_pitch, void *into, cl_uint,
+                                            const cl_event *, cl_event *event)
+{
+    AV_SCOPE("enqueue_read_buffer_rect");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueReadBufferRect",
+                      root.enqueue_read_buffer_rect(queue, buffer,
+                                                    ClBufferRect(buffer_origin, host_origin, region, buffer_row_pitch,
+                                                                 buffer_slice_pitch, host_row_pitch, host_slice_pitch),
+                                                    into, event));
+}
+
+cl_int CL_API_CALL enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, cl_bool,
+                                             const size_t *buffer_origin, const size_t *host_origin,
+                                             const size_t *region, size_t buffer_row_pitch,
+                                             size_t buffer_slice_pitch, size_t host_row_pitch,
+                                             size_t host_slice_pitch, const void *from, cl_uint, const cl_event *,
+                                             cl_event *event)
+{
+    AV_SCOPE("enqueue_write_buffer_rect");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueWriteBufferRect",
+                      root.enqueue_write_buffer_rect(queue, buffer,
+                                                     ClBufferRect(buffer_origin, host_origin, region, buffer_row_pitch,
+                                                                  buffer_slice_pitch, host_row_pitch, host_slice_pitch),
+                                                     from, event));
+}
+
+cl_int CL_API_CALL enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, cl_mem to,
+                                            const size_t *from_origin, const size_t *to_origin, const size_t *region,
+                                            size_t from_row_pitch, size_t from_slice_pitch, size_t to_row_pitch,
+                                            size_t to_slice_pitch, cl_uint, const cl_event *, cl_event *event)
+{
+    AV_SCOPE("enqueue_copy_buffer_rect");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueCopyBufferRect",
+                      root.enqueue_copy_buffer_rect(queue, from, to, from_origin, to_origin, region, from_row_pitch,
+                                                    from_slice_pitch, to_row_pitch, to_slice_pitch, event));
+}
+
 cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_bool,
                                        const size_t *origin, const size_t *region, size_t row_pitch,
                                        size_t slice_pitch, const void *from, cl_uint,
@@ -782,6 +826,9 @@ void ClDispatchTable::fill()
     table_.clGetProgramBuildInfo = &get_program_build_info;
     table_.clGetKernelWorkGroupInfo = &get_kernel_work_group_info;
     table_.clEnqueueCopyBuffer = &enqueue_copy_buffer;
+    table_.clEnqueueReadBufferRect = &enqueue_read_buffer_rect;
+    table_.clEnqueueWriteBufferRect = &enqueue_write_buffer_rect;
+    table_.clEnqueueCopyBufferRect = &enqueue_copy_buffer_rect;
     table_.clEnqueueFillBuffer = &enqueue_fill_buffer;
     table_.clEnqueueCopyImage = &enqueue_copy_image;
     table_.clCreateImage = &create_image;
@@ -806,7 +853,7 @@ void ClDispatchTable::fill()
     table_.clEnqueueAcquireGLObjects = &enqueue_acquire_gl;
     table_.clEnqueueReleaseGLObjects = &enqueue_release_gl;
     table_.clGetGLContextInfoKHR = &get_gl_context_info;
-    claimed_ = 73u;
+    claimed_ = 76u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
