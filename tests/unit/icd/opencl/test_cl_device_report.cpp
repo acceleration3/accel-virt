@@ -118,6 +118,18 @@ TEST(cl_device_report, a_luid_of_zero_is_reported_as_one_that_means_nothing)
   CHECK_EQ(luid[7], 0u);
   CHECK(report.invariants_hold()); }
 
+TEST(cl_device_report, it_names_the_adapter_it_is_on_and_no_other)
+{ ClDeviceReport report(adapter_luid);
+  CHECK(report.names_adapter(adapter_luid));
+  CHECK(!report.names_adapter(adapter_luid + 1u));
+  CHECK(!report.names_adapter(0u));
+  /* A report with no adapter names none - not even an application's zero,
+   * which would otherwise be the one LUID every adapterless report matched. */
+  ClDeviceReport unplaced(0u);
+  CHECK(!unplaced.names_adapter(0u));
+  unplaced.observe_luid(adapter_luid);
+  CHECK(unplaced.names_adapter(adapter_luid)); }
+
 TEST(cl_device_report, until_a_host_is_asked_the_report_is_this_icds_own_version)
 { ClDeviceReport report(adapter_luid);
   char text[64] = {};

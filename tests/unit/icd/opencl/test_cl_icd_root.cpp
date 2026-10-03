@@ -149,7 +149,8 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
 
   /* A host naming extensions this ICD has no row for, including one whose
    * name is a prefix of another so a match on anything but a whole word
-   * shows, and no cl_khr_gl_sharing: nothing of it reaches the application. */
+   * shows, and no cl_khr_gl_sharing: nothing of it reaches the application,
+   * which is shown only what this ICD answers alone. */
   static const char plain[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_shar";
   rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
   char   reported[128];
@@ -159,11 +160,10 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
                                     &answered),
            CL_SUCCESS);
   /* Nothing of the host's reached the application, and what it got is a
-   * terminated empty string rather than untouched room. */
-  CHECK_EQ(answered, 1u);
-  CHECK_EQ(reported[0], '\0');
+   * terminated string rather than untouched room. */
+  CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing"), 0);
+  CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing") + 1u);
   CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
-  CHECK_EQ(std::strcmp(reported, ""), 0);
 
   /* The same host with the one name the rows are answered over: the two
    * external-memory rows and GL sharing itself are reported, in the policy's
@@ -174,7 +174,9 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
                                     &answered),
            CL_SUCCESS);
-  CHECK_EQ(std::strcmp(reported, "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing"), 0);
+  CHECK_EQ(std::strcmp(reported,
+                       "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing"),
+           0);
   CHECK_EQ(answered, std::strlen(reported) + 1u);
 
   /* The size query, which an application makes first: the same length, and
@@ -183,7 +185,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
   std::size_t wanted = 0u;
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted),
            CL_SUCCESS);
-  CHECK_EQ(wanted, 1u);
+  CHECK_EQ(wanted, std::strlen("cl_khr_d3d10_sharing") + 1u);
 
   /* Room the answer does not fit is the API's own refusal, not a truncation. */
   rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);

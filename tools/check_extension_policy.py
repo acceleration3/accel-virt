@@ -50,6 +50,9 @@ EMPTY = re.compile(r"ExtensionPolicy::Row\s*\*\s*reported_extensions\s*=\s*nullp
 ROW = re.compile(r'\s*\{\s*"(?P<name>[^"]*)"\s*,\s*(?P<version>\d+)u?\s*,\s*"(?P<test>[^"]*)"'
                  r'(\s*,\s*"(?P<host>[^"]*)")?\s*\}\s*,?')
 TEST_NAME = re.compile(r"^(\w+)\.(\w+)$")
+# A row whose host is this is answered by the ICD alone and needs no host
+# mechanism (ClExtensionPolicy::answered_here).
+ANSWERED_HERE = "-"
 
 
 class PolicyCheck:
@@ -179,8 +182,8 @@ class PolicyCheck:
                 violations.append(f"{where}: {name} is not a WGL extension")
             elif implemented is not None and name not in implemented[1]:
                 violations.append(f"{where}: {name} is not in {implemented[0]}")
-            if (host is not None and implemented is not None and host not in implemented[1]
-                    and not self.device_uses(host)):
+            if (host is not None and host != ANSWERED_HERE and implemented is not None
+                    and host not in implemented[1] and not self.device_uses(host)):
                 # A row answered over another extension is a promise about that
                 # mechanism, and the promise is kept by whichever side uses it:
                 # the ICD, whose translation the generator had to emit, or the

@@ -169,6 +169,19 @@ class CheckExtensionPolicy(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("ok, 2 reported (opengl 1, vulkan 1)", result.stdout)
 
+    def test_a_row_answered_over_a_host_mechanism_needs_one_this_build_uses(self):
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv", "VK_KHR_external_memory_fd"}')
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("VK_KHR_spirv_1_4 is answered over VK_KHR_external_memory_fd, which is in neither", result.stderr)
+        self.write("src/executor/shim/host.cpp", 'const char *name = "VK_KHR_external_memory_fd";\n')
+        self.assertEqual(self.check().returncode, 0)
+        # A row answered by the ICD alone promises no host mechanism at all.
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv", "-"}')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ok, 1 reported", result.stdout)
+
     def wgl_table(self, rows, where="src/icd/opengl/gl_icd_root.cpp"):
         self.write(where, "namespace {\nconst ExtensionPolicy::Row reported_extensions[] = {\n"
                           '{"GL_KHR_debug", 1u, "probe.enables_spirv"}\n};\n'

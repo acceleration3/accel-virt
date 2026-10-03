@@ -85,6 +85,30 @@ TEST(cl_extension_policy, an_extension_the_host_offers_and_no_row_names_is_not_r
   CHECK(!policy.reportable("cl_khr_gl_sharing"));
   CHECK(!policy.reportable("cl_khr_fp16")); }
 
+TEST(cl_extension_policy, a_row_answered_here_is_reported_whatever_the_host_offers)
+{ const ClExtensionPolicy::Row own[] = {
+      {"cl_khr_fp64", 1u, "cl_extension_policy.a_row_the_host_offers_is_reported"},
+      {"cl_khr_d3d10_sharing", 1u, "cl_extension_policy.a_row_answered_here_is_reported_whatever_the_host_offers",
+       ClExtensionPolicy::answered_here},
+  };
+  ClExtensionPolicy policy(own, 2u);
+  char into[128] = {'z'};
+  /* No host at all, and a host with neither: the ICD's own row is still
+   * reported, and the host's is not. */
+  CHECK_EQ(policy.report(nullptr, 0u, into, sizeof into), std::strlen("cl_khr_d3d10_sharing") + 1u);
+  CHECK_EQ(std::strcmp(into, "cl_khr_d3d10_sharing"), 0);
+  const char host[] = "cl_khr_icd";
+  policy.report(host, sizeof host, into, sizeof into);
+  CHECK_EQ(std::strcmp(into, "cl_khr_d3d10_sharing"), 0);
+  /* And the marker is the whole host name: a host extension called "-x" is a
+   * host extension like any other. */
+  const ClExtensionPolicy::Row dashed[] = {
+      {"cl_khr_d3d10_sharing", 1u, "cl_extension_policy.a_row_answered_here_is_reported_whatever_the_host_offers",
+       "-x"}};
+  ClExtensionPolicy borrowed(dashed, 1u);
+  CHECK_EQ(borrowed.report(host, sizeof host, into, sizeof into), 1u);
+  CHECK(policy.invariants_hold()); }
+
 TEST(cl_extension_policy, a_name_is_matched_whole_and_never_as_a_prefix)
 { ClExtensionPolicy policy(rows, row_count);
   /* "cl_khr_fp64_extra" is not "cl_khr_fp64", and neither is "cl_khr_fp6". */

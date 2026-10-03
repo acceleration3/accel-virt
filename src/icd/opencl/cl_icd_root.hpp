@@ -61,6 +61,7 @@ namespace av::clicd {
 
 class ClBufferRect;
 
+class D3dAdapterSource;
 class GlShareSource;
 struct ClIcdRootProbe;
 
@@ -81,6 +82,7 @@ public:
      * point looks its arguments up there without `lock`. */
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
               icd::ThreadLock &objects_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+              D3dAdapterSource &d3d_adapters,
               ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;
@@ -242,6 +244,33 @@ public:
      * the one every OpenGL context of ours runs on. */
     cl_int gl_context_info(const cl_context_properties *properties, cl_gl_context_info name, size_t value_bytes,
                            void *value, size_t *size_ret);
+
+    /* ---- cl_khr_d3d10_sharing --------------------------------------------- */
+
+    /* The extension's own numbers (cl_d3d10.h), which portable code cannot
+     * include: it includes d3d10.h. */
+    static constexpr cl_uint d3d10_device_source = 0x4010u;
+    static constexpr cl_uint d3d10_adapter_source = 0x4011u;
+    static constexpr cl_uint d3d10_preferred_devices = 0x4012u;
+    static constexpr cl_uint d3d10_all_devices = 0x4013u;
+    static constexpr cl_uint d3d10_context_device = 0x4014u;
+    static constexpr cl_int  invalid_d3d10_device = -1002;
+
+    /* clGetDeviceIDsFromD3D10KHR: this ICD's one device for a DXGI adapter or
+     * an ID3D10Device on the avgpu adapter that device runs on - preferred
+     * and all alike, since there is one - and CL_DEVICE_NOT_FOUND for any
+     * other adapter, which is how an application tells which of its adapters
+     * a device of ours belongs to. */
+    cl_int device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
+                                 cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices);
+    /* An object over a Direct3D 10 one, and its acquire and release, belong to
+     * a context made from a Direct3D 10 device, and no context here is one:
+     * create_context answers such a device CL_INVALID_D3D10_DEVICE_KHR, the
+     * extension's word for a device this one cannot share with. So a context
+     * or queue of this ICD's is answered CL_INVALID_CONTEXT, and anything else
+     * the API's own error for it. */
+    cl_mem create_from_d3d10(cl_context context, cl_int *error);
+    cl_int enqueue_d3d10_objects(cl_command_queue queue);
 
     /* ---- the queue's own points ------------------------------------------ */
 
@@ -443,6 +472,7 @@ private:
     icd::ThreadLock       &lock_;
     LogSink          &log_;
     GlShareSource         &gl_share_;
+    D3dAdapterSource      &d3d_adapters_;
     ClIcdBinding          &binding_;
     ClDispatchTable        dispatch_;
     ClPlatform             platform_;

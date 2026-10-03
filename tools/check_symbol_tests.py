@@ -49,6 +49,9 @@ EXCLUDE = {
     "src/device/renderer/renderer_resources.hpp": "what the renderer's service requires of its process, "
                              "implemented by PosixRendererHost and by MockRendererResources in tests/harness, "
                              "and exercised through every renderer service test",
+    "src/icd/opencl/d3d_adapter_source.hpp": "the DXGI the OpenCL ICD asks for an adapter's LUID, implemented "
+                             "by WindowsD3dAdapterSource in src/um and by ScriptedD3dAdapterSource in "
+                             "tests/harness, and exercised through every cl_d3d10_sharing test",
 }
 
 

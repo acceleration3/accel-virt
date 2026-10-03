@@ -203,6 +203,19 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
                                          nullptr, nullptr) == nullptr);
   CHECK(table.table().clCreateUserEvent(nullptr, nullptr) == nullptr);
 
+  /* The buffer rectangles name a queue first, so that is what they refuse. */
+  const size_t corner[3] = {0u, 0u, 0u}, region[3] = {1u, 1u, 1u};
+  unsigned char memory[1] = {};
+  CHECK_EQ(table.table().clEnqueueReadBufferRect(nullptr, nullptr, CL_TRUE, corner, corner, region, 0u, 0u, 0u, 0u,
+                                                 memory, 0u, nullptr, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(table.table().clEnqueueWriteBufferRect(nullptr, nullptr, CL_TRUE, corner, corner, region, 0u, 0u, 0u, 0u,
+                                                  memory, 0u, nullptr, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(table.table().clEnqueueCopyBufferRect(nullptr, nullptr, nullptr, corner, corner, region, 0u, 0u, 0u, 0u, 0u,
+                                                 nullptr, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+
   /* The deprecated 1.2 queue call is its own slot: an application built
    * against the older header reaches it and not the properties one, so it
    * needs the same answer. */

@@ -2,7 +2,9 @@
  *
  * An extension is reported only when a row here names it *and* the host device
  * reports it too: the row is what says this ICD carries it, and the host is
- * what says the GPU does. Every row names the test that proves the extension
+ * what says the GPU does. The exception is a row whose host is `answered_here`:
+ * an extension this ICD answers alone, about guest objects no host GPU has,
+ * which is reported whatever the host offers. Every row names the test that proves the extension
  * through this ICD, which tools/check_extension_policy.py holds it to - no
  * test, no row; no row, no report (constitution VI).
  *
@@ -29,6 +31,8 @@ public:
      * string carrying one is a host string this does not believe. */
     static constexpr uint32_t name_bytes = 128u;
     static constexpr uint32_t max_rows = 32u;
+    /* The host a row names when no host extension answers it: the ICD does. */
+    static constexpr char answered_here[] = "-";
 
     /* `rows` is a constant table the owner keeps for as long as this. */
     ClExtensionPolicy(const Row *rows, uint32_t count);

@@ -10,6 +10,7 @@
 
 #include "icd/opencl/cl_icd_root.hpp"
 #include "um/kmt/gdi_kmt.hpp"
+#include "um/opencl/windows_d3d_adapter_source.hpp"
 #include "um/opencl/windows_gl_share_source.hpp"
 #include "um/common/file_log.hpp"
 #include "um/common/lazy_driver.hpp"
@@ -61,6 +62,7 @@ private:
          * its watcher go. */
         WindowsServiceThread watcher;
         WindowsGlShareSource gl_share;
+        WindowsD3dAdapterSource d3d_adapters;
         clicd::ClIcdRoot root;
         ProcessTrace     trace;
     };

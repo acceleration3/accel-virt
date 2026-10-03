@@ -212,6 +212,12 @@ void ClDeviceReport::observe_luid(uint64_t adapter_luid)
     luid_ = adapter_luid;
 }
 
+bool ClDeviceReport::names_adapter(uint64_t adapter_luid) const
+{
+    AV_SCOPE("ClDeviceReport::names_adapter");
+    return luid_ != 0u && luid_ == adapter_luid;
+}
+
 bool ClDeviceReport::invariants_hold() const
 {
     AV_SCOPE("ClDeviceReport::invariants_hold");

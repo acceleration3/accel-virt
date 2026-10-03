@@ -49,6 +49,9 @@ public:
     /* The adapter this device is on, once the ICD has opened one: a report
      * built before there was an adapter has nothing to name. */
     void     observe_luid(uint64_t adapter_luid);
+    /* Whether `adapter_luid` is the adapter this device is on; a report with
+     * no adapter names none. */
+    bool     names_adapter(uint64_t adapter_luid) const;
     ClDeviceReport(const ClDeviceReport &) = delete;
     ClDeviceReport &operator=(const ClDeviceReport &) = delete;
 

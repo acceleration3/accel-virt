@@ -20,6 +20,7 @@
 #include "icd/opencl/cl_image_region.hpp"
 #include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
+#include "icd/opencl/d3d_adapter_source.hpp"
 #include "icd/opencl/gl_share_source.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -55,8 +56,9 @@ void report_error(cl_int *error, cl_int value)
 
 ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      icd::ThreadLock &send_lock, icd::ThreadLock &objects_lock, LogSink &log,
-                     icd::ServiceThread &watcher_thread, GlShareSource &gl_share, ClIcdBinding &binding)
-    : lock_(lock), log_(log), gl_share_(gl_share), binding_(binding), dispatch_(), platform_(),
+                     icd::ServiceThread &watcher_thread, GlShareSource &gl_share, D3dAdapterSource &d3d_adapters,
+                     ClIcdBinding &binding)
+    : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt),
       shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
       device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_(), refusals_(log)
@@ -426,11 +428,20 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
      * own rule), and the host is told nothing it would change. */
     static constexpr uint64_t allowed[] = {
         static_cast<uint64_t>(CL_CONTEXT_PLATFORM), static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC),
-        static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR)};
+        static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR),
+        static_cast<uint64_t>(d3d10_context_device)};
     ClPropertyList            list;
-    const cl_int              judged_list = judge(properties, allowed, 4u, list);
+    const cl_int              judged_list = judge(properties, allowed, 5u, list);
     if (judged_list != CL_SUCCESS) {
         report_error(error, judged_list);
+        return nullptr;
+    }
+    /* A Direct3D 10 device to share with is one this device cannot share
+     * with: nothing crosses that could name the device's surfaces. A null
+     * one names no device, which the extension allows. */
+    uint64_t d3d10_device = 0u;
+    if (list.names(static_cast<uint64_t>(d3d10_context_device), d3d10_device) && d3d10_device != 0u) {
+        report_error(error, invalid_d3d10_device);
         return nullptr;
     }
     uint32_t     gl_share = 0u;
@@ -2180,6 +2191,43 @@ cl_mem ClIcdRoot::gl_object(ClientTransport &wire, ClObject &context, uint64_t m
         return nullptr;
     }
     return static_cast<cl_mem>(wrap(wire, ClObject::Kind::mem, made, context.context(), &context, error));
+}
+
+cl_int ClIcdRoot::device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
+                                        cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices)
+{
+    AV_SCOPE("ClIcdRoot::device_ids_from_d3d10");
+    if (!platform_.names_this(platform)) return CL_INVALID_PLATFORM;
+    if ((source != d3d10_device_source && source != d3d10_adapter_source) ||
+        (set != d3d10_preferred_devices && set != d3d10_all_devices) ||
+        (devices == nullptr && num_devices == nullptr) || (devices != nullptr && num_entries == 0u))
+        return CL_INVALID_VALUE;
+    const uint64_t luid =
+        source == d3d10_device_source ? d3d_adapters_.device_luid(object) : d3d_adapters_.adapter_luid(object);
+    lock_.acquire();
+    const Status opened = open_device();
+    lock_.release();
+    if (luid == 0u || opened != Status::ok || !device_.names_adapter(luid)) {
+        if (num_devices != nullptr) *num_devices = 0u;
+        return CL_DEVICE_NOT_FOUND;
+    }
+    if (devices != nullptr) devices[0] = reinterpret_cast<cl_device_id>(device_object_);
+    if (num_devices != nullptr) *num_devices = 1u;
+    return CL_SUCCESS;
+}
+
+cl_mem ClIcdRoot::create_from_d3d10(cl_context context, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_d3d10");
+    report_error(error, CL_INVALID_CONTEXT);
+    static_cast<void>(context);
+    return nullptr;
+}
+
+cl_int ClIcdRoot::enqueue_d3d10_objects(cl_command_queue queue)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_d3d10_objects");
+    return judged(queue, ClObject::Kind::command_queue) != nullptr ? CL_INVALID_CONTEXT : CL_INVALID_COMMAND_QUEUE;
 }
 
 cl_mem ClIcdRoot::create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)

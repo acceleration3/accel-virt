@@ -668,6 +668,57 @@ cl_int CL_API_CALL enqueue_barrier(cl_command_queue queue, cl_uint count, const 
     return root.noted("clEnqueueBarrierWithWaitList", root.enqueue_barrier(queue, count, events, event));
 }
 
+/* cl_khr_d3d10_sharing: its six slots of cl_icd_dispatch, which the loader's
+ * own entry points for the names dispatch through. Each takes the Direct3D
+ * objects as the pointers they are; the slots' declared types name them by
+ * interface only where d3d10.h is included, which portable code is not. */
+cl_int CL_API_CALL get_device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
+                                             cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices)
+{
+    AV_SCOPE("get_device_ids_from_d3d10");
+    AV_CL_ROOT_OR(CL_INVALID_PLATFORM);
+    return root.noted("clGetDeviceIDsFromD3D10KHR",
+                      root.device_ids_from_d3d10(platform, source, object, set, num_entries, devices, num_devices));
+}
+
+cl_mem CL_API_CALL create_from_d3d10_buffer(cl_context context, cl_mem_flags, void *, cl_int *error)
+{
+    AV_SCOPE("create_from_d3d10_buffer");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D10BufferKHR", error);
+    return cl_icd_binding.root().create_from_d3d10(context, noted.pointer());
+}
+
+cl_mem CL_API_CALL create_from_d3d10_texture(cl_context context, cl_mem_flags, void *, cl_uint, cl_int *error)
+{
+    AV_SCOPE("create_from_d3d10_texture");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D10TextureKHR", error);
+    return cl_icd_binding.root().create_from_d3d10(context, noted.pointer());
+}
+
+cl_int CL_API_CALL enqueue_acquire_d3d10(cl_command_queue queue, cl_uint, const cl_mem *, cl_uint, const cl_event *,
+                                         cl_event *)
+{
+    AV_SCOPE("enqueue_acquire_d3d10");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueAcquireD3D10ObjectsKHR", root.enqueue_d3d10_objects(queue));
+}
+
+cl_int CL_API_CALL enqueue_release_d3d10(cl_command_queue queue, cl_uint, const cl_mem *, cl_uint, const cl_event *,
+                                         cl_event *)
+{
+    AV_SCOPE("enqueue_release_d3d10");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueReleaseD3D10ObjectsKHR", root.enqueue_d3d10_objects(queue));
+}
+
 /* cl_khr_gl_sharing: each slot of cl_icd_dispatch, and clGetGLContextInfoKHR
  * also by name, since an application may ask the ICD for it directly. */
 cl_mem CL_API_CALL create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)
@@ -853,7 +904,19 @@ void ClDispatchTable::fill()
     table_.clEnqueueAcquireGLObjects = &enqueue_acquire_gl;
     table_.clEnqueueReleaseGLObjects = &enqueue_release_gl;
     table_.clGetGLContextInfoKHR = &get_gl_context_info;
-    claimed_ = 76u;
+    table_.clGetDeviceIDsFromD3D10KHR =
+        reinterpret_cast<decltype(table_.clGetDeviceIDsFromD3D10KHR)>(&get_device_ids_from_d3d10);
+    table_.clCreateFromD3D10BufferKHR =
+        reinterpret_cast<decltype(table_.clCreateFromD3D10BufferKHR)>(&create_from_d3d10_buffer);
+    table_.clCreateFromD3D10Texture2DKHR =
+        reinterpret_cast<decltype(table_.clCreateFromD3D10Texture2DKHR)>(&create_from_d3d10_texture);
+    table_.clCreateFromD3D10Texture3DKHR =
+        reinterpret_cast<decltype(table_.clCreateFromD3D10Texture3DKHR)>(&create_from_d3d10_texture);
+    table_.clEnqueueAcquireD3D10ObjectsKHR =
+        reinterpret_cast<decltype(table_.clEnqueueAcquireD3D10ObjectsKHR)>(&enqueue_acquire_d3d10);
+    table_.clEnqueueReleaseD3D10ObjectsKHR =
+        reinterpret_cast<decltype(table_.clEnqueueReleaseD3D10ObjectsKHR)>(&enqueue_release_d3d10);
+    claimed_ = 82u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;

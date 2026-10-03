@@ -193,6 +193,19 @@ commands = [
 driver_implemented = [
     "clEnqueueAcquireExternalMemObjectsKHR",
     "clEnqueueReleaseExternalMemObjectsKHR",
+    # `cl_khr_d3d10_sharing`'s six. Which device an application's DXGI
+    # adapter or Direct3D 10 device is on is a guest question - the LUID of
+    # a guest adapter - and the ICD answers it from the object itself. No
+    # context here is made from a Direct3D 10 device: the device's surfaces
+    # are not the host's to name, so create_context refuses one as a device
+    # this one cannot share with, and the four that act on a sharing
+    # context answer that there is none.
+    "clGetDeviceIDsFromD3D10KHR",
+    "clCreateFromD3D10BufferKHR",
+    "clCreateFromD3D10Texture2DKHR",
+    "clCreateFromD3D10Texture3DKHR",
+    "clEnqueueAcquireD3D10ObjectsKHR",
+    "clEnqueueReleaseD3D10ObjectsKHR",
 ]
 
 # Commands the client does not wait for. Reference counting is the

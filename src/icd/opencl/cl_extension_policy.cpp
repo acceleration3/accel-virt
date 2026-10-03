@@ -47,6 +47,14 @@ bool same_word(const char *text, const char *name, size_t length)
  * application enables, and this ICD answers its two queries without claiming
  * the extension.
  *
+ * `cl_khr_d3d10_sharing` is answered here alone, so it is reported whatever
+ * the host offers: which device an application's DXGI adapter or Direct3D 10
+ * device is on is a question about the guest's adapters, answered by the
+ * adapter's LUID, and no context is ever made from a Direct3D 10 device - the
+ * device's surfaces are not the host's to name - so the rest of the extension
+ * is its refusals (ClIcdRoot). Affinity looks its OpenCL device up this way
+ * and uses none that cannot be.
+ *
  * `cl_khr_gl_sharing` is reported where the host's device lists it - which
  * it does exactly when its OpenCL made a context against a GL context of the
  * device's own. The context this ICD makes from a GL context is a context of
@@ -62,6 +70,8 @@ const ClExtensionPolicy::Row reported_extensions[] = {
      "cl_buffer_paths.a_buffer_over_a_shared_object_is_opened_and_released_as_one",
      "cl_khr_gl_sharing"},
     {"cl_khr_gl_sharing", 1u, "cl_gl_sharing.a_context_made_from_the_current_gl_context_names_its_objects"},
+    {"cl_khr_d3d10_sharing", 1u, "cl_d3d10_sharing.a_dxgi_adapter_or_d3d10_device_on_the_avgpu_adapter_is_this_device",
+     "-"},
 };
 const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 
@@ -96,6 +106,7 @@ bool ClExtensionPolicy::answered_by(const char *host, size_t host_bytes, const R
      * host's cl_khr_gl_sharing, since no Linux OpenCL has a Win32 handle to
      * take and the device opens the object through OpenGL instead
      * (research.md §21). */
+    if (row.host_ != nullptr && same_word(answered_here, row.host_, sizeof answered_here - 1u)) return true;
     return offered_by(host, host_bytes, row.host_ != nullptr ? row.host_ : row.name_);
 }
 

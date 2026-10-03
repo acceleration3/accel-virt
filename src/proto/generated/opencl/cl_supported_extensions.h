@@ -49,6 +49,7 @@ inline constexpr const char* kCarriedExtensions[] = {
     "cl_khr_3d_image_writes",
     "cl_khr_async_work_group_copy_fence",
     "cl_khr_byte_addressable_store",
+    "cl_khr_d3d10_sharing",
     "cl_khr_depth_images",
     "cl_khr_device_enqueue_local_arg_types",
     "cl_khr_device_uuid",
