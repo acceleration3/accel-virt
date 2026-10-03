@@ -62,7 +62,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt),
       shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock), device_(0u),
-      device_object_(nullptr), watcher_(watcher_thread, log, lock, *this), waits_(kmt), reads_(), refusals_(log)
+      device_object_(nullptr), device_answers_(), watcher_(watcher_thread, log, lock, *this), waits_(kmt), reads_(), refusals_(log)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -283,8 +283,29 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
         return import_handle_types(*object, value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;
-    return av::clproto::av_clGetDeviceInfo(*wire, object->wire(), name, value_bytes, value,
-                                            size_ret);
+    return host_device_info(*wire, *object, name, value_bytes, value, size_ret);
+}
+
+/* Asked of the host with room for the longest answer kept, whatever the
+ * caller's room, so the answer kept is whole. A query refused as an invalid
+ * value - an unknown name, or an answer longer than that room - is asked again
+ * as the caller put it, so the caller gets the host's own answer to it. */
+cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClObject &device, cl_device_info name,
+                                   size_t value_bytes, void *value, size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::host_device_info");
+    const ClInfoRequest asked(value_bytes, value, size_ret);
+    cl_int              kept = CL_SUCCESS;
+    if (device_answers_.answer(device.wire(), name, asked, kept)) return kept;
+    uint8_t      answer[host_extensions_bytes];
+    size_t       answered = 0u;
+    const cl_int fetched =
+        av::clproto::av_clGetDeviceInfo(wire, device.wire(), name, sizeof answer, answer, &answered);
+    if (fetched == CL_INVALID_VALUE)
+        return av::clproto::av_clGetDeviceInfo(wire, device.wire(), name, value_bytes, value, size_ret);
+    if (fetched != CL_SUCCESS) return fetched;
+    device_answers_.keep(device.wire(), name, answer, answered);
+    return asked.give(answer, answered);
 }
 
 cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *value,
@@ -295,8 +316,7 @@ cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *
     if (wire == nullptr) return CL_INVALID_DEVICE;
     char         host[host_extensions_bytes] = {};
     size_t       answered = 0u;
-    const cl_int asked = av::clproto::av_clGetDeviceInfo(
-        *wire, device.wire(), CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
+    const cl_int asked = host_device_info(*wire, device, CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
     if (asked != CL_SUCCESS) return asked;
     /* `answered` needs no clamp of its own: the generated client refuses a
      * size the device reports past the room it was given, so a device that
@@ -1601,8 +1621,7 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
         ClientTransport *const flags_wire = wire_of(*held);
         if (flags_wire == nullptr) return CL_OUT_OF_RESOURCES;
         cl_mem_flags made = 0u;
-        const cl_int answered =
-            av::clproto::av_clGetMemObjectInfo(*flags_wire, held->wire(), CL_MEM_FLAGS, sizeof made, &made, nullptr);
+        const cl_int answered = host_mem_info(*flags_wire, *held, CL_MEM_FLAGS, sizeof made, &made, nullptr);
         if (answered != CL_SUCCESS) return answered;
         if (held->application_memory() != nullptr)
             made = (made & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR)) |
@@ -1614,7 +1633,29 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
     }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    return av::clproto::av_clGetMemObjectInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+    return host_mem_info(*wire, *held, name, value_bytes, value, size_ret);
+}
+
+/* The map count changes with every map and the property list is not a word;
+ * every other answer the host gives here is fixed when the object is made,
+ * and a word, so a refusal of one is the host's answer and not the room's. */
+cl_int ClIcdRoot::host_mem_info(ClientTransport &wire, ClObject &object, cl_mem_info name, size_t value_bytes,
+                                void *value, size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::host_mem_info");
+    const bool fixed = name == CL_MEM_TYPE || name == CL_MEM_FLAGS || name == CL_MEM_SIZE || name == CL_MEM_OFFSET ||
+                       name == CL_MEM_USES_SVM_POINTER;
+    if (!fixed) return av::clproto::av_clGetMemObjectInfo(wire, object.wire(), name, value_bytes, value, size_ret);
+    const ClInfoRequest asked(value_bytes, value, size_ret);
+    cl_int              kept = CL_SUCCESS;
+    if (object.kept_answer(name, asked, kept)) return kept;
+    uint64_t     answer = 0u;
+    size_t       answered = 0u;
+    const cl_int fetched =
+        av::clproto::av_clGetMemObjectInfo(wire, object.wire(), name, sizeof answer, &answer, &answered);
+    if (fetched != CL_SUCCESS) return fetched;
+    object.keep_answer(name, &answer, answered);
+    return asked.give(&answer, answered);
 }
 
 cl_int ClIcdRoot::image_info(cl_mem image, cl_image_info name, size_t value_bytes, void *value, size_t *size_ret)

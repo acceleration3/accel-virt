@@ -12,6 +12,8 @@
 #ifndef AV_CLICD_CL_OBJECT_HPP
 #define AV_CLICD_CL_OBJECT_HPP
 
+#include "icd/opencl/cl_info_answers.hpp"
+
 #include <CL/cl.h>
 #include <CL/cl_icd.h>
 
@@ -86,6 +88,12 @@ public:
     void     idle();
     bool     known_idle() const;
 
+    /* A mem's answers to the info queries that cannot change once it is made
+     * (ClInfoAnswers): `kept_answer` gives one kept to `asked`, false when
+     * none is, and `keep_answer` keeps the host's. */
+    [[nodiscard]] bool kept_answer(cl_mem_info name, const ClInfoRequest &asked, cl_int &result) const;
+    void               keep_answer(cl_mem_info name, const void *value, size_t bytes);
+
     bool invariants_hold() const;
 
 private:
@@ -106,6 +114,9 @@ private:
     /* Atomic: an application's threads may share a queue, and the API leaves
      * ordering their enqueues to it - each only needs to see the other's. */
     bool                   idle_;
+    /* One each for the type, the flags, the size, the offset and whether it
+     * uses shared memory: none is longer than a word. */
+    ClInfoAnswers<5u, sizeof(uint64_t)> fixed_;
 };
 
 }  // namespace av::clicd

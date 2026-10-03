@@ -29,6 +29,7 @@
 #include "icd/opencl/cl_event_owner.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
+#include "icd/opencl/cl_info_answers.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
@@ -78,6 +79,10 @@ public:
      * a few hundred bytes, and a host whose list will not fit is a host this
      * cannot confirm a single extension against, which is its own answer. */
     static constexpr size_t  host_extensions_bytes = 4096u;
+    /* The device's answers kept (ClInfoAnswers): more than the properties an
+     * application asks of a device, each as long as the longest - the
+     * extension list - so every one the host gives is kept. */
+    static constexpr uint32_t device_answers = 48u;
 
     /* `objects_lock` is the object table's own (ClObjectTable): every entry
      * point looks its arguments up there without `lock`. `blocks_lock` is
@@ -376,6 +381,14 @@ private:
     ClientTransport *wire_of(ClObject &object);
     /* Judges an application's pointer and answers the object, or null. */
     ClObject        *judged(const void *pointer, ClObject::Kind kind);
+    /* The host's answer to a device query, kept the first time and given
+     * from the guest after: a device's properties never change. */
+    cl_int           host_device_info(ClientTransport &wire, ClObject &device, cl_device_info name,
+                                      size_t value_bytes, void *value, size_t *size_ret);
+    /* The host's answer to a mem query, kept and given from the guest after
+     * for the five that cannot change once the object is made. */
+    cl_int           host_mem_info(ClientTransport &wire, ClObject &object, cl_mem_info name, size_t value_bytes,
+                                   void *value, size_t *size_ret);
     /* CL_DEVICE_EXTENSIONS, which is neither the host's answer nor this ICD's
      * but the two intersected: the host says the GPU has an extension and a
      * policy row says this ICD carries it, and an application is shown only
@@ -498,6 +511,7 @@ private:
     /* The one device this ICD shows, made on the first clGetDeviceIDs. */
     ClDeviceReport         device_;
     ClObject              *device_object_;
+    ClInfoAnswers<device_answers, host_extensions_bytes> device_answers_;
     ClEventWatcher         watcher_;
     ClBlockingWait         waits_;
     ClPendingReads         reads_;

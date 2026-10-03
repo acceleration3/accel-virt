@@ -168,111 +168,153 @@ TEST(cl_icd_root, a_devices_platform_is_this_icds_and_it_has_no_parent)
  * host that does not is shown nothing, and neither is ever shown the host's
  * own list. */
 TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_the_host_s_own)
-{ ClIcdRig rig;
-  cl_device_id device = opened_device(rig);
-  CHECK(device != nullptr);
-
-  /* A host naming extensions this ICD has no row for, including one whose
+{ /* A host naming extensions this ICD has no row for, including one whose
    * name is a prefix of another so a match on anything but a whole word
    * shows, and no cl_khr_gl_sharing: nothing of it reaches the application,
    * which is shown only what this ICD answers alone. */
   static const char plain[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_shar";
-  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
-  char   reported[128];
-  std::memset(reported, 'x', sizeof reported);
-  std::size_t answered = 0u;
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
-                                    &answered),
-           CL_SUCCESS);
-  /* Nothing of the host's reached the application, and what it got is a
-   * terminated string rather than untouched room. */
-  CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing"), 0);
-  CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing") + 1u);
-  CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
+  char              reported[128];
+  std::size_t       answered = 0u;
+  { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    CHECK(device != nullptr);
+    rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+    std::memset(reported, 'x', sizeof reported);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
+             CL_SUCCESS);
+    /* Nothing of the host's reached the application, and what it got is a
+     * terminated string rather than untouched room. */
+    CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing"), 0);
+    CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing") + 1u);
+    CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
 
-  /* The same host with the one name the rows are answered over: the two
+    /* The size query, which an application makes first, and room the answer
+     * does not fit, which is the API's own refusal and not a truncation. A
+     * device's list cannot change, so neither asks the host again. */
+    const std::uint32_t sent = rig.kmt().commands();
+    std::size_t         wanted = 0u;
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted), CL_SUCCESS);
+    CHECK_EQ(wanted, std::strlen("cl_khr_d3d10_sharing") + 1u);
+    char cramped[1] = {'x'};
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr), CL_INVALID_VALUE);
+    CHECK_EQ(cramped[0], 'x');
+    CHECK_EQ(rig.kmt().commands(), sent); }
+
+  /* A host with the one name the rows are answered over: the two
    * external-memory rows and GL sharing itself are reported, in the policy's
    * order, and still nothing else of the host's. */
-  static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il";
-  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
-  std::memset(reported, 'x', sizeof reported);
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
-                                    &answered),
-           CL_SUCCESS);
-  CHECK_EQ(std::strcmp(reported,
-                       "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing"),
-           0);
-  CHECK_EQ(answered, std::strlen(reported) + 1u);
-
-  /* The size query, which an application makes first: the same length, and
-   * the host is asked again because the answer is the host's to change. */
-  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
-  std::size_t wanted = 0u;
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted),
-           CL_SUCCESS);
-  CHECK_EQ(wanted, std::strlen("cl_khr_d3d10_sharing") + 1u);
-
-  /* Room the answer does not fit is the API's own refusal, not a truncation. */
-  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
-  char cramped[1] = {'x'};
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr),
-           CL_INVALID_VALUE);
-  CHECK_EQ(cramped[0], 'x');
+  { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il";
+    rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+    std::memset(reported, 'x', sizeof reported);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
+             CL_SUCCESS);
+    CHECK_EQ(std::strcmp(reported,
+                         "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing"),
+             0);
+    CHECK_EQ(answered, std::strlen(reported) + 1u); }
 
   /* And a host that will not answer is the host's status, not an empty list:
    * an ICD that reported "no extensions" for a device it could not ask would
-   * be answering for a device it has lost. */
-  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
-                                    nullptr),
-           CL_OUT_OF_RESOURCES); }
+   * be answering for a device it has lost. Nothing is kept of it, so the next
+   * query asks again. */
+  { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, nullptr),
+             CL_OUT_OF_RESOURCES);
+    rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(rig.kmt().queued_answers(), 0u); } }
 
 /* The query that goes with the rows: what handle types an import may name.
  * This driver takes the opaque Win32 handle and nothing else - a guest has no
  * file descriptors, which is the whole reason the Win32 names exist - and it
  * answers at all only where it reports the extension that defines the query. */
 TEST(cl_icd_root, the_import_handle_types_are_this_drivers_own_and_only_where_it_reports_them)
-{ ClIcdRig rig;
-  cl_device_id device = opened_device(rig);
-  CHECK(device != nullptr);
-  static const char sharing[] = "cl_khr_gl_sharing";
+{ { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    CHECK(device != nullptr);
+    static const char sharing[] = "cl_khr_gl_sharing";
+    rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+    cl_external_memory_handle_type_khr taken = 0u;
+    std::size_t                        answered = 0u;
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
+                                      &taken, &answered),
+             CL_SUCCESS);
+    CHECK_EQ(taken, static_cast<cl_external_memory_handle_type_khr>(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR));
+    CHECK_EQ(answered, sizeof taken);
 
-  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
-  cl_external_memory_handle_type_khr taken = 0u;
-  std::size_t                        answered = 0u;
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR,
-                                    sizeof taken, &taken, &answered),
-           CL_SUCCESS);
-  CHECK_EQ(taken, static_cast<cl_external_memory_handle_type_khr>(
-                      CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR));
-  CHECK_EQ(answered, sizeof taken);
-
-  /* The size query, and room it does not fit. */
-  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
-  std::size_t wanted = 0u;
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, 0u,
-                                    nullptr, &wanted),
-           CL_SUCCESS);
-  CHECK_EQ(wanted, sizeof taken);
-  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
-  char cramped[1] = {'x'};
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, 1u,
-                                    cramped, nullptr),
-           CL_INVALID_VALUE);
-  CHECK_EQ(cramped[0], 'x');
+    /* The size query, and room it does not fit: the device's list was kept,
+     * so neither asks the host. */
+    const std::uint32_t sent = rig.kmt().commands();
+    std::size_t         wanted = 0u;
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, 0u, nullptr,
+                                      &wanted),
+             CL_SUCCESS);
+    CHECK_EQ(wanted, sizeof taken);
+    char cramped[1] = {'x'};
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, 1u, cramped,
+                                      nullptr),
+             CL_INVALID_VALUE);
+    CHECK_EQ(cramped[0], 'x');
+    CHECK_EQ(rig.kmt().commands(), sent); }
 
   /* A host this driver reports no external memory over has no such query:
    * answering one would be answering for an extension nobody was offered. */
-  static const char plain[] = "cl_khr_fp64";
-  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR,
-                                    sizeof taken, &taken, nullptr),
-           CL_INVALID_VALUE);
+  cl_external_memory_handle_type_khr taken = 0u;
+  { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    static const char plain[] = "cl_khr_fp64";
+    rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
+                                      &taken, nullptr),
+             CL_INVALID_VALUE); }
   /* And a host that will not say is its own status. */
-  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
-  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR,
-                                    sizeof taken, &taken, nullptr),
-           CL_OUT_OF_RESOURCES); }
+  { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
+                                      &taken, nullptr),
+             CL_OUT_OF_RESOURCES); } }
+
+/* Every other device query is the host's answer, asked once: a device's
+ * properties cannot change, and an application that asks them on every
+ * operation - Affinity, from every worker at once - would otherwise wait a
+ * round trip each time. The host is asked with room for the longest answer
+ * kept, so a caller's size query and its fetch are both answered from it. A
+ * name the host refuses as an invalid value is asked again as the caller put
+ * it - the host's own answer to that - and kept nothing of. */
+TEST(cl_icd_root, a_device_property_is_asked_of_the_host_once)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  const cl_uint units = 64u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&units), sizeof units);
+  const std::uint32_t sent = rig.kmt().commands();
+  std::size_t         wanted = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_MAX_COMPUTE_UNITS, 0u, nullptr, &wanted), CL_SUCCESS);
+  CHECK_EQ(wanted, sizeof units);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  for (int again = 0; again < 3; ++again) {
+      cl_uint got = 0u;
+      CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof got, &got, nullptr),
+               CL_SUCCESS);
+      CHECK_EQ(got, units);
+  }
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
+  cl_uint unknown = 0u;
+  CHECK_EQ(rig.loader().device_info(device, 0x7FFFu, sizeof unknown, &unknown, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), sent + 3u);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&units), sizeof units);
+  CHECK_EQ(rig.loader().device_info(device, 0x7FFFu, sizeof unknown, &unknown, nullptr), CL_SUCCESS);
+  CHECK_EQ(unknown, units);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 TEST(cl_icd_root, a_device_pointer_the_icd_never_made_is_an_invalid_device)
 { ClIcdRig rig;
@@ -1781,16 +1823,79 @@ TEST(cl_icd_root, a_buffers_info_names_this_icds_objects_and_asks_the_host_the_r
   CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_HOST_PTR, sizeof pointer, &pointer, nullptr), CL_SUCCESS);
   CHECK(pointer == nullptr);
   CHECK_EQ(rig.kmt().commands(), before);
-  /* The size is the host's. */
+  /* The size is the host's, asked once: it is fixed when the buffer is
+   * made, and an application may ask it of every tile on every operation. A
+   * size query and room too small are answered from what was kept. */
   const std::size_t host_size = 64u;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&host_size), sizeof host_size);
   std::size_t size = 0u;
   CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof size, &size, nullptr), CL_SUCCESS);
   CHECK_EQ(size, 64u);
   CHECK_EQ(rig.kmt().commands(), before + 1u);
+  size = 0u;
+  std::size_t wanted = 0u;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof size, &size, &wanted), CL_SUCCESS);
+  CHECK_EQ(size, 64u);
+  CHECK_EQ(wanted, sizeof size);
+  std::uint32_t cramped = 0u;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof cramped, &cramped, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  /* The type, the offset and whether it uses shared memory are fixed too. */
+  const cl_mem_object_type type = CL_MEM_OBJECT_BUFFER;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&type), sizeof type);
+  const std::size_t offset = 0u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&offset), sizeof offset);
+  const cl_bool svm = CL_FALSE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&svm), sizeof svm);
+  for (int twice = 0; twice < 2; ++twice) {
+      cl_mem_object_type got_type = 0u;
+      CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_TYPE, sizeof got_type, &got_type, nullptr), CL_SUCCESS);
+      CHECK_EQ(got_type, static_cast<cl_mem_object_type>(CL_MEM_OBJECT_BUFFER));
+      std::size_t got_offset = 1u;
+      CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_OFFSET, sizeof got_offset, &got_offset, nullptr), CL_SUCCESS);
+      CHECK_EQ(got_offset, 0u);
+      cl_bool got_svm = CL_TRUE;
+      CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_USES_SVM_POINTER, sizeof got_svm, &got_svm, nullptr),
+               CL_SUCCESS);
+      CHECK_EQ(got_svm, static_cast<cl_bool>(CL_FALSE));
+  }
+  CHECK_EQ(rig.kmt().commands(), before + 4u);
+  /* The map count changes with every map: asked every time. */
+  const cl_uint maps = 1u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&maps), sizeof maps);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&maps), sizeof maps);
+  for (int twice = 0; twice < 2; ++twice) {
+      cl_uint mapped = 0u;
+      CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_MAP_COUNT, sizeof mapped, &mapped, nullptr), CL_SUCCESS);
+      CHECK_EQ(mapped, 1u);
+  }
+  CHECK_EQ(rig.kmt().commands(), before + 6u);
   CHECK_EQ(rig.root().mem_object_info(reinterpret_cast<cl_mem>(context), CL_MEM_SIZE, sizeof size, &size, nullptr),
            CL_INVALID_MEM_OBJECT);
   CHECK(rig.root().invariants_hold()); }
+
+/* A fixed answer the host refuses is the host's error, and nothing is kept of
+ * it: the next query asks again. */
+TEST(cl_icd_root, a_buffer_answer_the_host_refuses_is_not_kept)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+  const cl_icd_dispatch &table = rig.root().dispatch();
+  const std::uint32_t    before = rig.kmt().commands();
+  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  std::size_t size = 0u;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof size, &size, nullptr), CL_OUT_OF_RESOURCES);
+  const std::size_t host_size = 128u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&host_size), sizeof host_size);
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof size, &size, nullptr), CL_SUCCESS);
+  CHECK_EQ(size, 128u);
+  CHECK_EQ(rig.kmt().commands(), before + 2u);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 TEST(cl_icd_root, an_images_buffer_is_none_and_its_extent_is_the_hosts)
 { ClIcdRig rig;

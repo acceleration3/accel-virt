@@ -816,6 +816,12 @@ TEST(cl_buffer_paths, a_buffer_over_the_applications_memory_maps_to_that_memory)
   cl_mem_flags flags = 0u;
   CHECK_EQ(rig.root().mem_object_info(buffer, CL_MEM_FLAGS, sizeof flags, &flags, nullptr), CL_SUCCESS);
   CHECK_EQ(flags, static_cast<cl_mem_flags>(CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR));
+  /* Asked again, the host's flags were kept and the answer is the same. */
+  const std::uint32_t asked = rig.kmt().commands();
+  flags = 0u;
+  CHECK_EQ(rig.root().mem_object_info(buffer, CL_MEM_FLAGS, sizeof flags, &flags, nullptr), CL_SUCCESS);
+  CHECK_EQ(flags, static_cast<cl_mem_flags>(CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR));
+  CHECK_EQ(rig.kmt().commands(), asked);
 
   rig.host().cl_handle(host_mapped, CL_SUCCESS);
   unsigned char device[32];
