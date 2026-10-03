@@ -337,6 +337,20 @@ static void virtio_gpu_av_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comma
             virtio_gpu_av_scanout_image(g, r, cmd);
             return;
         }
+        if (header.type == VIRTIO_GPU_CMD_RESOURCE_FLUSH) {
+            struct virtio_gpu_resource_flush flush;
+            /* A head showing an exported image was refreshed when the image
+             * was shown: the 2D surface behind it is not on screen, and
+             * QEMU's flush would upload it to the display's texture all the
+             * same, on the main loop, once a frame. */
+            if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &flush, sizeof(flush)) == sizeof(flush)) {
+                const uint32_t head = virtio_gpu_av_head_of(g, le32_to_cpu(flush.resource_id));
+                if (head != VIRTIO_GPU_AV_NO_HEAD && r->showing[head] >= 0) {
+                    virtio_gpu_ctrl_response_nodata(g, cmd, VIRTIO_GPU_RESP_OK_NODATA);
+                    return;
+                }
+            }
+        }
         if (av_device_control(r->core, cmd, header.type)) {
             return;
         }
