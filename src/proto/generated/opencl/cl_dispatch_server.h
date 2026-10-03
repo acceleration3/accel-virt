@@ -61,6 +61,11 @@ public:
     // handle it need not name the start of one: a kernel argument
     // may point into the middle of an allocation.
     virtual void* svm_for(uint64_t address, uint64_t bytes) const = 0;
+    // The guest's own memory at this offset of its context's blob
+    // arena, `bytes` long, as a pointer, or null for a span that is not
+    // wholly inside it. A lent parameter names this instead of carrying
+    // its bytes, and the call reads or writes it in place.
+    virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;
 
     virtual cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) = 0;
     virtual cl_int on_clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) = 0;

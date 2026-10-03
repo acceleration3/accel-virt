@@ -13,12 +13,12 @@
 namespace av::clicd {
 
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
-                               icd::ThreadLock &send_lock, LogSink &log,
+                               icd::ThreadLock &send_lock, icd::ThreadLock &blocks_lock, LogSink &log,
                                icd::SharedHandles &handles)
     : memory_(memory), send_lock_(send_lock), log_(log),
       link_(connection), gl_share_(0u), 
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
-      locked_(),
+      locked_(), blocks_(blocks_lock),
       svm_(memory), external_(handles, log), mappings_(), properties_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -77,8 +77,10 @@ Status GuestClContext::build(uint32_t gl_share)
     }
     /* The arena is the memory a mappable buffer is made over, on both sides:
      * the device holds it as one import, so an offset names the same bytes
-     * here and there and a map costs no copy. */
-    blocks_.lend(channel_.arena_view(), channel_.arena_bytes());
+     * here and there and a map costs no copy. Not its last word, which is the
+     * host's to publish errors in - and so not the page that holds it, since
+     * blocks are whole pages. */
+    blocks_.lend(channel_.arena_view(), channel_.arena_bytes() - KmtBlobArena::error_word_bytes);
     log_.write("avcl: buffers map through the blob arena; no copy");
     return Status::ok;
 }

@@ -60,6 +60,7 @@ private:
     RecordingThreadLock  lock_;
     RecordingThreadLock  send_lock_;
     RecordingThreadLock  objects_lock_;
+    RecordingThreadLock  blocks_lock_;
     RecordingLog         log_;
     ScriptedThread       watcher_;
     ScriptedGlShareSource gl_share_;

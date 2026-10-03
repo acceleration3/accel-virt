@@ -242,13 +242,20 @@ role = "bytes_in"
 len = "@image_host_bytes"
 
 # Buffer transfers name their own byte count.
+#
+# A transfer's bytes are `lent`: when the ICD stages them in the context's
+# blob arena - or the application's pointer is in it already, a mapped
+# buffer the arena backs - they cross as an offset into it, and the host
+# reads or writes them there rather than in a copy the command carries.
 [params."clEnqueueReadBuffer.ptr"]
 role = "bytes_out"
 len = "size"
+lent = true
 
 [params."clEnqueueWriteBuffer.ptr"]
 role = "bytes_in"
 len = "size"
+lent = true
 
 [params."clEnqueueFillBuffer.pattern"]
 role = "bytes_in"
@@ -259,10 +266,12 @@ len = "pattern_size"
 [params."clEnqueueReadImage.ptr"]
 role = "bytes_out"
 len = "@image_transfer_bytes"
+lent = true
 
 [params."clEnqueueWriteImage.ptr"]
 role = "bytes_in"
 len = "@image_transfer_bytes"
+lent = true
 
 # The work-size triple is counted by work_dim.
 [params."clEnqueueNDRangeKernel.global_work_offset"]
@@ -381,6 +390,7 @@ len = "3"
 [params."clEnqueueReadBufferRect.ptr"]
 role = "bytes_out"
 len = "@rect_bytes"
+lent = true
 
 [params."clEnqueueWriteBufferRect.buffer_origin"]
 role = "scalar_array"
@@ -397,6 +407,7 @@ len = "3"
 [params."clEnqueueWriteBufferRect.ptr"]
 role = "bytes_in"
 len = "@rect_bytes"
+lent = true
 
 [params."clEnqueueCopyBufferRect.src_origin"]
 role = "scalar_array"

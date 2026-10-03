@@ -260,11 +260,12 @@ int main(int argc, char **argv)
         av::RecordingThreadLock   lock(trace, 'H');
         av::RecordingThreadLock   send_lock(trace, 'S');
         av::RecordingThreadLock   objects_lock(trace, 'O');
+        av::RecordingThreadLock   blocks_lock(trace, 'B');
         av::RecordingLog          icd_log;
         av::ScriptedThread        watcher;
         av::ScriptedGlShareSource no_gl;
         av::ScriptedD3dAdapterSource no_d3d;
-        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, objects_lock, icd_log, watcher, no_gl, no_d3d,
+        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, objects_lock, blocks_lock, icd_log, watcher, no_gl, no_d3d,
                                        av::clicd::cl_icd_binding);
         samples::icd = &root;
         code = samples::run(argc, argv);

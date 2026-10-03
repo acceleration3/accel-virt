@@ -654,6 +654,16 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"            if (wire_len != 0) b.write({n}[i], wire_len);")
         out.append("        }")
         out.append("    }")
+    elif p.role == Role.BYTES_IN and p.lent:
+        size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
+        _encode_lent(n, size, out)
+        out.append(f"    if ({n}_lent) {{")
+        out.append(f"        b.write_varint(static_cast<uint64_t>({size}));")
+        out.append(f"        b.write_varint({n}_lent_at);")
+        out.append(f"    }} else if ({n} != nullptr) {{")
+        out.append(f"        b.write_varint(static_cast<uint64_t>({size}));")
+        out.append(f"        b.write({n}, static_cast<size_t>({size}));")
+        out.append("    }")
     elif p.role == Role.BYTES_IN:
         size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
         out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
@@ -691,12 +701,33 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         # The byte says whether the caller wants it; the server skips
         # producing what nobody asked for.
         out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
+    elif p.role == Role.BYTES_OUT and p.lent:
+        size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
+        _encode_lent(n, size, out)
+        out.append(f"    if ({n} != nullptr) b.write_varint(static_cast<uint64_t>({size}));")
+        out.append(f"    if ({n}_lent) b.write_varint({n}_lent_at);")
     elif p.role == Role.BYTES_OUT:
         size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
         out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) b.write_varint(static_cast<uint64_t>({size}));")
     else:
         raise AssertionError(f"no encoder for {p.role}")
+
+
+# The byte before a lent parameter: absent, its bytes inline, or where they
+# already are in the blob arena.
+WIRE_ABSENT, WIRE_INLINE, WIRE_LENT = 0, 1, 2
+
+
+def _encode_lent(n: str, size: str, out: list[str]) -> None:
+    """The presence byte of a lent parameter, which says which way its bytes
+    cross: by offset when every one of them is in the arena already, which
+    is a copy fewer each way, and inline when any is not."""
+    out.append(f"    uint64_t {n}_lent_at = 0;")
+    out.append(f"    const bool {n}_lent = {n} != nullptr &&")
+    out.append(f"        t.blobs().holds({n}, static_cast<size_t>({size}), {n}_lent_at);")
+    out.append(f"    b.write_pod<uint8_t>({n} == nullptr ? {WIRE_ABSENT} : "
+               f"({n}_lent ? {WIRE_LENT} : {WIRE_INLINE}));")
 
 
 def _client_failure(cmd: Command) -> str:
@@ -764,10 +795,13 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
             out.append(f"            if (!r.read_pod({n}[i])) {fail}")
             out.append("        }")
         elif p.role in (Role.BYTES_OUT, Role.INFO_VALUE):
+            # Lent bytes are already where the caller wanted them: the host
+            # wrote them there, and the reply says only how many.
+            inline = f"!{n}_lent && " if p.lent else ""
             out.append("        uint64_t wire_count = 0;")
             out.append(f"        if (!r.read_varint(wire_count)) {fail}")
             out.append(f"        if (wire_count > static_cast<uint64_t>({_client_room(p)})) {fail}")
-            out.append(f"        if (wire_count != 0 && !r.read({n}, static_cast<size_t>(wire_count))) {fail}")
+            out.append(f"        if (wire_count != 0 && {inline}!r.read({n}, static_cast<size_t>(wire_count))) {fail}")
         else:
             raise AssertionError(f"no reply decoder for {p.role}")
         out.append("    }")
@@ -780,6 +814,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
          '#include "core/trace/function_scope.hpp"',
+         '#include "proto/client/client_blob_arena.hpp"',
          '#include "proto/client/sync_call_scope.hpp"',
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
@@ -935,7 +970,18 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("    {")
         out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
-        out.append("        if (wire_present != 0) {")
+        if p.lent:
+            out.append(f"        if (wire_present == {WIRE_LENT}) {{")
+            out.append("            uint64_t wire_count = 0;")
+            out.append("            uint64_t wire_offset = 0;")
+            out.append("            if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;")
+            out.append("            void* wire_bytes = s.lent_for(wire_offset, wire_count);")
+            out.append("            if (wire_bytes == nullptr) return false;")
+            out.append(f"            {n} = static_cast<{p.type.cpp()}>(wire_bytes);")
+            out.append(f"            {n}_count = wire_count;")
+            out.append(f"        }} else if (wire_present != {WIRE_ABSENT}) {{")
+        else:
+            out.append("        if (wire_present != 0) {")
         out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
         # The reader hands out no view of its own buffer, so the bytes are
@@ -1003,6 +1049,13 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
             out.append("            uint64_t cap = 0;")
             out.append("            if (!r.read_varint(cap)) return false;")
             out.append(f"            {n}_capacity = static_cast<size_t>(cap);")
+            out.append("        }")
+        if p.role == Role.BYTES_OUT and p.lent:
+            out.append(f"        if (wire_wanted == {WIRE_LENT}) {{")
+            out.append("            uint64_t wire_offset = 0;")
+            out.append("            if (!r.read_varint(wire_offset)) return false;")
+            out.append(f"            {n}_lent = s.lent_for(wire_offset, static_cast<uint64_t>({n}_capacity));")
+            out.append(f"            if ({n}_lent == nullptr) return false;")
             out.append("        }")
         out.append("    }")
     else:
@@ -1129,7 +1182,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "    // from it - inside a range this server handed out. Unlike a",
           "    // handle it need not name the start of one: a kernel argument",
           "    // may point into the middle of an allocation.",
-          "    virtual void* svm_for(uint64_t address, uint64_t bytes) const = 0;", ""]
+          "    virtual void* svm_for(uint64_t address, uint64_t bytes) const = 0;",
+          "    // The guest's own memory at this offset of its context's blob",
+          "    // arena, `bytes` long, as a pointer, or null for a span that is not",
+          "    // wholly inside it. A lent parameter names this instead of carrying",
+          "    // its bytes, and the call reads or writes it in place.",
+          "    virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;", ""]
     c = [HEADER, '#include "cl_dispatch_server.h"', "",
          "#include <stddef.h>", "#include <stdint.h>", "",
          '#include "cl_protocol_ids.h"',
@@ -1186,6 +1244,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    bool {p.name}_wanted = false;")
                 if p.role == Role.BYTES_OUT:
                     c.append(f"    size_t {p.name}_capacity = 0;")
+                if p.role == Role.BYTES_OUT and p.lent:
+                    c.append(f"    void* {p.name}_lent = nullptr;")
 
         for p in cmd.params:
             _decode_param(reg, cmd, p, c)
@@ -1220,7 +1280,13 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 cap = _capacity_expr(cmd, p)
                 ptr_t = "void*" if p.type.base == "void" else f"{p.type.base}*"
                 c.append(f"    {ptr_t} {n} = nullptr;")
-                c.append(f"    if ({n}_wanted) {{")
+                if p.lent:
+                    # Written where the guest lent, and not sent back.
+                    c.append(f"    if ({n}_lent != nullptr) {{")
+                    c.append(f"        {n} = static_cast<{ptr_t}>({n}_lent);")
+                    c.append(f"    }} else if ({n}_wanted) {{")
+                else:
+                    c.append(f"    if ({n}_wanted) {{")
                 c.append(f"        {n} = reinterpret_cast<{ptr_t}>("
                          f"arena.allocate<uint8_t>(static_cast<size_t>({cap}) + 1));")
                 c.append(f"        if ({n} == nullptr) return false;")
@@ -1292,7 +1358,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"        if (wire_written > static_cast<uint64_t>({cap}))")
                 c.append(f"            wire_written = static_cast<uint64_t>({cap});")
                 c.append("        reply.write_varint(wire_written);")
-                c.append(f"        if (wire_written != 0) reply.write({n}, static_cast<size_t>(wire_written));")
+                inline = f" && {n}_lent == nullptr" if p.lent else ""
+                c.append(f"        if (wire_written != 0{inline}) reply.write({n}, static_cast<size_t>(wire_written));")
             c.append("    }")
 
         c.append("    return true;")

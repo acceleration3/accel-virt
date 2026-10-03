@@ -9,7 +9,11 @@
  * after a transfer, not which commands were sent - and the commands are kept
  * too, each with the extent it named, for the tests about how a transfer was
  * cut. Its request slot is as large as a guest's staging room, so a command
- * that would overflow a guest's overflows here too. */
+ * that would overflow a guest's overflows here too.
+ *
+ * Memory it is lent (`lend`) is a context's blob arena: a command that names
+ * its bytes there by offset has them read from it, or written into it, as the
+ * host's OpenCL would through lent_for, and its answer carries no bytes. */
 #ifndef AV_CL_TRANSFER_HOST_HPP
 #define AV_CL_TRANSFER_HOST_HPP
 
@@ -47,6 +51,8 @@ public:
         std::uint64_t buffer_pitch[2];
         std::uint64_t host_origin[3];
         bool          blocking;
+        /* Whether its bytes were named by offset in the lent memory. */
+        bool          lent;
     };
 
     ClTransferHost();
@@ -57,6 +63,9 @@ public:
     /* The buffer's byte i is `seed + i`, the image's texel (x, y, z) its own
      * coordinates, so a read that landed in the wrong place shows. */
     void           fill(std::uint8_t seed);
+    /* `bytes` at `block` are the blob arena from now on, for the client's
+     * leases and for commands that name an offset in it. */
+    void           lend(std::uint8_t *block, std::size_t bytes);
     std::uint8_t   buffer_at(std::size_t offset) const;
     /* The texel at (x, y, z), as four bytes packed little-endian. */
     std::uint32_t  texel(std::size_t x, std::size_t y, std::size_t z) const;
@@ -93,12 +102,19 @@ private:
     /* Where byte `x` of row `y` of slice `z` of a rectangle lies in the buffer. */
     std::size_t rect_offset(const Command &seen, std::size_t x, std::size_t y, std::size_t z) const;
     std::size_t image_offset(std::size_t x, std::size_t y, std::size_t z) const;
+    /* Where a command's `count` bytes are, after its presence byte and count:
+     * the lent memory at the offset that follows, or the scratch block for
+     * bytes inline; false for none or an offset outside what was lent. */
+    bool        host_bytes(WireReader &payload, std::uint8_t present, std::uint64_t count, Command &seen,
+                           std::uint8_t *&at);
 
     std::uint8_t   *request_;
     std::uint8_t   *reply_;
     std::uint8_t   *buffer_;
     std::uint8_t   *image_;
     std::uint8_t   *scratch_;
+    std::uint8_t   *lent_;
+    std::size_t     lent_bytes_;
     Command        *seen_;
     std::uint32_t   commands_;
     std::size_t     answered_;

@@ -292,9 +292,9 @@ void OpenClBackend::abandon(ImportedBlob &blob)
     arena_.abandon(blob);
 }
 
-uint8_t *OpenClBackend::guest_bytes(uint64_t offset, uint64_t bytes) const
+void *OpenClBackend::lent_for(uint64_t offset, uint64_t bytes) const
 {
-    AV_SCOPE("OpenClBackend::guest_bytes");
+    AV_SCOPE("OpenClBackend::lent_for");
     return arena_.at(offset, bytes);
 }
 
@@ -544,12 +544,38 @@ cl_int OpenClBackend::on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_
                                              const cl_event *event_wait_list, cl_event *event)
 {
     AV_SCOPE("OpenClBackend::on_clEnqueueReadBuffer");
+    static_cast<void>(blocking_read);
     cl_int served = CL_SUCCESS;
-    if (blocking_read == CL_TRUE && num_events_in_wait_list == 0u && event == nullptr &&
+    if (num_events_in_wait_list == 0u && event == nullptr && !arena_.holds(ptr) &&
         read_ahead_.read(command_queue, buffer, offset, size, ptr, served))
         return served;
-    return RealDispatch::on_clEnqueueReadBuffer(command_queue, buffer, blocking_read, offset, size, ptr,
+    return RealDispatch::on_clEnqueueReadBuffer(command_queue, buffer, CL_TRUE, offset, size, ptr,
                                                 num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int OpenClBackend::on_clEnqueueReadImage(cl_command_queue command_queue, cl_mem image, cl_bool blocking_read,
+                                            const size_t *origin, const size_t *region, size_t row_pitch,
+                                            size_t slice_pitch, void *ptr, cl_uint num_events_in_wait_list,
+                                            const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueReadImage");
+    static_cast<void>(blocking_read);
+    return RealDispatch::on_clEnqueueReadImage(command_queue, image, CL_TRUE, origin, region, row_pitch,
+                                               slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int OpenClBackend::on_clEnqueueReadBufferRect(
+    cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read, const size_t *buffer_origin,
+    const size_t *host_origin, const size_t *region, size_t buffer_row_pitch, size_t buffer_slice_pitch,
+    size_t host_row_pitch, size_t host_slice_pitch, void *ptr, cl_uint num_events_in_wait_list,
+    const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueReadBufferRect");
+    static_cast<void>(blocking_read);
+    return RealDispatch::on_clEnqueueReadBufferRect(command_queue, buffer, CL_TRUE, buffer_origin, host_origin,
+                                                    region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch,
+                                                    host_slice_pitch, ptr, num_events_in_wait_list,
+                                                    event_wait_list, event);
 }
 
 cl_int OpenClBackend::on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer,

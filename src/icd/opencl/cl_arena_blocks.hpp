@@ -9,13 +9,21 @@
  *
  * Blocks are page aligned because a host asked to take memory as a buffer's
  * own wants its device's base alignment, and a page is the coarsest anything
- * on this path asks for. */
+ * on this path asks for.
+ *
+ * A transfer stages its bytes in a block for as long as it runs
+ * (ClStagingBlock), so blocks come and go on every application thread at once:
+ * each call holds the lock it is given, which is nothing else's. */
 #ifndef AV_CLICD_CL_ARENA_BLOCKS_HPP
 #define AV_CLICD_CL_ARENA_BLOCKS_HPP
 
 #include "icd/common/range_table.hpp"
 
 #include <stdint.h>
+
+namespace av::icd {
+class ThreadLock;
+}  // namespace av::icd
 
 namespace av::clicd {
 
@@ -28,7 +36,7 @@ public:
     /* What every block's offset and length are a whole number of. */
     static constexpr uint64_t alignment = 4096u;
 
-    ClArenaBlocks();
+    explicit ClArenaBlocks(icd::ThreadLock &lock);
     ClArenaBlocks(const ClArenaBlocks &) = delete;
     ClArenaBlocks &operator=(const ClArenaBlocks &) = delete;
 
@@ -55,6 +63,7 @@ public:
 private:
     friend struct ClArenaBlocksProbe;
 
+    icd::ThreadLock                 &lock_;
     uint8_t                         *base_;
     uint64_t                         bytes_;
     /* The blocks, first fit over the arena (RangeTable). */

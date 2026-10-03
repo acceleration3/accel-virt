@@ -102,7 +102,7 @@ public:
     {
         rig_.host().blob_import(0u, 0x77u);
         static_cast<void>(
-            context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.log(), rig_.handles()));
+            context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.blocks_lock(), rig_.log(), rig_.handles()));
         CHECK_STATUS(context_.object().make(), Status::ok);
     }
     ~Watching() { context_.destroy(); }
@@ -414,7 +414,7 @@ TEST(cl_event_watcher, forgetting_one_context_leaves_every_other_contexts_regist
   rig.rig().host().blob_import(0u, 0x78u);
   av::ObjectStorage<GuestClContext> second;
   CHECK_STATUS(second.construct(rig.rig().connection(), rig.rig().platform(),
-                                rig.rig().send_lock(), rig.rig().log(), rig.rig().handles()),
+                                rig.rig().send_lock(), rig.rig().blocks_lock(), rig.rig().log(), rig.rig().handles()),
                Status::ok);
   CHECK_STATUS(second.object().make(), Status::ok);
   CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, second.object().wire(), CL_COMPLETE, &note,

@@ -14,6 +14,7 @@
  * A host with no OpenCL, no EGL display, or no GL import returns without
  * judging, as every device-backed test here does. */
 #include "device/abi/av_executor.h"
+#include "executor/imported_blob.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -529,6 +530,95 @@ TEST(opencl_backend_device, a_write_has_taken_its_bytes_by_the_time_it_returns_w
   ::clReleaseMemObject(busy);
   ::clReleaseMemObject(target);
   ::clReleaseCommandQueue(queue);
+  backend.shut_down(); }
+
+/* A read's destination is the decode arena or memory the guest lent, and the
+ * guest reuses either once the read is answered. So whatever the guest asked,
+ * the read the backend makes has written its bytes by the time it returns,
+ * into the arena as into its own memory, with work queued ahead of it. */
+TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_whatever_the_guest_asked)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  constexpr std::size_t bytes = std::size_t{1} << 20;
+  alignas(4096) static std::uint8_t lent[bytes];
+  AvBlobHandle handle = {};
+  handle.kind = AV_BLOB_HOST_POINTER;
+  handle.pointer = lent;
+  handle.fd = -1;
+  handle.size = sizeof lent;
+  av::ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+  CHECK(backend.adopt(blob));
+  cl_int                 error = CL_SUCCESS;
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  cl_mem const source = ::clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, nullptr, &error);
+  cl_mem const busy = ::clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, nullptr, &error);
+  CHECK(source != nullptr && busy != nullptr);
+  const std::uint8_t pattern = 0x5Au;
+  CHECK_EQ(::clEnqueueFillBuffer(queue, busy, &pattern, 1u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
+  for (std::uint32_t copy = 0u; copy < 32u; ++copy)
+      CHECK_EQ(::clEnqueueCopyBuffer(queue, busy, source, 0u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::memset(lent, 0, sizeof lent);
+  void *const into = backend.lent_for(0u, bytes);
+  CHECK(into == lent);
+  CHECK_EQ(backend.on_clEnqueueReadBuffer(queue, source, CL_FALSE, 0u, bytes, into, 0u, nullptr, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(lent[0], pattern);
+  CHECK_EQ(lent[bytes - 1u], pattern);
+
+  /* One that hands back an event, and one that waits on one: neither is
+   * served from a read made ahead, and both have written when they return. */
+  std::memset(lent, 0, sizeof lent);
+  cl_event read = nullptr;
+  CHECK_EQ(backend.on_clEnqueueReadBuffer(queue, source, CL_FALSE, 0u, bytes, into, 0u, nullptr, &read),
+           CL_SUCCESS);
+  CHECK_EQ(lent[bytes - 1u], pattern);
+  CHECK(read != nullptr);
+  std::memset(lent, 0, sizeof lent);
+  CHECK_EQ(backend.on_clEnqueueReadBuffer(queue, source, CL_FALSE, 0u, bytes, into, 1u, &read, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(lent[bytes - 1u], pattern);
+  ::clReleaseEvent(read);
+
+  const cl_image_format format = {CL_RGBA, CL_UNSIGNED_INT8};
+  cl_image_desc         desc = {};
+  desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+  desc.image_width = 64u;
+  desc.image_height = 64u;
+  cl_mem const image = ::clCreateImage(context, CL_MEM_READ_WRITE, &format, &desc, nullptr, &error);
+  CHECK(image != nullptr);
+  const std::size_t origin[3] = {0u, 0u, 0u}, region[3] = {64u, 64u, 1u};
+  const unsigned    fill[4] = {0x31u, 0x31u, 0x31u, 0x31u};
+  CHECK_EQ(::clEnqueueFillImage(queue, image, fill, origin, region, 0u, nullptr, nullptr), CL_SUCCESS);
+  for (std::uint32_t copy = 0u; copy < 32u; ++copy)
+      CHECK_EQ(::clEnqueueCopyBuffer(queue, busy, source, 0u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::memset(lent, 0, sizeof lent);
+  CHECK_EQ(backend.on_clEnqueueReadImage(queue, image, CL_FALSE, origin, region, 0u, 0u, into, 0u, nullptr,
+                                         nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(lent[0], 0x31u);
+  CHECK_EQ(lent[64u * 64u * 4u - 1u], 0x31u);
+
+  const std::size_t rect[3] = {64u, 4u, 1u};
+  for (std::uint32_t copy = 0u; copy < 32u; ++copy)
+      CHECK_EQ(::clEnqueueCopyBuffer(queue, busy, source, 0u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::memset(lent, 0, sizeof lent);
+  CHECK_EQ(backend.on_clEnqueueReadBufferRect(queue, source, CL_FALSE, origin, origin, rect, 0u, 0u, 0u, 0u, into,
+                                              0u, nullptr, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(lent[0], pattern);
+  CHECK_EQ(lent[64u * 4u - 1u], pattern);
+
+  ::clReleaseMemObject(image);
+  ::clReleaseMemObject(busy);
+  ::clReleaseMemObject(source);
+  ::clReleaseCommandQueue(queue);
+  backend.abandon(blob);
   backend.shut_down(); }
 
 /* A buffer the guest releases while still mapped takes its mapping with it:

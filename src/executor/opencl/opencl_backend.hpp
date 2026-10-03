@@ -93,6 +93,10 @@ public:
      * mapping one of its maps answered. Those are the only two kinds of host
      * address the guest is ever told, so they are the only two it may name. */
     void *svm_for(uint64_t address, uint64_t bytes) const override;
+    /* `bytes` at `offset` of the adopted arena, or null for an offset or a
+     * length that does not lie inside it. Every offset here is a number the
+     * guest wrote, so this is a bounds check and never a dereference. */
+    void *lent_for(uint64_t offset, uint64_t bytes) const override;
     void  made(clproto::HandleKind kind, void *object) override;
     void  retained(clproto::HandleKind kind, void *object) override;
     void  released(clproto::HandleKind kind, void *object) override;
@@ -132,10 +136,6 @@ public:
                         cl_uint alignment) override;
     void  on_clSVMFree(cl_context context, void *svm_pointer) override;
 
-    /* `bytes` at `offset` of the adopted arena, or null for an offset or a
-     * length that does not lie inside it. Every offset here is a number the
-     * guest wrote, so this is a bounds check and never a dereference. */
-    uint8_t *guest_bytes(uint64_t offset, uint64_t bytes) const;
 
     /* A buffer whose memory is already the host's: the guest names an offset
      * of the context's arena through ClBlobBacking, and the host's cl_mem is
@@ -162,14 +162,17 @@ public:
                                       cl_uint num_events_in_wait_list,
                                       const cl_event *event_wait_list, cl_event *event) override;
 
-    /* A write's source is the decode arena, which the next command decodes
-     * over - and a host driver may read a non-blocking write's source when its
-     * queue reaches the write rather than at the call (rusticl does). So every
-     * write is made blocking here, whatever the guest asked: the bytes are
-     * copied before the arena is reused. The guest's ICD drains the queue
-     * first, so the host blocks on the copy and not on work ahead of it. */
-    /* A blocking read with no events: the guest's pieces, from one read made
-     * ahead of them (ClReadAhead). */
+    /* A transfer's host memory is the decode arena, which the next command
+     * decodes over, or guest memory the guest lent (lent_for), which it may
+     * give to another transfer once this one is answered - and a host driver
+     * may touch a non-blocking transfer's memory when its queue reaches it
+     * rather than at the call (rusticl does). So every transfer is made
+     * blocking here, whatever the guest asked: the bytes have moved before the
+     * answer. The guest's ICD drains the queue first, so the host blocks on
+     * the copy and not on work ahead of it. */
+    /* A read with no events into the decode arena: the guest's pieces, from
+     * one read made ahead of them (ClReadAhead). A read into lent memory is
+     * one piece already, and reading ahead would only copy it twice. */
     cl_int on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read,
                                   size_t offset, size_t size, void *ptr, cl_uint num_events_in_wait_list,
                                   const cl_event *event_wait_list, cl_event *event) override;
@@ -177,6 +180,16 @@ public:
                                    size_t offset, size_t size, const void *ptr,
                                    cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
                                    cl_event *event) override;
+    cl_int on_clEnqueueReadImage(cl_command_queue command_queue, cl_mem image, cl_bool blocking_read,
+                                 const size_t *origin, const size_t *region, size_t row_pitch,
+                                 size_t slice_pitch, void *ptr, cl_uint num_events_in_wait_list,
+                                 const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clEnqueueReadBufferRect(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read,
+                                      const size_t *buffer_origin, const size_t *host_origin,
+                                      const size_t *region, size_t buffer_row_pitch,
+                                      size_t buffer_slice_pitch, size_t host_row_pitch,
+                                      size_t host_slice_pitch, void *ptr, cl_uint num_events_in_wait_list,
+                                      const cl_event *event_wait_list, cl_event *event) override;
     cl_int on_clEnqueueWriteImage(cl_command_queue command_queue, cl_mem image, cl_bool blocking_write,
                                   const size_t *origin, const size_t *region, size_t input_row_pitch,
                                   size_t input_slice_pitch, const void *ptr,

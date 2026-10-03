@@ -164,6 +164,28 @@ bool read_buffer(ClSession &session, std::uint64_t queue, std::uint64_t buffer, 
     return session.run(av::clproto::kCmd_clEnqueueReadBuffer, frame, bytes);
 }
 
+/* clEnqueueReadBuffer or clEnqueueWriteBuffer (`command`) of `size` bytes at
+ * buffer offset 0, its memory lent at `offset` of the guest's arena - nothing
+ * of it in the frame - with no events and no event out. */
+bool transfer_lent(ClSession &session, std::uint32_t command, std::uint64_t queue, std::uint64_t buffer,
+                   std::uint64_t size, std::uint64_t offset)
+{
+    std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(queue);
+    frame.write_pod<std::uint64_t>(buffer);
+    frame.write_varint(CL_TRUE);
+    frame.write_varint(0u);
+    frame.write_varint(size);
+    frame.write_pod<std::uint8_t>(2u);
+    frame.write_varint(size);
+    frame.write_varint(offset);
+    frame.write_varint(0u);
+    frame.write_pod<std::uint8_t>(0u);
+    frame.write_pod<std::uint8_t>(0u);
+    return session.run(command, frame, bytes);
+}
+
 }  // namespace
 
 TEST(opencl_dispatch, a_program_s_first_objects_resolve_back_as_what_they_are)
@@ -977,6 +999,62 @@ TEST(opencl_dispatch, a_failed_read_answers_no_bytes_and_no_event)
   CHECK_EQ(event, 0u);
   CHECK_EQ(reply.remaining(), 0u);
   CHECK_EQ(dispatch.handles().count(), held); }
+
+/* A read whose memory the guest lent is written there, and its answer is the
+ * count alone: the bytes are already where the guest reads them. Only the
+ * span asked for is written, and a span not wholly inside what was lent - or
+ * with nothing lent at all - is refused before the call. */
+TEST(opencl_dispatch, a_lent_read_writes_the_guest_s_memory_and_answers_only_its_count)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t buffer = session.make_buffer(context, 4096u);
+  RecordingClDispatch &dispatch = session.dispatch();
+  constexpr std::uint32_t read = av::clproto::kCmd_clEnqueueReadBuffer;
+  std::uint8_t lent[256] = {};
+  const std::uint32_t before = dispatch.calls();
+  CHECK(!transfer_lent(session, read, queue, buffer, 16u, 0u));
+  dispatch.lend(lent, sizeof lent);
+  CHECK(!transfer_lent(session, read, queue, buffer, 64u, 193u));
+  CHECK(!transfer_lent(session, read, queue, buffer, 1u, 256u));
+  CHECK(!transfer_lent(session, read, queue, buffer, 2u, ~std::uint64_t{0}));
+  CHECK_EQ(dispatch.calls(), before);
+  dispatch.answer_next_with(CL_SUCCESS, 0u);
+  CHECK(transfer_lent(session, read, queue, buffer, 64u, 192u));
+  CHECK_EQ(dispatch.calls(), before + 1u);
+  CHECK_EQ(dispatch.strays(), 0u);
+  CHECK_EQ(lent[191], 0u);
+  CHECK_EQ(lent[192], RecordingClDispatch::garbage);
+  CHECK_EQ(lent[255], RecordingClDispatch::garbage);
+  WireReader reply = session.answer();
+  CHECK_EQ(answered_result(reply), CL_SUCCESS);
+  std::uint64_t sent = 0u;
+  CHECK(reply.read_varint(sent));
+  CHECK_EQ(sent, 64u);
+  CHECK_EQ(reply.remaining(), 0u); }
+
+/* A lent write carries none of its bytes, so a frame holding only the offset
+ * runs, and the call is handed the guest's own memory there. A span past what
+ * was lent, or anything with nothing lent, is refused before the call. */
+TEST(opencl_dispatch, a_lent_write_hands_the_call_the_guest_s_memory)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t buffer = session.make_buffer(context, 4096u);
+  RecordingClDispatch &dispatch = session.dispatch();
+  constexpr std::uint32_t write = av::clproto::kCmd_clEnqueueWriteBuffer;
+  std::uint8_t lent[256] = {};
+  dispatch.lend(lent, sizeof lent);
+  const std::uint32_t before = dispatch.calls();
+  CHECK(!transfer_lent(session, write, queue, buffer, 65u, 192u));
+  CHECK_EQ(dispatch.calls(), before);
+  CHECK(transfer_lent(session, write, queue, buffer, 64u, 192u));
+  CHECK_EQ(dispatch.calls(), before + 1u);
+  CHECK_EQ(dispatch.last_called(), write);
+  CHECK_EQ(dispatch.strays(), 0u);
+  dispatch.lend(nullptr, 0u);
+  CHECK(!transfer_lent(session, write, queue, buffer, 64u, 192u));
+  CHECK_EQ(dispatch.calls(), before + 1u); }
 
 /* ---- addresses (feature 052) ---------------------------------------------
  *

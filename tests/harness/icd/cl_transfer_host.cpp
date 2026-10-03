@@ -38,7 +38,7 @@ ClTransferHost::ClTransferHost()
       reply_(static_cast<std::uint8_t *>(std::calloc(1u, reply_bytes))),
       buffer_(static_cast<std::uint8_t *>(std::calloc(1u, buffer_bytes))),
       image_(static_cast<std::uint8_t *>(std::calloc(1u, image_bytes))),
-      scratch_(static_cast<std::uint8_t *>(std::calloc(1u, scratch_bytes))),
+      scratch_(static_cast<std::uint8_t *>(std::calloc(1u, scratch_bytes))), lent_(nullptr), lent_bytes_(0u),
       seen_(static_cast<Command *>(std::calloc(max_commands, sizeof(Command)))), commands_(0u), answered_(0u),
       refused_at_(nobody), refusal_(CL_SUCCESS), arena_(nullptr, 0u), blobs_()
 {
@@ -64,6 +64,29 @@ void ClTransferHost::fill(std::uint8_t seed)
                 const std::uint32_t value = texel_of(x, y, z);
                 std::memcpy(image_ + image_offset(x, y, z), &value, element_bytes);
             }
+}
+
+void ClTransferHost::lend(std::uint8_t *block, std::size_t bytes)
+{
+    lent_ = block;
+    lent_bytes_ = bytes;
+    blobs_.lend(block, bytes);
+}
+
+bool ClTransferHost::host_bytes(WireReader &payload, std::uint8_t present, std::uint64_t count, Command &seen,
+                                std::uint8_t *&at)
+{
+    if (present == 0u) return false;
+    seen.lent = present == 2u;
+    if (!seen.lent) {
+        at = scratch_;
+        return count <= scratch_bytes;
+    }
+    std::uint64_t offset = 0u;
+    if (!payload.read_varint(offset) || lent_ == nullptr || offset > lent_bytes_ || count > lent_bytes_ - offset)
+        return false;
+    at = lent_ + offset;
+    return true;
 }
 
 std::uint32_t ClTransferHost::texel_of(std::size_t x, std::size_t y, std::size_t z) const
@@ -139,20 +162,25 @@ bool ClTransferHost::buffer_command(std::uint32_t id, WireReader &payload, Comma
     if (!payload.read_pod(queue) || !payload.read_pod(buffer) || buffer != buffer_handle) return false;
     if (!payload.read_varint(blocking) || !payload.read_varint(seen.offset) || !payload.read_varint(seen.bytes))
         return false;
-    if (!payload.read_pod(present) || present == 0u || !payload.read_varint(count) || count != seen.bytes) return false;
+    std::uint8_t *at = nullptr;
+    if (!payload.read_pod(present) || !payload.read_varint(count) || count != seen.bytes ||
+        !host_bytes(payload, present, count, seen, at))
+        return false;
     seen.blocking = blocking != 0u;
     if (seen.offset > buffer_bytes || seen.bytes > buffer_bytes - seen.offset) return false;
     const bool refused = commands_ == refused_at_;
     if (id == clproto::kCmd_clEnqueueWriteBuffer) {
-        if (!payload.read(scratch_, seen.bytes) || !read_tail(payload)) return false;
-        if (!refused) std::memcpy(buffer_ + seen.offset, scratch_, seen.bytes);
+        if ((!seen.lent && !payload.read(at, seen.bytes)) || !read_tail(payload)) return false;
+        if (!refused) std::memcpy(buffer_ + seen.offset, at, seen.bytes);
         answer.write_varint(static_cast<std::uint64_t>(static_cast<std::int64_t>(refused ? refusal_ : CL_SUCCESS)));
         return true;
     }
     if (!read_tail(payload)) return false;
     answer.write_varint(static_cast<std::uint64_t>(static_cast<std::int64_t>(refused ? refusal_ : CL_SUCCESS)));
     answer.write_varint(refused ? std::uint64_t{0} : seen.bytes);
-    if (!refused) answer.write(buffer_ + seen.offset, seen.bytes);
+    if (refused) return true;
+    if (seen.lent) std::memcpy(at, buffer_ + seen.offset, seen.bytes);
+    else answer.write(buffer_ + seen.offset, seen.bytes);
     return true;
 }
 
@@ -165,7 +193,9 @@ bool ClTransferHost::image_command(std::uint32_t id, WireReader &payload, Comman
     if (!payload.read_varint(blocking) || !read_triple(payload, seen.origin) || !read_triple(payload, seen.region))
         return false;
     if (!payload.read_varint(seen.row_pitch) || !payload.read_varint(slice_pitch)) return false;
-    if (!payload.read_pod(present) || present == 0u || !payload.read_varint(count)) return false;
+    std::uint8_t *at = nullptr;
+    if (!payload.read_pod(present) || !payload.read_varint(count) || !host_bytes(payload, present, count, seen, at))
+        return false;
     seen.blocking = blocking != 0u;
     seen.bytes = count;
     if (seen.region[2] != 1u || seen.origin[0] + seen.region[0] > image_width ||
@@ -176,21 +206,22 @@ bool ClTransferHost::image_command(std::uint32_t id, WireReader &payload, Comman
     if (count != (seen.region[1] - 1u) * row + seen.region[0] * element_bytes) return false;
     const bool refused = commands_ == refused_at_;
     if (id == clproto::kCmd_clEnqueueWriteImage) {
-        if (!payload.read(scratch_, count) || !read_tail(payload)) return false;
+        if ((!seen.lent && !payload.read(at, count)) || !read_tail(payload)) return false;
         for (std::size_t y = 0u; y < seen.region[1] && !refused; ++y)
-            std::memcpy(image_ + image_offset(seen.origin[0], seen.origin[1] + y, seen.origin[2]), scratch_ + y * row,
+            std::memcpy(image_ + image_offset(seen.origin[0], seen.origin[1] + y, seen.origin[2]), at + y * row,
                         seen.region[0] * element_bytes);
         answer.write_varint(static_cast<std::uint64_t>(static_cast<std::int64_t>(refused ? refusal_ : CL_SUCCESS)));
         return true;
     }
     if (!read_tail(payload)) return false;
-    std::memset(scratch_, 0, count);
-    for (std::size_t y = 0u; y < seen.region[1]; ++y)
-        std::memcpy(scratch_ + y * row, image_ + image_offset(seen.origin[0], seen.origin[1] + y, seen.origin[2]),
-                    seen.region[0] * element_bytes);
     answer.write_varint(static_cast<std::uint64_t>(static_cast<std::int64_t>(refused ? refusal_ : CL_SUCCESS)));
     answer.write_varint(refused ? std::uint64_t{0} : count);
-    if (!refused) answer.write(scratch_, count);
+    if (refused) return true;
+    if (!seen.lent) std::memset(at, 0, count);
+    for (std::size_t y = 0u; y < seen.region[1]; ++y)
+        std::memcpy(at + y * row, image_ + image_offset(seen.origin[0], seen.origin[1] + y, seen.origin[2]),
+                    seen.region[0] * element_bytes);
+    if (!seen.lent) answer.write(at, count);
     return true;
 }
 
@@ -214,7 +245,9 @@ bool ClTransferHost::rect_command(std::uint32_t id, WireReader &payload, Command
     if (!payload.read_varint(seen.buffer_pitch[0]) || !payload.read_varint(seen.buffer_pitch[1]) ||
         !payload.read_varint(seen.row_pitch) || !payload.read_varint(host_slice))
         return false;
-    if (!payload.read_pod(present) || present == 0u || !payload.read_varint(count)) return false;
+    std::uint8_t *at = nullptr;
+    if (!payload.read_pod(present) || !payload.read_varint(count) || !host_bytes(payload, present, count, seen, at))
+        return false;
     seen.blocking = blocking != 0u;
     seen.bytes = count;
     const std::size_t host_row = seen.row_pitch != 0u ? seen.row_pitch : seen.region[0];
@@ -225,19 +258,20 @@ bool ClTransferHost::rect_command(std::uint32_t id, WireReader &payload, Command
     if (rect_offset(seen, seen.region[0], seen.region[1] - 1u, 0u) > buffer_bytes) return false;
     const bool refused = commands_ == refused_at_;
     if (id == clproto::kCmd_clEnqueueWriteBufferRect) {
-        if (!payload.read(scratch_, count) || !read_tail(payload)) return false;
+        if ((!seen.lent && !payload.read(at, count)) || !read_tail(payload)) return false;
         for (std::size_t y = 0u; y < seen.region[1] && !refused; ++y)
-            std::memcpy(buffer_ + rect_offset(seen, 0u, y, 0u), scratch_ + y * host_row, seen.region[0]);
+            std::memcpy(buffer_ + rect_offset(seen, 0u, y, 0u), at + y * host_row, seen.region[0]);
         answer.write_varint(static_cast<std::uint64_t>(static_cast<std::int64_t>(refused ? refusal_ : CL_SUCCESS)));
         return true;
     }
     if (!read_tail(payload)) return false;
-    std::memset(scratch_, 0, count);
-    for (std::size_t y = 0u; y < seen.region[1]; ++y)
-        std::memcpy(scratch_ + y * host_row, buffer_ + rect_offset(seen, 0u, y, 0u), seen.region[0]);
     answer.write_varint(static_cast<std::uint64_t>(static_cast<std::int64_t>(refused ? refusal_ : CL_SUCCESS)));
     answer.write_varint(refused ? std::uint64_t{0} : count);
-    if (!refused) answer.write(scratch_, count);
+    if (refused) return true;
+    if (!seen.lent) std::memset(at, 0, count);
+    for (std::size_t y = 0u; y < seen.region[1]; ++y)
+        std::memcpy(at + y * host_row, buffer_ + rect_offset(seen, 0u, y, 0u), seen.region[0]);
+    if (!seen.lent) answer.write(at, count);
     return true;
 }
 

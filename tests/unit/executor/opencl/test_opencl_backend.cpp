@@ -147,17 +147,17 @@ TEST(opencl_backend, a_truncated_command_is_refused_at_every_length)
 TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_over)
 { OpenClBackend backend;
   /* Nothing adopted: no offset names anything. */
-  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  CHECK(backend.lent_for(0u, 1u) == nullptr);
   av::ImportedBlob blob;
   CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
   CHECK(backend.adopt(blob));
   CHECK(blob.wire_handle() != 0u);
-  CHECK(backend.guest_bytes(0u, sizeof arena_region) == arena_region);
-  CHECK(backend.guest_bytes(4096u, 64u) == arena_region + 4096u);
+  CHECK(backend.lent_for(0u, sizeof arena_region) == arena_region);
+  CHECK(backend.lent_for(4096u, 64u) == arena_region + 4096u);
   /* The bounds are the point: these are guest numbers. */
-  CHECK(backend.guest_bytes(0u, sizeof arena_region + 1u) == nullptr);
-  CHECK(backend.guest_bytes(sizeof arena_region, 1u) == nullptr);
-  CHECK(backend.guest_bytes(~std::uint64_t{0}, 1u) == nullptr);
+  CHECK(backend.lent_for(0u, sizeof arena_region + 1u) == nullptr);
+  CHECK(backend.lent_for(sizeof arena_region, 1u) == nullptr);
+  CHECK(backend.lent_for(~std::uint64_t{0}, 1u) == nullptr);
 
   /* One at a time: a second would leave the first unreachable and its
    * buffers pointing into memory nothing owns. */
@@ -168,7 +168,7 @@ TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_
 
   backend.abandon(blob);
   CHECK_EQ(blob.object(), 0u);
-  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  CHECK(backend.lent_for(0u, 1u) == nullptr);
   /* And the slot is free again. */
   CHECK(backend.adopt(second));
   backend.abandon(second);
@@ -183,7 +183,7 @@ TEST(opencl_backend, a_dma_buf_is_not_memory_a_buffer_can_be_made_over)
   handle.size = 4096u;
   CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
   CHECK(!backend.adopt(blob));
-  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  CHECK(backend.lent_for(0u, 1u) == nullptr);
   backend.abandon(blob);
   CHECK_EQ(blob.object(), 0u); }
 

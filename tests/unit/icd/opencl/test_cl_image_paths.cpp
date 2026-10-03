@@ -715,18 +715,20 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   static std::uint8_t from[2u * av::clicd::ClTransferChunks::write_room + 1u];
   for (std::size_t index = 0u; index < bytes; ++index) from[index] = static_cast<std::uint8_t>(index);
 
-  /* The create names no bytes and no copy; three writes on a queue of the
-   * ICD's own follow, unanswered, and the queue goes. */
+  /* The create names no bytes and no copy; one write staged in the arena,
+   * on a queue of the ICD's own, follows - answered, since the block it names
+   * is free for the next transfer once it returns - and the queue goes. */
   std::uint32_t sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_result(CL_SUCCESS);
   cl_int error = CL_INVALID_VALUE;
   cl_mem buffer = rig.root().create_buffer(run.context(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, from,
                                            nullptr, &error);
   CHECK(buffer != nullptr);
   CHECK_EQ(error, CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  CHECK_EQ(rig.kmt().commands(), sent + 4u);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clCreateBuffer);
   av::WireReader payload = payload_of(rig.kmt(), sent);
   std::uint64_t  context = 0u, flags = 0u, size = 0u;
@@ -737,11 +739,9 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK_EQ(size, bytes);
   CHECK_EQ(present, 0u);
   CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clCreateCommandQueueWithProperties);
-  for (std::uint32_t piece = 2u; piece < 5u; ++piece) {
-      CHECK_EQ(rig.kmt().command_id(sent + piece), av::clproto::kCmd_clEnqueueWriteBuffer);
-      CHECK(carries(rig.kmt(), sent + piece, own_queue));
-  }
-  CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clReleaseCommandQueue);
+  CHECK_EQ(rig.kmt().command_id(sent + 2u), av::clproto::kCmd_clEnqueueWriteBuffer);
+  CHECK(carries(rig.kmt(), sent + 2u, own_queue));
+  CHECK_EQ(rig.kmt().command_id(sent + 3u), av::clproto::kCmd_clReleaseCommandQueue);
 
   /* A copy one command carries rides inside the create. */
   sent = rig.kmt().commands();
@@ -749,15 +749,18 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, 64u, from, nullptr, &error) != nullptr);
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
 
-  /* The pieces are not answered one by one: a write the host refuses is the
-   * next answered command's to report, and the buffer is made. */
+  /* A write the host refuses is the create's failure: the buffer goes back
+   * and the application is told the host's error. */
   sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 4u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
+  rig.host().cl_result(CL_MEM_OBJECT_ALLOCATION_FAILURE);
   rig.host().cl_result(CL_SUCCESS);
-  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) != nullptr);
-  CHECK_EQ(error, CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clReleaseMemObject);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
 
   /* A queue the host will not make gives the buffer back, and the application

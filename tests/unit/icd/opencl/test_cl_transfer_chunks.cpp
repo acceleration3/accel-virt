@@ -4,8 +4,12 @@
  * its place - and then how many commands it took and what each named. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_transfer_host.hpp"
+#include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
+#include "icd/opencl/cl_arena_blocks.hpp"
 #include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_image_region.hpp"
+#include "icd/opencl/cl_staging_block.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 
@@ -15,6 +19,7 @@
 #include <cstring>
 
 using av::ClTransferHost;
+using av::clicd::ClArenaBlocks;
 using av::clicd::ClBufferRect;
 using av::clicd::ClImageRegion;
 using av::clicd::ClTransferChunks;
@@ -22,6 +27,11 @@ using av::clicd::ClTransferChunks;
 namespace {
 
 constexpr std::uint64_t queue = 0x6500u;
+
+av::LockTrace           trace;
+av::RecordingThreadLock lock(trace, 'B');
+/* A context with no arena, whose transfers all go inline. */
+ClArenaBlocks inline_only(lock);
 constexpr std::size_t   element = ClTransferHost::element_bytes;
 
 /* Memory of the application's, filled with a marker a transfer must not leave
@@ -54,7 +64,7 @@ private:
 TEST(cl_transfer_chunks, a_read_that_fits_one_reply_is_one_blocking_command)
 { ClTransferHost host;
   host.fill(3u);
-  ClTransferChunks chunks(host, queue);
+  ClTransferChunks chunks(host, queue, inline_only);
   Memory into(100u);
   CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 1000u, 100u, into.at(0u)), CL_SUCCESS);
   for (std::size_t index = 0u; index < 100u; ++index) CHECK_EQ(*into.at(index), host.buffer_at(1000u + index));
@@ -66,7 +76,7 @@ TEST(cl_transfer_chunks, a_read_that_fits_one_reply_is_one_blocking_command)
 TEST(cl_transfer_chunks, a_read_larger_than_a_reply_is_cut_into_pieces_that_cover_it_once_in_order)
 { ClTransferHost host;
   host.fill(11u);
-  ClTransferChunks  chunks(host, queue);
+  ClTransferChunks  chunks(host, queue, inline_only);
   const std::size_t bytes = 3u * ClTransferChunks::read_room + 17u;
   Memory            into(bytes);
   CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 777u, bytes, into.at(0u)), CL_SUCCESS);
@@ -86,7 +96,7 @@ TEST(cl_transfer_chunks, a_read_larger_than_a_reply_is_cut_into_pieces_that_cove
 
 TEST(cl_transfer_chunks, a_write_larger_than_the_staging_room_is_cut_into_pieces_that_fit_it)
 { ClTransferHost host;
-  ClTransferChunks  chunks(host, queue);
+  ClTransferChunks  chunks(host, queue, inline_only);
   const std::size_t bytes = 2u * ClTransferChunks::write_room + 5u;
   Memory            from(bytes);
   for (std::size_t index = 0u; index < bytes; ++index) *from.at(index) = static_cast<std::uint8_t>(index * 7u);
@@ -106,7 +116,7 @@ TEST(cl_transfer_chunks, a_write_larger_than_the_staging_room_is_cut_into_pieces
 TEST(cl_transfer_chunks, a_refused_piece_ends_the_transfer_with_the_hosts_error)
 { ClTransferHost host;
   host.refuse(1u, CL_INVALID_VALUE);
-  ClTransferChunks  chunks(host, queue);
+  ClTransferChunks  chunks(host, queue, inline_only);
   const std::size_t bytes = 3u * ClTransferChunks::read_room;
   Memory            into(bytes);
   CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 0u, bytes, into.at(0u)), CL_INVALID_VALUE);
@@ -119,7 +129,7 @@ TEST(cl_transfer_chunks, a_refused_piece_ends_the_transfer_with_the_hosts_error)
 TEST(cl_transfer_chunks, a_write_sends_every_piece_whatever_the_host_answers_one)
 { ClTransferHost refusing;
   refusing.refuse(0u, CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  ClTransferChunks  writes(refusing, queue);
+  ClTransferChunks  writes(refusing, queue, inline_only);
   const std::size_t bytes = 2u * ClTransferChunks::write_room + 5u;
   Memory            from(bytes);
   std::memset(from.at(0u), 0x5A, bytes);
@@ -132,7 +142,7 @@ TEST(cl_transfer_chunks, a_write_sends_every_piece_whatever_the_host_answers_one
 
 TEST(cl_transfer_chunks, a_transport_that_fails_is_the_apis_out_of_resources)
 { ClTransferHost host;
-  ClTransferChunks chunks(host, queue);
+  ClTransferChunks chunks(host, queue, inline_only);
   std::uint8_t     byte = 0u;
   /* The host's buffer ends here, so this host cannot read the command. */
   CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, ClTransferHost::buffer_bytes, 1u, &byte), CL_OUT_OF_RESOURCES);
@@ -141,7 +151,7 @@ TEST(cl_transfer_chunks, a_transport_that_fails_is_the_apis_out_of_resources)
 
 TEST(cl_transfer_chunks, a_transfer_of_nothing_sends_nothing)
 { ClTransferHost   host;
-  ClTransferChunks chunks(host, queue);
+  ClTransferChunks chunks(host, queue, inline_only);
   std::uint8_t     byte = 0u;
   CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 0u, 0u, &byte), CL_SUCCESS);
   CHECK_EQ(chunks.write(ClTransferHost::buffer_handle, 0u, 0u, &byte), CL_SUCCESS);
@@ -150,7 +160,7 @@ TEST(cl_transfer_chunks, a_transfer_of_nothing_sends_nothing)
 TEST(cl_transfer_chunks, packed_image_rows_come_back_as_runs_that_fit_a_reply)
 { ClTransferHost host;
   host.fill(0u);
-  ClTransferChunks  chunks(host, queue);
+  ClTransferChunks  chunks(host, queue, inline_only);
   /* 60000 texels a row is 240000 bytes: four rows fit a reply, five do not. */
   constexpr std::size_t width = 60000u;
   const std::size_t   origin[3] = {100u, 0u, 1u}, extent[3] = {width, 16u, 1u};
@@ -171,7 +181,7 @@ TEST(cl_transfer_chunks, packed_image_rows_come_back_as_runs_that_fit_a_reply)
 TEST(cl_transfer_chunks, image_rows_with_a_gap_come_back_one_at_a_time_and_the_gap_is_left_alone)
 { ClTransferHost host;
   host.fill(0u);
-  ClTransferChunks    chunks(host, queue);
+  ClTransferChunks    chunks(host, queue, inline_only);
   const std::size_t   origin[3] = {0u, 2u, 0u}, extent[3] = {8u, 5u, 1u};
   const std::size_t   pitch = 8u * element + 12u;
   const ClImageRegion region(origin, extent, pitch, 0u, element);
@@ -189,7 +199,7 @@ TEST(cl_transfer_chunks, image_rows_with_a_gap_come_back_one_at_a_time_and_the_g
 TEST(cl_transfer_chunks, an_image_row_longer_than_a_reply_comes_back_in_pieces_of_whole_texels)
 { ClTransferHost host;
   host.fill(0u);
-  ClTransferChunks    chunks(host, queue);
+  ClTransferChunks    chunks(host, queue, inline_only);
   const std::size_t   width = ClTransferChunks::read_room / element + 100u;
   const std::size_t   origin[3] = {10u, 3u, 2u}, extent[3] = {width, 2u, 1u};
   const ClImageRegion region(origin, extent, 0u, 0u, element);
@@ -210,7 +220,7 @@ TEST(cl_transfer_chunks, an_image_row_longer_than_a_reply_comes_back_in_pieces_o
 TEST(cl_transfer_chunks, wide_image_rows_with_a_gap_come_back_in_runs_and_leave_the_gap)
 { ClTransferHost host;
   host.fill(0u);
-  ClTransferChunks    chunks(host, queue);
+  ClTransferChunks    chunks(host, queue, inline_only);
   const std::size_t   width = ClTransferChunks::read_room / element + 3u;
   const std::size_t   origin[3] = {0u, 1u, 0u}, extent[3] = {width, 2u, 1u};
   const std::size_t   pitch = width * element + 8u;
@@ -229,7 +239,7 @@ TEST(cl_transfer_chunks, wide_image_rows_with_a_gap_come_back_in_runs_and_leave_
 
 TEST(cl_transfer_chunks, image_rows_go_to_the_host_in_runs_at_the_applications_own_pitch)
 { ClTransferHost host;
-  ClTransferChunks    chunks(host, queue);
+  ClTransferChunks    chunks(host, queue, inline_only);
   const std::size_t   width = 20000u;
   const std::size_t   pitch = width * element + 256u;
   const std::size_t   origin[3] = {5u, 1u, 0u}, extent[3] = {width, 10u, 2u};
@@ -260,7 +270,7 @@ TEST(cl_transfer_chunks, image_rows_go_to_the_host_in_runs_at_the_applications_o
 
 TEST(cl_transfer_chunks, an_image_row_longer_than_the_staging_room_goes_in_pieces_of_whole_texels)
 { ClTransferHost host;
-  ClTransferChunks    chunks(host, queue);
+  ClTransferChunks    chunks(host, queue, inline_only);
   const std::size_t   width = ClTransferChunks::write_room / element + 1000u;
   const std::size_t   origin[3] = {0u, 7u, 0u}, extent[3] = {width, 1u, 1u};
   const ClImageRegion region(origin, extent, 0u, 0u, element);
@@ -286,22 +296,22 @@ TEST(cl_transfer_chunks, a_refused_image_piece_ends_the_transfer_with_the_hosts_
   Memory              memory(2u * ClTransferHost::image_width * element);
   { ClTransferHost host;
     host.refuse(1u, CL_INVALID_OPERATION);
-    ClTransferChunks chunks(host, queue);
+    ClTransferChunks chunks(host, queue, inline_only);
     CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, wide, memory.at(0u)), CL_INVALID_OPERATION);
     CHECK_EQ(host.commands(), 2u); }
   { ClTransferHost host;
     host.refuse(0u, CL_INVALID_OPERATION);
-    ClTransferChunks chunks(host, queue);
+    ClTransferChunks chunks(host, queue, inline_only);
     CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, narrow, memory.at(0u)), CL_INVALID_OPERATION);
     CHECK_EQ(host.commands(), 1u); }
   { ClTransferHost host;
     host.refuse(0u, CL_INVALID_OPERATION);
-    ClTransferChunks chunks(host, queue);
+    ClTransferChunks chunks(host, queue, inline_only);
     CHECK_EQ(chunks.write_image(ClTransferHost::image_handle, wide, memory.at(0u)), CL_INVALID_OPERATION);
     CHECK_EQ(host.commands(), 1u); }
   { ClTransferHost host;
     host.refuse(0u, CL_INVALID_OPERATION);
-    ClTransferChunks chunks(host, queue);
+    ClTransferChunks chunks(host, queue, inline_only);
     CHECK_EQ(chunks.write_image(ClTransferHost::image_handle, narrow, memory.at(0u)), CL_INVALID_OPERATION);
     CHECK_EQ(host.commands(), 1u); } }
 
@@ -310,7 +320,7 @@ TEST(cl_transfer_chunks, a_refused_image_piece_ends_the_transfer_with_the_hosts_
 TEST(cl_transfer_chunks, packed_rectangle_rows_come_back_as_runs_that_fit_a_reply)
 { ClTransferHost host;
   host.fill(5u);
-  ClTransferChunks   chunks(host, queue);
+  ClTransferChunks   chunks(host, queue, inline_only);
   /* 3000 bytes a row out of a buffer 4096 bytes wide, more rows than a reply. */
   constexpr std::size_t width = 3000u, rows = 600u, pitch = 4096u;
   const std::size_t  corner[3] = {100u, 2u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, rows, 1u};
@@ -334,7 +344,7 @@ TEST(cl_transfer_chunks, packed_rectangle_rows_come_back_as_runs_that_fit_a_repl
 TEST(cl_transfer_chunks, rectangle_rows_with_a_gap_come_back_one_at_a_time_and_the_gap_is_left_alone)
 { ClTransferHost host;
   host.fill(9u);
-  ClTransferChunks   chunks(host, queue);
+  ClTransferChunks   chunks(host, queue, inline_only);
   const std::size_t  corner[3] = {7u, 3u, 1u}, host_corner[3] = {2u, 1u, 0u}, extent[3] = {20u, 5u, 1u};
   /* The application's rows are 32 bytes apart, its rectangle 2 bytes and a
    * row in; the buffer's rows 64 apart and its slices 1024. */
@@ -359,7 +369,7 @@ TEST(cl_transfer_chunks, rectangle_rows_with_a_gap_come_back_one_at_a_time_and_t
 TEST(cl_transfer_chunks, a_rectangle_row_longer_than_a_reply_comes_back_in_runs)
 { ClTransferHost host;
   host.fill(1u);
-  ClTransferChunks   chunks(host, queue);
+  ClTransferChunks   chunks(host, queue, inline_only);
   const std::size_t  width = ClTransferChunks::read_room + 10u;
   const std::size_t  corner[3] = {3u, 0u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, 2u, 1u};
   const ClBufferRect rect(corner, host_corner, extent, width + 16u, 0u, 0u, 0u);
@@ -374,7 +384,7 @@ TEST(cl_transfer_chunks, a_rectangle_row_longer_than_a_reply_comes_back_in_runs)
 TEST(cl_transfer_chunks, rectangle_rows_go_to_the_buffer_at_its_pitch_from_the_applications_corner)
 { ClTransferHost host;
   host.fill(0u);
-  ClTransferChunks   chunks(host, queue);
+  ClTransferChunks   chunks(host, queue, inline_only);
   /* Two slices of ten 400-byte rows. The application's rows are 448 apart
    * from 8 bytes and a row in; the buffer's 512 apart, its slices 10240. */
   const std::size_t  corner[3] = {16u, 4u, 1u}, host_corner[3] = {8u, 1u, 0u}, extent[3] = {400u, 10u, 2u};
@@ -402,7 +412,7 @@ TEST(cl_transfer_chunks, rectangle_rows_go_to_the_buffer_at_its_pitch_from_the_a
 
 TEST(cl_transfer_chunks, a_rectangle_row_longer_than_the_staging_room_goes_in_packed_runs)
 { ClTransferHost host;
-  ClTransferChunks   chunks(host, queue);
+  ClTransferChunks   chunks(host, queue, inline_only);
   const std::size_t  width = ClTransferChunks::write_room + 5u;
   const std::size_t  corner[3] = {0u, 1u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, 1u, 1u};
   const ClBufferRect rect(corner, host_corner, extent, width, 0u, 0u, 0u);
@@ -416,7 +426,7 @@ TEST(cl_transfer_chunks, a_rectangle_row_longer_than_the_staging_room_goes_in_pa
 
 TEST(cl_transfer_chunks, a_refused_rectangle_piece_ends_the_transfer_with_the_hosts_error)
 { ClTransferHost host;
-  ClTransferChunks   chunks(host, queue);
+  ClTransferChunks   chunks(host, queue, inline_only);
   const std::size_t  corner[3] = {0u, 0u, 0u}, extent[3] = {16u, 4u, 1u};
   const ClBufferRect rect(corner, corner, extent, 32u, 0u, 32u, 0u);
   Memory             memory(4u * 32u);
@@ -426,3 +436,281 @@ TEST(cl_transfer_chunks, a_refused_rectangle_piece_ends_the_transfer_with_the_ho
   host.refuse(1u, CL_OUT_OF_RESOURCES);
   CHECK_EQ(chunks.write_buffer_rect(ClTransferHost::buffer_handle, rect, memory.at(0u)), CL_OUT_OF_RESOURCES);
   CHECK_EQ(host.commands(), 2u); }
+
+/* ---- staged in the arena ------------------------------------------------------ */
+
+namespace {
+
+/* A context's blob arena of `bytes`: what the host is lent, and what the
+ * blocks are carved from. */
+class Arena {
+public:
+    Arena(ClTransferHost &host, std::size_t bytes)
+        : memory_(static_cast<std::uint8_t *>(std::aligned_alloc(4096u, bytes))), blocks_(lock)
+    {
+        blocks_.lend(memory_, bytes);
+        host.lend(memory_, bytes);
+    }
+    ~Arena() { std::free(memory_); }
+    Arena(const Arena &) = delete;
+    Arena &operator=(const Arena &) = delete;
+
+    ClArenaBlocks &blocks() { return blocks_; }
+
+private:
+    std::uint8_t *memory_;
+    ClArenaBlocks blocks_;
+};
+
+}  // namespace
+
+/* A read the arena has room for is one command whose bytes the host writes
+ * into a block, and they reach the application whole; the block goes back. */
+TEST(cl_transfer_chunks, a_read_with_room_in_the_arena_is_one_lent_command)
+{ ClTransferHost host;
+  host.fill(3u);
+  Arena             arena(host, 8u << 20);
+  ClTransferChunks  chunks(host, queue, arena.blocks());
+  const std::size_t bytes = 3u << 20;
+  Memory            into(bytes);
+  CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 1000u, bytes, into.at(0u)), CL_SUCCESS);
+  bool every_byte = true;
+  for (std::size_t index = 0u; index < bytes; ++index)
+      every_byte = every_byte && *into.at(index) == host.buffer_at(1000u + index);
+  CHECK(every_byte);
+  CHECK_EQ(host.commands(), 1u);
+  CHECK(host.command(0u).lent);
+  CHECK(host.command(0u).blocking);
+  CHECK_EQ(host.command(0u).bytes, bytes);
+  CHECK_EQ(arena.blocks().live(), 0u); }
+
+/* An arena too crowded for the whole transfer lends what it has - half, then
+ * a quarter - and the transfer goes a block at a time, in order. */
+TEST(cl_transfer_chunks, a_crowded_arena_stages_a_block_at_a_time)
+{ ClTransferHost host;
+  host.fill(7u);
+  Arena             arena(host, 1u << 20);
+  ClTransferChunks  chunks(host, queue, arena.blocks());
+  const std::size_t bytes = 3u << 20, block = 768u << 10;
+  Memory            into(bytes);
+  CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 5u, bytes, into.at(0u)), CL_SUCCESS);
+  bool every_byte = true;
+  for (std::size_t index = 0u; index < bytes; ++index)
+      every_byte = every_byte && *into.at(index) == host.buffer_at(5u + index);
+  CHECK(every_byte);
+  CHECK_EQ(host.commands(), 4u);
+  for (std::uint32_t index = 0u; index < host.commands(); ++index) {
+      CHECK(host.command(index).lent);
+      CHECK_EQ(host.command(index).offset, 5u + index * block);
+      CHECK_EQ(host.command(index).bytes, block);
+  }
+  CHECK_EQ(arena.blocks().live(), 0u); }
+
+/* A staged write is answered piece by piece, so a refusal is the caller's to
+ * see - the block it was read from is reused by the next piece - and nothing
+ * after it is sent. */
+TEST(cl_transfer_chunks, a_staged_write_lands_whole_and_a_refused_piece_ends_it)
+{ { ClTransferHost host;
+    Arena             arena(host, 8u << 20);
+    ClTransferChunks  chunks(host, queue, arena.blocks());
+    const std::size_t bytes = 2u << 20;
+    Memory            from(bytes);
+    for (std::size_t index = 0u; index < bytes; ++index) *from.at(index) = static_cast<std::uint8_t>(index * 13u);
+    CHECK_EQ(chunks.write(ClTransferHost::buffer_handle, 64u, bytes, from.at(0u)), CL_SUCCESS);
+    bool every_byte = true;
+    for (std::size_t index = 0u; index < bytes; ++index)
+        every_byte = every_byte && host.buffer_at(64u + index) == *from.at(index);
+    CHECK(every_byte);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(host.command(0u).lent);
+    CHECK_EQ(arena.blocks().live(), 0u); }
+  { ClTransferHost host;
+    host.refuse(0u, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+    Arena            arena(host, 1u << 20);
+    ClTransferChunks chunks(host, queue, arena.blocks());
+    Memory           from(3u << 20);
+    CHECK_EQ(chunks.write(ClTransferHost::buffer_handle, 0u, 3u << 20, from.at(0u)), CL_MEM_OBJECT_ALLOCATION_FAILURE);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK_EQ(arena.blocks().live(), 0u); }
+  { ClTransferHost host;
+    host.refuse(1u, CL_INVALID_VALUE);
+    Arena            arena(host, 1u << 20);
+    ClTransferChunks chunks(host, queue, arena.blocks());
+    Memory           into(3u << 20);
+    CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 0u, 3u << 20, into.at(0u)), CL_INVALID_VALUE);
+    CHECK_EQ(host.commands(), 2u);
+    CHECK_EQ(arena.blocks().live(), 0u); } }
+
+/* Below ClStagingBlock::least a transfer rides inside its command, and so does
+ * one the arena has no block for at all. */
+TEST(cl_transfer_chunks, a_small_transfer_or_a_full_arena_goes_inline)
+{ ClTransferHost host;
+  host.fill(1u);
+  { Arena            arena(host, 8u << 20);
+    ClTransferChunks chunks(host, queue, arena.blocks());
+    Memory           into(av::clicd::ClStagingBlock::least - 1u);
+    CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 0u, av::clicd::ClStagingBlock::least - 1u, into.at(0u)),
+             CL_SUCCESS);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(!host.command(0u).lent);
+    CHECK_EQ(*into.at(av::clicd::ClStagingBlock::least - 2u), host.buffer_at(av::clicd::ClStagingBlock::least - 2u)); }
+  { Arena            arena(host, 32u << 10);
+    ClTransferChunks chunks(host, queue, arena.blocks());
+    Memory           into(av::clicd::ClStagingBlock::least);
+    CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 0u, av::clicd::ClStagingBlock::least, into.at(0u)),
+             CL_SUCCESS);
+    CHECK_EQ(host.commands(), 2u);
+    CHECK(!host.command(1u).lent);
+    CHECK_EQ(*into.at(100u), host.buffer_at(100u)); } }
+
+/* An image region is packed tight in the block whatever the application's
+ * pitches, so rows with gaps between them - and slices with gaps between
+ * those - are one command a slice, naming no pitch; the gaps are the
+ * application's and are left alone. */
+TEST(cl_transfer_chunks, a_staged_image_read_packs_gapped_rows_into_one_command_a_slice)
+{ ClTransferHost host;
+  host.fill(0u);
+  Arena               arena(host, 8u << 20);
+  ClTransferChunks    chunks(host, queue, arena.blocks());
+  constexpr std::size_t width = 4096u, rows = 5u;
+  const std::size_t   pitch = width * element + 12u, slice_pitch = rows * pitch + 40u;
+  const std::size_t   origin[3] = {3u, 2u, 0u}, extent[3] = {width, rows, 2u};
+  const ClImageRegion region(origin, extent, pitch, slice_pitch, element);
+  Memory              into(2u * slice_pitch);
+  CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, region, into.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 2u);
+  CHECK(host.command(0u).lent);
+  CHECK_EQ(host.command(0u).row_pitch, 0u);
+  CHECK_EQ(host.command(0u).region[1], rows);
+  CHECK_EQ(host.command(1u).origin[2], 1u);
+  bool every_texel = true;
+  for (std::size_t z = 0u; z < 2u; ++z)
+      for (std::size_t y = 0u; y < rows; ++y)
+          for (std::size_t x = 0u; x < width; ++x)
+              every_texel = every_texel &&
+                            into.texel(z * slice_pitch + y * pitch + x * element) == host.texel_of(3u + x, 2u + y, z);
+  CHECK(every_texel);
+  CHECK_EQ(*into.at(width * element), 0xEEu);
+  CHECK_EQ(*into.at(pitch - 1u), 0xEEu);
+  CHECK_EQ(*into.at(slice_pitch - 1u), 0xEEu);
+  CHECK_EQ(arena.blocks().live(), 0u); }
+
+TEST(cl_transfer_chunks, a_staged_image_write_packs_gapped_rows_into_one_command)
+{ ClTransferHost host;
+  Arena               arena(host, 8u << 20);
+  ClTransferChunks    chunks(host, queue, arena.blocks());
+  constexpr std::size_t width = 4096u, rows = 5u;
+  const std::size_t   pitch = width * element + 12u;
+  const std::size_t   origin[3] = {9u, 1u, 2u}, extent[3] = {width, rows, 1u};
+  const ClImageRegion region(origin, extent, pitch, 0u, element);
+  Memory              from(rows * pitch);
+  for (std::size_t y = 0u; y < rows; ++y)
+      for (std::size_t x = 0u; x < width; ++x) {
+          const std::uint32_t value = static_cast<std::uint32_t>(y * 100000u + x);
+          std::memcpy(from.at(y * pitch + x * element), &value, sizeof value);
+      }
+  CHECK_EQ(chunks.write_image(ClTransferHost::image_handle, region, from.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 1u);
+  CHECK(host.command(0u).lent);
+  CHECK_EQ(host.command(0u).row_pitch, 0u);
+  bool every_texel = true;
+  for (std::size_t y = 0u; y < rows; ++y)
+      for (std::size_t x = 0u; x < width; ++x)
+          every_texel = every_texel && host.texel(9u + x, 1u + y, 2u) == static_cast<std::uint32_t>(y * 100000u + x);
+  CHECK(every_texel);
+  CHECK_EQ(arena.blocks().live(), 0u); }
+
+/* A row longer than the block the arena could lend goes in runs of whole
+ * texels, each packed from the block's start. */
+TEST(cl_transfer_chunks, a_staged_image_row_longer_than_its_block_goes_in_runs)
+{ ClTransferHost host;
+  host.fill(0u);
+  Arena               arena(host, 512u << 10);
+  ClTransferChunks    chunks(host, queue, arena.blocks());
+  const std::size_t   width = ClTransferHost::image_width - 10u, run = (512u << 10) / element;
+  const std::size_t   origin[3] = {10u, 4u, 1u}, extent[3] = {width, 2u, 1u};
+  const ClImageRegion region(origin, extent, 0u, 0u, element);
+  Memory              into(2u * width * element);
+  CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, region, into.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 4u);
+  CHECK_EQ(host.command(0u).region[0], run);
+  CHECK_EQ(host.command(1u).region[0], width - run);
+  CHECK_EQ(host.command(1u).origin[0], 10u + run);
+  CHECK_EQ(host.command(2u).origin[1], 5u);
+  bool every_texel = true;
+  for (std::size_t y = 0u; y < 2u; ++y)
+      for (std::size_t x = 0u; x < width; ++x)
+          every_texel = every_texel && into.texel((y * width + x) * element) == host.texel_of(10u + x, 4u + y, 1u);
+  CHECK(every_texel); }
+
+/* A rectangle staged the same way: the buffer's side at its own pitch, the
+ * application's packed into the block from the corner, so one command whose
+ * host side names no corner and no pitch; the application's memory around
+ * the rectangle is left alone. */
+TEST(cl_transfer_chunks, a_staged_rectangle_is_one_packed_command_each_way)
+{ constexpr std::size_t width = 3000u, rows = 30u, pitch = 4096u, host_pitch = 3100u;
+  const std::size_t corner[3] = {100u, 2u, 0u}, host_corner[3] = {5u, 1u, 0u}, extent[3] = {width, rows, 1u};
+  const ClBufferRect rect(corner, host_corner, extent, pitch, 0u, host_pitch, 0u);
+  CHECK_EQ(rect.check(), CL_SUCCESS);
+  const std::size_t at_corner = host_pitch + 5u;
+  { ClTransferHost host;
+    host.fill(5u);
+    Arena            arena(host, 8u << 20);
+    ClTransferChunks chunks(host, queue, arena.blocks());
+    Memory           into((rows + 1u) * host_pitch);
+    CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, into.at(0u)), CL_SUCCESS);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(host.command(0u).lent);
+    CHECK_EQ(host.command(0u).row_pitch, 0u);
+    CHECK_EQ(host.command(0u).buffer_pitch[0], pitch);
+    bool every_byte = true;
+    for (std::size_t y = 0u; y < rows; ++y)
+        for (std::size_t x = 0u; x < width; ++x)
+            every_byte = every_byte &&
+                         *into.at(at_corner + y * host_pitch + x) == host.buffer_at((2u + y) * pitch + 100u + x);
+    CHECK(every_byte);
+    CHECK_EQ(*into.at(at_corner - 1u), 0xEEu);
+    CHECK_EQ(*into.at(at_corner + width), 0xEEu);
+    CHECK_EQ(arena.blocks().live(), 0u); }
+  { ClTransferHost host;
+    Arena            arena(host, 8u << 20);
+    ClTransferChunks chunks(host, queue, arena.blocks());
+    Memory           from((rows + 1u) * host_pitch);
+    for (std::size_t index = 0u; index < (rows + 1u) * host_pitch; ++index)
+        *from.at(index) = static_cast<std::uint8_t>(index * 31u);
+    CHECK_EQ(chunks.write_buffer_rect(ClTransferHost::buffer_handle, rect, from.at(0u)), CL_SUCCESS);
+    CHECK_EQ(host.commands(), 1u);
+    CHECK(host.command(0u).lent);
+    bool every_byte = true;
+    for (std::size_t y = 0u; y < rows; ++y)
+        for (std::size_t x = 0u; x < width; ++x)
+            every_byte = every_byte &&
+                         host.buffer_at((2u + y) * pitch + 100u + x) == *from.at(at_corner + y * host_pitch + x);
+    CHECK(every_byte);
+    CHECK_EQ(host.buffer_at(2u * pitch + 99u), 0u);
+    CHECK_EQ(arena.blocks().live(), 0u); } }
+
+/* A refused staged piece of an image or a rectangle ends the transfer with
+ * the host's error, either way, and gives the block back. */
+TEST(cl_transfer_chunks, a_refused_staged_region_ends_the_transfer)
+{ constexpr std::size_t width = 4096u, rows = 5u;
+  const std::size_t   origin[3] = {0u, 0u, 0u}, extent[3] = {width, rows, 1u};
+  const ClImageRegion region(origin, extent, 0u, 0u, element);
+  const std::size_t   corner[3] = {0u, 0u, 0u}, rect_extent[3] = {width * element, rows, 1u};
+  const ClBufferRect  rect(corner, corner, rect_extent, width * element, 0u, 0u, 0u);
+  Memory              memory(rows * width * element);
+  for (std::uint32_t which = 0u; which < 4u; ++which) {
+      ClTransferHost host;
+      host.refuse(0u, CL_INVALID_OPERATION);
+      Arena            arena(host, 8u << 20);
+      ClTransferChunks chunks(host, queue, arena.blocks());
+      const cl_int     answered =
+          which == 0u ? chunks.read_image(ClTransferHost::image_handle, region, memory.at(0u))
+          : which == 1u ? chunks.write_image(ClTransferHost::image_handle, region, memory.at(0u))
+          : which == 2u ? chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, memory.at(0u))
+                        : chunks.write_buffer_rect(ClTransferHost::buffer_handle, rect, memory.at(0u));
+      CHECK_EQ(answered, CL_INVALID_OPERATION);
+      CHECK_EQ(host.commands(), 1u);
+      CHECK(host.command(0u).lent);
+      CHECK_EQ(arena.blocks().live(), 0u);
+  } }

@@ -1364,6 +1364,7 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
     size_t size{};
     bool ptr_wanted = false;
     size_t ptr_capacity = 0;
+    void* ptr_lent = nullptr;
     cl_uint num_events_in_wait_list{};
     const cl_event* event_wait_list = nullptr;
     uint64_t event_wait_list_count = 0;
@@ -1404,6 +1405,12 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
             if (!r.read_varint(cap)) return false;
             ptr_capacity = static_cast<size_t>(cap);
         }
+        if (wire_wanted == 2) {
+            uint64_t wire_offset = 0;
+            if (!r.read_varint(wire_offset)) return false;
+            ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));
+            if (ptr_lent == nullptr) return false;
+        }
     }
     {
         uint64_t wire_value = 0;
@@ -1436,7 +1443,9 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
     if (ptr_wanted && static_cast<uint64_t>(size) > static_cast<uint64_t>(ptr_capacity)) return false;
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     void* ptr = nullptr;
-    if (ptr_wanted) {
+    if (ptr_lent != nullptr) {
+        ptr = static_cast<void*>(ptr_lent);
+    } else if (ptr_wanted) {
         ptr = reinterpret_cast<void*>(arena.allocate<uint8_t>(static_cast<size_t>(ptr_capacity) + 1));
         if (ptr == nullptr) return false;
     }
@@ -1449,7 +1458,7 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
         if (wire_written > static_cast<uint64_t>(ptr_capacity))
             wire_written = static_cast<uint64_t>(ptr_capacity);
         reply.write_varint(wire_written);
-        if (wire_written != 0) reply.write(ptr, static_cast<size_t>(wire_written));
+        if (wire_written != 0 && ptr_lent == nullptr) reply.write(ptr, static_cast<size_t>(wire_written));
     }
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -1506,7 +1515,15 @@ static bool decode_clEnqueueWriteBuffer(ServerDispatch& s, ::av::WireReader& r,
     {
         uint8_t wire_present = 0;
         if (!r.read_pod(wire_present)) return false;
-        if (wire_present != 0) {
+        if (wire_present == 2) {
+            uint64_t wire_count = 0;
+            uint64_t wire_offset = 0;
+            if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;
+            void* wire_bytes = s.lent_for(wire_offset, wire_count);
+            if (wire_bytes == nullptr) return false;
+            ptr = static_cast<const void*>(wire_bytes);
+            ptr_count = wire_count;
+        } else if (wire_present != 0) {
             uint64_t wire_count = 0;
             if (!r.read_varint(wire_count)) return false;
             auto* wire_bytes = arena.allocate<uint8_t>(static_cast<size_t>(wire_count) + 1);
@@ -1764,6 +1781,7 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
     size_t slice_pitch{};
     bool ptr_wanted = false;
     size_t ptr_capacity = 0;
+    void* ptr_lent = nullptr;
     cl_uint num_events_in_wait_list{};
     const cl_event* event_wait_list = nullptr;
     uint64_t event_wait_list_count = 0;
@@ -1838,6 +1856,12 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
             if (!r.read_varint(cap)) return false;
             ptr_capacity = static_cast<size_t>(cap);
         }
+        if (wire_wanted == 2) {
+            uint64_t wire_offset = 0;
+            if (!r.read_varint(wire_offset)) return false;
+            ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));
+            if (ptr_lent == nullptr) return false;
+        }
     }
     {
         uint64_t wire_value = 0;
@@ -1876,7 +1900,9 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
     }
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     void* ptr = nullptr;
-    if (ptr_wanted) {
+    if (ptr_lent != nullptr) {
+        ptr = static_cast<void*>(ptr_lent);
+    } else if (ptr_wanted) {
         ptr = reinterpret_cast<void*>(arena.allocate<uint8_t>(static_cast<size_t>(ptr_capacity) + 1));
         if (ptr == nullptr) return false;
     }
@@ -1889,7 +1915,7 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
         if (wire_written > static_cast<uint64_t>(ptr_capacity))
             wire_written = static_cast<uint64_t>(ptr_capacity);
         reply.write_varint(wire_written);
-        if (wire_written != 0) reply.write(ptr, static_cast<size_t>(wire_written));
+        if (wire_written != 0 && ptr_lent == nullptr) reply.write(ptr, static_cast<size_t>(wire_written));
     }
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -1984,7 +2010,15 @@ static bool decode_clEnqueueWriteImage(ServerDispatch& s, ::av::WireReader& r,
     {
         uint8_t wire_present = 0;
         if (!r.read_pod(wire_present)) return false;
-        if (wire_present != 0) {
+        if (wire_present == 2) {
+            uint64_t wire_count = 0;
+            uint64_t wire_offset = 0;
+            if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;
+            void* wire_bytes = s.lent_for(wire_offset, wire_count);
+            if (wire_bytes == nullptr) return false;
+            ptr = static_cast<const void*>(wire_bytes);
+            ptr_count = wire_count;
+        } else if (wire_present != 0) {
             uint64_t wire_count = 0;
             if (!r.read_varint(wire_count)) return false;
             auto* wire_bytes = arena.allocate<uint8_t>(static_cast<size_t>(wire_count) + 1);
@@ -4668,6 +4702,7 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
     size_t host_slice_pitch{};
     bool ptr_wanted = false;
     size_t ptr_capacity = 0;
+    void* ptr_lent = nullptr;
     cl_uint num_events_in_wait_list{};
     const cl_event* event_wait_list = nullptr;
     uint64_t event_wait_list_count = 0;
@@ -4769,6 +4804,12 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
             if (!r.read_varint(cap)) return false;
             ptr_capacity = static_cast<size_t>(cap);
         }
+        if (wire_wanted == 2) {
+            uint64_t wire_offset = 0;
+            if (!r.read_varint(wire_offset)) return false;
+            ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));
+            if (ptr_lent == nullptr) return false;
+        }
     }
     {
         uint64_t wire_value = 0;
@@ -4808,7 +4849,9 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
     }
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     void* ptr = nullptr;
-    if (ptr_wanted) {
+    if (ptr_lent != nullptr) {
+        ptr = static_cast<void*>(ptr_lent);
+    } else if (ptr_wanted) {
         ptr = reinterpret_cast<void*>(arena.allocate<uint8_t>(static_cast<size_t>(ptr_capacity) + 1));
         if (ptr == nullptr) return false;
     }
@@ -4821,7 +4864,7 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
         if (wire_written > static_cast<uint64_t>(ptr_capacity))
             wire_written = static_cast<uint64_t>(ptr_capacity);
         reply.write_varint(wire_written);
-        if (wire_written != 0) reply.write(ptr, static_cast<size_t>(wire_written));
+        if (wire_written != 0 && ptr_lent == nullptr) reply.write(ptr, static_cast<size_t>(wire_written));
     }
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -4947,7 +4990,15 @@ static bool decode_clEnqueueWriteBufferRect(ServerDispatch& s, ::av::WireReader&
     {
         uint8_t wire_present = 0;
         if (!r.read_pod(wire_present)) return false;
-        if (wire_present != 0) {
+        if (wire_present == 2) {
+            uint64_t wire_count = 0;
+            uint64_t wire_offset = 0;
+            if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;
+            void* wire_bytes = s.lent_for(wire_offset, wire_count);
+            if (wire_bytes == nullptr) return false;
+            ptr = static_cast<const void*>(wire_bytes);
+            ptr_count = wire_count;
+        } else if (wire_present != 0) {
             uint64_t wire_count = 0;
             if (!r.read_varint(wire_count)) return false;
             auto* wire_bytes = arena.allocate<uint8_t>(static_cast<size_t>(wire_count) + 1);

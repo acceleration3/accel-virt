@@ -143,6 +143,10 @@ def lower(raw: RawRegistry, profile) -> Registry:
                     param.optional = bool(override["optional"])
                 if "element" in override:
                     param.element = override["element"]
+                if "lent" in override:
+                    param.lent = bool(override["lent"])
+            if param.lent and param.role not in (Role.BYTES_IN, Role.BYTES_OUT):
+                raise ValueError(f"{name}.{param.name} is lent but is not bytes")
             if _needs_len(param):
                 raise ValueError(
                     f"{name}.{param.name} is a {param.role.value} and cl.xml "

@@ -4,6 +4,7 @@
 #include "cl_dispatch_client.h"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/client/sync_call_scope.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -665,8 +666,12 @@ cl_int av_clEnqueueReadBuffer(::av::ClientTransport& t, uint64_t command_queue, 
     b.write_varint(static_cast<uint64_t>(blocking_read));
     b.write_varint(static_cast<uint64_t>(offset));
     b.write_varint(static_cast<uint64_t>(size));
-    b.write_pod<uint8_t>(ptr != nullptr ? 1 : 0);
+    uint64_t ptr_lent_at = 0;
+    const bool ptr_lent = ptr != nullptr &&
+        t.blobs().holds(ptr, static_cast<size_t>(size), ptr_lent_at);
+    b.write_pod<uint8_t>(ptr == nullptr ? 0 : (ptr_lent ? 2 : 1));
     if (ptr != nullptr) b.write_varint(static_cast<uint64_t>(size));
+    if (ptr_lent) b.write_varint(ptr_lent_at);
     b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
     b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
     if (event_wait_list != nullptr) {
@@ -691,7 +696,7 @@ cl_int av_clEnqueueReadBuffer(::av::ClientTransport& t, uint64_t command_queue, 
         uint64_t wire_count = 0;
         if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
         if (wire_count > static_cast<uint64_t>(size)) return CL_OUT_OF_RESOURCES;
-        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !ptr_lent && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (event != nullptr) {
         if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
@@ -707,8 +712,14 @@ cl_int av_clEnqueueWriteBuffer(::av::ClientTransport& t, uint64_t command_queue,
     b.write_varint(static_cast<uint64_t>(blocking_write));
     b.write_varint(static_cast<uint64_t>(offset));
     b.write_varint(static_cast<uint64_t>(size));
-    b.write_pod<uint8_t>(ptr != nullptr ? 1 : 0);
-    if (ptr != nullptr) {
+    uint64_t ptr_lent_at = 0;
+    const bool ptr_lent = ptr != nullptr &&
+        t.blobs().holds(ptr, static_cast<size_t>(size), ptr_lent_at);
+    b.write_pod<uint8_t>(ptr == nullptr ? 0 : (ptr_lent ? 2 : 1));
+    if (ptr_lent) {
+        b.write_varint(static_cast<uint64_t>(size));
+        b.write_varint(ptr_lent_at);
+    } else if (ptr != nullptr) {
         b.write_varint(static_cast<uint64_t>(size));
         b.write(ptr, static_cast<size_t>(size));
     }
@@ -834,8 +845,12 @@ cl_int av_clEnqueueReadImage(::av::ClientTransport& t, uint64_t command_queue, u
     }
     b.write_varint(static_cast<uint64_t>(row_pitch));
     b.write_varint(static_cast<uint64_t>(slice_pitch));
-    b.write_pod<uint8_t>(ptr != nullptr ? 1 : 0);
+    uint64_t ptr_lent_at = 0;
+    const bool ptr_lent = ptr != nullptr &&
+        t.blobs().holds(ptr, static_cast<size_t>(ptr_bytes), ptr_lent_at);
+    b.write_pod<uint8_t>(ptr == nullptr ? 0 : (ptr_lent ? 2 : 1));
     if (ptr != nullptr) b.write_varint(static_cast<uint64_t>(ptr_bytes));
+    if (ptr_lent) b.write_varint(ptr_lent_at);
     b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
     b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
     if (event_wait_list != nullptr) {
@@ -860,7 +875,7 @@ cl_int av_clEnqueueReadImage(::av::ClientTransport& t, uint64_t command_queue, u
         uint64_t wire_count = 0;
         if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
         if (wire_count > static_cast<uint64_t>(ptr_bytes)) return CL_OUT_OF_RESOURCES;
-        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !ptr_lent && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (event != nullptr) {
         if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
@@ -890,8 +905,14 @@ cl_int av_clEnqueueWriteImage(::av::ClientTransport& t, uint64_t command_queue, 
     }
     b.write_varint(static_cast<uint64_t>(input_row_pitch));
     b.write_varint(static_cast<uint64_t>(input_slice_pitch));
-    b.write_pod<uint8_t>(ptr != nullptr ? 1 : 0);
-    if (ptr != nullptr) {
+    uint64_t ptr_lent_at = 0;
+    const bool ptr_lent = ptr != nullptr &&
+        t.blobs().holds(ptr, static_cast<size_t>(ptr_bytes), ptr_lent_at);
+    b.write_pod<uint8_t>(ptr == nullptr ? 0 : (ptr_lent ? 2 : 1));
+    if (ptr_lent) {
+        b.write_varint(static_cast<uint64_t>(ptr_bytes));
+        b.write_varint(ptr_lent_at);
+    } else if (ptr != nullptr) {
         b.write_varint(static_cast<uint64_t>(ptr_bytes));
         b.write(ptr, static_cast<size_t>(ptr_bytes));
     }
@@ -2353,8 +2374,12 @@ cl_int av_clEnqueueReadBufferRect(::av::ClientTransport& t, uint64_t command_que
     b.write_varint(static_cast<uint64_t>(buffer_slice_pitch));
     b.write_varint(static_cast<uint64_t>(host_row_pitch));
     b.write_varint(static_cast<uint64_t>(host_slice_pitch));
-    b.write_pod<uint8_t>(ptr != nullptr ? 1 : 0);
+    uint64_t ptr_lent_at = 0;
+    const bool ptr_lent = ptr != nullptr &&
+        t.blobs().holds(ptr, static_cast<size_t>(ptr_bytes), ptr_lent_at);
+    b.write_pod<uint8_t>(ptr == nullptr ? 0 : (ptr_lent ? 2 : 1));
     if (ptr != nullptr) b.write_varint(static_cast<uint64_t>(ptr_bytes));
+    if (ptr_lent) b.write_varint(ptr_lent_at);
     b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
     b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
     if (event_wait_list != nullptr) {
@@ -2379,7 +2404,7 @@ cl_int av_clEnqueueReadBufferRect(::av::ClientTransport& t, uint64_t command_que
         uint64_t wire_count = 0;
         if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
         if (wire_count > static_cast<uint64_t>(ptr_bytes)) return CL_OUT_OF_RESOURCES;
-        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !ptr_lent && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (event != nullptr) {
         if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
@@ -2418,8 +2443,14 @@ cl_int av_clEnqueueWriteBufferRect(::av::ClientTransport& t, uint64_t command_qu
     b.write_varint(static_cast<uint64_t>(buffer_slice_pitch));
     b.write_varint(static_cast<uint64_t>(host_row_pitch));
     b.write_varint(static_cast<uint64_t>(host_slice_pitch));
-    b.write_pod<uint8_t>(ptr != nullptr ? 1 : 0);
-    if (ptr != nullptr) {
+    uint64_t ptr_lent_at = 0;
+    const bool ptr_lent = ptr != nullptr &&
+        t.blobs().holds(ptr, static_cast<size_t>(ptr_bytes), ptr_lent_at);
+    b.write_pod<uint8_t>(ptr == nullptr ? 0 : (ptr_lent ? 2 : 1));
+    if (ptr_lent) {
+        b.write_varint(static_cast<uint64_t>(ptr_bytes));
+        b.write_varint(ptr_lent_at);
+    } else if (ptr != nullptr) {
         b.write_varint(static_cast<uint64_t>(ptr_bytes));
         b.write(ptr, static_cast<size_t>(ptr_bytes));
     }

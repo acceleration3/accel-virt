@@ -55,6 +55,23 @@ TEST(guest_region, answers_inside_the_mapping_it_was_given)
   CHECK(region.at(sizeof mapping, 0u) == mapping + sizeof mapping);
   CHECK(region.invariants_hold()); }
 
+/* What a decoder resolved through `at` - the region's first byte to its last
+ * - and nothing beside it: not the byte past the end, not one before the
+ * start, and nothing at all with no region. */
+TEST(guest_region, holds_only_pointers_into_the_mapping)
+{ GuestRegion  region;
+  std::uint8_t elsewhere = 0u;
+  CHECK(!region.holds(mapping));
+  region.take(mapping + 16, sizeof mapping - 32u);
+  CHECK(region.holds(mapping + 16));
+  CHECK(region.holds(mapping + sizeof mapping - 17u));
+  CHECK(!region.holds(mapping + sizeof mapping - 16u));
+  CHECK(!region.holds(mapping + 15));
+  CHECK(!region.holds(&elsewhere));
+  CHECK(!region.holds(nullptr));
+  region.give_back();
+  CHECK(!region.holds(mapping + 16)); }
+
 TEST(guest_region, refuses_anything_past_the_end)
 { GuestRegion region;
   region.take(mapping, sizeof mapping);

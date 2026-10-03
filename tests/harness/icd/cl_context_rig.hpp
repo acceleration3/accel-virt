@@ -34,6 +34,7 @@ public:
     ScriptedHost           &host();
     LockTrace              &trace();
     RecordingThreadLock    &send_lock();
+    RecordingThreadLock    &blocks_lock();
     RecordingLog           &log();
     av::icd::IcdConnection &connection();
     /* The NT handles a context's imports resolve through (feature 053). */
@@ -45,6 +46,7 @@ private:
     ScriptedHost           host_;
     LockTrace              trace_;
     RecordingThreadLock    send_lock_;
+    RecordingThreadLock    blocks_lock_;
     RecordingLog           log_;
     av::icd::IcdConnection connection_;
     RecordingThreadLock    handles_lock_;

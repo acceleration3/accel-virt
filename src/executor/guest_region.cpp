@@ -80,6 +80,15 @@ uint8_t *GuestRegion::at(uint64_t offset, uint64_t bytes) const
     return base_ + offset;
 }
 
+bool GuestRegion::holds(const void *bytes) const
+{
+    AV_SCOPE("GuestRegion::holds");
+    if (base_ == nullptr) return false;
+    /* As integers: the pointer may be into any other object. One below the
+     * region wraps to an offset past it. */
+    return reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(base_) < length_;
+}
+
 uint64_t GuestRegion::length() const
 {
     AV_SCOPE("GuestRegion::length");

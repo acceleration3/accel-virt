@@ -59,6 +59,7 @@ class ThreadLock;
 
 namespace av::clicd {
 
+class ClArenaBlocks;
 class ClBufferRect;
 
 class D3dAdapterSource;
@@ -79,9 +80,10 @@ public:
     static constexpr size_t  host_extensions_bytes = 4096u;
 
     /* `objects_lock` is the object table's own (ClObjectTable): every entry
-     * point looks its arguments up there without `lock`. */
+     * point looks its arguments up there without `lock`. `blocks_lock` is
+     * every context's arena blocks' (ClArenaBlocks). */
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-              icd::ThreadLock &objects_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+              icd::ThreadLock &objects_lock, icd::ThreadLock &blocks_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
               D3dAdapterSource &d3d_adapters,
               ClIcdBinding &binding);
     ~ClIcdRoot();
@@ -396,10 +398,11 @@ private:
     /* Fetches the bytes of every non-blocking read waiting on one of these
      * events, now that the host has reached them. The first failure, or
      * CL_SUCCESS - including for events nothing was waiting on. */
-    cl_int           deliver_reads(ClientTransport &wire, const uint64_t *events, uint32_t count);
+    cl_int           deliver_reads(ClientTransport &wire, ClArenaBlocks &blocks, const uint64_t *events,
+                                   uint32_t count);
     /* Every read outstanding on one queue, for a finish - which says
      * everything queued on it has run. */
-    cl_int           deliver_queued(ClientTransport &wire, uint64_t queue);
+    cl_int           deliver_queued(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t queue);
     /* Waits for everything enqueued on `queue` so far without holding the
      * host's worker: a marker is the queue's end as an event, and this side
      * asks after it (ClBlockingWait). What a finish is, and what every
@@ -445,10 +448,11 @@ private:
     /* Writes the application's bytes into an image just made, on a queue of
      * its own that is released again; CL_INVALID_OPERATION for an image type
      * whose layout is not rows and slices. */
-    cl_int           fill_image(ClientTransport &wire, uint64_t context, uint64_t image,
+    cl_int           fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t image,
                                 const cl_image_desc &desc, const void *from);
     /* The same for a buffer whose bytes one create could not carry. */
-    cl_int           fill_buffer(ClientTransport &wire, uint64_t context, uint64_t buffer, size_t bytes,
+    cl_int           fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t buffer,
+                                 size_t bytes,
                                  const void *from);
     /* A host queue on `context` that nothing else has, for a fill: nothing is
      * ahead of its writes for the host to wait behind. 0, with the error, when
@@ -490,6 +494,7 @@ private:
     ObjectPool<GuestClContext> contexts_;
     BlockSource           &memory_;
     icd::ThreadLock       &send_lock_;
+    icd::ThreadLock       &blocks_lock_;
     /* The one device this ICD shows, made on the first clGetDeviceIDs. */
     ClDeviceReport         device_;
     ClObject              *device_object_;

@@ -22,6 +22,7 @@ struct ClientBlobArenaProbe {
         arena.block_ = nullptr;
         arena.capacity_ = 1u;
     }
+    static void outgrow(ClientBlobArena &arena) { arena.capacity_ = arena.lent_ + 1u; }
 };
 
 }  // namespace av
@@ -197,4 +198,41 @@ TEST(client_blob_arena, the_invariant_catches_impossible_states)
   CHECK(!overfilled.invariants_hold());
   ClientBlobArena orphaned(block, sizeof block);
   ClientBlobArenaProbe::orphan_capacity(orphaned);
-  CHECK(!orphaned.invariants_hold()); }
+  CHECK(!orphaned.invariants_hold());
+  ClientBlobArena outgrown(block, sizeof block);
+  ClientBlobArenaProbe::outgrow(outgrown);
+  CHECK(!outgrown.invariants_hold()); }
+
+/* Bytes already inside the block cross by offset, with no lease: the first
+ * and last byte of it, a span ending on its last byte, and room set aside -
+ * which the host sees as well as any. A span that starts before it, starts
+ * past it or runs off its end is the application's own memory, and so is any
+ * span at all with no arena, or one of no bytes. */
+TEST(client_blob_arena, bytes_inside_the_block_are_held_at_their_offset)
+{ std::uint8_t    memory[96];
+  std::uint8_t   *block = memory + 16;
+  ClientBlobArena arena(block, 64u);
+  std::uint64_t   offset = 999u;
+  CHECK(arena.holds(block, 64u, offset));
+  CHECK_EQ(offset, 0u);
+  CHECK(arena.holds(block + 63, 1u, offset));
+  CHECK_EQ(offset, 63u);
+  CHECK(arena.holds(block + 40, 24u, offset));
+  CHECK_EQ(offset, 40u);
+  const ClientBlobLease aside = arena.set_aside(16u);
+  CHECK(arena.holds(aside.data(), 16u, offset));
+  CHECK_EQ(offset, 48u);
+  offset = 999u;
+  CHECK(!arena.holds(block + 40, 25u, offset));
+  CHECK(!arena.holds(block - 1, 2u, offset));
+  CHECK(!arena.holds(block + 64, 1u, offset));
+  CHECK(!arena.holds(block + 65, 0u, offset));
+  CHECK(!arena.holds(block + 65, 1u, offset));
+  CHECK(!arena.holds(block + 8, 0u, offset));
+  CHECK(!arena.holds(memory, 8u, offset));
+  CHECK_EQ(offset, 999u);
+  ClientBlobArena none;
+  CHECK(!none.holds(block, 1u, offset));
+  arena.lend(nullptr, 64u);
+  CHECK(!arena.holds(block, 1u, offset));
+  CHECK_EQ(offset, 999u); }

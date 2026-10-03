@@ -64,6 +64,12 @@ public:
      * reaches a call without being one of these is the stranger, and each
      * call below is where that is judged. */
     void *svm_for(std::uint64_t address, std::uint64_t bytes) const override;
+    /* `bytes` at `offset` of the memory `lend` named, or null for none lent
+     * or a span not wholly inside it. A span a call is handed there is no
+     * stray: it is guest memory the decoder resolved, as an arena's would be. */
+    void *lent_for(std::uint64_t offset, std::uint64_t bytes) const override;
+    /* What a guest's blob arena is to the decoder from now on. */
+    void  lend(std::uint8_t *block, std::size_t bytes);
 
     /* Makes `bytes` of shared virtual memory a guest may then name, and
      * answers the address of it, or 0 when there is no room left. */
@@ -149,8 +155,13 @@ private:
     /* An ID query's answer: garbage past the ids reported, and the count. */
     cl_int scribble_ids(void *ids, cl_uint room, cl_uint *count);
 
+    /* Whether all `length` bytes at `bytes` are inside what was lent. */
+    bool inside_lent(const void *bytes, std::size_t length) const;
+
     const std::uint8_t *block_;
     const WireArena    &arena_;
+    std::uint8_t       *lent_;
+    std::size_t         lent_bytes_;
     ClHandleRegistry    handles_;
     HostSvmRanges       svm_;
     /* What make_svm hands out of: real storage, so a decoder that writes

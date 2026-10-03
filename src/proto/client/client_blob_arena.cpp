@@ -36,13 +36,13 @@ size_t   ClientBlobLease::bytes() const
     return bytes_;
 }
 
-ClientBlobArena::ClientBlobArena() : block_(nullptr), capacity_(0u), used_(0u)
+ClientBlobArena::ClientBlobArena() : block_(nullptr), lent_(0u), capacity_(0u), used_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
 }
 
 ClientBlobArena::ClientBlobArena(uint8_t *block, size_t capacity)
-    : block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u)
+    : block_(block), lent_(block == nullptr ? 0u : capacity), capacity_(lent_), used_(0u)
     {
         AV_SCOPE("ClientBlobArena::ClientBlobArena");
     }
@@ -51,7 +51,8 @@ void ClientBlobArena::lend(uint8_t *block, size_t capacity)
 {
     AV_SCOPE("ClientBlobArena::lend");
     block_ = block;
-    capacity_ = block == nullptr ? 0u : capacity;
+    lent_ = block == nullptr ? 0u : capacity;
+    capacity_ = lent_;
     used_ = 0u;
 }
 
@@ -98,6 +99,19 @@ void ClientBlobArena::restore(const ClientBlobLease &aside)
     if (aside.taken() && aside.offset() == capacity_) capacity_ += aside.bytes();
 }
 
+bool ClientBlobArena::holds(const void *bytes, size_t count, uint64_t &offset) const
+{
+    AV_SCOPE("ClientBlobArena::holds");
+    if (block_ == nullptr || count == 0u) return false;
+    /* As integers: comparing pointers into different objects is undefined,
+     * and `bytes` is any application pointer at all. One below the block
+     * wraps to an offset past it. */
+    const uintptr_t into = reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(block_);
+    if (into > lent_ || count > lent_ - into) return false;
+    offset = static_cast<uint64_t>(into);
+    return true;
+}
+
 size_t ClientBlobArena::used() const
 {
     AV_SCOPE("ClientBlobArena::used");
@@ -113,7 +127,7 @@ size_t ClientBlobArena::room() const
 bool ClientBlobArena::invariants_hold() const
 {
     AV_SCOPE("ClientBlobArena::invariants_hold");
-    return used_ <= capacity_ && (block_ != nullptr || capacity_ == 0u);
+    return used_ <= capacity_ && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u);
 }
 
 }  // namespace av

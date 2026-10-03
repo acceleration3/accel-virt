@@ -49,6 +49,9 @@ public:
     /* `bytes` at `offset`, or null: for a region that is not there, an offset
      * past its end, a length past its end, and a sum that would wrap. */
     uint8_t *at(uint64_t offset, uint64_t bytes) const;
+    /* Whether `bytes` points inside the region: memory a decoder resolved
+     * through `at`, rather than a copy of its own. */
+    bool     holds(const void *bytes) const;
     /* `value` stored at `offset` as one aligned eight-byte store, which the
      * guest reads whole and never half: an error word, a fence value. False
      * for a word outside the region or off its alignment. */

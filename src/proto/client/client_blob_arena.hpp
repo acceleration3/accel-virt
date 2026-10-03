@@ -7,7 +7,11 @@
  * no host-visible memory - `ready()` is false and the client sends inline
  * instead (feature 043). A lease lives until an answer retires every lease
  * together, since a one-way command is read when the host runs it, after its
- * send (feature 050). */
+ * send (feature 050).
+ *
+ * Memory the guest already has inside the lent block - a buffer the OpenCL
+ * ICD carved out of it - needs no lease at all: `holds` answers the offset the
+ * host reads it at, and the bytes cross without a copy. */
 #ifndef AV_CLIENT_BLOB_ARENA_HPP
 #define AV_CLIENT_BLOB_ARENA_HPP
 
@@ -67,6 +71,11 @@ public:
     /* The most recent room set aside goes back to lending; any other is kept
      * set aside, since lending can only grow at the top. */
     void            restore(const ClientBlobLease &aside);
+    /* Whether all `count` bytes at `bytes` lie inside the lent block, with
+     * `offset` where they start in it. Not for no arena or a count of zero,
+     * and `offset` is untouched then. Room taken, set aside or free alike:
+     * the host sees the whole block. */
+    [[nodiscard]] bool holds(const void *bytes, size_t count, uint64_t &offset) const;
 
     size_t used() const;
     /* What the next lease can have at most. */
@@ -75,6 +84,8 @@ public:
 
 private:
     uint8_t *block_;
+    /* The whole block lent, which set_aside never shrinks. */
+    size_t   lent_;
     size_t   capacity_;
     size_t   used_;
 

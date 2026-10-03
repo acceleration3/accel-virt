@@ -71,6 +71,11 @@ class Param:
     size_ret_param: str | None = None
     # Whether the pointer may be null.
     optional: bool = True
+    # For BYTES_IN and BYTES_OUT: bytes that may already be in the context's
+    # blob arena, which then cross as an offset into it rather than inline.
+    # Only plain data the host copies and never reads for meaning: the guest
+    # can change lent bytes while the host works on them.
+    lent: bool = False
     # The element type for array roles, and the struct name for struct
     # roles; ``type.base`` with the pointer stripped.
     element: str = ""

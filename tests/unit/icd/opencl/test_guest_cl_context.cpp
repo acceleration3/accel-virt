@@ -12,6 +12,8 @@
 #include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
 #include "harness/icd/cl_context_rig.hpp"
+#include "proto/client/client_blob_arena.hpp"
+#include "proto/client/client_transport.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_property_list.hpp"
@@ -54,7 +56,7 @@ namespace {
 
 GuestClContext made_context(ClContextRig &rig)
 {
-    return GuestClContext(rig.connection(), rig.platform(), rig.send_lock(), rig.log(),
+    return GuestClContext(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(),
                           rig.handles());
 }
 
@@ -185,7 +187,8 @@ TEST(guest_cl_context, with_no_avgpu_adapter_it_is_not_supported_and_holds_nothi
   av::RecordingThreadLock handles_lock(trace, 'H');
   av::icd::SharedHandles  handles(kmt, handles_lock);
   /* No adapter was added: what a process on a machine with no avgpu sees. */
-  GuestClContext context(connection, platform, send_lock, log, handles);
+  av::RecordingThreadLock blocks_lock(trace, 'B');
+  GuestClContext context(connection, platform, send_lock, blocks_lock, log, handles);
   CHECK_STATUS(context.make(), Status::not_supported);
   CHECK(context.state() == GuestClContext::State::created);
   CHECK_EQ(kmt.open_objects(), 0u);
@@ -435,6 +438,24 @@ TEST(guest_cl_context, a_context_says_whether_it_got_an_arena)
     GuestClContext context = made_context(rig);
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(!context.has_arena()); } }
+
+/* The arena's last word is where the host publishes errors, so no block - a
+ * buffer's or a transfer's - is ever carved over it: every page but its last
+ * is lent out, and what is lent is memory the wire names by offset. */
+TEST(guest_cl_context, the_arena_s_blocks_stop_short_of_the_host_s_error_word)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  const std::uint64_t page = av::clicd::ClArenaBlocks::alignment;
+  std::uint64_t       offset = 0u;
+  CHECK(!context.blocks().take(GuestClContext::arena_bytes, offset));
+  CHECK(!context.blocks().take(GuestClContext::arena_bytes - page + 1u, offset));
+  CHECK(context.blocks().take(GuestClContext::arena_bytes - page, offset));
+  std::uint64_t named = ~std::uint64_t{0};
+  CHECK(context.wire()->blobs().holds(context.blocks().at(offset, GuestClContext::arena_bytes - page),
+                                      GuestClContext::arena_bytes - page, named));
+  CHECK_EQ(named, offset); }
 
 /* The invariant reaches what the context owns, not only its own fields: a
  * broken allocation or a broken mapping is a broken context. */

@@ -78,8 +78,9 @@ public:
      * open - more than 64 for a new, empty one. */
     static constexpr uint32_t max_mappings = 4096u;
 
+    /* `blocks_lock` is the arena blocks' own (ClArenaBlocks). */
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                   LogSink &log, icd::SharedHandles &handles);
+                   icd::ThreadLock &blocks_lock, LogSink &log, icd::SharedHandles &handles);
     ~GuestClContext();
     GuestClContext(const GuestClContext &) = delete;
     GuestClContext &operator=(const GuestClContext &) = delete;

@@ -109,7 +109,7 @@ TEST(mapped_region, giving_it_up_leaves_it_answering_for_nothing)
 TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
 
   std::uint8_t *const at = context.take_mapping(host_buffer, host_address, 0u, 128u, CL_MAP_READ);
@@ -131,7 +131,7 @@ TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
 TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   CHECK(context.take_mapping(host_buffer, host_address, 0u, 0u, CL_MAP_READ) == nullptr);
   CHECK(context.take_mapping(0u, host_address, 0u, 16u, CL_MAP_READ) == nullptr);
@@ -147,7 +147,7 @@ TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
 TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffer_takes_its_own)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   static std::uint8_t own[64];
   std::uint8_t *const at = context.take_application_mapping(host_buffer, host_address, 16u, 8u, CL_MAP_WRITE, own + 16);
@@ -173,7 +173,7 @@ TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffe
 TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stays_usable)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   /* One staged mapping, then the rest of the table with mappings of memory
    * the context already has - thousands of staged blocks are more than the
@@ -194,7 +194,7 @@ TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stay
 TEST(guest_cl_context, mappings_left_live_go_with_the_context)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  { GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
+  { GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(context.take_mapping(host_buffer, host_address, 0u, 256u, CL_MAP_WRITE) != nullptr);
     CHECK_EQ(context.mappings(), 1u); }

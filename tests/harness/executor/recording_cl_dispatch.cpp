@@ -43,7 +43,7 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 }  // namespace
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
-    : block_(block), arena_(arena), handles_(), svm_(), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
+    : block_(block), arena_(arena), lent_(nullptr), lent_bytes_(0u), handles_(), svm_(), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
       last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
       answer_pending_(false), answer_result_(CL_SUCCESS), answer_reported_(0u), logged_{}
 {}
@@ -126,6 +126,26 @@ void *RecordingClDispatch::svm_for(std::uint64_t address, std::uint64_t bytes) c
     /* A refusal, not a stranger: the decoder reads null as "the guest named
      * an address it was never given" and never makes the call. */
     return svm_.resolve(address, bytes);
+}
+
+void *RecordingClDispatch::lent_for(std::uint64_t offset, std::uint64_t bytes) const
+{
+    if (lent_ == nullptr || offset > lent_bytes_ || bytes > lent_bytes_ - offset) return nullptr;
+    return lent_ + offset;
+}
+
+void RecordingClDispatch::lend(std::uint8_t *block, std::size_t bytes)
+{
+    lent_ = block;
+    lent_bytes_ = block == nullptr ? 0u : bytes;
+}
+
+bool RecordingClDispatch::inside_lent(const void *bytes, std::size_t length) const
+{
+    const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(bytes);
+    const std::uintptr_t first = reinterpret_cast<std::uintptr_t>(lent_);
+    return lent_ != nullptr && start >= first && start - first <= lent_bytes_ &&
+           length <= lent_bytes_ - (start - first);
 }
 
 void RecordingClDispatch::from_svm(const void *pointer, std::uint64_t bytes) const
@@ -335,7 +355,7 @@ void RecordingClDispatch::handed(clproto::HandleKind kind, void *object)
 
 void RecordingClDispatch::touched(const void *bytes, std::size_t length)
 {
-    if (length == 0u) return;
+    if (length == 0u || inside_lent(bytes, length)) return;
     const std::uintptr_t start = reinterpret_cast<std::uintptr_t>(bytes);
     const std::uintptr_t first = reinterpret_cast<std::uintptr_t>(block_);
     const std::uintptr_t end = first + arena_.used();
