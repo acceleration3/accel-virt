@@ -35,8 +35,8 @@ constexpr uint32_t copy_discard = 0x2u;
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), shadows_(memory), maps_(), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
-      recorded_(), context_(nullptr), paging_(), follower_(), feature_level_(0u),
-      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), frame_(1u)
+      recorded_(), context_(nullptr), paging_(), follower_(), gate_(), feature_level_(0u),
+      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }
@@ -58,6 +58,8 @@ D3d11Device::~D3d11Device()
     }
     if (paging_.constructed()) paging_.destroy();
     follower_.destroy();
+    if (gate_.constructed()) session_.transport().forget(gate_.object());
+    gate_.destroy();
     kernel_.destroy_context(context_);
 }
 
@@ -73,6 +75,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     static_cast<void>(follower_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport()));
     const HRESULT context = make_context();
     if (FAILED(context)) return context;
+    static_cast<void>(gate_.construct(kernel_.callbacks(), kernel_.runtime(), context_, lines_));
     const uint32_t level = D3D11DDI_EXTRACT_3DPIPELINELEVEL_FROM_FLAGS(create.Flags);
     feature_level_ = level < sizeof(feature_levels) / sizeof(feature_levels[0]) ? feature_levels[level] : 0u;
     const HRESULT joined = session_.join(adapter);
@@ -412,9 +415,15 @@ VOID D3d11Device::set_hardware_protection_state(BOOL)
     AV_SCOPE("D3d11Device::set_hardware_protection_state");
 }
 
-VOID D3d11Device::acquire_resource(D3D10DDI_HRESOURCE, HANDLE)
+/* The wait is only queued here: the batch that next reaches the host passes
+ * the kernel context first (KernelContextGate), this wait among what it holds. */
+VOID D3d11Device::acquire_resource(D3D10DDI_HRESOURCE, HANDLE token)
 {
     AV_SCOPE("D3d11Device::acquire_resource");
+    if (token == nullptr || context_ == nullptr) return;
+    const HRESULT queued = kernel_.acquire(token, context_);
+    if (SUCCEEDED(queued) || !token_refused_.first()) return;
+    LogLine(lines_).text("the kernel refused a buffer's sync token ").hex(static_cast<uint32_t>(queued), 8u).write();
 }
 
 VOID D3d11Device::release_resource(D3D10DDI_HRESOURCE, HANDLE)

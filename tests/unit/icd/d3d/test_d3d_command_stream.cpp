@@ -121,6 +121,24 @@ TEST(d3d_command_stream, an_application_flush_asks_the_host_once_and_sends_the_b
   CHECK_EQ(fixture.submits(), submits);
   CHECK(fixture.stream().invariants_hold()); }
 
+/* An application's flush sends its batch even to a host still behind: what
+ * another device reads next is released at that flush, and the batches only
+ * run in order once both are published. */
+TEST(d3d_command_stream, an_application_flush_sends_its_batch_while_the_host_is_behind)
+{ Fixture fixture;
+  for (std::uint32_t batch = 0u; batch < 2u; batch++) {
+      CHECK(av_d3d_Draw(fixture.stream(), batch, 0u));
+      CHECK_STATUS(fixture.stream().flush(), Status::ok);
+  }
+  const std::uint32_t submits = fixture.submits();
+  CHECK(av_d3d_Draw(fixture.stream(), 9u, 0u));
+  CHECK_STATUS(fixture.stream().flush_hint(), Status::ok);
+  CHECK_EQ(fixture.submits(), submits);
+  CHECK_STATUS(fixture.stream().application_flush(), Status::ok);
+  CHECK_EQ(fixture.submits(), submits + 1u);
+  CHECK_EQ(fixture.stream().recorded_bytes(), 0u);
+  CHECK(fixture.stream().invariants_hold()); }
+
 /* The host holding more than the newest batch is not ready: a hint leaves the
  * batch growing, and a real flush sends it. */
 TEST(d3d_command_stream, a_flush_hint_waits_while_the_host_is_behind)

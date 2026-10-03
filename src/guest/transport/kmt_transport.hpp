@@ -35,6 +35,7 @@
 namespace av {
 
 class GuestConnection;
+class PublishGate;
 struct KmtTransportProbe;
 
 class KmtTransport final : public ClientTransport {
@@ -68,8 +69,15 @@ public:
      * doorbell, and through the kernel. */
     uint64_t             submissions_through_doorbell() const;
     /* The host has taken every batch but the newest: one more now keeps it
-     * fed, and holding a batch back until then lets it grow instead. */
+     * fed, and holding a batch back until then lets it grow instead. Never
+     * while held: the batch keeps growing until something must send it. */
     bool                 ready_for_batch() const;
+    /* After a present that hands a buffer to another process: the next batch
+     * written to the ring, whatever sends it, passes `gate` first, and until
+     * then no batch is ready (PublishGate). `gate` outlives that write. */
+    void                 hold(PublishGate &gate);
+    /* `gate` is going away: a hold by it is dropped, one by another kept. */
+    void                 forget(const PublishGate &gate);
     uint64_t             submissions_through_kernel() const;
     /* Every batch this transport has submitted: what has not moved has sent
      * nothing in between. */
@@ -183,6 +191,8 @@ private:
     /* Where each outstanding fence's batch ends in the ring. */
     uint64_t         fence_ends_[TransportFence::max_outstanding];
     bool             faulted_;
+    /* What the next batch written waits for; null when nothing is held. */
+    PublishGate     *held_;
     /* A synchronous call was answered since the last end_call. */
     bool             answered_;
     WireArena        decode_arena_;

@@ -39,6 +39,9 @@ public:
     void   *lock_to_write(D3DKMT_HANDLE allocation);
     void   *lock_to_read(D3DKMT_HANDLE allocation);
     void    unlock(D3DKMT_HANDLE allocation);
+    /* The wait a sync token stands for - DWM giving a flip-model buffer back
+     * (AcquireResource) - queued on `context`. */
+    HRESULT acquire(HANDLE token, HANDLE context);
     /* A present the runtime describes; a display mode a primary is set to. */
     HRESULT present(D3DDDICB_PRESENT &present);
     HRESULT set_display_mode(D3DDDICB_SETDISPLAYMODE &mode);

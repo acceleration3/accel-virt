@@ -30,6 +30,7 @@
 #include "um/d3d/reentrant_call_lock.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
+#include "um/d3d/kernel_context_gate.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
@@ -248,6 +249,9 @@ private:
     HANDLE    context_;
     ObjectStorage<PagingQueue> paging_;
     ObjectStorage<d3d::BatchFollower> follower_;
+    /* What the session's transport waits for after this device's flip-model
+     * present (KmtTransport::hold): the kernel context's queue. */
+    ObjectStorage<d3d::KernelContextGate> gate_;
     uint32_t  feature_level_;
     static constexpr uint32_t max_guest_surfaces = 256u;
     ResourceRecord *guest_surfaces_[max_guest_surfaces];
@@ -258,6 +262,7 @@ private:
      * in the log as a change of these. */
     uint32_t        present_flags_;
     icd::OnceLatch  follow_refused_;
+    icd::OnceLatch  token_refused_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
 };

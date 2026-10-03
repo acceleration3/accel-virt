@@ -48,6 +48,12 @@ Status D3dCommandStream::flush_hint()
     return flush();
 }
 
+/* Sent whether or not the host has caught up: what another device reads next
+ * is released at an application's flush. DWM flushes its composition and then
+ * signals that the buffer it read may be drawn again; a composition still
+ * waiting here for the host to go idle ran after the application's next frame
+ * had begun to clear that buffer. Devices' batches run in the order the guest
+ * published them (D3dOrdering), so publishing here is what orders them. */
 Status D3dCommandStream::application_flush()
 {
     AV_SCOPE("D3dCommandStream::application_flush");
@@ -56,7 +62,8 @@ Status D3dCommandStream::application_flush()
         if (send_async(flush_command_, flush) != TransportResult::ok) return Status::invalid_state;
         flushed_at_ = recorded_;
     }
-    return flush_hint();
+    if (failed_) return Status::invalid_state;
+    return framed_.used() == 0u ? Status::ok : flush();
 }
 
 void D3dCommandStream::record(CommandRecording &recording)

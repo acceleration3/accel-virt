@@ -17,6 +17,7 @@
 #include "proto/resources/scanout_target.hpp"
 #include "proto/escape/present_point_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/d3d_session.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 
 namespace av::d3d11 {
@@ -170,6 +171,11 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
     present.PrivateDriverDataSize = named ? static_cast<UINT>(sizeof record) : 0u;
     present.pPrivateDriverData = named ? record : nullptr;
     const HRESULT presented = dxgi_->pfnPresentCb(runtime_.handle, &present);
+    /* The buffer drawn next comes back from DWM through a wait the runtime
+     * queues on the context after this returns; what this device records
+     * from here on must not reach the host before it. */
+    if (SUCCEEDED(presented) && source.present_model == d3d::SwapChainBuffer::Model::flip && gate_.constructed())
+        session_.transport().hold(gate_.object());
     /* The runtime turns a refused present into a removed device without
      * saying why; the answer is only ever seen here. */
     if (FAILED(presented) && present_refused_.first()) {

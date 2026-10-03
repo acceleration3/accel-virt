@@ -7,6 +7,7 @@
 #include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "guest/transport/publish_gate.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
@@ -29,7 +30,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), fence_ends_{}, faulted_(false), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -173,7 +174,19 @@ bool KmtTransport::record_carries(const GlContextOptions &options) const
 bool KmtTransport::ready_for_batch() const
 {
     AV_SCOPE("KmtTransport::ready_for_batch");
-    return ring_.head() >= previous_end_;
+    return held_ == nullptr && ring_.head() >= previous_end_;
+}
+
+void KmtTransport::hold(PublishGate &gate)
+{
+    AV_SCOPE("KmtTransport::hold");
+    held_ = &gate;
+}
+
+void KmtTransport::forget(const PublishGate &gate)
+{
+    AV_SCOPE("KmtTransport::forget");
+    if (held_ == &gate) held_ = nullptr;
 }
 
 uint64_t KmtTransport::submissions_through_doorbell() const
@@ -228,6 +241,8 @@ void KmtTransport::teardown()
     reply_ = ReplyReader();
     fences_ = TransportFence();
     faulted_ = false;
+    /* A gate is its device's, which a transport torn down outlives no longer. */
+    held_ = nullptr;
 }
 
 bool KmtTransport::established() const
@@ -354,6 +369,11 @@ bool KmtTransport::room_for_fence()
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
 {
     AV_SCOPE("KmtTransport::publish_batch");
+    if (held_ != nullptr) {
+        PublishGate &gate = *held_;
+        held_ = nullptr;
+        gate.pass();
+    }
     /* Asynchronous batches open fences nobody waits on: a sender faster than
      * the host fills the fence window or the ring, and then waits for the
      * host to catch up rather than failing. */

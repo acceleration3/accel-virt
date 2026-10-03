@@ -8,6 +8,7 @@
 #include "guest/transport/batch_mark.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "guest/transport/publish_gate.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/escape/context_views_record.hpp"
@@ -1257,6 +1258,123 @@ TEST(kmt_transport, is_ready_for_a_batch_while_the_host_holds_no_more_than_the_n
   CHECK(transport.send_answered_batch(answered, last, reply) == TransportResult::ok);
   transport.end_call();
   CHECK(transport.ready_for_batch());
+  transport.teardown(); }
+
+namespace {
+
+/* Counts its passes and what the device had been sent at each: a gate passed
+ * after its batch was submitted would have let the host start it too soon. */
+class CountingGate final : public av::PublishGate {
+public:
+    explicit CountingGate(const MockKmt &kmt) : kmt_(kmt), passes_(0u), sent_at_pass_(0u) {}
+    void pass() override
+    {
+        passes_++;
+        sent_at_pass_ = kmt_.commands();
+    }
+    std::uint32_t passes() const { return passes_; }
+    std::uint32_t sent_at_pass() const { return sent_at_pass_; }
+
+private:
+    const MockKmt &kmt_;
+    std::uint32_t  passes_;
+    std::uint32_t  sent_at_pass_;
+};
+
+}  // namespace
+
+/* After a present the transport is held: no batch is ready however idle the
+ * host, so hints keep growing theirs, and the one that is sent passes the gate
+ * before the device hears of it - once, the batches after it go as before. */
+TEST(kmt_transport, a_held_transport_passes_the_gate_once_before_its_next_batch_reaches_the_device)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CountingGate gate(fixture.kmt());
+  CHECK(transport.ready_for_batch());
+  transport.hold(gate);
+  CHECK(!transport.ready_for_batch());
+  CHECK_EQ(gate.passes(), 0u);
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  const std::uint32_t before = fixture.kmt().commands();
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK_EQ(gate.passes(), 1u);
+  CHECK_EQ(gate.sent_at_pass(), before);
+  CHECK_EQ(fixture.kmt().commands(), before + 1u);
+  CHECK(transport.ready_for_batch());
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK_EQ(gate.passes(), 1u);
+  CHECK(transport.invariants_hold());
+  transport.teardown(); }
+
+/* An answered call sends what is held as surely as a flush does: the gate is
+ * passed before its batch, and the answer read after. */
+TEST(kmt_transport, an_answered_call_on_a_held_transport_passes_the_gate_before_it_is_sent)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CountingGate gate(fixture.kmt());
+  transport.hold(gate);
+  std::uint8_t answered[12u] = {};
+  const std::size_t length = frame_batch(answered, 0x10002u, 1u, true);
+  const std::uint8_t answer[1] = {0x42u};
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  const std::uint32_t before = fixture.kmt().commands();
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_answered_batch(answered, length, reply) == TransportResult::ok);
+  CHECK_EQ(reply.read_u8(), 0x42u);
+  transport.end_call();
+  CHECK_EQ(gate.passes(), 1u);
+  CHECK_EQ(gate.sent_at_pass(), before);
+  transport.teardown(); }
+
+/* A device going away takes its own hold with it and leaves another's: the
+ * transport is its session's, shared by every device in it. */
+TEST(kmt_transport, a_gate_forgotten_drops_its_own_hold_and_no_other)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CountingGate holding(fixture.kmt());
+  CountingGate other(fixture.kmt());
+  transport.hold(holding);
+  transport.forget(other);
+  CHECK(!transport.ready_for_batch());
+  transport.forget(holding);
+  CHECK(transport.ready_for_batch());
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK_EQ(holding.passes(), 0u);
+  CHECK_EQ(other.passes(), 0u);
+  transport.teardown(); }
+
+/* A gate is its device's: a transport torn down and set up again holds nothing. */
+TEST(kmt_transport, a_torn_down_transport_forgets_what_held_it)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CountingGate gate(fixture.kmt());
+  transport.hold(gate);
+  transport.teardown();
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.ready_for_batch());
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK_EQ(gate.passes(), 0u);
   transport.teardown(); }
 
 /* What a packet on another of this process's contexts names: the transport's

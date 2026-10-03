@@ -34,6 +34,17 @@ HRESULT KernelDevice::make_context(HANDLE &context)
     return made;
 }
 
+HRESULT KernelDevice::acquire(HANDLE token, HANDLE context)
+{
+    AV_SCOPE("KernelDevice::acquire");
+    if (callbacks_ == nullptr || callbacks_->pfnAcquireResourceCb == nullptr) return E_NOTIMPL;
+    D3DDDICB_SYNCTOKEN acquire = {};
+    acquire.hSyncToken = token;
+    acquire.BroadcastContextCount = 1u;
+    acquire.BroadcastContextArray = &context;
+    return callbacks_->pfnAcquireResourceCb(runtime_, &acquire);
+}
+
 void KernelDevice::destroy_context(HANDLE context)
 {
     AV_SCOPE("KernelDevice::destroy_context");
