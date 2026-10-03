@@ -3,13 +3,14 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
+#include "icd/common/thread_lock.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
 
-ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, LogSink &log, ClEventOwner &owner)
-    : thread_(thread), log_(log), owner_(owner), registrations_(), held_(0u), delivered_(0u)
+ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock, ClEventOwner &owner)
+    : thread_(thread), log_(log), lock_(lock), owner_(owner), registrations_(), held_(0u), delivered_(0u)
 {
     AV_SCOPE("ClEventWatcher::ClEventWatcher");
 }
@@ -27,13 +28,19 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
                              cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data)
 {
     AV_SCOPE("ClEventWatcher::watch");
+    lock_.acquire();
     uint32_t slot = 0u;
     while (slot < max_registrations && registrations_[slot].held()) ++slot;
-    if (slot == max_registrations) return CL_OUT_OF_RESOURCES;
+    if (slot == max_registrations) {
+        lock_.release();
+        return CL_OUT_OF_RESOURCES;
+    }
     if (!registrations_[slot].take(event, wire, wire_of_context, status_wanted, notify, user_data)) {
+        lock_.release();
         return CL_INVALID_VALUE;
     }
     ++held_;
+    lock_.release();
     /* The thread starts with the first registration, so a process that never
      * asks for a callback never starts one; from then on it rests while
      * nothing is registered, and this ends the rest. */
@@ -42,8 +49,10 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
     } else {
         const Status started = thread_.start(*this);
         if (started != Status::ok) {
+            lock_.acquire();
             registrations_[slot].give_up();
             --held_;
+            lock_.release();
             log_.write("avcl: no thread to watch events on");
             return CL_OUT_OF_RESOURCES;
         }
@@ -76,21 +85,35 @@ bool ClEventWatcher::turn()
      * that ended when the last callback ran was one the next registration
      * found still "running" and never started again, and no callback after
      * the first batch ever came (Affinity waits on one to make a document). */
-    if (held_ == 0u) {
+    lock_.acquire();
+    const uint32_t held = held_;
+    lock_.release();
+    if (held == 0u) {
         thread_.rest();
         return true;
     }
     for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
-        if (!registrations_[slot].held()) continue;
+        lock_.acquire();
+        const ClWatchedEvent asked = registrations_[slot];
+        lock_.release();
+        if (!asked.held()) continue;
         cl_int status = CL_QUEUED;
-        if (!completed(registrations_[slot], status)) continue;
-        /* Copied and given up before it runs: a callback that releases its
-         * own event, or the context it belongs to, is releasing something
-         * this is no longer holding. */
-        const ClWatchedEvent ran = registrations_[slot];
-        registrations_[slot].give_up();
-        --held_;
-        ++delivered_;
+        if (!completed(asked, status)) continue;
+        /* Claimed and given up before it runs - and only if the row is still
+         * the one asked about, since a context released meanwhile forgets it:
+         * a callback that releases its own event, or the context it belongs
+         * to, is releasing something this is no longer holding. */
+        lock_.acquire();
+        const bool still = registrations_[slot].held() && registrations_[slot].event() == asked.event() &&
+                           registrations_[slot].wire() == asked.wire();
+        if (still) {
+            registrations_[slot].give_up();
+            --held_;
+            ++delivered_;
+        }
+        lock_.release();
+        if (!still) continue;
+        const ClWatchedEvent &ran = asked;
         /* Whatever the event owes the application arrives before the
          * callback does: a callback on a non-blocking read that could not
          * see the bytes would be a callback about nothing. */

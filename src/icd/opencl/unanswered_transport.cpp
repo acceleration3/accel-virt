@@ -31,10 +31,14 @@ TransportResult UnansweredTransport::send_sync(uint32_t command_id, WireWriter &
     return sent;
 }
 
+/* Nothing is open to end: the call ended when its command went out, and a
+ * shared transport let its lock go there. Passed on, this end was another
+ * thread's - a LockedTransport cannot tell whose call is open - and it let go
+ * of the lock that thread held and retired the reply it was decoding; the
+ * lock's next release found it free, and every thread after waited on it. */
 void UnansweredTransport::end_call()
 {
     AV_SCOPE("UnansweredTransport::end_call");
-    inner_.end_call();
 }
 
 WireArena &UnansweredTransport::decode_arena()

@@ -23,6 +23,7 @@ public:
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;
     /* Sent asynchronously; `reply` is a status of zero, encoded. */
     TransportResult  send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
+    /* Ends nothing: what send_sync sent was asynchronous, and over. */
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;

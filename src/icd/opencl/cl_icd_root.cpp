@@ -61,7 +61,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt),
       shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
-      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_(), refusals_(log)
+      device_object_(nullptr), watcher_(watcher_thread, log, lock, *this), waits_(kmt), reads_(), refusals_(log)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -1059,8 +1059,11 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
         /* An event the application did not ask for is one the ICD keeps
          * until the read delivers: it is the row's name, and releasing it
          * now would let the host hand the number to something else. */
-        if (reads_.record(produced, held->wire(), named->wire(), offset, bytes, into,
-                          event == nullptr)) {
+        lock_.acquire();
+        const bool recorded = reads_.record(produced, held->wire(), named->wire(), offset, bytes, into,
+                                            event == nullptr);
+        lock_.release();
+        if (recorded) {
             if (event != nullptr) {
                 *event = static_cast<cl_event>(
                     wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
@@ -1670,8 +1673,19 @@ cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, const uint64_t *events, u
     AV_SCOPE("ClIcdRoot::deliver_reads");
     cl_int answer = CL_SUCCESS;
     for (uint32_t index = 0u; index < count; ++index) {
+        /* Found, fetched and given back under the lock: the watcher's thread
+         * and the application's threads deliver the same reads - a callback
+         * on one, a wait on another - and two that both fetched released the
+         * marker twice, which the host refused, and the context with it. One
+         * that finds the row taken has to find the bytes there too, so it
+         * waits for the fetch rather than only the claim. The lock comes
+         * before the send lock, as it does for a release. */
+        lock_.acquire();
         ClPendingRead *const waiting = reads_.waiting_on(events[index]);
-        if (waiting == nullptr) continue;
+        if (waiting == nullptr) {
+            lock_.release();
+            continue;
+        }
         /* The fetch the enqueue deferred. The host has reached the marker, so
          * everything queued before the read has run and this answers at once;
          * it is sent blocking because there is nothing left to wait for. */
@@ -1682,6 +1696,7 @@ cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, const uint64_t *events, u
             static_cast<void>(av::clproto::av_clReleaseEvent(wire, waiting->event()));
         waiting->give_up();
         reads_.count_delivery();
+        lock_.release();
         if (read != CL_SUCCESS && answer == CL_SUCCESS) answer = read;
     }
     return answer;
@@ -1696,10 +1711,12 @@ cl_int ClIcdRoot::deliver_queued(ClientTransport &wire, uint64_t queue)
      * changes underneath. */
     for (uint32_t taken = 0u; taken < ClPendingReads::max_reads; ++taken) {
         uint64_t             event = 0u;
+        lock_.acquire();
         for (uint32_t slot = 0u; slot < ClPendingReads::max_reads && event == 0u; ++slot) {
             const ClPendingRead *const row = reads_.at(slot);
             if (row->held() && row->queue() == queue) event = row->event();
         }
+        lock_.release();
         if (event == 0u) break;
         const cl_int one = deliver_reads(wire, &event, 1u);
         if (one != CL_SUCCESS && answer == CL_SUCCESS) answer = one;

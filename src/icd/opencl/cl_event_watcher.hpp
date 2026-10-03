@@ -36,6 +36,7 @@ class StateWriter;
 }  // namespace av
 
 namespace av::icd {
+class ThreadLock;
 }
 
 namespace av::clicd {
@@ -49,7 +50,10 @@ public:
      * is refused, which is a call the application can see fail. */
     static constexpr uint32_t max_registrations = 256u;
 
-    ClEventWatcher(icd::ServiceThread &thread, LogSink &log, ClEventOwner &owner);
+    /* `lock` is the ICD's: the table is written by application threads and
+     * read by the watcher's own, so both hold it while they touch a row -
+     * and never while a callback runs or the host is asked. */
+    ClEventWatcher(icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock, ClEventOwner &owner);
     ~ClEventWatcher();
     ClEventWatcher(const ClEventWatcher &) = delete;
     ClEventWatcher &operator=(const ClEventWatcher &) = delete;
@@ -72,7 +76,8 @@ public:
     /* Forgets everything registered on `context_wire`, without running any of
      * it: what a context being released means for the callbacks on it. The
      * references are not given back, because the context's objects go with
-     * the context and there would be nothing left to give them to. */
+     * the context and there would be nothing left to give them to. Called
+     * with the ICD's lock held - a context is released under it. */
     void forget_context(const ClientTransport *wire_of_context);
 
     uint32_t registered() const;
@@ -91,6 +96,7 @@ private:
 
     icd::ServiceThread &thread_;
     LogSink       &log_;
+    icd::ThreadLock    &lock_;
     ClEventOwner       &owner_;
     ClWatchedEvent      registrations_[max_registrations];
     uint32_t            held_;

@@ -97,7 +97,7 @@ cl_icd_dispatch dispatch = {};
 class Watching {
 public:
     Watching()
-        : rig_(), thread_(), owner_(), watcher_(thread_, rig_.log(), owner_),
+        : rig_(), thread_(), owner_(), watcher_(thread_, rig_.log(), rig_.send_lock(), owner_),
           event_(dispatch, ClObject::Kind::event, 0x6900u, nullptr, nullptr)
     {
         rig_.host().blob_import(0u, 0x77u);
