@@ -23,6 +23,7 @@ constexpr uint32_t ddi_uav_writes = 0x200u;
 constexpr uint32_t ddi_buffer = 0x400u;
 constexpr uint32_t ddi_logic_op = 0x2000u;
 constexpr uint32_t ddi_shader_gather = 0x4000u;
+constexpr uint32_t ddi_tiled = 0x10000u;
 constexpr uint32_t ddi_uav_reads = 0x20000u;
 constexpr uint32_t ddi_display = 0x200000u;
 constexpr Carry    carries[] = {
@@ -40,6 +41,8 @@ constexpr Carry    carries[] = {
     {0x40u, true, ddi_uav_reads},
 };
 constexpr uint32_t api_depth_stencil = 0x10000u;
+/* D3D12_FORMAT_SUPPORT2_TILED. */
+constexpr uint32_t api_tiled = 0x200u;
 
 struct Family {
     uint32_t head;
@@ -153,6 +156,13 @@ bool DxgiFormatTable::multisamples(uint32_t format) const
     for (uint32_t step = 1u; step < sample_steps; step++)
         if (shared[step] != 0u) return true;
     return false;
+}
+
+uint32_t DxgiFormatTable::tiled_support(uint32_t format) const
+{
+    AV_SCOPE("DxgiFormatTable::tiled_support");
+    if (format >= format_count || (support2_[format] & api_tiled) == 0u) return 0u;
+    return ddi_tiled;
 }
 
 uint32_t DxgiFormatTable::format_support(uint32_t format) const

@@ -131,6 +131,12 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   CHECK(!session.on_CreateHeap12(1u, device_local, 0u, 4096u, 0u, 0u));
   CHECK(!session.on_CreateCommittedResource12(2u, device_local, 0u, buffer, 0u, none, 0u));
   CHECK(!session.on_CreatePlacedResource12(3u, 1u, 0u, buffer, 0u, none, 0u));
+  CHECK(!session.on_CreateReservedResource12(3u, buffer, 0u, none, 0u));
+  std::uint32_t tiles = 9u, packed_mips = 9u, packed_tiles = 9u;
+  CHECK(!session.on_ResourceTiling12(3u, tiles, packed_mips, packed_tiles));
+  CHECK_EQ(tiles, 0u);
+  CHECK_EQ(packed_mips, 0u);
+  CHECK_EQ(packed_tiles, 0u);
   CHECK(!session.on_CreateDescriptorHeap12(4u, 0u, 16u, 0u));
   CHECK(!session.on_CreateRootSignature12(5u, 0u, 0u, nullptr, 0u, nullptr, 0u, nullptr));
   CHECK(!session.on_CreateCommandQueue12(6u, 0u, 0u, 0u));
@@ -182,7 +188,13 @@ TEST(d3d12_session, every_queue_list_and_fence_command_naming_nothing_is_refused
   CHECK(session.on_PublishFence12(nobody, av::D3d12FencePublisher::stop));
   /* A swap chain buffer shared or presented that nothing names. */
   CHECK(!session.on_ShareResource12(nobody, 0x5eedu));
-  CHECK(!session.on_PresentResource12(nobody, nobody, 1u)); }
+  CHECK(!session.on_PresentResource12(nobody, nobody, 1u));
+  /* A queue's tile mappings, on a queue and of resources nothing made. */
+  const TileRegion region = {TileCoordinate{}, TileSize{1u, 0u, 0u, 0u, 0u}};
+  const TileRange range = {0u, 0u, 1u};
+  CHECK(!session.on_UpdateTileMappings12(nobody, nobody, 1u, &region, 0u, 1u, &range, 0u));
+  CHECK(!session.on_UpdateTileMappings12(nobody, nobody, 1u, &region, nobody, 1u, &range, 0u));
+  CHECK(!session.on_CopyTileMappings12(nobody, nobody, TileCoordinate{}, nobody, TileCoordinate{}, region.size, 0u)); }
 
 TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
 { FreshSession fresh;
@@ -229,7 +241,8 @@ TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
   CHECK(!session.on_BeginEvent12(list, 1u, marker, sizeof marker));
   CHECK(!session.on_EndEvent12(list));
   CHECK(!session.on_SetMarker12(list, 1u, marker, sizeof marker));
-  CHECK(!session.on_ExecuteIndirect12(list, 1u, 1u, 2u, 0u, 0u, 0u)); }
+  CHECK(!session.on_ExecuteIndirect12(list, 1u, 1u, 2u, 0u, 0u, 0u));
+  CHECK(!session.on_CopyTiles12(list, 1u, TileCoordinate{}, TileSize{1u, 0u, 0u, 0u, 0u}, 2u, 0u, 0u)); }
 
 /* With no queue executed there is no GPU work to wait for, and no published
  * fence to write. */

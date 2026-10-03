@@ -108,7 +108,7 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 
 D3d12Session::D3d12Session(GuestRegion &region, D3dObjectTable &objects)
     : region_(region), device_(nullptr), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
-      pipelines_(objects_), presentation_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_)
+      pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -441,6 +441,21 @@ bool D3d12Session::on_ResourceAllocation12(const d3d12proto::ResourceDesc &desc,
     size = info.SizeInBytes;
     alignment = info.Alignment;
     return true;
+}
+
+bool D3d12Session::on_CreateReservedResource12(uint32_t resource, const d3d12proto::ResourceDesc &desc,
+                                               uint32_t state, const d3d12proto::ClearValue &clear, uint64_t address)
+{
+    AV_SCOPE("D3d12Session::on_CreateReservedResource12");
+    if (device_ == nullptr || !resource_holds(desc)) return false;
+    const D3D12_RESOURCE_DESC made_desc = host_desc(desc);
+    D3D12_CLEAR_VALUE         value = {};
+    ID3D12Resource           *made = nullptr;
+    if (FAILED(device_->device()->CreateReservedResource(&made_desc, static_cast<D3D12_RESOURCE_STATES>(state),
+                                                         host_clear(clear, value), __uuidof(ID3D12Resource),
+                                                         reinterpret_cast<void **>(&made))))
+        return false;
+    return place(resource, made, desc.dimension == buffer_dimension ? address : 0u, desc.width);
 }
 
 bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset,

@@ -76,6 +76,21 @@ TEST(dxgi_format_table, the_hosts_bits_become_the_ddis_bits)
   CHECK_EQ(table.own_format_support(0u), 0u);
   CHECK_EQ(table.own_format_support(DxgiFormatTable::format_count), 0u); }
 
+/* Whether the host tiles a format is its own bit, which only a driver that
+ * carries tiled resources adds - Direct3D 11's never does - and no other
+ * answer carries it. */
+TEST(dxgi_format_table, a_format_the_host_tiles_is_told_apart_from_its_other_support)
+{ DxgiFormatTable table;
+  constexpr std::uint32_t api2_tiled = 0x200u, ddi_tiled = 0x10000u;
+  table.record(rgba8_unorm, api_sample, api2_tiled);
+  table.record(rgba32_float, api_sample, api2_uav_reads);
+  table.settle();
+  CHECK_EQ(table.tiled_support(rgba8_unorm), ddi_tiled);
+  CHECK_EQ(table.tiled_support(rgba32_float), 0u);
+  CHECK_EQ(table.tiled_support(DxgiFormatTable::format_count), 0u);
+  CHECK_EQ(table.format_support(rgba8_unorm) & ddi_tiled, 0u);
+  CHECK_EQ(table.own_format_support(rgba8_unorm) & ddi_tiled, 0u); }
+
 /* Blending and multisampled rendering are rendering: claimed without a render
  * target, they are not told. */
 TEST(dxgi_format_table, blending_without_rendering_is_not_claimed)

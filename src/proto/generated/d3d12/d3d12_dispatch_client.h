@@ -35,6 +35,12 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key);
 // A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on.
 [[nodiscard]] bool av_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
+// A resource with no memory of its own: its 64 KiB tiles are mapped to heaps' by UpdateTileMappings12 on a
+// queue. A buffer is found by `address` from then on.
+[[nodiscard]] bool av_d3d12_CreateReservedResource12(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
+// How a reserved resource is tiled on the host: every tile it has, and its packed mips - how many of its
+// smallest mips share tiles, and how many tiles they share. Zeros for any other resource.
+[[nodiscard]] bool av_d3d12_ResourceTiling12(::av::ClientTransport& t, uint32_t resource, uint32_t* tiles, uint32_t* packed_mips, uint32_t* packed_tiles);
 // How many bytes, at what alignment, a placed resource of `desc` takes in a heap: the host's answer, since
 // the host is where it will be placed. size is ~0 for a description the host would refuse.
 [[nodiscard]] bool av_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc& desc, uint64_t* size, uint64_t* alignment);
@@ -82,6 +88,13 @@ namespace av::d3d12proto {
 // The host writes `fence`'s completed value, as a u64, at arena offset `offset` whenever it advances,
 // so the guest reads memory instead of asking. offset ~0 stops it.
 [[nodiscard]] bool av_d3d12_PublishFence12(::av::ClientTransport& t, uint32_t fence, uint64_t offset);
+// Maps the tiles of `regions` of a reserved resource, in order, to the heap tiles `ranges` name, in order,
+// on `queue` - between the work executed on it before and after. heap is 0 when every range unmaps or skips. A
+// call the guest made with more regions or ranges than one command carries crosses as several, in order.
+[[nodiscard]] bool av_d3d12_UpdateTileMappings12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t heap, uint32_t range_count, const TileRange* ranges, uint32_t flags);
+// Maps the tiles of a region of `destination` to whatever the same-sized region of `source` from
+// `source_start` is mapped to, on `queue`.
+[[nodiscard]] bool av_d3d12_CopyTileMappings12(::av::ClientTransport& t, uint32_t queue, uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags);
 [[nodiscard]] bool av_d3d12_CreateQueryHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count);
 [[nodiscard]] bool av_d3d12_ResourceBarrier12(::av::ClientTransport& t, uint32_t list, uint32_t count, const Barrier* barriers);
 [[nodiscard]] bool av_d3d12_SetPipelineState12(::av::ClientTransport& t, uint32_t list, uint32_t pipeline);
@@ -120,5 +133,8 @@ namespace av::d3d12proto {
 // Up to max_count commands of the signature, read from argument_buffer at argument_offset; with a
 // count_buffer (0 for none), as many as the u32 at count_offset says, if fewer.
 [[nodiscard]] bool av_d3d12_ExecuteIndirect12(::av::ClientTransport& t, uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset);
+// Copies a region of a reserved resource's tiles to `buffer` at `buffer_offset`, 64 KiB a tile in the
+// region's order - or from it, when flags has D3D12_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE.
+[[nodiscard]] bool av_d3d12_CopyTiles12(::av::ClientTransport& t, uint32_t list, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags);
 
 }  // namespace av::d3d12proto

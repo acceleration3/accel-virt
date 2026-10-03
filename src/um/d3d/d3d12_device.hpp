@@ -117,10 +117,20 @@ private:
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
                                            HeapRecord &heap, uint64_t offset, ResourceRecord &resource);
+    /* A record of `desc`, stamped with a new id and no heap. */
+    void                     record_resource(const d3d12proto::ResourceDesc &desc, ResourceRecord &resource);
+    d3d12proto::ClearValue   clear_value(const D3D12DDI_CLEAR_VALUES *clear) const;
     uint64_t                 allocation_bytes(const d3d12proto::ResourceDesc &desc, uint64_t &alignment);
     /* A resource the host gave no size to, in the log: an application told so
      * sizes a heap by UINT64_MAX. */
     void                     log_unsized(const d3d12proto::ResourceDesc &desc);
+
+    /* Reserved resources and their tiles (d3d12_device_tiles.cpp): one made
+     * with no heap, and how the host tiled it - asked once, when the runtime
+     * or an update first needs it. */
+    HRESULT                  reserve_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args,
+                                              const D3D12DDI_CLEAR_VALUES *clear, ResourceRecord &resource);
+    const ResourceRecord    &tiling(ResourceRecord &resource);
 
     /* A swap chain buffer (d3d12_device_present.cpp): the kernel allocation
      * DWM opens it by, and the host's texture shown under its identity. */

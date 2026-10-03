@@ -24,6 +24,7 @@
 #include "executor/d3d/d3d12_fence_wake.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
+#include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "device/host/stdio_log.hpp"
@@ -37,6 +38,7 @@ struct ID3D12Fence;
 struct ID3D12GraphicsCommandList;
 struct IUnknown;
 struct ID3D12Heap;
+struct ID3D12Resource;
 struct D3D12_TEXTURE_COPY_LOCATION;
 
 namespace av {
@@ -86,6 +88,8 @@ public:
     bool on_Finish12(uint32_t& hresult) override;
     bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) override;
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
+    bool on_CreateReservedResource12(uint32_t resource, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
+    bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) override;
     bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
     bool on_ShareResource12(uint32_t resource, uint64_t key) override;
     bool on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point) override;
@@ -114,6 +118,8 @@ public:
     bool on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value) override;
     bool on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t& completed) override;
     bool on_PublishFence12(uint32_t fence, uint64_t offset) override;
+    bool on_UpdateTileMappings12(uint32_t queue, uint32_t resource, uint32_t region_count, const d3d12proto::TileRegion* regions, uint32_t heap, uint32_t range_count, const d3d12proto::TileRange* ranges, uint32_t flags) override;
+    bool on_CopyTileMappings12(uint32_t queue, uint32_t destination, const d3d12proto::TileCoordinate& destination_start, uint32_t source, const d3d12proto::TileCoordinate& source_start, const d3d12proto::TileSize& size, uint32_t flags) override;
     bool on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count) override;
     bool on_ResourceBarrier12(uint32_t list, uint32_t count, const d3d12proto::Barrier* barriers) override;
     bool on_SetPipelineState12(uint32_t list, uint32_t pipeline) override;
@@ -145,6 +151,7 @@ public:
     bool on_BeginEvent12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) override;
     bool on_EndEvent12(uint32_t list) override;
     bool on_SetMarker12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) override;
+    bool on_CopyTiles12(uint32_t list, uint32_t resource, const d3d12proto::TileCoordinate& start, const d3d12proto::TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) override;
     bool on_ExecuteIndirect12(uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) override;
 
     bool invariants_hold() const;
@@ -170,6 +177,10 @@ private:
      * anything. The location was resolved (copy_location). */
     bool                       footprint_holds(const d3d12proto::CopyLocation &location,
                                                const d3d12proto::Box &region) const;
+    /* Whether `size` tiles from `start` are all tiles of `resource`, a
+     * reserved resource; false for any other resource (D3d12TileSpace). */
+    bool                       tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,
+                                          const d3d12proto::TileSize &size) const;
     /* Every queue of the session has finished what was executed on it; one
      * that has not in 5 s removes the device. */
     void                       drain();
@@ -186,6 +197,8 @@ private:
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     D3d12Presentation      presentation_;
+    /* The update UpdateTileMappings12 is building. */
+    D3d12TileUpdate        tile_update_;
     /* The decoding command's arena, which containers are written into. */
     WireArena             *arena_;
     uint32_t               removed_;

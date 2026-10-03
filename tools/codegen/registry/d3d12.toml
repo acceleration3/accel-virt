@@ -160,6 +160,26 @@ fields = ["u64 offset", "u32 resource", "u32 type", "u32 subresource", "u32 form
 [structs.IndirectArgument]
 fields = ["u32 type", "u32 a", "u32 b", "u32 c"]
 
+# D3D12_TILED_RESOURCE_COORDINATE: in tiles, not texels; a packed mip's
+# subresource names the resource's packed tiles, x counting them.
+[structs.TileCoordinate]
+fields = ["u32 x", "u32 y", "u32 z", "u32 subresource"]
+
+# D3D12_TILE_REGION_SIZE: `tiles` tiles, in a width x height x depth box when
+# use_box is not 0 (and then the box holds exactly `tiles`), else counted on
+# from the start through the resource's tiles in order.
+[structs.TileSize]
+fields = ["u32 tiles", "u32 use_box", "u32 width", "u32 height", "u32 depth"]
+
+[structs.TileRegion]
+fields = ["TileCoordinate start", "TileSize size"]
+
+# One run of heap tiles an update maps regions' tiles to, in order: flags is
+# D3D12_TILE_RANGE_FLAGS (NULL unmaps, SKIP leaves, REUSE_SINGLE_TILE maps each
+# tile to heap_offset alone), heap_offset counts 64 KiB tiles into the heap.
+[structs.TileRange]
+fields = ["u32 flags", "u32 heap_offset", "u32 tiles"]
+
 [structs.Caps12]
 fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
           "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
@@ -230,6 +250,21 @@ id = 0x1102
 doc = """A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on."""
 params = ["u32 resource", "u32 heap", "u64 offset", "ResourceDesc desc", "u32 state", "ClearValue clear",
           "u64 address"]
+
+[[command]]
+name = "CreateReservedResource12"
+id = 0x1105
+doc = """A resource with no memory of its own: its 64 KiB tiles are mapped to heaps' by UpdateTileMappings12 on a
+queue. A buffer is found by `address` from then on."""
+params = ["u32 resource", "ResourceDesc desc", "u32 state", "ClearValue clear", "u64 address"]
+
+[[command]]
+name = "ResourceTiling12"
+id = 0x1106
+doc = """How a reserved resource is tiled on the host: every tile it has, and its packed mips - how many of its
+smallest mips share tiles, and how many tiles they share. Zeros for any other resource."""
+params = ["u32 resource"]
+reply = ["u32 tiles", "u32 packed_mips", "u32 packed_tiles"]
 
 [[command]]
 name = "ResourceAllocation12"
@@ -395,6 +430,23 @@ id = 0x140b
 doc = """The host writes `fence`'s completed value, as a u64, at arena offset `offset` whenever it advances,
 so the guest reads memory instead of asking. offset ~0 stops it."""
 params = ["u32 fence", "u64 offset"]
+
+[[command]]
+name = "UpdateTileMappings12"
+id = 0x140e
+doc = """Maps the tiles of `regions` of a reserved resource, in order, to the heap tiles `ranges` name, in order,
+on `queue` - between the work executed on it before and after. heap is 0 when every range unmaps or skips. A
+call the guest made with more regions or ranges than one command carries crosses as several, in order."""
+params = ["u32 queue", "u32 resource", "u32 region_count", "TileRegion regions[region_count] max 2048", "u32 heap",
+          "u32 range_count", "TileRange ranges[range_count] max 2048", "u32 flags"]
+
+[[command]]
+name = "CopyTileMappings12"
+id = 0x140f
+doc = """Maps the tiles of a region of `destination` to whatever the same-sized region of `source` from
+`source_start` is mapped to, on `queue`."""
+params = ["u32 queue", "u32 destination", "TileCoordinate destination_start", "u32 source",
+          "TileCoordinate source_start", "TileSize size", "u32 flags"]
 
 [[command]]
 name = "CreateQueryHeap12"
@@ -569,3 +621,11 @@ doc = """Up to max_count commands of the signature, read from argument_buffer at
 count_buffer (0 for none), as many as the u32 at count_offset says, if fewer."""
 params = ["u32 list", "u32 signature", "u32 max_count", "u32 argument_buffer", "u64 argument_offset",
           "u32 count_buffer", "u64 count_offset"]
+
+[[command]]
+name = "CopyTiles12"
+id = 0x1520
+doc = """Copies a region of a reserved resource's tiles to `buffer` at `buffer_offset`, 64 KiB a tile in the
+region's order - or from it, when flags has D3D12_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE."""
+params = ["u32 list", "u32 resource", "TileCoordinate start", "TileSize size", "u32 buffer", "u64 buffer_offset",
+          "u32 flags"]

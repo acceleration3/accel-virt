@@ -175,6 +175,36 @@ bool av_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource
     return t.send_async(kCmd_CreatePlacedResource12, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d12_CreateReservedResource12(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
+    AV_SCOPE("av_d3d12_CreateReservedResource12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(desc);
+    b.write_pod<uint32_t>(state);
+    b.write_pod(clear);
+    b.write_pod<uint64_t>(address);
+    return t.send_async(kCmd_CreateReservedResource12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_ResourceTiling12(::av::ClientTransport& t, uint32_t resource, uint32_t* tiles, uint32_t* packed_mips, uint32_t* packed_tiles) {
+    AV_SCOPE("av_d3d12_ResourceTiling12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_ResourceTiling12, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (tiles != nullptr) *tiles = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (packed_mips != nullptr) *packed_mips = value; }
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (packed_tiles != nullptr) *packed_tiles = value; }
+    return r.remaining() == 0u;
+}
+
 bool av_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc& desc, uint64_t* size, uint64_t* alignment) {
     AV_SCOPE("av_d3d12_ResourceAllocation12");
     ::av::WireWriter b = t.request_writer();
@@ -439,6 +469,35 @@ bool av_d3d12_PublishFence12(::av::ClientTransport& t, uint32_t fence, uint64_t 
     b.write_pod<uint32_t>(fence);
     b.write_pod<uint64_t>(offset);
     return t.send_async(kCmd_PublishFence12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_UpdateTileMappings12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t heap, uint32_t range_count, const TileRange* ranges, uint32_t flags) {
+    AV_SCOPE("av_d3d12_UpdateTileMappings12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(queue);
+    b.write_pod<uint32_t>(resource);
+    b.write_pod<uint32_t>(region_count);
+    if (region_count > 2048u || (region_count != 0u && regions == nullptr)) return abandon(t);
+    if (region_count != 0u) b.write(regions, sizeof(*regions) * region_count);
+    b.write_pod<uint32_t>(heap);
+    b.write_pod<uint32_t>(range_count);
+    if (range_count > 2048u || (range_count != 0u && ranges == nullptr)) return abandon(t);
+    if (range_count != 0u) b.write(ranges, sizeof(*ranges) * range_count);
+    b.write_pod<uint32_t>(flags);
+    return t.send_async(kCmd_UpdateTileMappings12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_CopyTileMappings12(::av::ClientTransport& t, uint32_t queue, uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags) {
+    AV_SCOPE("av_d3d12_CopyTileMappings12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(queue);
+    b.write_pod<uint32_t>(destination);
+    b.write_pod(destination_start);
+    b.write_pod<uint32_t>(source);
+    b.write_pod(source_start);
+    b.write_pod(size);
+    b.write_pod<uint32_t>(flags);
+    return t.send_async(kCmd_CopyTileMappings12, b) == ::av::TransportResult::ok;
 }
 
 bool av_d3d12_CreateQueryHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count) {
@@ -773,6 +832,19 @@ bool av_d3d12_ExecuteIndirect12(::av::ClientTransport& t, uint32_t list, uint32_
     b.write_pod<uint32_t>(count_buffer);
     b.write_pod<uint64_t>(count_offset);
     return t.send_async(kCmd_ExecuteIndirect12, b) == ::av::TransportResult::ok;
+}
+
+bool av_d3d12_CopyTiles12(::av::ClientTransport& t, uint32_t list, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) {
+    AV_SCOPE("av_d3d12_CopyTiles12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(resource);
+    b.write_pod(start);
+    b.write_pod(size);
+    b.write_pod<uint32_t>(buffer);
+    b.write_pod<uint64_t>(buffer_offset);
+    b.write_pod<uint32_t>(flags);
+    return t.send_async(kCmd_CopyTiles12, b) == ::av::TransportResult::ok;
 }
 
 }  // namespace av::d3d12proto

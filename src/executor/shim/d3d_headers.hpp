@@ -53,6 +53,22 @@ ID3D12DeviceFactory : public IUnknown {
 };
 __CRT_UUID_DECL(ID3D12DeviceFactory, 0x61f307d3, 0xd34e, 0x4e7c, 0x83, 0x74, 0x3b, 0xa4, 0xde, 0x23, 0xcc, 0xcb);
 
+/* ID3D12CommandQueue's first slot as vkd3d-proton implements it
+ * (include/vkd3d_d3d12.idl): DXVK's native d3d12.h comes from a Wine IDL that
+ * left UpdateTileMappings' heap out, so a call through it would hand
+ * vkd3d-proton the range count where it reads the heap, and every argument
+ * after it one place late. The same object, the slot declared with the API's
+ * ten parameters, under ID3D12CommandQueue's own IID. */
+MIDL_INTERFACE("0ec870a6-5d7e-4c22-8cfc-5baae07616ed")
+ID3D12CommandQueueTileMappings : public ID3D12Pageable {
+    virtual void STDMETHODCALLTYPE UpdateTileMappings(ID3D12Resource *resource, UINT region_count,
+                                                      const D3D12_TILED_RESOURCE_COORDINATE *region_starts,
+                                                      const D3D12_TILE_REGION_SIZE *region_sizes, ID3D12Heap *heap,
+                                                      UINT range_count, const D3D12_TILE_RANGE_FLAGS *range_flags,
+                                                      const UINT *heap_range_offsets, const UINT *range_tile_counts,
+                                                      D3D12_TILE_MAPPING_FLAGS flags) = 0;
+};
+
 /* CLSID_D3D12DeviceFactory, what D3D12GetInterface makes a factory from. */
 constexpr GUID clsid_d3d12_device_factory = {0x114863bf, 0xc386, 0x4aee, {0xb3, 0x9d, 0x8f, 0x0b, 0xbb, 0x06, 0x29, 0x55}};
 

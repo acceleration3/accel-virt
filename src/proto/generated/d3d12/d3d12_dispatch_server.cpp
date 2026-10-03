@@ -205,6 +205,44 @@ static bool decode_CreatePlacedResource12(ServerDispatch& s, ::av::WireReader& r
     return true;
 }
 
+static bool decode_CreateReservedResource12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CreateReservedResource12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    ResourceDesc desc{};
+    if (!r.read_pod(desc)) return false;
+    uint32_t state{};
+    if (!r.read_pod(state)) return false;
+    ClearValue clear{};
+    if (!r.read_pod(clear)) return false;
+    uint64_t address{};
+    if (!r.read_pod(address)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CreateReservedResource12(resource, desc, state, clear, address)) return false;
+    return true;
+}
+
+static bool decode_ResourceTiling12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ResourceTiling12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    uint32_t tiles{};
+    uint32_t packed_mips{};
+    uint32_t packed_tiles{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ResourceTiling12(resource, tiles, packed_mips, packed_tiles)) return false;
+    reply.write_pod(tiles);
+    reply.write_pod(packed_mips);
+    reply.write_pod(packed_tiles);
+    return true;
+}
+
 static bool decode_ResourceAllocation12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:ResourceAllocation12");
     (void)s;
@@ -685,6 +723,66 @@ static bool decode_PublishFence12(ServerDispatch& s, ::av::WireReader& r, ::av::
     if (!r.read_pod(offset)) return false;
     if (r.remaining() != 0u) return false;
     if (!s.on_PublishFence12(fence, offset)) return false;
+    return true;
+}
+
+static bool decode_UpdateTileMappings12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:UpdateTileMappings12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t queue{};
+    if (!r.read_pod(queue)) return false;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    uint32_t region_count{};
+    if (!r.read_pod(region_count)) return false;
+    if (region_count > 2048u) return false;
+    TileRegion* regions = nullptr;
+    if (region_count != 0u) {
+        regions = arena.allocate<TileRegion>(region_count);
+        if (regions == nullptr) return false;
+        if (!r.read(regions, sizeof(TileRegion) * region_count)) return false;
+    }
+    uint32_t heap{};
+    if (!r.read_pod(heap)) return false;
+    uint32_t range_count{};
+    if (!r.read_pod(range_count)) return false;
+    if (range_count > 2048u) return false;
+    TileRange* ranges = nullptr;
+    if (range_count != 0u) {
+        ranges = arena.allocate<TileRange>(range_count);
+        if (ranges == nullptr) return false;
+        if (!r.read(ranges, sizeof(TileRange) * range_count)) return false;
+    }
+    uint32_t flags{};
+    if (!r.read_pod(flags)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_UpdateTileMappings12(queue, resource, region_count, regions, heap, range_count, ranges, flags)) return false;
+    return true;
+}
+
+static bool decode_CopyTileMappings12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CopyTileMappings12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t queue{};
+    if (!r.read_pod(queue)) return false;
+    uint32_t destination{};
+    if (!r.read_pod(destination)) return false;
+    TileCoordinate destination_start{};
+    if (!r.read_pod(destination_start)) return false;
+    uint32_t source{};
+    if (!r.read_pod(source)) return false;
+    TileCoordinate source_start{};
+    if (!r.read_pod(source_start)) return false;
+    TileSize size{};
+    if (!r.read_pod(size)) return false;
+    uint32_t flags{};
+    if (!r.read_pod(flags)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CopyTileMappings12(queue, destination, destination_start, source, source_start, size, flags)) return false;
     return true;
 }
 
@@ -1321,6 +1419,30 @@ static bool decode_ExecuteIndirect12(ServerDispatch& s, ::av::WireReader& r, ::a
     return true;
 }
 
+static bool decode_CopyTiles12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CopyTiles12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    TileCoordinate start{};
+    if (!r.read_pod(start)) return false;
+    TileSize size{};
+    if (!r.read_pod(size)) return false;
+    uint32_t buffer{};
+    if (!r.read_pod(buffer)) return false;
+    uint64_t buffer_offset{};
+    if (!r.read_pod(buffer_offset)) return false;
+    uint32_t flags{};
+    if (!r.read_pod(flags)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CopyTiles12(list, resource, start, size, buffer, buffer_offset, flags)) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1331,6 +1453,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CreateCommittedResource12:
         case kCmd_ShareResource12:
         case kCmd_CreatePlacedResource12:
+        case kCmd_CreateReservedResource12:
+        case kCmd_ResourceTiling12:
         case kCmd_ResourceAllocation12:
         case kCmd_CreateDescriptorHeap12:
         case kCmd_CreateShaderResourceView12:
@@ -1357,6 +1481,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_WaitFence12:
         case kCmd_FenceValue12:
         case kCmd_PublishFence12:
+        case kCmd_UpdateTileMappings12:
+        case kCmd_CopyTileMappings12:
         case kCmd_CreateQueryHeap12:
         case kCmd_ResourceBarrier12:
         case kCmd_SetPipelineState12:
@@ -1389,6 +1515,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_EndEvent12:
         case kCmd_SetMarker12:
         case kCmd_ExecuteIndirect12:
+        case kCmd_CopyTiles12:
             return true;
         default: return false;
     }
@@ -1405,6 +1532,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CreateCommittedResource12: return decode_CreateCommittedResource12(s, r, reply, arena);
         case kCmd_ShareResource12: return decode_ShareResource12(s, r, reply, arena);
         case kCmd_CreatePlacedResource12: return decode_CreatePlacedResource12(s, r, reply, arena);
+        case kCmd_CreateReservedResource12: return decode_CreateReservedResource12(s, r, reply, arena);
+        case kCmd_ResourceTiling12: return decode_ResourceTiling12(s, r, reply, arena);
         case kCmd_ResourceAllocation12: return decode_ResourceAllocation12(s, r, reply, arena);
         case kCmd_CreateDescriptorHeap12: return decode_CreateDescriptorHeap12(s, r, reply, arena);
         case kCmd_CreateShaderResourceView12: return decode_CreateShaderResourceView12(s, r, reply, arena);
@@ -1431,6 +1560,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_WaitFence12: return decode_WaitFence12(s, r, reply, arena);
         case kCmd_FenceValue12: return decode_FenceValue12(s, r, reply, arena);
         case kCmd_PublishFence12: return decode_PublishFence12(s, r, reply, arena);
+        case kCmd_UpdateTileMappings12: return decode_UpdateTileMappings12(s, r, reply, arena);
+        case kCmd_CopyTileMappings12: return decode_CopyTileMappings12(s, r, reply, arena);
         case kCmd_CreateQueryHeap12: return decode_CreateQueryHeap12(s, r, reply, arena);
         case kCmd_ResourceBarrier12: return decode_ResourceBarrier12(s, r, reply, arena);
         case kCmd_SetPipelineState12: return decode_SetPipelineState12(s, r, reply, arena);
@@ -1463,6 +1594,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_EndEvent12: return decode_EndEvent12(s, r, reply, arena);
         case kCmd_SetMarker12: return decode_SetMarker12(s, r, reply, arena);
         case kCmd_ExecuteIndirect12: return decode_ExecuteIndirect12(s, r, reply, arena);
+        case kCmd_CopyTiles12: return decode_CopyTiles12(s, r, reply, arena);
         default: return false;
     }
 }

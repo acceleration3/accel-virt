@@ -392,10 +392,10 @@ extern "C" VOID APIENTRY avumd_d3d12q_ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE
 { D3d12RecordHandle(handle.pDrvPrivate).device().execute_command_lists(handle, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12q_UpdateTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_HRESOURCE a1, UINT a2, const D3D12DDI_TILED_RESOURCE_COORDINATE * a3, const D3D12DDI_TILE_REGION_SIZE * a4, D3D12DDI_HHEAP a5, UINT a6, const D3D12DDI_TILE_RANGE_FLAGS * a7, const UINT * a8, const UINT * a9, D3D12DDI_TILE_MAPPING_FLAGS a10)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); static_cast<void>(a7); static_cast<void>(a8); static_cast<void>(a9); static_cast<void>(a10); }
+{ D3d12RecordHandle(handle.pDrvPrivate).device().update_tile_mappings(handle, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
 extern "C" VOID APIENTRY avumd_d3d12q_CopyTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_HRESOURCE a1, const D3D12DDI_TILED_RESOURCE_COORDINATE * a2, D3D12DDI_HRESOURCE a3, const D3D12DDI_TILED_RESOURCE_COORDINATE * a4, const D3D12DDI_TILE_REGION_SIZE * a5, D3D12DDI_TILE_MAPPING_FLAGS a6)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); }
+{ D3d12RecordHandle(handle.pDrvPrivate).device().copy_tile_mappings(handle, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d12q_SignalFence(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDIARG_FENCE_OPERATION * a1)
 { D3d12RecordHandle(handle.pDrvPrivate).device().signal_fence(handle, a1); }
@@ -452,7 +452,7 @@ extern "C" VOID APIENTRY avumd_d3d12l_ResourceCopy(D3D12DDI_HCOMMANDLIST handle,
 { D3d12RecordHandle(handle.pDrvPrivate).recorder().resource_copy(handle, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_CopyTiles(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE a1, const D3D12DDI_TILED_RESOURCE_COORDINATE * a2, const D3D12DDI_TILE_REGION_SIZE * a3, D3D12DDI_HRESOURCE a4, UINT64 a5, D3D12DDI_TILE_COPY_FLAGS a6)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); }
+{ D3d12RecordHandle(handle.pDrvPrivate).recorder().copy_tiles(handle, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT a1, D3D12DDIARG_BUFFER_PLACEMENT a2, UINT64 a3)
 { D3d12RecordHandle(handle.pDrvPrivate).recorder().copy_buffer_region(handle, a1, a2, a3); }

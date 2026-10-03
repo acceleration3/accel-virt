@@ -37,6 +37,8 @@ public:
     virtual bool on_CreateCommittedResource12(uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
     virtual bool on_ShareResource12(uint32_t resource, uint64_t key) = 0;
     virtual bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
+    virtual bool on_CreateReservedResource12(uint32_t resource, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
+    virtual bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) = 0;
     virtual bool on_ResourceAllocation12(const ResourceDesc& desc, uint64_t& size, uint64_t& alignment) = 0;
     virtual bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) = 0;
     virtual bool on_CreateShaderResourceView12(const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) = 0;
@@ -63,6 +65,8 @@ public:
     virtual bool on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
     virtual bool on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t& completed) = 0;
     virtual bool on_PublishFence12(uint32_t fence, uint64_t offset) = 0;
+    virtual bool on_UpdateTileMappings12(uint32_t queue, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t heap, uint32_t range_count, const TileRange* ranges, uint32_t flags) = 0;
+    virtual bool on_CopyTileMappings12(uint32_t queue, uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags) = 0;
     virtual bool on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count) = 0;
     virtual bool on_ResourceBarrier12(uint32_t list, uint32_t count, const Barrier* barriers) = 0;
     virtual bool on_SetPipelineState12(uint32_t list, uint32_t pipeline) = 0;
@@ -95,6 +99,7 @@ public:
     virtual bool on_EndEvent12(uint32_t list) = 0;
     virtual bool on_SetMarker12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) = 0;
     virtual bool on_ExecuteIndirect12(uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) = 0;
+    virtual bool on_CopyTiles12(uint32_t list, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) = 0;
 
 protected:
     ServerDispatch() = default;

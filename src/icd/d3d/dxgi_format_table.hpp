@@ -35,6 +35,9 @@ public:
      * members' multisampling pooled (D3D12Core refuses "MSAA quality for
      * parent != child"). */
     uint32_t format_support(uint32_t format) const;
+    /* D3D12DDI_FORMAT_SUPPORT_TILED for a format the host tiles, 0 for one it
+     * does not: a driver that carries tiled resources adds it. */
+    uint32_t tiled_support(uint32_t format) const;
     uint32_t quality_levels(uint32_t format, uint32_t samples) const;
     /* The same as Direct3D 11 wants them: each format its own answer, a
      * typeless parent included. Pooled, some formats DWM draws its acrylic

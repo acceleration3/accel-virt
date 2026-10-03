@@ -90,7 +90,8 @@ IMPLEMENTED = {
         "pfnCheckDriverMatchingIdentifier", "pfnGetDebugAllocationInfo",
         "pfnCalcPrivateCommandSignatureSize", "pfnCreateCommandSignature", "pfnDestroyCommandSignature",
     },
-    QUEUE_TABLE: {"pfnExecuteCommandLists", "pfnSignalFence", "pfnWaitForFence"},
+    QUEUE_TABLE: {"pfnExecuteCommandLists", "pfnSignalFence", "pfnWaitForFence", "pfnUpdateTileMappings",
+                  "pfnCopyTileMappings"},
     EXTENDED_TABLE: {"pfnGetSupportedExtendedFeatures", "pfnGetSupportedExtendedFeatureVersions",
                      "pfnEnableExtendedFeature", "pfnSetExtendedFeatureCallbacks"},
     LIST_TABLE: {
@@ -108,7 +109,7 @@ IMPLEMENTED = {
         "pfnSetGraphicsRootShaderResourceView", "pfnSetComputeRootUnorderedAccessView",
         "pfnSetGraphicsRootUnorderedAccessView", "pfnIASetIndexBuffer", "pfnIASetVertexBuffers",
         "pfnOMSetRenderTargets", "pfnSetMarker", "pfnClearRootArguments", "pfnExecuteIndirect",
-        "pfnPresent",
+        "pfnPresent", "pfnCopyTiles",
     },
 }
 

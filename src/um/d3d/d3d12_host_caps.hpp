@@ -58,6 +58,8 @@ private:
     /* The host's level counts past one sample, into the format table. */
     [[nodiscard]] bool learn_samples(ClientTransport &transport);
     uint32_t pipeline_level() const;
+    /* The host's tier of tiled resources, as far as this driver carries it. */
+    uint32_t tiled_tier() const;
     HRESULT  options(void *data, UINT bytes) const;
     HRESULT  shader(void *data, UINT bytes) const;
     HRESULT  shader_models(void *data, UINT bytes) const;

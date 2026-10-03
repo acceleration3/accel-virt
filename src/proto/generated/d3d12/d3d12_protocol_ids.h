@@ -18,6 +18,8 @@ inline constexpr uint32_t kCmd_CreateCommittedResource12 = 0x00041101;
 inline constexpr uint32_t kCmd_CreatePlacedResource12 = 0x00041102;
 inline constexpr uint32_t kCmd_ResourceAllocation12 = 0x00041103;
 inline constexpr uint32_t kCmd_ShareResource12 = 0x00041104;
+inline constexpr uint32_t kCmd_CreateReservedResource12 = 0x00041105;
+inline constexpr uint32_t kCmd_ResourceTiling12 = 0x00041106;
 inline constexpr uint32_t kCmd_CreateDescriptorHeap12 = 0x00041200;
 inline constexpr uint32_t kCmd_CreateShaderResourceView12 = 0x00041201;
 inline constexpr uint32_t kCmd_CreateUnorderedAccessView12 = 0x00041202;
@@ -44,6 +46,8 @@ inline constexpr uint32_t kCmd_FenceValue12 = 0x0004140a;
 inline constexpr uint32_t kCmd_PublishFence12 = 0x0004140b;
 inline constexpr uint32_t kCmd_CreateQueryHeap12 = 0x0004140c;
 inline constexpr uint32_t kCmd_PresentResource12 = 0x0004140d;
+inline constexpr uint32_t kCmd_UpdateTileMappings12 = 0x0004140e;
+inline constexpr uint32_t kCmd_CopyTileMappings12 = 0x0004140f;
 inline constexpr uint32_t kCmd_ResourceBarrier12 = 0x00041500;
 inline constexpr uint32_t kCmd_SetPipelineState12 = 0x00041501;
 inline constexpr uint32_t kCmd_SetRootSignature12 = 0x00041502;
@@ -75,5 +79,6 @@ inline constexpr uint32_t kCmd_BeginEvent12 = 0x0004151c;
 inline constexpr uint32_t kCmd_EndEvent12 = 0x0004151d;
 inline constexpr uint32_t kCmd_SetMarker12 = 0x0004151e;
 inline constexpr uint32_t kCmd_ExecuteIndirect12 = 0x0004151f;
+inline constexpr uint32_t kCmd_CopyTiles12 = 0x00041520;
 
 }  // namespace av::d3d12proto

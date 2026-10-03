@@ -4,6 +4,7 @@
 #include "icd/d3d/list_pieces.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "um/d3d/d3d12_ddi_tile_source.hpp"
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d12_records.hpp"
 
@@ -227,6 +228,20 @@ VOID D3d12Recorder::resource_copy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
     sent(av_d3d12_CopyResource12(device_.wire(), list(handle), device_.id_of(destination.pDrvPrivate),
                                   device_.id_of(source.pDrvPrivate)),
          "CopyResource12");
+}
+
+VOID D3d12Recorder::copy_tiles(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE resource,
+                               const D3D12DDI_TILED_RESOURCE_COORDINATE *start, const D3D12DDI_TILE_REGION_SIZE *size,
+                               D3D12DDI_HRESOURCE buffer, UINT64 buffer_offset, D3D12DDI_TILE_COPY_FLAGS flags)
+{
+    AV_SCOPE("D3d12Recorder::copy_tiles");
+    if (start == nullptr || size == nullptr) return;
+    const d3d12proto::TileRegion region =
+        DdiTileSource(1u, start, size, 0u, nullptr, nullptr, nullptr, 0u).region(0u);
+    sent(av_d3d12_CopyTiles12(device_.wire(), list(handle), device_.id_of(resource.pDrvPrivate), region.start,
+                              region.size, device_.id_of(buffer.pDrvPrivate), buffer_offset,
+                              static_cast<uint32_t>(flags)),
+         "CopyTiles12");
 }
 
 VOID D3d12Recorder::copy_buffer_region(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT destination,

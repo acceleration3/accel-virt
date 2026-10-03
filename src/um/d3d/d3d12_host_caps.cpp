@@ -13,6 +13,14 @@ namespace {
 
 constexpr uint32_t level_11_0 = 0xb000u;
 constexpr uint32_t level_11_1 = 0xb100u;
+constexpr uint32_t level_12_0 = 0xc000u;
+/* What 12_0 asks beyond 11_1 (D3D_FEATURE_LEVEL_12_0): resource binding tier
+ * 2, tiled resources tier 2 and typed UAV loads of the additional formats. */
+constexpr uint32_t binding_tier_12_0 = 2u;
+constexpr uint32_t tiled_tier_12_0 = 2u;
+/* The tiers of tiled resources this driver carries: Texture2D tiles, with
+ * unmapped tiles reading zero. A Texture3D's (tier 3) are not reported. */
+constexpr uint32_t most_tiled_tier = 2u;
 /* D3D_SHADER_MODEL 5.1 and 6.5, and the DDI's release values: 5.1, then each
  * 6.x as 0x60005 + 0x10 * x. */
 constexpr uint32_t api_model_6_0 = 0x60u;
@@ -87,15 +95,25 @@ bool D3d12HostCaps::learned() const
 UINT D3d12HostCaps::format_support(DXGI_FORMAT format) const
 {
     AV_SCOPE("D3d12HostCaps::format_support");
-    return formats_.format_support(static_cast<uint32_t>(format));
+    const uint32_t asked = static_cast<uint32_t>(format);
+    return formats_.format_support(asked) | (tiled_tier() != 0u ? formats_.tiled_support(asked) : 0u);
 }
 
 uint32_t D3d12HostCaps::pipeline_level() const
 {
     AV_SCOPE("D3d12HostCaps::pipeline_level");
+    if (caps_.feature_level >= level_12_0 && caps_.resource_binding_tier >= binding_tier_12_0 &&
+        tiled_tier() >= tiled_tier_12_0 && caps_.typed_uav_load_additional_formats != 0u)
+        return D3D12DDI_3DPIPELINELEVEL_12_0;
     if (caps_.feature_level >= level_11_1) return D3D12DDI_3DPIPELINELEVEL_11_1;
     if (caps_.feature_level >= level_11_0) return D3D12DDI_3DPIPELINELEVEL_11_0;
     return D3D12DDI_3DPIPELINELEVEL_1_0_CORE;
+}
+
+uint32_t D3d12HostCaps::tiled_tier() const
+{
+    AV_SCOPE("D3d12HostCaps::tiled_tier");
+    return caps_.tiled_resources_tier < most_tiled_tier ? caps_.tiled_resources_tier : most_tiled_tier;
 }
 
 HRESULT D3d12HostCaps::fill(void *data, UINT bytes, const void *answer, UINT answer_bytes) const
@@ -110,7 +128,7 @@ HRESULT D3d12HostCaps::options(void *data, UINT bytes) const
     D3D12DDI_D3D12_OPTIONS_DATA_0089 answer = {};
     answer.ResourceBindingTier = static_cast<D3D12DDI_RESOURCE_BINDING_TIER>(caps_.resource_binding_tier);
     answer.ResourceHeapTier = static_cast<D3D12DDI_RESOURCE_HEAP_TIER>(caps_.resource_heap_tier);
-    answer.TiledResourcesTier = D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+    answer.TiledResourcesTier = static_cast<D3D12DDI_TILED_RESOURCES_TIER>(tiled_tier());
     answer.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
     return fill(data, bytes, &answer, sizeof(answer));
 }

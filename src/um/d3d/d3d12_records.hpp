@@ -77,6 +77,14 @@ struct ResourceRecord {
      * surface (docs/shared-surfaces.md). */
     uint32_t      presents;
     HANDLE        runtime_resource;
+    /* A reserved resource - tiles with no memory of their own, mapped to
+     * heaps' by the queue - and, once the host has been asked, how it tiled
+     * it: every tile, and its packed mips and their tiles. */
+    uint32_t      reserved;
+    uint32_t      tiling_known;
+    uint32_t      tiles;
+    uint32_t      packed_mips;
+    uint32_t      packed_tiles;
 };
 
 /* A descriptor heap; its descriptors follow it in the block, one slot of

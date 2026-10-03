@@ -18,6 +18,8 @@ const char* command_name(uint32_t id) {
         case kCmd_CreatePlacedResource12: return "CreatePlacedResource12";
         case kCmd_ResourceAllocation12: return "ResourceAllocation12";
         case kCmd_ShareResource12: return "ShareResource12";
+        case kCmd_CreateReservedResource12: return "CreateReservedResource12";
+        case kCmd_ResourceTiling12: return "ResourceTiling12";
         case kCmd_CreateDescriptorHeap12: return "CreateDescriptorHeap12";
         case kCmd_CreateShaderResourceView12: return "CreateShaderResourceView12";
         case kCmd_CreateUnorderedAccessView12: return "CreateUnorderedAccessView12";
@@ -44,6 +46,8 @@ const char* command_name(uint32_t id) {
         case kCmd_PublishFence12: return "PublishFence12";
         case kCmd_CreateQueryHeap12: return "CreateQueryHeap12";
         case kCmd_PresentResource12: return "PresentResource12";
+        case kCmd_UpdateTileMappings12: return "UpdateTileMappings12";
+        case kCmd_CopyTileMappings12: return "CopyTileMappings12";
         case kCmd_ResourceBarrier12: return "ResourceBarrier12";
         case kCmd_SetPipelineState12: return "SetPipelineState12";
         case kCmd_SetRootSignature12: return "SetRootSignature12";
@@ -75,6 +79,7 @@ const char* command_name(uint32_t id) {
         case kCmd_EndEvent12: return "EndEvent12";
         case kCmd_SetMarker12: return "SetMarker12";
         case kCmd_ExecuteIndirect12: return "ExecuteIndirect12";
+        case kCmd_CopyTiles12: return "CopyTiles12";
         default: return nullptr;
     }
 }

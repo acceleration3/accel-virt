@@ -210,26 +210,10 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
 {
     AV_SCOPE("D3d12Device::make_resource");
     const d3d12proto::ResourceDesc desc = resource_desc(args);
-    resource = ResourceRecord{};
-    stamp(resource.header, ResourceRecord::tag, next_id());
-    resource.dimension = desc.dimension;
-    resource.width = desc.width;
-    resource.height = desc.height;
-    resource.depth_or_array = desc.depth_or_array;
-    resource.mip_levels = desc.mip_levels;
-    resource.format = desc.format;
-    resource.sample_count = desc.sample_count;
-    resource.flags = desc.flags;
+    record_resource(desc, resource);
     resource.address = desc.dimension == buffer_dimension ? heap.address + offset : 0u;
-    d3d12proto::ClearValue value = {};
-    if (clear != nullptr) {
-        value.present = 1u;
-        value.format = static_cast<uint32_t>(clear->Format);
-        for (uint32_t channel = 0u; channel < 4u; channel++) value.color[channel] = clear->Color[channel];
-        value.depth = clear->DepthStencil.Depth;
-        value.stencil = clear->DepthStencil.Stencil;
-    }
-    const uint32_t state = initial_state(args, heap.type);
+    const d3d12proto::ClearValue value = clear_value(clear);
+    const uint32_t               state = initial_state(args, heap.type);
     bool           made = false;
     resource.placed_in = &heap;
     resource.heap_offset = offset;
@@ -245,6 +229,34 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
     return sent(made, "CreateResource12") ? S_OK : E_OUTOFMEMORY;
 }
 
+void D3d12Device::record_resource(const d3d12proto::ResourceDesc &desc, ResourceRecord &resource)
+{
+    AV_SCOPE("D3d12Device::record_resource");
+    resource = ResourceRecord{};
+    stamp(resource.header, ResourceRecord::tag, next_id());
+    resource.dimension = desc.dimension;
+    resource.width = desc.width;
+    resource.height = desc.height;
+    resource.depth_or_array = desc.depth_or_array;
+    resource.mip_levels = desc.mip_levels;
+    resource.format = desc.format;
+    resource.sample_count = desc.sample_count;
+    resource.flags = desc.flags;
+}
+
+d3d12proto::ClearValue D3d12Device::clear_value(const D3D12DDI_CLEAR_VALUES *clear) const
+{
+    AV_SCOPE("D3d12Device::clear_value");
+    d3d12proto::ClearValue value = {};
+    if (clear == nullptr) return value;
+    value.present = 1u;
+    value.format = static_cast<uint32_t>(clear->Format);
+    for (uint32_t channel = 0u; channel < 4u; channel++) value.color[channel] = clear->Color[channel];
+    value.depth = clear->DepthStencil.Depth;
+    value.stencil = clear->DepthStencil.Stencil;
+    return value;
+}
+
 D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_heap_and_resource_sizes(
     const D3D12DDIARG_CREATEHEAP_0001 *, const D3D12DDIARG_CREATERESOURCE_0109 *, D3D12DDI_HPROTECTEDRESOURCESESSION_0030)
 {
@@ -252,9 +264,10 @@ D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_heap_and_resource_siz
     return D3D12DDI_HEAP_AND_RESOURCE_SIZES{sizeof(HeapRecord), sizeof(ResourceRecord)};
 }
 
-/* Three calls in one: a heap alone (pResource null), a committed resource
- * with the heap made for it, and a resource placed in an existing heap
- * (pHeap null), at the offset D3D12Core puts in ReuseBufferGPUVA. */
+/* Four calls in one: a heap alone (pResource null), a committed resource
+ * with the heap made for it, a resource placed in an existing heap (pHeap
+ * null), at the offset D3D12Core puts in ReuseBufferGPUVA - and a reserved
+ * resource, with neither a heap nor a buffer to be placed in. */
 HRESULT D3d12Device::create_heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
                                               D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                                               const D3D12DDI_CLEAR_VALUES *clear,
@@ -321,6 +334,9 @@ HRESULT D3d12Device::place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIAR
     if (args == nullptr || handle.pDrvPrivate == nullptr) return E_INVALIDARG;
     const D3D12DDIARG_HRESOURCE_PLACEMENT &at = args->ReuseBufferGPUVA.BaseAddress.UMD;
     const auto *const spanning = static_cast<const ResourceRecord *>(at.hResource.pDrvPrivate);
+    /* No heap, and no buffer of one to be placed in: a reserved resource. */
+    if (heap_handle.pDrvPrivate == nullptr && spanning == nullptr)
+        return reserve_resource(*args, clear, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
     HeapRecord *const in = heap_handle.pDrvPrivate != nullptr ? static_cast<HeapRecord *>(heap_handle.pDrvPrivate)
                            : spanning != nullptr && spanning->header.magic == ResourceRecord::tag ? spanning->placed_in
                                                                                                   : nullptr;
@@ -415,11 +431,5 @@ VOID D3d12Device::check_subresource_info(D3D12DDI_HRESOURCE, UINT, D3D12DDI_SUBR
     if (info != nullptr) *info = D3D12DDI_SUBRESOURCE_INFO{};
 }
 
-VOID D3d12Device::get_mip_packing(D3D12DDI_HRESOURCE, UINT *packed, UINT *tiles)
-{
-    AV_SCOPE("D3d12Device::get_mip_packing");
-    if (packed != nullptr) *packed = 0u;
-    if (tiles != nullptr) *tiles = 0u;
-}
 
 }  // namespace av::d3d12
