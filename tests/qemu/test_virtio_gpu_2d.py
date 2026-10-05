@@ -36,8 +36,10 @@ FEATURE_VIRGL = 1 << 0
 FEATURE_RESOURCE_BLOB = 1 << 3
 FEATURE_CONTEXT_INIT = 1 << 4
 
-DEVICES = {"stock": "virtio-gpu-pci", "av": "virtio-gpu-av-pci,host-gpu=auto",
-           "av with an executor": av_context.av_device()}
+# Pin the mode: accel-virt's default follows the host's connected monitors,
+# so comparing it with stock's 1280x800 default is otherwise machine-dependent.
+DEVICES = {"stock": "virtio-gpu-pci", "av": "virtio-gpu-av-pci,host-gpu=auto,modes=1280x800",
+           "av with an executor": av_context.av_device(",modes=1280x800")}
 
 
 def header(command):

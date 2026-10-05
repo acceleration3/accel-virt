@@ -56,6 +56,34 @@ TEST(vblank_schedule, sixty_blanks_at_sixty_hertz_are_one_second_to_the_nanoseco
   CHECK_EQ(schedule.sequence(), 60u);
   CHECK_EQ(schedule.last(), start_at + second);
   CHECK_EQ(short_gaps, 20u);   /* two thirds of a nanosecond short each time, made up every third */
+   CHECK(schedule.invariants_hold()); }
+
+TEST(vblank_schedule, one_hundred_twenty_hertz_carries_fractional_nanoseconds_without_drift)
+{ VblankSchedule schedule;
+  constexpr std::uint64_t epoch = 7u * 24u * 60u * 60u * second;
+  schedule.retime(120000u, epoch);
+  schedule.start(epoch);
+  std::uint64_t previous = epoch;
+  for (std::uint64_t blank = 1u; blank <= 120u * 60u * 60u; blank++) {
+      const std::uint64_t due = schedule.next();
+      CHECK_EQ(due, epoch + blank * second / 120u);
+      CHECK_EQ(schedule.advance(due - 1u), 0u);
+      CHECK_EQ(schedule.advance(due), 1u);
+      CHECK(due - previous == 8333333u || due - previous == 8333334u);
+      previous = due;
+  }
+  CHECK_EQ(schedule.last(), epoch + 60u * 60u * second);
+  CHECK(schedule.invariants_hold()); }
+
+TEST(vblank_schedule, a_late_count_at_one_hundred_twenty_hertz_keeps_the_absolute_phase)
+{ VblankSchedule schedule;
+  schedule.retime(120000u, start_at);
+  schedule.start(start_at);
+  CHECK_EQ(schedule.advance(start_at + second + 1234567u), 120u);
+  CHECK_EQ(schedule.last(), start_at + second);
+  CHECK_EQ(schedule.next(), start_at + second + 8333333u);
+  CHECK_EQ(schedule.advance(start_at + second + 8333332u), 0u);
+  CHECK_EQ(schedule.advance(start_at + second + 8333333u), 1u);
   CHECK(schedule.invariants_hold()); }
 
 TEST(vblank_schedule, a_late_count_takes_every_blank_that_passed)

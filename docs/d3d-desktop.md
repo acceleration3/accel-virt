@@ -152,14 +152,14 @@ height)`** on the control queue when the shown key changes, and
 key (the boot and basic-display desktop, CDD primaries) keeps the guest-page
 path.
 
-On the host, a device-level **`ImageScanout`** keeps each head's key and, on a
-flush, asks the executor for the pixels through a new executor ABI operation,
-`read_image(key, destination, stride, width, height)`: the executor copies the
-image into a host staging texture on the D3D11 device, maps it, and writes
-into QEMU's console surface, off the main loop, which then announces the
-update (`dpy_gfx_update`). With a GL console the same key is exported as a
-dma-buf (`export_object` already exists for Vulkan objects) and shown through
-`DisplayHeads`. Nothing is read back to the guest.
+On the host, `virtio_gpu_av_scanout_image` validates the 2D resource, then
+posts the host key to the display clock or exports it as a dma-buf for a GL
+console. Without a GL console it acknowledges the image without exporting
+or reading it back. The accelerated desktop has no CPU/VNC fallback: a
+desktop-sized GPU wait and staging copy on QEMU's main loop would stall
+device emulation and RemoteWin control notifications. WGC monitor and app
+captures use the independent shared-surface export path. Guest-authored 2D
+transfers (including boot/basic-display and cursor pixels) remain supported.
 
 ### 3.4 Flip completion
 

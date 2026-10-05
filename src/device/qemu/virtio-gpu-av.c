@@ -241,9 +241,9 @@ static int virtio_gpu_av_set_status(VirtIODevice *vdev, uint8_t status)
     return 0;
 }
 
-/* A 2D scanout resource filled from the host image a guest primary shows,
- * named by its key (docs/d3d-desktop.md §3.3): the guest's pages are not read,
- * and RESOURCE_FLUSH then shows it as it would a TRANSFER_TO_HOST_2D. A frame
+/* A guest primary's host image, named by its key (docs/d3d-desktop.md §3.3).
+ * Only a GL display consumes it. Without one it is acknowledged without
+ * readback; WGC mirrors capture independently of the QEMU console. A frame
  * other than 0 is the display clock's to show, at the head's next vertical
  * blank (docs/protocol.md, "Display clock"). */
 #define VIRTIO_GPU_AV_CMD_SCANOUT_IMAGE 0x02F0
@@ -278,24 +278,24 @@ static void virtio_gpu_av_scanout_image(VirtIOGPU *g, VirtIOGPUAv *r, struct vir
     struct virtio_gpu_simple_resource *resource;
     enum virtio_gpu_ctrl_type answer = VIRTIO_GPU_RESP_OK_NODATA;
     AvExportedImage exported;
+    uint32_t head;
 
     if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &request, sizeof(request)) != sizeof(request)) {
         answer = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
-    } else if (av_device_post_frame(r->core, virtio_gpu_av_head_of(g, le32_to_cpu(request.resource_id)),
-                                     le32_to_cpu(request.frame), le64_to_cpu(request.key))) {
-        answer = VIRTIO_GPU_RESP_OK_NODATA;
-    } else if (av_device_export_image(r->core, le64_to_cpu(request.key), &exported) &&
-               virtio_gpu_av_show_image(r, virtio_gpu_av_head_of(g, le32_to_cpu(request.resource_id)), &exported)) {
-        /* A GL display composes the host's image as it is: nothing is read back. */
-        answer = VIRTIO_GPU_RESP_OK_NODATA;
     } else {
         resource = virtio_gpu_find_resource(g, le32_to_cpu(request.resource_id));
         if (resource == NULL || resource->image == NULL) {
             answer = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
-        } else if (!av_device_read_image(r->core, le64_to_cpu(request.key), pixman_image_get_data(resource->image),
-                                          (uint32_t)pixman_image_get_stride(resource->image), resource->width,
-                                          resource->height)) {
-            answer = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        } else {
+            head = virtio_gpu_av_head_of(g, le32_to_cpu(request.resource_id));
+            /* Do not export either: export_image queues a desktop-sized GPU
+             * copy and waits for it on this same main loop. */
+            if (r->host.display_takes_dmabuf(r->host.opaque, head) &&
+                !av_device_post_frame(r->core, head, le32_to_cpu(request.frame), le64_to_cpu(request.key)) &&
+                !(av_device_export_image(r->core, le64_to_cpu(request.key), &exported) &&
+                  virtio_gpu_av_show_image(r, head, &exported))) {
+                answer = VIRTIO_GPU_RESP_ERR_UNSPEC;
+            }
         }
     }
     virtio_gpu_ctrl_response_nodata(g, cmd, answer);

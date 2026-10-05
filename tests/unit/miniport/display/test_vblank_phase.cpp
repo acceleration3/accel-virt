@@ -69,4 +69,20 @@ TEST(vblank_phase, a_new_period_starts_over_and_forgetting_leaves_nothing)
   CHECK_EQ(phase.since_blank(90000000u), 0u);
   phase.forget();
   CHECK(!phase.known());
-  CHECK(phase.invariants_hold()); }
+   CHECK(phase.invariants_hold()); }
+
+TEST(vblank_phase, fractional_period_at_one_hundred_twenty_hertz_tracks_jittered_arrivals)
+{ VblankPhase phase;
+  constexpr std::uint64_t epoch = std::uint64_t{7u} * 24u * 60u * 60u * 10000000u;
+  constexpr std::uint64_t ticks_per_second = 10000000u;
+  constexpr std::uint32_t fractional_period_ns = 8333333u;
+  for (std::uint64_t blank = 1u; blank <= 120u * 60u; blank++) {
+      const std::uint64_t at = epoch + blank * ticks_per_second / 120u;
+      const std::uint64_t delay = blank % 4u == 0u ? 0u : 500u;
+      phase.observe(blank, at + delay, fractional_period_ns);
+      if (blank < 4u) continue;
+      const std::uint64_t into = phase.since_blank(at + 1000u);
+      CHECK(into >= 999u && into <= 1001u);
+      CHECK_EQ(phase.period(), 83333u);
+      CHECK(phase.invariants_hold());
+  } }

@@ -6,8 +6,9 @@ A console with no display backend has no GL context - it is the backend that
 calls qemu_console_set_display_gl_ctx, not the device - so this device offers no
 dma-buf scanout, says so in its capset, and refuses every SET_SCANOUT_BLOB with
 ERR_UNSPEC while answering every malformed one exactly as ScanoutFramebuffer
-says. The guest then
-keeps the 2D path of feature 038.
+says. Guest-authored 2D transfers still work, but accelerated desktop images
+are acknowledged without GPU export or CPU readback. WGC clients capture the
+desktop independently of QEMU's display backend.
 
 What a GL display does with the same commands needs one, and the guest suite is
 where it is proven (T029).
@@ -25,6 +26,9 @@ import virtio_qtest
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 
 CMD_RESOURCE_UNREF = 0x0102
+CMD_RESOURCE_CREATE_2D = 0x0101
+CMD_RESOURCE_ATTACH_BACKING = 0x0106
+CMD_SCANOUT_IMAGE = 0x02F0
 CMD_SET_SCANOUT = 0x0103
 CMD_RESOURCE_FLUSH = 0x0104
 CMD_RESOURCE_CREATE_BLOB = 0x010C
@@ -104,6 +108,31 @@ class VirtioGpuScanout(unittest.TestCase):
         self.assertEqual(hex(response_type(response)), hex(RESP_OK_CAPSET))
         features = struct.unpack_from("<Q", response, 24 + 24)[0]
         self.assertEqual(features & FEATURE_DMABUF_SCANOUT, 0)
+
+    def test_accelerated_desktop_without_gl_never_requires_a_readable_image(self):
+        gpu = self.open()
+        self.expect(gpu, header(CMD_RESOURCE_CREATE_2D)
+                    + struct.pack("<4I", 1, FORMAT_B8G8R8A8, WIDTH, HEIGHT), RESP_OK_NODATA)
+        address = gpu.device.memory.allocate(FRAME)
+        self.expect(gpu, header(CMD_RESOURCE_ATTACH_BACKING)
+                    + struct.pack("<IIQI4x", 1, 1, address, FRAME), RESP_OK_NODATA)
+        self.expect(gpu, header(CMD_SET_SCANOUT)
+                    + struct.pack("<6I", 0, 0, WIDTH, HEIGHT, 0, 1), RESP_OK_NODATA)
+        # The echo executor cannot export or read this key. A CPU-readback
+        # fallback would fail here; headless presentation must still succeed.
+        for frame in (0, 1, 2, 0xFFFFFFFF):
+            self.expect(gpu, header(CMD_SCANOUT_IMAGE)
+                        + struct.pack("<IIQ", 1, frame, 0xDEADBEEF), RESP_OK_NODATA)
+        self.expect(gpu, flush(1), RESP_OK_NODATA)
+
+    def test_accelerated_desktop_still_rejects_truncation_and_unknown_resources(self):
+        gpu = self.open()
+        request = header(CMD_SCANOUT_IMAGE) + struct.pack("<IIQ", 99, 0, 1)
+        self.expect(gpu, request[:-1], RESP_ERR_INVALID_PARAMETER)
+        self.expect(gpu, request, RESP_ERR_INVALID_RESOURCE_ID)
+        self.blob(gpu, 1)
+        self.expect(gpu, header(CMD_SCANOUT_IMAGE) + struct.pack("<IIQ", 1, 0, 1),
+                    RESP_ERR_INVALID_RESOURCE_ID)
 
     def test_a_well_formed_scanout_is_the_hosts_refusal_and_never_the_guests(self):
         gpu = self.open()
