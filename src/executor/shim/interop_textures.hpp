@@ -34,7 +34,12 @@ class Vkd3dImageExport;
 
 class InteropTextures {
 public:
-    static constexpr uint32_t capacity = 64u;
+    /* Every window a mirror shows keeps a ring of three of these, made again
+     * at each resize, and DWM's surfaces other APIs open come from here too:
+     * sixty-four ran out under one application with a handful of windows,
+     * and every surface made after was one nothing could export. A vacant
+     * slot holds nothing. */
+    static constexpr uint32_t capacity = 1024u;
 
     explicit InteropTextures(DxvkVulkanDevice &vulkan);
     ~InteropTextures();

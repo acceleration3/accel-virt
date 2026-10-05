@@ -155,7 +155,10 @@ ID3D11Texture2D *InteropTextures::make(const D3D11_TEXTURE2D_DESC1 &desc)
     if (!described.supported() || !vulkan_.connected()) return nullptr;
     collect();
     Slot *const slot = vacant_slot();
-    if (slot == nullptr) return nullptr;
+    if (slot == nullptr) {
+        lines_.name("a shared texture is made that nothing can export:", "every slot is held");
+        return nullptr;
+    }
     VkImage made = VK_NULL_HANDLE;
     if (!vulkan_.create_image(described.info(), made)) return nullptr;
     const VkMemoryRequirements needs = vulkan_.requirements(made);
