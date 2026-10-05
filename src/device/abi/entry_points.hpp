@@ -22,6 +22,7 @@ void AvRingAttach(void *ring);
 void AvDisplayClockRun(void *clock);
 void AvDisplayFramesShow(void *device);
 void AvPresentEngineRun(void *engine);
+void AvExportConnectionServe(void *connection);
 
 }
 

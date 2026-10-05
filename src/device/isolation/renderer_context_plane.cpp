@@ -502,6 +502,26 @@ void RendererContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &)
     AV_SCOPE("RendererContextPlane::unmap_frame");
 }
 
+/* The surfaces live in the renderer's process, whose descriptors nothing here
+ * asks for: a device with a renderer exports none (docs/external-export.md). */
+bool RendererContextPlane::exports_surfaces() const
+{
+    AV_SCOPE("RendererContextPlane::exports_surfaces");
+    return false;
+}
+
+bool RendererContextPlane::export_surface(const uint8_t *, uint64_t, AvExportedImage &)
+{
+    AV_SCOPE("RendererContextPlane::export_surface");
+    return false;
+}
+
+bool RendererContextPlane::sync_surface(const uint8_t *, uint64_t, uint64_t &, int &)
+{
+    AV_SCOPE("RendererContextPlane::sync_surface");
+    return false;
+}
+
 bool RendererContextPlane::alive() const
 {
     AV_SCOPE("RendererContextPlane::alive");

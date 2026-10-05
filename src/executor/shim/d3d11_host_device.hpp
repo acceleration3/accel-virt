@@ -35,6 +35,7 @@ struct ID3DDeviceContextState;
 struct D3D11_TEXTURE2D_DESC;
 struct D3D11_TEXTURE2D_DESC1;
 struct ID3D11Texture2D;
+struct ID3D11Fence;
 struct ID3D12Resource;
 struct IUnknown;
 
@@ -70,6 +71,28 @@ public:
     /* A session's state is going: if it is in force it stops being, so the
      * next lock swaps rather than trusting a pointer that was released. */
     void                    forget_state(ID3DDeviceContextState *state);
+    /* Under the lock a session's command already holds: `presented`, a
+     * flip-model buffer just presented, copied - in the presenting session's
+     * order - into the texture its compositor reads in its place, made the
+     * first time. DWM learns of the present only once the guest's kernel has
+     * run it, and composes on its own clock: it read the buffer itself after
+     * the kernel had handed it back to the application, which was drawing its
+     * next frame there. A copy taken at the present is what a flip shows, and
+     * nothing drawn afterwards reaches it - as UTM's driver copies a composed
+     * present inside the application's own stream. False for a key not
+     * shared, or a copy the device will not make. */
+    [[nodiscard]] bool      show(uint64_t key, ID3D11Texture2D *presented);
+    /* Under the lock: the copy shown for `key`, with a reference the caller
+     * owns; null for a key never presented as a flip. */
+    IUnknown               *find_shown(uint64_t key);
+    /* A fence of the device's, starting at `initial`, the caller's; null when
+     * the device makes none (D3d11BatchProgress). */
+    ID3D11Fence            *make_fence(uint64_t initial);
+    /* Under the lock a session's command already holds: the immediate context
+     * signals `fence` with `value` behind everything recorded so far, and is
+     * flushed so the GPU starts on it. False for no fence, or a refused
+     * signal. */
+    [[nodiscard]] bool      signal(ID3D11Fence *fence, uint64_t value);
 
     /* The texture published under `key`, read into `pixels` as B8G8R8A8 rows
      * `stride` bytes apart, as much of it as fits `width` by `height`. False
@@ -77,6 +100,16 @@ public:
     [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     /* The image published under `key` as a dma-buf (HostImageExport). */
     [[nodiscard]] bool export_image(uint64_t key, AvExportedImage &image);
+    /* The surface shared under `surface` as its own memory, a dma-buf the
+     * caller owns, for a process outside QEMU (InteropTextures::export_image).
+     * False for a surface nothing shares here, or one made over memory no
+     * other API can open. Takes the lock. */
+    [[nodiscard]] bool export_surface(uint64_t surface, AvExportedImage &image);
+    /* The copies into `surface` the host has run (D3dSharedResources::writes)
+     * and a sync_file, the caller's, that signals once the GPU is done with
+     * them (DxvkVulkanDevice::sync_file). False for a surface nothing shares
+     * here, or a device that makes no sync_file. Takes the lock. */
+    [[nodiscard]] bool sync_surface(uint64_t surface, uint64_t &writes, int &fd);
     /* Under the lock a session's command already holds: subresource
      * `subresource` of `source` staged for the present engine
      * (D3d11FramePool::stage); null when no frame is free. */

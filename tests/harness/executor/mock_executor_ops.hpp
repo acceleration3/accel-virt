@@ -126,6 +126,12 @@ public:
     /* map_frame answers `view` for `surface` at `point` until it is unmapped. */
     void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
+    /* Version 15: export_surface answers `image` for `surface`, and
+     * sync_surface `writes` and `fence` - neither descriptor looked at here;
+     * every other surface is AV_UNKNOWN. The GPU the last asked about. */
+    void                 serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
+                                       int fence);
+    const std::uint8_t  *last_surface_gpu() const;
     std::uint32_t        shared_releases();
     std::uint64_t        last_shared_release();
     const std::uint8_t *last_shared_gpu();
@@ -205,6 +211,11 @@ private:
     std::uint32_t              frame_point_ = 0u;
     AvFrameView               frame_ = {};
     std::uint32_t              frame_unmaps_ = 0u;
+    std::uint64_t              surface_ = 0u;
+    AvExportedImage            surface_image_ = {};
+    std::uint64_t              surface_writes_ = 0u;
+    int                        surface_fence_ = -1;
+    const std::uint8_t        *surface_gpu_ = nullptr;
     std::uint64_t              last_shared_release_ = 0u;
     const std::uint8_t        *last_shared_gpu_ = nullptr;
     std::uint64_t              next_object_;

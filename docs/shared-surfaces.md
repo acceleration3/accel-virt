@@ -195,6 +195,10 @@ order Windows gives implicitly, between a present and whoever shows it.
 - **Scanout (a flipped primary).** `SCANOUT_IMAGE(id)` exports the surface for
   QEMU's display after its written point. `HostImageExport` becomes the scanout
   half of `SharedSurfaces`.
+- **Export (a process outside QEMU).** A host process asks for the surface by
+  id on the device's export socket and is handed its memory as a dma-buf, with
+  a count of the copies into it and a sync_file for them
+  (docs/external-export.md). Done, for Direct3D 11 surfaces made shareable.
 - **Blt (redirected or not).** The present engine asks `read(id, point)`, and
   three cases follow:
   - **A surface no blt has read before.** It is waited for at `point` and

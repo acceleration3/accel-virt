@@ -10,7 +10,8 @@ DxvkVulkanDevice::DxvkVulkanDevice()
     : interop_(nullptr), physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), create_image_(nullptr),
       destroy_image_(nullptr), requirements_(nullptr), allocate_(nullptr), free_(nullptr), bind_(nullptr),
       layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
-      import_semaphore_(nullptr), submit_(nullptr), queue_idle_(nullptr)
+      import_semaphore_(nullptr), submit_(nullptr), queue_idle_(nullptr), semaphore_fd_(nullptr),
+      sync_(VK_NULL_HANDLE), sync_spent_(false)
 {
     AV_SCOPE("DxvkVulkanDevice::DxvkVulkanDevice");
 }
@@ -45,6 +46,7 @@ bool DxvkVulkanDevice::connect(ID3D11Device5 *device)
     import_semaphore_ = reinterpret_cast<PFN_vkImportSemaphoreFdKHR>(load("vkImportSemaphoreFdKHR"));
     submit_ = reinterpret_cast<PFN_vkQueueSubmit>(load("vkQueueSubmit"));
     queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(load("vkQueueWaitIdle"));
+    semaphore_fd_ = reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(load("vkGetSemaphoreFdKHR"));
     interop_ = interop;
     return memory_fd_ != nullptr;
 }
@@ -58,6 +60,18 @@ bool DxvkVulkanDevice::connected() const
 void DxvkVulkanDevice::release()
 {
     AV_SCOPE("DxvkVulkanDevice::release");
+    if (sync_ != VK_NULL_HANDLE) {
+        auto *const interop = static_cast<IDXGIVkInteropDevice1 *>(interop_);
+        VkQueue     queue = VK_NULL_HANDLE;
+        uint32_t    family = 0u;
+        interop->GetSubmissionQueue(&queue, &family);
+        interop->LockSubmissionQueue();
+        static_cast<void>(queue_idle_(queue));
+        interop->ReleaseSubmissionQueue();
+        destroy_semaphore_(device_, sync_, nullptr);
+        sync_ = VK_NULL_HANDLE;
+    }
+    sync_spent_ = false;
     if (interop_ != nullptr) static_cast<IDXGIVkInteropDevice1 *>(interop_)->Release();
     interop_ = nullptr;
     device_ = VK_NULL_HANDLE;
@@ -202,6 +216,43 @@ void DxvkVulkanDevice::idle() const
     interop->LockSubmissionQueue();
     static_cast<void>(queue_idle_(queue));
     interop->ReleaseSubmissionQueue();
+}
+
+/* DXVK submits from a thread of its own, after its CS thread has recorded:
+ * FlushRenderingCommands drains the CS thread, and its submission lock waits
+ * for its submission queue to empty, so the empty batch here is submitted
+ * after all of it - and a signal covers everything earlier in submission
+ * order on the queue. */
+bool DxvkVulkanDevice::sync_file(int &fd)
+{
+    AV_SCOPE("DxvkVulkanDevice::sync_file");
+    fd = -1;
+    if (interop_ == nullptr || semaphore_fd_ == nullptr || sync_spent_) return false;
+    if (sync_ == VK_NULL_HANDLE) {
+        const VkExportSemaphoreCreateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO, nullptr,
+                                                      VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
+        const VkSemaphoreCreateInfo made = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, &exported, 0u};
+        if (create_semaphore_(device_, &made, nullptr, &sync_) != VK_SUCCESS) {
+            sync_ = VK_NULL_HANDLE;
+            return false;
+        }
+    }
+    auto *const interop = static_cast<IDXGIVkInteropDevice1 *>(interop_);
+    VkQueue     queue = VK_NULL_HANDLE;
+    uint32_t    family = 0u;
+    interop->GetSubmissionQueue(&queue, &family);
+    interop->FlushRenderingCommands();
+    const VkSubmitInfo submit = {VK_STRUCTURE_TYPE_SUBMIT_INFO, nullptr, 0u, nullptr, nullptr, 0u, nullptr, 1u, &sync_};
+    interop->LockSubmissionQueue();
+    const VkResult submitted = submit_(queue, 1u, &submit, VK_NULL_HANDLE);
+    interop->ReleaseSubmissionQueue();
+    if (submitted != VK_SUCCESS) return false;
+    const VkSemaphoreGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR, nullptr, sync_,
+                                           VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT};
+    if (semaphore_fd_(device_, &asked, &fd) == VK_SUCCESS) return true;
+    fd = -1;
+    sync_spent_ = true;
+    return false;
 }
 
 }  // namespace av

@@ -160,6 +160,23 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (surface == mock.frame_surface_ && point == mock.frame_point_) mock.frame_surface_ = 0u;
         mock.frame_unmaps_++;
     };
+    table_.export_surface = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t surface,
+                               AvExportedImage *image) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        mock.surface_gpu_ = gpu_uuid;
+        if (image == nullptr || surface == 0u || surface != mock.surface_) return AV_UNKNOWN;
+        *image = mock.surface_image_;
+        return AV_EXECUTED;
+    };
+    table_.sync_surface = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint64_t *writes,
+                             int *fd) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        mock.surface_gpu_ = gpu_uuid;
+        if (writes == nullptr || fd == nullptr || surface == 0u || surface != mock.surface_) return AV_UNKNOWN;
+        *writes = mock.surface_writes_;
+        *fd = mock.surface_fence_;
+        return AV_EXECUTED;
+    };
     table_.release_shared = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t object_id) {
         MockExecutorOps &mock = mock_of(opaque);
         Lock lock(mock.lock_);
@@ -449,6 +466,20 @@ void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, co
 std::uint32_t MockExecutorOps::frame_unmaps() const
 {
     return frame_unmaps_;
+}
+
+void MockExecutorOps::serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
+                                    int fence)
+{
+    surface_ = surface;
+    surface_image_ = image;
+    surface_writes_ = writes;
+    surface_fence_ = fence;
+}
+
+const std::uint8_t *MockExecutorOps::last_surface_gpu() const
+{
+    return surface_gpu_;
 }
 
 std::uint32_t MockExecutorOps::shared_releases()

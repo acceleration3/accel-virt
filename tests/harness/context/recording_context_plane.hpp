@@ -64,6 +64,45 @@ public:
         snapshot_mapped_ = false;
         served_ = true;
     }
+    /* Surfaces exported as the test scripts them: `count` of them from
+     * `surface`, each one's memory a fresh memfd - a real descriptor, which
+     * the device must close or hand over - described as `image` says (its fd
+     * ignored), and its syncs a fresh eventfd, already readable, with
+     * `writes`. */
+    bool exports_surfaces() const override { return exports_; }
+    bool export_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, AvExportedImage &image) override
+    {
+        export_gpu_ = gpu_uuid;
+        exports_asked_++;
+        if (!exported(surface)) return false;
+        image = exported_image_;
+        image.fd = exported_fd_ ? fresh_memfd() : -1;
+        return true;
+    }
+    bool sync_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint64_t &writes, int &fd) override
+    {
+        export_gpu_ = gpu_uuid;
+        syncs_asked_++;
+        if (!exported(surface)) return false;
+        writes = writes_;
+        fd = synced_fd_ ? fresh_eventfd() : -1;
+        return true;
+    }
+    void export_as(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
+                   std::uint64_t count = 1u)
+    {
+        exports_ = true;
+        exported_surface_ = surface;
+        exported_count_ = count;
+        exported_image_ = image;
+        writes_ = writes;
+    }
+    /* A library that says it executed and handed over no descriptor. */
+    void export_without_descriptor() { exported_fd_ = false; }
+    void sync_without_descriptor() { synced_fd_ = false; }
+    std::uint32_t       exports_asked() const { return exports_asked_; }
+    std::uint32_t       syncs_asked() const { return syncs_asked_; }
+    const std::uint8_t *export_gpu() const { return export_gpu_; }
     bool          snapshot_mapped() const { return snapshot_mapped_; }
     std::uint32_t unmaps() const { return unmaps_; }
     void report(StateWriter &) override {}
@@ -81,6 +120,24 @@ public:
     std::uint32_t losses() const { return losses_; }
 
 private:
+    int fresh_memfd() const;
+    int fresh_eventfd() const;
+
+    bool exported(std::uint64_t surface) const
+    {
+        return exports_ && surface >= exported_surface_ && surface - exported_surface_ < exported_count_;
+    }
+
+    bool            exports_ = false;
+    bool            exported_fd_ = true;
+    bool            synced_fd_ = true;
+    std::uint64_t   exported_surface_ = 0u;
+    std::uint64_t   exported_count_ = 0u;
+    AvExportedImage exported_image_ = {};
+    std::uint64_t   writes_ = 0u;
+    std::uint32_t   exports_asked_ = 0u;
+    std::uint32_t   syncs_asked_ = 0u;
+    const std::uint8_t *export_gpu_ = nullptr;
     SurfacePoint    frame_;
     AvFrameView snapshot_ = {};
     bool            snapshot_mapped_ = false;

@@ -189,6 +189,9 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
         error_setg(errp, "%s", error);
         return;
     }
+    if (r->export_socket && r->export_socket[0] && !virtio_gpu_av_export_listen(r, errp)) {
+        return;
+    }
     b->virtio_config.num_capsets = cpu_to_le32(av_device_capsets(r->core));
     if (av_device_capsets(r->core)) {
         b->conf.flags |= 1 << VIRTIO_GPU_FLAG_CONTEXT_INIT_ENABLED;
@@ -374,6 +377,8 @@ static void virtio_gpu_av_finalize(Object *obj)
 {
     VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
 
+    /* No connection arrives once the core that would serve it starts going. */
+    virtio_gpu_av_export_finish(r);
     (void)av_device_destroy(r->core);
     r->core = NULL;
     virtio_gpu_av_renderer_finish(r);
@@ -406,6 +411,7 @@ static void virtio_gpu_av_instance_init(Object *obj)
     VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
 
     virtio_gpu_av_renderer_init(r);
+    virtio_gpu_av_export_init(r);
     memory_region_init_io(&r->doorbells, obj, &virtio_gpu_av_doorbell_ops, r, "virtio-gpu-av-doorbells",
                           (uint64_t)AV_DEVICE_DOORBELLS * AV_DEVICE_DOORBELL_PAGE);
 }
@@ -419,6 +425,7 @@ static const Property virtio_gpu_av_properties[] = {
     DEFINE_PROP_STRING("record-kinds", VirtIOGPUAv, record_kinds),
     DEFINE_PROP_BOOL("record-wrap", VirtIOGPUAv, record_wrap, false),
     DEFINE_PROP_BOOL("display", VirtIOGPUAv, display, true),
+    DEFINE_PROP_STRING("export-socket", VirtIOGPUAv, export_socket),
 };
 
 static void virtio_gpu_av_class_init(ObjectClass *klass, const void *data)

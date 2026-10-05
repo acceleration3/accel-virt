@@ -32,6 +32,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <sys/socket.h>
 #include <unistd.h>
 
 using av::GpuIdentity;
@@ -567,7 +568,7 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   const int line = host.fence_interrupt_descriptor(63u);
   CHECK(mock.descriptor_open(line));
   CHECK_EQ(mock.live_dmabufs(), 1u);
-  CHECK_EQ(host.fence_interrupt_descriptor(65u), -1);  /* past the fence queues and the display line */
+  CHECK_EQ(host.fence_interrupt_descriptor(66u), -1);  /* past the fence queues, the display line and the present line */
   host.close_descriptor(line);
   CHECK(!mock.descriptor_open(line));
   CHECK_EQ(mock.live_dmabufs(), 0u);
@@ -824,3 +825,65 @@ TEST(table_host_scanout, show_image_goes_through_the_table_or_is_not_supported)
   TableHost old_host(older);
   CHECK_STATUS(old_host.show_image(0u, image), Status::not_supported);
   CHECK_EQ(mock.images_shown(0u), 1u); }
+
+/* An export connection's datagrams cross the table as the glue gives them: one
+ * datagram each way with the descriptor beside it, a datagram longer than the
+ * buffer known by its whole length, a shut-down connection answering not_found,
+ * and the close counted once. A table with no export calls offers none. */
+TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  int ends[2] = {-1, -1};
+  CHECK(::socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, ends) == 0);
+  const std::uint8_t sent[3] = {1u, 2u, 3u};
+  CHECK(::send(ends[1], sent, sizeof sent, 0) == static_cast<ssize_t>(sizeof sent));
+  std::uint8_t got[2] = {};
+  std::size_t  length = 0u;
+  CHECK_STATUS(host.receive_export(ends[0], got, sizeof got, length), Status::ok);
+  CHECK_EQ(length, 3u);   /* longer than the buffer, known by its length */
+  CHECK_EQ(got[1], 2u);
+  const int passed = mock.open_descriptor();
+  CHECK_STATUS(host.send_export(ends[0], sent, sizeof sent, passed), Status::ok);
+  CHECK_EQ(mock.export_sends(), 1u);
+  std::uint8_t          back[4] = {};
+  alignas(cmsghdr) char control[CMSG_SPACE(sizeof(int))] = {};
+  iovec                 vector = {back, sizeof back};
+  msghdr                message = {};
+  message.msg_iov = &vector;
+  message.msg_iovlen = 1u;
+  message.msg_control = control;
+  message.msg_controllen = sizeof control;
+  CHECK(::recvmsg(ends[1], &message, 0) == static_cast<ssize_t>(sizeof sent));
+  const cmsghdr *const header = CMSG_FIRSTHDR(&message);
+  CHECK(header != nullptr && header->cmsg_type == SCM_RIGHTS);
+  int arrived = -1;
+  std::memcpy(&arrived, CMSG_DATA(header), sizeof arrived);
+  CHECK(arrived >= 0 && arrived != passed);
+  ::close(arrived);
+  CHECK(mock.descriptor_open(passed));   /* still the sender's */
+  mock.close_descriptor(passed);
+  CHECK_STATUS(host.send_export(ends[0], sent, sizeof sent, -1), Status::ok);
+  mock.fail_export_send_at(1u);
+  CHECK_STATUS(host.send_export(ends[0], sent, sizeof sent, -1), Status::not_found);
+  host.shutdown_export(ends[0]);
+  CHECK_STATUS(host.receive_export(ends[0], got, sizeof got, length), Status::not_found);
+  CHECK_EQ(length, 0u);
+  host.close_export(ends[0]);
+  CHECK_EQ(mock.exports_closed(), 1u);
+  CHECK(!mock.descriptor_open(ends[0]));
+
+  AvHostOps older = ops.table();
+  older.receive_export = nullptr;
+  older.send_export = nullptr;
+  older.shutdown_export = nullptr;
+  older.close_export = nullptr;
+  TableHost before(older);
+  length = 5u;
+  CHECK_STATUS(before.receive_export(ends[1], got, sizeof got, length), Status::not_found);
+  CHECK_EQ(length, 0u);
+  CHECK_STATUS(before.send_export(ends[1], sent, sizeof sent, -1), Status::not_found);
+  before.shutdown_export(ends[1]);
+  before.close_export(ends[1]);
+  CHECK_EQ(mock.exports_closed(), 1u);
+  CHECK(mock.descriptor_open(ends[1]));
+  ::close(ends[1]); }
+

@@ -297,6 +297,14 @@ device without render-server, and reads answers from reply slots.
 `test_virtio_gpu_faults.py` faults contexts for every reason the echo executor
 can reach and reads the faulted page, the pending vector, a healthy neighbour,
 a recreated context and progress per command.
+`test_virtio_gpu_export.py` connects to the export socket as a process
+outside QEMU would (docs/external-export.md), with QEMU under the seccomp
+sandbox libvirt starts it with: the greeting, an export whose dma-buf is the
+echo executor's memfd, a sync, every refusal, the guest's release and a reset
+reaching the consumer, the ninth connection closed, a stale socket file
+replaced and a live one left alone. The same path on a real GPU - the
+surface's own memory imported by an EGL consumer, every texel judged - is
+`tests/unit/executor/d3d/test_d3d_external_export_device.cpp`.
 
 ### The shape of a test file
 

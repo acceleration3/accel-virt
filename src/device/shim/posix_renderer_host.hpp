@@ -144,6 +144,11 @@ public:
                                           uint32_t capacity_descriptors, uint32_t &count,
                                           uint32_t timeout_ms) override;
     void                 kill_renderer() override;
+    /* A renderer serves no export socket (docs/external-export.md). */
+    [[nodiscard]] Status receive_export(int connection, uint8_t *buffer, size_t capacity, size_t &length) override;
+    [[nodiscard]] Status send_export(int connection, const uint8_t *bytes, size_t length, int descriptor) override;
+    void                 shutdown_export(int connection) override;
+    void                 close_export(int descriptor) override;
 
 private:
     struct Posted {

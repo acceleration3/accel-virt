@@ -426,9 +426,24 @@ VOID D3d11Device::acquire_resource(D3D10DDI_HRESOURCE, HANDLE token)
     LogLine(lines_).text("the kernel refused a buffer's sync token ").hex(static_cast<uint32_t>(queued), 8u).write();
 }
 
-VOID D3d11Device::release_resource(D3D10DDI_HRESOURCE, HANDLE)
+/* A compositor - DWM - is done with an application's flip-model buffer. Its
+ * reads of it went to the host on the session's ring, which dxgkrnl never
+ * sees, so they are flushed and followed on the kernel context first: the
+ * release queued behind them reaches the application, through its own
+ * acquire, only once the host has composed from the buffer. Dropped, the
+ * release came as soon as DWM's composition was recorded, and the next frame
+ * was drawn into the buffer while the host still read it. */
+VOID D3d11Device::release_resource(D3D10DDI_HRESOURCE, HANDLE token)
 {
     AV_SCOPE("D3d11Device::release_resource");
+    if (token == nullptr || context_ == nullptr) return;
+    if (wire().application_flush() != Status::ok || FAILED(follow_host())) {
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return;
+    }
+    const HRESULT queued = kernel_.release(token, context_);
+    if (SUCCEEDED(queued) || !token_refused_.first()) return;
+    LogLine(lines_).text("the kernel refused a buffer's sync token ").hex(static_cast<uint32_t>(queued), 8u).write();
 }
 
 HRESULT D3d11Device::retrieve_shader_comment(D3D10DDI_HSHADER, WCHAR *, SIZE_T *)

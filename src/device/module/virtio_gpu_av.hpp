@@ -11,6 +11,7 @@
 #include "device/display/display_clock.hpp"
 #include "device/display/display_heads.hpp"
 #include "device/display/display_modes.hpp"
+#include "device/export/export_service.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/module/driver_status.hpp"
 #include "device/gpu/gpu_binding.hpp"
@@ -88,6 +89,11 @@ public:
     uint32_t             contexts() const;
     /* Main loop: the renderer the contexts ran in died. */
     void                 renderer_lost();
+    /* Main loop. A connection the glue accepted on the export socket
+     * (docs/external-export.md), from a process of QEMU's own user or not:
+     * true when it is served, and the device's from now on; false, leaving it
+     * the glue's to close, before realize or when the service refused it. */
+    bool                 export_accepted(int connection, bool same_user);
     bool                 realized() const;
     uint32_t             gpu_index() const;
     /* Main loop: its fields on the line its caller opened, then its contexts. */
@@ -100,6 +106,9 @@ private:
      * invalid_parameter, named in `message`, for properties that name nothing;
      * a host that cannot make the file leaves recording off and says so. */
     [[nodiscard]] Status start_recording(const AvRecordingOptions *recording, TextBuffer &message);
+    /* What the export socket serves, once the GPU is bound and its capset
+     * described. */
+    void                 attach_exports();
 
     Host              &host_;
     GpuBinding         binding_;
@@ -124,6 +133,9 @@ private:
     LocalContextPlane    local_;
     RendererContextPlane remote_;
     ContextPlane        *contexts_;
+    /* After the contexts its connections ask, so every connection's thread
+     * has ended before they go. */
+    ExportService        exports_;
 
     friend struct VirtioGpuAvProbe;
 };

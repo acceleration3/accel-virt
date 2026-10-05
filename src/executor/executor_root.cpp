@@ -94,6 +94,22 @@ void ExecutorRoot::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &fram
     if (surfaces != nullptr) surfaces->unmap(frame);
 }
 
+bool ExecutorRoot::export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image)
+{
+    AV_SCOPE("ExecutorRoot::export_surface");
+    const HostGpu *const   gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->export_surface(surface, image);
+}
+
+bool ExecutorRoot::sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd)
+{
+    AV_SCOPE("ExecutorRoot::sync_surface");
+    const HostGpu *const   gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->sync_surface(surface, writes, fd);
+}
+
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
                                    ContextSession *share)
 {

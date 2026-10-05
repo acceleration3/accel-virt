@@ -236,6 +236,20 @@ void unmap_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t poi
     library.root().unmap_frame(gpu_uuid, av::SurfacePoint(surface, point));
 }
 
+uint32_t export_surface(void *, const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage *image)
+{
+    AV_SCOPE("export_surface");
+    return image != nullptr && library.root().export_surface(gpu_uuid, surface, *image) ? AV_EXECUTED : AV_UNKNOWN;
+}
+
+uint32_t sync_surface(void *, const uint8_t *gpu_uuid, uint64_t surface, uint64_t *writes, int *fd)
+{
+    AV_SCOPE("sync_surface");
+    return writes != nullptr && fd != nullptr && library.root().sync_surface(gpu_uuid, surface, *writes, *fd)
+               ? AV_EXECUTED
+               : AV_UNKNOWN;
+}
+
 void release_shared(void *, const uint8_t *gpu_uuid, uint64_t object_id)
 {
     AV_SCOPE("release_shared");
@@ -289,7 +303,9 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               gpu_progress,
                               release_shared,
                               map_frame,
-                              unmap_frame};
+                              unmap_frame,
+                              export_surface,
+                              sync_surface};
 
 }  // namespace
 

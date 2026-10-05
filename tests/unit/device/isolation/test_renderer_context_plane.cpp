@@ -947,3 +947,14 @@ TEST(renderer_context_plane_invariants, each_broken_promise_is_seen)
   RendererContextPlaneProbe::count_blobs(fixture.plane(), 0u);
   RendererContextPlaneProbe::unconfigure(fixture.plane());
   CHECK(!fixture.plane().invariants_hold()); }
+
+/* A renderer's surfaces are in its process: none is exported from here. */
+TEST(renderer_context_plane, exports_no_surface)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK(!fixture.plane().exports_surfaces());
+  AvExportedImage image = {};
+  CHECK(!fixture.plane().export_surface(uuid, 9u, image));
+  std::uint64_t writes = 1u;
+  int           sync_fd = 1;
+  CHECK(!fixture.plane().sync_surface(uuid, 9u, writes, sync_fd)); }

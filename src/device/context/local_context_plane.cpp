@@ -166,6 +166,24 @@ void LocalContextPlane::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint 
     library_.unmap_frame(gpu_uuid, frame);
 }
 
+bool LocalContextPlane::exports_surfaces() const
+{
+    AV_SCOPE("LocalContextPlane::exports_surfaces");
+    return library_.exports_surfaces();
+}
+
+bool LocalContextPlane::export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image)
+{
+    AV_SCOPE("LocalContextPlane::export_surface");
+    return library_.export_surface(gpu_uuid, surface, image);
+}
+
+bool LocalContextPlane::sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd)
+{
+    AV_SCOPE("LocalContextPlane::sync_surface");
+    return library_.sync_surface(gpu_uuid, surface, writes, fd);
+}
+
 void LocalContextPlane::report(StateWriter &writer)
 {
     AV_SCOPE("LocalContextPlane::report");

@@ -14,6 +14,7 @@
 #include "core/support/text_buffer.hpp"
 #include "harness/context/local_context_plane_probe.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
+#include "harness/export/fake_export_consumer.hpp"
 #include "harness/display/display_heads_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
@@ -27,6 +28,8 @@
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/export/export_answer.hpp"
+#include "proto/export/export_request.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -492,9 +495,10 @@ TEST(virtio_gpu_av, lifecycle_is_main_loop_only)
   host.join_thread(thread);
   /* realize, its fence interrupts, its blob table, its context table and its
    * binding, reset, its display clock, its present engine, every table, the
-   * status and the interrupts under it, create, destroy and its table, and
-   * control, which an unrealized device answers no further */
-  for (int violation = 0; violation < 17; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+   * export socket's revocation, the status and the interrupts under it,
+   * create, destroy and its table, and control, which an unrealized device
+   * answers no further */
+  for (int violation = 0; violation < 18; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
@@ -1178,3 +1182,53 @@ TEST(virtio_gpu_av_present_engine, the_engine_is_offered_takes_presents_and_stop
   CHECK_EQ(after.response_type(), 0x1205u);   /* no page: nothing counted */
   std::memcpy(&completed, rig.host.guest_ram(0x402000u + 8u), sizeof completed);
   CHECK_EQ(completed, 1u); }
+
+/* The export socket's connections reach the realized device alone: hello names
+ * the bound GPU by its UUID and PCI address, a surface is exported through the
+ * executor the device loaded, the guest's release of it reaches the consumer,
+ * and so does a reset - every surface, as 0. */
+TEST(virtio_gpu_av_export, serves_the_bound_gpu_s_surfaces_and_revokes_them_at_a_release_and_a_reset)
+{ MockHost host;
+  host.add_gpu(first);
+  host.place_gpu_on_pci(0u, MockHost::PciBus{0u, 3u, 0u, 0u});
+  VirtioGpuAv device(host);
+  av::FakeExportConsumer early;
+  CHECK(!device.export_accepted(early.device_end(), true));
+  early.refused();
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
+  executor.serve_surface(0x51u, AvExportedImage{host.open_descriptor(), 0u, 16u, 16u, 64u, 0u, 0x34325241u, 0u, 0u},
+                         4u, -1);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::ok);
+  av::FakeExportConsumer stranger;
+  CHECK(!device.export_accepted(stranger.device_end(), false));
+  stranger.refused();
+  av::FakeExportConsumer consumer;
+  CHECK(device.export_accepted(consumer.device_end(), true));
+  av::ExportAnswer answer;
+  CHECK(consumer.send(av::ExportRequest(av::ExportOperation::hello, 0u, 1u)));
+  CHECK_STATUS(consumer.receive(answer), Status::ok);
+  CHECK_STATUS(answer.status(), Status::ok);
+  CHECK_EQ(answer.greeting().uuid()[0], first[0]);
+  CHECK(answer.greeting().on_pci());
+  CHECK_EQ(answer.greeting().bus(), 3u);
+  CHECK(consumer.send(av::ExportRequest(av::ExportOperation::export_surface, 0x51u, 2u)));
+  CHECK_STATUS(consumer.receive(answer), Status::ok);
+  CHECK_STATUS(answer.status(), Status::ok);
+  CHECK(executor.last_surface_gpu() != nullptr && executor.last_surface_gpu()[0] == first[0]);
+  CHECK(consumer.descriptor() >= 0);
+  GpuRequestBuilder release(0x02F1u);
+  release.u64(0x51u);
+  MockRequest release_request(release.bytes(), release.size());
+  CHECK(device.control(&release_request, 0x02F1u));
+  CHECK_STATUS(consumer.receive(answer), Status::ok);
+  CHECK(answer.operation() == av::ExportOperation::revoked);
+  CHECK_EQ(answer.surface(), 0x51u);
+  device.reset();
+  CHECK_STATUS(consumer.receive(answer), Status::ok);
+  CHECK(answer.operation() == av::ExportOperation::revoked);
+  CHECK_EQ(answer.surface(), 0u);
+  CHECK_EQ(answer.reason(), 2u);
+  CHECK(device.invariants_hold()); }
+

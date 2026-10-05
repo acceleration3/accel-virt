@@ -16,6 +16,7 @@
 #include <linux/udmabuf.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -53,7 +54,8 @@ MockHost::MockHost()
       fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{}, images_shown_{}, last_images_{},
       update_rects_{}, renderer_regions_{}, renderer_region_count_(0u), renderer_peer_(nullptr),
       renderer_running_(false), fail_renderer_start_(0u), renderer_starts_(0u), renderer_kills_(0u),
-      renderer_datagrams_(0u), receive_timeout_(0u), forward_requests_(false), fail_event_descriptor_(0u), started_renderer_{}
+      renderer_datagrams_(0u), receive_timeout_(0u), forward_requests_(false), fail_event_descriptor_(0u), started_renderer_{},
+      fail_export_send_(0u), export_sends_(0u), exports_closed_(0u)
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -1835,6 +1837,92 @@ void MockHost::kill_renderer()
     StateLock lock(state_);
     renderer_kills_++;
     renderer_running_ = false;
+}
+
+Status MockHost::receive_export(int connection, std::uint8_t *buffer, std::size_t capacity, std::size_t &length)
+{
+    length = 0u;
+    alignas(cmsghdr) char control[CMSG_SPACE(sizeof(int) * 4u)] = {};
+    iovec  vector = {buffer, capacity};
+    msghdr message = {};
+    message.msg_iov = &vector;
+    message.msg_iovlen = 1u;
+    message.msg_control = control;
+    message.msg_controllen = sizeof control;
+    ssize_t got = -1;
+    do {
+        got = ::recvmsg(connection, &message, MSG_TRUNC | MSG_CMSG_CLOEXEC);
+    } while (got < 0 && errno == EINTR);
+    for (cmsghdr *header = CMSG_FIRSTHDR(&message); header != nullptr; header = CMSG_NXTHDR(&message, header)) {
+        if (header->cmsg_level != SOL_SOCKET || header->cmsg_type != SCM_RIGHTS) continue;
+        const std::size_t carried = (header->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+        for (std::size_t index = 0u; index < carried; index++) {
+            int descriptor = -1;
+            std::memcpy(&descriptor, CMSG_DATA(header) + index * sizeof(int), sizeof descriptor);
+            ::close(descriptor);
+        }
+    }
+    if (got <= 0) return Status::not_found;
+    length = static_cast<std::size_t>(got);
+    return Status::ok;
+}
+
+Status MockHost::send_export(int connection, const std::uint8_t *bytes, std::size_t length, int descriptor)
+{
+    {
+        StateLock lock(state_);
+        if (fail_now(fail_export_send_)) return Status::not_found;
+        export_sends_++;
+    }
+    alignas(cmsghdr) char control[CMSG_SPACE(sizeof(int))] = {};
+    iovec  vector = {const_cast<std::uint8_t *>(bytes), length};
+    msghdr message = {};
+    message.msg_iov = &vector;
+    message.msg_iovlen = 1u;
+    if (descriptor >= 0) {
+        message.msg_control = control;
+        message.msg_controllen = sizeof control;
+        cmsghdr *const header = CMSG_FIRSTHDR(&message);
+        header->cmsg_level = SOL_SOCKET;
+        header->cmsg_type = SCM_RIGHTS;
+        header->cmsg_len = CMSG_LEN(sizeof(int));
+        std::memcpy(CMSG_DATA(header), &descriptor, sizeof descriptor);
+    }
+    return ::sendmsg(connection, &message, MSG_DONTWAIT | MSG_NOSIGNAL) == static_cast<ssize_t>(length)
+               ? Status::ok
+               : Status::not_found;
+}
+
+void MockHost::shutdown_export(int connection)
+{
+    ::shutdown(connection, SHUT_RDWR);
+}
+
+void MockHost::close_export(int descriptor)
+{
+    {
+        StateLock lock(state_);
+        exports_closed_++;
+    }
+    ::close(descriptor);
+}
+
+void MockHost::fail_export_send_at(std::uint32_t nth)
+{
+    StateLock lock(state_);
+    fail_export_send_ = nth;
+}
+
+std::uint32_t MockHost::export_sends()
+{
+    StateLock lock(state_);
+    return export_sends_;
+}
+
+std::uint32_t MockHost::exports_closed()
+{
+    StateLock lock(state_);
+    return exports_closed_;
 }
 
 int MockHost::add_guest_region(std::uint32_t region, void *pointer, std::uint64_t size)

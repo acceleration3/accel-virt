@@ -65,6 +65,11 @@ struct VirtIOGPUAv {
     /* The modes the display offers, "WxH,WxH" with the first preferred; none
      * is the host's monitors'. Settable before realize and while the VM runs. */
     char *modes;
+    /* The unix socket a process outside QEMU asks for shared surfaces on
+     * (docs/external-export.md); none: no socket. The listening descriptor,
+     * -1 while none listens. */
+    char *export_socket;
+    int export_listener;
     AvHostOps host;
     uint32_t gpu_count;
     AvGpuProperties gpus[VIRTIO_GPU_AV_MAX_GPUS];
@@ -119,6 +124,14 @@ void virtio_gpu_av_renderer_init(VirtIOGPUAv *r);
 /* Kills and reaps a renderer still running, without telling the core, which
  * is gone by then. */
 void virtio_gpu_av_renderer_finish(VirtIOGPUAv *r);
+
+/* The export socket (docs/external-export.md): nothing listening, before
+ * anything else touches it; listening at r->export_socket, accepting each
+ * connection for the core, or an error; and no longer listening, the socket
+ * file gone. */
+void virtio_gpu_av_export_init(VirtIOGPUAv *r);
+bool virtio_gpu_av_export_listen(VirtIOGPUAv *r, Error **errp);
+void virtio_gpu_av_export_finish(VirtIOGPUAv *r);
 
 /* Head `head` shows `image` straight from the executor's dma-buf; false
  * where the head's display has no GL. */

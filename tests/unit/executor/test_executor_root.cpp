@@ -145,6 +145,38 @@ TEST(executor_root, a_shared_release_reaches_only_the_named_gpu_s_table)
   CHECK_EQ(other.references, 1u);
   CHECK(root.invariants_hold()); }
 
+/* A surface is exported, and synced, only through the Direct3D 11 device of
+ * the GPU named: a root that has not asked the host, a GPU nobody has and one
+ * with no device answer nothing - and a device that never opened exports
+ * nothing either, whatever its table shares. Its sync_file comes from the
+ * device itself, judged on a GPU in test_d3d_external_export_device. */
+TEST(executor_root, a_surface_is_exported_only_through_the_named_gpu_s_device)
+{ Counted surface;
+  MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.give_d3d11(0u);
+  CHECK(apis.d3d11().shared().publish(7u, &surface));
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  AvExportedImage image = {};
+  std::uint64_t   writes = 5u;
+  int             fd = 5;
+  CHECK(!root.export_surface(intel, 7u, image));
+  CHECK(!root.sync_surface(intel, 7u, writes, fd));
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  CHECK(!root.export_surface(absent, 7u, image));
+  CHECK(!root.export_surface(nvidia, 7u, image));
+  CHECK(!root.export_surface(intel, 7u, image));
+  CHECK_EQ(image.fd, -1);
+  CHECK(!root.sync_surface(absent, 7u, writes, fd));
+  CHECK(!root.sync_surface(nvidia, 7u, writes, fd));
+  CHECK(!root.sync_surface(intel, 7u, writes, fd));
+  CHECK_EQ(fd, -1);
+  CHECK_EQ(writes, 0u);
+  apis.d3d11().shared().clear();
+  CHECK(root.invariants_hold()); }
+
 /* The host is asked once. Asking twice would mean the capset and the answer
  * could disagree. */
 TEST(executor_root, asks_the_host_once)

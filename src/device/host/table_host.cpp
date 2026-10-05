@@ -575,4 +575,34 @@ void TableHost::kill_renderer()
     if (ops_.kill_renderer != nullptr) ops_.kill_renderer(ops_.opaque);
 }
 
+Status TableHost::receive_export(int connection, uint8_t *buffer, size_t capacity, size_t &length)
+{
+    AV_SCOPE("TableHost::receive_export");
+    length = 0u;
+    if (ops_.receive_export == nullptr) return Status::not_found;
+    size_t received = 0u;
+    if (ops_.receive_export(ops_.opaque, connection, buffer, capacity, &received) != 0) return Status::not_found;
+    length = received;
+    return Status::ok;
+}
+
+Status TableHost::send_export(int connection, const uint8_t *bytes, size_t length, int descriptor)
+{
+    AV_SCOPE("TableHost::send_export");
+    if (ops_.send_export == nullptr) return Status::not_found;
+    return ops_.send_export(ops_.opaque, connection, bytes, length, descriptor) == 0 ? Status::ok : Status::not_found;
+}
+
+void TableHost::shutdown_export(int connection)
+{
+    AV_SCOPE("TableHost::shutdown_export");
+    if (ops_.shutdown_export != nullptr) ops_.shutdown_export(ops_.opaque, connection);
+}
+
+void TableHost::close_export(int descriptor)
+{
+    AV_SCOPE("TableHost::close_export");
+    if (ops_.close_export != nullptr) ops_.close_export(ops_.opaque, descriptor);
+}
+
 }  // namespace av

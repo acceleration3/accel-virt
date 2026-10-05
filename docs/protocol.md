@@ -501,7 +501,7 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/av_executor.h`, now version 12, is what runs a context's commands on
+`src/device/abi/av_executor.h`, now version 15, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
@@ -569,6 +569,16 @@ sends when it resets. It runs on the main loop. Before version 12 a library had
 nothing to release by, and a surface shared across processes lived only as
 long as the session that made it; a version 11 library is told nothing.
 
+**Version 15 adds `export_surface(opaque, gpu_uuid, surface, image)` and
+`sync_surface(opaque, gpu_uuid, surface, &writes, &fd)`**, what a device's
+export socket asks for a process outside QEMU (docs/external-export.md): the
+surface shared under `surface` as its own memory - a dma-buf the caller owns,
+described in an `AvExportedImage` whose modifier is
+`AV_EXPORT_MODIFIER_IMPLICIT` - and how many copies into it the host has run,
+with a sync_file the caller owns that signals once the GPU has finished them.
+Both run on any thread. A library before version 15, or one missing either
+call, exports nothing, and the socket answers every request `unavailable`.
+
 A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
 API can take without a copy - with no offset, because the device hands over a
 handle naming exactly the range and OpenCL's own import has no offset property.
@@ -592,6 +602,12 @@ executor makes for the question over an anonymous page; `import_blob` still
 checks the type against the real pointer. Buffers and images made on the device
 imports go to carry `HOST_ALLOCATION` external-memory create info where the
 driver reports the create importable, unless the guest's chain names its own.
+
+### The export socket (device <-> a host process)
+
+Not the guest's: the socket a device's `export-socket` property names, on
+which a process on the host is handed shared surfaces as dma-bufs. Its own
+messages and version, in docs/external-export.md.
 
 ## Ring header (shared, both write)
 

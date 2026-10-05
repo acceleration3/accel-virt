@@ -138,6 +138,40 @@ bool ExecutorLibrary::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &fra
     return ops_->map_frame(ops_->opaque, gpu_uuid, frame.surface(), frame.point(), wait_ms, &view) == AV_EXECUTED;
 }
 
+bool ExecutorLibrary::exports_surfaces() const
+{
+    AV_SCOPE("ExecutorLibrary::exports_surfaces");
+    return ops_ != nullptr && ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_SURFACE_EXPORTS &&
+           ops_->export_surface != nullptr && ops_->sync_surface != nullptr;
+}
+
+/* What a library hands over is only believed as far as AV_EXECUTED: the
+ * descriptor in an answer it did not execute is not looked at. */
+bool ExecutorLibrary::export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image) const
+{
+    AV_SCOPE("ExecutorLibrary::export_surface");
+    image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    if (!exports_surfaces()) return false;
+    AvExportedImage answered = {-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    if (ops_->export_surface(ops_->opaque, gpu_uuid, surface, &answered) != AV_EXECUTED) return false;
+    image = answered;
+    return true;
+}
+
+bool ExecutorLibrary::sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd) const
+{
+    AV_SCOPE("ExecutorLibrary::sync_surface");
+    writes = 0u;
+    fd = -1;
+    if (!exports_surfaces()) return false;
+    uint64_t counted = 0u;
+    int      answered = -1;
+    if (ops_->sync_surface(ops_->opaque, gpu_uuid, surface, &counted, &answered) != AV_EXECUTED) return false;
+    writes = counted;
+    fd = answered;
+    return true;
+}
+
 void ExecutorLibrary::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) const
 {
     AV_SCOPE("ExecutorLibrary::unmap_frame");

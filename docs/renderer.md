@@ -42,6 +42,10 @@ Only file descriptors and bytes, over one `SOCK_SEQPACKET` socketpair:
 QEMU never registers a descriptor the renderer made with KVM, and accepts only
 dma-bufs back.
 
+A device with a renderer exports no surface on its export socket
+(docs/external-export.md): the surfaces are the renderer's, and nothing asks
+it for their descriptors yet.
+
 ## Lifecycle
 
 QEMU spawns the renderer at realize and waits for `Ready`, which carries the

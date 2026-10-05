@@ -8,6 +8,8 @@
 # d3d11_cube.exe, a cube map made with each face's initial data and read back; and
 # gl_window.exe, an OpenGL window swapping a frame whose orientation shows; and
 # d3d11_flip.exe, a window shown through an R8G8B8A8 flip chain, as a window chain is; and
+# shared_id_probe.exe, shared textures and the ids avgpu minted for them, read
+# in user mode as docs/external-export.md tells a mirror to; and
 # vk_window.exe, a Vulkan window presenting a frame whose orientation and channel order show,
 # its swapchain made again when it resizes. llvm-mingw (https://github.com/mstorsjo/llvm-mingw, found on
 # PATH or in /opt/llvm-mingw): its MinGW-w64 headers carry the WinRT capture,
@@ -39,4 +41,6 @@ x86_64-w64-mingw32-clang++ -O2 -std=c++17 -municode -Wall -static \
     "$source_dir/d3d11_flip.cpp" -o "$output/d3d11_flip.exe" -ld3d11 -ldxgi -luser32 -lgdi32
 x86_64-w64-mingw32-clang++ -O2 -std=c++17 -municode -Wall -static -I"$root/third_party/dxvk/include/vulkan/include" \
     "$source_dir/vk_window.cpp" -o "$output/vk_window.exe" -luser32 -lgdi32
-echo "$output/wgc_probe.exe $output/etw_schema.exe $output/d3d9_probe.exe $output/dxgi_modes.exe $output/d3d11_cube.exe $output/gl_window.exe $output/d3d11_flip.exe $output/vk_window.exe"
+x86_64-w64-mingw32-clang++ -O2 -std=c++17 -municode -Wall -static \
+    "$source_dir/shared_id_probe.cpp" -o "$output/shared_id_probe.exe" -lgdi32 -ld3d11 -ldxgi
+echo "$output/shared_id_probe.exe $output/wgc_probe.exe $output/etw_schema.exe $output/d3d9_probe.exe $output/dxgi_modes.exe $output/d3d11_cube.exe $output/gl_window.exe $output/d3d11_flip.exe $output/vk_window.exe"

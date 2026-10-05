@@ -72,6 +72,12 @@ public:
     bool                 map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms,
                                       AvFrameView &view) const;
     void                 unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) const;
+    /* Whether the library hands shared surfaces to a process outside QEMU
+     * (version 15, both calls given), and the calls: false, with nothing
+     * handed over, for one that does not. Any thread. */
+    bool                 exports_surfaces() const;
+    bool                 export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image) const;
+    bool                 sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd) const;
     /* Whether the library answers the wire handle an import made (version 3),
      * without which a guest has nothing to name an import by. */
     bool                 names_imports() const;

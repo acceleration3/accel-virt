@@ -241,6 +241,22 @@ public:
     /* Ends the renderer at once; its death is reported as any other. */
     virtual void                 kill_renderer() = 0;
 
+    /* The export socket's connections (docs/external-export.md), each a
+     * descriptor the glue accepted and the device owns. Any thread, all four. */
+    /* The next datagram on `connection`, waiting for it, its length in
+     * `length` - past `capacity` for one that did not fit: not_found once the
+     * peer has gone or the connection was shut down. */
+    [[nodiscard]] virtual Status receive_export(int connection, uint8_t *buffer, size_t capacity, size_t &length) = 0;
+    /* One datagram, with `descriptor` beside it unless it is -1, never waiting
+     * for room: not_found when the peer has gone or does not read. The
+     * descriptor stays the caller's. */
+    [[nodiscard]] virtual Status send_export(int connection, const uint8_t *bytes, size_t length, int descriptor) = 0;
+    /* A receive on `connection`, now or later, answers not_found. */
+    virtual void                 shutdown_export(int connection) = 0;
+    /* A descriptor the export path owns closed: a connection, a dma-buf or a
+     * sync_file. */
+    virtual void                 close_export(int descriptor) = 0;
+
 protected:
     Host() = default;
     ~Host() = default;

@@ -3,6 +3,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "executor/shim/drm_fourcc.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "proto/vulkan/exportable_image_info.hpp"
 #include "executor/shim/vkd3d_image_export.hpp"
@@ -174,16 +175,49 @@ bool InteropTextures::export_memory(ID3D11Texture2D *texture, int &fd)
 {
     AV_SCOPE("InteropTextures::export_memory");
     fd = -1;
-    if (texture == nullptr) return false;
+    const Slot *const slot = slot_of(texture);
+    return slot != nullptr && vulkan_.memory_fd(slot->memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
+}
+
+/* The row layout is asked of the driver for an image of optimal tiling, which
+ * the Vulkan specification leaves undefined and RADV answers with the pitch
+ * and offset it laid the image out at - what an importer reading the layout
+ * the driver kept with the memory checks its own against. */
+bool InteropTextures::export_image(ID3D11Texture2D *texture, AvExportedImage &image)
+{
+    AV_SCOPE("InteropTextures::export_image");
+    image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    const Slot *const slot = slot_of(texture);
+    if (slot == nullptr) return false;
+    D3D11_TEXTURE2D_DESC described = {};
+    texture->GetDesc(&described);
+    const uint32_t fourcc = DrmFourcc(static_cast<uint32_t>(described.Format)).value();
+    int            fd = -1;
+    if (fourcc == 0u || !vulkan_.memory_fd(slot->memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd))
+        return false;
+    const VkSubresourceLayout laid = vulkan_.row_layout(slot->image_);
+    image.fd = fd;
+    image.width = described.Width;
+    image.height = described.Height;
+    image.stride = static_cast<uint32_t>(laid.rowPitch);
+    image.offset = static_cast<uint32_t>(laid.offset);
+    image.fourcc = fourcc;
+    image.modifier = AV_EXPORT_MODIFIER_IMPLICIT;
+    return true;
+}
+
+InteropTextures::Slot *InteropTextures::slot_of(ID3D11Texture2D *texture)
+{
+    AV_SCOPE("InteropTextures::slot_of");
+    if (texture == nullptr) return nullptr;
     IUnknown *held = nullptr;
     UINT      size = sizeof held;
-    if (FAILED(texture->GetPrivateData(slot_data, &size, &held)) || held == nullptr) return false;
+    if (FAILED(texture->GetPrivateData(slot_data, &size, &held)) || held == nullptr) return nullptr;
     /* The reference the read took is the slot's own count, given straight back. */
     held->Release();
     for (Slot &slot : slots_)
-        if (reinterpret_cast<IUnknown *>(&slot) == held && !slot.vacant())
-            return vulkan_.memory_fd(slot.memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
-    return false;
+        if (reinterpret_cast<IUnknown *>(&slot) == held && !slot.vacant()) return &slot;
+    return nullptr;
 }
 
 ID3D11Texture2D *InteropTextures::wrap(Slot &slot, VkImage image, VkDeviceMemory memory,

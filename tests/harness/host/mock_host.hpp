@@ -124,6 +124,12 @@ public:
                               std::uint32_t capacity_descriptors, std::uint32_t &count,
                               std::uint32_t timeout_ms) override;
     void     kill_renderer() override;
+    /* The export socket's connections, for real: a test hands the device one
+     * end of a SOCK_SEQPACKET socketpair and is the consumer on the other. */
+    Status   receive_export(int connection, std::uint8_t *buffer, std::size_t capacity, std::size_t &length) override;
+    Status   send_export(int connection, const std::uint8_t *bytes, std::size_t length, int descriptor) override;
+    void     shutdown_export(int connection) override;
+    void     close_export(int descriptor) override;
 
     /* The plane a head was told to show, field for field as it crossed the
      * boundary, so a test asserts the picture rather than that something was
@@ -284,6 +290,13 @@ public:
     bool          renderer_running();
     std::uint32_t renderer_starts();
     std::uint32_t renderer_kills();
+    /* The Nth export send from now is refused, as a consumer that reads
+     * nothing would refuse it. */
+    void          fail_export_send_at(std::uint32_t nth);
+    /* Datagrams sent on export connections, and descriptors close_export
+     * closed. */
+    std::uint32_t export_sends();
+    std::uint32_t exports_closed();
     /* The path the last start named, empty before the first. */
     const char   *started_renderer();
     /* Datagrams sent while a renderer ran, delivered to a peer or not. */
@@ -577,6 +590,9 @@ private:
     bool            forward_requests_;
     std::uint32_t   fail_event_descriptor_;
     char            started_renderer_[max_path];
+    std::uint32_t   fail_export_send_;
+    std::uint32_t   export_sends_;
+    std::uint32_t   exports_closed_;
 };
 
 }  // namespace av

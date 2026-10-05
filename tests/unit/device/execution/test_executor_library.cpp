@@ -124,7 +124,8 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(AV_EXECUTOR_ABI_VERSION, 14u);
+{ CHECK_EQ(AV_EXECUTOR_ABI_VERSION, 15u);
+  CHECK_EQ(AV_EXECUTOR_ABI_VERSION_SURFACE_EXPORTS, 15u);
   CHECK_EQ(AV_EXECUTOR_ABI_VERSION_HANDLES, 3u);
   CHECK_EQ(AV_EXECUTOR_ABI_VERSION_OPTIONS, 4u);
   CHECK_EQ(AV_EXECUTOR_ABI_VERSION_EVENTS, 5u);
@@ -596,3 +597,66 @@ TEST(executor_library_frames, are_read_through_a_version_14_table_with_both_call
   ExecutorLibrary old;
   CHECK_STATUS(old.accept(&table), Status::ok);
   CHECK(!old.reads_frames()); }
+
+/* Version 15 hands surfaces over only with both calls given: what the library
+ * answers is passed on whole when it executed, and nothing - no descriptor -
+ * when it did not, or when the table is older or lacks either call. */
+TEST(executor_library_surfaces, are_exported_and_synced_through_a_version_15_table_with_both_calls)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);
+  const std::uint8_t gpu[16] = {3};
+  ops.serve_surface(0x51u, AvExportedImage{41, 9u, 64u, 32u, 256u, 16u, 0x34325241u, 0u, 0x00FFFFFFFFFFFFFFull}, 7u,
+                    42);
+  {
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+      CHECK(library.exports_surfaces());
+      AvExportedImage image = {};
+      CHECK(!library.export_surface(gpu, 0x52u, image));
+      CHECK_EQ(image.fd, -1);
+      CHECK(library.export_surface(gpu, 0x51u, image));
+      CHECK(ops.last_surface_gpu() == gpu);
+      CHECK_EQ(image.fd, 41);
+      CHECK_EQ(image.slot, 9u);
+      CHECK_EQ(image.stride, 256u);
+      CHECK_EQ(image.offset, 16u);
+      CHECK_EQ(image.modifier, 0x00FFFFFFFFFFFFFFull);
+      std::uint64_t writes = 99u;
+      int           fence = 99;
+      CHECK(!library.sync_surface(gpu, 0x52u, writes, fence));
+      CHECK_EQ(writes, 0u);
+      CHECK_EQ(fence, -1);
+      CHECK(library.sync_surface(gpu, 0x51u, writes, fence));
+      CHECK_EQ(writes, 7u);
+      CHECK_EQ(fence, 42);
+  }
+  AvExecutorOps &table = ops.editable();
+  table.sync_surface = nullptr;
+  {
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&table), Status::ok);
+      CHECK(!library.exports_surfaces());
+      AvExportedImage image = {};
+      CHECK(!library.export_surface(gpu, 0x51u, image));
+      CHECK_EQ(image.fd, -1);
+      std::uint64_t writes = 0u;
+      int           fence = 0;
+      CHECK(!library.sync_surface(gpu, 0x51u, writes, fence));
+      CHECK_EQ(fence, -1);
+  }
+  const auto sync = table.sync_surface;
+  MockExecutorOps whole(AV_EXECUTOR_SUB_API_D3D);
+  table.sync_surface = whole.table().sync_surface;
+  table.export_surface = nullptr;
+  {
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&table), Status::ok);
+      CHECK(!library.exports_surfaces());
+  }
+  table.export_surface = whole.table().export_surface;
+  table.sync_surface = sync;
+  table.abi_version = AV_EXECUTOR_ABI_VERSION_FRAMES;
+  ExecutorLibrary old;
+  CHECK_STATUS(old.accept(&table), Status::ok);
+  CHECK(!old.exports_surfaces());
+  ExecutorLibrary none;
+  CHECK(!none.exports_surfaces()); }

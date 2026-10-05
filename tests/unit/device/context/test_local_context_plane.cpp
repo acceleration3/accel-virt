@@ -237,3 +237,23 @@ TEST(local_context_plane, the_renderers_hooks_change_nothing_in_process)
   CHECK_EQ(fixture.host().live_doorbells(), 1u);
   CHECK_EQ(fixture.host().raised(5u), 0u);
   CHECK(plane.invariants_hold()); }
+
+/* Shared surfaces leave through the library, from any thread; a plane with no
+ * library exports none. */
+TEST(local_context_plane, exports_surfaces_through_its_library)
+{ Fixture fixture;
+  CHECK(!fixture.plane().exports_surfaces());
+  AvExportedImage image = {};
+  CHECK(!fixture.plane().export_surface(uuid, 5u, image));
+  fixture.ops().serve_surface(5u, AvExportedImage{11, 0u, 8u, 8u, 32u, 0u, 0x34325241u, 0u, 0u}, 3u, 12);
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK(fixture.plane().exports_surfaces());
+  CHECK(fixture.plane().export_surface(uuid, 5u, image));
+  CHECK_EQ(image.fd, 11);
+  CHECK_EQ(image.width, 8u);
+  std::uint64_t writes = 0u;
+  int           sync_fd = -1;
+  CHECK(!fixture.plane().sync_surface(uuid, 6u, writes, sync_fd));
+  CHECK(fixture.plane().sync_surface(uuid, 5u, writes, sync_fd));
+  CHECK_EQ(writes, 3u);
+  CHECK_EQ(sync_fd, 12); }

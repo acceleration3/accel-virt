@@ -71,6 +71,14 @@ public:
     virtual bool reads_frames() const = 0;
     virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) = 0;
     virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
+    /* Any thread: whether a surface the guest shared can be handed to a
+     * process outside QEMU here (docs/external-export.md), and the one
+     * shared as `surface` exported as its own memory, or the copies into it
+     * counted with a sync_file for them (ExecutorLibrary::export_surface,
+     * sync_surface). Every descriptor answered is the caller's. */
+    virtual bool exports_surfaces() const = 0;
+    virtual bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image) = 0;
+    virtual bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd) = 0;
 
     virtual void report(StateWriter &writer) = 0;
     virtual bool invariants_hold() const = 0;

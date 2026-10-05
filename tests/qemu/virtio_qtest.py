@@ -51,9 +51,10 @@ FEATURE_EDID = 1 << 1
 class Qtest:
     """One QEMU process driven over qtest; stopped when closed."""
 
-    def __init__(self, build, device, shared_ram=False):
+    def __init__(self, build, device, shared_ram=False, extra=()):
         """`shared_ram` backs guest RAM with a memfd, as the guest runner does, so
-        the device can map guest pages a second time (feature 045)."""
+        the device can map guest pages a second time (feature 045). `extra` is
+        appended to the command line - a seccomp sandbox, as libvirt starts QEMU."""
         self.environment = dict(os.environ, QEMU_MODULE_DIR=build)
         command = [os.path.join(build, "qemu-system-x86_64"), "-M", "pc", "-m", f"{RAM_MB}M",
                    "-display", "none", "-nodefaults", "-machine", "accel=qtest", "-qtest", "stdio",
@@ -61,6 +62,7 @@ class Qtest:
         if shared_ram:
             command += ["-object", f"memory-backend-memfd,id=ram,size={RAM_MB}M,share=on",
                         "-machine", "memory-backend=ram"]
+        command += list(extra)
         # A file, not a pipe: nothing reads stderr while qtest runs, and a full pipe would stop QEMU.
         self.stderr = tempfile.TemporaryFile(mode="w+")
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,

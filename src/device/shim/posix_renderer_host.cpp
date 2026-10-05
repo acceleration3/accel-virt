@@ -824,4 +824,27 @@ void PosixRendererHost::kill_renderer()
     AV_SCOPE("PosixRendererHost::kill_renderer");
 }
 
+Status PosixRendererHost::receive_export(int, uint8_t *, size_t, size_t &length)
+{
+    AV_SCOPE("PosixRendererHost::receive_export");
+    length = 0u;
+    return Status::not_found;
+}
+
+Status PosixRendererHost::send_export(int, const uint8_t *, size_t, int)
+{
+    AV_SCOPE("PosixRendererHost::send_export");
+    return Status::not_found;
+}
+
+void PosixRendererHost::shutdown_export(int)
+{
+    AV_SCOPE("PosixRendererHost::shutdown_export");
+}
+
+void PosixRendererHost::close_export(int)
+{
+    AV_SCOPE("PosixRendererHost::close_export");
+}
+
 }  // namespace av

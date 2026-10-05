@@ -18,6 +18,7 @@
 #define AV_INTEROP_TEXTURES_HPP
 
 #include "core/log/driver_log.hpp"
+#include "device/abi/av_executor.h"
 #include "device/host/stdio_log.hpp"
 
 #include <stdint.h>
@@ -52,6 +53,14 @@ public:
     /* A dma-buf of `texture`'s memory, which the caller owns; false for a
      * texture this table did not make. */
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
+    /* The same dma-buf, described for a process outside QEMU to import with
+     * no copy (docs/external-export.md): the image's size, the DRM format of
+     * its pixels, and where its rows are as the driver laid them out. The
+     * layout is the driver's own, kept with the memory - it was bound
+     * dedicated - so the modifier is AV_EXPORT_MODIFIER_IMPLICIT. False for a
+     * texture this table did not make, or one in a format no DRM format
+     * names. */
+    [[nodiscard]] bool export_image(ID3D11Texture2D *texture, AvExportedImage &image);
     /* The images whose textures have gone, freed once DXVK's GPU work is. */
     void             collect();
     /* Every image freed, its texture gone or not: the device is closing. */
@@ -91,6 +100,9 @@ private:
     };
 
     Slot *vacant_slot();
+    /* The slot holding `texture`'s image, when this table made it; null for
+     * any other texture. */
+    Slot *slot_of(ID3D11Texture2D *texture);
     /* A texture described as `desc` over `image` and `memory`, which `slot`
      * then holds; null, with both freed, when DXVK would not wrap it. */
     ID3D11Texture2D *wrap(Slot &slot, VkImage image, VkDeviceMemory memory, const D3D11_TEXTURE2D_DESC1 &desc);

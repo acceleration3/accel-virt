@@ -15,6 +15,7 @@
 
 #include "core/log/driver_log.hpp"
 #include "executor/d3d/command_refusal.hpp"
+#include "executor/d3d/d3d11_batch_progress.hpp"
 #include "executor/d3d/d3d12_session.hpp"
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -183,6 +184,8 @@ private:
     /* `texture` made over memory other APIs can open, when the guest's
      * `guest_misc` shares it and the host can; null otherwise. */
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
+    /* A copy into `destination` has run: counted when it is a shared surface. */
+    void                     counted(ID3D11Resource *destination);
     /* Whether every id in `ids` names nothing (0) or an object of `kind`. */
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
     /* A device is selected and not removed: what a command on the immediate
@@ -237,10 +240,16 @@ private:
     /* Direct3D 9's, sharing it too. */
     D3d9Session             d3d9_;
     QueryResultPublisher    published_;
+    /* How far the host GPU has got with the batches the session recorded. */
+    D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
     /* The last shared key an open found nothing under: the guest asks again
      * and again for one it was just given, and the host log says so once. */
     uint64_t                missed_key_;
+    /* The host log says once that batches complete as recorded. */
+    bool                    mark_refused_;
+    /* The host log says once that a flip is read from the buffer itself. */
+    bool                    show_refused_;
     bool                    lost_;
 };
 

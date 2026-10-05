@@ -38,6 +38,20 @@ public:
      * it - another API's view of the same surface. False for a key it does
      * not hold. */
     [[nodiscard]] bool replace(uint64_t key, IUnknown *resource);
+    /* A copy into what `key` shares has run: counted, so a process outside
+     * QEMU reading the surface knows which of the guest's copies it waits for
+     * (docs/external-export.md). Nothing for a key it does not hold. */
+    void               written(uint64_t key);
+    /* The copies into what `key` shares since it was shared; false for a key
+     * it does not hold. */
+    [[nodiscard]] bool writes(uint64_t key, uint64_t &count) const;
+    /* What `key`'s compositor reads instead of the surface itself: the copy
+     * of its latest present (D3d11HostDevice::show), the table's reference
+     * moving to `shown`. False for a key it does not hold, or no copy. */
+    [[nodiscard]] bool show(uint64_t key, IUnknown *shown);
+    /* `key`'s copy, with a reference the caller owns; null for a key never
+     * presented, or one it does not hold. */
+    IUnknown          *shown(uint64_t key) const;
     /* The guest let go of `key` everywhere: the table's reference goes. A key
      * it does not hold is nothing to do. */
     void               release(uint64_t key);
@@ -50,6 +64,8 @@ private:
 
     uint64_t  keys_[capacity];
     IUnknown *resources_[capacity];
+    IUnknown *shown_[capacity];
+    uint64_t  writes_[capacity];
     uint32_t  count_;
 };
 

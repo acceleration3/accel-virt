@@ -60,6 +60,11 @@ public:
     /* Everything DXVK has recorded is submitted and the GPU is done with it.
      * Under the Direct3D 11 device's lock: it flushes the immediate context. */
     void                 idle() const;
+    /* A sync_file, the caller's, that signals once the GPU has finished
+     * everything DXVK has recorded so far - nothing waits for it here. Under
+     * the Direct3D 11 device's lock: it flushes the immediate context. False
+     * where the device exports no sync_file. */
+    [[nodiscard]] bool   sync_file(int &fd);
 
 private:
     void                            *interop_;   /* IDXGIVkInteropDevice1, held */
@@ -78,6 +83,16 @@ private:
     PFN_vkImportSemaphoreFdKHR       import_semaphore_;
     PFN_vkQueueSubmit                submit_;
     PFN_vkQueueWaitIdle              queue_idle_;
+    PFN_vkGetSemaphoreFdKHR          semaphore_fd_;
+    /* Signalled by the empty batch behind each sync_file and reset by its
+     * export, so one serves every sync_file: a binary semaphore is unsignalled
+     * again once a sync_file is exported from it, and destroying it would
+     * wait for the batch that signals it, which is not this device's to wait
+     * for. */
+    VkSemaphore                      sync_;
+    /* A signal submitted and never exported leaves the semaphore signalled,
+     * which no batch may signal again: from then on there are no more. */
+    bool                             sync_spent_;
 };
 
 }  // namespace av

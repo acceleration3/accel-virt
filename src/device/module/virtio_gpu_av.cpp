@@ -16,7 +16,9 @@
 #include "device/execution/executor_library.hpp"
 #include "device/host/host.hpp"
 #include "core/support/text_buffer.hpp"
+#include "device/gpu/pci_address.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/export/export_greeting.hpp"
 
 namespace av {
 
@@ -28,7 +30,7 @@ VirtioGpuAv::VirtioGpuAv(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
       heads_(host, blobs_), display_modes_(host), interrupts_(host),
       clock_(host, interrupts_, &AvDisplayFramesShow, this), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
-      remote_(host, blobs_, interrupts_), contexts_(&local_)
+      remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host)
       {
           AV_SCOPE("VirtioGpuAv::VirtioGpuAv");
       }
@@ -104,12 +106,26 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
     if (capset_.described() &&
         contexts_->import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
         capset_.withdraw_guest_import();
+    attach_exports();
     if (clock_.initialize() == Status::no_memory || presents_.initialize() == Status::no_memory) {
         message.append("virtio-gpu-av: the host has no mutex or event for the display clock or the present engine");
         host_.log(message.text());
         return Status::no_memory;
     }
     return start_recording(recording, message);
+}
+
+/* Hello names the GPU by the UUID the executor knows it by, and by its PCI
+ * address where the host read one, so a consumer imports on the same GPU. */
+void VirtioGpuAv::attach_exports()
+{
+    AV_SCOPE("VirtioGpuAv::attach_exports");
+    const uint8_t *const uuid = capset_.info().gpu().uuid();
+    PciAddress           address;
+    const bool           on_pci = host_.gpu_pci_address(binding_.index(), address) == Status::ok;
+    exports_.attach(*contexts_, uuid,
+                    on_pci ? address.greeting(uuid, ExportConnection::max_surfaces)
+                           : ExportGreeting(uuid, ExportConnection::max_surfaces));
 }
 
 /* After the GPU is bound, so the recording's header names the GPU it recorded
@@ -138,6 +154,7 @@ void VirtioGpuAv::reset()
      * shares under the old ones goes - on this device's GPU, which the device
      * knows and a plane running in QEMU was never told. */
     contexts_->shared_released(capset_.info().gpu().uuid(), 0u);
+    exports_.revoke(0u, ExportRevocation::reset);
     const bool connected = interrupts_.connected();
     status_.reset();
     if (connected && !interrupts_.connected()) contexts_->interrupts_changed(false);
@@ -185,11 +202,18 @@ bool VirtioGpuAv::control(void *request, uint32_t type)
     return ContextCommands(host_, *contexts_, capset_).answer(control, type) ||
            BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
            ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||
-           SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type) ||
+           SharedCommands(host_, *contexts_, exports_, capset_.info().gpu().uuid()).answer(control, type) ||
            PresentCommands(host_).answer(control, type) ||
            DisplayModeCommands(host_, display_modes_).answer(control, type) ||
            DisplayClockCommands(host_, clock_).answer(control, type) ||
            PresentEngineCommands(host_, presents_, snapshots).answer(control, type);
+}
+
+bool VirtioGpuAv::export_accepted(int connection, bool same_user)
+{
+    AV_SCOPE("VirtioGpuAv::export_accepted");
+    host_.require_main_loop("VirtioGpuAv::export_accepted");
+    return realized() && exports_.accept(connection, same_user) == Status::ok;
 }
 
 Status VirtioGpuAv::set_modes(const char *text, uint32_t &width, uint32_t &height)
@@ -338,7 +362,8 @@ bool VirtioGpuAv::invariants_hold() const
     AV_SCOPE("VirtioGpuAv::invariants_hold");
     return contexts_->invariants_hold() && blobs_.invariants_hold() &&
            heads_.invariants_hold() && interrupts_.invariants_hold() && presents_.invariants_hold() &&
-           status_.invariants_hold() && (binding_.bound() || contexts_->live() == 0u);
+           status_.invariants_hold() && exports_.invariants_hold() &&
+           (binding_.bound() || (contexts_->live() == 0u && exports_.live() == 0u));
 }
 
 }  // namespace av

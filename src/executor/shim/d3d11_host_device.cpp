@@ -127,6 +127,38 @@ bool D3d11HostDevice::export_image(uint64_t key, AvExportedImage &image)
     return true;
 }
 
+bool D3d11HostDevice::export_surface(uint64_t surface, AvExportedImage &image)
+{
+    AV_SCOPE("D3d11HostDevice::export_surface");
+    image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    if (device_ == nullptr) return false;
+    lock(nullptr);
+    IUnknown *const  published = find_shared(surface);
+    ID3D11Texture2D *texture = nullptr;
+    const bool       found = published != nullptr && SUCCEEDED(published->QueryInterface(
+                                                         __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
+    if (published != nullptr) published->Release();
+    const bool exported = found && interop_.export_image(texture, image);
+    if (texture != nullptr) texture->Release();
+    unlock();
+    return exported;
+}
+
+/* The count is read under the lock every copy into the surface is made and
+ * counted under, and the sync_file made before it is let go, so the sync_file
+ * covers every copy the count says ran. */
+bool D3d11HostDevice::sync_surface(uint64_t surface, uint64_t &writes, int &fd)
+{
+    AV_SCOPE("D3d11HostDevice::sync_surface");
+    writes = 0u;
+    fd = -1;
+    if (device_ == nullptr) return false;
+    lock(nullptr);
+    const bool synced = shared_.writes(surface, writes) && vulkan_.sync_file(fd);
+    unlock();
+    return synced;
+}
+
 StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
                                           uint32_t height, uint32_t format)
 {
@@ -306,6 +338,59 @@ ID3D11Device5 *D3d11HostDevice::device() const
 {
     AV_SCOPE("D3d11HostDevice::device");
     return device_;
+}
+
+bool D3d11HostDevice::show(uint64_t key, ID3D11Texture2D *presented)
+{
+    AV_SCOPE("D3d11HostDevice::show");
+    if (device_ == nullptr || context_ == nullptr || presented == nullptr) return false;
+    ID3D11Texture2D *copy = nullptr;
+    IUnknown *const  held = shared_.shown(key);
+    if (held != nullptr) {
+        static_cast<void>(held->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&copy)));
+        held->Release();
+    }
+    if (copy == nullptr) {
+        D3D11_TEXTURE2D_DESC desc = {};
+        presented->GetDesc(&desc);
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = (desc.BindFlags & D3D11_BIND_RENDER_TARGET) | D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags = 0u;
+        desc.MiscFlags &= D3D11_RESOURCE_MISC_TEXTURECUBE;
+        if (FAILED(device_->CreateTexture2D(&desc, nullptr, &copy)) || copy == nullptr) return false;
+        if (!shared_.show(key, copy)) {
+            copy->Release();
+            return false;
+        }
+    }
+    context_->CopyResource(copy, presented);
+    copy->Release();
+    return true;
+}
+
+IUnknown *D3d11HostDevice::find_shown(uint64_t key)
+{
+    AV_SCOPE("D3d11HostDevice::find_shown");
+    return shared_.shown(key);
+}
+
+ID3D11Fence *D3d11HostDevice::make_fence(uint64_t initial)
+{
+    AV_SCOPE("D3d11HostDevice::make_fence");
+    ID3D11Fence *fence = nullptr;
+    if (device_ == nullptr ||
+        FAILED(device_->CreateFence(initial, D3D11_FENCE_FLAG_NONE, __uuidof(ID3D11Fence),
+                                    reinterpret_cast<void **>(&fence))))
+        return nullptr;
+    return fence;
+}
+
+bool D3d11HostDevice::signal(ID3D11Fence *fence, uint64_t value)
+{
+    AV_SCOPE("D3d11HostDevice::signal");
+    if (fence == nullptr || context_ == nullptr || FAILED(context_->Signal(fence, value))) return false;
+    context_->Flush();
+    return true;
 }
 
 ID3D11DeviceContext4 *D3d11HostDevice::context() const

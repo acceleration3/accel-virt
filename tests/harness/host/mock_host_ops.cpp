@@ -209,6 +209,16 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
                                         int *fd) {
         return host_of(opaque).dmabuf_over_host_memory(memory, offset, size, *fd) == Status::ok ? 0 : 1;
     };
+    table_.receive_export = [](void *opaque, int connection, std::uint8_t *buffer, std::size_t capacity,
+                               std::size_t *length) {
+        return host_of(opaque).receive_export(connection, buffer, capacity, *length) == Status::ok ? 0 : 1;
+    };
+    table_.send_export = [](void *opaque, int connection, const std::uint8_t *bytes, std::size_t length,
+                            int descriptor) {
+        return host_of(opaque).send_export(connection, bytes, length, descriptor) == Status::ok ? 0 : 1;
+    };
+    table_.shutdown_export = [](void *opaque, int connection) { host_of(opaque).shutdown_export(connection); };
+    table_.close_export = [](void *opaque, int descriptor) { host_of(opaque).close_export(descriptor); };
 }
 
 const AvHostOps &MockHostOps::table() const

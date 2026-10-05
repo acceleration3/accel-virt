@@ -45,6 +45,17 @@ HRESULT KernelDevice::acquire(HANDLE token, HANDLE context)
     return callbacks_->pfnAcquireResourceCb(runtime_, &acquire);
 }
 
+HRESULT KernelDevice::release(HANDLE token, HANDLE context)
+{
+    AV_SCOPE("KernelDevice::release");
+    if (callbacks_ == nullptr || callbacks_->pfnReleaseResourceCb == nullptr) return E_NOTIMPL;
+    D3DDDICB_SYNCTOKEN release = {};
+    release.hSyncToken = token;
+    release.BroadcastContextCount = 1u;
+    release.BroadcastContextArray = &context;
+    return callbacks_->pfnReleaseResourceCb(runtime_, &release);
+}
+
 void KernelDevice::destroy_context(HANDLE context)
 {
     AV_SCOPE("KernelDevice::destroy_context");

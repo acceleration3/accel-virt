@@ -5,7 +5,8 @@
  * events, mutexes and bottom halves, guest memory through the device's DMA
  * address space, memfd blocks placed over the hostmem reservation, the control
  * queue, doorbell pages as ioeventfds on the worker's eventfd, and the host GPU
- * catalog read from the Vulkan loader. Translation only.
+ * catalog read from the Vulkan loader, and the export socket's listener and
+ * connections (docs/external-export.md). Translation only.
  *
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-av-host.c.
  */
@@ -20,6 +21,9 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include "qemu/rcu.h"
 #include "qemu/event_notifier.h"
 #include "qapi/error.h"
@@ -1255,6 +1259,180 @@ void virtio_gpu_av_host_finish(VirtIOGPUAv *r)
     }
 }
 
+/* The export socket (docs/external-export.md). Its connections are blocking
+ * descriptors a core thread reads; nothing here decides what a request is. */
+void virtio_gpu_av_export_init(VirtIOGPUAv *r)
+{
+    r->export_listener = -1;
+}
+
+/* Every connection waiting is handed over, refused ones closed: the core
+ * decides, from whose process each came. */
+static void av_export_accept(void *opaque)
+{
+    VirtIOGPUAv *r = opaque;
+
+    for (;;) {
+        struct ucred peer = { 0 };
+        socklen_t peer_size = sizeof(peer);
+        const int connection = accept4(r->export_listener, NULL, NULL, SOCK_CLOEXEC);
+
+        if (connection < 0) {
+            return;
+        }
+        const int same_user = getsockopt(connection, SOL_SOCKET, SO_PEERCRED, &peer, &peer_size) == 0 &&
+                              peer.uid == geteuid();
+        if (av_device_export_accepted(r->core, connection, same_user) != 0) {
+            close(connection);
+        }
+    }
+}
+
+/* A socket file left by a QEMU that is gone answers a connect with
+ * ECONNREFUSED and is replaced; one a live process listens on, or a path that
+ * is no socket, is not touched. */
+static bool av_export_path_free(const char *path, Error **errp)
+{
+    struct sockaddr_un address = { .sun_family = AF_UNIX };
+    struct stat file;
+    int probe;
+    int connected;
+
+    if (lstat(path, &file) != 0) {
+        return true;
+    }
+    if (!S_ISSOCK(file.st_mode)) {
+        error_setg(errp, "virtio-gpu-av: export-socket '%s' exists and is not a socket", path);
+        return false;
+    }
+    probe = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    if (probe < 0) {
+        error_setg_errno(errp, errno, "virtio-gpu-av: no socket to probe export-socket '%s'", path);
+        return false;
+    }
+    memcpy(address.sun_path, path, strlen(path));
+    connected = connect(probe, (struct sockaddr *)&address, sizeof(address));
+    const int failure = errno;
+    close(probe);
+    if (connected == 0) {
+        error_setg(errp, "virtio-gpu-av: export-socket '%s' is another process's, which is listening on it", path);
+        return false;
+    }
+    if (failure == ECONNREFUSED && unlink(path) != 0) {
+        error_setg_errno(errp, errno, "virtio-gpu-av: the stale export-socket '%s' cannot be removed", path);
+        return false;
+    }
+    return true;
+}
+
+bool virtio_gpu_av_export_listen(VirtIOGPUAv *r, Error **errp)
+{
+    struct sockaddr_un address = { .sun_family = AF_UNIX };
+    const char *path = r->export_socket;
+    int listener;
+
+    if (strlen(path) >= sizeof(address.sun_path)) {
+        error_setg(errp, "virtio-gpu-av: export-socket '%s' is longer than a socket path can be", path);
+        return false;
+    }
+    if (!av_export_path_free(path, errp)) {
+        return false;
+    }
+    memcpy(address.sun_path, path, strlen(path));
+    listener = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    if (listener < 0) {
+        error_setg_errno(errp, errno, "virtio-gpu-av: no socket for export-socket '%s'", path);
+        return false;
+    }
+    /* Mode 0600 once bound; a process of another user that connects in the
+     * moment before is refused by its credentials all the same. */
+    if (bind(listener, (struct sockaddr *)&address, sizeof(address)) != 0 || chmod(path, 0600) != 0 ||
+        listen(listener, 8) != 0) {
+        error_setg_errno(errp, errno, "virtio-gpu-av: export-socket '%s' cannot be listened on", path);
+        close(listener);
+        return false;
+    }
+    r->export_listener = listener;
+    qemu_set_fd_handler(listener, av_export_accept, NULL, r);
+    return true;
+}
+
+void virtio_gpu_av_export_finish(VirtIOGPUAv *r)
+{
+    if (r->export_listener < 0) {
+        return;
+    }
+    qemu_set_fd_handler(r->export_listener, NULL, NULL, NULL);
+    close(r->export_listener);
+    r->export_listener = -1;
+    unlink(r->export_socket);
+}
+
+/* SOCK_SEQPACKET keeps a datagram whole: MSG_TRUNC answers its real length,
+ * which the core reads as one too long. A consumer sends no descriptors, so
+ * any that came are closed. */
+static int av_receive_export(void *opaque, int connection, uint8_t *buffer, size_t capacity, size_t *length)
+{
+    char control[CMSG_SPACE(sizeof(int) * 4)] = { 0 };
+    struct iovec vector = { .iov_base = buffer, .iov_len = capacity };
+    struct msghdr message = {
+        .msg_iov = &vector, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof(control),
+    };
+    ssize_t got;
+
+    do {
+        got = recvmsg(connection, &message, MSG_TRUNC | MSG_CMSG_CLOEXEC);
+    } while (got < 0 && errno == EINTR);
+    for (struct cmsghdr *header = CMSG_FIRSTHDR(&message); header; header = CMSG_NXTHDR(&message, header)) {
+        if (header->cmsg_level != SOL_SOCKET || header->cmsg_type != SCM_RIGHTS) {
+            continue;
+        }
+        const size_t carried = (header->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+        for (size_t index = 0; index < carried; index++) {
+            int descriptor;
+            memcpy(&descriptor, CMSG_DATA(header) + index * sizeof(int), sizeof(descriptor));
+            close(descriptor);
+        }
+    }
+    if (got <= 0) {
+        return 1;
+    }
+    *length = (size_t)got;
+    return 0;
+}
+
+static int av_send_export(void *opaque, int connection, const uint8_t *bytes, size_t length, int descriptor)
+{
+    char control[CMSG_SPACE(sizeof(int))] = { 0 };
+    struct iovec vector = { .iov_base = (void *)bytes, .iov_len = length };
+    struct msghdr message = { .msg_iov = &vector, .msg_iovlen = 1 };
+    ssize_t sent;
+
+    if (descriptor >= 0) {
+        message.msg_control = control;
+        message.msg_controllen = sizeof(control);
+        struct cmsghdr *header = CMSG_FIRSTHDR(&message);
+        header->cmsg_level = SOL_SOCKET;
+        header->cmsg_type = SCM_RIGHTS;
+        header->cmsg_len = CMSG_LEN(sizeof(int));
+        memcpy(CMSG_DATA(header), &descriptor, sizeof(descriptor));
+    }
+    do {
+        sent = sendmsg(connection, &message, MSG_DONTWAIT | MSG_NOSIGNAL);
+    } while (sent < 0 && errno == EINTR);
+    return sent == (ssize_t)length ? 0 : 1;
+}
+
+static void av_shutdown_export(void *opaque, int connection)
+{
+    shutdown(connection, SHUT_RDWR);
+}
+
+static void av_close_export(void *opaque, int descriptor)
+{
+    close(descriptor);
+}
+
 void virtio_gpu_av_host_init(VirtIOGPUAv *r)
 {
     r->host = (AvHostOps) {
@@ -1322,6 +1500,10 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .dmabuf_over_host_memory = av_dmabuf_over_host_memory,
         .wait_event_until = av_wait_event_until,
         .show_image = av_show_image,
+        .receive_export = av_receive_export,
+        .send_export = av_send_export,
+        .shutdown_export = av_shutdown_export,
+        .close_export = av_close_export,
     };
     virtio_gpu_av_renderer_ops(&r->host);
     av_read_gpus(r);

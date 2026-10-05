@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define AV_EXECUTOR_ABI_VERSION 14u
+#define AV_EXECUTOR_ABI_VERSION 15u
 #define AV_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -65,6 +65,9 @@ extern "C" {
 /* 14 replaces 13's two snapshot operations, in their places, with the frame
  * operations: a device of 14 reads them only from a library of 14 or later. */
 #define AV_EXECUTOR_ABI_VERSION_FRAMES 14u
+/* 15 adds the two calls that hand a shared surface to a process outside QEMU
+ * (docs/external-export.md). */
+#define AV_EXECUTOR_ABI_VERSION_SURFACE_EXPORTS 15u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -153,6 +156,11 @@ typedef struct AvExportedImage {
     uint32_t reserved;
     uint64_t modifier;
 } AvExportedImage;
+
+/* DRM_FORMAT_MOD_INVALID: an exported surface's layout is the one its driver
+ * keeps with the memory itself, which an importer on the same GPU reads from
+ * the dma-buf (export_surface). */
+#define AV_EXPORT_MODIFIER_IMPLICIT 0x00FFFFFFFFFFFFFFull
 
 /* A staged frame mapped for reading (map_frame): `height` rows of `width`
  * four-byte pixels, `row_pitch` bytes apart, in the frame's own byte order.
@@ -319,6 +327,21 @@ typedef struct AvExecutorOps {
                           AvFrameView *view);
     /* ABI 14: that frame let go, mapped or not. Any thread. */
     void (*unmap_frame)(void *opaque, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point);
+
+    /* ABI 15: the surface the guest shared as `surface` - the id the miniport
+     * minted over its allocation - as its own memory, a dma-buf a process
+     * outside QEMU imports with no copy (docs/external-export.md):
+     * AV_EXECUTED with `image` filled, its fd the caller's to close and `slot`
+     * 0, or AV_UNKNOWN for a surface no session on the GPU `gpu_uuid` names
+     * shared, or one whose memory no other API can open. `modifier` is
+     * AV_EXPORT_MODIFIER_IMPLICIT. Any thread. */
+    uint32_t (*export_surface)(void *opaque, const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage *image);
+    /* ABI 15: how many copies into `surface` the host has run since it was
+     * shared, in *writes, and in *fd a sync_file, the caller's, that signals
+     * once the GPU has finished every one of them: AV_EXECUTED, or AV_UNKNOWN
+     * for a surface no session shared or a GPU that makes no sync_file. Any
+     * thread. */
+    uint32_t (*sync_surface)(void *opaque, const uint8_t *gpu_uuid, uint64_t surface, uint64_t *writes, int *fd);
 } AvExecutorOps;
 
 typedef const AvExecutorOps *(*AvExecutorOpsFunction)(void);

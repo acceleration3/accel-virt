@@ -255,6 +255,25 @@ typedef struct AvHostOps {
     /* Main loop. Head `head` shows `image`, as av_device_export_image gave
      * it: 0 when it does, nonzero where its console cannot. NULL: no head can. */
     int (*show_image)(void *opaque, uint32_t head, const AvExportedImage *image);
+
+    /* The export socket's connections (docs/external-export.md): each a
+     * SOCK_SEQPACKET descriptor the glue accepted and handed to
+     * av_device_export_accepted, which the core owns from then on. Any
+     * thread, all four. NULL, any of them: the host offers no export socket. */
+    /* The next datagram on `connection`, waiting for it: 0 with its length in
+     * *length - past `capacity` for one that did not fit, whose bytes past it
+     * are lost - or nonzero once the peer has gone or the connection was shut
+     * down. Descriptors that came with it are closed. */
+    int (*receive_export)(void *opaque, int connection, uint8_t *buffer, size_t capacity, size_t *length);
+    /* One datagram, with `descriptor` beside it unless it is -1, never
+     * waiting for room: 0 sent, nonzero when the peer has gone or its socket
+     * is full. `descriptor` stays the caller's. */
+    int (*send_export)(void *opaque, int connection, const uint8_t *bytes, size_t length, int descriptor);
+    /* A receive on `connection`, now or later, answers that the peer has gone. */
+    void (*shutdown_export)(void *opaque, int connection);
+    /* Closes a descriptor the export path owns: a connection, or a dma-buf or
+     * a sync_file the executor handed over. */
+    void (*close_export)(void *opaque, int descriptor);
 } AvHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from
@@ -327,6 +346,11 @@ void av_device_status(AvDevice *device, uint8_t status);
 void av_device_reset(AvDevice *device);
 /* The renderer died or its socket closed. Main loop. */
 void av_device_renderer_lost(AvDevice *device);
+/* The export socket accepted `connection` from a process whose user is this
+ * process's (`same_user` nonzero) or another's: 0 when the device serves it
+ * and owns the descriptor from now on, nonzero when it refused it and the
+ * glue closes it. Main loop. */
+int av_device_export_accepted(AvDevice *device, int connection, int same_user);
 /* Nonzero for a device this module never created. Main loop. */
 int av_device_destroy(AvDevice *device);
 

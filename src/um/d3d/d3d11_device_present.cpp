@@ -98,10 +98,10 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
 {
     AV_SCOPE("D3d11Device::present_surface");
     if (source.shared_key == 0u) return present_pages(source, subresource, destination, dxgi_context);
-    /* A flush, not a round trip: the present then waits in its context behind
-     * the batch this publishes (present_to_kernel), and DWM and the scanout
-     * wait on the present. */
-    if (wire().flush() != Status::ok) {
+    /* A flush, not a round trip: the present waits in its context behind the
+     * batch this publishes (present_to_kernel), and DWM and the scanout wait
+     * on the present. */
+    if (FAILED(show_flip(source, subresource)) || wire().flush() != Status::ok) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return DXGI_ERROR_DEVICE_REMOVED;
     }
@@ -113,6 +113,22 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
         break;
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
+}
+
+/* A swap chain's flip names no frame (point 0): the host copies the buffer,
+ * here in the device's own order, into what DWM composes in its place, so
+ * nothing drawn after this present reaches the window (D3d11HostDevice::show).
+ * Only a buffer DXGI made to present from (D3D10_DDI_BIND_PRESENT): a
+ * DirectComposition surface is shared and presented too, but drawn between
+ * its presents as well, and a copy taken at one would hide those draws. */
+HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresource)
+{
+    AV_SCOPE("D3d11Device::show_flip");
+    if (source.present_model != d3d::SwapChainBuffer::Model::flip || (source.bind & D3D10_DDI_BIND_PRESENT) == 0u)
+        return S_OK;
+    if (d3dproto::av_d3d_PresentPoint(wire(), source.id, subresource, 0u)) return S_OK;
+    set_error(D3DDDIERR_DEVICEREMOVED);
+    return DXGI_ERROR_DEVICE_REMOVED;
 }
 
 /* A present the kernel copies from the buffer's own pages - into the window's
@@ -238,6 +254,13 @@ HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
     AV_SCOPE("D3d11Device::present1");
     refresh_guest_surfaces();
     if (args->SurfacesToPresent == 0u || args->phSurfacesToPresent == nullptr) return E_INVALIDARG;
+    /* Every surface the present names is shown as it is now; the first is the
+     * one the kernel is handed (present_surface). */
+    for (UINT index = 1u; index < args->SurfacesToPresent; index++) {
+        const HRESULT shown = show_flip(record(args->phSurfacesToPresent[index].hSurface),
+                                        args->phSurfacesToPresent[index].SubResourceIndex);
+        if (FAILED(shown)) return shown;
+    }
     ResourceRecord &source = record(args->phSurfacesToPresent[0].hSurface);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
     if (args->Flags.Value != present_flags_) {

@@ -491,7 +491,7 @@ foreach(src ${AV_UNIT_TESTS})
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
   if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d12_session_device" OR
      name STREQUAL "test_d3d12_session_features_device" OR name STREQUAL "test_d3d12_session_tiles_device" OR
-     name STREQUAL "test_d3d_gl_interop_device" OR
+     name STREQUAL "test_d3d_gl_interop_device" OR name STREQUAL "test_d3d_external_export_device" OR
      name STREQUAL "test_d3d9_session_device" OR
      name STREQUAL "test_d3d_vulkan_interop_device")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT

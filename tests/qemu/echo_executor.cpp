@@ -27,6 +27,15 @@
 //
 // Anything else is AV_UNKNOWN. With AV_ECHO_FAIL_CREATE set, create fails.
 //
+// Version 15 (docs/external-export.md): every surface the guest has not
+// released is shared, so the device's export socket can be judged without a
+// GPU. export_surface answers a memfd of 64x64 B8G8R8A8 pixels, linear, whose
+// first eight bytes are the surface's id; sync_surface answers twice the id as
+// the copies run, and an eventfd already readable - signalled - standing in
+// for a sync_file. release_shared remembers what the guest let go of (0
+// forgets it all: the ids start again), and a surface let go of exports
+// nothing.
+//
 // Version 4 (feature 050): create_with_options records what it was asked for.
 // With AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan, and with
 // AV_ECHO_ABI_VERSION_3 it answers the version 3 table, which makes only
@@ -57,6 +66,9 @@
 #include <cstring>
 #include <ctime>
 #include <pthread.h>
+#include <sys/eventfd.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace {
 
@@ -322,6 +334,64 @@ uint32_t import_object(void *, AvExecutor *, uint32_t, uint32_t, int, uint64_t, 
 }
 void release_object(void *, AvExecutor *, uint32_t, uint64_t) {}
 
+/* Version 15's shared surfaces: what the guest let go of, under a lock, since
+ * the export socket asks from a thread of its own and the release comes on
+ * the main loop. */
+constexpr std::uint32_t surface_edge = 64u;
+constexpr std::size_t   max_released = 64u;
+pthread_mutex_t         released_lock = PTHREAD_MUTEX_INITIALIZER;
+std::uint64_t           released[max_released] = {};
+
+bool surface_released(std::uint64_t surface)
+{
+    pthread_mutex_lock(&released_lock);
+    bool found = surface == 0u;
+    for (const std::uint64_t gone : released) found = found || gone == surface;
+    pthread_mutex_unlock(&released_lock);
+    return found;
+}
+
+void release_shared(void *, const std::uint8_t *, std::uint64_t object_id)
+{
+    pthread_mutex_lock(&released_lock);
+    if (object_id == 0u) std::memset(released, 0, sizeof released);
+    for (std::uint64_t &slot : released) {
+        if (object_id == 0u || slot != 0u) continue;
+        slot = object_id;
+        break;
+    }
+    pthread_mutex_unlock(&released_lock);
+}
+
+std::uint32_t export_surface(void *, const std::uint8_t *, std::uint64_t surface, AvExportedImage *image)
+{
+    constexpr std::uint32_t stride = surface_edge * 4u;
+    constexpr std::size_t   bytes = std::size_t{stride} * surface_edge;
+    if (image == nullptr || surface_released(surface)) return AV_UNKNOWN;
+    const int fd = memfd_create("echo-surface", MFD_CLOEXEC);
+    if (fd < 0) return AV_UNKNOWN;
+    void *mapped = MAP_FAILED;
+    if (ftruncate(fd, static_cast<off_t>(bytes)) == 0)
+        mapped = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapped == MAP_FAILED) {
+        close(fd);
+        return AV_UNKNOWN;
+    }
+    std::memcpy(mapped, &surface, sizeof surface);
+    munmap(mapped, bytes);
+    *image = AvExportedImage{fd, 0u, surface_edge, surface_edge, stride, 0u, 0x34325241u /* AR24 */, 0u, 0u};
+    return AV_EXECUTED;
+}
+
+std::uint32_t sync_surface(void *, const std::uint8_t *, std::uint64_t surface, std::uint64_t *writes, int *fd)
+{
+    if (writes == nullptr || fd == nullptr || surface_released(surface)) return AV_UNKNOWN;
+    *fd = eventfd(1u, EFD_CLOEXEC);
+    if (*fd < 0) return AV_UNKNOWN;
+    *writes = surface * 2u;
+    return AV_EXECUTED;
+}
+
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -336,7 +406,17 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               set_signal,
                               export_object,
                               import_object,
-                              release_object, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+                              release_object,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              release_shared,
+                              nullptr,
+                              nullptr,
+                              export_surface,
+                              sync_surface};
 
 /* Version 3: default contexts only (feature 050). */
 const AvExecutorOps version_3_table = {AV_EXECUTOR_ABI_VERSION_HANDLES,
@@ -354,7 +434,7 @@ const AvExecutorOps version_3_table = {AV_EXECUTOR_ABI_VERSION_HANDLES,
                                         nullptr,
                                         nullptr,
                                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                        nullptr};
+                                        nullptr, nullptr, nullptr};
 
 /* Version 1, carrying none of the memory operations: the device must keep
  * accepting a library that imports nothing, and a suite whose only library is
@@ -374,7 +454,7 @@ const AvExecutorOps version_1_table = {AV_EXECUTOR_ABI_VERSION_MINIMUM,
                                         nullptr,
                                         nullptr,
                                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                        nullptr};
+                                        nullptr, nullptr, nullptr};
 
 }  // namespace
 

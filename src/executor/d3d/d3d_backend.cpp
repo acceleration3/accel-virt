@@ -55,6 +55,7 @@ constexpr uint32_t max_buffer_bytes = 1u << 30u;
 constexpr uint32_t no_stream = 0xffffffffu;
 constexpr size_t   container_slack = 64u * 1024u;
 
+
 }  // namespace
 
 D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
@@ -72,8 +73,8 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(),
-      missed_key_(0u), lost_(false)
+    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(), progress11_(),
+      missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -110,6 +111,7 @@ void D3dBackend::shut_down()
         published_.unbind();
         constants_.close();
         objects_.clear();
+        progress11_.release();
         device11_->unlock();
     }
     static_cast<void>(states_.select(0u));
@@ -153,13 +155,26 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
 
 /* A batch that ended queries is flushed, so DXVK starts the work their
  * results wait on rather than when the guest next asks. */
+/* A batch is marked and flushed, so the ring completes it only once the GPU
+ * has run it (D3d11BatchProgress); a batch that ended queries is flushed even
+ * when it cannot be marked, so DXVK starts the work their results wait on
+ * rather than when the guest next asks. */
 void D3dBackend::end_batch()
 {
     AV_SCOPE("D3dBackend::end_batch");
     if (!held_) return;
-    if (published_.needs_flush()) {
-        device11_->context()->Flush();
+    if (progress11_.fence() == nullptr) progress11_.adopt(device11_->make_fence(progress11_.marked()));
+    if (device11_->signal(progress11_.fence(), progress11_.next())) {
+        progress11_.signalled();
         published_.flushed();
+    } else {
+        if (!mark_refused_)
+            LogLine(lines_).text("no fence marks the session's batches: they complete as recorded").write();
+        mark_refused_ = true;
+        if (published_.needs_flush()) {
+            device11_->context()->Flush();
+            published_.flushed();
+        }
     }
     static_cast<void>(published_.publish(device11_->context()));
     held_ = false;
@@ -169,7 +184,7 @@ void D3dBackend::end_batch()
 bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
-    const bool fences_pending = d3d12_.poll();
+    const bool fences_pending = d3d12_.poll() || progress11_.pending();
     if (device11_ == nullptr || held_ || !published_.pending()) return fences_pending;
     /* GetData reads no pipeline state, so no device's state is selected. */
     device11_->lock(nullptr);
@@ -186,10 +201,17 @@ void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
     d3d12_.bind_signal(signal, context);
 }
 
+/* A session is one runtime's (avumd makes one per runtime a process uses), so
+ * a session whose Direct3D 12 queues ever marked work answers with theirs, and
+ * any other with its Direct3D 11 batches': the two count apart, and the ring
+ * compares one answer with the next. */
 void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("D3dBackend::gpu_progress");
     d3d12_.gpu_progress(marked, reached);
+    if (marked != 0u) return;
+    marked = progress11_.marked();
+    reached = progress11_.reached();
 }
 
 bool D3dBackend::lost() const
@@ -733,7 +755,9 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     found = 0u;
     desc = d3dproto::ResourceDesc{};
     if (!has_device()) return false;
-    IUnknown *const shared = device11_->find_shared(shared_key);
+    /* A flip-model buffer is read as its latest present's copy (show). */
+    IUnknown *const shown = device11_->find_shown(shared_key);
+    IUnknown *const shared = shown != nullptr ? shown : device11_->find_shared(shared_key);
     if (shared == nullptr) {
         if (shared_key != missed_key_)
             LogLine(lines_)
@@ -1502,6 +1526,7 @@ bool D3dBackend::on_CopyResource(uint32_t destination, uint32_t source)
     constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
     constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
     device11_->context()->CopyResource(to, from);
+    counted(to);
     return true;
 }
 
@@ -1519,7 +1544,17 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     device11_->context()->CopySubresourceRegion1(to, destination_subresource, x, y, z, from, source_subresource,
                                                  has_box != 0u ? &region : nullptr,
                                                  copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+    counted(to);
     return true;
+}
+
+/* A copy into a surface the guest shared is counted, under the device lock
+ * every command holds, so a process outside QEMU reading the surface can
+ * tell which of the guest's copies the host has run (docs/external-export.md). */
+void D3dBackend::counted(ID3D11Resource *destination)
+{
+    AV_SCOPE("D3dBackend::counted");
+    device11_->shared().written(SurfaceIdentity(destination).surface());
 }
 
 bool D3dBackend::on_ResolveSubresource(uint32_t destination, uint32_t destination_subresource, uint32_t source,
@@ -1626,9 +1661,18 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
     ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr) return false;
     const SurfacePoint frame(SurfaceIdentity(found).surface(), point);
-    if (surfaces_ == nullptr || !frame.names()) return true;
     D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
     found->GetType(&dimension);
+    /* A flip names no frame: its present is the copy its compositor reads. */
+    if (point == 0u) {
+        if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D && frame.surface() != 0u &&
+            !device11_->show(frame.surface(), static_cast<ID3D11Texture2D *>(found)) && !show_refused_) {
+            LogLine(lines_).text("a flip of surface ").hex(frame.surface(), 16u).text(" has no copy to show: DWM reads the buffer itself").write();
+            show_refused_ = true;
+        }
+        return true;
+    }
+    if (surfaces_ == nullptr || !frame.names()) return true;
     uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
     if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !extent_of(found, subresource, width, height, depth, format))
         return true;

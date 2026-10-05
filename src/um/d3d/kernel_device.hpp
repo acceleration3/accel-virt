@@ -42,6 +42,10 @@ public:
     /* The wait a sync token stands for - DWM giving a flip-model buffer back
      * (AcquireResource) - queued on `context`. */
     HRESULT acquire(HANDLE token, HANDLE context);
+    /* What a sync token stands for once a compositor is done reading the
+     * buffer (ReleaseResource): queued on `context` behind the work that read
+     * it, so the buffer goes back to its owner only once that work ran. */
+    HRESULT release(HANDLE token, HANDLE context);
     /* A present the runtime describes; a display mode a primary is set to. */
     HRESULT present(D3DDDICB_PRESENT &present);
     HRESULT set_display_mode(D3DDDICB_SETDISPLAYMODE &mode);

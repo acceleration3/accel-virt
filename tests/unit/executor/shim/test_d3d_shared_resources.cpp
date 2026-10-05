@@ -98,3 +98,42 @@ TEST(d3d_shared_resources, a_zero_key_a_second_share_and_a_full_table_are_refuse
   table.clear();
   CHECK_EQ(surface.references, 1u);
   CHECK_EQ(other.references, 1u); }
+
+/* Copies into a shared surface are counted per key from the moment it is
+ * shared, survive another key leaving the table (whose last row moves into
+ * the gap) and another API's view replacing the row, and start again at 0
+ * when the key comes back; a key the table does not hold counts nothing. */
+TEST(d3d_shared_resources, copies_are_counted_per_key_from_the_moment_it_is_shared)
+{ D3dSharedResources &table = fresh_table();
+  Counted first, second, view;
+  std::uint64_t count = 99u;
+  CHECK(!table.writes(5u, count));
+  CHECK_EQ(count, 0u);
+  CHECK(table.publish(5u, &first));
+  CHECK(table.publish(6u, &second));
+  CHECK(table.writes(5u, count));
+  CHECK_EQ(count, 0u);
+  table.written(6u);
+  table.written(6u);
+  table.written(5u);
+  table.written(7u);   /* not shared: nothing */
+  table.written(0u);
+  CHECK(!table.writes(7u, count));
+  CHECK(!table.writes(0u, count));
+  CHECK(table.writes(5u, count));
+  CHECK_EQ(count, 1u);
+  table.release(5u);   /* 6's row moves into 5's */
+  CHECK(table.writes(6u, count));
+  CHECK_EQ(count, 2u);
+  CHECK(table.replace(6u, &view));
+  table.written(6u);
+  CHECK(table.writes(6u, count));
+  CHECK_EQ(count, 3u);
+  CHECK(!table.writes(5u, count));
+  CHECK(table.publish(5u, &first));
+  CHECK(table.writes(5u, count));
+  CHECK_EQ(count, 0u);
+  table.clear();
+  CHECK_EQ(first.references, 1u);
+  CHECK_EQ(second.references, 1u);
+  CHECK_EQ(view.references, 1u); }

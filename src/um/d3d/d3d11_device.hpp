@@ -188,6 +188,7 @@ private:
     void refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIEW *views, UINT count);
     void refresh_guest_surface(ResourceRecord &resource);
     void forget_guest_surface(const ResourceRecord &resource);
+    HRESULT show_flip(const ResourceRecord &source, uint32_t subresource);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                             void *dxgi_context);
     HRESULT present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,

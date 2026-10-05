@@ -88,6 +88,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `virtio_gpu/` | miniport <-> device | virtio-gpu control-queue requests and responses, and av's own |
 | `escape/` | guest UM <-> guest KM | escapes and private data the host never sees: av context records, context views, tail publish, UMD adapter info, host-window, follow, present-point and trace-escape records |
 | `renderer/` | QEMU <-> av-renderer | the renderer process's messages |
+| `export/` | QEMU <-> a host process | the export socket's requests and answers (docs/external-export.md) |
 | `d3d/`, `vulkan/` | - | DXGI/D3D9 format layouts; descriptor-template and exportable-image layouts |
 | `generated/<api>/` | - | written by `tools/codegen`, never by hand |
 
@@ -107,6 +108,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `display/` | heads, modes, scanout, the display clock |
 | `present/` | the present engine, queued presents, region moves |
 | `execution/` | the device's side of `av_executor.h`: loading the executor library and running batches through it |
+| `export/` | the export socket's connections, their threads and revocations (docs/external-export.md) |
 | `isolation/` | the device's side of av-renderer: `RendererContextPlane`, `RemoteContext`, `RendererLink` |
 | `renderer/` | av-renderer's process service |
 | `recording/` | the wire recorder and the recording file format |

@@ -64,6 +64,12 @@ public:
      * (D3d11HostDevice::map_frame). Any thread. */
     bool     map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame);
+    /* The surface shared under `surface` on `gpu_uuid` as its own memory, for
+     * a process outside QEMU (D3d11HostDevice::export_surface), and the copies
+     * into it the host has run with a sync_file for them
+     * (D3d11HostDevice::sync_surface). Any thread. */
+    bool     export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image);
+    bool     sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd);
 
     /* A session for one context of `sub_api` on the GPU `gpu_uuid` names, or
      * null: for a sub-API that GPU does not run, for a GPU nobody has, and

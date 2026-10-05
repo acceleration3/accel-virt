@@ -2,6 +2,7 @@
 
 #include "device/module/device_instance.hpp"
 #include "device/display/display_clock.hpp"
+#include "device/export/export_connection.hpp"
 #include "device/present/present_engine.hpp"
 #include "device/module/device_module.hpp"
 #include "device/module/virtio_gpu_av.hpp"
@@ -73,6 +74,10 @@ void av_device_renderer_lost(AvDevice *device)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().renderer_lost(); }
 
 __attribute__((visibility("default")))
+int av_device_export_accepted(AvDevice *device, int connection, int same_user)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().export_accepted(connection, same_user != 0) ? 0 : 1; }
+
+__attribute__((visibility("default")))
 int av_device_destroy(AvDevice *device)
 { return av::device_module.destroy(reinterpret_cast<av::DeviceInstance *>(device)) != av::Status::ok; }
 
@@ -90,5 +95,8 @@ void AvDisplayFramesShow(void *device)
 
 void AvPresentEngineRun(void *engine)
 { static_cast<av::PresentEngine *>(engine)->run(); }
+
+void AvExportConnectionServe(void *connection)
+{ static_cast<av::ExportConnection *>(connection)->serve(); }
 
 }

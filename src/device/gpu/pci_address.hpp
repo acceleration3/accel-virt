@@ -7,6 +7,7 @@
 
 namespace av {
 
+class ExportGreeting;
 class TextBuffer;
 
 class PciAddress {
@@ -17,6 +18,9 @@ public:
     /* "dddd:bb:dd.f", lowercase, as /sys/bus/pci/devices names it. Each field
      * is cut to the width PCI gives it, so the text is always that shape. */
     void append_to(TextBuffer &text) const;
+    /* What a device's export socket answers hello with for the GPU here,
+     * whose Vulkan UUID is `uuid` (docs/external-export.md). */
+    ExportGreeting greeting(const uint8_t *uuid, uint32_t capacity) const;
 
 private:
     uint32_t domain_;
