@@ -54,7 +54,11 @@ public:
     bool     faulted() const;
     uint64_t head() const;
     /* From another worker: when the guest published the oldest batch this ring
-     * holds and has not run, or UINT64_MAX for none. */
+     * holds and has not begun to run, or UINT64_MAX for none. One running is
+     * not waited for: until it has recorded its last command it holds its
+     * API's device lock, which orders a later batch behind it anyway, and once
+     * it has, all it can still be doing is waiting on the GPU for an answer -
+     * a read back - that nothing published after it depends on. */
     uint64_t earliest_pending() const;
     /* Any thread: the guest has published a batch not yet taken. */
     bool     has_work() const;
@@ -91,6 +95,9 @@ private:
     RingProgress progress_;
     HeldCompletions held_;
     uint64_t     head_;
+    /* Where the batch running ends, 0 while none runs; another worker's
+     * earliest_pending looks past it. */
+    uint64_t     running_end_;
     uint64_t     last_fence_;
     uint64_t     batches_;
     D3dOrdering *ordering_;

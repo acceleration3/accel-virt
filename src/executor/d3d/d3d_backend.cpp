@@ -1651,6 +1651,29 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     return true;
 }
 
+/* What a read back waits for, without the device's lock: every session on the
+ * GPU records into one immediate context, and DXVK's Map(READ) flushes it and
+ * waits for the GPU to finish all of it, holding every other session - DWM's
+ * composition among them - for as long. An application reading one back each
+ * frame held DWM a frame at a time, and the compositor skipped captures. The
+ * copy is marked on the session's fence instead, the lock let go while the GPU
+ * runs it, and taken again - the session's state with it - to map what is by
+ * then finished. A mark the device refuses leaves the Map to wait, as before. */
+void D3dBackend::await_gpu_unlocked()
+{
+    AV_SCOPE("D3dBackend::await_gpu_unlocked");
+    constexpr long     pause_nanoseconds = 20000;
+    constexpr uint32_t most_pauses = 100000u; /* 2 s, past which the Map waits */
+    if (progress11_.fence() == nullptr) progress11_.adopt(device11_->make_fence(progress11_.marked()));
+    if (!device11_->signal(progress11_.fence(), progress11_.next())) return;
+    progress11_.signalled();
+    published_.flushed();
+    device11_->unlock();
+    const timespec pause = {0, pause_nanoseconds};
+    for (uint32_t pauses = 0u; pauses < most_pauses && progress11_.pending(); pauses++) nanosleep(&pause, nullptr);
+    device11_->lock(states_.selected());
+}
+
 /* A frame the host cannot stage - a resource never shared, not a 2D texture
  * of four-byte pixels, no frame free - is a present the engine refuses: the
  * session goes on, and the application sees at most a frame not shown. A
@@ -1699,8 +1722,9 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     if (!extent_of(found, subresource, width, height, depth, format)) return false;
     ID3D11Resource *const staging = staging_for(found, subresource, width, height, depth, format);
     if (staging == nullptr) return true;
+    device11_->context()->CopySubresourceRegion(staging, 0u, 0u, 0u, 0u, found, subresource, nullptr);
+    await_gpu_unlocked();
     ID3D11DeviceContext4 *const context = device11_->context();
-    context->CopySubresourceRegion(staging, 0u, 0u, 0u, 0u, found, subresource, nullptr);
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     const HRESULT result = context->Map(staging, 0u, D3D11_MAP_READ, 0u, &mapped);
     if (FAILED(result)) {

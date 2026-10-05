@@ -207,6 +207,9 @@ private:
      * false for a subresource the resource does not have. */
     bool                     extent_of(ID3D11Resource *resource, uint32_t subresource, uint32_t &width,
                                        uint32_t &height, uint32_t &depth, uint32_t &format) const;
+    /* Inside a command holding the device's lock: returns once the GPU has
+     * run what the session recorded, the lock let go meanwhile. */
+    void                     await_gpu_unlocked();
     /* A CPU-readable resource one subresource of `resource` can be copied
      * into, with a reference the caller owns; null when the host refuses one. */
     ID3D11Resource          *staging_for(ID3D11Resource *resource, uint32_t subresource, uint32_t width,

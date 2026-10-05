@@ -18,7 +18,7 @@
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(EnvSetting("AV_PERFETTO").on()), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), running_end_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(EnvSetting("AV_PERFETTO").on()), prepared_(false),
       attached_(false), faulted_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
@@ -114,7 +114,9 @@ Status RingConsumer::consume_next()
     if (published < batch.span()) return Status::no_space;
     if (ordering_ != nullptr) ordering_->wait_before(*this, batch.published_at());
     note_clock(batch.published_at());
+    __atomic_store_n(&running_end_, head_ + batch.span(), __ATOMIC_RELEASE);
     const Status ran = executor_.run(ring_, head_, batch);
+    __atomic_store_n(&running_end_, 0u, __ATOMIC_RELEASE);
     if (ran != Status::ok) {
         fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());
         return ran;
@@ -190,7 +192,8 @@ uint64_t RingConsumer::earliest_pending() const
 {
     AV_SCOPE("RingConsumer::earliest_pending");
     if (!attached_ || faulted_ || !executor_.ready()) return UINT64_MAX;
-    const uint64_t head = __atomic_load_n(&head_, __ATOMIC_ACQUIRE);
+    const uint64_t running_end = __atomic_load_n(&running_end_, __ATOMIC_ACQUIRE);
+    const uint64_t head = running_end != 0u ? running_end : __atomic_load_n(&head_, __ATOMIC_ACQUIRE);
     RingHeader     header;
     if (ring_.snapshot(header) == Status::ok && header.tail() - head >= BatchHeader::encoded_size) {
         uint8_t     bytes[BatchHeader::encoded_size] = {};
