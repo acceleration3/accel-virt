@@ -23,6 +23,15 @@ build() {
     if [ ! -f "$dir/build.ninja" ]; then
         meson setup "$dir" "$source" --buildtype=release --prefix="$PREFIX" --libdir=lib "$@"
     fi
+    # vkd3d-proton copies each header it generates into the build's include/
+    # to install it, and that directory is on every compile's include path
+    # ahead of the copy the compiles wait for - while nothing orders a compile
+    # after the copy. A compile could read a header still being copied:
+    # IUnknown unknown in vkd3d_core_interface.h, a parallel build's luck.
+    # The copies are made before anything is compiled.
+    local copies
+    mapfile -t copies < <(ninja -C "$dir" -t targets all | sed -n 's|^\(include/[A-Za-z0-9_]*\.h\): CUSTOM_COMMAND$|\1|p')
+    if [ ${#copies[@]} -ne 0 ]; then ninja -C "$dir" -j"$JOBS" "${copies[@]}"; fi
     ninja -C "$dir" -j"$JOBS"
     meson install -C "$dir" --quiet
 }
