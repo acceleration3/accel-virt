@@ -198,11 +198,17 @@ void RecordingPrinter::append_record(TextBuffer &text) const
         text.append_decimal(commands_);
         text.append(" commands");
         return;
-    case RecordKind::reply:
+    case RecordKind::reply: {
         text.append("reply ");
         text.append_decimal(record_.length());
         text.append(" bytes");
+        /* As a command's payload is: the answer is what a replay compares. */
+        const uint32_t shown = record_.length() < payload_bytes_ ? record_.length() : payload_bytes_;
+        if (shown == 0u || payload_ == nullptr) return;
+        text.append(" ");
+        for (uint32_t index = 0u; index < shown; index++) text.append_hex(payload_[index], 2u);
         return;
+    }
     case RecordKind::fence_completed: text.append("fence completed"); return;
     case RecordKind::fault: append_fault(text); return;
     case RecordKind::blob: append_blob(text); return;
