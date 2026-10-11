@@ -202,6 +202,10 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
     }
     case CL_DEVICE_SVM_CAPABILITIES:
         return answer(&svm_, sizeof svm_, value_bytes, value, size_ret);
+    case CL_DEVICE_HOST_UNIFIED_MEMORY: {
+        const cl_bool reported = CL_FALSE;
+        return answer(&reported, sizeof reported, value_bytes, value, size_ret);
+    }
     default: return CL_INVALID_VALUE;
     }
 }

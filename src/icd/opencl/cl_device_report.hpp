@@ -1,7 +1,7 @@
 /* The clGetDeviceInfo queries this ICD answers instead of forwarding.
  *
  * Almost every device query is the host device's to answer: it is the GPU that
- * will run the work. Four are not, and each for its own reason.
+ * will run the work. Five are not, and each for its own reason.
  *
  * CL_DEVICE_VENDOR_ID and CL_DEVICE_LUID_KHR name an adapter. The host's name
  * the host's own GPU, which the guest has no handle to, cannot share memory
@@ -18,6 +18,16 @@
  * mirrors a coarse-grained buffer and nothing else, so a fine-grained or
  * system report would have a kernel dereference a host address the guest never
  * mirrored.
+ *
+ * CL_DEVICE_HOST_UNIFIED_MEMORY says whether the application's memory is the
+ * device's. The host's says whether the host's is - yes for an integrated
+ * GPU - but the application's memory here is the guest's, which no host GPU
+ * reads or writes: a buffer over it is a copy (ClIcdRoot::create_buffer). An
+ * application told yes takes the zero-copy path and reads a kernel's results
+ * out of its own memory without a map, which is what the API allows a
+ * unified device to be relied on for in practice; Affinity does, and on an
+ * iGPU its canvas never saw a tile it rendered. So the answer is no, whatever
+ * the GPU, and the application maps or reads.
  *
  * CL_DEVICE_EXTENSIONS is neither this report's answer nor the host's:
  * ClExtensionPolicy intersects the two, and the caller asks it. */

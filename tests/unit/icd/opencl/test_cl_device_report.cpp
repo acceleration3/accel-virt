@@ -266,6 +266,18 @@ TEST(cl_device_report, svm_is_coarse_grained_or_nothing_whatever_the_host_offers
   CHECK_EQ(bytes, sizeof(cl_device_svm_capabilities));
   CHECK(report.invariants_hold()); }
 
+TEST(cl_device_report, the_applications_memory_is_never_the_devices_whatever_the_gpu)
+{ ClDeviceReport report(adapter_luid);
+  /* An integrated GPU's host says yes, and an application told yes reads a
+   * kernel's results out of its own memory without a map - memory the guest
+   * holds and no host GPU writes. So it is told no, and maps or reads. */
+  cl_bool unified = CL_TRUE;
+  std::size_t bytes = 0u;
+  CHECK(report.decides(CL_DEVICE_HOST_UNIFIED_MEMORY));
+  CHECK_EQ(report.info(CL_DEVICE_HOST_UNIFIED_MEMORY, sizeof unified, &unified, &bytes), CL_SUCCESS);
+  CHECK_EQ(unified, static_cast<cl_bool>(CL_FALSE));
+  CHECK_EQ(bytes, sizeof(cl_bool)); }
+
 TEST(cl_device_report, every_other_device_query_is_left_to_the_host)
 { ClDeviceReport report(adapter_luid);
   /* The host's own answers describe the device that will run the work, and
@@ -287,7 +299,7 @@ TEST(cl_device_report, what_it_decides_is_exactly_what_it_answers)
   const cl_device_info decided[] = {CL_DEVICE_VENDOR_ID,        CL_DEVICE_LUID_KHR,
                                     CL_DEVICE_LUID_VALID_KHR,   CL_DEVICE_VERSION,
                                     CL_DEVICE_OPENCL_C_VERSION, CL_DEVICE_NUMERIC_VERSION,
-                                    CL_DEVICE_SVM_CAPABILITIES};
+                                    CL_DEVICE_SVM_CAPABILITIES, CL_DEVICE_HOST_UNIFIED_MEMORY};
   for (const cl_device_info name : decided) {
     CHECK(report.decides(name));
     std::size_t bytes = 0u;
