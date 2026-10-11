@@ -253,12 +253,13 @@ constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
 /* A device that says it has a host-visible region; whether it really presents
  * one is the PCI walk's answer, and both have to agree (feature 041). */
 av::CapsetInfo host_capset(const std::uint8_t *uuid, std::uint32_t sub_apis = 1u,
-                           std::uint64_t features = av::CapsetInfo::feature_host_visible_memory)
+                           std::uint64_t features = av::CapsetInfo::feature_host_visible_memory,
+                           std::uint32_t device_type = av::GpuIdentity::discrete_gpu)
 {
     return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                               av::ProtocolVersion::current_minor),
                           sub_apis, 64u, 12u, 24u, features,
-                          av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
+                          av::GpuIdentity(1u, 2u, device_type, uuid, 0u, 0u, "the host's"));
 }
 
 class Fixture {
@@ -325,6 +326,12 @@ public:
     {
         capset_ = host_capset(first_gpu, 1u,
                               av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine);
+    }
+    /* A device on an integrated host GPU. */
+    void                   offer_integrated_gpu()
+    {
+        capset_ = host_capset(first_gpu, 1u, av::CapsetInfo::feature_host_visible_memory,
+                              av::GpuIdentity::integrated_gpu);
     }
     /* A device whose fence pages count the raises (feature_raises). */
     void                   offer_raises()
@@ -2930,6 +2937,21 @@ TEST(adapter_query_adapter_info, umd_private_names_the_luid_the_adapter_was_star
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
   CHECK_EQ(three[1], 0x0000000500001234ull);
   CHECK_EQ(three[2], 0u); }
+
+/* An integrated host GPU is said so in the third word, which is what the
+ * guest's vendor libraries report a GPU's kind from (ADL's ASIC family,
+ * NVAPI's GPU type); a discrete one, above, reads nothing. */
+TEST(adapter_query_adapter_info, umd_private_says_an_integrated_host_gpu_is_one)
+{ Fixture fixture;
+  fixture.offer_integrated_gpu();
+  CHECK_EQ(fixture.start(), success);
+  std::uint64_t                 words[3] = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = query_umd_private;
+  query.pOutputData = words;
+  query.OutputDataSize = sizeof words;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(words[2], av::UmdAdapterInfo::feature_integrated_gpu); }
 
 /* Where the engine runs on a device that reads host frames, the third word
  * offers them, and a blt from a surface the host holds, whose private driver

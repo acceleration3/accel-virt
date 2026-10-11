@@ -12,6 +12,10 @@
  * answer, so a test that queues none is a test of what happens when the device
  * says nothing. */
 #include "core/trace/state_writer.hpp"
+#include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/memory_segment_group.hpp"
+#include "guest/kmt/pci_identity.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -23,6 +27,7 @@
 #include <CL/cl_ext.h>
 
 #include <cstring>
+#include <initializer_list>
 
 using av::ClIcdRig;
 using av::FakeClLoader;
@@ -173,7 +178,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
    * shows, and no cl_khr_gl_sharing: nothing of it reaches the application,
    * which is shown only what this ICD answers alone. */
   static const char plain[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_shar";
-  char              reported[128];
+  char              reported[256];
   std::size_t       answered = 0u;
   { ClIcdRig rig;
     cl_device_id device = opened_device(rig);
@@ -184,8 +189,8 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
              CL_SUCCESS);
     /* Nothing of the host's reached the application, and what it got is a
      * terminated string rather than untouched room. */
-    CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing"), 0);
-    CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing") + 1u);
+    CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"), 0);
+    CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
     CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
 
     /* The size query, which an application makes first, and room the answer
@@ -194,7 +199,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     const std::uint32_t sent = rig.kmt().commands();
     std::size_t         wanted = 0u;
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted), CL_SUCCESS);
-    CHECK_EQ(wanted, std::strlen("cl_khr_d3d10_sharing") + 1u);
+    CHECK_EQ(wanted, std::strlen("cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
     char cramped[1] = {'x'};
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr), CL_INVALID_VALUE);
     CHECK_EQ(cramped[0], 'x');
@@ -211,7 +216,8 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
              CL_SUCCESS);
     CHECK_EQ(std::strcmp(reported,
-                         "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing"),
+                         "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing cl_khr_d3d10_sharing cl_khr_d3d11_sharing "
+                         "cl_khr_pci_bus_info"),
              0);
     CHECK_EQ(answered, std::strlen(reported) + 1u); }
 
@@ -2032,3 +2038,148 @@ TEST(cl_icd_root, a_state_dump_reads_under_the_lock_or_says_busy)
   CHECK(std::strstr(busy_writer.dump(), "clicd/0 busy=true") != nullptr);
   CHECK(std::strstr(busy_writer.dump(), "reads_outstanding") == nullptr);
   rig.lock().held_elsewhere(false); }
+
+/* The platform and the device are named after the adapter Windows describes
+ * (docs/vendor-libraries.md): asked before any device exists, the platform's
+ * name is found by the adapter's handle alone, which is closed again and
+ * opens no device; the device, once made, takes the adapter's name and
+ * vendor rather than the host GPU's. */
+TEST(cl_icd_root, the_platform_and_device_are_named_after_the_adapter_windows_describes)
+{ ClIcdRig rig;
+  rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  const std::uint32_t opened = rig.kmt().open_objects();
+  char name[160] = {};
+  CHECK_EQ(rig.root().platform_info(rig.loader().platform(0u), CL_PLATFORM_NAME, sizeof name, name, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(std::strcmp(name, "avgpu OpenCL on AMD Radeon(TM) Graphics"), 0);
+  CHECK_EQ(rig.kmt().open_objects(), opened);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 0u);
+  device_opens(rig);
+  cl_device_id device = nullptr;
+  cl_uint      devices = 0u;
+  CHECK_EQ(rig.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+  CHECK(device != nullptr);
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_NAME, sizeof name, name, nullptr), CL_SUCCESS);
+  CHECK_EQ(std::strcmp(name, "AMD Radeon(TM) Graphics"), 0);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The platform name is found once: asked again, the adapter is not searched
+ * for again. Where there is no avgpu adapter, or Windows will not identify,
+ * locate or name it, the name is this ICD's own, and is looked for again the
+ * next time it is asked. */
+TEST(cl_icd_root, the_platform_name_is_found_once_and_without_an_adapter_is_the_icd_s_own)
+{ char name[160] = {};
+  { ClIcdRig rig;
+    rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
+    CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+    CHECK_EQ(rig.root().platform_info(rig.loader().platform(0u), CL_PLATFORM_NAME, sizeof name, name, nullptr),
+             CL_SUCCESS);
+    const std::uint32_t searched = rig.kmt().calls(MockKmt::Call::enumerate_adapters);
+    CHECK_EQ(rig.root().platform_info(rig.loader().platform(0u), CL_PLATFORM_NAME, sizeof name, name, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), searched);
+    CHECK_EQ(std::strcmp(name, "avgpu OpenCL on AMD Radeon(TM) Graphics"), 0); }
+  for (const MockKmt::Call refused : {MockKmt::Call::enumerate_adapters, MockKmt::Call::query_adapter_location,
+                                     MockKmt::Call::query_adapter_name}) {
+      ClIcdRig rig;
+      rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
+      CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+      rig.kmt().fail_at(refused, 1u, MockKmt::invalid_parameter);
+      CHECK_EQ(rig.root().platform_info(rig.loader().platform(0u), CL_PLATFORM_NAME, sizeof name, name, nullptr),
+               CL_SUCCESS);
+      CHECK_EQ(std::strcmp(name, "avgpu OpenCL"), 0);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+      CHECK_EQ(rig.root().platform_info(rig.loader().platform(0u), CL_PLATFORM_NAME, sizeof name, name, nullptr),
+               CL_SUCCESS);
+      CHECK_EQ(std::strcmp(name, "avgpu OpenCL on AMD Radeon(TM) Graphics"), 0);
+  }
+  /* The search identifies the adapter first; the second identification is
+   * the description's own. */
+  { ClIcdRig rig;
+    rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
+    CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+    rig.kmt().fail_at(MockKmt::Call::query_identity, 2u, MockKmt::invalid_parameter);
+    CHECK_EQ(rig.root().platform_info(rig.loader().platform(0u), CL_PLATFORM_NAME, sizeof name, name, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(std::strcmp(name, "avgpu OpenCL"), 0); } }
+
+/* A queue says its context, its device and its count as this ICD's own - the
+ * host's handles are nothing in this process - says it has no default device
+ * queue, and asks the host the rest. */
+TEST(cl_icd_root, a_queue_says_its_context_and_device_and_asks_the_host_the_rest)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  if (device == nullptr) return;
+  rig.host().blob_import(0u, 0x78u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  const cl_context context = rig.loader().create_context(device, nullptr);
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  const cl_command_queue queue = rig.loader().create_queue(context, device, nullptr);
+  CHECK(queue != nullptr);
+  const cl_icd_dispatch &table = *rig.loader().dispatch_of(queue);
+  cl_context   owner = nullptr;
+  cl_device_id on = nullptr;
+  cl_uint      count = 0u;
+  cl_command_queue default_queue = queue;
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_CONTEXT, sizeof owner, &owner, nullptr), CL_SUCCESS);
+  CHECK(owner == context);
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_DEVICE, sizeof on, &on, nullptr), CL_SUCCESS);
+  CHECK(on == device);
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_REFERENCE_COUNT, sizeof count, &count, nullptr), CL_SUCCESS);
+  CHECK_EQ(count, 1u);
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_DEVICE_DEFAULT, sizeof default_queue, &default_queue,
+                                       nullptr),
+           CL_SUCCESS);
+  CHECK(default_queue == nullptr);
+  const cl_command_queue_properties profiled = CL_QUEUE_PROFILING_ENABLE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&profiled), sizeof profiled);
+  cl_command_queue_properties properties = 0u;
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_PROPERTIES, sizeof properties, &properties, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(properties, profiled);
+  int not_a_queue = 0;
+  CHECK_EQ(rig.root().queue_info(reinterpret_cast<cl_command_queue>(&not_a_queue), CL_QUEUE_CONTEXT, sizeof owner,
+                                 &owner, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  /* A device lost - a release the host never answers - has nothing to ask,
+   * and the ICD's own answers stand. */
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  const cl_mem buffer = rig.loader().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr);
+  CHECK_EQ(rig.loader().release_mem(buffer), CL_SUCCESS);
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_PROPERTIES, sizeof properties, &properties, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(table.clGetCommandQueueInfo(queue, CL_QUEUE_DEVICE, sizeof on, &on, nullptr), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* On an AMD adapter the device answers AMD's free-memory query from what
+ * Windows says this process may still use of the adapter's own memory, in
+ * KiB; on another vendor's it is the host's question. */
+TEST(cl_icd_root, an_amd_adapter_answers_its_free_memory_from_windows)
+{ ClIcdRig rig;
+  rig.kmt().set_identity(0u, av::PciIdentity(0x1002u, 0x13C0u, av::AdapterSearch::virtio_vendor,
+                                             av::AdapterSearch::av_subsystem, 0xC9u));
+  rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
+  rig.kmt().set_video_memory(av::MemorySegmentGroup::local, 512ull << 20u, 128ull << 20u);
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  if (device == nullptr) return;
+  std::size_t free_kib[2] = {};
+  std::size_t answered = 0u;
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, &answered),
+           CL_SUCCESS);
+  CHECK_EQ(answered, sizeof free_kib);
+  CHECK_EQ(free_kib[0], 384u * 1024u);
+  CHECK_EQ(free_kib[1], 384u * 1024u);
+  /* Using more than the budget is none free, not a wrap. */
+  rig.kmt().set_video_memory(av::MemorySegmentGroup::local, 128ull << 20u, 512ull << 20u);
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(free_kib[0], 0u);
+  /* Windows refusing to say is the query's refusal. */
+  rig.kmt().fail_at(MockKmt::Call::query_video_memory, 1u, MockKmt::invalid_parameter);
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, nullptr),
+           CL_OUT_OF_RESOURCES); }

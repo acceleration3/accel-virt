@@ -28,7 +28,7 @@ bool same_word(const char *text, const char *name, size_t length)
 /* The extensions this ICD reports, each with the test that proves it through
  * the ICD (tools/check_extension_policy.py).
  *
- * Two rows, and two names deliberately absent.
+ * Two names are deliberately absent.
  *
  * `cl_khr_external_memory` and `cl_khr_external_memory_win32` are how an
  * application names memory another API made: the Win32 handle travels in
@@ -55,13 +55,37 @@ bool same_word(const char *text, const char *name, size_t length)
  * is its refusals (ClIcdRoot). Affinity looks its OpenCL device up this way
  * and uses none that cannot be.
  *
+ * `cl_khr_byte_addressable_store` is a compiler's promise - a kernel may
+ * store a char without touching the bytes beside it - core since OpenCL 1.1
+ * and listed by every driver still. Nothing crosses the wire for it but the
+ * kernels, so it is reported where the host's device lists it; DaVinci Resolve
+ * logs an error for a device that does not.
+ *
+ * `cl_khr_d3d11_sharing` is answered here alone too, so it is reported
+ * whatever the host offers: a context made from an application's Direct3D 11
+ * device keeps the device, each cl_mem over one of its resources is an
+ * ordinary object of the host's, and acquire and release copy the resource's
+ * bytes in and back through that device (docs/d3d11-sharing.md). DaVinci
+ * Resolve makes its context this way and waits forever when it cannot.
+ *
  * `cl_khr_gl_sharing` is reported where the host's device lists it - which
  * it does exactly when its OpenCL made a context against a GL context of the
  * device's own. The context this ICD makes from a GL context is a context of
  * the device's made in that GL context's share group: the OpenGL ICD names
  * the context by its ring (avGetShareName), the miniport resolves the name
  * for a context of the same process, and the executor makes the host's
- * context against a GL context sharing the guest one's objects. */
+ * context against a GL context sharing the guest one's objects. *
+ * `cl_khr_pci_bus_info`, `cl_amd_device_attribute_query` and
+ * `cl_nv_device_attribute_query` say where the device sits on the PCI bus,
+ * which is how an application pairs it with a DXGI adapter or a vendor
+ * library's GPU (docs/vendor-libraries.md; DaVinci Resolve does). ClDeviceReport
+ * answers them from what Windows says of the guest's adapter - the host's own
+ * answers would name a bus the guest has no part of - and AMD's free memory
+ * from Windows' own account of the adapter's (ClIcdRoot::free_memory), which
+ * Resolve asks. The vendor rows are reported on that vendor's adapter alone;
+ * their other queries go to the host, which answers them where its own driver
+ * carries the extension and refuses them where it does not.
+ */
 const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory", 1u,
      "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver",
@@ -70,13 +94,22 @@ const ClExtensionPolicy::Row reported_extensions[] = {
      "cl_buffer_paths.a_buffer_over_a_shared_object_is_opened_and_released_as_one",
      "cl_khr_gl_sharing"},
     {"cl_khr_gl_sharing", 1u, "cl_gl_sharing.a_context_made_from_the_current_gl_context_names_its_objects"},
+    {"cl_khr_byte_addressable_store", 1u,
+     "fullstack_opencl_icd.a_kernel_stores_single_bytes_and_leaves_their_neighbours"},
     {"cl_khr_d3d10_sharing", 1u, "cl_d3d10_sharing.a_dxgi_adapter_or_d3d10_device_on_the_avgpu_adapter_is_this_device",
      "-"},
+    {"cl_khr_d3d11_sharing", 1u, "cl_d3d11_sharing.an_acquire_copies_each_resource_in_and_a_release_copies_it_back",
+     "-"},
+    {"cl_khr_pci_bus_info", 1u, "cl_device_report.the_pci_location_and_name_are_the_guest_adapter_s", "-*"},
+    {"cl_amd_device_attribute_query", 1u,
+     "cl_device_report.an_amd_adapter_says_where_it_sits_as_amd_s_driver_does", "-1002"},
+    {"cl_nv_device_attribute_query", 1u,
+     "cl_device_report.an_nvidia_adapter_says_where_it_sits_as_nvidia_s_driver_does", "-10DE"},
 };
 const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 
 ClExtensionPolicy::ClExtensionPolicy(const Row *rows, uint32_t count)
-    : rows_(rows), count_(rows != nullptr ? count : 0u)
+    : rows_(rows), count_(rows != nullptr ? count : 0u), vendor_(0u)
 {
     AV_SCOPE("ClExtensionPolicy::ClExtensionPolicy");
     if (count_ > max_rows) count_ = max_rows;
@@ -106,7 +139,22 @@ bool ClExtensionPolicy::answered_by(const char *host, size_t host_bytes, const R
      * host's cl_khr_gl_sharing, since no Linux OpenCL has a Win32 handle to
      * take and the device opens the object through OpenGL instead
      * (research.md §21). */
-    if (row.host_ != nullptr && same_word(answered_here, row.host_, sizeof answered_here - 1u)) return true;
+    if (row.host_ != nullptr && row.host_[0] == answered_here[0]) {
+        if (row.host_[1] == '\0') return true;
+        /* "-*": answered here once the adapter is described, whatever it is. */
+        if (row.host_[1] == '*' && row.host_[2] == '\0') return vendor_ != 0u;
+        /* "-1002": answered here on an adapter of that PCI vendor. */
+        uint32_t vendor = 0u;
+        for (const char *digit = &row.host_[1]; *digit != '\0'; ++digit) {
+            const char c = *digit;
+            const uint32_t value = c >= '0' && c <= '9'   ? static_cast<uint32_t>(c - '0')
+                                   : c >= 'A' && c <= 'F' ? static_cast<uint32_t>(c - 'A' + 10)
+                                                          : 16u;
+            if (value == 16u) return false;
+            vendor = (vendor << 4u) | value;
+        }
+        return vendor_ != 0u && vendor == vendor_;
+    }
     return offered_by(host, host_bytes, row.host_ != nullptr ? row.host_ : row.name_);
 }
 
@@ -149,6 +197,12 @@ size_t ClExtensionPolicy::report(const char *host, size_t host_bytes, char *into
     }
     into[at] = '\0';
     return needed;
+}
+
+void ClExtensionPolicy::observe_vendor(uint32_t vendor)
+{
+    AV_SCOPE("ClExtensionPolicy::observe_vendor");
+    vendor_ = vendor;
 }
 
 uint32_t ClExtensionPolicy::rows() const

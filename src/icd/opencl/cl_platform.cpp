@@ -1,5 +1,6 @@
 #include "icd/opencl/cl_platform.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 
 #include <CL/cl_ext.h>
@@ -23,10 +24,31 @@ size_t length_of(const char *text)
 
 }  // namespace
 
-ClPlatform::ClPlatform() : dispatch_(nullptr), version_{}, major_(implemented_major), minor_(implemented_minor)
+ClPlatform::ClPlatform()
+    : dispatch_(nullptr), version_{}, name_{}, major_(implemented_major), minor_(implemented_minor)
 {
     AV_SCOPE("ClPlatform::ClPlatform");
     cap_version(implemented_major, implemented_minor);
+    TextBuffer text(name_, sizeof name_);
+    text.append(base_name);
+}
+
+void ClPlatform::observe_adapter(const char *adapter_name)
+{
+    AV_SCOPE("ClPlatform::observe_adapter");
+    if (adapter_name == nullptr || adapter_name[0] == '\0') return;
+    TextBuffer text(name_, sizeof name_);
+    text.append(base_name);
+    text.append(" on ");
+    text.append(adapter_name);
+}
+
+bool ClPlatform::names_an_adapter() const
+{
+    AV_SCOPE("ClPlatform::names_an_adapter");
+    size_t length = 0u;
+    while (base_name[length] != '\0') ++length;
+    return name_[length] != '\0';
 }
 
 void ClPlatform::dispatch_through(const cl_icd_dispatch &table)
@@ -103,7 +125,7 @@ cl_int ClPlatform::info(cl_platform_id platform, cl_platform_info name_asked, si
     switch (name_asked) {
     case CL_PLATFORM_PROFILE: return answer(profile, value_bytes, value, size_ret);
     case CL_PLATFORM_VERSION: return answer(version_, value_bytes, value, size_ret);
-    case CL_PLATFORM_NAME: return answer(name, value_bytes, value, size_ret);
+    case CL_PLATFORM_NAME: return answer(name_, value_bytes, value, size_ret);
     case CL_PLATFORM_VENDOR: return answer(vendor, value_bytes, value, size_ret);
     /* The one query an ICD may not decline: a platform whose suffix cannot be
      * read is dropped by the loader (research §1). */

@@ -4,6 +4,7 @@
 #include "core/support/nt_status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/beam_position.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/escape/umd_adapter_info.hpp"
 
@@ -252,7 +253,75 @@ Status GdiKmt::query_identity(uint32_t adapter, PciIdentity &identity)
     query.PrivateDriverDataSize = sizeof ids;
     const Status status = answer(D3DKMTQueryAdapterInfo(&query));
     identity = PciIdentity(ids.DeviceIds.VendorID, ids.DeviceIds.DeviceID, ids.DeviceIds.SubVendorID,
-                           ids.DeviceIds.SubSystemID);
+                           ids.DeviceIds.SubSystemID, ids.DeviceIds.RevisionID);
+    return status;
+}
+
+Status GdiKmt::query_adapter_location(uint32_t adapter, PciLocation &location)
+{
+    AV_SCOPE("GdiKmt::query_adapter_location");
+    D3DKMT_ADAPTERADDRESS   where = {};
+    D3DKMT_QUERYADAPTERINFO query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_ADAPTERADDRESS;
+    query.pPrivateDriverData = &where;
+    query.PrivateDriverDataSize = sizeof where;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    location = status == Status::ok ? PciLocation(where.BusNumber, where.DeviceNumber, where.FunctionNumber)
+                                   : PciLocation();
+    return status;
+}
+
+Status GdiKmt::query_adapter_name(uint32_t adapter, uint16_t *name, uint32_t capacity)
+{
+    AV_SCOPE("GdiKmt::query_adapter_name");
+    if (name == nullptr || capacity == 0u) return Status::invalid_parameter;
+    name[0] = 0u;
+    D3DKMT_ADAPTERREGISTRYINFO info = {};
+    D3DKMT_QUERYADAPTERINFO    query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_ADAPTERREGISTRYINFO;
+    query.pPrivateDriverData = &info;
+    query.PrivateDriverDataSize = sizeof info;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    if (status != Status::ok) return status;
+    constexpr uint32_t held = sizeof info.AdapterString / sizeof info.AdapterString[0];
+    uint32_t           index = 0u;
+    for (; index + 1u < capacity && index < held && info.AdapterString[index] != 0; ++index)
+        name[index] = static_cast<uint16_t>(info.AdapterString[index]);
+    name[index] = 0u;
+    return Status::ok;
+}
+
+Status GdiKmt::query_segment_sizes(uint32_t adapter, uint64_t &dedicated_video, uint64_t &dedicated_system,
+                                   uint64_t &shared_system)
+{
+    AV_SCOPE("GdiKmt::query_segment_sizes");
+    D3DKMT_SEGMENTSIZEINFO  sizes = {};
+    D3DKMT_QUERYADAPTERINFO query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_GETSEGMENTSIZE;
+    query.pPrivateDriverData = &sizes;
+    query.PrivateDriverDataSize = sizeof sizes;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    const bool   ok = status == Status::ok;
+    dedicated_video = ok ? sizes.DedicatedVideoMemorySize : 0u;
+    dedicated_system = ok ? sizes.DedicatedSystemMemorySize : 0u;
+    shared_system = ok ? sizes.SharedSystemMemorySize : 0u;
+    return status;
+}
+
+Status GdiKmt::query_kmd_driver_version(uint32_t adapter, uint64_t &version)
+{
+    AV_SCOPE("GdiKmt::query_kmd_driver_version");
+    D3DKMT_KMD_DRIVER_VERSION reported = {};
+    D3DKMT_QUERYADAPTERINFO   query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_KMD_DRIVER_VERSION;
+    query.pPrivateDriverData = &reported;
+    query.PrivateDriverDataSize = sizeof reported;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    version = status == Status::ok ? static_cast<uint64_t>(reported.DriverVersion.QuadPart) : 0u;
     return status;
 }
 

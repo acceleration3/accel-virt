@@ -1,5 +1,14 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "icd/opencl/d3d11_bridge.hpp"
+#include "icd/opencl/d3d11_object.hpp"
+
+#include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/memory_segment_group.hpp"
+#include "guest/kmt/pci_identity.hpp"
+#include "guest/kmt/pci_location.hpp"
+#include "icd/common/adapter_string.hpp"
+
 #include "icd/opencl/cl_info_request.hpp"
 
 #include "proto/resources/cl_blob_backing.hpp"
@@ -52,15 +61,19 @@ void report_error(cl_int *error, cl_int value)
     if (error != nullptr) *error = value;
 }
 
+/* The unit CL_DEVICE_GLOBAL_FREE_MEMORY_AMD answers in. */
+constexpr uint64_t kib = 1024u;
+
 }  // namespace
 
 ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      icd::ThreadLock &send_lock, icd::ThreadLock &objects_lock, icd::ThreadLock &blocks_lock,
                      LogSink &log,
                      icd::ServiceThread &watcher_thread, GlShareSource &gl_share, D3dAdapterSource &d3d_adapters,
+                     D3d11Bridge &d3d11,
                      ClIcdBinding &binding)
-    : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), binding_(binding), dispatch_(), platform_(),
-      extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt),
+    : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
+      extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt), kmt_(kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock), device_(0u),
       device_object_(nullptr), device_answers_(), watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), reads_(), refusals_(log)
 {
@@ -117,7 +130,34 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
         if (size_ret != nullptr) *size_ret = sizeof none;
         return CL_SUCCESS;
     }
+    /* Asked before any device exists, the name is found by the adapter's
+     * handle alone - no device is opened for it, which every process asking
+     * would then pay. */
+    if (name == CL_PLATFORM_NAME && !platform_.names_an_adapter()) {
+        AdapterSearch search(kmt_);
+        if (search.find_avgpu(0u) == Status::ok) describe_adapter(kmt_, search.adapter());
+    }
     return platform_.info(platform, name, value_bytes, value, size_ret);
+}
+
+/* What Windows says of the adapter the device is on, which is what the
+ * device's vendor, name and PCI location are (docs/vendor-libraries.md): an
+ * adapter it will not describe leaves those as they were. */
+void ClIcdRoot::describe_adapter(Kmt &kmt, uint32_t adapter)
+{
+    AV_SCOPE("ClIcdRoot::describe_adapter");
+    PciIdentity identity;
+    PciLocation location;
+    uint16_t    name[icd::AdapterString::bytes] = {};
+    if (kmt.query_identity(adapter, identity) != Status::ok ||
+        kmt.query_adapter_location(adapter, location) != Status::ok ||
+        kmt.query_adapter_name(adapter, name, icd::AdapterString::bytes) != Status::ok)
+        return;
+    device_.observe_adapter(identity, location, name);
+    extensions_.observe_vendor(identity.vendor());
+    icd::AdapterString narrow;
+    narrow.take(name);
+    platform_.observe_adapter(narrow.text());
 }
 
 bool ClIcdRoot::spells(const char *name, const char *wanted) const
@@ -192,6 +232,7 @@ Status ClIcdRoot::open_device()
     static_cast<void>(connection_.device(0u).kmt().adapter_luid(
         connection_.device(0u).adapter(), adapter_luid));
     device_.observe_luid(adapter_luid);
+    describe_adapter(connection_.device(0u).kmt(), connection_.device(0u).adapter());
     ClObject *object = nullptr;
     const Status held = objects_.make(ClObject::Kind::device, host_device, context, nullptr, object);
     if (held != Status::ok) {
@@ -281,6 +322,8 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
      * extension that defines the query. */
     if (name == CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR)
         return import_handle_types(*object, value_bytes, value, size_ret);
+    if (name == free_memory_amd && device_.on_vendor(ClDeviceReport::amd_vendor))
+        return free_memory(value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;
     return host_device_info(*wire, *object, name, value_bytes, value, size_ret);
@@ -290,6 +333,21 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
  * caller's room, so the answer kept is whole. A query refused as an invalid
  * value - an unknown name, or an answer longer than that room - is asked again
  * as the caller put it, so the caller gets the host's own answer to it. */
+cl_int ClIcdRoot::free_memory(size_t value_bytes, void *value, size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::free_memory");
+    uint64_t budget = 0u;
+    uint64_t usage = 0u;
+    if (connection_.device(0u).kmt().query_video_memory(connection_.device(0u).adapter(), MemorySegmentGroup::local,
+                                                       budget, usage) != Status::ok)
+        return CL_OUT_OF_RESOURCES;
+    /* Nothing says how the free memory is broken up, so the largest block is
+     * all of it, as AMD's own driver answers on an idle GPU. */
+    const size_t free_kib = static_cast<size_t>((budget > usage ? budget - usage : 0u) / kib);
+    const size_t answer[2] = {free_kib, free_kib};
+    return ClInfoRequest(value_bytes, value, size_ret).give(answer, sizeof answer);
+}
+
 cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClObject &device, cl_device_info name,
                                    size_t value_bytes, void *value, size_t *size_ret)
 {
@@ -465,9 +523,9 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     static constexpr uint64_t allowed[] = {
         static_cast<uint64_t>(CL_CONTEXT_PLATFORM), static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC),
         static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR),
-        static_cast<uint64_t>(d3d10_context_device)};
+        static_cast<uint64_t>(d3d10_context_device), static_cast<uint64_t>(d3d11_context_device)};
     ClPropertyList            list;
-    const cl_int              judged_list = judge(properties, allowed, 5u, list);
+    const cl_int              judged_list = judge(properties, allowed, 6u, list);
     if (judged_list != CL_SUCCESS) {
         report_error(error, judged_list);
         return nullptr;
@@ -486,6 +544,17 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, shared);
         return nullptr;
     }
+    void        *d3d11_device = nullptr;
+    const cl_int d3d11_shared = d3d11_device_for(list, d3d11_device);
+    if (d3d11_shared != CL_SUCCESS) {
+        report_error(error, d3d11_shared);
+        return nullptr;
+    }
+    /* A context may share with OpenGL and Direct3D 11 both. The extensions
+     * say CL_INVALID_OPERATION, and AMD's and NVIDIA's drivers make the
+     * context anyway - DaVinci Resolve asks for exactly that, and gets no GPU
+     * when refused. The two never meet: GL objects are the host's share
+     * group's, and Direct3D 11 ones are copied through the device. */
     uint64_t named = 0u;
     if (list.names(static_cast<uint64_t>(CL_CONTEXT_PLATFORM), named) && named != 0u &&
         !platform_.names_this(reinterpret_cast<cl_platform_id>(named))) {
@@ -538,6 +607,11 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     }
     void *const wrapped = wrap(*wire, ClObject::Kind::context, host_context, context, nullptr, error);
     if (wrapped == nullptr) static_cast<void>(contexts_.destroy(context));
+    /* Held for the context's life: every create and copy on it uses it. */
+    if (wrapped != nullptr && d3d11_device != nullptr) {
+        context->d3d11().share_with(d3d11_device);
+        d3d11_.hold(d3d11_device);
+    }
     lock_.release();
     return static_cast<cl_context>(wrapped);
 }
@@ -579,6 +653,13 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
     GuestClContext *const context = held->context();
     const uint64_t        wire_handle = held->wire();
     const bool            last = held->references() == 1u;
+    /* One over a Direct3D 11 resource lets go of the resource, which the
+     * extension's reference is the cl_mem's: whether or not the device can
+     * still be told, since the resource is this process's either way. */
+    if (last && kind == ClObject::Kind::mem && context != nullptr) {
+        void *resource = nullptr;
+        if (context->d3d11().forget(object, resource)) d3d11_.let_go(resource);
+    }
     if (last && kind != ClObject::Kind::context && context != nullptr) {
         ClientTransport *const wire = context->wire();
         if (wire != nullptr) {
@@ -626,6 +707,7 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
          * their transport is about to go, and asking the host over a torn
          * down one is what would happen otherwise. */
         watcher_.forget_context(freed->wire());
+        if (freed->d3d11().device() != nullptr) d3d11_.let_go(freed->d3d11().device());
         /* Its objects are gone from the table; its transport and everything
          * the host held on it go now. */
         static_cast<void>(contexts_.destroy(freed));
@@ -1554,6 +1636,13 @@ cl_int ClIcdRoot::noted(const char *entry_point, cl_int result)
     return result;
 }
 
+cl_int ClIcdRoot::noted_query(const char *entry_point, uint32_t query, cl_int result)
+{
+    AV_SCOPE("ClIcdRoot::noted_query");
+    refusals_.note_query(entry_point, query, result);
+    return result;
+}
+
 cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t value_bytes, void *value,
                                size_t *size_ret)
 {
@@ -1583,9 +1672,51 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
         const uint32_t        values = held->context()->properties(laid, ClPropertyList::max_pairs * 2u + 1u);
         return asked.give(laid, values * sizeof(cl_context_properties));
     }
+    /* Whether a resource made to be shared would be faster to share: not
+     * here, where every object is copied (docs/d3d11-sharing.md). Asked only
+     * of a context made from Direct3D 11. */
+    case d3d11_prefer_shared: {
+        if (held->context()->d3d11().device() == nullptr) return CL_INVALID_VALUE;
+        const cl_bool no = CL_FALSE;
+        return asked.give(&no, sizeof no);
+    }
     default:
         return CL_INVALID_VALUE;
     }
+}
+
+cl_int ClIcdRoot::queue_info(cl_command_queue queue, cl_command_queue_info name, size_t value_bytes, void *value,
+                             size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::queue_info");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    const ClInfoRequest asked(value_bytes, value, size_ret);
+    switch (name) {
+    case CL_QUEUE_CONTEXT: {
+        const cl_context owner = reinterpret_cast<cl_context>(held->nearest(ClObject::Kind::context));
+        return asked.give(&owner, sizeof owner);
+    }
+    case CL_QUEUE_DEVICE: {
+        const cl_device_id device = reinterpret_cast<cl_device_id>(device_object_);
+        return asked.give(&device, sizeof device);
+    }
+    case CL_QUEUE_REFERENCE_COUNT: {
+        lock_.acquire();
+        const cl_uint count = held->references();
+        lock_.release();
+        return asked.give(&count, sizeof count);
+    }
+    case CL_QUEUE_DEVICE_DEFAULT: {
+        const cl_command_queue none = nullptr;
+        return asked.give(&none, sizeof none);
+    }
+    default:
+        break;
+    }
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::av_clGetCommandQueueInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
 }
 
 cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_bytes, void *value,
@@ -1622,6 +1753,12 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
     }
     /* The host made a buffer over the application's memory as a copy of it,
      * and says so; the application asked for its memory to be used. */
+    case d3d11_resource_info: {
+        const D3d11Object *const made = d3d11_object_of(*held);
+        if (made == nullptr) return invalid_d3d11_resource;
+        void *const resource = made->resource();
+        return asked.give(&resource, sizeof resource);
+    }
     case CL_MEM_FLAGS: {
         ClientTransport *const flags_wire = wire_of(*held);
         if (flags_wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -1673,6 +1810,12 @@ cl_int ClIcdRoot::image_info(cl_mem image, cl_image_info name, size_t value_byte
     if (name == CL_IMAGE_BUFFER) {
         const cl_mem none = nullptr;
         return ClInfoRequest(value_bytes, value, size_ret).give(&none, sizeof none);
+    }
+    if (name == d3d11_subresource_info) {
+        const D3d11Object *const made = d3d11_object_of(*held);
+        if (made == nullptr) return invalid_d3d11_resource;
+        const cl_uint subresource = made->subresource();
+        return ClInfoRequest(value_bytes, value, size_ret).give(&subresource, sizeof subresource);
     }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -2360,6 +2503,12 @@ cl_int ClIcdRoot::device_ids_from_d3d10(cl_platform_id platform, cl_uint source,
         return CL_INVALID_VALUE;
     const uint64_t luid =
         source == d3d10_device_source ? d3d_adapters_.device_luid(object) : d3d_adapters_.adapter_luid(object);
+    return device_ids_for_luid(luid, devices, num_devices);
+}
+
+cl_int ClIcdRoot::device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_uint *num_devices)
+{
+    AV_SCOPE("ClIcdRoot::device_ids_for_luid");
     lock_.acquire();
     const Status opened = open_device();
     lock_.release();

@@ -36,6 +36,7 @@
 #include "icd/opencl/cl_refusal_log.hpp"
 #include "icd/opencl/cl_platform.hpp"
 #include "icd/opencl/cl_property_list.hpp"
+#include "icd/opencl/d3d11_resource.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 
 #include <CL/cl.h>
@@ -63,6 +64,8 @@ namespace av::clicd {
 class ClArenaBlocks;
 class ClBufferRect;
 
+class D3d11Bridge;
+class D3d11Object;
 class D3dAdapterSource;
 class GlShareSource;
 struct ClIcdRootProbe;
@@ -89,7 +92,7 @@ public:
      * every context's arena blocks' (ClArenaBlocks). */
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
               icd::ThreadLock &objects_lock, icd::ThreadLock &blocks_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
-              D3dAdapterSource &d3d_adapters,
+              D3dAdapterSource &d3d_adapters, D3d11Bridge &d3d11,
               ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;
@@ -116,6 +119,14 @@ public:
                       cl_device_id *devices, cl_uint *num_devices);
     cl_int device_info(cl_device_id device, cl_device_info name, size_t value_bytes, void *value,
                        size_t *size_ret);
+    /* clRetainDevice and clReleaseDevice: the one device is a root device,
+     * which the API keeps no count of, so either is CL_SUCCESS for it. */
+    cl_int device_reference(cl_device_id device);
+    /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD (cl_amd_device_attribute_query), which
+     * the host's OpenCL does not answer: on an AMD adapter, what Windows says
+     * this process may still use of the adapter's own memory, in KiB, as the
+     * total and as the largest block. */
+    static constexpr cl_device_info free_memory_amd = 0x4039u;
 
     /* ---- contexts ------------------------------------------------------- */
 
@@ -279,6 +290,42 @@ public:
     cl_mem create_from_d3d10(cl_context context, cl_int *error);
     cl_int enqueue_d3d10_objects(cl_command_queue queue);
 
+    /* ---- cl_khr_d3d11_sharing (docs/d3d11-sharing.md) -------------------- */
+
+    /* The extension's numbers (cl_d3d11.h), which portable code cannot
+     * include: it includes d3d11.h. */
+    static constexpr cl_uint d3d11_device_source = 0x4019u;
+    static constexpr cl_uint d3d11_adapter_source = 0x401Au;
+    static constexpr cl_uint d3d11_preferred_devices = 0x401Bu;
+    static constexpr cl_uint d3d11_all_devices = 0x401Cu;
+    static constexpr cl_uint d3d11_context_device = 0x401Du;
+    static constexpr cl_uint d3d11_resource_info = 0x401Eu;
+    static constexpr cl_uint d3d11_subresource_info = 0x401Fu;
+    static constexpr cl_uint d3d11_prefer_shared = 0x402Du;
+    static constexpr cl_int  invalid_d3d11_device = -1006;
+    static constexpr cl_int  invalid_d3d11_resource = -1007;
+
+    /* clGetDeviceIDsFromD3D11KHR, answered as Direct3D 10's is. */
+    cl_int device_ids_from_d3d11(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
+                                 cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices);
+    /* A cl_mem over an ID3D11Buffer of the device `context` was made from: an
+     * ordinary buffer of the host's, its size, which acquire and release copy
+     * the resource's bytes into and back out of. */
+    cl_mem create_from_d3d11_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error);
+    /* The same over one subresource of an ID3D11Texture2D or ID3D11Texture3D,
+     * `kind` saying which the application called for: an image of that
+     * subresource's mip level, in the format the extension maps its DXGI format
+     * to. */
+    cl_mem create_from_d3d11_texture(cl_context context, cl_mem_flags flags, void *resource, cl_uint subresource,
+                                     D3d11Resource::Kind kind, cl_int *error);
+    /* Acquire copies each object's resource in; release drains the queue and
+     * copies each back. Both wait for the wait list first, and both are done
+     * when they return, so the event they answer is a marker. */
+    cl_int enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                 const cl_event *events, cl_event *event);
+    cl_int enqueue_release_d3d11(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                 const cl_event *events, cl_event *event);
+
     /* ---- the queue's own points ------------------------------------------ */
 
     /* A marker or a barrier behind `count` events of this context, named to the
@@ -339,10 +386,17 @@ public:
     /* `result`, and in the log the first time an entry point answers it, when
      * it is an error. */
     cl_int   noted(const char *entry_point, cl_int result);
+    /* The same for a query, naming which was asked. */
+    cl_int   noted_query(const char *entry_point, uint32_t query, cl_int result);
     /* clGetContextInfo, clGetMemObjectInfo and clGetImageInfo: an answer that
      * names an object is this ICD's handle for it; the rest is the host's. */
     cl_int   context_info(cl_context context, cl_context_info name, size_t value_bytes, void *value,
                           size_t *size_ret);
+    /* clGetCommandQueueInfo: the context, the device and the count are this
+     * ICD's own; no queue here has a default device queue; the rest is the
+     * host's answer about its queue. */
+    cl_int   queue_info(cl_command_queue queue, cl_command_queue_info name, size_t value_bytes, void *value,
+                        size_t *size_ret);
     cl_int   mem_object_info(cl_mem object, cl_mem_info name, size_t value_bytes, void *value,
                              size_t *size_ret);
     cl_int   image_info(cl_mem image, cl_image_info name, size_t value_bytes, void *value, size_t *size_ret);
@@ -403,6 +457,8 @@ private:
                                          size_t *size_ret);
     cl_int           device_extensions(ClObject &device, size_t value_bytes, void *value,
                                        size_t *size_ret);
+    /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD, from D3DKMTQueryVideoMemoryInfo. */
+    cl_int           free_memory(size_t value_bytes, void *value, size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
      * no property named twice, and every name one of `allowed`. */
     template <typename Property>
@@ -422,6 +478,40 @@ private:
      * transfer that asks the host to block does first. `driven`: the queue's
      * context is one the driver wakes (GuestClContext::wakes). */
     cl_int           drain(ClientTransport &wire, uint64_t queue, bool driven);
+    /* The adapter's vendor, name and PCI location, to the device report, the
+     * extension policy and the platform name. */
+    void             describe_adapter(Kmt &kmt, uint32_t adapter);
+    /* clGetDeviceIDsFromD3D10KHR's and 11's answer for an object on the adapter
+     * of `luid`: this ICD's device, or CL_DEVICE_NOT_FOUND. */
+    cl_int           device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_uint *num_devices);
+    /* The ID3D11Device `list` names, into `device`: null for none, and
+     * CL_INVALID_D3D11_DEVICE_KHR for an object that is not one or is on
+     * another adapter. */
+    cl_int           d3d11_device_for(const ClPropertyList &list, void *&device);
+    /* What a create over `resource` is judged by: `context` made from a
+     * Direct3D 11 device, `flags` only the three access flags, `resource` of
+     * `kind` and made on that device with `subresource` one of its, and no
+     * cl_mem over it yet. Its owner and description into `owner` and
+     * `described`. */
+    cl_int           d3d11_resource(cl_context context, cl_mem_flags flags, void *resource, uint32_t subresource,
+                                    D3d11Resource::Kind kind, GuestClContext *&owner, D3d11Resource &described);
+    /* `made` kept as the object over `subresource` of `resource`, which it now
+     * holds a reference to; given back, and null with the error, when it
+     * cannot be kept. */
+    cl_mem           d3d11_object(cl_mem made, GuestClContext &owner, void *resource, uint32_t subresource,
+                                  const D3d11Resource &described, cl_mem_flags flags, cl_int *error);
+    /* The queue an acquire or release names, its context made from Direct3D 11
+     * and still able to send, and its wait list waited for. */
+    cl_int           d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_event *events, ClObject *&held,
+                                 GuestClContext *&context, ClientTransport *&wire);
+    /* Each object's resource copied into it, and each copied back: the
+     * objects of `context`, judged by the caller. */
+    cl_int           d3d11_copy_in(cl_command_queue queue, GuestClContext &context, const cl_mem *objects,
+                                   cl_uint count);
+    cl_int           d3d11_copy_out(cl_command_queue queue, GuestClContext &context, const cl_mem *objects,
+                                    cl_uint count);
+    /* The object `mem` is over a Direct3D 11 resource as, or null. */
+    D3d11Object     *d3d11_object_of(ClObject &mem);
     /* A drain, unless the queue is known idle; idle after one (ClObject). */
     [[nodiscard]] cl_int drain_unless_idle(ClientTransport &wire, ClObject &queue);
     /* The queue, looked up for a command that leaves work on it: it is no
@@ -496,12 +586,15 @@ private:
     LogSink          &log_;
     GlShareSource         &gl_share_;
     D3dAdapterSource      &d3d_adapters_;
+    D3d11Bridge           &d3d11_;
     ClIcdBinding          &binding_;
     ClDispatchTable        dispatch_;
     ClPlatform             platform_;
     ClExtensionPolicy      extensions_;
     ClObjectTable          objects_;
     icd::IcdConnection     connection_;
+    /* What the platform name is found with before a device exists. */
+    Kmt                   &kmt_;
     /* The NT handles this process holds for shared objects, which every
      * context's imports resolve through (feature 053). */
     icd::SharedHandles     shared_handles_;

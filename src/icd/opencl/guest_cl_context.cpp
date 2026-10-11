@@ -19,7 +19,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       link_(connection), gl_share_(0u), wakes_(false),
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
       locked_(), blocks_(blocks_lock), staging_(blocks_lock),
-      svm_(memory), external_(handles, memory, log), mappings_(), properties_(), state_(State::created)
+      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(), properties_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -173,6 +173,12 @@ ClExternalMemory &GuestClContext::external()
     return external_;
 }
 
+ClD3d11Objects &GuestClContext::d3d11()
+{
+    AV_SCOPE("GuestClContext::d3d11");
+    return d3d11_;
+}
+
 uint32_t GuestClContext::guest_device() const
 {
     AV_SCOPE("GuestClContext::guest_device");
@@ -282,13 +288,14 @@ void GuestClContext::report(StateWriter &writer) const
     writer.number("mappings", mappings());
     svm_.report(writer);
     external_.report(writer);
+    d3d11_.report(writer);
     writer.close();
 }
 
 bool GuestClContext::invariants_hold() const
 {
     AV_SCOPE("GuestClContext::invariants_hold");
-    if (!svm_.invariants_hold() || !external_.invariants_hold()) return false;
+    if (!svm_.invariants_hold() || !external_.invariants_hold() || !d3d11_.invariants_hold()) return false;
     for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
         if (!mappings_[slot].invariants_hold()) return false;
         /* No two live mappings answer the same pointer: an unmap would then

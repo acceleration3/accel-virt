@@ -13,8 +13,11 @@ DEVICE = ROOT / "src" / "device" / "qemu" / "virtio-gpu-pci-av.c"
 DRIVER_BUILD = ROOT / "src" / "km" / "CMakeLists.txt"
 MANIFEST = ROOT / "src" / "um" / "vulkan" / "avvk.json"
 PACKAGE_FILES = ("avgpu.sys", "avvk.dll", "avvk.json", "avgl.dll", "avcl.dll", "avumd.dll",
+                 # The vendor libraries, copied to System32 (docs/vendor-libraries.md).
+                 "atiadlxx.dll", "nvapi64.dll",
                  # What a WoW64 process loads.
-                 "avvk32.dll", "avvk32.json", "avgl32.dll", "avcl32.dll", "avumd32.dll")
+                 "avvk32.dll", "avvk32.json", "avgl32.dll", "avcl32.dll", "avumd32.dll", "atiadlxy.dll",
+                 "nvapi.dll")
 REDHAT_QUMRANET = 0x1AF4
 VIRTIO_GPU = 0x1050
 

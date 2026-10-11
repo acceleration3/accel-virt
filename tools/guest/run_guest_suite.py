@@ -61,8 +61,9 @@ GUEST_DIRECTORY = "C:\\av"
 PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
 # The package's files and their SHA-256, as provision.ps1 reads them.
 PACKAGE_MANIFEST = "package.sha256"
-# The 32-bit drivers avgpu.inf's *Wow values name, from --drivers32.
-DRIVERS32 = ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll")
+# The 32-bit drivers avgpu.inf's *Wow values name, and the 32-bit vendor
+# libraries it copies to SysWOW64, from --drivers32.
+DRIVERS32 = ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll", "atiadlxy.dll", "nvapi.dll")
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 REBOOT_REQUIRED = 3010
 SUMMARY = re.compile(rb"^avtest: (\d+) passed, (\d+) failed$", re.M)
@@ -279,10 +280,15 @@ def arguments():
                         help="the OpenCL ICD the package names (feature 052)")
     parser.add_argument("--umd", default=str(ROOT / "build" / "guest" / "avumd.dll"),
                         help="the Direct3D user-mode driver the package names (feature 055)")
+    parser.add_argument("--adl", default=str(ROOT / "build" / "guest" / "atiadlxx.dll"),
+                        help="the AMD Display Library the package copies to System32 "
+                             "(docs/vendor-libraries.md)")
+    parser.add_argument("--nvapi", default=str(ROOT / "build" / "guest" / "nvapi64.dll"),
+                        help="the NVAPI library the package copies to System32 (docs/vendor-libraries.md)")
     parser.add_argument("--drivers32", default=str(ROOT / "build" / "guest32"),
                         help="where the 32-bit drivers a WoW64 process loads were built: avvk32.dll, "
-                             "avgl32.dll, avcl32.dll and avumd32.dll, which the package names beside "
-                             "the 64-bit ones")
+                             "avgl32.dll, avcl32.dll, avumd32.dll, atiadlxy.dll and nvapi.dll, which the "
+                             "package names beside the 64-bit ones")
     parser.add_argument("--icd32-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "avvk32.json"))
     parser.add_argument("--provision", default=str(ROOT / "tools" / "guest" / "provision.ps1"))
     parser.add_argument("--firmware", default="/usr/share/edk2/x64/OVMF_CODE.4m.fd")
@@ -820,7 +826,7 @@ class GuestRun:
         if not self.args.prepare_image:
             required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest,
                          self.args.gl_icd, self.args.cl_icd, self.args.test, self.args.inspect,
-                         self.args.icd32_manifest]
+                         self.args.icd32_manifest, self.args.adl, self.args.nvapi]
             required += [str(pathlib.Path(self.args.drivers32) / name) for name in DRIVERS32]
         if self.args.vulkan:
             required.append(self.args.probe)
@@ -1076,6 +1082,8 @@ class GuestRun:
                       (self.args.gl_icd, PACKAGE_DIRECTORY + "\\avgl.dll"),
                       (self.args.cl_icd, PACKAGE_DIRECTORY + "\\avcl.dll"),
                       (self.args.umd, PACKAGE_DIRECTORY + "\\avumd.dll"),
+                      (self.args.adl, PACKAGE_DIRECTORY + "\\atiadlxx.dll"),
+                      (self.args.nvapi, PACKAGE_DIRECTORY + "\\nvapi64.dll"),
                       (self.args.icd32_manifest, PACKAGE_DIRECTORY + "\\avvk32.json")]
             files += [(str(pathlib.Path(self.args.drivers32) / name), PACKAGE_DIRECTORY + "\\" + name)
                       for name in DRIVERS32]

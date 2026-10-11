@@ -100,8 +100,9 @@ TEST(cl_extension_policy, a_row_answered_here_is_reported_whatever_the_host_offe
   const char host[] = "cl_khr_icd";
   policy.report(host, sizeof host, into, sizeof into);
   CHECK_EQ(std::strcmp(into, "cl_khr_d3d10_sharing"), 0);
-  /* And the marker is the whole host name: a host extension called "-x" is a
-   * host extension like any other. */
+  /* And a marker the policy does not read - neither a vendor nor "*" - is no
+   * host extension either: no host names one starting with "-", and the row
+   * is reported nowhere. */
   const ClExtensionPolicy::Row dashed[] = {
       {"cl_khr_d3d10_sharing", 1u, "cl_extension_policy.a_row_answered_here_is_reported_whatever_the_host_offers",
        "-x"}};
@@ -174,6 +175,39 @@ TEST(cl_extension_policy, a_policy_given_no_rows_but_a_count_holds_none)
   CHECK_EQ(policy.rows(), 0u);
   CHECK(policy.invariants_hold());
   CHECK(!policy.reportable("cl_khr_fp64")); }
+
+/* A vendor's own attribute query is answered here on that vendor's adapter
+ * alone ("-1002"), and the PCI location once the adapter is described at all
+ * ("-*"): before the device's adapter is known, neither. */
+TEST(cl_extension_policy, a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one)
+{ const ClExtensionPolicy::Row gated[] = {
+      {"cl_khr_pci_bus_info", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-*"},
+      {"cl_amd_device_attribute_query", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-1002"},
+      {"cl_nv_device_attribute_query", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-10DE"},
+      {"cl_x_lowercase", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-10de"},
+      /* Neither "*" alone nor a vendor: below the digits, between the
+       * digits and the letters, and "*" with more after it. */
+      {"cl_x_below_digits", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-#"},
+      {"cl_x_between", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-10:E"},
+      {"cl_x_star_and_more", 1u, "cl_extension_policy.a_vendor_s_row_is_reported_on_its_adapter_and_a_located_row_on_any_described_one", "-*1"},
+  };
+  ClExtensionPolicy policy(gated, 7u);
+  char into[160] = {};
+  CHECK_EQ(policy.report(nullptr, 0u, into, sizeof into), 1u);
+  CHECK_EQ(into[0], '\0');
+  policy.observe_vendor(0x1002u);
+  static_cast<void>(policy.report(nullptr, 0u, into, sizeof into));
+  CHECK_EQ(std::strcmp(into, "cl_khr_pci_bus_info cl_amd_device_attribute_query"), 0);
+  policy.observe_vendor(0x10DEu);
+  static_cast<void>(policy.report(nullptr, 0u, into, sizeof into));
+  CHECK_EQ(std::strcmp(into, "cl_khr_pci_bus_info cl_nv_device_attribute_query"), 0);
+  /* A host offering the vendor's extension changes nothing: the row is the
+   * ICD's to answer, on its adapter. */
+  policy.observe_vendor(0x8086u);
+  const char host[] = "cl_amd_device_attribute_query";
+  static_cast<void>(policy.report(host, sizeof host, into, sizeof into));
+  CHECK_EQ(std::strcmp(into, "cl_khr_pci_bus_info"), 0);
+  CHECK(policy.invariants_hold()); }
 
 TEST(cl_extension_policy, this_icd_reports_no_extension_yet_and_that_is_the_table)
 { /* cl_khr_icd is the loader's own contract rather than something an

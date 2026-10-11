@@ -44,6 +44,12 @@ bool DeviceIdentity::offers(uint64_t feature) const
     return known_ && started_on_.has_feature(feature);
 }
 
+bool DeviceIdentity::integrated() const
+{
+    AV_SCOPE("DeviceIdentity::integrated");
+    return known_ && started_on_.gpu().device_type() == GpuIdentity::integrated_gpu;
+}
+
 bool DeviceIdentity::changed() const
 {
     AV_SCOPE("DeviceIdentity::changed");

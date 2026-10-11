@@ -63,12 +63,20 @@ cl_int CL_API_CALL get_device_ids(cl_platform_id platform, cl_device_type type, 
     return root.noted("clGetDeviceIDs", root.device_ids(platform, type, num_entries, devices, num_devices));
 }
 
+cl_int CL_API_CALL get_command_queue_info(cl_command_queue queue, cl_command_queue_info name, size_t value_bytes,
+                                          void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_command_queue_info");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted_query("clGetCommandQueueInfo", name, root.queue_info(queue, name, value_bytes, value, size_ret));
+}
+
 cl_int CL_API_CALL get_device_info(cl_device_id device, cl_device_info name, size_t value_bytes,
                                    void *value, size_t *size_ret)
 {
     AV_SCOPE("get_device_info");
     AV_CL_ROOT_OR(CL_INVALID_DEVICE);
-    return root.noted("clGetDeviceInfo", root.device_info(device, name, value_bytes, value, size_ret));
+    return root.noted_query("clGetDeviceInfo", name, root.device_info(device, name, value_bytes, value, size_ret));
 }
 
 cl_context CL_API_CALL create_context(const cl_context_properties *properties, cl_uint num_devices,
@@ -719,6 +727,88 @@ cl_int CL_API_CALL enqueue_release_d3d10(cl_command_queue queue, cl_uint, const 
     return root.noted("clEnqueueReleaseD3D10ObjectsKHR", root.enqueue_d3d10_objects(queue));
 }
 
+/* cl_khr_d3d11_sharing's six (docs/d3d11-sharing.md), with the Direct3D
+ * objects as the pointers they are, as for Direct3D 10. */
+cl_int CL_API_CALL get_device_ids_from_d3d11(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
+                                             cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices)
+{
+    AV_SCOPE("get_device_ids_from_d3d11");
+    AV_CL_ROOT_OR(CL_INVALID_PLATFORM);
+    return root.noted("clGetDeviceIDsFromD3D11KHR",
+                      root.device_ids_from_d3d11(platform, source, object, set, num_entries, devices, num_devices));
+}
+
+cl_mem CL_API_CALL create_from_d3d11_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error)
+{
+    AV_SCOPE("create_from_d3d11_buffer");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D11BufferKHR", error);
+    return cl_icd_binding.root().create_from_d3d11_buffer(context, flags, resource, noted.pointer());
+}
+
+cl_mem CL_API_CALL create_from_d3d11_texture2d(cl_context context, cl_mem_flags flags, void *resource,
+                                               cl_uint subresource, cl_int *error)
+{
+    AV_SCOPE("create_from_d3d11_texture2d");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D11Texture2DKHR", error);
+    return cl_icd_binding.root().create_from_d3d11_texture(context, flags, resource, subresource,
+                                                           D3d11Resource::Kind::texture2d, noted.pointer());
+}
+
+cl_mem CL_API_CALL create_from_d3d11_texture3d(cl_context context, cl_mem_flags flags, void *resource,
+                                               cl_uint subresource, cl_int *error)
+{
+    AV_SCOPE("create_from_d3d11_texture3d");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromD3D11Texture3DKHR", error);
+    return cl_icd_binding.root().create_from_d3d11_texture(context, flags, resource, subresource,
+                                                           D3d11Resource::Kind::texture3d, noted.pointer());
+}
+
+cl_int CL_API_CALL enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                         const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("enqueue_acquire_d3d11");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueAcquireD3D11ObjectsKHR",
+                      root.enqueue_acquire_d3d11(queue, count, objects, waits, events, event));
+}
+
+cl_int CL_API_CALL enqueue_release_d3d11(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                         const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("enqueue_release_d3d11");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueReleaseD3D11ObjectsKHR",
+                      root.enqueue_release_d3d11(queue, count, objects, waits, events, event));
+}
+
+/* The device's retain and release, which answer alike for the root device
+ * this ICD shows; two entries so the log names the one an application called. */
+cl_int CL_API_CALL retain_device(cl_device_id device)
+{
+    AV_SCOPE("retain_device");
+    AV_CL_ROOT_OR(CL_INVALID_DEVICE);
+    return root.noted("clRetainDevice", root.device_reference(device));
+}
+
+cl_int CL_API_CALL release_device(cl_device_id device)
+{
+    AV_SCOPE("release_device");
+    AV_CL_ROOT_OR(CL_INVALID_DEVICE);
+    return root.noted("clReleaseDevice", root.device_reference(device));
+}
+
 /* cl_khr_gl_sharing: each slot of cl_icd_dispatch, and clGetGLContextInfoKHR
  * also by name, since an application may ask the ICD for it directly. */
 cl_mem CL_API_CALL create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)
@@ -916,7 +1006,22 @@ void ClDispatchTable::fill()
         reinterpret_cast<decltype(table_.clEnqueueAcquireD3D10ObjectsKHR)>(&enqueue_acquire_d3d10);
     table_.clEnqueueReleaseD3D10ObjectsKHR =
         reinterpret_cast<decltype(table_.clEnqueueReleaseD3D10ObjectsKHR)>(&enqueue_release_d3d10);
-    claimed_ = 82u;
+    table_.clGetDeviceIDsFromD3D11KHR =
+        reinterpret_cast<decltype(table_.clGetDeviceIDsFromD3D11KHR)>(&get_device_ids_from_d3d11);
+    table_.clCreateFromD3D11BufferKHR =
+        reinterpret_cast<decltype(table_.clCreateFromD3D11BufferKHR)>(&create_from_d3d11_buffer);
+    table_.clCreateFromD3D11Texture2DKHR =
+        reinterpret_cast<decltype(table_.clCreateFromD3D11Texture2DKHR)>(&create_from_d3d11_texture2d);
+    table_.clCreateFromD3D11Texture3DKHR =
+        reinterpret_cast<decltype(table_.clCreateFromD3D11Texture3DKHR)>(&create_from_d3d11_texture3d);
+    table_.clEnqueueAcquireD3D11ObjectsKHR =
+        reinterpret_cast<decltype(table_.clEnqueueAcquireD3D11ObjectsKHR)>(&enqueue_acquire_d3d11);
+    table_.clEnqueueReleaseD3D11ObjectsKHR =
+        reinterpret_cast<decltype(table_.clEnqueueReleaseD3D11ObjectsKHR)>(&enqueue_release_d3d11);
+    table_.clRetainDevice = &retain_device;
+    table_.clReleaseDevice = &release_device;
+    table_.clGetCommandQueueInfo = &get_command_queue_info;
+    claimed_ = 91u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;

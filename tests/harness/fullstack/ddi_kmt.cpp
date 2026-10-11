@@ -22,6 +22,7 @@
 #include "miniport/driver/ddi_table.hpp"
 #include "core/support/nt_status.hpp"
 #include "guest/kmt/beam_position.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/escape/tail_publish_record.hpp"
 #include "proto/escape/umd_adapter_info.hpp"
@@ -226,6 +227,33 @@ Status DdiKmt::query_identity(std::uint32_t adapter, PciIdentity &identity)
     identity = PciIdentity(config_u16(config, 0u), config_u16(config, 2u), config_u16(config, subsystem_vendor_offset),
                            config_u16(config, subsystem_offset));
     return refuse(Status::ok);
+}
+
+/* dxgkrnl answers these from PnP and the registry, neither of which the
+ * full-stack rig plays. */
+Status DdiKmt::query_adapter_location(std::uint32_t, PciLocation &location)
+{
+    location = PciLocation();
+    return refuse(Status::not_supported);
+}
+
+Status DdiKmt::query_adapter_name(std::uint32_t, std::uint16_t *name, std::uint32_t capacity)
+{
+    if (name != nullptr && capacity != 0u) name[0] = 0u;
+    return refuse(Status::not_supported);
+}
+
+Status DdiKmt::query_kmd_driver_version(std::uint32_t, std::uint64_t &version)
+{
+    version = 0u;
+    return refuse(Status::not_supported);
+}
+
+Status DdiKmt::query_segment_sizes(std::uint32_t, std::uint64_t &dedicated_video, std::uint64_t &dedicated_system,
+                                   std::uint64_t &shared_system)
+{
+    dedicated_video = dedicated_system = shared_system = 0u;
+    return refuse(Status::not_supported);
 }
 
 /* KMT_DRIVERVERSION from DRIVERCAPS.WDDMVersion: 0x3200 is 3200. */

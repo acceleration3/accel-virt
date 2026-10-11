@@ -47,8 +47,8 @@ miniport is unit tested), `docs/roadmap.md` (what to build, in order).
   `executor`; `icd` never includes `guest/suite` or `guest/probe`.
 - **Directory names are rules.** A directory named `shim` is exempt from the
   coverage gate and holds translation only; `generated` holds generator
-  output; `src/miniport/ddi/` and `src/icd/d3d/ddi/` are record directories.
-  Never reuse those names for anything else.
+  output; `src/miniport/ddi/`, `src/icd/d3d/ddi/` and `src/icd/vendor/ddi/`
+  are record directories. Never reuse those names for anything else.
 - **Moving files** is `git mv` plus every path the build and gates name
   (`docs/architecture.md`, "Paths the build and the gates name"), with the
   unit test moved to the mirrored path in the same change.
@@ -78,7 +78,9 @@ root behind the `Drv*` exports (`src/um/opengl/avgl_exports.cpp`) and
 `GlIcdBinding`'s pointer to it (`src/icd/opengl/gl_hooks.cpp`), and the D3D
 user-mode driver's root behind `OpenAdapter10_2` and `OpenAdapter12`
 (`src/um/d3d/avumd_exports.cpp`) with `UmdBinding`'s pointer to it
-(`src/icd/d3d/umd_binding.cpp`), and av-renderer's `RendererProcess` behind its
+(`src/icd/d3d/umd_binding.cpp`), the ADL and NVAPI libraries' roots behind
+their exports (`src/um/vendor/adl_exports.cpp`,
+`src/um/vendor/nvapi_exports.cpp`), and av-renderer's `RendererProcess` behind its
 `main` (`src/device/shim/renderer_main.cpp`) are the only
 process-lifetime state (constitution III). Each is a C entry point with
 nowhere to put a `this`, and each is one `ObjectStorage` in the single
@@ -220,8 +222,10 @@ Changed, because the DDI boundary is C structures:
   `DXGK_CHILD_DESCRIPTOR`, ...), proven in `src/km/ddi_record_layout.cpp`;
   `src/icd/d3d/ddi/` holds the Direct3D runtimes'
   (`D3D10DDIARG_OPENADAPTER`, `DXGI1_6_1_DDI_BASE_FUNCTIONS`, ...), proven in
-  `src/um/d3d/umd_record_layout.cpp`. Their fields are public and keep the
-  WDK's names so they grep to the header. A record declares no member
+  `src/um/d3d/umd_record_layout.cpp`; `src/icd/vendor/ddi/` holds ADL's and
+  NVAPI's (`AdapterInfo`, `NV_DISPLAY_DRIVER_MEMORY_INFO`, ...), proven in
+  `src/um/vendor/vendor_record_layout.cpp`. Their fields are public and keep the
+  WDK's or the vendor's names so they grep to the header. A record declares no member
   functions; `tools/check_design.py` enforces both, and
   `tools/header_scan.py`'s `RECORD_DIRECTORIES` is the list.
 

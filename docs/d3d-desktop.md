@@ -133,7 +133,9 @@ width, height, pitch, format), and the UMD's `OpenResource` recognises it
   see: the runtime hands the kernel the buffer, and dxgkrnl has the miniport
   copy it into the window's redirection surface, which DWM reads with the CPU.
   Where the device reads frames of shared surfaces - the miniport answers
-  UMDRIVERPRIVATE with a third word, bit 0 - the driver numbers each present
+  UMDRIVERPRIVATE with a third word, bit 0 (`UmdAdapterInfo`; bit 1 says
+  the host GPU is integrated, for the vendor libraries,
+  docs/vendor-libraries.md) - the driver numbers each present
   of the buffer (`PresentPoint`, or `PresentResource12`'s point), in the
   buffer's command order, and hands the point to the kernel in the present's
   private driver data (`PresentPointRecord`); the miniport names the buffer's

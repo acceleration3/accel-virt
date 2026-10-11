@@ -25,6 +25,7 @@
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/locked_transport.hpp"
+#include "icd/opencl/cl_d3d11_objects.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/mapped_region.hpp"
@@ -135,6 +136,9 @@ public:
     SvmTable        &svm();
     /* The objects another API made that this context imported. */
     ClExternalMemory &external();
+    /* The Direct3D 11 device it was made from, and the objects over that
+     * device's resources (docs/d3d11-sharing.md). */
+    ClD3d11Objects   &d3d11();
     /* The D3DKMT device this context's transport runs on, which is what an
      * open of another process's handle is made against; 0 before the make. */
     uint32_t         guest_device() const;
@@ -190,6 +194,7 @@ private:
     ClArenaBlocks                        staging_;
     SvmTable                             svm_;
     ClExternalMemory                     external_;
+    ClD3d11Objects                       d3d11_;
     MappedRegion                         mappings_[max_mappings];
     ClPropertyList                       properties_;
     State                                state_;

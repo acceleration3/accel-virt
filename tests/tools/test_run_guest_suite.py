@@ -148,12 +148,13 @@ class GuestSuiteRun(unittest.TestCase):
         for name in ("avgpu.sys", "avgpu.pdb", "avvk.dll", "avvk.json", "avtest.exe", "avvkprobe.exe",
                      "avinspect.exe", "avgl.dll", "avglprobe.exe", "avcl.dll", "avclprobe.exe",
                      "OpenCL.dll", "avumd.dll", "avd3d9probe.exe", "avd3d11probe.exe",
-                     "avd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd", "avvk32.json"):
+                     "avd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd", "avvk32.json", "atiadlxx.dll",
+                     "nvapi64.dll"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         # The 32-bit drivers, from a directory of their own as a build makes them.
         self.drivers32 = self.scratch / "guest32"
         self.drivers32.mkdir()
-        for name in ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll"):
+        for name in ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll", "atiadlxy.dll", "nvapi.dll"):
             (self.drivers32 / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
@@ -178,6 +179,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--icd", self.scratch / "avvk.dll", "--icd-manifest", self.scratch / "avvk.json",
                      "--gl-icd", self.scratch / "avgl.dll", "--cl-icd", self.scratch / "avcl.dll",
                      "--umd", self.scratch / "avumd.dll", "--drivers32", self.drivers32,
+                     "--adl", self.scratch / "atiadlxx.dll", "--nvapi", self.scratch / "nvapi64.dll",
                      "--icd32-manifest", self.scratch / "avvk32.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
@@ -218,7 +220,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 15)
+        self.assertEqual(events.count("file"), 19)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\av\\package\\avgpu.sys 900", lines)
         self.assertIn("file C:\\av\\package\\avgpu.inf", "\n".join(lines))
@@ -228,6 +230,10 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("file C:\\av\\package\\avvk.json 900", lines)
         # The OpenGL ICD is in the package too, which names it (feature 050).
         self.assertIn("file C:\\av\\package\\avgl.dll 800", lines)
+        # And the vendor libraries, which the INF copies to System32 and
+        # SysWOW64 (docs/vendor-libraries.md).
+        for name in ("atiadlxx.dll", "nvapi64.dll", "atiadlxy.dll", "nvapi.dll"):
+            self.assertIn(f"file C:\\av\\package\\{name}", "\n".join(lines))
         # And the Direct3D user-mode driver, which the software key names four
         # times over (feature 055).
         self.assertIn("file C:\\av\\package\\avumd.dll 900", lines)
@@ -1903,6 +1909,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--icd", self.scratch / "avvk.dll", "--icd-manifest", self.scratch / "avvk.json",
                      "--gl-icd", self.scratch / "avgl.dll",
                      "--umd", self.scratch / "avumd.dll", "--drivers32", self.drivers32,
+                     "--adl", self.scratch / "atiadlxx.dll", "--nvapi", self.scratch / "nvapi64.dll",
                      "--icd32-manifest", self.scratch / "avvk32.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]

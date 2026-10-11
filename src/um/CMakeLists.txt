@@ -249,6 +249,48 @@ target_link_options(avcl PRIVATE /ENTRY:avcl_entry /DEF:${CMAKE_CURRENT_SOURCE_D
 set_property(TARGET avcl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opencl/avcl.def)
 target_link_libraries(avcl PRIVATE ${AVTEST_IMPORTS})
 
+# atiadlxx.dll and nvapi64.dll, the GPU vendors' management libraries as they
+# describe avgpu's adapters (docs/vendor-libraries.md): what an application
+# that trusts only a GPU its vendor's library vouches for asks. D3DKMT through
+# gdi32, and no trace service, log or crash filter in the processes that load
+# them (vendor/vendor_driver.hpp). Both installed into System32 and SysWOW64
+# by avgpu.inf, under the names applications load them by.
+file(GLOB AV_VENDOR_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/vendor/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp)
+list(APPEND AV_VENDOR_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/thread_lock_hold.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/adapter_string.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/escape/umd_adapter_info.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/wire/wire_reader.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/wire/wire_writer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/srw_lock.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/run_once.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/vendor_record_layout.cpp)
+foreach(vendor adl nvapi)
+  if(vendor STREQUAL "adl")
+    set(vendor_target atiadlxx)
+  else()
+    set(vendor_target nvapi64)
+  endif()
+  add_library(${vendor_target} SHARED ${AV_VENDOR_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/${vendor}_library.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/${vendor}_exports.cpp
+    ${AV_STACK_PROBE} ${AV_CRT_STUBS})
+  add_dependencies(${vendor_target} avtest_imports)
+  set_target_properties(${vendor_target} PROPERTIES PREFIX "")
+  target_include_directories(${vendor_target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+  target_link_options(${vendor_target} PRIVATE /ENTRY:av${vendor}_entry
+                      /DEF:${CMAKE_CURRENT_SOURCE_DIR}/vendor/${vendor}.def)
+  set_property(TARGET ${vendor_target} APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/${vendor}.def)
+  target_link_libraries(${vendor_target} PRIVATE ${AVTEST_IMPORTS})
+endforeach()
+
 # avglprobe.exe, feature 050's experiment through the system opengl32.dll.
 file(GLOB AVGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)
 add_executable(avglprobe ${AVGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp
@@ -463,4 +505,7 @@ if(AV_GUEST_ARCH STREQUAL "x86")
   foreach(driver avvk avgl avcl avumd)
     set_target_properties(${driver} PROPERTIES OUTPUT_NAME ${driver}32)
   endforeach()
+  # The vendors' own 32-bit names, which a 32-bit application loads.
+  set_target_properties(atiadlxx PROPERTIES OUTPUT_NAME atiadlxy)
+  set_target_properties(nvapi64 PROPERTIES OUTPUT_NAME nvapi)
 endif()

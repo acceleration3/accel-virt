@@ -28,6 +28,19 @@ void ClRefusalLog::note_failure(const char *entry_point, int32_t error)
     lines_.name(entry_point, answer.text());
 }
 
+void ClRefusalLog::note_query(const char *entry_point, uint32_t query, int32_t error)
+{
+    AV_SCOPE("ClRefusalLog::note_query");
+    if (entry_point == nullptr || error >= 0 || !lines_.first(entry_point, static_cast<int32_t>(query))) return;
+    char       bytes[48];
+    TextBuffer answer(bytes, sizeof bytes);
+    answer.append("0x");
+    answer.append_hex(query, 4u);
+    answer.append(" answered -");
+    answer.append_decimal(static_cast<uint64_t>(-static_cast<int64_t>(error)));
+    lines_.name(entry_point, answer.text());
+}
+
 void ClRefusalLog::note_map(const char *why, uint64_t bytes, uint32_t held)
 {
     AV_SCOPE("ClRefusalLog::note_map");

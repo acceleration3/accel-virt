@@ -15,6 +15,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_d3d11_bridge.hpp"
 #include "harness/icd/scripted_d3d_adapter_source.hpp"
 #include "harness/icd/scripted_gl_share_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
@@ -49,6 +50,8 @@ public:
     /* Which OpenGL context the rig's process has current. */
     ScriptedGlShareSource &gl_share();
     ScriptedD3dAdapterSource &d3d_adapters();
+    /* What the rig's Direct3D 11 device and resources are. */
+    ScriptedD3d11Bridge &d3d11();
     clicd::ClIcdRoot    &root();
     FakeClLoader        &loader();
 
@@ -65,6 +68,7 @@ private:
     ScriptedThread       watcher_;
     ScriptedGlShareSource gl_share_;
     ScriptedD3dAdapterSource d3d_adapters_;
+    ScriptedD3d11Bridge  d3d11_;
     /* The root binds itself to the process's one binding - the same one the
      * dispatch table's entries reach it through - so what a test drives is
      * what a loader would. One rig at a time, as one ICD per process. */

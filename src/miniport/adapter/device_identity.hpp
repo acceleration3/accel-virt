@@ -34,6 +34,9 @@ public:
     /* Whether the device it started on offers `feature` (CapsetInfo); false
      * before StartDevice has asked. */
     bool offers(uint64_t feature) const;
+    /* Whether the host GPU it started on is integrated; false before
+     * StartDevice has asked. */
+    bool integrated() const;
     /* Whether the device under this adapter was found to be another one. */
     bool changed() const;
     /* StopDevice: the next start is a device of its own. */

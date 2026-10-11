@@ -20,6 +20,10 @@ public:
     /* A blt-model present may name a present snapshot instead of pages the
      * user-mode driver read back (docs/protocol.md, "Present engine"). */
     static constexpr uint64_t feature_present_snapshots = 1u;
+    /* The host GPU doing the work is integrated - it shares the host CPU's
+     * memory (GpuIdentity::integrated_gpu): what a vendor's management
+     * library says of the GPU it describes (src/icd/vendor). */
+    static constexpr uint64_t feature_integrated_gpu = 2u;
 
     UmdAdapterInfo();
     UmdAdapterInfo(uint64_t luid, uint64_t features);

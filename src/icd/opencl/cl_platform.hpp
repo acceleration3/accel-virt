@@ -28,7 +28,12 @@ public:
     /* What the loader appends to a suffixed extension function's name to
      * route it here. */
     static constexpr const char *suffix = "AV";
-    static constexpr const char *name = "avgpu OpenCL";
+    /* The name before the adapter is known, and what precedes its name
+     * after: "avgpu OpenCL on AMD Radeon(TM) Graphics". An application that
+     * pairs a platform with a Direct3D adapter by vendor (DaVinci Resolve does,
+     * for an Intel GPU) finds the vendor there, as on its own driver's
+     * platform. */
+    static constexpr const char *base_name = "avgpu OpenCL";
     static constexpr const char *vendor = "accel-virt";
     /* A full profile, which is what a platform backed by a real GPU is; the
      * embedded profile is for devices that may leave parts of the language
@@ -61,6 +66,11 @@ public:
     /* What the version says, which is the host's capped at the version this
      * ICD implements. Until a device says otherwise it is this ICD's own. */
     void        cap_version(uint32_t major, uint32_t minor);
+    /* The name of the adapter the device is on, in UTF-8; empty leaves the
+     * name as it was. */
+    void        observe_adapter(const char *adapter_name);
+    /* Whether the name carries an adapter's yet. */
+    bool        names_an_adapter() const;
 
     bool invariants_hold() const;
 
@@ -74,6 +84,7 @@ private:
     const cl_icd_dispatch *dispatch_;
     /* "OpenCL <major>.<minor> avgpu", built when the version is capped. */
     char                   version_[32];
+    char                   name_[160];
     uint32_t               major_;
     uint32_t               minor_;
 };

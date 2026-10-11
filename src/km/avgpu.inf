@@ -29,6 +29,8 @@ PnpLockdown = 1
 
 [DestinationDirs]
 DefaultDestDir = 13
+Avgpu_Vendor64 = 11
+Avgpu_Vendor32 = 10,SysWOW64
 
 [SourceDisksNames]
 1 = %DiskName%
@@ -45,6 +47,10 @@ avvk32.json = 1
 avgl32.dll = 1
 avcl32.dll = 1
 avumd32.dll = 1
+atiadlxx.dll = 1
+nvapi64.dll = 1
+atiadlxy.dll = 1
+nvapi.dll = 1
 
 ; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
 [Manufacturer]
@@ -55,7 +61,7 @@ avumd32.dll = 1
 
 [Avgpu_Install]
 FeatureScore = F8
-CopyFiles    = Avgpu_Files
+CopyFiles    = Avgpu_Files, Avgpu_Vendor64, Avgpu_Vendor32
 AddReg       = Avgpu_SoftwareSettings, Avgpu_Scheduler
 
 ; dxgkrnl refuses the adapter outright without this value. DXGADAPTER::Initialize
@@ -142,6 +148,20 @@ avvk32.json
 avgl32.dll
 avcl32.dll
 avumd32.dll
+
+; The GPU vendors' management libraries as they describe avgpu's adapters
+; (docs/vendor-libraries.md): AMD's Display Library and NVIDIA's NVAPI, where
+; an application loads them by name - System32 for a 64-bit one, SysWOW64 for a
+; 32-bit one, as the vendors' own drivers put them. Each describes only the
+; adapters presenting its vendor's GPU and declines to start where there are
+; none, so both go in whatever GPU the host has.
+[Avgpu_Vendor64]
+atiadlxx.dll
+nvapi64.dll
+
+[Avgpu_Vendor32]
+atiadlxy.dll
+nvapi.dll
 
 ; One message for each of the device's own sources - control, cursor and
 ; configuration changes - and eight the av contexts' fence queues share

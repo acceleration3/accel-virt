@@ -206,6 +206,21 @@ driver_implemented = [
     "clCreateFromD3D10Texture3DKHR",
     "clEnqueueAcquireD3D10ObjectsKHR",
     "clEnqueueReleaseD3D10ObjectsKHR",
+    # `cl_khr_d3d11_sharing`'s six (docs/d3d11-sharing.md). The resources are
+    # the application's Direct3D 11 resources, which the host cannot open, so
+    # each cl_mem is an ordinary host buffer or image and the ICD copies the
+    # resource's bytes in at acquire and back at release, through the
+    # application's own device.
+    "clGetDeviceIDsFromD3D11KHR",
+    "clCreateFromD3D11BufferKHR",
+    "clCreateFromD3D11Texture2DKHR",
+    "clCreateFromD3D11Texture3DKHR",
+    "clEnqueueAcquireD3D11ObjectsKHR",
+    "clEnqueueReleaseD3D11ObjectsKHR",
+    # The device's retain and release: the one device is a root device, which
+    # the API keeps no count of.
+    "clRetainDevice",
+    "clReleaseDevice",
 ]
 
 # Commands the client does not wait for. Reference counting is the

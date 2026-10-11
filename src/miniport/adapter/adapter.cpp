@@ -688,12 +688,15 @@ int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request
 }
 
 /* Present snapshots are offered while the engine runs on a device that reads
- * them: a user-mode driver that saw the bit stops reading blt presents back. */
+ * them: a user-mode driver that saw the bit stops reading blt presents back.
+ * An integrated host GPU is said so, for the vendor libraries that describe
+ * the GPU to applications. */
 Status Adapter::answer_umd_private(const AdapterInfoQuery &request)
 {
     AV_SCOPE("Adapter::answer_umd_private");
     const bool     snapshots = presents_.constructed() && identity_.offers(CapsetInfo::feature_present_from_image);
-    const uint64_t features = snapshots ? UmdAdapterInfo::feature_present_snapshots : 0u;
+    const uint64_t features = (snapshots ? UmdAdapterInfo::feature_present_snapshots : 0u) |
+                              (identity_.integrated() ? UmdAdapterInfo::feature_integrated_gpu : 0u);
     uint8_t        bytes[UmdAdapterInfo::encoded_size] = {};
     size_t         written = 0u;
     const uint32_t room = request.output_size();

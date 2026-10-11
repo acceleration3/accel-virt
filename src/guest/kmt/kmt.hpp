@@ -17,6 +17,7 @@ namespace av {
 class UmdAdapterInfo;
 
 class BeamPosition;
+class PciLocation;
 class PciIdentity;
 
 class Kmt {
@@ -26,6 +27,20 @@ public:
     virtual Status   query_identity(uint32_t adapter, PciIdentity &identity) = 0;
     /* KMT_DRIVERVERSION: 3200 for WDDM 3.2. */
     virtual Status   query_driver_version(uint32_t adapter, uint32_t &version) = 0;
+    /* KMTQAITYPE_ADAPTERADDRESS: where the adapter sits on the PCI bus. */
+    virtual Status   query_adapter_location(uint32_t adapter, PciLocation &location) = 0;
+    /* KMTQAITYPE_ADAPTERREGISTRYINFO's AdapterString: the adapter's name as its
+     * driver wrote it (HardwareInformation.AdapterString), UTF-16 and ended
+     * within `capacity` units - an empty string where there is none. */
+    virtual Status   query_adapter_name(uint32_t adapter, uint16_t *name, uint32_t capacity) = 0;
+    /* KMTQAITYPE_KMD_DRIVER_VERSION: the driver package's version, the INF's
+     * DriverVer as four 16-bit parts, the most significant first. */
+    virtual Status   query_kmd_driver_version(uint32_t adapter, uint64_t &version) = 0;
+    /* KMTQAITYPE_GETSEGMENTSIZE: the memory the adapter reports - dedicated
+     * video, dedicated system and shared system bytes - which is what DXGI
+     * describes it with. */
+    virtual Status   query_segment_sizes(uint32_t adapter, uint64_t &dedicated_video, uint64_t &dedicated_system,
+                                         uint64_t &shared_system) = 0;
     /* KMTQAITYPE_WDDM_3_1_CAPS: whether the OS let the adapter report native
      * GPU fences, without which no hardware queue is given a doorbell. */
     virtual Status   query_native_gpu_fences(uint32_t adapter, bool &supported) = 0;

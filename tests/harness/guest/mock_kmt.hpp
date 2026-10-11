@@ -20,6 +20,7 @@
 
 #include "guest/kmt/beam_position.hpp"
 #include "guest/kmt/kmt.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "guest/kmt/pci_identity.hpp"
 
 #include <cstdint>
@@ -94,6 +95,11 @@ public:
         escape,
         adapter_luid,
         query_video_memory,
+        query_adapter_location,
+        query_adapter_name,
+        query_kmd_driver_version,
+        query_segment_sizes,
+        query_adapter_features,
         count
     };
     static constexpr std::uint32_t max_objects = 32u;
@@ -165,7 +171,13 @@ public:
     Status        query_identity(std::uint32_t adapter, PciIdentity &identity) override;
     Status        query_driver_version(std::uint32_t adapter, std::uint32_t &version) override;
     Status        query_native_gpu_fences(std::uint32_t adapter, bool &supported) override;
+    /* What describe_adapter set for the adapter, or nothing; set_adapter_features likewise. */
     Status        query_adapter_features(std::uint32_t adapter, UmdAdapterInfo &info) override;
+    Status        query_adapter_location(std::uint32_t adapter, PciLocation &location) override;
+    Status        query_adapter_name(std::uint32_t adapter, std::uint16_t *name, std::uint32_t capacity) override;
+    Status        query_kmd_driver_version(std::uint32_t adapter, std::uint64_t &version) override;
+    Status        query_segment_sizes(std::uint32_t adapter, std::uint64_t &dedicated_video,
+                                      std::uint64_t &dedicated_system, std::uint64_t &shared_system) override;
     void          sleep_briefly() override;
     Status        close_adapter(std::uint32_t adapter) override;
     Status        adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
@@ -262,6 +274,19 @@ public:
 
     /* An adapter enumeration opens; up to eight. */
     void          add_adapter(const PciIdentity &identity, std::uint32_t driver_version);
+    /* The `index`th adapter presents `identity` from now on: avgpu presenting
+     * its host GPU's vendor, device and revision. */
+    void          set_identity(std::uint32_t index, const PciIdentity &identity);
+    /* Where the adapter added `index`th (0-based) sits on the PCI bus, the
+     * name its driver wrote (ASCII here, UTF-16 as answered) and its driver
+     * package's version; past the adapters kept, nothing. */
+    void          describe_adapter(std::uint32_t index, const PciLocation &location, const char *name,
+                                   std::uint64_t kmd_version);
+    /* The memory every adapter reports. */
+    void          set_segment_sizes(std::uint64_t dedicated_video, std::uint64_t dedicated_system,
+                                    std::uint64_t shared_system);
+    /* The UmdAdapterInfo features that adapter's miniport answers. */
+    void          set_adapter_features(std::uint32_t index, std::uint64_t features);
     /* The LUID of the adapter added `index`th (0-based); past the adapters
      * kept, nothing. */
     void          set_adapter_luid(std::uint32_t index, std::uint64_t luid);
@@ -537,6 +562,11 @@ private:
     PciIdentity   identities_[max_adapters];
     std::uint32_t versions_[max_adapters];
     std::uint64_t luids_[max_adapters];
+    PciLocation    locations_[max_adapters];
+    char          names_[max_adapters][64] = {};
+    std::uint64_t kmd_versions_[max_adapters] = {};
+    std::uint64_t adapter_features_[max_adapters] = {};
+    std::uint64_t segment_sizes_[3] = {};
     std::uint64_t budgets_[segment_groups];
     std::uint64_t usages_[segment_groups];
     std::uint32_t adapter_count_;

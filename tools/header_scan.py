@@ -48,7 +48,7 @@ STATIC_METHOD_RE = re.compile(r"^\s*static\s+(?!constexpr\b|inline\s+constexpr\b
 MEMBER_RE = re.compile(r"^\s*(?:mutable\s+)?[\w:<>,\s\[\]]+[\s*&]+(\w+_)\s*(?:\[[^\]]*\])*\s*(?:=[^;]*)?;")
 ACCESS_RE = re.compile(r"^\s*(private|protected|public)\s*:")
 PURE_RE = re.compile(r"=\s*0\s*;")
-RECORD_DIRECTORIES = ("src/miniport/ddi/", "src/icd/d3d/ddi/")
+RECORD_DIRECTORIES = ("src/miniport/ddi/", "src/icd/d3d/ddi/", "src/icd/vendor/ddi/")
 RECORD_FIELD_RE = re.compile(r"^\s*[\w:]+(?:\s*\*+\s*|\s+)[A-Za-z_]\w*(?:\[\w+\])?\s*;")
 
 

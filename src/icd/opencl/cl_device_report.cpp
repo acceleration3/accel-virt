@@ -1,6 +1,7 @@
 #include "icd/opencl/cl_device_report.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/pci_identity.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -21,6 +22,18 @@ constexpr const char *language_prefix = "OpenCL C ";
 /* What follows the number, so a log of an application's device list says which
  * driver answered. */
 constexpr const char *reported_by = " avgpu";
+
+/* cl_nv_device_attribute_query's location queries, which the Khronos headers
+ * do not carry (cl_nv_device_attribute_query.txt). */
+constexpr cl_device_info pci_bus_nv = 0x4008u;
+constexpr cl_device_info pci_slot_nv = 0x4009u;
+constexpr cl_device_info pci_domain_nv = 0x400Au;
+
+/* cl_device_topology_amd's PCIe arm: a type word, 17 unused bytes, then the
+ * bus, device and function, one byte each - 24 bytes in all. */
+constexpr cl_uint topology_pcie_amd = 1u;
+constexpr size_t  topology_bytes = 24u;
+constexpr size_t  topology_bus_at = 21u;
 
 size_t length_within(const char *text, size_t bytes)
 {
@@ -90,7 +103,8 @@ bool built_within(const char *text, size_t room)
 }  // namespace
 
 ClDeviceReport::ClDeviceReport(uint64_t adapter_luid)
-    : luid_(adapter_luid), version_{}, c_version_{}, major_(implemented_major),
+    : luid_(adapter_luid), vendor_(vendor_id), location_(), located_(false), name_(), version_{}, c_version_{},
+      major_(implemented_major),
       minor_(implemented_minor), c_major_(implemented_major), c_minor_(implemented_minor), svm_(0u)
 {
     AV_SCOPE("ClDeviceReport::ClDeviceReport");
@@ -176,9 +190,21 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
     AV_SCOPE("ClDeviceReport::info");
     switch (name_asked) {
     case CL_DEVICE_VENDOR_ID: {
-        const cl_uint reported = vendor_id;
+        const cl_uint reported = vendor_;
         return answer(&reported, sizeof reported, value_bytes, value, size_ret);
     }
+    case CL_DEVICE_NAME: return answer_name(value_bytes, value, size_ret);
+    case CL_DEVICE_PCI_BUS_INFO_KHR: {
+        if (!located_) return CL_INVALID_VALUE;
+        const cl_device_pci_bus_info_khr reported = {0u, location_.bus(), location_.device(), location_.function()};
+        return answer(&reported, sizeof reported, value_bytes, value, size_ret);
+    }
+    case CL_DEVICE_BOARD_NAME_AMD:
+        return vendor_ == amd_vendor ? answer_name(value_bytes, value, size_ret) : CL_INVALID_VALUE;
+    case CL_DEVICE_TOPOLOGY_AMD:
+    case pci_bus_nv:
+    case pci_slot_nv:
+    case pci_domain_nv: return answer_vendor_location(name_asked, value_bytes, value, size_ret);
     case CL_DEVICE_LUID_KHR: {
         /* LowPart then HighPart: the 64-bit value's bytes little-endian, which
          * is what an application memcmps against a DXGI adapter's LUID. */
@@ -208,6 +234,51 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
     }
     default: return CL_INVALID_VALUE;
     }
+}
+
+cl_int ClDeviceReport::answer_name(size_t value_bytes, void *value, size_t *size_ret) const
+{
+    AV_SCOPE("ClDeviceReport::answer_name");
+    const char *const text = name_.text();
+    if (text[0] == '\0') return CL_INVALID_VALUE;
+    return answer(text, length_within(text, icd::AdapterString::bytes - 1u) + 1u, value_bytes, value, size_ret);
+}
+
+cl_int ClDeviceReport::answer_vendor_location(cl_device_info name_asked, size_t value_bytes, void *value,
+                                              size_t *size_ret) const
+{
+    AV_SCOPE("ClDeviceReport::answer_vendor_location");
+    if (!located_) return CL_INVALID_VALUE;
+    if (name_asked == CL_DEVICE_TOPOLOGY_AMD) {
+        if (vendor_ != amd_vendor) return CL_INVALID_VALUE;
+        cl_uchar reported[topology_bytes] = {};
+        for (size_t index = 0u; index < sizeof topology_pcie_amd; ++index)
+            reported[index] = static_cast<cl_uchar>((topology_pcie_amd >> (8u * index)) & 0xFFu);
+        reported[topology_bus_at] = static_cast<cl_uchar>(location_.bus());
+        reported[topology_bus_at + 1u] = static_cast<cl_uchar>(location_.device());
+        reported[topology_bus_at + 2u] = static_cast<cl_uchar>(location_.function());
+        return answer(reported, sizeof reported, value_bytes, value, size_ret);
+    }
+    if (vendor_ != nvidia_vendor) return CL_INVALID_VALUE;
+    const cl_uint reported = name_asked == pci_bus_nv ? location_.bus()
+                             : name_asked == pci_slot_nv ? location_.device()
+                                                         : 0u;
+    return answer(&reported, sizeof reported, value_bytes, value, size_ret);
+}
+
+bool ClDeviceReport::on_vendor(uint32_t vendor) const
+{
+    AV_SCOPE("ClDeviceReport::on_vendor");
+    return vendor_ == vendor;
+}
+
+void ClDeviceReport::observe_adapter(const PciIdentity &identity, const PciLocation &location, const uint16_t *name)
+{
+    AV_SCOPE("ClDeviceReport::observe_adapter");
+    vendor_ = identity.vendor();
+    location_ = location;
+    located_ = true;
+    name_.take(name);
 }
 
 void ClDeviceReport::observe_luid(uint64_t adapter_luid)

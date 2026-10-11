@@ -22,9 +22,10 @@ import sys
 
 TABLE_DIRECTORY = "src/icd"
 SHARED_DIRECTORY = "common"
-# APIs whose drivers live under src/icd but report no extensions, because the
-# API has no extension mechanism: Direct3D's capabilities are pfnGetCaps's.
-NO_EXTENSIONS = ("d3d",)
+# Directories under src/icd whose drivers report no extensions, because their
+# API has no extension mechanism: Direct3D's capabilities are pfnGetCaps's, and
+# the vendor libraries (ADL, NVAPI) answer the calls they export and no others.
+NO_EXTENSIONS = ("d3d", "vendor")
 # Where each API's generator lists what it implemented, and the array naming it.
 IMPLEMENTED_LISTS = {
     "vulkan": ("src/proto/generated/vulkan/vk_supported_extensions.h", "kImplementedDeviceExtensions"),
@@ -50,7 +51,9 @@ EMPTY = re.compile(r"ExtensionPolicy::Row\s*\*\s*reported_extensions\s*=\s*nullp
 ROW = re.compile(r'\s*\{\s*"(?P<name>[^"]*)"\s*,\s*(?P<version>\d+)u?\s*,\s*"(?P<test>[^"]*)"'
                  r'(\s*,\s*"(?P<host>[^"]*)")?\s*\}\s*,?')
 TEST_NAME = re.compile(r"^(\w+)\.(\w+)$")
-# A row whose host is this is answered by the ICD alone and needs no host
+# A row whose host is this - alone, or followed by the PCI vendor ID whose adapters
+# it is reported on ("-1002"), or by "*" for any described adapter - is answered
+# by the ICD alone and needs no host
 # mechanism (ClExtensionPolicy::answered_here).
 ANSWERED_HERE = "-"
 
@@ -182,7 +185,7 @@ class PolicyCheck:
                 violations.append(f"{where}: {name} is not a WGL extension")
             elif implemented is not None and name not in implemented[1]:
                 violations.append(f"{where}: {name} is not in {implemented[0]}")
-            if (host is not None and host != ANSWERED_HERE and implemented is not None
+            if (host is not None and not host.startswith(ANSWERED_HERE) and implemented is not None
                     and host not in implemented[1] and not self.device_uses(host)):
                 # A row answered over another extension is a promise about that
                 # mechanism, and the promise is kept by whichever side uses it:

@@ -4,7 +4,11 @@
  * reports it too: the row is what says this ICD carries it, and the host is
  * what says the GPU does. The exception is a row whose host is `answered_here`:
  * an extension this ICD answers alone, about guest objects no host GPU has,
- * which is reported whatever the host offers. Every row names the test that proves the extension
+ * which is reported whatever the host offers - or, for a host of
+ * `answered_here` followed by a PCI vendor ID in hex ("-1002"), reported on an
+ * adapter of that vendor alone: a vendor's own attribute query, which this ICD
+ * answers with where the guest's adapter sits; followed by "*", reported once
+ * the adapter is described at all. Every row names the test that proves the extension
  * through this ICD, which tools/check_extension_policy.py holds it to - no
  * test, no row; no row, no report (constitution VI).
  *
@@ -51,6 +55,9 @@ public:
     bool offered_by(const char *host, size_t host_bytes, const char *name) const;
     /* Whether a row names it; what the ICD asks before it acts on one. */
     bool reportable(const char *name) const;
+    /* The PCI vendor the device's adapter presents, which a vendor's own rows
+     * are reported on; none until this. */
+    void observe_vendor(uint32_t vendor);
 
     uint32_t rows() const;
 
@@ -65,6 +72,7 @@ private:
 
     const Row *rows_;
     uint32_t   count_;
+    uint32_t   vendor_;
 };
 
 /* What this ICD ships, read by tools/check_extension_policy.py and by the

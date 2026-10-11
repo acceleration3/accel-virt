@@ -31,6 +31,10 @@ public:
      * one entry point is one pointer. */
     void     note(const char *entry_point);
     void     note_failure(const char *entry_point, int32_t error);
+    /* A query `entry_point` refused, named with the query the first time it
+     * is: what says which of an application's questions this device cannot
+     * answer, which the entry point alone does not. */
+    void     note_query(const char *entry_point, uint32_t query, int32_t error);
     /* A map refused for `why` (a literal, logged the first time): its size
      * and how many of the context's mappings were held, which is what says
      * whether a limit or the memory ran out. */

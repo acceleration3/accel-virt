@@ -141,9 +141,11 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 | `icd/common/` | what two or more user-mode drivers share: transports, waits, locks, handle tables, connections, window seams |
 | `icd/vulkan/`, `icd/opengl/`, `icd/opencl/` | each ICD's logic |
 | `icd/d3d/` | the Direct3D user-mode driver's portable logic; `ddi/` mirrors the runtimes' structures |
+| `icd/vendor/` | the ADL and NVAPI libraries' portable logic (docs/vendor-libraries.md); `ddi/` mirrors their structures |
 | `um/common/` | the Windows halves of `icd/common`'s seams: file log, lazy driver, process heap, SRW lock, window chains |
 | `um/vulkan/`, `um/opengl/`, `um/opencl/` | each ICD's exports and library root |
 | `um/d3d/` | avumd's exports, devices and DDI thunks (see "Known exceptions") |
+| `um/vendor/` | the ADL and NVAPI libraries' exports, lazy root and record layout proofs |
 | `um/kmt/` | `GdiKmt`, the Kmt over gdi32's D3DKMT calls |
 | `um/avtest/`, `um/inspect/`, `um/probe/{vk,gl,cl,d3d}/` | the programs' Windows entry points |
 | `um/trace/` | the Windows trace hosts and crash handling |

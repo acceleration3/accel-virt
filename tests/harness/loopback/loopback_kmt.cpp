@@ -2,6 +2,7 @@
 
 #include "core/support/status.hpp"
 #include "guest/kmt/beam_position.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
@@ -75,6 +76,33 @@ Status LoopbackKmt::query_driver_version(std::uint32_t, std::uint32_t &version)
 {
     version = 3200u;
     return Status::ok;
+}
+
+/* The loopback has no PCI bus, no registry and no driver package: what a
+ * vendor library would ask of it is not there to answer. */
+Status LoopbackKmt::query_adapter_location(std::uint32_t, PciLocation &location)
+{
+    location = PciLocation();
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::query_adapter_name(std::uint32_t, std::uint16_t *name, std::uint32_t capacity)
+{
+    if (name != nullptr && capacity != 0u) name[0] = 0u;
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::query_kmd_driver_version(std::uint32_t, std::uint64_t &version)
+{
+    version = 0u;
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::query_segment_sizes(std::uint32_t, std::uint64_t &dedicated_video,
+                                        std::uint64_t &dedicated_system, std::uint64_t &shared_system)
+{
+    dedicated_video = dedicated_system = shared_system = 0u;
+    return Status::not_supported;
 }
 
 Status LoopbackKmt::close_adapter(std::uint32_t) { return Status::ok; }

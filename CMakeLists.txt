@@ -444,6 +444,15 @@ endif()
 # ExtensionPolicy is the one piece of src/icd/common a Direct3D driver has no
 # use for - it reports Khronos extensions - and it is the one that needs the
 # Vulkan headers, so this archive names what it takes rather than globbing.
+# The vendor management libraries' decisions (atiadlxx.dll, nvapi64.dll;
+# docs/vendor-libraries.md): portable, over the Kmt and a thread lock.
+file(GLOB_RECURSE AV_VENDOR_SOURCES CONFIGURE_DEPENDS src/icd/vendor/*.cpp)
+add_library(av_vendor STATIC ${AV_VENDOR_SOURCES} ${CMAKE_SOURCE_DIR}/src/icd/common/thread_lock_hold.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/adapter_string.cpp)
+target_link_libraries(av_vendor PUBLIC av_core)
+target_compile_options(av_vendor PRIVATE ${AV_TEST_FLAGS})
+target_link_options(av_vendor PUBLIC ${AV_TEST_FLAGS})
+
 file(GLOB_RECURSE AV_D3D_UMD_SOURCES CONFIGURE_DEPENDS src/icd/d3d/*.cpp)
 add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
   ${CMAKE_SOURCE_DIR}/src/icd/common/batched_transport.cpp
@@ -517,6 +526,8 @@ foreach(src ${AV_UNIT_TESTS})
     target_link_libraries(${name} PRIVATE av_gl_icd)
   elseif(src MATCHES "/tests/unit/icd/d3d/")
     target_link_libraries(${name} PRIVATE av_d3d_umd)
+  elseif(src MATCHES "/tests/unit/icd/vendor/")
+    target_link_libraries(${name} PRIVATE av_vendor)
   elseif(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
   endif()
@@ -666,7 +677,8 @@ ExternalProject_Add(avtest
                    ${CMAKE_BINARY_DIR}/guest/avvkprobe.exe ${CMAKE_BINARY_DIR}/guest/avinspect.exe
                    ${CMAKE_BINARY_DIR}/guest/avgl.dll ${CMAKE_BINARY_DIR}/guest/avglprobe.exe
                    ${CMAKE_BINARY_DIR}/guest/avcl.dll ${CMAKE_BINARY_DIR}/guest/avclprobe.exe
-                   ${CMAKE_BINARY_DIR}/guest/avumd.dll ${CMAKE_BINARY_DIR}/guest/avclsamples.exe)
+                   ${CMAKE_BINARY_DIR}/guest/avumd.dll ${CMAKE_BINARY_DIR}/guest/avclsamples.exe
+                   ${CMAKE_BINARY_DIR}/guest/atiadlxx.dll ${CMAKE_BINARY_DIR}/guest/nvapi64.dll)
 ExternalProject_Add_StepDependencies(avtest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
@@ -692,7 +704,8 @@ ExternalProject_Add(avtest32
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest32/avvk32.dll ${CMAKE_BINARY_DIR}/guest32/avgl32.dll
                    ${CMAKE_BINARY_DIR}/guest32/avcl32.dll ${CMAKE_BINARY_DIR}/guest32/avumd32.dll
-                   ${CMAKE_BINARY_DIR}/guest32/avtest.exe)
+                   ${CMAKE_BINARY_DIR}/guest32/avtest.exe
+                   ${CMAKE_BINARY_DIR}/guest32/atiadlxy.dll ${CMAKE_BINARY_DIR}/guest32/nvapi.dll)
 ExternalProject_Add_StepDependencies(avtest32 configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
@@ -724,6 +737,8 @@ install(FILES
           ${CMAKE_BINARY_DIR}/guest32/avumd32.dll ${CMAKE_BINARY_DIR}/guest32/avvk32.dll
           ${CMAKE_SOURCE_DIR}/src/um/vulkan/avvk32.json ${CMAKE_BINARY_DIR}/guest32/avgl32.dll
           ${CMAKE_BINARY_DIR}/guest32/avcl32.dll
+          ${CMAKE_BINARY_DIR}/guest/atiadlxx.dll ${CMAKE_BINARY_DIR}/guest/nvapi64.dll
+          ${CMAKE_BINARY_DIR}/guest32/atiadlxy.dll ${CMAKE_BINARY_DIR}/guest32/nvapi.dll
         DESTINATION package COMPONENT drivers)
 install(CODE "set(AV_SOURCE_DIR \"${CMAKE_SOURCE_DIR}\")" COMPONENT drivers)
 install(SCRIPT ${CMAKE_SOURCE_DIR}/cmake/driver_package.cmake COMPONENT drivers)
@@ -838,6 +853,32 @@ add_test(NAME avumd32_image
                  ${CMAKE_BINARY_DIR}/guest32/avumd32.dll --machine i386 --dll --only-exports
                  --require-export OpenAdapter10_2 --require-export OpenAdapter12
                  --require-export OpenAdapter)
+# The vendor libraries export exactly what their .def files name, which is
+# what an application resolves by name (docs/vendor-libraries.md): NVAPI's one
+# lookup, and ADL's ADL_ and ADL2_ calls. Neither presents anything, so neither
+# wants user32; the 32-bit pair's names are undecorated, as AMD's and NVIDIA's.
+file(STRINGS ${CMAKE_SOURCE_DIR}/src/um/vendor/adl.def adl_exports REGEX "^ADL")
+set(adl_required_exports)
+foreach(name IN LISTS adl_exports)
+  list(APPEND adl_required_exports --require-export ${name})
+endforeach()
+foreach(vendor_image IN ITEMS "guest/atiadlxx.dll|amd64|adl" "guest/nvapi64.dll|amd64|nvapi"
+                              "guest32/atiadlxy.dll|i386|adl" "guest32/nvapi.dll|i386|nvapi")
+  string(REPLACE "|" ";" vendor_image "${vendor_image}")
+  list(GET vendor_image 0 vendor_path)
+  list(GET vendor_image 1 vendor_machine)
+  list(GET vendor_image 2 vendor_api)
+  get_filename_component(vendor_name ${vendor_path} NAME_WE)
+  if(vendor_api STREQUAL "adl")
+    set(vendor_exports ${adl_required_exports})
+  else()
+    set(vendor_exports --require-export nvapi_QueryInterface)
+  endif()
+  add_test(NAME ${vendor_name}_image
+           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                   ${CMAKE_BINARY_DIR}/${vendor_path} --machine ${vendor_machine} --dll --only-exports
+                   ${vendor_exports})
+endforeach()
 add_test(NAME avcl32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest32/avcl32.dll --machine i386 --dll --only-exports

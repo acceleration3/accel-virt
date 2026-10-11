@@ -11,11 +11,14 @@
  * The host's answers arrive as bytes with a length, from a device this ICD
  * does not control, so what happens to a version cut short or shaped like
  * nothing the specification fixes is as much of the point as the capping. */
+#include "guest/kmt/pci_identity.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "icd/opencl/cl_device_report.hpp"
 
 #include <CL/cl_ext.h>
 
+#include <cstdint>
 #include <cstring>
 
 using av::Status;
@@ -391,3 +394,94 @@ TEST(cl_device_report, a_version_whose_digits_are_not_digits_is_not_believed)
       CHECK_EQ(CL_VERSION_MAJOR(numeric), 3u);
       CHECK(report.invariants_hold());
   } }
+
+namespace {
+
+const av::PciIdentity on_raphael(0x1002u, 0x13C0u, 0x1AF4u, 0x5256u, 0xC9u);
+const av::PciIdentity on_geforce(0x10DEu, 0x2684u, 0x1AF4u, 0x5256u, 0xA1u);
+const std::uint16_t   radeon[] = {'A', 'M', 'D', ' ', 'R', 'a', 'd', 'e', 'o', 'n', 0u};
+
+}  // namespace
+
+/* Described by Windows, the device is the guest's adapter: its vendor (the
+ * host GPU's, which avgpu presents), the name Device Manager shows, and where
+ * it sits on the guest's PCI bus - not the host's (cl_khr_pci_bus_info). Before
+ * that, the name is the host's to answer and no location is said. */
+TEST(cl_device_report, the_pci_location_and_name_are_the_guest_adapter_s)
+{ ClDeviceReport report(adapter_luid);
+  CHECK(!report.decides(CL_DEVICE_NAME));
+  CHECK(!report.decides(CL_DEVICE_PCI_BUS_INFO_KHR));
+  report.observe_adapter(on_raphael, av::PciLocation(0u, 17u, 0u), radeon);
+  cl_uint vendor = 0u;
+  CHECK_EQ(report.info(CL_DEVICE_VENDOR_ID, sizeof vendor, &vendor, nullptr), CL_SUCCESS);
+  CHECK_EQ(vendor, 0x1002u);
+  char        name[64] = {};
+  std::size_t bytes = 0u;
+  CHECK_EQ(report.info(CL_DEVICE_NAME, sizeof name, name, &bytes), CL_SUCCESS);
+  CHECK_EQ(std::strcmp(name, "AMD Radeon"), 0);
+  CHECK_EQ(bytes, sizeof "AMD Radeon");
+  char small[4] = {'x'};
+  CHECK_EQ(report.info(CL_DEVICE_NAME, sizeof small, small, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(small[0], 'x');
+  cl_device_pci_bus_info_khr where = {9u, 9u, 9u, 9u};
+  CHECK_EQ(report.info(CL_DEVICE_PCI_BUS_INFO_KHR, sizeof where, &where, &bytes), CL_SUCCESS);
+  CHECK_EQ(bytes, sizeof where);
+  CHECK_EQ(where.pci_domain, 0u);
+  CHECK_EQ(where.pci_bus, 0u);
+  CHECK_EQ(where.pci_device, 17u);
+  CHECK_EQ(where.pci_function, 0u);
+  /* An adapter with no name leaves the name to the host. */
+  ClDeviceReport unnamed(adapter_luid);
+  unnamed.observe_adapter(on_raphael, av::PciLocation(0u, 17u, 0u), nullptr);
+  CHECK(!unnamed.decides(CL_DEVICE_NAME));
+  CHECK(report.invariants_hold()); }
+
+/* AMD's attribute query on an AMD adapter, as AMD's own driver answers it:
+ * the PCIe topology (type 1, then bus, device and function at bytes 21 to 23)
+ * and the board's name. Not on another vendor's adapter. */
+TEST(cl_device_report, an_amd_adapter_says_where_it_sits_as_amd_s_driver_does)
+{ ClDeviceReport report(adapter_luid);
+  CHECK(!report.decides(CL_DEVICE_TOPOLOGY_AMD));
+  report.observe_adapter(on_raphael, av::PciLocation(3u, 17u, 2u), radeon);
+  std::uint8_t topology[24] = {};
+  std::size_t  bytes = 0u;
+  CHECK_EQ(report.info(CL_DEVICE_TOPOLOGY_AMD, sizeof topology, topology, &bytes), CL_SUCCESS);
+  CHECK_EQ(bytes, sizeof topology);
+  CHECK_EQ(topology[0], 1u);
+  CHECK_EQ(topology[1], 0u);
+  CHECK_EQ(topology[21], 3u);
+  CHECK_EQ(topology[22], 17u);
+  CHECK_EQ(topology[23], 2u);
+  char board[64] = {};
+  CHECK_EQ(report.info(CL_DEVICE_BOARD_NAME_AMD, sizeof board, board, nullptr), CL_SUCCESS);
+  CHECK_EQ(std::strcmp(board, "AMD Radeon"), 0);
+  ClDeviceReport nvidia(adapter_luid);
+  nvidia.observe_adapter(on_geforce, av::PciLocation(3u, 0u, 0u), radeon);
+  CHECK(!nvidia.decides(CL_DEVICE_TOPOLOGY_AMD));
+  CHECK(!nvidia.decides(CL_DEVICE_BOARD_NAME_AMD)); }
+
+/* NVIDIA's attribute query on an NVIDIA adapter: the bus, the slot - the PCI
+ * device number - and the domain, which the guest has one of. Not on another
+ * vendor's adapter. */
+TEST(cl_device_report, an_nvidia_adapter_says_where_it_sits_as_nvidia_s_driver_does)
+{ constexpr cl_device_info bus_nv = 0x4008u;
+  constexpr cl_device_info slot_nv = 0x4009u;
+  constexpr cl_device_info domain_nv = 0x400Au;
+  ClDeviceReport report(adapter_luid);
+  CHECK(!report.decides(bus_nv));
+  report.observe_adapter(on_geforce, av::PciLocation(4u, 18u, 0u), radeon);
+  cl_uint value = 99u;
+  CHECK_EQ(report.info(bus_nv, sizeof value, &value, nullptr), CL_SUCCESS);
+  CHECK_EQ(value, 4u);
+  CHECK_EQ(report.info(slot_nv, sizeof value, &value, nullptr), CL_SUCCESS);
+  CHECK_EQ(value, 18u);
+  CHECK_EQ(report.info(domain_nv, sizeof value, &value, nullptr), CL_SUCCESS);
+  CHECK_EQ(value, 0u);
+  ClDeviceReport amd(adapter_luid);
+  amd.observe_adapter(on_raphael, av::PciLocation(4u, 18u, 0u), radeon);
+  CHECK(!amd.decides(bus_nv));
+  CHECK(!amd.decides(slot_nv));
+  /* Which vendor the adapter presents, which AMD's free memory is asked by. */
+  CHECK(amd.on_vendor(ClDeviceReport::amd_vendor));
+  CHECK(!amd.on_vendor(ClDeviceReport::nvidia_vendor));
+  CHECK(report.on_vendor(ClDeviceReport::nvidia_vendor)); }

@@ -202,3 +202,20 @@ TEST(cl_platform, the_invariant_catches_a_version_it_could_not_have)
   CHECK(!broken(ClPlatformProbe::a_minor_past_what_is_implemented));
   CHECK(!broken(ClPlatformProbe::an_empty_version));
   CHECK(!broken(ClPlatformProbe::an_unterminated_version)); }
+
+/* The adapter's name follows the driver's, so an application that pairs a
+ * platform with a Direct3D adapter by vendor finds it there; an empty name
+ * leaves it as it was. */
+TEST(cl_platform, the_name_carries_the_adapter_s_once_it_is_known)
+{ ClPlatform platform;
+  char text[160] = {};
+  CHECK(!platform.names_an_adapter());
+  CHECK(reads_back(platform, CL_PLATFORM_NAME, text, sizeof text));
+  CHECK_EQ(std::strcmp(text, "avgpu OpenCL"), 0);
+  platform.observe_adapter("");
+  platform.observe_adapter(nullptr);
+  CHECK(!platform.names_an_adapter());
+  platform.observe_adapter("Intel(R) Arc(TM) Graphics");
+  CHECK(platform.names_an_adapter());
+  CHECK(reads_back(platform, CL_PLATFORM_NAME, text, sizeof text));
+  CHECK_EQ(std::strcmp(text, "avgpu OpenCL on Intel(R) Arc(TM) Graphics"), 0); }

@@ -77,7 +77,11 @@ hooks reach it through the single pointer `GlIcdBinding` holds
 function pointers, none of them handed a context, so the D3D user-mode driver's
 root lives in its exports' translation unit (`src/um/d3d/avumd_exports.cpp`,
 feature 055) and the table's thunks reach it through the single pointer
-`UmdBinding` holds (`src/icd/d3d/umd_binding.cpp`);
+`UmdBinding` holds (`src/icd/d3d/umd_binding.cpp`); and an application calls
+the ADL and NVAPI libraries' exports with no context but an ADL2 context
+that is the root itself, so each library's root lives in its exports'
+translation unit (`src/um/vendor/adl_exports.cpp`,
+`src/um/vendor/nvapi_exports.cpp`, docs/vendor-libraries.md);
 and every function opens a trace scope (`AV_SCOPE`, docs/trace.md) that no
 caller can hand the binary's trace table, so each binary's table - owned by
 that binary's root above - is reached through the single pointer

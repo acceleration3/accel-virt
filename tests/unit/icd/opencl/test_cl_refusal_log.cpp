@@ -65,6 +65,20 @@ TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success
   refusals.note(image_2d);
   CHECK_EQ(log.lines(), 4u); }
 
+/* A refused query is named with the query, once per query, so the log says
+ * which of an application's questions the device could not answer. */
+TEST(cl_refusal_log, each_query_an_entry_point_refuses_is_named_with_it_once)
+{ av::RecordingLog        log;
+  ClRefusalLog            refusals(log);
+  refusals.note_query(mem_info, 0x4039u, -30);
+  refusals.note_query(mem_info, 0x4039u, -30);
+  refusals.note_query(mem_info, 0x1002u, -30);
+  refusals.note_query(mem_info, 0x1002u, 0);
+  refusals.note_query(nullptr, 0x4039u, -30);
+  CHECK_EQ(log.lines(), 2u);
+  CHECK(std::strcmp(log.line(0u), "avcl: clGetMemObjectInfo 0x4039 answered -30") == 0);
+  CHECK(std::strcmp(log.line(1u), "avcl: clGetMemObjectInfo 0x1002 answered -30") == 0); }
+
 /* A refused map says which limit it met, its size and how many mappings were
  * held - once for each reason - and a buffer released while mapped is named
  * the first time with how many went with it, never for one that held none. */

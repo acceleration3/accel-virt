@@ -24,12 +24,14 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_d3d11_bridge.hpp"
 #include "harness/icd/scripted_d3d_adapter_source.hpp"
 #include "harness/icd/scripted_gl_share_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "icd/opencl/d3d11_resource.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -144,7 +146,7 @@ public:
     explicit ClProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'),
           root_(memory_, kmt, lock_, send_lock_, objects_lock_, blocks_lock_, log_, watcher_, gl_share_, d3d_adapters_,
-                av::clicd::cl_icd_binding),
+                d3d11_, av::clicd::cl_icd_binding),
           loader_(root_)
     {
     }
@@ -155,6 +157,8 @@ public:
     RecordingThreadLock &send_lock() { return send_lock_; }
     FakeClLoader        &loader() { return loader_; }
     ScriptedThread      &watcher() { return watcher_; }
+    av::ScriptedD3dAdapterSource &d3d_adapters() { return d3d_adapters_; }
+    av::ScriptedD3d11Bridge      &d3d11() { return d3d11_; }
 
 private:
     MockPlatform        memory_;
@@ -167,6 +171,7 @@ private:
     ScriptedThread      watcher_;
     av::ScriptedGlShareSource gl_share_;
     av::ScriptedD3dAdapterSource d3d_adapters_;
+    av::ScriptedD3d11Bridge      d3d11_;
     ClIcdRoot           root_;
     FakeClLoader        loader_;
 };
@@ -951,3 +956,171 @@ TEST(fullstack_opencl_icd, a_blocking_read_answers_with_the_bytes_the_kernel_wro
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* cl_khr_d3d11_sharing on the host's own OpenCL (docs/d3d11-sharing.md): a
+ * context made from a Direct3D 11 device, a buffer resource whose bytes a
+ * kernel adds one to between acquire and release, and a texture whose rows -
+ * further apart in the mapping than in the image - come back where they went
+ * in. The Direct3D side is the tests' bridge; everything OpenCL is the host's. */
+TEST(fullstack_opencl_icd, a_d3d11_resource_s_bytes_reach_the_kernel_and_come_back_changed)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
+      std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
+      return;
+  }
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    cl_device_id device = nullptr;
+    cl_uint      devices = 0u;
+    CHECK_EQ(loader.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+    if (device == nullptr) return;
+    /* The Direct3D device is on the adapter the device says it is on. */
+    std::uint64_t luid = 0u;
+    CHECK_EQ(loader.device_info(device, CL_DEVICE_LUID_KHR, sizeof luid, &luid, nullptr), CL_SUCCESS);
+    int d3d_device = 0, buffer_resource = 0, texture_resource = 0;
+    process.d3d_adapters().name_device(&d3d_device, luid);
+    process.d3d11().name_device(&d3d_device);
+    constexpr std::size_t bytes = 256u;
+    std::uint8_t          buffer_bytes[bytes];
+    for (std::size_t index = 0u; index < bytes; ++index) buffer_bytes[index] = static_cast<std::uint8_t>(index);
+    process.d3d11().name_resource(&buffer_resource, &d3d_device,
+                                  av::clicd::D3d11Resource(av::clicd::D3d11Resource::Kind::buffer, 0u, bytes, 0u, 0u,
+                                                           0u, 1u, 1u, 1u),
+                                  buffer_bytes, bytes, bytes, bytes);
+    /* 8x4 R8G8B8A8_UNORM texels, 32 bytes a row, mapped 64 bytes apart. */
+    constexpr std::size_t pitch = 64u, rows = 4u, row_bytes = 32u;
+    std::uint8_t          texels[pitch * rows] = {};
+    for (std::size_t row = 0u; row < rows; ++row)
+        for (std::size_t at = 0u; at < row_bytes; ++at) texels[row * pitch + at] = static_cast<std::uint8_t>(row * 40u + at);
+    std::uint8_t original[pitch * rows];
+    std::memcpy(original, texels, sizeof texels);
+    process.d3d11().name_resource(&texture_resource, &d3d_device,
+                                  av::clicd::D3d11Resource(av::clicd::D3d11Resource::Kind::texture2d, 28u, 0u, 8u, 4u,
+                                                           1u, 1u, 1u, 1u),
+                                  texels, sizeof texels, pitch, pitch * rows);
+
+    const cl_context_properties properties[] = {
+        static_cast<cl_context_properties>(ClIcdRoot::d3d11_context_device),
+        reinterpret_cast<cl_context_properties>(&d3d_device), 0};
+    cl_int           error = CL_INVALID_VALUE;
+    const cl_context context = table_of(device)->clCreateContext(properties, 1u, &device, nullptr, nullptr, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (context == nullptr) return;
+    const cl_command_queue queue = loader.create_queue(context, device, &error);
+    using FromBuffer = cl_mem(CL_API_CALL *)(cl_context, cl_mem_flags, void *, cl_int *);
+    using FromTexture = cl_mem(CL_API_CALL *)(cl_context, cl_mem_flags, void *, cl_uint, cl_int *);
+    using Objects = cl_int(CL_API_CALL *)(cl_command_queue, cl_uint, const cl_mem *, cl_uint, const cl_event *,
+                                          cl_event *);
+    const cl_mem buffer = reinterpret_cast<FromBuffer>(table_of(context)->clCreateFromD3D11BufferKHR)(
+        context, CL_MEM_READ_WRITE, &buffer_resource, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    const cl_mem image = reinterpret_cast<FromTexture>(table_of(context)->clCreateFromD3D11Texture2DKHR)(
+        context, CL_MEM_READ_WRITE, &texture_resource, 0u, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (buffer == nullptr || image == nullptr || queue == nullptr) return;
+
+    const cl_program program = loader.create_program(
+        context, "__kernel void one_more(__global uchar *bytes) { bytes[get_global_id(0)] += 1; }", &error);
+    CHECK_EQ(loader.build_program(program, nullptr), CL_SUCCESS);
+    const cl_kernel kernel = loader.create_kernel(program, "one_more", &error);
+    CHECK_EQ(table_of(kernel)->clSetKernelArg(kernel, 0u, sizeof buffer, &buffer), CL_SUCCESS);
+
+    const cl_mem both[2] = {buffer, image};
+    CHECK_EQ(reinterpret_cast<Objects>(table_of(queue)->clEnqueueAcquireD3D11ObjectsKHR)(queue, 2u, both, 0u, nullptr,
+                                                                                         nullptr),
+             CL_SUCCESS);
+    const std::size_t global = bytes;
+    CHECK_EQ(table_of(queue)->clEnqueueNDRangeKernel(queue, kernel, 1u, nullptr, &global, nullptr, 0u, nullptr,
+                                                     nullptr),
+             CL_SUCCESS);
+    std::memset(texels, 0xEE, sizeof texels);
+    CHECK_EQ(reinterpret_cast<Objects>(table_of(queue)->clEnqueueReleaseD3D11ObjectsKHR)(queue, 2u, both, 0u, nullptr,
+                                                                                         nullptr),
+             CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::size_t index = 0u; index < bytes; ++index)
+        if (buffer_bytes[index] != static_cast<std::uint8_t>(index + 1u)) ++wrong;
+    CHECK_EQ(wrong, 0u);
+    for (std::size_t row = 0u; row < rows; ++row)
+        CHECK_EQ(std::memcmp(texels + row * pitch, original + row * pitch, row_bytes), 0);
+
+    CHECK_EQ(table_of(kernel)->clReleaseKernel(kernel), CL_SUCCESS);
+    CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
+    CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
+    CHECK_EQ(loader.release_mem(image), CL_SUCCESS);
+    CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
+    CHECK_EQ(loader.release_context(context), CL_SUCCESS);
+    CHECK_EQ(process.d3d11().references(&buffer_resource), 0);
+    CHECK_EQ(process.d3d11().references(&d3d_device), 0);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* cl_khr_byte_addressable_store, through the ICD on the host's own OpenCL:
+ * each work-item stores one byte, and none disturbs its neighbours - what a
+ * device without byte stores would get wrong as soon as two work-items share
+ * a word. */
+TEST(fullstack_opencl_icd, a_kernel_stores_single_bytes_and_leaves_their_neighbours)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
+      std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
+      return;
+  }
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    cl_device_id device = nullptr;
+    cl_uint      devices = 0u;
+    CHECK_EQ(loader.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+    if (device == nullptr) return;
+    char extensions[4096] = {};
+    CHECK_EQ(loader.device_info(device, CL_DEVICE_EXTENSIONS, sizeof extensions, extensions, nullptr), CL_SUCCESS);
+    CHECK(std::strstr(extensions, "cl_khr_byte_addressable_store") != nullptr);
+    cl_int           error = CL_INVALID_VALUE;
+    const cl_context context = loader.create_context(device, &error);
+    if (context == nullptr) return;
+    const cl_command_queue queue = loader.create_queue(context, device, &error);
+    constexpr std::size_t  bytes = 257u;
+    const cl_mem           buffer = loader.create_buffer(context, CL_MEM_READ_WRITE, bytes, &error);
+    std::uint8_t           cleared[bytes] = {};
+    CHECK_EQ(table_of(queue)->clEnqueueWriteBuffer(queue, buffer, CL_TRUE, 0u, bytes, cleared, 0u, nullptr, nullptr),
+             CL_SUCCESS);
+    const cl_program program = loader.create_program(
+        context, "__kernel void one_each(__global uchar *bytes) { size_t i = get_global_id(0); bytes[i] = (uchar)(i * 7u + 1u); }",
+        &error);
+    CHECK_EQ(loader.build_program(program, nullptr), CL_SUCCESS);
+    const cl_kernel kernel = loader.create_kernel(program, "one_each", &error);
+    CHECK_EQ(table_of(kernel)->clSetKernelArg(kernel, 0u, sizeof buffer, &buffer), CL_SUCCESS);
+    const std::size_t global = bytes;
+    CHECK_EQ(table_of(queue)->clEnqueueNDRangeKernel(queue, kernel, 1u, nullptr, &global, nullptr, 0u, nullptr,
+                                                     nullptr),
+             CL_SUCCESS);
+    std::uint8_t read[bytes] = {};
+    CHECK_EQ(table_of(queue)->clEnqueueReadBuffer(queue, buffer, CL_TRUE, 0u, bytes, read, 0u, nullptr, nullptr),
+             CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::size_t index = 0u; index < bytes; ++index)
+        if (read[index] != static_cast<std::uint8_t>(index * 7u + 1u)) ++wrong;
+    CHECK_EQ(wrong, 0u);
+    CHECK_EQ(table_of(kernel)->clReleaseKernel(kernel), CL_SUCCESS);
+    CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
+    CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
+    CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
+    CHECK_EQ(loader.release_context(context), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }

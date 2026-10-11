@@ -24,6 +24,7 @@
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/submission/command_header.hpp"
+#include "icd/opencl/d3d11_resource.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -592,3 +593,16 @@ TEST(guest_cl_context, a_staged_mapping_starts_as_zeros)
   CHECK(region != nullptr);
   context.give_back_mapping(*region);
   CHECK_EQ(context.mappings(), 0u); }
+
+/* Likewise its Direct3D 11 objects: one over a resource in a context made from
+ * no device is one no create could have made. */
+TEST(guest_cl_context, a_d3d11_table_that_cannot_be_true_makes_the_context_untrue)
+{ ClContextRig rig;
+  GuestClContext context = made_context(rig);
+  int            mem = 0, resource = 0;
+  const av::clicd::D3d11Resource buffer(av::clicd::D3d11Resource::Kind::buffer, 0u, 64u, 0u, 0u, 0u, 1u, 1u, 1u);
+  CHECK_STATUS(context.d3d11().keep(&mem, &resource, 0u, buffer, CL_MEM_READ_WRITE), av::Status::ok);
+  CHECK(!context.invariants_hold());
+  void *forgotten = nullptr;
+  CHECK(context.d3d11().forget(&mem, forgotten));
+  CHECK(context.invariants_hold()); }

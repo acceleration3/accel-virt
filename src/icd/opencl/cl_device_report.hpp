@@ -1,12 +1,15 @@
 /* The clGetDeviceInfo queries this ICD answers instead of forwarding.
  *
  * Almost every device query is the host device's to answer: it is the GPU that
- * will run the work. Five are not, and each for its own reason.
+ * will run the work. These are not, and each for its own reason.
  *
- * CL_DEVICE_VENDOR_ID and CL_DEVICE_LUID_KHR name an adapter. The host's name
- * the host's own GPU, which the guest has no handle to, cannot share memory
- * with, and cannot match a DXGI adapter against; the guest's adapter is
- * avgpu's. CL_DEVICE_UUID_KHR is left to the host, as the Vulkan ICD leaves
+ * CL_DEVICE_VENDOR_ID, CL_DEVICE_LUID_KHR, CL_DEVICE_NAME and the PCI location
+ * (cl_khr_pci_bus_info, and the AMD and NVIDIA attribute queries an
+ * application finds a GPU's place on the bus by) name an adapter. The host's
+ * name the host's own GPU, which the guest has no handle to, cannot share
+ * memory with, and cannot match a DXGI adapter or a vendor library's GPU
+ * against; the guest's adapter is avgpu's, and these are what Windows says of
+ * it (docs/vendor-libraries.md). CL_DEVICE_UUID_KHR is left to the host, as the Vulkan ICD leaves
  * VkPhysicalDeviceIDProperties::deviceUUID: it identifies the physical GPU
  * doing the work, and there is no second GPU here to confuse it with.
  *
@@ -38,8 +41,15 @@
 
 #include <CL/cl.h>
 
+#include "guest/kmt/pci_location.hpp"
+#include "icd/common/adapter_string.hpp"
+
 #include <stddef.h>
 #include <stdint.h>
+
+namespace av {
+class PciIdentity;
+}  // namespace av
 
 namespace av::clicd {
 
@@ -48,9 +58,11 @@ struct ClDeviceReportProbe;
 class ClDeviceReport {
 public:
     /* Red Hat's PCI vendor, which is the virtio function avgpu drives
-     * (1af4:1050). An application matching this device against an adapter it
-     * enumerated matches the guest's, so this is the guest's. */
+     * (1af4:1050): the vendor answered before an adapter is described. Once
+     * one is, its own - the host GPU's vendor, which avgpu presents. */
     static constexpr uint32_t vendor_id = 0x1AF4u;
+    static constexpr uint32_t amd_vendor = 0x1002u;
+    static constexpr uint32_t nvidia_vendor = 0x10DEu;
 
     /* `adapter_luid` is the avgpu adapter's, as Kmt::adapter_luid answers it;
      * zero is what it leaves when there was no adapter, and is reported as a
@@ -62,6 +74,11 @@ public:
     /* Whether `adapter_luid` is the adapter this device is on; a report with
      * no adapter names none. */
     bool     names_adapter(uint64_t adapter_luid) const;
+    /* Whether the adapter presents `vendor`'s GPU. */
+    bool     on_vendor(uint32_t vendor) const;
+    /* What Windows says of that adapter: its PCI identity, where it sits,
+     * and its name in UTF-16 (null for none). */
+    void     observe_adapter(const PciIdentity &identity, const PciLocation &location, const uint16_t *name);
     ClDeviceReport(const ClDeviceReport &) = delete;
     ClDeviceReport &operator=(const ClDeviceReport &) = delete;
 
@@ -99,8 +116,18 @@ private:
     cl_int answer(const void *from, size_t bytes, size_t value_bytes, void *value,
                   size_t *size_ret) const;
     cl_int answer_text(const char *text, size_t value_bytes, void *value, size_t *size_ret) const;
+    /* The adapter's name, or CL_INVALID_VALUE where it has none. */
+    cl_int answer_name(size_t value_bytes, void *value, size_t *size_ret) const;
+    /* The AMD and NVIDIA queries of where the device sits, on an adapter of
+     * that vendor; CL_INVALID_VALUE otherwise. */
+    cl_int answer_vendor_location(cl_device_info name_asked, size_t value_bytes, void *value,
+                                  size_t *size_ret) const;
 
     uint64_t                   luid_;
+    uint32_t                   vendor_;
+    PciLocation                location_;
+    bool                       located_;
+    icd::AdapterString         name_;
     char                       version_[version_bytes];
     char                       c_version_[version_bytes];
     uint32_t                   major_;

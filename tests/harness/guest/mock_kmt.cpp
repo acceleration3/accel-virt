@@ -1290,6 +1290,11 @@ void MockKmt::slip_every(std::uint32_t nth, std::uint64_t ticks)
 
 std::uint32_t MockKmt::last_code() const { return last_code_; }
 
+void MockKmt::set_identity(std::uint32_t index, const PciIdentity &identity)
+{
+    if (index < adapter_count_) identities_[index] = identity;
+}
+
 void MockKmt::add_adapter(const PciIdentity &identity, std::uint32_t driver_version)
 {
     if (adapter_count_ == max_adapters) return;
@@ -1392,10 +1397,85 @@ std::uint64_t MockKmt::allocation_pages(std::uint32_t allocation)
 const std::uint8_t *MockKmt::last_private() const { return private_; }
 std::uint32_t       MockKmt::last_private_size() const { return private_size_; }
 
-Status MockKmt::query_adapter_features(std::uint32_t, UmdAdapterInfo &info)
+Status MockKmt::query_adapter_features(std::uint32_t adapter, UmdAdapterInfo &info)
 {
-    info = UmdAdapterInfo(0u, 0u);
+    info = UmdAdapterInfo();
+    if (!begin(Call::query_adapter_features)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    const bool          kept = object != nullptr && object->owner < adapter_count_;
+    info = UmdAdapterInfo(kept ? luids_[object->owner] : 0u, kept ? adapter_features_[object->owner] : 0u);
     return Status::ok;
+}
+
+Status MockKmt::query_adapter_location(std::uint32_t adapter, PciLocation &location)
+{
+    location = PciLocation();
+    if (!begin(Call::query_adapter_location)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    if (object == nullptr) return misuse();
+    if (object->owner < adapter_count_) location = locations_[object->owner];
+    return succeed();
+}
+
+Status MockKmt::query_adapter_name(std::uint32_t adapter, std::uint16_t *name, std::uint32_t capacity)
+{
+    if (name == nullptr || capacity == 0u) return refuse(invalid_parameter);
+    name[0] = 0u;
+    if (!begin(Call::query_adapter_name)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    if (object == nullptr) return misuse();
+    if (object->owner >= adapter_count_) return succeed();
+    const char   *text = names_[object->owner];
+    std::uint32_t index = 0u;
+    for (; index + 1u < capacity && text[index] != '\0'; ++index) name[index] = static_cast<unsigned char>(text[index]);
+    name[index] = 0u;
+    return succeed();
+}
+
+Status MockKmt::query_kmd_driver_version(std::uint32_t adapter, std::uint64_t &version)
+{
+    version = 0u;
+    if (!begin(Call::query_kmd_driver_version)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    if (object == nullptr) return misuse();
+    if (object->owner < adapter_count_) version = kmd_versions_[object->owner];
+    return succeed();
+}
+
+void MockKmt::describe_adapter(std::uint32_t index, const PciLocation &location, const char *name,
+                               std::uint64_t kmd_version)
+{
+    if (index >= max_adapters) return;
+    locations_[index] = location;
+    std::uint32_t at = 0u;
+    for (; name != nullptr && at + 1u < sizeof names_[index] && name[at] != '\0'; ++at) names_[index][at] = name[at];
+    names_[index][at] = '\0';
+    kmd_versions_[index] = kmd_version;
+}
+
+Status MockKmt::query_segment_sizes(std::uint32_t adapter, std::uint64_t &dedicated_video,
+                                    std::uint64_t &dedicated_system, std::uint64_t &shared_system)
+{
+    dedicated_video = dedicated_system = shared_system = 0u;
+    if (!begin(Call::query_segment_sizes)) return refuse(last_code_);
+    if (find(Kind::adapter, adapter) == nullptr) return misuse();
+    dedicated_video = segment_sizes_[0];
+    dedicated_system = segment_sizes_[1];
+    shared_system = segment_sizes_[2];
+    return succeed();
+}
+
+void MockKmt::set_segment_sizes(std::uint64_t dedicated_video, std::uint64_t dedicated_system,
+                                std::uint64_t shared_system)
+{
+    segment_sizes_[0] = dedicated_video;
+    segment_sizes_[1] = dedicated_system;
+    segment_sizes_[2] = shared_system;
+}
+
+void MockKmt::set_adapter_features(std::uint32_t index, std::uint64_t features)
+{
+    if (index < max_adapters) adapter_features_[index] = features;
 }
 
 

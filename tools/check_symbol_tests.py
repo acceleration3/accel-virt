@@ -52,6 +52,11 @@ EXCLUDE = {
     "src/icd/opencl/d3d_adapter_source.hpp": "the DXGI the OpenCL ICD asks for an adapter's LUID, implemented "
                              "by WindowsD3dAdapterSource in src/um and by ScriptedD3dAdapterSource in "
                              "tests/harness, and exercised through every cl_d3d10_sharing test",
+    "src/icd/opencl/d3d11_bridge.hpp": "the Direct3D 11 the OpenCL ICD copies through, implemented by "
+                             "WindowsD3d11Bridge in src/um and by ScriptedD3d11Bridge in tests/harness, and "
+                             "exercised through every cl_d3d11_sharing test",
+    "src/icd/opencl/d3d11_rows.hpp": "what is done with a mapped subresource, implemented by ClD3d11Upload and "
+                             "ClD3d11Download, whose own tests call it",
 }
 
 
