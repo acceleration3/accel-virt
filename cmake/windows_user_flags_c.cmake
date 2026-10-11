@@ -42,7 +42,13 @@ if(AV_GUEST_ARCH STREQUAL "x86")
 else()
   set(AV_GUEST_ARCH_LINK "")
 endif()
+# /Brepro and /PDBALTPATH:%_PDB% make the image depend on its source alone:
+# no link time, a PDB GUID from the content, and the PDB named without the
+# build directory. The package's package.sha256 is then the same for the
+# same source, and LSW offers a guest a driver update only when one changed.
 string(JOIN " " CMAKE_EXE_LINKER_FLAGS_INIT
-  /SUBSYSTEM:CONSOLE /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG ${AV_GUEST_ARCH_LINK})
+  /SUBSYSTEM:CONSOLE /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG /Brepro /PDBALTPATH:%_PDB%
+  ${AV_GUEST_ARCH_LINK})
 string(JOIN " " CMAKE_SHARED_LINKER_FLAGS_INIT
-  /DLL /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG ${AV_GUEST_ARCH_LINK})
+  /DLL /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG /Brepro /PDBALTPATH:%_PDB%
+  ${AV_GUEST_ARCH_LINK})

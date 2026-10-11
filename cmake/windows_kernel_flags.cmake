@@ -28,9 +28,13 @@ endforeach()
 # MiObtainSectionForDriver refuses a native image carrying that bit with
 # STATUS_CONFLICTING_ADDRESSES before DriverEntry runs: Code 39 in the guest.
 set(CMAKE_CXX_CREATE_CONSOLE_EXE "")
+# /Brepro and /PDBALTPATH:%_PDB% make avgpu.sys depend on its source alone:
+# no link time, a PDB GUID from the content, and the PDB named without the
+# build directory. The package's package.sha256 is then the same for the
+# same source, and LSW offers a guest a driver update only when one changed.
 string(JOIN " " CMAKE_EXE_LINKER_FLAGS_INIT
   /DRIVER /SUBSYSTEM:NATIVE /ENTRY:GsDriverEntry /NODEFAULTLIB /MANIFEST:NO
-  /TSAWARE:NO /OPT:REF /DEBUG)
+  /TSAWARE:NO /OPT:REF /DEBUG /Brepro /PDBALTPATH:%_PDB%)
 
 set(AV_WINDOWS_KIT_LIBRARIES ntoskrnl.lib hal.lib BufferOverflowK.lib displib.lib)
 list(TRANSFORM AV_WINDOWS_KIT_LIBRARIES PREPEND "\"${AV_WINDOWS_KIT_DIR}/lib/x64/")
