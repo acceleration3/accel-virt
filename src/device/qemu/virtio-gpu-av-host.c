@@ -1065,7 +1065,10 @@ static bool av_amdgpu_name(const AvGpuProperties *gpu, int revision, char *name,
 }
 
 /* The PCI ID database's name for the device, its bracketed product name when
- * it has one ("Granite Ridge [Radeon Graphics]"), after the vendor's. */
+ * it has one ("Alder Lake-P GT2 [Iris Xe Graphics]"), after the prefix the
+ * vendor's Windows driver gives a product. A product that already starts
+ * with the vendor's word has it replaced, not repeated: "Intel Arc Graphics"
+ * is "Intel(R) Arc Graphics". */
 static bool av_pci_ids_name(const AvGpuProperties *gpu, char *name, size_t size)
 {
     static const char *const databases[] = {"/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids"};
@@ -1073,6 +1076,7 @@ static bool av_pci_ids_name(const AvGpuProperties *gpu, char *name, size_t size)
     g_autofree char *device_line = g_strdup_printf("\t%04x  ", gpu->device_id);
     const char *vendor = gpu->vendor_id == 0x1002 ? "AMD" : gpu->vendor_id == 0x8086 ? "Intel(R)"
                        : gpu->vendor_id == 0x10de ? "NVIDIA" : NULL;
+    const char *word = gpu->vendor_id == 0x8086 ? "Intel " : gpu->vendor_id == 0x10de ? "NVIDIA " : "AMD ";
 
     for (size_t d = 0; d < G_N_ELEMENTS(databases) && vendor; d++) {
         g_autofree char *text = NULL;
@@ -1096,7 +1100,8 @@ static bool av_pci_ids_name(const AvGpuProperties *gpu, char *name, size_t size)
             const char *close = open ? strchr(open, ']') : NULL;
             g_autofree char *picked = open && close ? g_strndup(open + 1, (gsize)(close - open - 1))
                                                     : g_strdup(product);
-            g_autofree char *full = g_strdup_printf("%s %s", vendor, picked);
+            const char *rest = g_str_has_prefix(picked, word) ? picked + strlen(word) : picked;
+            g_autofree char *full = g_strdup_printf("%s %s", vendor, rest);
             g_strlcpy(name, full, size);
             return true;
         }
@@ -1104,18 +1109,33 @@ static bool av_pci_ids_name(const AvGpuProperties *gpu, char *name, size_t size)
     return false;
 }
 
+/* An integrated GPU AMD's table does not name. An AMD one is "AMD
+ * Radeon(TM) Graphics", what AMD's own Windows driver calls these: the PCI ID
+ * database's bracket lists whatever the device ID was sold as ("Granite Ridge
+ * [Radeon 610M]" for a desktop Ryzen 9000's GPU, never called that). Another
+ * vendor's is the database's name. */
+static bool av_integrated_name(const AvGpuProperties *gpu, char *name, size_t size)
+{
+    if (gpu->vendor_id == 0x1002) {
+        g_strlcpy(name, "AMD Radeon(TM) Graphics", size);
+        return true;
+    }
+    return av_pci_ids_name(gpu, name, size);
+}
+
 /* The name Windows would give the adapter. Vulkan's deviceName is the
  * driver's: RADV names an integrated GPU after its processor, "AMD Ryzen 9
  * 9950X3D 16-Core Processor (RADV RAPHAEL_MENDOCINO)", which is no GPU's name
  * and runs past what the capset carries. AMD's own table comes first, then,
- * for an integrated GPU, the PCI ID database's; otherwise Vulkan's stands. */
+ * for an integrated GPU, av_integrated_name; otherwise Vulkan's stands.
+ * tools/host/list_gpus.py makes the same choice. */
 static void av_marketing_name(AvGpuProperties *gpu)
 {
     char name[sizeof(gpu->name)] = {0};
     const int revision = av_pci_revision(gpu);
 
     if (av_amdgpu_name(gpu, revision, name, sizeof(name)) ||
-        (gpu->device_type == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && av_pci_ids_name(gpu, name, sizeof(name)))) {
+        (gpu->device_type == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && av_integrated_name(gpu, name, sizeof(name)))) {
         g_strlcpy(gpu->name, name, sizeof(gpu->name));
     }
 }

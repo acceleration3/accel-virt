@@ -192,6 +192,25 @@ class WhatTheGuestIsTold(unittest.TestCase):
         self.assertEqual(list_gpus.adapter_name("y" * 46 + "\u00e9" + "y" * 8), "y" * 46)
         self.assertEqual(list_gpus.adapter_name("w" * 47 + " (RADV)"), "w" * 47)
 
+    def test_an_integrated_gpu_amds_table_leaves_out_is_named_as_its_vendor_names_it(self):
+        """An AMD one by AMD's generic name, whatever the PCI ID database's bracket
+        says; another vendor's by the database's name after the vendor, once."""
+        self.tree.write("pci.ids", "1002  Advanced Micro Devices, Inc. [AMD/ATI]\n"
+                                   "\t13c0  Granite Ridge [Radeon 610M]\n"
+                                   "8086  Intel Corporation\n"
+                                   "\t46a6  Alder Lake-P GT2 [Iris Xe Graphics]\n"
+                                   "\t7d55  Meteor Lake-P [Intel Arc Graphics]\n"
+                                   "\t7d67  Arrow Lake-S\n")
+        databases = (self.tree.root / "missing.ids", self.tree.root / "pci.ids")
+        cases = {(0x1002, 0x13C0): "AMD Radeon(TM) Graphics",
+                 (0x8086, 0x7D55): "Intel(R) Arc Graphics",
+                 (0x8086, 0x46A6): "Intel(R) Iris Xe Graphics",
+                 (0x8086, 0x7D67): "Intel(R) Arrow Lake-S",
+                 (0x8086, 0x9999): None,
+                 (0x1AF4, 0x1050): None}
+        for (vendor, device), expected in cases.items():
+            self.assertEqual(list_gpus.integrated_name(vendor, device, databases), expected, f"{vendor:04x}:{device:04x}")
+
 
 if __name__ == "__main__":
     unittest.main()

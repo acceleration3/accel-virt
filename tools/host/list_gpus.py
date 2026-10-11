@@ -75,12 +75,12 @@ class Gpu:
     def adapter_name(self, sysfs=SYSFS_PCI):
         """What Windows would call the adapter: AMD's own product table first,
         then, for an integrated GPU (which RADV names after its processor),
-        the PCI ID database's product name; else the Vulkan name, trimmed.
-        The same choice the device makes (virtio-gpu-av-host.c)."""
+        integrated_name; else the Vulkan name, trimmed. The same choice the
+        device makes (virtio-gpu-av-host.c)."""
         vendor, device, revision = self.pci_identity(sysfs)
         name = amdgpu_name(vendor, device, revision)
         if name is None and self.kind == "integrated":
-            name = pci_ids_name(vendor, device)
+            name = integrated_name(vendor, device)
         return adapter_name(name if name is not None else self.name)
 
     def pci_identity(self, sysfs=SYSFS_PCI):
@@ -108,7 +108,15 @@ def sysfs_number(sysfs, address, attribute):
 
 AMDGPU_IDS = "/usr/share/libdrm/amdgpu.ids"
 PCI_IDS = ("/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids")
-VENDOR_NAMES = {0x1002: "AMD", 0x8086: "Intel(R)", 0x10DE: "NVIDIA"}
+# The prefix each vendor's Windows driver puts before a product, and the word
+# the PCI ID database may already start a product with, which the prefix
+# replaces rather than repeats ("Intel Graphics" is "Intel(R) Graphics").
+VENDOR_NAMES = {0x1002: ("AMD", "AMD"), 0x8086: ("Intel(R)", "Intel"), 0x10DE: ("NVIDIA", "NVIDIA")}
+# An AMD integrated GPU AMD's table leaves out. The PCI ID database's bracket
+# lists whatever the device ID was sold as ("Granite Ridge [Radeon 610M]" for
+# a desktop Ryzen 9000's GPU, never called that), and AMD's own Windows
+# driver names these "AMD Radeon(TM) Graphics".
+AMD_INTEGRATED = "AMD Radeon(TM) Graphics"
 
 
 def amdgpu_name(vendor, device, revision, table=AMDGPU_IDS):
@@ -128,8 +136,14 @@ def amdgpu_name(vendor, device, revision, table=AMDGPU_IDS):
     return None
 
 
+def integrated_name(vendor, device, databases=PCI_IDS):
+    """An integrated GPU AMD's table does not name: AMD's generic name for an
+    AMD one, the PCI ID database's for another vendor's."""
+    return AMD_INTEGRATED if vendor == 0x1002 else pci_ids_name(vendor, device, databases)
+
+
 def pci_ids_name(vendor, device, databases=PCI_IDS):
-    prefix = VENDOR_NAMES.get(vendor)
+    prefix, word = VENDOR_NAMES.get(vendor, (None, None))
     for database in databases if prefix else ():
         try:
             lines = pathlib.Path(database).read_text(errors="replace").splitlines()
@@ -143,7 +157,8 @@ def pci_ids_name(vendor, device, databases=PCI_IDS):
             if in_vendor and line.startswith(f"\t{device:04x}  "):
                 product = line[len(f"\t{device:04x}  "):]
                 bracketed = re.search(r"\[([^\]]+)\][^\[]*$", product)
-                return f"{prefix} {bracketed.group(1) if bracketed else product}"
+                picked = bracketed.group(1) if bracketed else product
+                return f"{prefix} {picked.removeprefix(word + ' ')}"
     return None
 
 
