@@ -247,8 +247,16 @@ copied the table.
   own: `nm -D` shows neither the library nor the QEMU module exporting it.
   The executor ABI has no call a device could ask for its state with, so the
   library serves its own dump on `/dev/shm/av-state-executor-<pid>.sock`
-  (`StateSocket` over `ReporterStateSource`, with `ExecutorRoot` reporting the
-  GPUs it asked about and each live session's API and GPU, without a lock).
+  (`StateSocket` over `ReporterStateSource`, with `ExecutorRoot` reporting,
+  without a lock of its own):
+  - `executor/0 sessions= live= gpus= overflowed=`, `gpu/<n> uuid= sub_apis=`;
+  - per open domain: `domain/<id> gpu=`;
+  - per live session: `session/<slot> api= gpu= domain=`;
+  - per GPU, `gpu_shares/<n>`, then its `HostShares`: `shares/0 live= objects=
+    d3d11= d3d12= released_by_guest= unindexed= holders= retiring=`, and per
+    share `share/<id> domain= origin= kind= size= guest_holds= published=
+    exported= holders= opens= writes=` (or `busy=true` while a worker holds
+    the table); then `exportable_images/0 live= retired= blocks=`.
   Before it does, it pins itself with `RTLD_NODELETE`: QEMU closes an executor
   it no longer needs, and the socket's thread and every traced thread's signal
   stack destructor run code in the library for the rest of the process.

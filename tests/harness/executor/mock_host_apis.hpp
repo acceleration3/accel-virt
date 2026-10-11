@@ -6,6 +6,10 @@
 #include "executor/host_apis.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "core/log/driver_log.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "executor/shim/host_heap.hpp"
 
 #include <stdint.h>
 
@@ -45,6 +49,7 @@ public:
     D3d12HostDevice    *d3d12_device(uint32_t index) override;
     D3d9HostDevice     *d3d9_device(uint32_t index) override;
     SharedSurfaces     *surfaces(uint32_t index) override;
+    HostShares         *shares(uint32_t index) override;
 
 private:
     struct Gpu {
@@ -59,6 +64,10 @@ private:
     D3d11HostDevice d3d11_;
     uint32_t        d3d11_index_;
     SharedSurfaces  surfaces_;
+    HostHeap        heap_;
+    RecordingLog    log_;
+    DriverLog       lines_;
+    HostShares      shares_;
 };
 
 }  // namespace av

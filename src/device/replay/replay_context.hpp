@@ -33,10 +33,9 @@ public:
     ReplayContext(const ReplayContext &) = delete;
     ReplayContext &operator=(const ReplayContext &) = delete;
 
-    /* The executor `library` makes for `api` on `gpu_uuid`: invalid_state once
-     * created, no_memory when the library makes none. */
-    [[nodiscard]] Status create(const ExecutorLibrary &library, uint32_t context, SubApi api,
-                                const uint8_t *gpu_uuid);
+    /* The executor `library` makes for `api` in its domain: invalid_state
+     * once created, no_memory when the library makes none. */
+    [[nodiscard]] Status create(const ExecutorLibrary &library, uint32_t context, SubApi api);
     void                 destroy(const ExecutorLibrary &library);
     bool                 created() const;
     uint32_t             context() const;

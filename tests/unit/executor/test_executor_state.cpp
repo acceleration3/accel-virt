@@ -36,8 +36,8 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  ContextSession *const on_intel = root.open(AV_EXECUTOR_SUB_API_VULKAN, intel);
-  ContextSession *const on_nvidia = root.open(AV_EXECUTOR_SUB_API_VULKAN, nvidia);
+  ContextSession *const on_intel = held.open(AV_EXECUTOR_SUB_API_VULKAN, intel);
+  ContextSession *const on_nvidia = held.open(AV_EXECUTOR_SUB_API_VULKAN, nvidia);
   CHECK(on_intel != nullptr);
   CHECK(on_nvidia != nullptr);
   root.close(on_intel);
@@ -49,8 +49,13 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
       "executor/0 sessions=64 live=1 gpus=2 overflowed=false\n"
       "executor/0/gpu/0 uuid=8680A6460C0000000002000000000000 sub_apis=0x0000000000000005\n"
       "executor/0/gpu/1 uuid=7B7AD2C542198C80C4FDA64B8775AEDB sub_apis=0x0000000000000001\n"
-      "executor/0/session/1 api=vulkan gpu=1";
-  CHECK(std::strcmp(writer.dump(), expected) == 0);
+      "executor/0/domain/1 gpu=0\n"
+      "executor/0/domain/2 gpu=1\n"
+      "executor/0/session/1 api=vulkan gpu=1 domain=2\n"
+      "executor/0/gpu_shares/0\n"
+      "executor/0/gpu_shares/0/shares/0 live=0";
+  CHECK(std::strncmp(writer.dump(), expected, std::strlen(expected)) == 0);
+  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/1/shares/0 live=0") != nullptr);
   CHECK(root.invariants_hold());
   root.close(on_nvidia);
   StateWriter after(bytes, sizeof bytes);
@@ -76,9 +81,25 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
   char bytes[1024];
   StateWriter writer(bytes, sizeof bytes);
   root.report(writer);
-  CHECK(std::strstr(writer.dump(), "\nexecutor/0/session/0 api=opencl gpu=0\nexecutor/0/session/1 api=opengl gpu=0\n"
-                                   "executor/0/session/2 api=unknown gpu=0") != nullptr);
+  CHECK(std::strstr(writer.dump(), "\nexecutor/0/session/0 api=opencl gpu=0 domain=0\n"
+                                   "executor/0/session/1 api=opengl gpu=0 domain=0\n"
+                                   "executor/0/session/2 api=unknown gpu=0 domain=0") != nullptr);
   for (std::uint32_t slot = 0u; slot < 3u; slot++) probe.session_at(slot).release(); }
+
+/* A GPU with a Direct3D 11 device reports its exportable images beside its
+ * shares. */
+TEST(executor_root_report, a_gpu_s_device_reports_its_exportable_images)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.give_d3d11(0u);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  char bytes[1024];
+  StateWriter writer(bytes, sizeof bytes);
+  root.report(writer);
+  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/0/shares/0 live=0") != nullptr);
+  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/0/exportable_images/0 live=0 retired=0") != nullptr); }
 
 TEST(executor_root_report, a_root_that_never_asked_has_nothing_but_its_line)
 { RootUnderTest held;

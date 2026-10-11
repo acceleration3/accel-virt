@@ -17,11 +17,13 @@
 #ifndef AV_ICD_SHARED_HANDLES_HPP
 #define AV_ICD_SHARED_HANDLES_HPP
 
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class Kmt;
 }
 
@@ -46,29 +48,29 @@ struct SharedHandleSlot {
 
 class SharedHandles {
 public:
-    /* More than an application shares: DXGI interop is a handful of surfaces
-     * and fences per device, as 047's table is sized for. */
-    static constexpr uint32_t max_handles = 64u;
     /* The allocation private driver data an open carries back: a descriptor
      * and a shared object's record, with room over. */
     static constexpr uint32_t max_private = 128u;
 
-    SharedHandles(Kmt &kmt, ThreadLock &lock);
+    /* Rows are kept in `memory`: as many as the process holds handles, which
+     * is no count a fixed table should guess - a mirror's capture alone keeps
+     * three per window it shows. */
+    SharedHandles(Kmt &kmt, ThreadLock &lock, BlockSource &memory);
     SharedHandles(const SharedHandles &) = delete;
     SharedHandles &operator=(const SharedHandles &) = delete;
 
     /* An NT handle for the resource `carrier` of `device`, which already
      * carries `object_id` - the id this process's own create was handed back.
      * The same object minted twice answers the same handle, as Windows does
-     * for a handle to one object. invalid_parameter for an id of 0; no_space
-     * when every row is taken; whatever the kernel answered when it would not
+     * for a handle to one object. invalid_parameter for an id of 0; no_memory
+     * when no row can be had; whatever the kernel answered when it would not
      * share. 0 unless ok. */
     [[nodiscard]] Status mint(uint32_t device, uint32_t carrier, uint64_t object_id, uint64_t &handle);
     /* A handle another process sent, opened on `device`, with the id read out
      * of the creating process's own bytes. A handle already held answers its
      * id and opens nothing again. invalid_parameter for a handle of 0 or bytes
      * that carry no assigned record; not_found for a handle this process may
-     * not open; no_space when every row is taken. 0 unless ok. */
+     * not open; no_memory when no row can be had. 0 unless ok. */
     [[nodiscard]] Status adopt(uint32_t device, uint64_t handle, uint64_t &object_id);
     /* The object `handle` names. False for a handle this table neither minted
      * nor adopted, which leaves `object_id` alone. */
@@ -92,14 +94,13 @@ private:
     const SharedHandleSlot *row_of(uint64_t handle) const;
     /* The row `object_id` is in, or null. The caller holds the lock. */
     SharedHandleSlot       *row_for(uint64_t object_id);
-    /* The row dropped, its handle closed and the resource an adopt opened for
-     * it destroyed. The caller holds the lock. */
-    void                    give_back(SharedHandleSlot &row);
+    /* Its handle closed and the resource an adopt opened for it destroyed;
+     * dropping the row is the caller's. The caller holds the lock. */
+    void                    give_back(const SharedHandleSlot &row);
 
-    Kmt              &kmt_;
-    ThreadLock       &lock_;
-    SharedHandleSlot  slots_[max_handles];
-    uint32_t          live_;
+    Kmt                                  &kmt_;
+    ThreadLock                           &lock_;
+    mutable ObjectPool<SharedHandleSlot> slots_;
 };
 
 }  // namespace av::icd

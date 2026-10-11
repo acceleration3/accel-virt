@@ -55,6 +55,17 @@ TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
   CHECK_EQ(second->import_kinds(AV_EXECUTOR_SUB_API_OPENCL), 0u);
   CHECK(set.invariants_hold()); }
 
+/* A domain remembers its GPU by index once the device named it by UUID. */
+TEST(host_gpu_set, answers_each_gpu_by_its_index)
+{ MockHostApis apis;
+  apis.add_gpu(intel, all_three, 0u, 0u, 0u);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  HostGpuSet set;
+  set.initialize(apis);
+  CHECK(set.at(0u) == set.find(intel));
+  CHECK(set.at(1u) == set.find(nvidia));
+  CHECK(set.at(2u) == nullptr); }
+
 TEST(host_gpu_set, a_uuid_no_gpu_has_is_not_found)
 { MockHostApis apis;
   apis.add_gpu(intel, all_three, 0u, 0u, 0u);

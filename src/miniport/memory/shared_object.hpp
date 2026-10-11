@@ -34,8 +34,13 @@ public:
     const SharedObjectKind &kind() const;
     uint64_t                size() const;
     /* Whether it is this allocation's identity, which is how the table finds
-     * what to forget when an allocation is destroyed. */
+     * what to forget when an allocation is destroyed. A forgotten object names
+     * none. */
     bool                    names(const Allocation &allocation) const;
+    /* Its allocation was destroyed: it is gone from the whole guest, and waits
+     * only for the device to be told. */
+    void                    forget();
+    bool                    forgotten() const;
     uint32_t                opens() const;
 
     /* One more device holding it. no_space at the ceiling: a count that wrapped
@@ -57,8 +62,8 @@ private:
     uint64_t         id_;
     SharedObjectKind kind_;
     uint64_t         size_;
-    /* The allocation it names, which outlives it: the table forgets the object
-     * when the allocation is destroyed. */
+    /* The allocation it names, which outlives it until the table forgets the
+     * object as the allocation is destroyed; null from then on. */
     Allocation      *allocation_;
     uint32_t         opens_;
 

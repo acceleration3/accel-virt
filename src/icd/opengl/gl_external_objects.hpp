@@ -19,6 +19,7 @@
 #ifndef AV_GLICD_GL_EXTERNAL_OBJECTS_HPP
 #define AV_GLICD_GL_EXTERNAL_OBJECTS_HPP
 
+#include "core/support/object_pool.hpp"
 #include "icd/common/opened_objects.hpp"
 
 #include <stdint.h>
@@ -28,6 +29,7 @@ class LogSink;
 }  // namespace av
 
 namespace av {
+class BlockSource;
 class ClientTransport;
 class StateWriter;
 }  // namespace av
@@ -61,9 +63,6 @@ struct GlSharedObjectRow {
 
 class GlExternalObjects {
 public:
-    /* As many as a context can share, matching icd::SharedHandles: a name
-     * whose handle the process could not hold is a name it could not use. */
-    static constexpr uint32_t max_objects = 64u;
     /* The GL errors it answers, which are the ones these entry points have. */
     enum : uint32_t {
         gl_no_error = 0u,
@@ -82,14 +81,15 @@ public:
     static constexpr uint32_t protected_memory = 0x959Bu;
     static constexpr uint32_t d3d12_fence_value = 0x9595u;
 
-    GlExternalObjects(icd::SharedHandles &handles, LogSink &log);
+    /* Rows are kept in `memory`: as many names as the context creates. */
+    GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, LogSink &log);
     GlExternalObjects(const GlExternalObjects &) = delete;
     GlExternalObjects &operator=(const GlExternalObjects &) = delete;
 
     /* glCreateMemoryObjectsEXT and glGenSemaphoresEXT, answered here and never
      * sent: the host has nothing to name yet. `count` names of `kind` written
      * to `names`. GL_INVALID_VALUE for a negative count or no names to write
-     * to, GL_OUT_OF_MEMORY once the table is full - and nothing is written
+     * to, GL_OUT_OF_MEMORY when no row can be had - and nothing is written
      * unless every one of them fits, because a partly filled array is one an
      * application would read whole. */
     uint32_t create(uint32_t kind, int32_t count, uint32_t *names);
@@ -103,7 +103,7 @@ public:
      * imported, and for a memory size of 0; GL_INVALID_OPERATION for a handle
      * type this path does not take, a handle this process may not open, and
      * an object this context already imported under another name;
-     * GL_OUT_OF_MEMORY when the device would not open it. */
+     * GL_OUT_OF_MEMORY when the device would not open it or no row can be had. */
     uint32_t import(ClientTransport &wire, uint32_t device, uint32_t kind, uint32_t name, uint64_t size,
                     uint32_t handle_type, void *handle);
     /* glDeleteMemoryObjectsEXT and glDeleteSemaphoresEXT: each name's object
@@ -138,7 +138,7 @@ public:
     uint32_t live() const;
     void     report(StateWriter &writer) const;
 
-    /* A row is empty or holds one non-zero name of one namespace, no name
+    /* A row holds one non-zero name of one namespace, no name
      * appears twice in one namespace, an imported row's host name is one the
      * device answered for its namespace, and as many objects are open as rows
      * are imported. */
@@ -152,7 +152,7 @@ private:
     bool                     known(uint32_t kind, bool &memory) const;
     GlSharedObjectRow       *row_of(bool memory, uint32_t name);
     const GlSharedObjectRow *row_of(bool memory, uint32_t name) const;
-    /* The object of one row given back to the device, and the row emptied. */
+    /* The object of one row given back to the device, and the row dropped. */
     void                     give_back(ClientTransport &wire, GlSharedObjectRow &row);
     /* What a row's namespace is opened as on the wire. */
     uint32_t                 wire_kind(const GlSharedObjectRow &row) const;
@@ -160,8 +160,7 @@ private:
 
     LogSink           &log_;
     icd::OpenedObjects opened_;
-    GlSharedObjectRow   rows_[max_objects];
-    uint32_t            live_;
+    mutable ObjectPool<GlSharedObjectRow> rows_;
     /* The next name this ICD hands out. Its own counter, because the only
      * memory objects and semaphores that exist in this context are the ones it
      * made - the host's names for them are never seen by the application. */

@@ -20,11 +20,13 @@
 #define AV_ICD_OPENED_OBJECTS_HPP
 
 #include "core/log/driver_log.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class ClientTransport;
 class LogSink;
 class StateWriter;
@@ -50,12 +52,9 @@ struct OpenedObjectRow {
 
 class OpenedObjects {
 public:
-    /* As many as a context can share, matching SharedHandles: an object whose
-     * handle the process could not hold is one it could not name. */
-    static constexpr uint32_t max_objects = 64u;
-
-    /* `prefix` starts every refusal this writes ("avcl: "). */
-    OpenedObjects(SharedHandles &handles, LogSink &log, const char *prefix);
+    /* `prefix` starts every refusal this writes ("avcl: "). Rows are kept in
+     * `memory`: as many as the context opens. */
+    OpenedObjects(SharedHandles &handles, BlockSource &memory, LogSink &log, const char *prefix);
     OpenedObjects(const OpenedObjects &) = delete;
     OpenedObjects &operator=(const OpenedObjects &) = delete;
 
@@ -66,8 +65,9 @@ public:
      *
      * invalid_parameter for a handle of 0 or a memory size no whole number of
      * pages holds; not_found for a handle this process may not open; conflict
-     * for an object this context already opened; no_space when the table is
-     * full; invalid_state when the device would not open it. `made` is 0
+     * for an object this context already opened; no_memory when no row for
+     * the handle or the object can be had, before the device is asked; invalid_state when the device would
+     * not open it. `made` is 0
      * unless ok. */
     [[nodiscard]] Status open(ClientTransport &wire, uint32_t device, uint64_t handle, uint32_t kind, uint64_t size,
                               uint64_t &made);
@@ -99,10 +99,9 @@ private:
     bool                   opened_bytes(uint32_t kind, uint64_t size, uint64_t &bytes) const;
     bool                   row_holds(const OpenedObjectRow &row) const;
 
-    SharedHandles  &handles_;
-    DriverLog       lines_;
-    OpenedObjectRow rows_[max_objects];
-    uint32_t        live_;
+    SharedHandles                       &handles_;
+    DriverLog                            lines_;
+    mutable ObjectPool<OpenedObjectRow> rows_;
 };
 
 }  // namespace av::icd

@@ -107,7 +107,7 @@ TEST(export_answer, a_sync_carries_the_writes_and_a_sync_file)
 TEST(export_answer, hello_carries_the_gpu_and_its_address_only_when_on_pci)
 { std::uint8_t bytes[ExportAnswer::encoded_size] = {};
   ExportAnswer sent(ExportRequest(ExportOperation::hello, 0u, tag), Status::ok);
-  sent.greet(ExportGreeting(uuid, 64u, 0u, 0x03u, 0x00u, 0x01u));
+  sent.greet(ExportGreeting(uuid, 0u, 0x03u, 0x00u, 0x01u));
   CHECK_EQ(sent.descriptors(), 0u);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   CHECK(std::memcmp(bytes + 32u, uuid, sizeof uuid) == 0);
@@ -116,13 +116,19 @@ TEST(export_answer, hello_carries_the_gpu_and_its_address_only_when_on_pci)
   CHECK_EQ(bytes[53], 0x00u);
   CHECK_EQ(bytes[54], 0x01u);
   CHECK_EQ(bytes[55], 1u);   /* on PCI */
-  CHECK_EQ(u32_at(bytes, 56u), 64u);
+  CHECK_EQ(u32_at(bytes, 56u), 0u);
   CHECK_EQ(u32_at(bytes, 60u), 0u);
   ExportAnswer read;
   CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::ok);
   CHECK(read.greeting().on_pci());
   CHECK_EQ(read.greeting().function(), 0x01u);
-  CHECK_EQ(read.greeting().capacity(), 64u);
+  /* Both words past the address are reserved. */
+  bytes[56] = 1u;
+  CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
+  bytes[56] = 0u;
+  bytes[60] = 1u;
+  CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
+  bytes[60] = 0u;
   bytes[55] = 0u;   /* off PCI, with an address left behind */
   CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
   bytes[52] = 0u;
@@ -135,10 +141,10 @@ TEST(export_answer, hello_carries_the_gpu_and_its_address_only_when_on_pci)
   bytes[60] = 1u;
   CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
   bytes[60] = 0u;
-  std::memset(bytes + 56u, 0, 4u);   /* capacity 0: no greeting */
+  std::memset(bytes + 32u, 0, 16u);   /* no UUID: no GPU named */
   CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
   ExportAnswer named(ExportRequest(ExportOperation::export_surface, surface, tag), Status::ok);
-  named.greet(ExportGreeting(uuid, 64u));   /* a greeting in an export */
+  named.greet(ExportGreeting(uuid));   /* a greeting in an export */
   CHECK_STATUS(named.encode(bytes, sizeof bytes), Status::invalid_parameter); }
 
 /* A refusal carries nothing: no body, no descriptor, whatever was asked. */
@@ -274,7 +280,7 @@ TEST(export_answer, another_major_length_magic_or_operation_is_refused)
  * layout or a count given to an answer that does not carry it is refused at
  * encode, so the device cannot write what a consumer would refuse. */
 TEST(export_answer, a_body_its_operation_does_not_carry_is_refused_at_encode)
-{ const ExportGreeting greeting(uuid, 64u);
+{ const ExportGreeting greeting(uuid);
   const ExportedLayout layout(64u, 64u, 0x34325241u, 256u, 0u, 0u);
   const ExportAnswer   answers[] = {
       ExportAnswer(ExportRequest(ExportOperation::hello, 0u, tag), Status::ok),
@@ -308,7 +314,7 @@ TEST(export_answer, a_body_its_operation_does_not_carry_is_refused_at_encode)
 TEST(export_answer, an_answer_naming_the_surface_its_operation_does_not_is_malformed)
 { std::uint8_t bytes[ExportAnswer::encoded_size] = {};
   ExportAnswer greeted(ExportRequest(ExportOperation::hello, 0u, tag), Status::ok);
-  greeted.greet(ExportGreeting(uuid, 64u));
+  greeted.greet(ExportGreeting(uuid));
   CHECK_STATUS(greeted.encode(bytes, sizeof bytes), Status::ok);
   bytes[16] = 1u;
   ExportAnswer read;

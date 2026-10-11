@@ -37,7 +37,7 @@ constexpr std::uint32_t fence = 2u;
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), interrupts_(host_), recorder_(host_), plane_(host_, blobs_, interrupts_, recorder_), ops_(vulkan_only)
+    Fixture() : blobs_(host_), interrupts_(host_), recorder_(host_), ops_(vulkan_only), plane_(host_, blobs_, interrupts_, recorder_)
     {
         host_.set_hostmem_size(0x10000u);
         static_cast<void>(blobs_.initialize());
@@ -56,8 +56,9 @@ private:
     BlobTable         blobs_;
     FenceInterrupts   interrupts_;
     av::WireRecorder  recorder_;
-    LocalContextPlane plane_;
+    /* Before the plane, which closes its domain in the library as it goes. */
     MockExecutorOps   ops_;
+    LocalContextPlane plane_;
 };
 
 const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {7u};
@@ -103,6 +104,8 @@ TEST(local_context_plane, reads_staged_frames_through_its_library)
   fixture.ops().serve_frame(3u, 9u, AvFrameView{pixels, 16u, 4u, 1u, 0u});
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK(fixture.plane().reads_frames());
+  CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view));   /* no domain until started */
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
   CHECK(!fixture.plane().map_frame(uuid, av::SurfacePoint(3u, 8u), 1u, view));
   CHECK(fixture.plane().map_frame(uuid, frame, 1u, view));
   CHECK(view.pixels == pixels);
@@ -133,6 +136,7 @@ TEST(local_context_plane, runs_contexts_through_its_table)
   av::ContextPlane &plane = fixture.plane();
   CHECK_STATUS(plane.initialize(), Status::ok);
   CHECK_STATUS(plane.accept(&fixture.ops().table()), Status::ok);
+  CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
   CHECK_STATUS(fixture.plane().create(0u), Status::invalid_parameter);
   CHECK_STATUS(fixture.plane().create(3u), Status::ok);
   CHECK_STATUS(fixture.plane().create(3u), Status::conflict);
@@ -153,42 +157,48 @@ TEST(local_context_plane, runs_contexts_through_its_table)
   CHECK(!fixture.plane().holds_doorbell(5u));
   CHECK_EQ(fixture.plane().live(), 1u); }
 
-/* A reset leaves no context to hold a shared object, so the objects go with
- * the contexts. */
-TEST(local_context_plane, destroy_all_takes_the_shared_objects_with_the_contexts)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.plane().initialize(), Status::ok);
-  CHECK_STATUS(fixture.plane().create(1u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(2u), Status::ok);
-  const int descriptor = fixture.host().open_descriptor();
-  CHECK_STATUS(LocalContextPlaneProbe::shared(fixture.plane())
-                   .publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, descriptor),
-               Status::ok);
-  CHECK_EQ(LocalContextPlaneProbe::shared(fixture.plane()).live(), 1u);
-  fixture.plane().destroy_all();
-  CHECK_EQ(fixture.plane().live(), 0u);
-  CHECK_EQ(LocalContextPlaneProbe::shared(fixture.plane()).live(), 0u);
-  CHECK_EQ(fixture.host().live_threads(), 0u); }
+/* The device's domain opens in the library as the plane starts, once, on the
+ * GPU it starts for; the plane closes it as it goes, after its contexts. A
+ * GPU the library has not got is a plane whose contexts are refused, not one
+ * that fails to start. */
+TEST(local_context_plane, opens_the_device_s_domain_once_and_closes_it_as_it_goes)
+{ MockExecutorOps ops(vulkan_only);
+  { MockHost          host;
+    BlobTable         blobs(host);
+    FenceInterrupts   interrupts(host);
+    av::WireRecorder  recorder(host);
+    LocalContextPlane plane(host, blobs, interrupts, recorder);
+    CHECK_STATUS(plane.initialize(), Status::ok);
+    CHECK_STATUS(plane.accept(&ops.table()), Status::ok);
+    CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
+    CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
+    CHECK_EQ(ops.domains_opened(), 1u);
+    CHECK_EQ(ops.last_domain_gpu(), 7u);
+    plane.destroy_all();
+    CHECK_EQ(ops.domains_closed(), 0u); }
+  CHECK_EQ(ops.domains_closed(), 1u);
+  MockHost          host;
+  BlobTable         blobs(host);
+  FenceInterrupts   interrupts(host);
+  av::WireRecorder  recorder(host);
+  LocalContextPlane plane(host, blobs, interrupts, recorder);
+  CHECK_STATUS(plane.accept(&ops.table()), Status::ok);
+  ops.refuse_domain_at(1u);
+  CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
+  CHECK_EQ(ops.domains_opened(), 1u); }
 
-/* The guest let go of an object everywhere: the hold its publish made goes,
- * and the executor is told so, on the GPU the release names. Object 0 is
- * every object. */
-TEST(local_context_plane, a_guest_release_closes_the_guest_s_hold_and_tells_the_executor)
+/* The guest let go of an object everywhere: the library is told so, in the
+ * device's domain. Object 0 is every object. */
+TEST(local_context_plane, a_guest_release_tells_the_library_in_the_device_s_domain)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
-  av::HostSharedObjects &shared = LocalContextPlaneProbe::shared(fixture.plane());
-  CHECK_STATUS(shared.publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u,
-                              fixture.host().open_descriptor()), Status::ok);
-  CHECK_STATUS(shared.publish(8u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u,
-                              fixture.host().open_descriptor()), Status::ok);
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
   fixture.plane().shared_released(uuid, 7u);
-  CHECK_EQ(shared.live(), 1u);
   CHECK_EQ(fixture.ops().shared_releases(), 1u);
   CHECK(fixture.ops().last_shared_release() == 7u);
-  CHECK(fixture.ops().last_shared_gpu() == uuid);
+  CHECK(fixture.ops().last_domain() != 0u);
   fixture.plane().shared_released(uuid, 0u);
-  CHECK_EQ(shared.live(), 0u);
   CHECK_EQ(fixture.ops().shared_releases(), 2u);
   CHECK(fixture.ops().last_shared_release() == 0u); }
 
@@ -202,16 +212,16 @@ TEST(local_context_plane, an_image_nothing_published_is_neither_exported_nor_rea
   std::uint32_t pixels[4] = {};
   CHECK(!fixture.plane().read_image(uuid, 9u, pixels, 8u, 2u, 2u)); }
 
-/* The shared objects' line, then the contexts'. */
-TEST(local_context_plane, reports_its_shared_objects_then_its_contexts)
+/* The contexts' line: what they share is the library's to report. */
+TEST(local_context_plane, reports_its_contexts)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
   char bytes[512];
   av::StateWriter writer(bytes, sizeof bytes);
   writer.open("device", 0u);
   fixture.plane().report(writer);
-  CHECK(std::strstr(writer.dump(), "device/0/shared/0") != nullptr);
-  CHECK(std::strstr(writer.dump(), "shared/0") < std::strstr(writer.dump(), "contexts/0 live=0")); }
+  CHECK(std::strstr(writer.dump(), "contexts/0 live=0") != nullptr);
+  CHECK(std::strstr(writer.dump(), "shared/0") == nullptr); }
 
 /* Contexts in QEMU's own process read QEMU's own blob table and raise QEMU's
  * own interrupts, and there is no renderer to lose: the hooks a renderer
@@ -220,6 +230,7 @@ TEST(local_context_plane, the_renderers_hooks_change_nothing_in_process)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
   CHECK_STATUS(fixture.plane().create(3u), Status::ok);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   const std::uint32_t threads = fixture.host().live_threads();
@@ -248,6 +259,8 @@ TEST(local_context_plane, exports_surfaces_through_its_library)
   fixture.ops().serve_surface(5u, AvExportedImage{11, 0u, 8u, 8u, 32u, 0u, 0x34325241u, 0u, 0u}, 3u, 12);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK(fixture.plane().exports_surfaces());
+  CHECK(!fixture.plane().export_surface(uuid, 5u, image));   /* no domain until started */
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
   CHECK(fixture.plane().export_surface(uuid, 5u, image));
   CHECK_EQ(image.fd, 11);
   CHECK_EQ(image.width, 8u);

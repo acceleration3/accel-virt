@@ -38,7 +38,13 @@ namespace av::icd {
 
 /* Rows an open never leaves behind, for the invariant the context folds in. */
 struct OpenedObjectsProbe {
-    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
+    /* A row naming nothing, then none. */
+    static void add_empty(OpenedObjects &opened)
+    {
+        OpenedObjectRow *made = nullptr;
+        CHECK_STATUS(opened.rows_.create(made, OpenedObjectRow{}), Status::ok);
+    }
+    static void clear(OpenedObjects &opened) { opened.rows_.destroy_all(); }
 };
 
 }  // namespace av::icd
@@ -46,8 +52,8 @@ struct OpenedObjectsProbe {
 namespace av::clicd {
 
 struct ClExternalMemoryProbe {
-    static void set_live(ClExternalMemory &memory, std::uint32_t live)
-    { icd::OpenedObjectsProbe::set_live(memory.opened_, live); }
+    static void add_empty(ClExternalMemory &memory) { icd::OpenedObjectsProbe::add_empty(memory.opened_); }
+    static void clear(ClExternalMemory &memory) { icd::OpenedObjectsProbe::clear(memory.opened_); }
 };
 
 }  // namespace av::clicd
@@ -149,9 +155,9 @@ TEST(guest_cl_context, a_shared_object_table_that_cannot_be_true_makes_the_conte
 { ClContextRig rig;
   GuestClContext context = made_context(rig);
   CHECK(context.invariants_hold());
-  av::clicd::ClExternalMemoryProbe::set_live(context.external(), 1u);
+  av::clicd::ClExternalMemoryProbe::add_empty(context.external());
   CHECK(!context.invariants_hold());
-  av::clicd::ClExternalMemoryProbe::set_live(context.external(), 0u);
+  av::clicd::ClExternalMemoryProbe::clear(context.external());
   CHECK(context.invariants_hold()); }
 
 /* An open of another process's handle is made against the D3DKMT device this
@@ -188,7 +194,7 @@ TEST(guest_cl_context, with_no_avgpu_adapter_it_is_not_supported_and_holds_nothi
   av::RecordingLog log;
   av::icd::IcdConnection connection(kmt);
   av::RecordingThreadLock handles_lock(trace, 'H');
-  av::icd::SharedHandles  handles(kmt, handles_lock);
+  av::icd::SharedHandles  handles(kmt, handles_lock, platform);
   /* No adapter was added: what a process on a machine with no avgpu sees. */
   av::RecordingThreadLock blocks_lock(trace, 'B');
   GuestClContext context(connection, platform, send_lock, blocks_lock, log, handles);

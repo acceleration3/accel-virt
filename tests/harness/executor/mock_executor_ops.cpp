@@ -1,7 +1,5 @@
 #include "harness/executor/mock_executor_ops.hpp"
 
-#include "harness/host/mock_host.hpp"
-
 #include <cstring>
 
 namespace av {
@@ -24,14 +22,11 @@ private:
 }  // namespace
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
-    : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
-      executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u), imports_{},
-      refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr), last_options_{},
-      last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u),
-      descriptors_(nullptr), export_handle_kind_(AV_SHARED_HANDLE_DMA_BUF), refuse_export_(0u),
-      lie_on_export_(0u),
-      refuse_object_import_(0u), withhold_object_handle_(0u), exported_objects_(0u), imported_objects_(0u),
-      released_objects_(0u), next_object_(0u), objects_{}
+    : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(),
+      held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u), executed_(0u), ids_{},
+      sizes_{}, last_sub_api_(0u), misuses_(0u), imports_{}, refuse_import_(0u), withhold_handle_(0u),
+      answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr),
+      last_options_{}, last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u)
 {
     pthread_mutex_init(&lock_, nullptr);
     pthread_cond_init(&released_, nullptr);
@@ -83,109 +78,136 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.signal_ = signal;
         mock.signal_context_ = context;
     };
-    /* Version 6: one host object moved between two executors (feature 053).
-     * The descriptor is a real one of the host's, because the device closes it
-     * when the last holder lets go and "closed exactly once" is the claim
-     * these tests are for. */
-    table_.export_object = [](void *opaque, AvExecutor *handle, std::uint32_t kind,
-                              std::uint64_t wire_handle, std::uint32_t *handle_kind,
-                              int *fd) -> std::uint32_t {
+    table_.open_domain = [](void *opaque, const std::uint8_t *gpu_uuid) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
-        if (mock.executor_of(handle) == nullptr || handle_kind == nullptr || fd == nullptr)
-            return AV_UNKNOWN;
-        Lock lock(mock.lock_);
-        if (wire_handle == 0u || kind < AV_SHARED_MEMORY || kind > AV_SHARED_NATIVE_FENCE)
-            return AV_UNKNOWN;
-        if (mock.refuse_export_ != 0u && --mock.refuse_export_ == 0u) return AV_UNKNOWN;
-        if (mock.descriptors_ == nullptr) return AV_UNKNOWN;
-        if (mock.lie_on_export_ != 0u && --mock.lie_on_export_ == 0u) {
-            /* A real descriptor with a kind that is not one: the half of a
-             * lying library the caller cannot tell from a good answer without
-             * looking at what came back. */
-            const int lied = mock.descriptors_->open_descriptor();
-            if (lied < 0) return AV_UNKNOWN;
-            *handle_kind = 0u;
-            *fd = lied;
-            mock.exported_objects_++;
-            return AV_EXECUTED;
-        }
-        const int made = mock.descriptors_->open_descriptor();
-        if (made < 0) return AV_UNKNOWN;
-        *handle_kind = mock.export_handle_kind_;
-        *fd = made;
-        mock.exported_objects_++;
-        return AV_EXECUTED;
+        Lock             lock(mock.lock_);
+        if (mock.refuse_domain_ != 0u && --mock.refuse_domain_ == 0u) return 0u;
+        mock.last_domain_gpu_ = gpu_uuid != nullptr ? gpu_uuid[0] : 0u;
+        return domain_bit | ++mock.domains_opened_;
     };
-    table_.import_object = [](void *opaque, AvExecutor *handle, std::uint32_t kind,
-                              std::uint32_t handle_kind, int fd, std::uint64_t size,
-                              std::uint64_t *wire_handle) -> std::uint32_t {
+    table_.close_domain = [](void *opaque, std::uint32_t domain) {
         MockExecutorOps &mock = mock_of(opaque);
-        if (mock.executor_of(handle) == nullptr || wire_handle == nullptr) return AV_UNKNOWN;
-        Lock lock(mock.lock_);
-        if (fd < 0 || size == 0u || kind < AV_SHARED_MEMORY || kind > AV_SHARED_NATIVE_FENCE)
-            return AV_UNKNOWN;
-        if (mock.refuse_object_import_ != 0u && --mock.refuse_object_import_ == 0u) return AV_UNKNOWN;
-        mock.imported_objects_++;
-        if (mock.withhold_object_handle_ != 0u && --mock.withhold_object_handle_ == 0u) {
-            *wire_handle = 0u;
-            return AV_EXECUTED;
-        }
-        const std::uint64_t made = object_bit | ++mock.next_object_;
-        for (SharedObject &object : mock.objects_) {
-            if (object.live) continue;
-            object = SharedObject{made, kind, handle_kind, size, fd, true};
-            *wire_handle = made;
-            return AV_EXECUTED;
-        }
-        return AV_UNKNOWN;
+        Lock             lock(mock.lock_);
+        mock.domains_closed_++;
+        mock.last_closed_domain_ = domain;
+        for (Share &share : mock.shares_)
+            if (share.domain == domain) share.live = false;
     };
-    table_.release_object = [](void *opaque, AvExecutor *handle, std::uint32_t, std::uint64_t wire_handle) {
+    /* One host object shared between executors (feature 053), kept as the
+     * library keeps it: an id per domain, its kind and size, and who opened
+     * it with what handle. */
+    table_.share_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id, std::uint32_t kind,
+                             std::uint64_t size, std::uint64_t wire_handle) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (mock.executor_of(handle) == nullptr) return AV_SHARED_REFUSED;
+        Lock lock(mock.lock_);
+        if (wire_handle == 0u || kind < AV_SHARED_MEMORY || kind > AV_SHARED_NATIVE_FENCE) return AV_SHARED_REFUSED;
+        if (mock.refuse_share_ != 0u && --mock.refuse_share_ == 0u) return AV_SHARED_REFUSED;
+        for (const Share &share : mock.shares_) {
+            if (!share.live || share.object_id != object_id) continue;
+            const bool again = share.publisher == handle && share.kind == kind && share.size == size;
+            return again ? AV_SHARED_DONE : AV_SHARED_CONFLICT;
+        }
+        for (Share &share : mock.shares_) {
+            if (share.live) continue;
+            share = Share{object_id, mock.last_options_.domain, kind, size, handle, true};
+            mock.shared_objects_++;
+            return AV_SHARED_DONE;
+        }
+        return AV_SHARED_REFUSED;
+    };
+    table_.open_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id, std::uint32_t kind,
+                            std::uint64_t size, std::uint64_t *wire_handle) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (mock.executor_of(handle) == nullptr || wire_handle == nullptr) return AV_SHARED_REFUSED;
+        *wire_handle = 0u;
+        Lock         lock(mock.lock_);
+        const Share *found = nullptr;
+        for (const Share &share : mock.shares_)
+            if (share.live && share.object_id == object_id) found = &share;
+        if (found == nullptr) return AV_SHARED_UNKNOWN;
+        if (found->kind != kind || found->size != size) return AV_SHARED_MISMATCHED;
+        if (found->publisher == handle) return AV_SHARED_CONFLICT;
+        for (const Open &open : mock.opens_)
+            if (open.live && open.object_id == object_id && open.executor == handle) return AV_SHARED_CONFLICT;
+        if (mock.refuse_open_ != 0u && --mock.refuse_open_ == 0u) return AV_SHARED_REFUSED;
+        mock.opened_objects_++;
+        if (mock.withhold_open_handle_ != 0u && --mock.withhold_open_handle_ == 0u) return AV_SHARED_DONE;
+        for (Open &open : mock.opens_) {
+            if (open.live) continue;
+            open = Open{object_id, handle, object_bit | ++mock.next_object_, true};
+            *wire_handle = open.wire_handle;
+            return AV_SHARED_DONE;
+        }
+        return AV_SHARED_REFUSED;
+    };
+    table_.close_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id) {
         MockExecutorOps &mock = mock_of(opaque);
         if (mock.executor_of(handle) == nullptr) return;
         Lock lock(mock.lock_);
-        mock.released_objects_++;
-        for (SharedObject &object : mock.objects_)
-            if (object.live && object.wire_handle == wire_handle) object.live = false;
+        mock.closed_objects_++;
+        for (Open &open : mock.opens_)
+            if (open.live && open.object_id == object_id && open.executor == handle) open.live = false;
     };
-    table_.map_frame = [](void *opaque, const std::uint8_t *, std::uint64_t surface, std::uint32_t point,
+    table_.release_shared = [](void *opaque, std::uint32_t domain, std::uint64_t object_id) {
+        MockExecutorOps &mock = mock_of(opaque);
+        Lock             lock(mock.lock_);
+        mock.shared_releases_++;
+        mock.last_shared_release_ = object_id;
+        mock.last_domain_ = domain;
+        for (Share &share : mock.shares_)
+            if (share.live && share.domain == domain && (object_id == 0u || share.object_id == object_id))
+                share.live = false;
+    };
+    table_.read_image = [](void *opaque, std::uint32_t domain, std::uint64_t, void *, std::uint32_t, std::uint32_t,
+                           std::uint32_t) -> std::uint32_t {
+        mock_of(opaque).last_domain_ = domain;
+        return AV_UNKNOWN;
+    };
+    table_.export_image = [](void *opaque, std::uint32_t domain, std::uint64_t, AvExportedImage *) -> std::uint32_t {
+        mock_of(opaque).last_domain_ = domain;
+        return AV_UNKNOWN;
+    };
+    table_.map_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point,
                           std::uint32_t, AvFrameView *view) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
+        mock.last_domain_ = domain;
         if (view == nullptr || surface == 0u || surface != mock.frame_surface_ || point != mock.frame_point_)
             return AV_UNKNOWN;
         *view = mock.frame_;
         return AV_EXECUTED;
     };
-    table_.unmap_frame = [](void *opaque, const std::uint8_t *, std::uint64_t surface, std::uint32_t point) {
+    table_.unmap_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point) {
         MockExecutorOps &mock = mock_of(opaque);
+        mock.last_domain_ = domain;
         if (surface == mock.frame_surface_ && point == mock.frame_point_) mock.frame_surface_ = 0u;
         mock.frame_unmaps_++;
     };
-    table_.export_surface = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t surface,
+    table_.export_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface,
                                AvExportedImage *image) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
-        mock.surface_gpu_ = gpu_uuid;
+        mock.last_domain_ = domain;
         if (image == nullptr || surface == 0u || surface != mock.surface_) return AV_UNKNOWN;
         *image = mock.surface_image_;
         return AV_EXECUTED;
     };
-    table_.sync_surface = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint64_t *writes,
+    table_.sync_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint64_t *writes,
                              int *fd) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
-        mock.surface_gpu_ = gpu_uuid;
+        mock.last_domain_ = domain;
         if (writes == nullptr || fd == nullptr || surface == 0u || surface != mock.surface_) return AV_UNKNOWN;
         *writes = mock.surface_writes_;
         *fd = mock.surface_fence_;
         return AV_EXECUTED;
     };
-    table_.release_shared = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t object_id) {
-        MockExecutorOps &mock = mock_of(opaque);
-        Lock lock(mock.lock_);
-        mock.shared_releases_++;
-        mock.last_shared_release_ = object_id;
-        mock.last_shared_gpu_ = gpu_uuid;
+    table_.end_batch = [](void *, AvExecutor *) {};
+    table_.poll = [](void *, AvExecutor *) -> std::uint32_t { return 0u; };
+    table_.gpu_progress = [](void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached) {
+        *marked = 0u;
+        *reached = 0u;
     };
-    table_.create_with_options = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
-                                    const AvContextOptions *options, AvExecutor *share) -> AvExecutor * {
+    table_.create = [](void *opaque, std::uint32_t sub_api, const AvContextOptions *options,
+                       AvExecutor *share) -> AvExecutor * {
         MockExecutorOps &mock = mock_of(opaque);
         {
             Lock lock(mock.lock_);
@@ -198,17 +220,9 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         }
         /* Read after the hold: the share must still be alive when a create using it returns. */
         const bool live = mock.alive(share);
-        {
-            Lock lock(mock.lock_);
-            mock.last_share_live_ = live;
-        }
-        return mock.table_.create(opaque, sub_api, uuid);
-    };
-    table_.create = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid) -> AvExecutor * {
-        MockExecutorOps &mock = mock_of(opaque);
-        Lock lock(mock.lock_);
+        Lock       lock(mock.lock_);
+        mock.last_share_live_ = live;
         mock.last_sub_api_ = sub_api;
-        mock.last_uuid_byte_ = uuid[0];
         if (mock.fail_create_ != 0u && --mock.fail_create_ == 0u) return nullptr;
         for (Executor &executor : mock.executors_) {
             if (executor.live) continue;
@@ -227,7 +241,8 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.destroyed_++;
         /* Destroy releases whatever the device never did (av_executor.h). */
         for (Import &import : mock.imports_) import.live = false;
-        for (SharedObject &object : mock.objects_) object.live = false;
+        for (Open &open : mock.opens_)
+            if (open.executor == handle) open.live = false;
     };
     table_.execute = [](void *opaque, AvExecutor *handle, std::uint32_t id, const std::uint8_t *payload,
                         std::size_t size, std::uint8_t *reply, std::size_t capacity,
@@ -328,7 +343,11 @@ std::uint32_t MockExecutorOps::executed() { Lock lock(lock_); return executed_; 
 std::uint32_t MockExecutorOps::id_at(std::uint32_t index) { Lock lock(lock_); return index < journal_capacity ? ids_[index] : 0u; }
 std::uint32_t MockExecutorOps::size_at(std::uint32_t index) { Lock lock(lock_); return index < journal_capacity ? sizes_[index] : 0u; }
 std::uint32_t MockExecutorOps::last_sub_api() { Lock lock(lock_); return last_sub_api_; }
-std::uint8_t  MockExecutorOps::last_uuid_byte() { Lock lock(lock_); return last_uuid_byte_; }
+void          MockExecutorOps::refuse_domain_at(std::uint32_t nth) { Lock lock(lock_); refuse_domain_ = nth; }
+std::uint32_t MockExecutorOps::domains_opened() { Lock lock(lock_); return domains_opened_; }
+std::uint32_t MockExecutorOps::domains_closed() { Lock lock(lock_); return domains_closed_; }
+std::uint32_t MockExecutorOps::last_closed_domain() { Lock lock(lock_); return last_closed_domain_; }
+std::uint8_t  MockExecutorOps::last_domain_gpu() { Lock lock(lock_); return last_domain_gpu_; }
 std::uint32_t MockExecutorOps::misuses() { return misuses_.load(); }
 
 void MockExecutorOps::set_import_kinds(std::uint32_t kinds) { import_kinds_ = kinds; }
@@ -397,63 +416,36 @@ bool MockExecutorOps::fire_signal()
 }
 
 
-void MockExecutorOps::descriptors_from(MockHost &host)
-{
-    Lock lock(lock_);
-    descriptors_ = &host;
-}
-
 void MockExecutorOps::set_abi_version(std::uint32_t version)
 {
     table_.abi_version = version == 0u ? AV_EXECUTOR_ABI_VERSION : version;
 }
 
-void MockExecutorOps::export_handle_kind(std::uint32_t kind)
+void MockExecutorOps::refuse_share_at(std::uint32_t nth) { Lock lock(lock_); refuse_share_ = nth; }
+void MockExecutorOps::refuse_open_at(std::uint32_t nth) { Lock lock(lock_); refuse_open_ = nth; }
+void MockExecutorOps::withhold_open_handle_at(std::uint32_t nth) { Lock lock(lock_); withhold_open_handle_ = nth; }
+std::uint32_t MockExecutorOps::shared_objects() { Lock lock(lock_); return shared_objects_; }
+std::uint32_t MockExecutorOps::opened_objects() { Lock lock(lock_); return opened_objects_; }
+std::uint32_t MockExecutorOps::closed_objects() { Lock lock(lock_); return closed_objects_; }
+
+std::uint32_t MockExecutorOps::live_opens()
 {
-    Lock lock(lock_);
-    export_handle_kind_ = kind;
+    Lock          lock(lock_);
+    std::uint32_t count = 0u;
+    for (const Open &open : opens_)
+        if (open.live) count++;
+    return count;
 }
 
-void MockExecutorOps::lie_on_export_at(std::uint32_t nth)
+bool MockExecutorOps::opened_as(AvExecutor *executor, std::uint64_t object_id, std::uint64_t &wire_handle)
 {
     Lock lock(lock_);
-    lie_on_export_ = nth;
-}
-
-void MockExecutorOps::refuse_export_at(std::uint32_t nth)
-{
-    Lock lock(lock_);
-    refuse_export_ = nth;
-}
-
-void MockExecutorOps::refuse_object_import_at(std::uint32_t nth)
-{
-    Lock lock(lock_);
-    refuse_object_import_ = nth;
-}
-
-void MockExecutorOps::withhold_object_handle_at(std::uint32_t nth)
-{
-    Lock lock(lock_);
-    withhold_object_handle_ = nth;
-}
-
-std::uint32_t MockExecutorOps::exported_objects()
-{
-    Lock lock(lock_);
-    return exported_objects_;
-}
-
-std::uint32_t MockExecutorOps::imported_objects()
-{
-    Lock lock(lock_);
-    return imported_objects_;
-}
-
-std::uint32_t MockExecutorOps::released_objects()
-{
-    Lock lock(lock_);
-    return released_objects_;
+    for (const Open &open : opens_) {
+        if (!open.live || open.object_id != object_id || open.executor != executor) continue;
+        wire_handle = open.wire_handle;
+        return true;
+    }
+    return false;
 }
 
 void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view)
@@ -463,10 +455,7 @@ void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, co
     frame_ = view;
 }
 
-std::uint32_t MockExecutorOps::frame_unmaps() const
-{
-    return frame_unmaps_;
-}
+std::uint32_t MockExecutorOps::frame_unmaps() const { return frame_unmaps_; }
 
 void MockExecutorOps::serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
                                     int fence)
@@ -477,51 +466,8 @@ void MockExecutorOps::serve_surface(std::uint64_t surface, const AvExportedImage
     surface_fence_ = fence;
 }
 
-const std::uint8_t *MockExecutorOps::last_surface_gpu() const
-{
-    return surface_gpu_;
-}
-
-std::uint32_t MockExecutorOps::shared_releases()
-{
-    Lock lock(lock_);
-    return shared_releases_;
-}
-
-std::uint64_t MockExecutorOps::last_shared_release()
-{
-    Lock lock(lock_);
-    return last_shared_release_;
-}
-
-const std::uint8_t *MockExecutorOps::last_shared_gpu()
-{
-    Lock lock(lock_);
-    return last_shared_gpu_;
-}
-
-std::uint32_t MockExecutorOps::live_objects()
-{
-    Lock          lock(lock_);
-    std::uint32_t count = 0u;
-    for (const SharedObject &object : objects_)
-        if (object.live) count++;
-    return count;
-}
-
-bool MockExecutorOps::object_of(std::uint64_t wire_handle, std::uint32_t &kind, std::uint32_t &handle_kind,
-                                std::uint64_t &size, int &fd)
-{
-    Lock lock(lock_);
-    for (const SharedObject &object : objects_) {
-        if (!object.live || object.wire_handle != wire_handle) continue;
-        kind = object.kind;
-        handle_kind = object.handle_kind;
-        size = object.size;
-        fd = object.fd;
-        return true;
-    }
-    return false;
-}
+std::uint32_t MockExecutorOps::last_domain() const { return last_domain_; }
+std::uint32_t MockExecutorOps::shared_releases() { Lock lock(lock_); return shared_releases_; }
+std::uint64_t MockExecutorOps::last_shared_release() { Lock lock(lock_); return last_shared_release_; }
 
 }  // namespace av

@@ -7,8 +7,6 @@
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/batch_executor.hpp"
-#include "device/execution/context_shared_objects.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
@@ -61,6 +59,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
     av::ExecutorLibrary library;
     if (library.accept(&ops.table()) != av::Status::ok) __builtin_trap();
+    if (library.open_domain(uuid) != av::Status::ok) __builtin_trap();
     av::ExecutorShares  shares(host, library);
     av::ContextExecutor executor(host, library, shares, 1u);
     executor.configure(av::SubApi::vulkan, uuid, av::GlContextOptions());
@@ -71,10 +70,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::FenceReporter   fences(host, interrupts, recorder, 1u);
     av::BlobTable       blobs(host);
     av::BlobImports     imports(host, blobs, executor, recorder, 1u);
-    av::HostSharedObjects    objects(host);
-    if (objects.initialize() != av::Status::ok) __builtin_trap();
-    av::ContextSharedObjects shared(objects, executor);
-    av::BatchExecutor batches(host, executor, imports, shared, staging, fences, recorder, 1u);
+    av::BatchExecutor batches(host, executor, imports, staging, fences, recorder, 1u);
     batches.prepare(with_reply ? av::BlobWindow(&reply_pointer, &reply_bytes, 1u, reply_bytes) : av::BlobWindow());
     if (batches.start() != av::Status::ok) __builtin_trap();
     const av::RingWindow ring_window(av::BlobWindow(&ring_pointer, &ring_length, 1u, ring_length), 12u);

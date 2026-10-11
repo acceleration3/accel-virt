@@ -4,7 +4,8 @@
 
 namespace av {
 
-MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus), surfaces_() {}
+MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus), surfaces_(), heap_(),
+      log_(), lines_(log_, "shares: "), shares_(heap_, lines_) {}
 
 void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis, uint32_t vulkan_kinds,
                            uint32_t opengl_kinds, uint32_t opencl_kinds)
@@ -96,6 +97,13 @@ SharedSurfaces *MockHostApis::surfaces(uint32_t index)
 {
     questions_++;
     return index < count_ ? &surfaces_ : nullptr;
+}
+
+/* Likewise one table of shares, every GPU's. */
+HostShares *MockHostApis::shares(uint32_t index)
+{
+    questions_++;
+    return index < count_ ? &shares_ : nullptr;
 }
 
 }  // namespace av

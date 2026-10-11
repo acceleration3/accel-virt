@@ -18,12 +18,22 @@
 
 #include <stdint.h>
 
+#include "core/support/object_pool.hpp"
+
 #include <vulkan/vulkan_core.h>
 
 namespace av::icd {
 
 class ThreadLock;
 struct ExternalObjectsProbe;
+
+}  // namespace av::icd
+
+namespace av {
+class BlockSource;
+}
+
+namespace av::icd {
 
 /* One object this process shares. A type of its own so the table's slots are
  * complete (tools/header_scan.py reads a class's members only to its first
@@ -48,11 +58,9 @@ struct ExternalObjectSlot {
 
 class ExternalObjects {
 public:
-    /* More than an application shares: DXGI interop is a handful of surfaces
-     * and fences per device. */
-    static constexpr uint32_t max_objects = 64u;
-
-    explicit ExternalObjects(ThreadLock &lock);
+    /* Rows are kept in `memory`: as many as the process shares, with no
+     * count past which one is refused. */
+    ExternalObjects(ThreadLock &lock, BlockSource &memory);
     ExternalObjects(const ExternalObjects &) = delete;
     ExternalObjects &operator=(const ExternalObjects &) = delete;
 
@@ -60,8 +68,8 @@ public:
      * and the handle that names it. Exactly one of `memory` and `semaphore` is
      * set. `carrier` is the allocation the identity was minted into for an
      * object this process exported, and 0 for one it opened. False for neither
-     * object or both, an id or a handle of 0, an object already held, and a
-     * table with no room. */
+     * object or both, an id or a handle of 0, an object already held, and no
+     * memory for a row - the one a caller that passes a valid row can meet. */
     [[nodiscard]] bool remember(VkDevice device, VkDeviceMemory memory, VkSemaphore semaphore,
                                 uint64_t object_id, uint64_t size, uint64_t handle, uint32_t carrier);
     /* The NT handle `memory` was published under, or 0 for memory this process
@@ -84,19 +92,19 @@ public:
 
     uint32_t live() const;
 
-    /* A slot is empty or names exactly one object of one device under one
-     * non-zero id and handle, and no object, id or handle appears twice. */
+    /* A row names exactly one object of one device under one non-zero id and
+     * handle, and no object, id or handle appears twice. */
     bool invariants_hold() const;
 
 private:
     /* The slot naming the object, or null. The caller holds the lock. */
     ExternalObjectSlot       *find(VkDeviceMemory memory, VkSemaphore semaphore);
     const ExternalObjectSlot *find(VkDeviceMemory memory, VkSemaphore semaphore) const;
-    /* The row copied out and its slot emptied. The caller holds the lock. */
+    /* The row copied out and dropped. The caller holds the lock. */
     void                      give_back(ExternalObjectSlot &slot, ExternalObjectSlot &row);
 
-    ThreadLock        &lock_;
-    ExternalObjectSlot slots_[max_objects];
+    ThreadLock                             &lock_;
+    mutable ObjectPool<ExternalObjectSlot> slots_;
 
     friend struct ExternalObjectsProbe;
 };

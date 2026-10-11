@@ -154,13 +154,6 @@ class VirtioGpuContextOptions(unittest.TestCase):
         Context(self, gpu, 5, 5, options=(SUB_API_VULKAN, 4, 6, PROFILE_CORE, 0, 0),
                 answer=RESP_ERR_INVALID_PARAMETER)
 
-    def test_a_version_3_library_makes_only_default_contexts(self):
-        gpu = self.open(AV_ECHO_ABI_VERSION_3="1")
-        Context(self, gpu, 1, 0, options=(SUB_API_OPENGL, 4, 6, PROFILE_CORE, 0, 0),
-                answer=RESP_ERR_INVALID_PARAMETER)
-        plain = Context(self, gpu, 2, 1, options=(SUB_API_OPENGL, 0, 0, 0, 0, 0))
-        self.assertEqual(self.asked(plain), (0, 0, 0, 0, 0))
-
 
 @unittest.skipUnless(BUILD and EXECUTOR, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuExecution(unittest.TestCase):
@@ -417,18 +410,6 @@ class VirtioGpuExecution(unittest.TestCase):
         resource, _ = self.chunk(gpu, context, 1)
         self.assertEqual(self.imported(context, resource, 0, PAGE), (UNMAPPABLE_PAGES, 0))
         self.expect(gpu, unref(resource), RESP_OK_NODATA)   # a refused import holds nothing
-
-    def test_a_version_1_library_is_refused_the_import_and_runs_on(self):
-        os.environ["AV_ECHO_ABI_VERSION_1"] = "1"
-        try:
-            gpu = self.open(shared_ram=True)
-        finally:
-            del os.environ["AV_ECHO_ABI_VERSION_1"]
-        context = Context(self, gpu, 1, 13)
-        resource, _ = self.chunk(gpu, context, 1)
-        self.assertEqual(self.imported(context, resource, 0, PAGE), (EXECUTOR_REFUSED, 0))
-        self.assertTrue(context.run(command(ECHO, b"still", GENERATE_REPLY)))
-        self.assertEqual(context.answer()[1], b"still")
 
 
 if __name__ == "__main__":

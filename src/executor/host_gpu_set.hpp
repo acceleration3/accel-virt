@@ -39,6 +39,8 @@ public:
     void           report(StateWriter &writer) const;
     /* The GPU whose deviceUUID is `uuid`, or null. */
     const HostGpu *find(const uint8_t *uuid) const;
+    /* The GPU at `index`, as HostGpu::index names it; null past the count. */
+    const HostGpu *at(uint32_t index) const;
     /* Every sub-API any GPU here can run, which is what the ABI's sub_apis
      * answers and the capset carries. */
     uint32_t       sub_apis() const;

@@ -45,7 +45,6 @@ GlContextAttributes::GlContextAttributes(const AvContextOptions *options)
 bool GlContextAttributes::acceptable() const
 {
     AV_SCOPE("GlContextAttributes::acceptable");
-    if (options_.reserved != 0u) return false;
     if (options_.major == 0u) return options_.minor == 0u && options_.profile == 0u && options_.flags == 0u;
     return options_.major <= highest_major && options_.minor <= highest_minor[options_.major - 1u] &&
            options_.profile <= AV_CONTEXT_PROFILE_COMPATIBILITY && (options_.flags & ~defined_flags) == 0u;

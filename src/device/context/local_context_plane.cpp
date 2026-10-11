@@ -6,14 +6,17 @@
 namespace av {
 
 LocalContextPlane::LocalContextPlane(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, WireRecorder &recorder)
-    : library_(), shared_(host), contexts_(host, blobs, shared_, interrupts, library_, recorder)
+    : library_(), contexts_(host, blobs, interrupts, library_, recorder)
 {
     AV_SCOPE("LocalContextPlane::LocalContextPlane");
 }
 
+/* The contexts first: none may share in a domain that is closing. */
 LocalContextPlane::~LocalContextPlane()
 {
     AV_SCOPE("LocalContextPlane::~LocalContextPlane");
+    contexts_.destroy_all();
+    library_.close_domain();
 }
 
 Status LocalContextPlane::accept(const AvExecutorOps *executor)
@@ -27,14 +30,17 @@ Status LocalContextPlane::accept(const AvExecutorOps *executor)
 Status LocalContextPlane::initialize()
 {
     AV_SCOPE("LocalContextPlane::initialize");
-    if (shared_.initialize() == Status::no_memory) return Status::no_memory;
     return contexts_.initialize() == Status::no_memory ? Status::no_memory : Status::ok;
 }
 
-/* The library was loaded with QEMU and runs in it: nothing to start. */
-Status LocalContextPlane::start(const uint8_t *, const CapsetInfo &)
+/* The library was loaded with QEMU and runs in it: all there is to start is
+ * this device's domain in it. A GPU the library has not got is a device whose
+ * every context is refused, as one whose capset offers nothing is, not one
+ * that fails to realize; a device restarted keeps the domain it has. */
+Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &)
 {
     AV_SCOPE("LocalContextPlane::start");
+    if (library_.domain() == 0u) static_cast<void>(library_.open_domain(gpu_uuid));
     return Status::ok;
 }
 
@@ -50,12 +56,10 @@ void LocalContextPlane::blob_released(uint32_t)
 }
 
 /* Object 0 is every one: a reset, after which the guest's ids start again. */
-void LocalContextPlane::shared_released(const uint8_t *gpu_uuid, uint64_t object_id)
+void LocalContextPlane::shared_released(const uint8_t *, uint64_t object_id)
 {
     AV_SCOPE("LocalContextPlane::shared_released");
-    if (object_id == 0u) shared_.release_all();
-    else shared_.close(object_id);
-    library_.release_shared(gpu_uuid, object_id);
+    library_.release_shared(object_id);
 }
 
 void LocalContextPlane::interrupts_changed(bool)
@@ -92,13 +96,10 @@ Status LocalContextPlane::destroy(uint32_t id)
     return contexts_.destroy(id);
 }
 
-/* The contexts drop their references as they go; whatever is left belongs to
- * no context and goes too. */
 void LocalContextPlane::destroy_all()
 {
     AV_SCOPE("LocalContextPlane::destroy_all");
     contexts_.destroy_all();
-    shared_.release_all();
 }
 
 bool LocalContextPlane::holds(uint32_t id)
@@ -133,68 +134,69 @@ uint32_t LocalContextPlane::live() const
     return contexts_.live();
 }
 
-bool LocalContextPlane::export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image)
+/* The device's own domain answers for every GPU named here: one device is
+ * on one GPU. */
+bool LocalContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("LocalContextPlane::export_image");
     contexts_.settle_d3d();
-    return library_.export_image(gpu_uuid, key, image);
+    return library_.export_image(key, image);
 }
 
-bool LocalContextPlane::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
-                                   uint32_t width, uint32_t height)
+bool LocalContextPlane::read_image(const uint8_t *, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+                                   uint32_t height)
 {
     AV_SCOPE("LocalContextPlane::read_image");
     contexts_.settle_d3d();
-    return library_.read_image(gpu_uuid, key, pixels, stride, width, height);
+    return library_.read_image(key, pixels, stride, width, height);
 }
 
 bool LocalContextPlane::reads_frames() const
 {
     AV_SCOPE("LocalContextPlane::reads_frames");
-    return library_.reads_frames();
+    return library_.available();
 }
 
-bool LocalContextPlane::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
+bool LocalContextPlane::map_frame(const uint8_t *, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
 {
     AV_SCOPE("LocalContextPlane::map_frame");
-    return library_.map_frame(gpu_uuid, frame, wait_ms, view);
+    return library_.map_frame(frame, wait_ms, view);
 }
 
-void LocalContextPlane::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame)
+void LocalContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &frame)
 {
     AV_SCOPE("LocalContextPlane::unmap_frame");
-    library_.unmap_frame(gpu_uuid, frame);
+    library_.unmap_frame(frame);
 }
 
 bool LocalContextPlane::exports_surfaces() const
 {
     AV_SCOPE("LocalContextPlane::exports_surfaces");
-    return library_.exports_surfaces();
+    return library_.available();
 }
 
-bool LocalContextPlane::export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image)
+bool LocalContextPlane::export_surface(const uint8_t *, uint64_t surface, AvExportedImage &image)
 {
     AV_SCOPE("LocalContextPlane::export_surface");
-    return library_.export_surface(gpu_uuid, surface, image);
+    return library_.export_surface(surface, image);
 }
 
-bool LocalContextPlane::sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd)
+bool LocalContextPlane::sync_surface(const uint8_t *, uint64_t surface, uint64_t &writes, int &fd)
 {
     AV_SCOPE("LocalContextPlane::sync_surface");
-    return library_.sync_surface(gpu_uuid, surface, writes, fd);
+    return library_.sync_surface(surface, writes, fd);
 }
 
 void LocalContextPlane::report(StateWriter &writer)
 {
     AV_SCOPE("LocalContextPlane::report");
-    shared_.report(writer);
     contexts_.report(writer);
 }
 
 bool LocalContextPlane::invariants_hold() const
 {
     AV_SCOPE("LocalContextPlane::invariants_hold");
-    return contexts_.invariants_hold() && shared_.invariants_hold();
+    return contexts_.invariants_hold();
 }
 
 }  // namespace av

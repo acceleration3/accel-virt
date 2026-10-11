@@ -42,6 +42,12 @@ const HostGpu *HostGpuSet::find(const uint8_t *uuid) const
     return nullptr;
 }
 
+const HostGpu *HostGpuSet::at(uint32_t index) const
+{
+    AV_SCOPE("HostGpuSet::at");
+    return index < count_ ? &gpus_[index] : nullptr;
+}
+
 uint32_t HostGpuSet::sub_apis() const
 {
     AV_SCOPE("HostGpuSet::sub_apis");

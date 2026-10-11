@@ -14,8 +14,13 @@
 #ifndef AV_ROOT_UNDER_TEST_HPP
 #define AV_ROOT_UNDER_TEST_HPP
 
+#include "device/abi/av_executor.h"
+
+#include <cstdint>
+
 namespace av {
 
+class ContextSession;
 class ExecutorRoot;
 
 class RootUnderTest {
@@ -30,10 +35,23 @@ public:
     ExecutorRoot *operator->() const;
     ExecutorRoot &operator*() const;
 
+    /* The domain a device on the GPU `gpu_uuid` names would have, opened the
+     * first time it is asked for and the same one after; 0 for a GPU the
+     * root has not got. */
+    std::uint32_t   domain_of(const std::uint8_t *gpu_uuid);
+    /* A session of `sub_api` in that domain, as a device on the GPU makes one:
+     * what a test of the root opens by GPU. */
+    ContextSession *open(std::uint32_t sub_api, const std::uint8_t *gpu_uuid,
+                         const AvContextOptions *options = nullptr, ContextSession *share = nullptr);
+
     bool invariants_hold() const;
 
 private:
-    bool held_;
+    static constexpr std::uint32_t max_domains = 8u;
+
+    bool          held_;
+    std::uint8_t  gpus_[max_domains][16];
+    std::uint32_t domains_[max_domains];
 };
 
 }  // namespace av

@@ -20,7 +20,7 @@ constexpr uint32_t blob_imported = 1u;
 
 }  // namespace
 
-RecordingReplay::RecordingReplay(const ExecutorLibrary &library)
+RecordingReplay::RecordingReplay(ExecutorLibrary &library)
     : library_(library),
       gpu_(),
       gpu_chosen_(false),
@@ -39,6 +39,7 @@ RecordingReplay::~RecordingReplay()
 {
     AV_SCOPE("RecordingReplay::~RecordingReplay");
     for (ReplayContext &slot : slots_) slot.destroy(library_);
+    library_.close_domain();
 }
 
 void RecordingReplay::use_gpu(const uint8_t *uuid)
@@ -57,6 +58,9 @@ Status RecordingReplay::run(RecordingReader &reader, const RecordingFilter &filt
     const Status opened = reader.open();
     if (opened != Status::ok) return Status::malformed;
     if (!gpu_chosen_) use_gpu(reader.header().uuid());
+    /* A GPU the library has not got makes every context a finding, as a
+     * library that makes no executor does. */
+    static_cast<void>(library_.open_domain(gpu_.raw()));
     RecordHeader   record;
     const uint8_t *payload = nullptr;
     for (;;) {
@@ -94,7 +98,7 @@ void RecordingReplay::replay_setup(const RecordHeader &record, const uint8_t *pa
     if (known != nullptr) known->destroy(library_);
     for (ReplayContext &slot : slots_) {
         if (slot.created()) continue;
-        if (slot.create(library_, record.context(), setup.sub_api(), gpu_.raw()) != Status::ok) {
+        if (slot.create(library_, record.context(), setup.sub_api()) != Status::ok) {
             finding_about(record, "the library made no executor for it");
             return;
         }

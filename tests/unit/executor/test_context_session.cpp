@@ -349,67 +349,17 @@ TEST(context_session_invariants, an_arena_used_past_its_room_breaks_it)
   arena.set_used(block_bytes + 1u);
   CHECK(!bound.session().invariants_hold()); }
 
-/* Feature 053: a shared object reaches the backend only through a session the
- * root handed out, and a faulted one answers no to everything - the same rule
- * every command it runs is held to. */
-TEST(context_session, the_shared_object_calls_reach_the_backend_of_a_live_session)
+/* A session whose host device was lost has faulted: it refuses every
+ * command, and the root shares and opens nothing through it (feature 053). */
+TEST(context_session, says_when_a_lost_device_faulted_it)
 { Bound bound;
-  CHECK_STATUS(bound.status(), Status::ok);
-  MockSessionBackend &backend = bound.backend();
-  std::uint32_t handle_kind = 0u;
-  int           fd = -1;
-  CHECK(bound.session().export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
-  CHECK(fd >= 0);
-  CHECK_EQ(backend.exported_objects(), 1u);
-
-  std::uint64_t made = 0u;
-  CHECK(bound.session().import_object(AV_SHARED_MEMORY, handle_kind, fd, 4096u, made));
-  CHECK(made != 0u);
-  CHECK_EQ(backend.imported_objects(), 1u);
-  bound.session().release_object(AV_SHARED_MEMORY, made);
-  CHECK_EQ(backend.released_objects(), 1u);
-  ::close(fd);
-  CHECK(bound.session().invariants_hold()); }
-
-TEST(context_session, a_backend_that_shares_nothing_is_a_refusal_and_not_a_fault)
-{ Bound bound;
-  bound.backend().set_shares(false);
-  std::uint32_t handle_kind = 9u;
-  int           fd = 9;
-  CHECK(!bound.session().export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  CHECK_EQ(handle_kind, 0u);
-  CHECK_EQ(fd, -1);
-  std::uint64_t made = 9u;
-  CHECK(!bound.session().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
-  CHECK_EQ(made, 0u);
-  CHECK(bound.session().invariants_hold()); }
-
-TEST(context_session, a_session_that_was_never_bound_shares_nothing_and_releases_nothing)
-{ ContextSession session;
-  std::uint32_t  handle_kind = 9u;
-  int            fd = 9;
-  CHECK(!session.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  CHECK_EQ(fd, -1);
-  std::uint64_t made = 9u;
-  CHECK(!session.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
-  CHECK_EQ(made, 0u);
-  session.release_object(AV_SHARED_MEMORY, 0x40u);
-  CHECK(session.invariants_hold()); }
-
-/* A faulted session refuses the shared-object calls as it refuses every
- * command: what it was running is gone, and nothing it names can be trusted. */
-TEST(context_session, a_faulted_session_shares_nothing)
-{ Bound bound;
-  ContextSessionProbe(bound.session()).set_faulted(true);
-  std::uint32_t handle_kind = 9u;
-  int           fd = 9;
-  CHECK(!bound.session().export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  std::uint64_t made = 9u;
-  CHECK(!bound.session().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
-  CHECK_EQ(made, 0u);
-  CHECK_EQ(bound.backend().exported_objects(), 0u);
-  ContextSessionProbe(bound.session()).set_faulted(false); }
+  CHECK(!bound.session().faulted());
+  std::size_t answer = 0u;
+  CHECK_EQ(bound.session().execute(MockSessionBackend::lose_id, nullptr, 0u, nullptr, 0u, answer),
+           std::uint32_t{AV_DEVICE_LOST});
+  CHECK(bound.session().faulted());
+  bound.session().release();
+  CHECK(!bound.session().faulted()); }
 
 /* ContextSession::hold_clocks: the session tells its GPU's clock hold of every
  * command it runs. A hold the host could not open is told and does nothing, so

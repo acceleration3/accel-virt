@@ -45,7 +45,7 @@ TEST(exported_gpu, exports_nothing_before_realize_or_where_the_contexts_export_n
   descriptor = 7;
   CHECK_STATUS(exported.sync(asked(ExportOperation::sync), descriptor).status(), Status::invalid_state);
   CHECK_EQ(descriptor, -1);
-  exported.attach(plane, gpu, ExportGreeting(gpu, 64u));
+  exported.attach(plane, gpu, ExportGreeting(gpu));
   CHECK_STATUS(exported.greet(asked(ExportOperation::hello)).status(), Status::invalid_state);
   CHECK_STATUS(exported.export_surface(asked(ExportOperation::export_surface), descriptor).status(),
                Status::invalid_state);
@@ -56,13 +56,13 @@ TEST(exported_gpu, hello_names_the_gpu_it_was_attached_with)
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu, 64u, 0u, 3u, 0u, 0u));
+  exported.attach(plane, gpu, ExportGreeting(gpu, 0u, 3u, 0u, 0u));
   const ExportAnswer answer = exported.greet(asked(ExportOperation::hello));
   CHECK_STATUS(answer.status(), Status::ok);
   CHECK_EQ(answer.tag(), 5u);
   CHECK_EQ(answer.greeting().uuid()[1], 0xB2u);
   CHECK_EQ(answer.greeting().bus(), 3u);
-  CHECK_EQ(answer.greeting().capacity(), 64u); }
+  CHECK(answer.greeting().valid()); }
 
 /* The executor's own answer, asked by the GPU's UUID, with its descriptor. */
 TEST(exported_gpu, an_exported_surface_is_answered_with_its_layout_and_its_dma_buf)
@@ -70,7 +70,7 @@ TEST(exported_gpu, an_exported_surface_is_answered_with_its_layout_and_its_dma_b
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu, 64u));
+  exported.attach(plane, gpu, ExportGreeting(gpu));
   int descriptor = -1;
   const ExportAnswer answer = exported.export_surface(asked(ExportOperation::export_surface), descriptor);
   CHECK_STATUS(answer.status(), Status::ok);
@@ -98,7 +98,7 @@ TEST(exported_gpu, an_export_with_no_picture_or_no_dma_buf_is_refused_and_its_de
   narrow.stride = 639u;
   plane.export_as(surface, narrow, 0u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu, 64u));
+  exported.attach(plane, gpu, ExportGreeting(gpu));
   int descriptor = 9;
   CHECK_STATUS(exported.export_surface(asked(ExportOperation::export_surface), descriptor).status(), Status::not_found);
   CHECK_EQ(descriptor, -1);
@@ -120,7 +120,7 @@ TEST(exported_gpu, a_sync_is_answered_with_the_writes_and_a_sync_file_or_refused
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 12u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu, 64u));
+  exported.attach(plane, gpu, ExportGreeting(gpu));
   int descriptor = -1;
   const ExportAnswer answer = exported.sync(asked(ExportOperation::sync), descriptor);
   CHECK_STATUS(answer.status(), Status::ok);

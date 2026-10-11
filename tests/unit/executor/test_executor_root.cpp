@@ -4,6 +4,9 @@
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "executor/executor_root.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "executor/sharing/session_shares.hpp"
+#include "proto/resources/surface_point.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
@@ -26,6 +29,8 @@ using av::HostGpuProbe;
 using av::HostGpuSetProbe;
 using av::MockHostApis;
 using av::MockSessionBackend;
+using av::HostShares;
+using av::ShareOrigin;
 using av::Status;
 
 /* The real-GPU test enumerates the host's own loaders, which allocate things
@@ -115,66 +120,130 @@ TEST(executor_root, answers_nothing_until_it_has_asked)
   CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_VULKAN, intel), 0u);
   CHECK(root.invariants_hold()); }
 
-/* The guest's release of what it shared reaches the Direct3D 11 table of the
- * GPU it names and no other one; a root that has not asked the host has no
- * table to reach. Id 0 lets go of everything. */
-TEST(executor_root, a_shared_release_reaches_only_the_named_gpu_s_table)
-{ Counted surface, other;
+/* A device's domain is on the GPU it named, opened once it is known and
+ * closed as the device goes; a GPU nobody has, or a root that has not asked
+ * the host, opens none. */
+TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_EQ(root.open_domain(intel), 0u);
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  CHECK_EQ(root.open_domain(absent), 0u);
+  CHECK_EQ(root.open_domain(nullptr), 0u);
+  const std::uint32_t domain = root.open_domain(intel);
+  CHECK(domain != 0u);
+  CHECK(root.open_domain(intel) != domain);   /* a second device on the same GPU */
+  const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
+  ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
+  CHECK(session != nullptr);
+  root.close(session);
+  root.close_domain(domain);
+  CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain) == nullptr);   /* closed: names nothing */
+  const AvContextOptions none = {};
+  CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, none) == nullptr);
+  root.close_domain(domain);   /* twice is nothing */
+  CHECK(root.invariants_hold()); }
+
+/* The guest's release reaches the shares of the domain it names and no other
+ * one; a root that has not asked the host has none to reach. Id 0 lets go of
+ * every id of the domain, and closing the domain does too. */
+TEST(executor_root, a_shared_release_reaches_only_the_named_domain)
+{ Counted surface, other, elsewhere;
   MockHostApis apis;
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
   apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
-  apis.give_d3d11(0u);
-  CHECK(apis.d3d11().shared().publish(7u, &surface));
   RootUnderTest held;
   ExecutorRoot &root = *held;
-  root.release_shared(intel, 7u);
-  CHECK_EQ(apis.d3d11().shared().count(), 1u);
+  root.release_shared(1u, 7u);
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  root.release_shared(nvidia, 7u);
-  root.release_shared(absent, 7u);
-  CHECK_EQ(apis.d3d11().shared().count(), 1u);
-  CHECK_EQ(surface.references, 2u);
-  root.release_shared(intel, 7u);
-  CHECK_EQ(apis.d3d11().shared().count(), 0u);
-  CHECK_EQ(surface.references, 1u);
-  CHECK(apis.d3d11().shared().publish(8u, &surface));
-  CHECK(apis.d3d11().shared().publish(9u, &other));
-  root.release_shared(intel, 0u);
-  CHECK_EQ(apis.d3d11().shared().count(), 0u);
+  const std::uint32_t on_intel = held.domain_of(intel);
+  const std::uint32_t on_nvidia = held.domain_of(nvidia);
+  HostShares        &shares = *apis.shares(0u);
+  MockSessionBackend publisher;
+  CHECK_STATUS(shares.publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher), Status::ok);
+  root.release_shared(on_nvidia, 7u);
+  root.release_shared(on_intel + 100u, 7u);
+  CHECK_EQ(shares.live(), 1u);
+  root.release_shared(on_intel, 7u);
+  CHECK_EQ(shares.live(), 0u);
+  CHECK_STATUS(shares.publish_resource(on_intel, 8u, &surface, ShareOrigin::d3d11, publisher), Status::ok);
+  CHECK_STATUS(shares.publish_resource(on_intel, 9u, &other, ShareOrigin::d3d11, publisher), Status::ok);
+  CHECK_STATUS(shares.publish_resource(on_nvidia, 8u, &elsewhere, ShareOrigin::d3d11, publisher), Status::ok);
+  root.release_shared(on_intel, 0u);
+  CHECK_EQ(shares.live(), 1u);
+  root.close_domain(on_nvidia);
+  CHECK_EQ(shares.live(), 0u);
+  /* No device opened here to give the references back to: they wait. */
+  IUnknown *objects[4] = {};
+  for (std::uint32_t taken = shares.take_retired(objects, 4u); taken != 0u; taken = shares.take_retired(objects, 4u))
+      for (std::uint32_t index = 0u; index < taken; index++) objects[index]->Release();
   CHECK_EQ(surface.references, 1u);
   CHECK_EQ(other.references, 1u);
+  CHECK_EQ(elsewhere.references, 1u);
   CHECK(root.invariants_hold()); }
 
 /* A surface is exported, and synced, only through the Direct3D 11 device of
- * the GPU named: a root that has not asked the host, a GPU nobody has and one
- * with no device answer nothing - and a device that never opened exports
- * nothing either, whatever its table shares. Its sync_file comes from the
- * device itself, judged on a GPU in test_d3d_external_export_device. */
-TEST(executor_root, a_surface_is_exported_only_through_the_named_gpu_s_device)
+ * the domain's GPU: a root that has not asked the host, a domain not open and
+ * a GPU with no device answer nothing - and a device that never opened
+ * exports nothing either, whatever its shares hold. Its sync_file comes from
+ * the device itself, judged on a GPU in test_d3d_external_export_device. */
+TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
 { Counted surface;
   MockHostApis apis;
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
   apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
   apis.give_d3d11(0u);
-  CHECK(apis.d3d11().shared().publish(7u, &surface));
   RootUnderTest held;
   ExecutorRoot &root = *held;
   AvExportedImage image = {};
   std::uint64_t   writes = 5u;
   int             fd = 5;
-  CHECK(!root.export_surface(intel, 7u, image));
-  CHECK(!root.sync_surface(intel, 7u, writes, fd));
+  CHECK(!root.export_surface(1u, 7u, image));
+  CHECK(!root.sync_surface(1u, 7u, writes, fd));
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  CHECK(!root.export_surface(absent, 7u, image));
-  CHECK(!root.export_surface(nvidia, 7u, image));
-  CHECK(!root.export_surface(intel, 7u, image));
+  const std::uint32_t on_intel = held.domain_of(intel);
+  const std::uint32_t on_nvidia = held.domain_of(nvidia);
+  MockSessionBackend  publisher;
+  CHECK_STATUS(apis.shares(0u)->publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher),
+               Status::ok);
+  CHECK(!root.export_surface(on_intel + 100u, 7u, image));
+  CHECK(!root.export_surface(on_nvidia, 7u, image));
+  CHECK(!root.export_surface(on_intel, 7u, image));
   CHECK_EQ(image.fd, -1);
-  CHECK(!root.sync_surface(absent, 7u, writes, fd));
-  CHECK(!root.sync_surface(nvidia, 7u, writes, fd));
-  CHECK(!root.sync_surface(intel, 7u, writes, fd));
+  CHECK(!root.export_image(on_intel, 7u, image));
+  CHECK(!root.export_image(on_nvidia, 7u, image));
+  CHECK(!root.export_image(on_intel + 100u, 7u, image));
+  std::uint8_t pixels[16] = {};
+  CHECK(!root.read_image(on_intel, 7u, pixels, 8u, 2u, 2u));
+  CHECK(!root.read_image(on_nvidia, 7u, pixels, 8u, 2u, 2u));
+  CHECK(!root.read_image(on_intel + 100u, 7u, pixels, 8u, 2u, 2u));
+  CHECK(!root.sync_surface(on_intel + 100u, 7u, writes, fd));
+  CHECK(!root.sync_surface(on_nvidia, 7u, writes, fd));
+  CHECK(!root.sync_surface(on_intel, 7u, writes, fd));
   CHECK_EQ(fd, -1);
   CHECK_EQ(writes, 0u);
-  apis.d3d11().shared().clear();
+  apis.shares(0u)->clear();
+  IUnknown *objects[1] = {};
+  while (apis.shares(0u)->take_retired(objects, 1u) != 0u) objects[0]->Release();
+  CHECK_EQ(surface.references, 1u);
+  CHECK(root.invariants_hold()); }
+
+/* A present's frames are mapped only in a domain that is open, from the
+ * surfaces of its GPU. */
+TEST(executor_root, frames_are_read_only_in_an_open_domain)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t on_intel = held.domain_of(intel);
+  AvFrameView view = {};
+  CHECK(!root.map_frame(on_intel + 100u, av::SurfacePoint(3u, 1u), 0u, view));
+  CHECK(!root.map_frame(on_intel, av::SurfacePoint(3u, 1u), 0u, view));   /* nothing staged */
+  root.unmap_frame(on_intel + 100u, av::SurfacePoint(3u, 1u));
+  root.unmap_frame(on_intel, av::SurfacePoint(3u, 1u));
   CHECK(root.invariants_hold()); }
 
 /* The host is asked once. Asking twice would mean the capset and the answer
@@ -219,6 +288,8 @@ public:
     }
     Status              status() const { return status_; }
     ExecutorRoot       &root() { return *held_; }
+    RootUnderTest      &held() { return held_; }
+    MockHostApis       &apis() { return apis_; }
 
 private:
     MockHostApis       apis_;
@@ -235,7 +306,7 @@ TEST(executor_root_open, a_context_on_a_gpu_that_runs_it_gets_a_session)
   CHECK_EQ(opened.root().live(), 0u);
 
   ContextSession *const session =
-      opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
+      opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
   CHECK(session != nullptr);
   CHECK(session->live());
   CHECK_EQ(opened.root().live(), 1u);
@@ -250,8 +321,8 @@ TEST(executor_root_open, a_context_on_a_gpu_that_runs_it_gets_a_session)
  * does not run. It is refused rather than served by the wrong device. */
 TEST(executor_root_open, an_api_this_gpu_does_not_run_gets_no_session)
 { Opened opened;
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, nvidia) != nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, nvidia) != nullptr);
   CHECK_EQ(opened.root().live(), 1u); }
 
 /* A GPU the capset says runs OpenCL, on a host that kept no OpenCL device for
@@ -259,16 +330,16 @@ TEST(executor_root_open, an_api_this_gpu_does_not_run_gets_no_session)
  * setup and the slot given back, rather than shown an empty platform list. */
 TEST(executor_root_open, an_opencl_context_with_no_device_behind_it_gives_the_slot_back)
 { Opened opened;
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_OPENCL, intel) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENCL, intel) == nullptr);
   CHECK_EQ(opened.root().live(), 0u);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel) != nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel) != nullptr);
   CHECK_EQ(opened.root().live(), 1u);
   CHECK(opened.root().invariants_hold()); }
 
 TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
 { Opened opened;
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, absent) == nullptr);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, nullptr) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, absent) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, nullptr) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
 /* Every slot taken is a refusal, not a failure: the device turns it into a
@@ -276,10 +347,10 @@ TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
 TEST(executor_root_open, every_slot_taken_refuses_the_next)
 { Opened opened;
   for (std::uint32_t i = 0u; i < ExecutorRoot::sessions; i++) {
-      CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel) != nullptr);
+      CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel) != nullptr);
   }
   CHECK_EQ(opened.root().live(), ExecutorRoot::sessions);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
 
 /* A slot given back is a slot the next context gets. */
 TEST(executor_root_open, a_closed_session_s_slot_comes_back)
@@ -287,12 +358,12 @@ TEST(executor_root_open, a_closed_session_s_slot_comes_back)
   ContextSession *first = nullptr;
   for (std::uint32_t i = 0u; i < ExecutorRoot::sessions; i++) {
       ContextSession *const session =
-          opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
+          opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
       if (i == 0u) first = session;
   }
   opened.root().close(first);
   CHECK_EQ(opened.root().live(), ExecutorRoot::sessions - 1u);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel) == first); }
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel) == first); }
 
 /* A pointer this root never handed out is not one it will act on, which is
  * what a device that destroys twice would present. */
@@ -344,8 +415,8 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
 /* Nothing is handed out before the host has been asked. */
 TEST(executor_root_open, opens_nothing_until_it_has_asked)
 { RootUnderTest held;
-  ExecutorRoot &root = *held;
-  CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
+  CHECK_EQ(held.domain_of(intel), 0u);
+  CHECK(held.open(AV_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
 
 /* The root answers the capset from its GPUs, so one broken GPU is a broken
  * root. */
@@ -368,7 +439,7 @@ TEST(executor_root_invariants, gpus_it_never_asked_about_break_them)
  * backend, so no session is made rather than one bound to the wrong API. */
 TEST(executor_root_open, a_value_naming_two_sub_apis_at_once_gets_no_session)
 { Opened opened;
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL, intel) ==
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL, intel) ==
         nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
@@ -383,7 +454,7 @@ TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_bac
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  CHECK(root.open(AV_EXECUTOR_SUB_API_OPENGL, absent) == nullptr);
+  CHECK(held.open(AV_EXECUTOR_SUB_API_OPENGL, absent) == nullptr);
   CHECK_EQ(root.live(), 0u);
   CHECK(root.invariants_hold()); }
 
@@ -404,8 +475,8 @@ TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
       std::uint8_t uuid[16] = {};
       host.gpu_uuid(i, uuid);
       for (const std::uint32_t api : apis) {
-          ContextSession *const first = root.open(api, uuid);
-          ContextSession *const second = root.open(api, uuid);
+          ContextSession *const first = held.open(api, uuid);
+          ContextSession *const second = held.open(api, uuid);
           const bool runs = (host.sub_apis(i) & api) != 0u;
           CHECK_EQ(first != nullptr, runs);
           CHECK_EQ(second != nullptr, runs);
@@ -433,18 +504,18 @@ TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
 TEST(executor_root_open, options_or_a_share_for_another_api_get_no_session)
 { Opened opened;
   const AvContextOptions asked[] = {{1u, 0u, 0u, 0u, 0u}, {0u, 1u, 0u, 0u, 0u}, {0u, 0u, 1u, 0u, 0u},
-                                     {0u, 0u, 0u, 1u, 0u}, {0u, 0u, 0u, 0u, 1u}};
+                                     {0u, 0u, 0u, 1u, 0u}};
   for (const AvContextOptions &options : asked)
-      CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel, &options, nullptr) == nullptr);
+      CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel, &options, nullptr) == nullptr);
   const AvContextOptions defaults = {};
-  ContextSession *const vulkan = opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel, &defaults, nullptr);
+  ContextSession *const vulkan = opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel, &defaults, nullptr);
   CHECK(vulkan != nullptr);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_VULKAN, intel, nullptr, vulkan) == nullptr);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel, nullptr, vulkan) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
   ContextSession stranger;
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, &stranger) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, &stranger) == nullptr);
   opened.root().close(vulkan);
-  CHECK(opened.root().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
+  CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
 /* On the GPUs this host has: an OpenGL session shares another on its own GPU
@@ -463,14 +534,14 @@ TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
       if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_OPENGL) == 0u) continue;
       std::uint8_t uuid[16] = {};
       host.gpu_uuid(i, uuid);
-      ContextSession *const first = root.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, nullptr, nullptr);
+      ContextSession *const first = held.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, nullptr, nullptr);
       CHECK(first != nullptr);
-      ContextSession *const second = root.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &core, first);
+      ContextSession *const second = held.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &core, first);
       CHECK(second != nullptr);
       const std::uint32_t live = root.live();
-      CHECK(root.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &impossible, nullptr) == nullptr);
+      CHECK(held.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &impossible, nullptr) == nullptr);
       CHECK_EQ(root.live(), live);
-      if (previous != nullptr) CHECK(root.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &core, previous) == nullptr);
+      if (previous != nullptr) CHECK(held.open(AV_EXECUTOR_SUB_API_OPENGL, uuid, &core, previous) == nullptr);
       root.close(second);
       if (previous != nullptr) root.close(previous);
       previous = first;
@@ -494,56 +565,58 @@ TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothi
   CHECK_EQ(opened.root().live(), 0u);
   CHECK(opened.root().invariants_hold()); }
 
-/* Feature 053: the three shared-object calls reach only a session this root
- * handed out. The device's pointer is all the ABI gives to tell them apart, so
- * a stranger's session and a null are the two a root must answer nothing to. */
-TEST(executor_root, the_shared_object_calls_reach_only_a_session_this_root_opened)
+/* Feature 053: share, open and close reach the domain's shares as the session
+ * that asked, and only for a session this root handed out that has not
+ * faulted. The device's pointer is all the ABI gives to tell them apart, so a
+ * stranger's session and a null are refused. */
+TEST(executor_root, the_shared_object_calls_reach_the_domain_as_the_session_that_asked)
 { Opened opened;
-  ContextSession *const session = &ExecutorRootProbe(opened.root()).session_at(0u);
-  static std::uint8_t   block[4096];
-  MockSessionBackend    backend;
-  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t maker_block[4096], reader_block[4096];
+  MockSessionBackend  maker_backend, reader_backend;
+  ContextSession *const maker = &probe.session_at(0u);
+  ContextSession *const reader = &probe.session_at(1u);
+  CHECK_STATUS(maker->initialize(maker_backend, maker_block, sizeof maker_block), Status::ok);
+  CHECK_STATUS(reader->initialize(reader_backend, reader_block, sizeof reader_block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, maker_backend);
+  probe.shares_at(1u).bind(*opened.apis().shares(0u), domain, reader_backend);
 
-  /* A session this root owns whose backend shares nothing is a refusal the
-   * root passes on rather than one it makes itself. */
-  backend.set_shares(false);
-  std::uint32_t handle_kind = 9u;
-  int           fd = 9;
-  CHECK(!opened.root().export_object(session, AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  CHECK_EQ(fd, -1);
-  std::uint64_t refused = 9u;
-  CHECK(!opened.root().import_object(session, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u,
-                                     refused));
-  CHECK_EQ(refused, 0u);
-  backend.set_shares(true);
-
-  CHECK(opened.root().export_object(session, AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
-  CHECK(fd >= 0);
-  std::uint64_t made = 0u;
-  CHECK(opened.root().import_object(session, AV_SHARED_MEMORY, handle_kind, fd, 4096u, made));
+  CHECK_EQ(root.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
+  CHECK_EQ(root.share_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x41u), std::uint32_t{AV_SHARED_CONFLICT});
+  std::uint64_t made = 9u;
+  CHECK_EQ(root.open_object(reader, 0x2Bu, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_UNKNOWN});
+  CHECK_EQ(made, 0u);
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 8192u, made), std::uint32_t{AV_SHARED_MISMATCHED});
+  reader_backend.set_shares(false);
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  reader_backend.set_shares(true);
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_DONE});
   CHECK(made != 0u);
-  opened.root().release_object(session, AV_SHARED_MEMORY, made);
-  CHECK_EQ(backend.released_objects(), 1u);
+  root.close_object(reader, 0x2Au);
+  CHECK_EQ(reader_backend.released_objects(), 1u);
 
   static std::uint8_t stranger_block[4096];
   MockSessionBackend  stranger_backend;
   ContextSession      stranger;
   CHECK_STATUS(stranger.initialize(stranger_backend, stranger_block, sizeof stranger_block), Status::ok);
-  std::uint32_t theirs_kind = 9u;
-  int           theirs_fd = 9;
-  CHECK(!opened.root().export_object(&stranger, AV_SHARED_MEMORY, 0x40u, theirs_kind, theirs_fd));
-  CHECK_EQ(theirs_fd, -1);
-  CHECK(!opened.root().export_object(nullptr, AV_SHARED_MEMORY, 0x40u, theirs_kind, theirs_fd));
-  std::uint64_t theirs = 9u;
-  CHECK(!opened.root().import_object(&stranger, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, 4096u,
-                                     theirs));
-  CHECK_EQ(theirs, 0u);
-  CHECK(!opened.root().import_object(nullptr, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, 4096u,
-                                     theirs));
-  opened.root().release_object(&stranger, AV_SHARED_MEMORY, made);
-  opened.root().release_object(nullptr, AV_SHARED_MEMORY, made);
+  CHECK_EQ(root.share_object(&stranger, 0x2Cu, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.share_object(nullptr, 0x2Cu, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.open_object(&stranger, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.open_object(nullptr, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  root.close_object(&stranger, 0x2Au);
+  root.close_object(nullptr, 0x2Au);
   CHECK_EQ(stranger_backend.released_objects(), 0u);
-  CHECK_EQ(backend.released_objects(), 1u);
+
+  /* A session whose device is lost shares and opens nothing more. */
+  std::size_t answer = 0u;
+  CHECK_EQ(reader->execute(MockSessionBackend::lose_id, nullptr, 0u, nullptr, 0u, answer),
+           std::uint32_t{AV_DEVICE_LOST});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.share_object(reader, 0x2Du, AV_SHARED_MEMORY, 4096u, 0x41u), std::uint32_t{AV_SHARED_REFUSED});
   stranger.release();
-  ::close(fd);
-  session->release(); }
+  probe.shares_at(1u).end();
+  probe.shares_at(0u).end();
+  reader->release();
+  maker->release(); }

@@ -18,9 +18,7 @@
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
-#include "device/execution/context_shared_objects.hpp"
 #include "device/memory/blob_table.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/context/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -117,13 +115,13 @@ public:
         : ring_bytes_{}, ring_pointer_(ring_bytes_), ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, 12u),
           reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), page_{}, page_pointer_(page_),
           page_length_(sizeof page_), ops_(AV_EXECUTOR_SUB_API_VULKAN), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
-          objects_(host_), recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u),
-          shared_(objects_, executor_), staging_(host_), interrupts_(host_),
+          recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u), staging_(host_), interrupts_(host_),
           fences_(host_, interrupts_, recorder_, 1u),
-          batches_(host_, executor_, imports_, shared_, staging_, fences_, recorder_, 1u)
+          batches_(host_, executor_, imports_, staging_, fences_, recorder_, 1u)
     {
         std::memset(reply_, 0xEE, sizeof reply_);
         static_cast<void>(library_.accept(&ops_.table()));
+        static_cast<void>(library_.open_domain(uuid));
         static_cast<void>(fences_.prepare(av::FenceWindow(BlobWindow(&page_pointer_, &page_length_, 1u, page_length_)), 0u));
         executor_.configure(SubApi::vulkan, uuid, av::GlContextOptions());
         static_cast<void>(staging_.allocate(4096u, slot_bytes > 32u ? slot_bytes - 32u : 0u));
@@ -233,10 +231,8 @@ private:
     av::ExecutorShares shares_;
     ContextExecutor executor_;
     av::BlobTable   blobs_;
-    av::HostSharedObjects objects_;
     av::WireRecorder recorder_;
     av::BlobImports imports_;
-    av::ContextSharedObjects shared_;
     BatchStaging    staging_;
     av::FenceInterrupts interrupts_;
     av::FenceReporter   fences_;

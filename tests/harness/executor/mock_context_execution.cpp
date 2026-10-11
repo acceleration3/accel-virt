@@ -14,11 +14,12 @@ constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 
 MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, std::uint8_t order)
     : ops_(AV_EXECUTOR_SUB_API_VULKAN), recorder_(host), library_(), shares_(host, library_),
-      executor_(host, library_, shares_, 1u), blobs_(host), shared_objects_(host),
-      imports_(host, blobs_, executor_, recorder_, 1u), shared_(shared_objects_, executor_), staging_(host),
-      batches_(host, executor_, imports_, shared_, staging_, fences, recorder_, 1u)
+      executor_(host, library_, shares_, 1u), blobs_(host),
+      imports_(host, blobs_, executor_, recorder_, 1u), staging_(host),
+      batches_(host, executor_, imports_, staging_, fences, recorder_, 1u)
 {
     static_cast<void>(library_.accept(&ops_.table()));
+    static_cast<void>(library_.open_domain(no_uuid));
     executor_.configure(SubApi::vulkan, no_uuid, GlContextOptions());
     static_cast<void>(staging_.allocate(std::uint64_t{1} << order, 0u));
     batches_.prepare(BlobWindow());

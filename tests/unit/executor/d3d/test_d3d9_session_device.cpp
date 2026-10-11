@@ -5,6 +5,7 @@
  * DXVK's d3d9 is loaded from AV_D3D_PATH, or build-d3d/lib in this checkout
  * (tools/build_d3d_runtime.sh). A host without it returns without judging, as
  * the other device tests do. */
+#include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
@@ -77,7 +78,8 @@ TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, nullptr, nullptr, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u;
@@ -125,7 +127,8 @@ TEST(d3d9_session_device, another_devices_surface_is_refused_and_removes_the_dev
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, nullptr, nullptr, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u;
@@ -160,7 +163,8 @@ TEST(d3d9_session_device, a_surface_the_host_cannot_make_names_nothing)
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, nullptr, nullptr, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u;
@@ -239,7 +243,8 @@ TEST(d3d9_session_device, a_shaded_triangle_lands_where_it_was_drawn)
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, nullptr, nullptr, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
     av::D3dLoopback wire(backend);
     make_target(wire);
 
@@ -281,7 +286,8 @@ TEST(d3d9_session_device, a_pretransformed_triangle_needs_no_shader)
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, nullptr, nullptr, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
     av::D3dLoopback wire(backend);
     make_target(wire);
 
@@ -313,7 +319,8 @@ TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, nullptr, nullptr, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, draw_device, 0u, &hresult));
@@ -369,7 +376,8 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     constexpr std::uint32_t format_r5g6b5 = 23u;
     av::SharedSurfaces      surfaces;
     av::D3dBackend          backend;
-    CHECK(backend.initialize(device11, nullptr, &surfaces, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
     av::D3dLoopback wire(backend);
     std::uint32_t   hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
@@ -431,7 +439,8 @@ TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
     if (!host_devices(apis, device11, device9)) return;
     av::SharedSurfaces surfaces;
     av::D3dBackend     backend;
-    CHECK(backend.initialize(device11, nullptr, &surfaces, device9));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
     av::D3dLoopback wire(backend);
     std::uint32_t   hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));

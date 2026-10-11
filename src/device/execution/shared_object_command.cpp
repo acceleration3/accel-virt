@@ -1,18 +1,18 @@
 #include "device/execution/shared_object_command.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/execution/context_shared_objects.hpp"
+#include "device/execution/context_executor.hpp"
 #include "proto/submission/shared_object_answer.hpp"
 #include "proto/submission/shared_object_request.hpp"
 
 namespace av {
 
-SharedObjectCommand::SharedObjectCommand(ContextSharedObjects &objects, const CommandHeader &header,
+SharedObjectCommand::SharedObjectCommand(ContextExecutor &executor, const CommandHeader &header,
                                          const uint8_t *body)
-    : objects_(objects), header_(header), body_(body)
-    {
-        AV_SCOPE("SharedObjectCommand::SharedObjectCommand");
-    }
+    : executor_(executor), header_(header), body_(body)
+{
+    AV_SCOPE("SharedObjectCommand::SharedObjectCommand");
+}
 
 size_t SharedObjectCommand::body_size() const
 {
@@ -34,7 +34,6 @@ uint32_t SharedObjectCommand::refusal_of(Status answered) const
     case Status::not_found: return SharedObjectAnswer::unknown_object;
     case Status::invalid_parameter: return SharedObjectAnswer::mismatched_object;
     case Status::conflict: return SharedObjectAnswer::conflict;
-    case Status::no_space: return SharedObjectAnswer::no_room;
     default: return SharedObjectAnswer::executor_refused;
     }
 }
@@ -67,19 +66,18 @@ Status SharedObjectCommand::run(uint8_t *reply, size_t capacity, size_t &produce
         return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
 
     if (header_.id() == CommandHeader::release_shared_object_id) {
-        objects_.release(request.object_id());
+        executor_.close_object(request.object_id());
         return answer(SharedObjectAnswer::done, 0u, reply, capacity, produced);
     }
     if (header_.id() == CommandHeader::share_object_id) {
         if (request.wire_handle() == 0u)
             return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
-        const Status published = objects_.publish(request.object_id(), request.kind().value(),
-                                                  request.wire_handle(), request.size());
+        const Status published = executor_.share_object(request.object_id(), request.kind().value(), request.size(),
+                                                        request.wire_handle());
         return answer(refusal_of(published), 0u, reply, capacity, produced);
     }
     uint64_t     wire_handle = 0u;
-    const Status opened =
-        objects_.open(request.object_id(), request.kind().value(), request.size(), wire_handle);
+    const Status opened = executor_.open_object(request.object_id(), request.kind().value(), request.size(), wire_handle);
     return answer(refusal_of(opened), wire_handle, reply, capacity, produced);
 }
 

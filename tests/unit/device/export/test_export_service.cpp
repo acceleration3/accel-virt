@@ -59,7 +59,7 @@ TEST(export_service, serves_only_this_user_s_processes_up_to_its_connections)
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u);
   ExportService service(host);
-  service.attach(plane, gpu, ExportGreeting(gpu, ExportConnection::max_surfaces));
+  service.attach(plane, gpu, ExportGreeting(gpu));
   FakeExportConsumer stranger;
   CHECK_STATUS(service.accept(stranger.device_end(), false), Status::invalid_parameter);
   stranger.refused();
@@ -80,7 +80,7 @@ TEST(export_service, a_slot_whose_consumer_left_serves_the_next)
 { av::MockHost host;
   av::RecordingContextPlane plane;
   ExportService service(host);
-  service.attach(plane, gpu, ExportGreeting(gpu, ExportConnection::max_surfaces));
+  service.attach(plane, gpu, ExportGreeting(gpu));
   FakeExportConsumer consumers[ExportService::max_connections];
   for (FakeExportConsumer &consumer : consumers) CHECK_STATUS(service.accept(consumer.device_end(), true), Status::ok);
   consumers[3].leave();
@@ -105,7 +105,7 @@ TEST(export_service, a_revocation_reaches_every_consumer_holding_the_surface)
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u, 2u);
   ExportService service(host);
-  service.attach(plane, gpu, ExportGreeting(gpu, ExportConnection::max_surfaces));
+  service.attach(plane, gpu, ExportGreeting(gpu));
   FakeExportConsumer holding, other, idle;
   CHECK_STATUS(service.accept(holding.device_end(), true), Status::ok);
   CHECK_STATUS(service.accept(other.device_end(), true), Status::ok);

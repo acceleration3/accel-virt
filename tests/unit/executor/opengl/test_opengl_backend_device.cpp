@@ -6,7 +6,6 @@
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/imported_blob.hpp"
-#include "executor/opengl/gl_shared_objects.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/probe_dma_buf.hpp"
@@ -57,6 +56,9 @@ using av::OpenGlBackend;
 using av::OpenGlBackendProbe;
 
 namespace {
+
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
 
 constexpr unsigned gl_major_version = 0x821B;
 constexpr unsigned gl_minor_version = 0x821C;
@@ -346,7 +348,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t memory = 9u;
       if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                 av::ProbeDmaBuf::page_size, memory)) {
+                                 av::ProbeDmaBuf::page_size, memory, detail)) {
           std::fprintf(stderr, "display %u imports no memory object from a descriptor\n", index);
           CHECK_EQ(memory, 0u);
           backend.shut_down();
@@ -358,17 +360,17 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * does. */
       std::uint64_t again = 0u;
       CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                  av::ProbeDmaBuf::page_size, again));
+                                  av::ProbeDmaBuf::page_size, again, detail));
       CHECK(again != 0u);
       CHECK(again != memory);
 
       /* A name this context did not import, and one no GL name could be, are
        * released by nobody. */
-      backend.release_object(AV_SHARED_MEMORY, memory + again + 1u);
-      backend.release_object(AV_SHARED_MEMORY, 0x1'0000'0000ull | memory);
-      backend.release_object(AV_SHARED_MONITORED_FENCE, memory);
-      backend.release_object(AV_SHARED_MEMORY, memory);
-      backend.release_object(AV_SHARED_MEMORY, memory);
+      backend.release_object(AV_SHARED_MEMORY, memory + again + 1u, detail);
+      backend.release_object(AV_SHARED_MEMORY, 0x1'0000'0000ull | memory, detail);
+      backend.release_object(AV_SHARED_MONITORED_FENCE, memory, detail);
+      backend.release_object(AV_SHARED_MEMORY, memory, detail);
+      backend.release_object(AV_SHARED_MEMORY, memory, detail);
 
       /* A semaphore is the other name space, and one number can be both. Both
        * guest fence kinds are that one host semaphore, so both are imported:
@@ -376,19 +378,18 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * ever release. */
       std::uint64_t fence = 0u;
       if (backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                0u, fence)) {
+                                0u, fence, detail)) {
           CHECK(fence != 0u);
           /* Either guest fence kind is the one host semaphore. */
-          backend.release_object(AV_SHARED_NATIVE_FENCE, fence);
+          backend.release_object(AV_SHARED_NATIVE_FENCE, fence, detail);
       }
       std::uint64_t native = 0u;
       if (backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                4096u, native)) {
+                                4096u, native, detail)) {
           CHECK(native != 0u);
-          backend.release_object(AV_SHARED_NATIVE_FENCE, native);
+          backend.release_object(AV_SHARED_NATIVE_FENCE, native, detail);
       }
-      /* Whatever is left is deleted by the shut down, while the context can
-       * still delete it. */
+      /* What HostShares never released goes with the context. */
       backend.shut_down();
       /* And with the context gone the driver has nothing to make a semaphore
        * on: the import is refused rather than answering a name that names
@@ -396,31 +397,31 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * depends on and no argument can force. */
       std::uint64_t after = 9u;
       CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF,
-                                   descriptor.handle(), 0u, after));
+                                   descriptor.handle(), 0u, after, detail));
       CHECK_EQ(after, 0u);
   } }
 
-/* A context holds as many shared objects as it has rows for, and the one past
- * that is refused with nothing made - not an object no guest could name. */
-TEST(opengl_backend_device, a_context_full_of_imports_makes_no_object_it_cannot_name)
+/* A context imports as many shared objects as the guest opens: the table
+ * this replaced stopped at 64, and the next import was refused. Each is
+ * released by the name it was answered. */
+TEST(opengl_backend_device, a_context_imports_more_than_any_fixed_table_held)
 { Displays        displays;
   av::ProbeDmaBuf descriptor;
   if (!descriptor.make()) { std::fprintf(stderr, "this host makes no dma-buf\n"); return; }
+  constexpr std::uint32_t many = 80u;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
-      std::uint64_t made = 0u;
+      std::uint64_t made[many] = {};
       if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                 av::ProbeDmaBuf::page_size, made)) {
+                                 av::ProbeDmaBuf::page_size, made[0], detail)) {
           backend.shut_down();
           continue;
       }
-      for (std::uint32_t i = 1u; i < av::GlSharedObjects::max_objects; i++)
+      for (std::uint32_t i = 1u; i < many; i++)
           CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                      av::ProbeDmaBuf::page_size, made));
-      std::uint64_t past = 9u;
-      CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                   av::ProbeDmaBuf::page_size, past));
-      CHECK_EQ(past, 0u);
+                                      av::ProbeDmaBuf::page_size, made[i], detail));
+      for (std::uint32_t i = 1u; i < many; i++) CHECK(made[i] != made[i - 1u]);
+      for (const std::uint64_t name : made) backend.release_object(AV_SHARED_MEMORY, name, detail);
       backend.shut_down();
   } }

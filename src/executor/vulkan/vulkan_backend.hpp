@@ -148,8 +148,8 @@ public:
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     uint64_t &wire_handle) override;
-    void               release_object(uint32_t kind, uint64_t wire_handle) override;
+                                     uint64_t &wire_handle, uint64_t &detail) override;
+    void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
     /* Destroys whatever the guest still owned - the instance it made, and the
      * device with it - and forgets every handle. A context's host objects are

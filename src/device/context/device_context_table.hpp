@@ -18,7 +18,6 @@ namespace av {
 class BlobTable;
 class ExecutorLibrary;
 class FenceInterrupts;
-class HostSharedObjects;
 class Host;
 class StateWriter;
 class WireRecorder;
@@ -29,7 +28,7 @@ public:
     /* One worker thread each, so a bound on threads as much as on contexts. */
     static constexpr uint32_t max_contexts = 64u;
 
-    DeviceContextTable(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
+    DeviceContextTable(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
                        const ExecutorLibrary &library, WireRecorder &recorder);
     ~DeviceContextTable();
     DeviceContextTable(const DeviceContextTable &) = delete;
@@ -63,7 +62,6 @@ private:
 
     Host                        &host_;
     BlobTable                   &blobs_;
-    HostSharedObjects           &shared_;
     FenceInterrupts             &interrupts_;
     const ExecutorLibrary       &library_;
     WireRecorder                &recorder_;

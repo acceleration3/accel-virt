@@ -58,7 +58,7 @@ uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
 }  // namespace
 
 OpenGlBackend::OpenGlBackend()
-    : context_(), gl_(), import_(), objects_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
+    : context_(), gl_(), import_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
       lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
@@ -112,9 +112,6 @@ void OpenGlBackend::shut_down()
      * the context is still open: after the close there is nothing left to
      * delete it with, and a sync of a context sharing objects with another
      * would outlive this one. */
-    uint32_t kind = 0u;
-    uint32_t name = 0u;
-    while (objects_.take_any(kind, name)) destroy_made(kind, name);
     import_.give_back();
     void *fence = nullptr;
     while (fences_.take_any(fence))
@@ -277,10 +274,11 @@ bool OpenGlBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int
 }
 
 bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                  uint64_t &wire_handle)
+                                  uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenGlBackend::import_object");
     wire_handle = 0u;
+    detail = 0u;
     if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0) return false;
     uint32_t name = 0u;
     if (kind == AV_SHARED_MEMORY) {
@@ -292,22 +290,16 @@ bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     } else {
         return false;
     }
-    if (objects_.remember(kind, name)) {
-        wire_handle = name;
-        return true;
-    }
-    /* A row this context has no room for is an object nothing could name and
-     * nothing would free. */
-    destroy_made(kind, name);
-    return false;
+    wire_handle = name;
+    return true;
 }
 
-void OpenGlBackend::release_object(uint32_t kind, uint64_t wire_handle)
+/* The GL name is the handle: memory objects and semaphores are two name
+ * spaces, and `kind` says which, as the import recorded it. */
+void OpenGlBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t)
 {
     AV_SCOPE("OpenGlBackend::release_object");
-    uint32_t name = 0u;
-    if (!objects_.forget(kind, wire_handle, name)) return;
-    destroy_made(kind, name);
+    destroy_made(kind, static_cast<uint32_t>(wire_handle));
 }
 
 void OpenGlBackend::destroy_made(uint32_t kind, uint32_t name)

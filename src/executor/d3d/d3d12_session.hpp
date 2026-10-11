@@ -44,6 +44,7 @@ struct D3D12_TEXTURE_COPY_LOCATION;
 namespace av {
 
 class D3d11HostDevice;
+class SessionShares;
 class SharedSurfaces;
 class D3d12HostDevice;
 class GuestRegion;
@@ -62,7 +63,7 @@ public:
      * share or a present is refused. A present publishes its point on
      * `surfaces`, and stages its frame where that asks (SharedSurfaces). */
     void               initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by = nullptr,
-                                  SharedSurfaces *surfaces = nullptr);
+                                  SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr);
     /* Waits for the GPU to finish with everything, then lets it all go. */
     void               shut_down();
 

@@ -39,8 +39,8 @@ class Fixture {
 public:
     Fixture() : host_(), plane_(), gpu_(host_), connection_(host_, gpu_)
     {
-        plane_.export_as(first, picture, 3u, ExportConnection::max_surfaces + 2u);
-        gpu_.attach(plane_, gpu, ExportGreeting(gpu, ExportConnection::max_surfaces));
+        plane_.export_as(first, picture, 3u, 2u * ExportConnection::first_room + 2u);
+        gpu_.attach(plane_, gpu, ExportGreeting(gpu));
     }
 
     av::MockHost     &host() { return host_; }
@@ -92,7 +92,7 @@ TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
   CHECK(!fixture.connection().ended());
   ExportAnswer answer = fixture.ask(consumer, ExportOperation::hello, 0u);
   CHECK_STATUS(answer.status(), Status::ok);
-  CHECK_EQ(answer.greeting().capacity(), ExportConnection::max_surfaces);
+  CHECK(answer.greeting().valid());
   CHECK_EQ(answer.greeting().uuid()[0], 0x5Au);
   /* Nothing exported yet, so nothing to sync. */
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::sync, first).status(), Status::not_found);
@@ -146,28 +146,37 @@ TEST(export_connection, what_cannot_be_read_is_answered_and_the_connection_goes_
   CHECK_EQ(fixture.connection().held(), 0u);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::hello, 0u).status(), Status::ok); }
 
-/* At most max_surfaces at once; one already held is answered again, and one
- * released makes room. */
-TEST(export_connection, a_consumer_holds_at_most_max_surfaces)
+/* No count past which a consumer is refused: a mirror holds a ring of slots
+ * for every window it shows. What refuses an export is a host with no memory
+ * for the list, and then nothing is handed over that the connection could not
+ * revoke; one already held is answered again all the same, and one released
+ * makes room. */
+TEST(export_connection, a_consumer_holds_past_its_first_room_and_is_refused_only_for_memory)
 { Fixture fixture;
   FakeExportConsumer consumer;
   CHECK_STATUS(fixture.connection().open(consumer.device_end()), Status::ok);
-  for (std::uint64_t surface = first; surface < first + ExportConnection::max_surfaces; surface++)
+  const std::uint32_t full = 2u * ExportConnection::first_room;
+  for (std::uint64_t surface = first; surface < first + full; surface++)
       CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, surface).status(), Status::ok);
-  CHECK_EQ(fixture.connection().held(), ExportConnection::max_surfaces);
-  const std::uint64_t past = first + ExportConnection::max_surfaces;
-  const ExportAnswer  refused = fixture.ask(consumer, ExportOperation::export_surface, past);
+  CHECK_EQ(fixture.connection().held(), full);
+  CHECK(fixture.connection().invariants_hold());
+  const std::uint64_t past = first + full;
+  fixture.host().fail_allocation_at(1u);
+  const ExportAnswer refused = fixture.ask(consumer, ExportOperation::export_surface, past);
   CHECK_STATUS(refused.status(), Status::no_space);
   CHECK_EQ(consumer.descriptor(), -1);
+  fixture.host().fail_allocation_at(0u);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, first + 5u).status(), Status::ok);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::release, first + 5u).status(), Status::ok);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, past).status(), Status::ok);
-  CHECK_EQ(fixture.connection().held(), ExportConnection::max_surfaces);
+  CHECK_EQ(fixture.connection().held(), full);
+  CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, past + 1u).status(), Status::ok);
+  CHECK_EQ(fixture.connection().held(), full + 1u);
   /* A surface the executor does not export is not held. */
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::release, first).status(), Status::ok);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, first + 0x10000u).status(),
                Status::not_found);
-  CHECK_EQ(fixture.connection().held(), ExportConnection::max_surfaces - 1u);
+  CHECK_EQ(fixture.connection().held(), full);
   CHECK(fixture.connection().invariants_hold()); }
 
 /* Told of a surface it holds, never of one it does not; a reset tells it once
@@ -284,7 +293,8 @@ TEST(export_connection, its_invariants_catch_a_table_no_request_can_make)
   FakeExportConsumer consumer;
   CHECK_STATUS(connection.open(consumer.device_end()), Status::ok);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::hello, 0u).status(), Status::ok);
-  av::ExportConnectionProbe::hold(connection, ExportConnection::max_surfaces + 1u, first);
+  av::ExportConnectionProbe::hold(connection, 3u, first);
+  av::ExportConnectionProbe::overfill(connection);
   CHECK(!connection.invariants_hold());
   av::ExportConnectionProbe::hold(connection, 3u, first);
   CHECK(connection.invariants_hold());

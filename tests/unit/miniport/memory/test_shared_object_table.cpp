@@ -40,9 +40,6 @@ struct SharedObjectProbe {
 struct SharedObjectTableProbe {
     static void set_next_id(SharedObjectTable &table, std::uint64_t id) { table.next_id_ = id; }
     static std::uint64_t next_id(const SharedObjectTable &table) { return table.next_id_; }
-    static void queue(SharedObjectTable &table, std::uint64_t id) { table.released_[table.released_count_++] = id; }
-    static void set_released_count(SharedObjectTable &table, std::uint32_t count) { table.released_count_ = count; }
-    static std::uint32_t dropped(const SharedObjectTable &table) { return table.released_dropped_; }
 };
 
 }  // namespace av
@@ -371,9 +368,9 @@ TEST(shared_object_table_forget, takes_the_identity_with_the_allocation_and_leav
   rig.check();
   CHECK_EQ(rig.table().live(), 1u); }
 
-/* What a destroy forgot waits for the adapter to tell the device: oldest first,
- * as many as asked for, and each id once. */
-TEST(shared_object_table_take_released, hands_over_each_forgotten_id_once_oldest_first)
+/* What a destroy forgot waits for the adapter to tell the device: as many as
+ * asked for, and each id once. A forgotten object no longer opens. */
+TEST(shared_object_table_take_released, hands_over_each_forgotten_id_once)
 { Fixture rig;
   Allocation *allocations[3] = {};
   SharedObjectRecord records[3];
@@ -388,50 +385,61 @@ TEST(shared_object_table_take_released, hands_over_each_forgotten_id_once_oldest
   rig.table().forget(*allocations[0]);
   rig.table().forget(*allocations[0]);   /* already forgotten: nothing more */
   rig.check();
+  CHECK_EQ(rig.table().live(), 1u);
+  av::SharedObject *found = nullptr;
+  CHECK_STATUS(rig.table().open(records[0], found), Status::not_found);
   CHECK_EQ(rig.table().take_released(ids, 1u), 1u);
-  CHECK_EQ(ids[0], records[2].object_id());
+  const std::uint64_t first = ids[0];
+  CHECK(first == records[2].object_id() || first == records[0].object_id());
   rig.table().forget(*allocations[1]);
   CHECK_EQ(rig.table().take_released(ids, 4u), 2u);
-  CHECK_EQ(ids[0], records[0].object_id());
-  CHECK_EQ(ids[1], records[1].object_id());
+  std::uint64_t sum = first + ids[0] + ids[1];
+  CHECK_EQ(sum, records[0].object_id() + records[1].object_id() + records[2].object_id());
+  CHECK(ids[0] != first && ids[1] != first && ids[0] != ids[1]);
   CHECK_EQ(rig.table().take_released(ids, 4u), 0u);
   CHECK_EQ(rig.table().take_released(nullptr, 4u), 0u);
+  CHECK_EQ(rig.table().live(), 0u);
   rig.check(); }
 
-/* A queue the adapter never drains fills, and what it cannot hold is counted
- * rather than written past its end. */
-TEST(shared_object_table_take_released, a_full_queue_counts_what_it_drops)
+/* An adapter that does not drain for a while drops nothing: the queue this
+ * replaced held 256, and what it could not hold the device kept until the
+ * adapter restarted. */
+TEST(shared_object_table_take_released, more_forgotten_than_any_fixed_queue_held_are_all_handed_over)
 { Fixture rig;
-  for (std::uint32_t index = 0u; index < SharedObjectTable::max_released; index++)
-      SharedObjectTableProbe::queue(rig.table(), 1u);
-  SharedObjectTableProbe::set_next_id(rig.table(), 2u);
+  constexpr std::uint32_t many = 300u;
+  /* One allocation made again and again, as a window remakes its surfaces:
+   * a forgotten object no longer names it. */
+  Allocation *const allocation = rig.allocate(page);
+  for (std::uint32_t index = 0u; index < many; index++) {
+      SharedObjectRecord record = rig.asking(page);
+      CHECK_STATUS(rig.table().mint(*allocation, record), Status::ok);
+      rig.table().forget(*allocation);
+  }
+  char        text[256] = {};
+  StateWriter writer(text, sizeof text);
+  rig.table().report(writer);
+  CHECK(std::strstr(writer.dump(), "live=0 released=300") != nullptr);
+  std::uint64_t ids[64] = {};
+  std::uint64_t handed = 0u, sum = 0u;
+  for (std::uint32_t taken = rig.table().take_released(ids, 64u); taken != 0u;
+       taken = rig.table().take_released(ids, 64u))
+      for (std::uint32_t index = 0u; index < taken; index++, handed++) sum += ids[index];
+  CHECK_EQ(handed, many);
+  CHECK_EQ(sum, std::uint64_t{many} * (many + 1u) / 2u);   /* ids 1 to 300, each once */
+  rig.check(); }
+
+/* dxgkrnl destroys a shared allocation only once nobody holds it, so a
+ * forgotten object still open is a table that lost count. */
+TEST(shared_object_table_invariants, refuse_a_forgotten_object_still_held)
+{ Fixture rig;
   Allocation *const allocation = rig.allocate(page);
   SharedObjectRecord record = rig.asking(page);
   CHECK_STATUS(rig.table().mint(*allocation, record), Status::ok);
-  rig.table().forget(*allocation);
-  CHECK_EQ(SharedObjectTableProbe::dropped(rig.table()), 1u);
-  CHECK_EQ(rig.table().live(), 0u);   /* the identity still goes */
-  char        text[512] = {};
-  StateWriter writer(text, sizeof text);
-  rig.table().report(writer);
-  CHECK(std::strstr(writer.dump(), "released=256") != nullptr);
-  CHECK(std::strstr(writer.dump(), "released_dropped=1") != nullptr);
-  std::uint64_t ids[SharedObjectTable::max_released] = {};
-  CHECK_EQ(rig.table().take_released(ids, SharedObjectTable::max_released), SharedObjectTable::max_released);
-  rig.check(); }
-
-TEST(shared_object_table_invariants, refuse_a_queued_id_never_minted_or_a_queue_past_its_end)
-{ Fixture rig;
-  SharedObjectTableProbe::queue(rig.table(), 1u);
-  CHECK(!rig.table().invariants_hold());   /* nothing was minted yet */
-  SharedObjectTableProbe::set_next_id(rig.table(), 2u);
-  CHECK(rig.table().invariants_hold());
-  SharedObjectTableProbe::set_released_count(rig.table(), 0u);
-  SharedObjectTableProbe::queue(rig.table(), 0u);
+  av::SharedObject *found = nullptr;
+  CHECK_STATUS(rig.table().open(record, found), Status::ok);
+  av::SharedObjectProbe::forget_allocation(*found);
   CHECK(!rig.table().invariants_hold());
-  SharedObjectTableProbe::set_released_count(rig.table(), SharedObjectTable::max_released + 1u);
-  CHECK(!rig.table().invariants_hold());
-  SharedObjectTableProbe::set_released_count(rig.table(), 0u);
+  av::SharedObjectProbe::set_opens(*found, 0u);
   CHECK(rig.table().invariants_hold()); }
 
 TEST(shared_object_table_open, propagates_an_object_at_its_ceiling)

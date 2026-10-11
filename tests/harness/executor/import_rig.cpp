@@ -31,7 +31,7 @@ ImportRig::ImportRig(bool executor)
     for (std::uint32_t index = 0u; index < ram_pages; index++)
         std::memset(guest_page(index), static_cast<int>((0x10u + index) & 0xFFu), page);
     if (blobs_.initialize() != Status::ok || library_.accept(&ops_.table()) != Status::ok ||
-        host_.create_event(start_) != Status::ok || host_.create_event(done_) != Status::ok ||
+        library_.open_domain(no_uuid) != Status::ok || host_.create_event(start_) != Status::ok || host_.create_event(done_) != Status::ok ||
         host_.start_thread([](void *rig) { static_cast<ImportRig *>(rig)->serve(); }, this, thread_) != Status::ok)
         std::abort();
     executor_.configure(SubApi::vulkan, no_uuid, GlContextOptions());

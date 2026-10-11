@@ -45,6 +45,7 @@ public:
     Fixture() : ops_(AV_EXECUTOR_SUB_API_OPENGL), shares_(host_, library_)
     {
         static_cast<void>(library_.accept(&ops_.table()));
+        static_cast<void>(library_.open_domain(gpu));
         CHECK_STATUS(shares_.initialize(), Status::ok);
     }
 
@@ -82,7 +83,7 @@ TEST(executor_shares, a_published_executor_is_shared_by_a_create_on_the_same_gpu
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();
   fixture.on_worker([&] {
-      AvExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
+      AvExecutor *const first = fixture.library().create(SubApi::opengl, AvContextOptions{}, nullptr);
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
       CHECK_EQ(shares.published(), 1u);
       CHECK(shares.invariants_hold());
@@ -107,7 +108,7 @@ TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();
   fixture.on_worker([&] {
-      AvExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
+      AvExecutor *const first = fixture.library().create(SubApi::opengl, AvContextOptions{}, nullptr);
       const std::uint32_t asked = fixture.ops().option_creates();
       CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
@@ -140,7 +141,7 @@ TEST(executor_shares, a_withdraw_waits_for_a_create_that_is_using_the_executor)
   std::atomic<bool> withdrawn{false};
   std::atomic<bool> destroy_now{false};
   auto owner = [&] {
-      shared = fixture.library().create(SubApi::opengl, gpu);
+      shared = fixture.library().create(SubApi::opengl, AvContextOptions{}, nullptr);
       CHECK_STATUS(shares.publish(5u, gpu, shared), Status::ok);
       published = true;
       while (!destroy_now) sched_yield();

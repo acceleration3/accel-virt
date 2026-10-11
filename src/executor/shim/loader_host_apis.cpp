@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
 
@@ -10,16 +11,19 @@ namespace av {
 
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
-      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, surfaces_{}, extensions_{}, count_(0u),
-      opened_(false)
-      {
-          AV_SCOPE("LoaderHostApis::LoaderHostApis");
-      }
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, surfaces_{}, heap_(), share_sink_(stderr),
+      share_lines_(share_sink_, "virtio-gpu-av: shares: "), shares_{},
+      extensions_{}, count_(0u), opened_(false)
+{
+    AV_SCOPE("LoaderHostApis::LoaderHostApis");
+    for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, share_lines_));
+}
 
 LoaderHostApis::~LoaderHostApis()
 {
     AV_SCOPE("LoaderHostApis::~LoaderHostApis");
     close();
+    for (ObjectStorage<HostShares> &shares : shares_) shares.destroy();
 }
 
 void LoaderHostApis::open()
@@ -88,7 +92,7 @@ void LoaderHostApis::enumerate()
      * about each GPU in turn is one factory and one enumeration. */
     if (d3d_runtime_.open()) {
         for (uint32_t i = 0u; i < found; i++)
-            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i].raw())) {
+            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
@@ -219,6 +223,12 @@ SharedSurfaces *LoaderHostApis::surfaces(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::surfaces");
     return index < count_ ? &surfaces_[index] : nullptr;
+}
+
+HostShares *LoaderHostApis::shares(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::shares");
+    return index < count_ ? &shares_[index].object() : nullptr;
 }
 
 }  // namespace av

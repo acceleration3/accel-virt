@@ -1025,6 +1025,114 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK_EQ(rig.rig().kmt().open_objects(), objects);
     CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); } }
 
+/* The last row a publish or an open takes is the ICD's own record of the
+ * object, and a process with no memory left for it is refused without
+ * anything left behind: what the device published or opened is released, and
+ * an export's NT handle and carrier are given back. */
+TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_made_for_it)
+{ { /* An export: the handle row is the first allocation, this the second. */
+    SharingRig          rig;
+    rig.rig().host().vk_handle(0, host_memory);
+    rig.rig().host().shared_object(0u, 0u);
+    rig.rig().host().shared_object(0u, 0u);
+    const std::uint32_t objects = rig.rig().kmt().open_objects();
+    rig.rig().platform().fail_allocation_at(2u);
+    VkExportMemoryAllocateInfo exporting = {};
+    exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+    exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &exporting;
+    allocate.allocationSize = shared_size;
+    allocate.memoryTypeIndex = 0u;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_OUT_OF_HOST_MEMORY);
+    CHECK(memory == VK_NULL_HANDLE);
+    /* Released, and then the host's memory freed as any refused export's is. */
+    MockKmt &kmt = rig.rig().kmt();
+    CHECK_EQ(kmt.command_id(kmt.commands() - 2u), av::CommandHeader::release_shared_object_id);
+    CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkFreeMemory));
+    CHECK_EQ(kmt.calls(MockKmt::Call::close_shared_object), 1u);
+    CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+
+  { /* An open of another process's object: the adopted handle's row is the
+     * first allocation, this the second. */
+    SharingRig  rig;
+    void *const handle = rig.foreign_handle();
+    rig.rig().host().shared_object(0u, 0x7700u);
+    rig.rig().host().shared_object(0u, 0u);
+    rig.rig().platform().fail_allocation_at(2u);
+    ImportMemoryWin32HandleRecord importing = {};
+    importing.type_ = av::icd::import_memory_win32_handle_info;
+    importing.handle_type_ = av::icd::opaque_win32_memory;
+    importing.handle_ = handle;
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &importing;
+    allocate.allocationSize = 4096u;
+    allocate.memoryTypeIndex = 0u;
+    VkDeviceMemory imported = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported),
+             VK_ERROR_OUT_OF_HOST_MEMORY);
+    CHECK(imported == VK_NULL_HANDLE);
+    CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); }
+
+  { /* An export whose NT handle has no row: the first allocation. The object
+     * is released and the handle never minted, so nothing names it. */
+    SharingRig          rig;
+    rig.rig().host().vk_handle(0, host_memory);
+    rig.rig().host().shared_object(0u, 0u);
+    rig.rig().host().shared_object(0u, 0u);
+    rig.rig().platform().fail_allocation_at(1u);
+    VkExportMemoryAllocateInfo exporting = {};
+    exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+    exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &exporting;
+    allocate.allocationSize = shared_size;
+    allocate.memoryTypeIndex = 0u;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_OUT_OF_HOST_MEMORY);
+    MockKmt &kmt = rig.rig().kmt();
+    CHECK_EQ(kmt.command_id(kmt.commands() - 2u), av::CommandHeader::release_shared_object_id);
+    CHECK_EQ(kmt.calls(MockKmt::Call::share_object), 0u); }
+
+  { /* A handle another process sent with no row to adopt it into, named to
+     * either import: refused as the memory failure it is, before the device
+     * is asked. */
+    SharingRig          rig;
+    void *const         handle = rig.foreign_handle();
+    const std::uint32_t sent = rig.rig().kmt().commands();
+    rig.rig().platform().fail_allocation_at(1u);
+    ImportMemoryWin32HandleRecord importing = {};
+    importing.type_ = av::icd::import_memory_win32_handle_info;
+    importing.handle_type_ = av::icd::opaque_win32_memory;
+    importing.handle_ = handle;
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &importing;
+    allocate.allocationSize = 4096u;
+    allocate.memoryTypeIndex = 0u;
+    VkDeviceMemory imported = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported),
+             VK_ERROR_OUT_OF_HOST_MEMORY);
+    CHECK(imported == VK_NULL_HANDLE);
+    ImportSemaphoreWin32HandleRecord fence = {};
+    fence.type_ = av::icd::import_semaphore_win32_handle_info;
+    fence.handle_type_ = av::icd::opaque_win32_semaphore;
+    fence.handle_ = handle;
+    fence.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
+    rig.rig().platform().fail_allocation_at(1u);
+    CHECK_EQ(rig.rig().root().import_semaphore_handle(rig.device(), &fence), VK_ERROR_OUT_OF_HOST_MEMORY);
+    CHECK_EQ(rig.rig().kmt().commands(), sent);
+    CHECK_EQ(rig.rig().log().holding("avvk: no memory to keep the Win32 handle named to vkAllocateMemory"), 1u);
+    CHECK_EQ(rig.rig().log().holding(
+                 "avvk: no memory to keep the Win32 handle named to vkImportSemaphoreWin32HandleKHR"),
+             1u); } }
+
 /* What a shared allocation is exported as is decided once per connection, from
  * the host's own device extension list. Every way that ask can fail leaves the
  * answer as it was - the opaque fd, which is what every host shared by before

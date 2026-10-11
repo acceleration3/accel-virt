@@ -57,6 +57,9 @@ PROBED_FEATURES = FEATURE_GPU_EXPORTED_MEMORY | FEATURE_GUEST_MEMORY_IMPORT
 says what does not depend on the host, and the probe tests say the rest."""
 # The device's own, offered on every host (docs/protocol.md, "Present engine").
 FEATURE_PRESENT_ENGINE = 16
+# Offered wherever a library is loaded: every library at this ABI version
+# reads frames.
+FEATURE_PRESENT_FROM_IMAGE = 32
 DEVICE_TYPES = {"other": 0, "integrated": 1, "discrete": 2, "virtual": 3, "cpu": 4}
 
 HOSTMEM = 64 << 20
@@ -163,7 +166,8 @@ class VirtioGpuContexts(unittest.TestCase):
         self.assertEqual((sub_apis, contexts, min_order, max_order), (SUB_API_VULKAN, MAX_CONTEXTS, 12, 24))
         self.assertEqual(capset[18:24], bytes(6))
         features = struct.unpack_from("<Q", capset, 24)[0]
-        self.assertEqual(features & ~PROBED_FEATURES, FEATURE_HOST_VISIBLE_MEMORY | FEATURE_PRESENT_ENGINE)
+        self.assertEqual(features & ~PROBED_FEATURES,
+                         FEATURE_HOST_VISIBLE_MEMORY | FEATURE_PRESENT_ENGINE | FEATURE_PRESENT_FROM_IMAGE)
         vendor, device, device_type, reserved = struct.unpack_from("<IIII", capset, 32)
         self.assertEqual((vendor, device, device_type, reserved), (host.vendor, host.device,
                                                                    DEVICE_TYPES[host.kind], 0))
@@ -178,7 +182,7 @@ class VirtioGpuContexts(unittest.TestCase):
     def test_host_visible_memory_is_offered_only_with_a_hostmem_region(self):
         gpu = self.open(av_context.av_device())
         features = struct.unpack_from("<Q", self.capset(gpu), 24)[0]
-        self.assertEqual(features & ~PROBED_FEATURES, FEATURE_PRESENT_ENGINE)
+        self.assertEqual(features & ~PROBED_FEATURES, FEATURE_PRESENT_ENGINE | FEATURE_PRESENT_FROM_IMAGE)
         # Nothing can be exported into a region that is not there.
         self.assertEqual(features & FEATURE_GPU_EXPORTED_MEMORY, 0)
 

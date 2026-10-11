@@ -39,10 +39,10 @@ void PciAddress::append_to(TextBuffer &text) const
     text.append_lower_hex(function_, 1u);
 }
 
-ExportGreeting PciAddress::greeting(const uint8_t *uuid, uint32_t capacity) const
+ExportGreeting PciAddress::greeting(const uint8_t *uuid) const
 {
     AV_SCOPE("PciAddress::greeting");
-    return ExportGreeting(uuid, capacity, domain_, static_cast<uint8_t>(bus_), static_cast<uint8_t>(device_),
+    return ExportGreeting(uuid, domain_, static_cast<uint8_t>(bus_), static_cast<uint8_t>(device_),
                           static_cast<uint8_t>(function_));
 }
 

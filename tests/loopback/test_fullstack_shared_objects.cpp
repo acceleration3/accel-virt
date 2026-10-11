@@ -5,12 +5,11 @@
  * the other context, and the device opens one host resource for it.
  *
  * What only this layer can prove is that the two halves agree. The miniport
- * mints the id and the device knows nothing of allocations; the device holds
- * the host resource and the miniport knows nothing of file descriptors. A test
- * of either alone can only assert its own bookkeeping, which is what makes the
- * pair worth running together: one descriptor, two holders, and a publisher
- * that can go first. */
-#include "core/trace/state_writer.hpp"
+ * mints the id and the device knows nothing of allocations; the library keeps
+ * the host object (HostShares, whose own tests hold it to the lifetimes) and
+ * the miniport knows nothing of it. What this pair shows is the path between:
+ * every guest command reaches the library as the context that sent it, one
+ * object shared and opened once, and a publisher that can go first. */
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -101,62 +100,6 @@ private:
     bool            live_ = false;
 };
 
-/* The device's own state dump. What the device holds is asked of the device:
- * a test that counted its own publishes would be asserting what it did rather
- * than what the device made of it. */
-class DeviceState {
-public:
-    explicit DeviceState(FullStackRig &rig) : dump_(), writer_(dump_, sizeof dump_)
-    {
-        writer_.open("device", 0u);
-        rig.device().device().report(writer_);
-    }
-    DeviceState(const DeviceState &) = delete;
-    DeviceState &operator=(const DeviceState &) = delete;
-
-    /* How many shared objects the device holds; ~0 if the dump does not say,
-     * which a worker holding the table's mutex would cause. */
-    std::uint32_t live() const { return number_after("device/0/shared/0 live="); }
-    /* How many contexts hold `object_id`. */
-    std::uint32_t holders_of(std::uint64_t object_id) const
-    {
-        char line[64] = {};
-        std::size_t at = 0u;
-        for (const char *from = "device/0/shared/0/object/"; *from != '\0'; from++) line[at++] = *from;
-        at += digits_into(line + at, object_id);
-        for (const char *from = " kind="; *from != '\0'; from++) line[at++] = *from;
-        const char *const found = std::strstr(writer_.dump(), line);
-        if (found == nullptr) return 0u;
-        return number_after_at(std::strstr(found, " holders="), std::strlen(" holders="));
-    }
-
-private:
-    static std::size_t digits_into(char *into, std::uint64_t value)
-    {
-        char        reversed[24] = {};
-        std::size_t length = 0u;
-        do {
-            reversed[length++] = static_cast<char>('0' + value % 10u);
-            value /= 10u;
-        } while (value != 0u);
-        for (std::size_t index = 0u; index < length; index++) into[index] = reversed[length - 1u - index];
-        return length;
-    }
-    static std::uint32_t number_after_at(const char *found, std::size_t skip)
-    {
-        if (found == nullptr) return ~std::uint32_t{0};
-        std::uint32_t value = 0u;
-        for (const char *at = found + skip; *at >= '0' && *at <= '9'; at++)
-            value = value * 10u + static_cast<std::uint32_t>(*at - '0');
-        return value;
-    }
-    std::uint32_t number_after(const char *key) const
-    { return number_after_at(std::strstr(writer_.dump(), key), std::strlen(key)); }
-
-    char            dump_[4096];
-    av::StateWriter writer_;
-};
-
 /* A carrier as an ICD makes one: a page of client memory whose private driver
  * data is a descriptor followed by an unassigned record, which the miniport
  * mints an identity into. The id it minted, or 0. */
@@ -200,7 +143,6 @@ std::uint64_t crossed_id(DdiKmt &kmt, std::uint32_t opener, std::uint64_t handle
 TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_and_outlives_it)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
-  rig.device().executor().descriptors_from(rig.device().host());
   DdiKmt       &kmt = rig.kmt();
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
@@ -211,7 +153,7 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
   CHECK_STATUS(publisher.open(adapter), Status::ok);
   CHECK_STATUS(opener.open(adapter), Status::ok);
   CHECK_EQ(rig.device().device().contexts(), 2u);
-  CHECK_EQ(DeviceState(rig).live(), 0u);
+  CHECK_EQ(rig.device().executor().shared_objects(), 0u);
 
   std::uint32_t      carrier = 0u;
   const std::uint64_t object_id = minted_carrier(kmt, publisher.device(), carrier);
@@ -219,9 +161,7 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
 
   SharedObjectCall publish(publisher.transport());
   CHECK_STATUS(publish.share(object_id, memory_kind, object_bytes, published_handle), Status::ok);
-  CHECK_EQ(DeviceState(rig).live(), 1u);
-  CHECK_EQ(rig.device().executor().exported_objects(), 1u);
-  CHECK_EQ(rig.device().host().live_dmabufs(), 1u);
+  CHECK_EQ(rig.device().executor().shared_objects(), 1u);
 
   /* The handle crosses, and the id with it - through the creating process's
    * private driver data, which is the only thing dxgkrnl carries. */
@@ -237,32 +177,22 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
   CHECK_STATUS(open.open(object_id, memory_kind, object_bytes, opened_handle), Status::ok);
   CHECK(opened_handle != 0u);
   CHECK(opened_handle != published_handle);
-  /* One host resource with two references: the second open imported the
-   * descriptor the first exported rather than making a second object. */
-  CHECK_EQ(DeviceState(rig).live(), 1u);
-  CHECK_EQ(rig.device().executor().exported_objects(), 1u);
-  CHECK_EQ(rig.device().executor().imported_objects(), 1u);
-  CHECK_EQ(rig.device().host().live_dmabufs(), 1u);
-  CHECK_EQ(DeviceState(rig).holders_of(object_id), 2u);
+  /* One host object, opened once: the second context made no object of its
+   * own. */
+  CHECK_EQ(rig.device().executor().shared_objects(), 1u);
+  CHECK_EQ(rig.device().executor().opened_objects(), 1u);
+  CHECK_EQ(rig.device().executor().live_opens(), 1u);
 
-  /* The publishing context goes, dropping the reference it held. The object
-   * is the opener's now - which is the whole of what US3 claims. */
+  /* The publishing context goes. The opener's hold is the opener's - which
+   * is the whole of what US3 claims. */
   publisher.close_context();
   CHECK_EQ(rig.device().device().contexts(), 1u);
-  CHECK_EQ(DeviceState(rig).live(), 1u);
-  CHECK_EQ(DeviceState(rig).holders_of(object_id), 1u);
-  CHECK_EQ(rig.device().host().live_dmabufs(), 1u);
+  CHECK_EQ(rig.device().executor().live_opens(), 1u);
 
-  /* And the opener still names it. */
+  /* And the opener still names it, and gives it back once. */
   CHECK_STATUS(open.release(object_id, memory_kind, object_bytes), Status::ok);
-  CHECK_EQ(DeviceState(rig).live(), 0u);
-  /* The descriptor the device held was closed once, by the last holder. */
-  CHECK_EQ(rig.device().host().live_dmabufs(), 0u);
-  /* One release through the executor, not two: what the *publisher* named was
-   * its own guest's object, and a device that destroyed that would be
-   * destroying memory the application is still using. */
-  CHECK_EQ(rig.device().executor().released_objects(), 1u);
-  CHECK_EQ(rig.device().executor().imported_objects(), 1u);
+  CHECK_EQ(rig.device().executor().live_opens(), 0u);
+  CHECK_EQ(rig.device().executor().closed_objects(), 1u);
 
   /* The guest side, in the order the kernel allows it: the opener gives back
    * what its open made, and only then is the carrier nobody holds open. */
@@ -283,7 +213,6 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
 TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_nothing_else_is)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
-  rig.device().executor().descriptors_from(rig.device().host());
   DdiKmt       &kmt = rig.kmt();
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
@@ -297,7 +226,7 @@ TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_not
   const std::uint64_t object_id = minted_carrier(kmt, publisher.device(), carrier);
   SharedObjectCall    publish(publisher.transport());
   CHECK_STATUS(publish.share(object_id, memory_kind, object_bytes, published_handle), Status::ok);
-  CHECK_EQ(DeviceState(rig).live(), 1u);
+  CHECK_EQ(rig.device().executor().shared_objects(), 1u);
 
   SharedObjectCall attack(hostile.transport());
   std::uint64_t    got = 9u;
@@ -326,30 +255,28 @@ TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_not
   CHECK_EQ(attack.device_status(), 6u);
 
   /* None of it touched the object, and none of it cost either context. */
-  CHECK_EQ(DeviceState(rig).live(), 1u);
-  CHECK_EQ(DeviceState(rig).holders_of(object_id), 1u);
+  CHECK_EQ(rig.device().executor().shared_objects(), 1u);
+  CHECK_EQ(rig.device().executor().live_opens(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 2u);
-  CHECK_EQ(rig.device().host().live_dmabufs(), 1u);
-  CHECK_EQ(rig.device().executor().imported_objects(), 0u);
+  CHECK_EQ(rig.device().executor().opened_objects(), 0u);
 
   /* The same context now does it correctly, which is what proves the refusals
    * were refusals and not a context left broken. */
   CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, got), Status::ok);
   CHECK(got != 0u);
-  CHECK_EQ(DeviceState(rig).holders_of(object_id), 2u);
+  CHECK_EQ(rig.device().executor().live_opens(), 1u);
   /* And opening it a second time in the same context is refused: one context
    * holding two handles to one object could free it twice. */
   std::uint64_t again = 9u;
   CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, again), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 6u);
   CHECK_EQ(again, 0u);
-  CHECK_EQ(DeviceState(rig).holders_of(object_id), 2u);
-  CHECK_EQ(rig.device().executor().imported_objects(), 1u);
+  CHECK_EQ(rig.device().executor().live_opens(), 1u);
+  CHECK_EQ(rig.device().executor().opened_objects(), 1u);
 
   CHECK_STATUS(attack.release(object_id, memory_kind, object_bytes), Status::ok);
+  CHECK_EQ(rig.device().executor().live_opens(), 0u);
   publisher.close_context();
-  CHECK_EQ(DeviceState(rig).live(), 0u);
-  CHECK_EQ(rig.device().host().live_dmabufs(), 0u);
   CHECK_STATUS(kmt.destroy_shared_allocation(publisher.device(), carrier), Status::ok);
   publisher.close();
   hostile.close();

@@ -1,13 +1,12 @@
 #include "icd/vulkan/external_objects.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 
 namespace av::icd {
 
-ExternalObjects::ExternalObjects(ThreadLock &lock) : lock_(lock), slots_{}
+ExternalObjects::ExternalObjects(ThreadLock &lock, BlockSource &memory) : lock_(lock), slots_(memory)
 {
     AV_SCOPE("ExternalObjects::ExternalObjects");
 }
@@ -15,23 +14,19 @@ ExternalObjects::ExternalObjects(ThreadLock &lock) : lock_(lock), slots_{}
 ExternalObjectSlot *ExternalObjects::find(VkDeviceMemory memory, VkSemaphore semaphore)
 {
     AV_SCOPE("ExternalObjects::find");
-    for (ExternalObjectSlot &slot : slots_) {
-        if (slot.device_ == VK_NULL_HANDLE) continue;
-        if (memory != VK_NULL_HANDLE && slot.memory_ == memory) return &slot;
-        if (semaphore != VK_NULL_HANDLE && slot.semaphore_ == semaphore) return &slot;
-    }
-    return nullptr;
+    return slots_.find_if([memory, semaphore](const ExternalObjectSlot &slot) {
+        return (memory != VK_NULL_HANDLE && slot.memory_ == memory) ||
+               (semaphore != VK_NULL_HANDLE && slot.semaphore_ == semaphore);
+    });
 }
 
 const ExternalObjectSlot *ExternalObjects::find(VkDeviceMemory memory, VkSemaphore semaphore) const
 {
     AV_SCOPE("ExternalObjects::find");
-    for (const ExternalObjectSlot &slot : slots_) {
-        if (slot.device_ == VK_NULL_HANDLE) continue;
-        if (memory != VK_NULL_HANDLE && slot.memory_ == memory) return &slot;
-        if (semaphore != VK_NULL_HANDLE && slot.semaphore_ == semaphore) return &slot;
-    }
-    return nullptr;
+    return slots_.find_if([memory, semaphore](const ExternalObjectSlot &slot) {
+        return (memory != VK_NULL_HANDLE && slot.memory_ == memory) ||
+               (semaphore != VK_NULL_HANDLE && slot.semaphore_ == semaphore);
+    });
 }
 
 bool ExternalObjects::remember(VkDevice device, VkDeviceMemory memory, VkSemaphore semaphore,
@@ -46,12 +41,9 @@ bool ExternalObjects::remember(VkDevice device, VkDeviceMemory memory, VkSemapho
     if ((memory != VK_NULL_HANDLE) != (size != 0u)) return false;
     const icd::ThreadLockHold released(lock_);
     if (find(memory, semaphore) != nullptr) return false;
-    for (ExternalObjectSlot &slot : slots_) {
-        if (slot.device_ != VK_NULL_HANDLE) continue;
-        slot = ExternalObjectSlot{device, memory, semaphore, object_id, size, handle, carrier};
-        return true;
-    }
-    return false;
+    ExternalObjectSlot *row = nullptr;
+    return slots_.create(row, ExternalObjectSlot{device, memory, semaphore, object_id, size, handle, carrier}) ==
+           Status::ok;
 }
 
 uint64_t ExternalObjects::handle_of_memory(VkDeviceMemory memory) const
@@ -76,20 +68,19 @@ bool ExternalObjects::holder_of(uint64_t object_id, ExternalObjectSlot &row) con
 {
     AV_SCOPE("ExternalObjects::holder_of");
     if (object_id == 0u) return false;
-    const icd::ThreadLockHold released(lock_);
-    for (const ExternalObjectSlot &slot : slots_) {
-        if (slot.device_ == VK_NULL_HANDLE || slot.object_id_ != object_id) continue;
-        row = slot;
-        return true;
-    }
-    return false;
+    const icd::ThreadLockHold        released(lock_);
+    const ExternalObjectSlot *const slot =
+        slots_.find_if([object_id](const ExternalObjectSlot &held) { return held.object_id_ == object_id; });
+    if (slot == nullptr) return false;
+    row = *slot;
+    return true;
 }
 
 void ExternalObjects::give_back(ExternalObjectSlot &slot, ExternalObjectSlot &row)
 {
     AV_SCOPE("ExternalObjects::give_back");
     row = slot;
-    slot = ExternalObjectSlot{};
+    static_cast<void>(slots_.destroy(&slot));
 }
 
 bool ExternalObjects::take_memory(VkDeviceMemory memory, ExternalObjectSlot &row)
@@ -119,47 +110,38 @@ bool ExternalObjects::take_any_of_device(VkDevice device, ExternalObjectSlot &ro
     AV_SCOPE("ExternalObjects::take_any_of_device");
     if (device == VK_NULL_HANDLE) return false;
     const icd::ThreadLockHold released(lock_);
-    for (ExternalObjectSlot &slot : slots_) {
-        if (slot.device_ != device) continue;
-        give_back(slot, row);
-        return true;
-    }
-    return false;
+    ExternalObjectSlot *const slot =
+        slots_.find_if([device](const ExternalObjectSlot &held) { return held.device_ == device; });
+    if (slot == nullptr) return false;
+    give_back(*slot, row);
+    return true;
 }
 
 uint32_t ExternalObjects::live() const
 {
     AV_SCOPE("ExternalObjects::live");
     const icd::ThreadLockHold released(lock_);
-    uint32_t found = 0u;
-    for (const ExternalObjectSlot &slot : slots_) found += slot.device_ != VK_NULL_HANDLE ? 1u : 0u;
-    return found;
+    return slots_.live();
 }
 
 bool ExternalObjects::invariants_hold() const
 {
     AV_SCOPE("ExternalObjects::invariants_hold");
-    for (uint32_t index = 0u; index < max_objects; index++) {
-        const ExternalObjectSlot &slot = slots_[index];
-        if (slot.device_ == VK_NULL_HANDLE) {
-            if (slot.memory_ != VK_NULL_HANDLE || slot.semaphore_ != VK_NULL_HANDLE ||
-                slot.object_id_ != 0u || slot.size_ != 0u || slot.handle_ != 0u || slot.carrier_ != 0u)
-                return false;
-            continue;
-        }
+    return slots_.all_of([this](const ExternalObjectSlot &slot) {
         const bool memory = slot.memory_ != VK_NULL_HANDLE;
         const bool semaphore = slot.semaphore_ != VK_NULL_HANDLE;
-        if (memory == semaphore) return false;
+        if (slot.device_ == VK_NULL_HANDLE || memory == semaphore) return false;
         if (slot.object_id_ == 0u || slot.handle_ == 0u) return false;
         if (memory != (slot.size_ != 0u)) return false;
-        for (uint32_t earlier = 0u; earlier < index; earlier++) {
-            if (memory && slots_[earlier].memory_ == slot.memory_) return false;
-            if (semaphore && slots_[earlier].semaphore_ == slot.semaphore_) return false;
-            if (slots_[earlier].object_id_ == slot.object_id_) return false;
-            if (slots_[earlier].handle_ == slot.handle_) return false;
-        }
-    }
-    return true;
+        uint32_t alike = 0u;
+        slots_.for_each([&slot, &alike](const ExternalObjectSlot &other) {
+            if (other.object_id_ == slot.object_id_ || other.handle_ == slot.handle_ ||
+                (other.memory_ == slot.memory_ && slot.memory_ != VK_NULL_HANDLE) ||
+                (other.semaphore_ == slot.semaphore_ && slot.semaphore_ != VK_NULL_HANDLE))
+                alike++;
+        });
+        return alike == 1u;
+    });
 }
 
 }  // namespace av::icd

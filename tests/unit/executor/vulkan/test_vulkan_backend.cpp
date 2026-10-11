@@ -49,6 +49,9 @@ extern "C" const char *__lsan_default_suppressions(void)
 
 namespace {
 
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
+
 constexpr std::size_t block_bytes = 65536u;
 
 /* VK_API_VERSION_1_0 and 1.1, spelled out: the macros are full of C casts
@@ -663,12 +666,12 @@ TEST(vulkan_backend, a_backend_with_no_device_exports_imports_and_releases_nothi
   CHECK(!backend.export_object(AV_SHARED_MONITORED_FENCE, 0x40u, handle_kind, fd));
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made, detail));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, made));
+  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, made, detail));
   /* And a release does nothing at all, with or without a handle. */
-  backend.release_object(AV_SHARED_MEMORY, 0x40u);
-  backend.release_object(AV_SHARED_MONITORED_FENCE, 0u); }
+  backend.release_object(AV_SHARED_MEMORY, 0x40u, detail);
+  backend.release_object(AV_SHARED_MONITORED_FENCE, 0u, detail); }
 
 namespace {
 

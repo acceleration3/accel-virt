@@ -17,6 +17,8 @@
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -78,17 +80,26 @@ struct Vertex {
 };
 
 /* The first GPU here with both devices; nulls when there is none. */
-bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::D3d12HostDevice *&device12)
+bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::D3d12HostDevice *&device12,
+                  av::HostShares *&shares)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     apis.open();
     for (std::uint32_t index = 0u; index < apis.gpu_count(); index++) {
         device11 = apis.d3d11_device(index);
         device12 = apis.d3d12_device(index);
+        shares = apis.shares(index);
         if (device11 != nullptr && device12 != nullptr) return true;
     }
     std::fprintf(stderr, "no GPU here runs vkd3d-proton: nothing judged\n");
     return false;
+}
+
+/* What `backend` shares through: `shares` in domain 1. */
+av::SessionShares *shared_as(av::SessionShares &session, av::HostShares *shares, av::D3dBackend &backend)
+{
+    session.bind(*shares, 1u, backend);
+    return &session;
 }
 
 /* Whether this vkd3d-proton imports guest memory: a stock one does not. */
@@ -303,9 +314,11 @@ TEST(d3d12_session_device, a_cleared_target_reads_back_through_guest_memory)
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
@@ -357,10 +370,12 @@ TEST(d3d12_session_device, a_triangle_drawn_from_ddi_dxil_reads_back_where_it_wa
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     for (int whole = 0; whole < 2; whole++) {
         av::D3dBackend backend;
-        CHECK(backend.initialize(device11, device12));
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
         av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
         if (!imports(*device12, wire)) {
             backend.shut_down();
@@ -457,9 +472,11 @@ TEST(d3d12_session_device, a_triangle_drawn_indirectly_reads_back_where_it_was_d
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
@@ -488,10 +505,12 @@ TEST(d3d12_session_device, each_indirect_misuse_removes_a_healthy_device)
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     for (const Misuse misuse : misuses) {
         av::D3dBackend backend;
-        CHECK(backend.initialize(device11, device12));
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
         av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
         if (!imports(*device12, wire)) {
             backend.shut_down();
@@ -516,12 +535,14 @@ TEST(d3d12_session_device, a_sampler_heap_past_2048_is_made_with_2048)
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     constexpr std::uint32_t descriptors_sampler = 1u, shader_visible = 1u, reported = 4000u, made = 2048u;
     const std::uint32_t indices[2] = {made - 1u, made};
     for (const std::uint32_t index : indices) {
         av::D3dBackend backend;
-        CHECK(backend.initialize(device11, device12));
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
         av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
         std::uint32_t hresult = 1u;
         Caps12 caps = {};
@@ -550,11 +571,13 @@ TEST(d3d12_session_device, a_buffer_placed_inside_a_spanning_buffer_is_taken_and
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     constexpr std::uint64_t heap_size = 1u << 20u, piece = 64u * 1024u, base = 0x300000000ull;
     constexpr std::uint32_t heap = 1u, spanning = 2u, inner = 3u, misplaced = 4u;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     std::uint32_t hresult = 1u;
     Caps12 caps = {};
@@ -645,7 +668,7 @@ bool frame_everywhere(const AvFrameView &view, std::uint32_t expected)
 bool shown_everywhere(av::D3d11HostDevice &device11, std::uint32_t expected)
 {
     std::uint32_t pixels[size * size] = {};
-    if (!device11.read_image(shown_key, pixels, row_pitch, size, size)) return false;
+    if (!device11.read_image(1u, shown_key, pixels, row_pitch, size, size)) return false;
     for (const std::uint32_t value : pixels)
         if (value != expected) return false;
     return true;
@@ -672,9 +695,11 @@ TEST(d3d12_session_device, a_shared_buffer_drawn_on_d3d12_is_what_d3d11_reads_un
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
@@ -692,7 +717,8 @@ TEST(d3d12_session_device, a_shared_buffer_drawn_on_d3d12_is_what_d3d11_reads_un
     CHECK(backend.invariants_hold());
     backend.shut_down();
     /* The guest let go of it everywhere: nothing is shown under the key. */
-    device11->release_shared(shown_key);
+    shares->release(1u, shown_key);
+    device11->retire_shares();
     CHECK(!shown_everywhere(*device11, opaque_green));
 }
 
@@ -706,10 +732,12 @@ TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     av::SharedSurfaces surfaces;
     av::D3dBackend     backend;
-    CHECK(backend.initialize(device11, device12, &surfaces));
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12, &surfaces));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
@@ -732,7 +760,8 @@ TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_
     CHECK(surfaces.invariants_hold());
     backend.shut_down();
     surfaces.release(0u);
-    device11->release_shared(shown_key);
+    shares->release(1u, shown_key);
+    device11->retire_shares();
 }
 
 /* A share of a texture not made shared, of none, under key 0 or a key already
@@ -743,10 +772,12 @@ TEST(d3d12_session_device, each_share_or_present_misuse_removes_a_healthy_device
     av::LoaderHostApis apis;
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
-    if (!host_devices(apis, device11, device12)) return;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
     for (const ShowMisuse misuse : show_misuses) {
         av::D3dBackend backend;
-        CHECK(backend.initialize(device11, device12));
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
         av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
         make_shown(wire);
         std::uint32_t removed = 1u;
@@ -756,6 +787,7 @@ TEST(d3d12_session_device, each_share_or_present_misuse_removes_a_healthy_device
         CHECK(av_d3d12_Finish12(wire, &removed));
         CHECK_EQ(removed, driver_internal_error);
         backend.shut_down();
-        device11->release_shared(shown_key);
+        shares->release(1u, shown_key);
+    device11->retire_shares();
     }
 }

@@ -187,8 +187,7 @@ Status ExportAnswer::encode(uint8_t *bytes, size_t capacity) const
         writer.write_u8(greeting_.device());
         writer.write_u8(greeting_.function());
         writer.write_u8(greeting_.on_pci() ? on_pci_flag : 0u);
-        writer.write_u32(greeting_.capacity());
-        writer.write_zeros(4u);
+        writer.write_zeros(8u);
         break;
     case ExportOperation::export_surface:
         writer.write_u32(layout_.width());
@@ -236,10 +235,9 @@ Status ExportAnswer::decode(const uint8_t *bytes, size_t length, uint32_t descri
         const uint8_t  device = reader.read_u8();
         const uint8_t  function = reader.read_u8();
         const uint8_t  flags = reader.read_u8();
-        const uint32_t held = reader.read_u32();
-        reserved = reader.read_u32() | (flags & ~on_pci_flag);
-        candidate.greeting_ = (flags & on_pci_flag) != 0u ? ExportGreeting(uuid, held, domain, bus, device, function)
-                                                          : ExportGreeting(uuid, held);
+        reserved = reader.read_u32() | reader.read_u32() | (flags & ~on_pci_flag);
+        candidate.greeting_ = (flags & on_pci_flag) != 0u ? ExportGreeting(uuid, domain, bus, device, function)
+                                                          : ExportGreeting(uuid);
         /* Without the flag the address fields must be 0; the greeting built
          * without them cannot say otherwise, so they are kept as reserved. */
         if ((flags & on_pci_flag) == 0u) reserved |= domain | bus | device | function;

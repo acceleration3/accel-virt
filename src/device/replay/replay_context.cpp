@@ -26,12 +26,11 @@ ReplayContext::~ReplayContext()
     AV_SCOPE("ReplayContext::~ReplayContext");
 }
 
-Status ReplayContext::create(const ExecutorLibrary &library, uint32_t context, SubApi api,
-                             const uint8_t *gpu_uuid)
+Status ReplayContext::create(const ExecutorLibrary &library, uint32_t context, SubApi api)
 {
     AV_SCOPE("ReplayContext::create");
     if (executor_ != nullptr) return Status::invalid_state;
-    AvExecutor *const made = library.create(api, gpu_uuid);
+    AvExecutor *const made = library.create(api, AvContextOptions{}, nullptr);
     if (made == nullptr) return Status::no_memory;
     executor_ = made;
     context_ = context;

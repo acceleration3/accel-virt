@@ -62,7 +62,7 @@ public:
     virtual void abandon(ImportedBlob &blob) = 0;
 
     /* A descriptor for the object `wire_handle` names in this API's commands,
-     * so the device can publish it for every context to open (feature 053):
+     * so HostShares can publish it for every context to open (feature 053):
      * false for a handle this backend did not make or a kind it cannot
      * export. The descriptor is the caller's on true, and `handle_kind` says
      * which AV_SHARED_HANDLE_* kind it is, because OpenGL and OpenCL import
@@ -75,13 +75,16 @@ public:
     [[nodiscard]] virtual bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                              int &fd) = 0;
     /* That descriptor made into an object of this API's, with `wire_handle`
-     * what the guest names it by. `fd` stays the caller's whatever the answer:
-     * it is the device's, and a backend that keeps one duplicates it. */
+     * what the guest names it by and `detail` whatever else releasing it will
+     * take - HostShares keeps both with the hold, so no backend keeps a table
+     * of what it imported. `fd` stays the caller's whatever the answer: it is
+     * HostShares', and a backend that keeps one duplicates it. */
     [[nodiscard]] virtual bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                             uint64_t &wire_handle) = 0;
-    /* What import_object made, destroyed. Nothing for a handle this backend
-     * did not make that way. */
-    virtual void               release_object(uint32_t kind, uint64_t wire_handle) = 0;
+                                             uint64_t &wire_handle, uint64_t &detail) = 0;
+    /* What import_object made, destroyed: called by HostShares alone, with
+     * what that import answered, on this session's thread - as the guest
+     * closes it, or as the session ends, before the backend shuts down. */
+    virtual void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) = 0;
 
 protected:
     SessionBackend() = default;

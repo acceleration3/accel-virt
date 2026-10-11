@@ -6,9 +6,9 @@
 
 namespace av {
 
-TransportCommand::TransportCommand(BlobImports &imports, ContextSharedObjects &shared,
+TransportCommand::TransportCommand(BlobImports &imports, ContextExecutor &executor,
                                    const CommandHeader &header, const uint8_t *body)
-    : imports_(imports), shared_(shared), header_(header), body_(body)
+    : imports_(imports), executor_(executor), header_(header), body_(body)
     {
         AV_SCOPE("TransportCommand::TransportCommand");
     }
@@ -21,7 +21,7 @@ Status TransportCommand::run(uint8_t *reply, size_t capacity, size_t &produced)
         return header_.size() == CommandHeader::encoded_size ? Status::ok : Status::malformed;
     if (header_.id() == CommandHeader::import_blob_id || header_.id() == CommandHeader::release_blob_id)
         return BlobImportCommand(imports_, header_, body_).run(reply, capacity, produced);
-    return SharedObjectCommand(shared_, header_, body_).run(reply, capacity, produced);
+    return SharedObjectCommand(executor_, header_, body_).run(reply, capacity, produced);
 }
 
 }  // namespace av

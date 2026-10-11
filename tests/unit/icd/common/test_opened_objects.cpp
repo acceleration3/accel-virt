@@ -12,6 +12,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "icd/common/opened_objects.hpp"
 #include "icd/common/shared_handles.hpp"
@@ -35,8 +36,13 @@ using av::icd::OpenedObjects;
 namespace av::icd {
 
 struct OpenedObjectsProbe {
-    static OpenedObjectRow &row(OpenedObjects &opened, std::uint32_t index) { return opened.rows_[index]; }
-    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
+    /* A row kept as no open would: what the invariants are judged against. */
+    static OpenedObjectRow &add(OpenedObjects &opened, const OpenedObjectRow &row)
+    {
+        OpenedObjectRow *made = nullptr;
+        CHECK_STATUS(opened.rows_.create(made, row), Status::ok);
+        return *made;
+    }
 };
 
 }  // namespace av::icd
@@ -67,8 +73,8 @@ private:
  * table over it, a transport playing the device, and the table under test. */
 class Process {
 public:
-    Process() : trace_(), lock_(trace_, 'S'), kmt_(), log_(), wire_(), device_(0u),
-                handles_(kmt_, lock_), opened_(handles_, log_, "avtest: ")
+    Process() : memory_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), wire_(), device_(0u),
+                handles_(kmt_, lock_, memory_), opened_(handles_, memory_, log_, "avtest: ")
     {
         kmt_.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
         std::uint32_t adapter = 0u;
@@ -81,6 +87,7 @@ public:
     av::MockTransport        &wire() { return wire_; }
     av::RecordingLog         &log() { return log_; }
     av::icd::SharedHandles   &handles() { return handles_; }
+    av::MockPlatform         &memory() { return memory_; }
     std::uint32_t             device() const { return device_; }
 
     /* A handle another process sent: an allocation the kernel minted an
@@ -110,6 +117,7 @@ public:
     }
 
 private:
+    av::MockPlatform        memory_;
     av::LockTrace           trace_;
     av::RecordingThreadLock lock_;
     av::MockKmt             kmt_;
@@ -243,22 +251,49 @@ TEST(opened_objects, a_device_that_refuses_leaves_no_row)
            1u);
   CHECK(process.opened().invariants_hold()); }
 
-/* A table with no room refuses before the kernel or the device is asked: an
- * object opened with nowhere to keep it is one nothing would give back. */
-TEST(opened_objects, a_full_table_refuses_before_anything_is_asked)
+/* No count of objects past which an open is refused: the table this replaced
+ * stopped at 64. */
+TEST(opened_objects, opens_past_any_fixed_table)
 { Process process;
-  for (std::uint32_t index = 0u; index < OpenedObjects::max_objects; index++)
-      OpenedObjectsProbe::row(process.opened(), index) =
-          av::icd::OpenedObjectRow{index + 1u, made_memory + index, page, SharedObjectKind::memory};
-  OpenedObjectsProbe::set_live(process.opened(), OpenedObjects::max_objects);
+  for (std::uint32_t index = 0u; index < 100u; index++)
+      static_cast<void>(OpenedObjectsProbe::add(
+          process.opened(),
+          av::icd::OpenedObjectRow{index + 1000u, made_memory + 0x10000u + index, page, SharedObjectKind::memory}));
   CHECK(process.opened().invariants_hold());
   const std::uint64_t named = process.handle();
-  std::uint64_t       made = 7u;
+  process.answer(SharedObjectAnswer::done, made_memory);
+  std::uint64_t made = 0u;
   CHECK_STATUS(process.opened().open(process.wire(), process.device(), named, SharedObjectKind::memory, page, made),
-               Status::no_space);
+               Status::ok);
+  CHECK_EQ(made, made_memory);
+  CHECK_EQ(process.opened().live(), 101u);
+  CHECK(process.opened().invariants_hold()); }
+
+/* No row to keep the object in refuses before the device is asked: an object
+ * opened with nowhere to keep it is one nothing would give back. The handle's
+ * own row is the first allocation, the opened object's the second. */
+TEST(opened_objects, no_memory_for_a_row_refuses_before_the_device_is_asked)
+{ Process             process;
+  const std::uint64_t named = process.handle();
+  process.memory().fail_allocation_at(2u);
+  std::uint64_t made = 7u;
+  CHECK_STATUS(process.opened().open(process.wire(), process.device(), named, SharedObjectKind::memory, page, made),
+               Status::no_memory);
   CHECK_EQ(made, 0u);
   CHECK_EQ(process.wire().sends(), 0u);
-  CHECK_EQ(process.handles().live(), 0u); }
+  CHECK_EQ(process.opened().live(), 0u);
+  CHECK_EQ(process.log().holding("avtest: no memory to keep an opened shared object"), 1u);
+  CHECK(process.opened().invariants_hold());
+  /* And one with no row for the handle itself, which a fresh process's
+   * first allocation is. */
+  Process             fresh;
+  const std::uint64_t another = fresh.handle();
+  fresh.memory().fail_allocation_at(1u);
+  CHECK_STATUS(fresh.opened().open(fresh.wire(), fresh.device(), another, SharedObjectKind::memory, page, made),
+               Status::no_memory);
+  CHECK_EQ(fresh.wire().sends(), 0u);
+  CHECK_EQ(fresh.handles().live(), 0u);
+  CHECK_EQ(fresh.log().holding("avtest: no memory to keep a Win32 handle"), 1u); }
 
 /* A memory object and a fence the device answered the same number for are two
  * objects - OpenGL's namespaces are separate - and each is given back by its
@@ -323,11 +358,10 @@ TEST(opened_objects, report_names_each_object)
 /* Every way a row can be wrong, made by hand: the invariant exists to fail. */
 TEST(opened_objects, invariants_reject_every_row_no_open_leaves)
 { Process process;
-  OpenedObjectsProbe::set_live(process.opened(), 2u);
-  av::icd::OpenedObjectRow &first = OpenedObjectsProbe::row(process.opened(), 0u);
-  av::icd::OpenedObjectRow &second = OpenedObjectsProbe::row(process.opened(), 1u);
-  first = av::icd::OpenedObjectRow{7u, made_memory, page, SharedObjectKind::memory};
-  second = av::icd::OpenedObjectRow{8u, made_fence, 0u, SharedObjectKind::monitored_fence};
+  av::icd::OpenedObjectRow &first = OpenedObjectsProbe::add(
+      process.opened(), av::icd::OpenedObjectRow{7u, made_memory, page, SharedObjectKind::memory});
+  av::icd::OpenedObjectRow &second = OpenedObjectsProbe::add(
+      process.opened(), av::icd::OpenedObjectRow{8u, made_fence, 0u, SharedObjectKind::monitored_fence});
   CHECK(process.opened().invariants_hold());
   const av::icd::OpenedObjectRow whole = second;
   second.object_id_ = 0u;
@@ -355,6 +389,4 @@ TEST(opened_objects, invariants_reject_every_row_no_open_leaves)
   CHECK(!process.opened().invariants_hold());          /* one kind's answer twice */
   second.kind_ = SharedObjectKind::native_fence;
   second.size_ = 0u;
-  CHECK(process.opened().invariants_hold());           /* another kind's is its own */
-  OpenedObjectsProbe::set_live(process.opened(), OpenedObjects::max_objects + 1u);
-  CHECK(!process.opened().invariants_hold()); }
+  CHECK(process.opened().invariants_hold()); }          /* another kind's is its own */

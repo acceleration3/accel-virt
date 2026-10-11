@@ -1,6 +1,5 @@
 /* What a test of the device's control plane reaches behind a
- * LocalContextPlane: the table of contexts, the objects they share and the
- * library they run on. */
+ * LocalContextPlane: the table of contexts and the library they run on. */
 #ifndef AV_LOCAL_CONTEXT_PLANE_PROBE_HPP
 #define AV_LOCAL_CONTEXT_PLANE_PROBE_HPP
 
@@ -10,7 +9,6 @@ namespace av {
 
 struct LocalContextPlaneProbe {
     static DeviceContextTable &table(LocalContextPlane &plane) { return plane.contexts_; }
-    static HostSharedObjects  &shared(LocalContextPlane &plane) { return plane.shared_; }
     static ExecutorLibrary    &library(LocalContextPlane &plane) { return plane.library_; }
 };
 

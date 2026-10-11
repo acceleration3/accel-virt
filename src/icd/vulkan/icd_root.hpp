@@ -349,8 +349,11 @@ private:
     VkResult                publish(LoaderHandle &made, VkDevice device, uint32_t kind, uint64_t size,
                                     VkDeviceMemory memory, VkSemaphore semaphore);
     /* The object id `handle` names: one this process published, or one another
-     * process sent, which is opened here. 0 for a handle from nowhere. */
-    uint64_t                object_of(LoaderHandle &made, void *handle);
+     * process sent, which is opened here. VK_ERROR_INVALID_EXTERNAL_HANDLE for
+     * a handle from nowhere, VK_ERROR_OUT_OF_HOST_MEMORY when there is no row
+     * to keep it in; `object_id` is 0 unless VK_SUCCESS. `api` names the
+     * entry point in the line a refused handle writes. */
+    VkResult                object_of(LoaderHandle &made, void *handle, const char *api, uint64_t &object_id);
     /* Everything one row cost, given back: the device's reference to the
      * object, the NT handle, and the carrier allocation nothing else knows
      * about. */

@@ -13,6 +13,9 @@
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
+#include "executor/shim/d3d_headers.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -71,6 +74,14 @@ av::D3d11HostDevice *host_device(av::LoaderHostApis &apis)
         if (apis.d3d11_device(index) != nullptr) return apis.d3d11_device(index);
     std::fprintf(stderr, "no GPU here runs DXVK: nothing judged\n");
     return nullptr;
+}
+
+/* The shares of the GPU `device` is on. */
+av::HostShares &shares_of(av::LoaderHostApis &apis, const av::D3d11HostDevice *device)
+{
+    std::uint32_t index = 0u;
+    while (apis.d3d11_device(index) != device) index++;
+    return *apis.shares(index);
 }
 
 std::uint32_t pixel(const std::uint8_t *pixels, std::uint32_t x, std::uint32_t y)
@@ -174,7 +185,8 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     if (device == nullptr) return;
     HeldBackend     held(first_backend);
     av::D3dBackend &backend = held.backend();
-    CHECK(backend.initialize(device));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u, level = 0u;
@@ -230,8 +242,12 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     constexpr std::uint64_t key = 0x5100000000000007ull;
     HeldBackend     held_creator(first_backend), held_opener(second_backend);
     av::D3dBackend &creator = held_creator.backend(), &opener = held_opener.backend();
-    CHECK(creator.initialize(device));
-    CHECK(opener.initialize(device));
+    av::HostShares   &shares = shares_of(apis, device);
+    av::SessionShares creator_shares, opener_shares;
+    creator_shares.bind(shares, 1u, creator);
+    opener_shares.bind(shares, 1u, opener);
+    CHECK(creator.initialize(creator_shares, device));
+    CHECK(opener.initialize(opener_shares, device));
     av::D3dLoopback made(creator), opening(opener);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(made, 1u, 0u, 0u, &hresult, &level));
@@ -246,12 +262,12 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     surface.sample_count = 1u;
     surface.bind_flags = bind_render_target;
     CHECK(av_d3d_CreateResource(made, 1u, surface, key));
-    const std::uint32_t held = device->shared().count();
+    const std::uint32_t held = shares.live();
 
     ResourceDesc other = surface;
     other.width = size / 2u;
     CHECK(av_d3d_CreateResource(opening, 9u, other, key));
-    CHECK_EQ(device->shared().count(), held);
+    CHECK_EQ(shares.live(), held);
     std::uint32_t found = 0u;
     ResourceDesc opened = {};
     CHECK(av_d3d_OpenResource(opening, 2u, key, &found, &opened));
@@ -259,17 +275,20 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     CHECK_EQ(opened.width, size);
 
     CHECK(av_d3d_DestroyObject(made, 1u));
+    creator_shares.end();
     creator.shut_down();
     CHECK(av_d3d_OpenResource(opening, 3u, key, &found, &opened));
     CHECK_EQ(found, 1u);
     CHECK_EQ(opened.width, size);
 
-    device->release_shared(key);
-    CHECK_EQ(device->shared().count(), held - 1u);
+    shares.release(1u, key);
+    device->retire_shares();
+    CHECK_EQ(shares.live(), held - 1u);
     CHECK(av_d3d_OpenResource(opening, 4u, key, &found, &opened));
     CHECK_EQ(found, 0u);
     CHECK_EQ(opening.refused(), 0u);
     CHECK(opener.invariants_hold());
+    opener_shares.end();
     opener.shut_down();
 }
 
@@ -289,7 +308,8 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     if (device == nullptr) return;
     HeldBackend     held(first_backend);
     av::D3dBackend &backend = held.backend();
-    CHECK(backend.initialize(device));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
@@ -371,7 +391,8 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     av::SharedSurfaces      surfaces;
     HeldBackend             held(first_backend);
     av::D3dBackend         &backend = held.backend();
-    CHECK(backend.initialize(device, nullptr, &surfaces));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device, nullptr, &surfaces));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -390,11 +411,79 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     CHECK_EQ(edge, 0xff0000ffu);   /* the blue the draw left, not the red cleared after */
     surfaces.unmap(av::SurfacePoint(shown, 1u));
     CHECK(!surfaces.map(av::SurfacePoint(shown, 1u), 0u, view));
+    /* A flip names no frame. This session shares nothing, so its target has
+     * no copy to show - said once, not per flip - and a flip of a buffer or
+     * of a texture never shared has nothing to show at all. */
     CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
+    CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
+    CHECK(av_d3d_PresentPoint(wire, 3u, 0u, 0u));
+    ResourceDesc unshared_texture = {};
+    unshared_texture.dimension = 3u;
+    unshared_texture.width = size;
+    unshared_texture.height = size;
+    unshared_texture.depth_or_array = 1u;
+    unshared_texture.mip_levels = 1u;
+    unshared_texture.format = format_b8g8r8a8;
+    unshared_texture.sample_count = 1u;
+    unshared_texture.bind_flags = bind_render_target;
+    CHECK(av_d3d_CreateResource(wire, 9u, unshared_texture, 0u));
+    CHECK(av_d3d_PresentPoint(wire, 9u, 0u, 0u));
     CHECK(av_d3d_PresentPoint(wire, 3u, 0u, 2u));   /* the vertex buffer, never shared */
     CHECK(!surfaces.map(av::SurfacePoint(shown, 2u), 0u, view));
+    /* Nor does it open anything: no share answers it. */
+    std::uint32_t found = 1u;
+    ResourceDesc  opened = {};
+    CHECK(av_d3d_OpenResource(wire, 10u, shown, &found, &opened));
+    CHECK_EQ(found, 0u);
     CHECK(av_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, 0u);
     CHECK_EQ(wire.refused(), 0u);
     CHECK(surfaces.invariants_hold());
+}
+
+/* A flip of a target its session shares is copied to the share's own flip
+ * copy, which is what a compositor opening the id reads: the copy is made at
+ * the first flip and written again at each. */
+TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    constexpr std::uint64_t key = 0x5100000000000009ull;
+    HeldBackend       held(first_backend);
+    av::D3dBackend   &backend = held.backend();
+    av::HostShares   &shares = shares_of(apis, device);
+    av::SessionShares session;
+    session.bind(shares, 1u, backend);
+    CHECK(backend.initialize(session, device));
+    av::D3dLoopback wire(backend);
+    std::uint32_t hresult = 1u, level = 0u, removed = 1u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    ResourceDesc target = {};
+    target.dimension = 3u;
+    target.width = size;
+    target.height = size;
+    target.depth_or_array = 1u;
+    target.mip_levels = 1u;
+    target.format = format_b8g8r8a8;
+    target.sample_count = 1u;
+    target.bind_flags = bind_render_target;
+    CHECK(av_d3d_CreateResource(wire, 1u, target, key));
+    IUnknown *copy = shares.shown(1u, key);
+    CHECK(copy == nullptr);
+    CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
+    copy = shares.shown(1u, key);
+    CHECK(copy != nullptr);
+    CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
+    IUnknown *const again = shares.shown(1u, key);
+    CHECK(again == copy);
+    if (again != nullptr) again->Release();
+    if (copy != nullptr) copy->Release();
+    CHECK(av_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    session.end();
+    backend.shut_down();
+    shares.release(1u, key);
+    device->retire_shares();
 }

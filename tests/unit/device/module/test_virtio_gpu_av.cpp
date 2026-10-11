@@ -5,8 +5,6 @@
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/module/driver_status.hpp"
-#include "device/memory/host_shared_object.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "device/module/virtio_gpu_av.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
 #include "device/recording/record_kind.hpp"
@@ -51,7 +49,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_,
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_,
                                                  table.library_, table.shares_, table.recorder_, table.ordering_, id));
                 static_cast<void>(slot.object().start());
                 return;
@@ -73,18 +71,6 @@ struct FenceInterruptsProbe {
     static void repair(FenceInterrupts &interrupts) { interrupts.connected_ = false; }
 };
 
-/* A slot that says it holds nothing while it still remembers everything: what
- * no give_back leaves behind, and what the table's own invariant refuses. */
-struct HostSharedObjectProbe {
-    static std::uint64_t forget_id(HostSharedObject &object)
-    { const std::uint64_t kept = object.id_; object.id_ = 0u; return kept; }
-    static void          restore_id(HostSharedObject &object, std::uint64_t id) { object.id_ = id; }
-};
-
-struct HostSharedObjectsProbe {
-    static HostSharedObject &first(HostSharedObjects &table) { return table.objects_[0]; }
-};
-
 struct VirtioGpuAvProbe {
     /* Interrupts connected with no lock to hold them apart. */
     static void break_interrupts(VirtioGpuAv &device) { FenceInterruptsProbe::connect_without_lock(device.interrupts_); }
@@ -94,15 +80,6 @@ struct VirtioGpuAvProbe {
      * driver that asked for it. */
     static Status connect_behind_the_status(VirtioGpuAv &device) { return device.interrupts_.connect(); }
     static void   disconnect_behind_the_status(VirtioGpuAv &device) { device.interrupts_.disconnect(); }
-    /* An object publish never made: a slot that says it holds nothing while
-     * it still remembers everything, which is how the device's invariant is
-     * shown to fold in its shared table's (feature 053). */
-    static std::uint64_t break_shared(VirtioGpuAv &device)
-    { return HostSharedObjectProbe::forget_id(HostSharedObjectsProbe::first(LocalContextPlaneProbe::shared(device.local_))); }
-    static void repair_shared(VirtioGpuAv &device, std::uint64_t id)
-    { HostSharedObjectProbe::restore_id(HostSharedObjectsProbe::first(LocalContextPlaneProbe::shared(device.local_)), id); }
-    static Status publish_shared(VirtioGpuAv &device, int descriptor)
-    { return LocalContextPlaneProbe::shared(device.local_).publish(7u, AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 4096u, descriptor); }
     /* A head that believes it is showing on a device whose display never
      * agreed to show anything, which is what the heads' own invariant
      * catches and the device's has to carry (feature 058). */
@@ -243,7 +220,7 @@ TEST(virtio_gpu_av_report, an_unrealized_device_says_so_and_has_no_contexts)
   av::StateWriter writer(dump, sizeof dump);
   writer.open("device", 0u);
   device.report(writer);
-  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/shared/0 busy=false\ndevice/0/contexts/0 live=0") == 0); }
+  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/contexts/0 live=0") == 0); }
 
 TEST(virtio_gpu_av_control, an_unrealized_device_answers_nothing_and_offers_no_capset)
 { MockHost host;
@@ -281,26 +258,25 @@ TEST(virtio_gpu_av_realize, an_executor_table_this_abi_does_not_accept_is_refuse
 { MockHost host;
   host.add_gpu(first);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
-  /* Two is this ABI now; a version nobody has written is what a device must
-   * refuse (feature 042). */
+  /* A version this device was not built with is what it must refuse. */
   executor.editable().abi_version = AV_EXECUTOR_ABI_VERSION + 1u;
   VirtioGpuAv device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::invalid_parameter);
-  CHECK(std::strstr(message.text(), "not ABI version 1 to 4") != nullptr);
+  CHECK(std::strstr(message.text(), "not this ABI version") != nullptr);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
 
 /* A reset starts the guest's shared-object ids again, so the executor is told
- * everything it shares is released - on the GPU this device is bound to, the
- * one the capset names, since the plane in QEMU is never started with one. */
+ * everything it shares is released - in the domain the device opened on the
+ * GPU it is bound to, the one the capset names. */
 TEST(virtio_gpu_av_control, a_reset_releases_every_shared_object_on_the_bound_gpu)
 { MockHost host;
   host.add_gpu(first);
   host.add_gpu(second);
-  VirtioGpuAv device(host);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, &executor.table(), nullptr, nullptr,
@@ -310,15 +286,16 @@ TEST(virtio_gpu_av_control, a_reset_releases_every_shared_object_on_the_bound_gp
   device.reset();
   CHECK_EQ(executor.shared_releases(), 1u);
   CHECK(executor.last_shared_release() == 0u);
-  CHECK(executor.last_shared_gpu() != nullptr);
-  CHECK(std::memcmp(executor.last_shared_gpu(), second, sizeof second) == 0); }
+  CHECK_EQ(executor.domains_opened(), 1u);
+  CHECK_EQ(executor.last_domain_gpu(), second[0]);
+  CHECK(executor.last_domain() != 0u); }
 
 TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts_before_their_blobs)
 { MockHost host;
   host.add_gpu(first);
   host.set_hostmem_size(0x10000u);
-  VirtioGpuAv device(host);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::ok);
@@ -358,12 +335,12 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   writer.open("device", 3u);
   device.report(writer);
   CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
-                                    "device/3/shared/0 live=0\n"
+                                    
                                     "device/3/contexts/0 live=1\n"
                                     "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
                      std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
-                                 "device/3/shared/0 live=0\n"
+                                 
                                  "device/3/contexts/0 live=1\n"
                                  "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                  "ring_order=12 fence=2 doorbell=0 reply=0 attached=")) == 0);
@@ -450,9 +427,9 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_shared_executors_refuses_th
   VirtioGpuAv device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(5u);
+  host.fail_mutex_at(4u);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
-  CHECK(std::strstr(message.text(), "no mutex for the contexts' shared objects and executors") != nullptr);
+  CHECK(std::strstr(message.text(), "no mutex for the contexts' ordering and executors") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, again), Status::ok);
@@ -467,8 +444,8 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_the_stress_probe_still_real
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(6u);   /* the fence interrupts, the blob table, the shared objects, the D3D
-                             * ordering and the shared executors take the first five */
+  host.fail_mutex_at(5u);   /* the fence interrupts, the blob table, the D3D ordering and the
+                             * shared executors take the first four */
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -498,7 +475,7 @@ TEST(virtio_gpu_av, lifecycle_is_main_loop_only)
    * export socket's revocation, the status and the interrupts under it,
    * create, destroy and its table, and control, which an unrealized device
    * answers no further */
-  for (int violation = 0; violation < 18; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  for (int violation = 0; violation < 17; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
@@ -520,19 +497,6 @@ TEST(virtio_gpu_av_invariants, a_context_on_an_unrealized_device_or_a_broken_tab
   av::VirtioGpuAvProbe::duplicate_blob(broken_blobs, 9u);
   CHECK(!broken_blobs.invariants_hold());
   broken_blobs.reset();
-  /* Feature 053: the device's invariant folds in its shared table's, so a
-   * publish the table half-forgot is one the device reports as broken too. */
-  VirtioGpuAv broken_shared(host);
-  TextBuffer   shared_message(bytes, sizeof bytes);
-  CHECK_STATUS(broken_shared.realize("auto", false, nullptr, nullptr, nullptr, nullptr, shared_message), Status::ok);
-  CHECK_STATUS(av::VirtioGpuAvProbe::publish_shared(broken_shared, 5), Status::ok);
-  CHECK(broken_shared.invariants_hold());
-  const std::uint64_t forgotten = av::VirtioGpuAvProbe::break_shared(broken_shared);
-  CHECK(!broken_shared.invariants_hold());
-  av::VirtioGpuAvProbe::repair_shared(broken_shared, forgotten);
-  CHECK(broken_shared.invariants_hold());
-  broken_shared.reset();
-
   VirtioGpuAv broken_interrupts(host);
   av::VirtioGpuAvProbe::break_interrupts(broken_interrupts);
   CHECK(!broken_interrupts.invariants_hold());
@@ -731,22 +695,6 @@ TEST(virtio_gpu_av_realize, record_wrap_decides_what_the_ceiling_does)
       CHECK(device.invariants_hold());
   } }
 
-/* Feature 053: the device's shared objects need a lock of their own, between
- * the blob table's and the contexts' shared executors'. */
-TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_the_shared_objects_refuses_the_realize)
-{ MockHost host;
-  host.add_gpu(first);
-  VirtioGpuAv device(host);
-  char bytes[128];
-  TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(3u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
-  CHECK(std::strstr(message.text(), "no mutex for the contexts' shared objects and executors") != nullptr);
-  CHECK(!device.realized());
-  TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, again), Status::ok);
-  CHECK(device.realized());
-  device.reset(); }
 /* The whole sequence a guest desktop performs, on a device whose host has a
  * GL display: a blob over its own pages, bound to head 0, flushed once per
  * frame, rebound to a second blob, and let go. Nothing is transferred, which
@@ -889,8 +837,8 @@ TEST(virtio_gpu_av_scanout, a_host_with_no_gl_display_refuses_every_scanout_and_
 TEST(virtio_gpu_av_renderer_lost, with_the_contexts_in_process_nothing_happens)
 { MockHost host;
   host.add_gpu(first);
-  VirtioGpuAv device(host);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::ok);
@@ -1056,7 +1004,7 @@ TEST(virtio_gpu_av_modes, told_modes_are_answered_and_a_bad_text_changes_nothing
 
 namespace {
 
-std::uint32_t export_key_51(void *, const std::uint8_t *, std::uint64_t key, AvExportedImage *image)
+std::uint32_t export_key_51(void *, std::uint32_t, std::uint64_t key, AvExportedImage *image)
 {
     if (key != 0x51u) return AV_UNKNOWN;
     image->fd = 12;
@@ -1191,11 +1139,11 @@ TEST(virtio_gpu_av_export, serves_the_bound_gpu_s_surfaces_and_revokes_them_at_a
 { MockHost host;
   host.add_gpu(first);
   host.place_gpu_on_pci(0u, MockHost::PciBus{0u, 3u, 0u, 0u});
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
   VirtioGpuAv device(host);
   av::FakeExportConsumer early;
   CHECK(!device.export_accepted(early.device_end(), true));
   early.refused();
-  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
   executor.serve_surface(0x51u, AvExportedImage{host.open_descriptor(), 0u, 16u, 16u, 64u, 0u, 0x34325241u, 0u, 0u},
                          4u, -1);
   char bytes[96];
@@ -1216,7 +1164,8 @@ TEST(virtio_gpu_av_export, serves_the_bound_gpu_s_surfaces_and_revokes_them_at_a
   CHECK(consumer.send(av::ExportRequest(av::ExportOperation::export_surface, 0x51u, 2u)));
   CHECK_STATUS(consumer.receive(answer), Status::ok);
   CHECK_STATUS(answer.status(), Status::ok);
-  CHECK(executor.last_surface_gpu() != nullptr && executor.last_surface_gpu()[0] == first[0]);
+  CHECK_EQ(executor.last_domain_gpu(), first[0]);
+  CHECK(executor.last_domain() != 0u);
   CHECK(consumer.descriptor() >= 0);
   GpuRequestBuilder release(0x02F1u);
   release.u64(0x51u);

@@ -119,9 +119,9 @@ public:
     /* The largest allocation private driver data this keeps, which is a
      * descriptor and a shared object's record with room over (feature 053). */
     static constexpr std::uint32_t max_allocation_private = 128u;
-    /* NT handles this hands out at once: one more than icd::SharedHandles
-     * holds, so a test can reach the ICD table's own refusal and not only the
-     * kernel's (feature 053). */
+    /* NT handles this hands out at once: one more than a pool block of
+     * icd::SharedHandles holds, so a test can see that table grow past it
+     * (feature 053). Every rig keeps one of these, some on the stack. */
     static constexpr std::uint32_t max_shared = 65u;
     /* The first NT handle it mints, which is nothing a D3DKMT_HANDLE could be
      * so a test that confuses the two fails rather than passing by luck. */

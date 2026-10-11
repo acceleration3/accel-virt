@@ -16,6 +16,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "icd/common/opened_objects.hpp"
 #include "icd/common/shared_handles.hpp"
@@ -38,13 +39,12 @@
 namespace av::icd {
 
 struct OpenedObjectsProbe {
-    static void fill(OpenedObjects &opened, std::uint64_t made, std::uint64_t bytes)
+    /* A row kept as no open would. */
+    static void add(OpenedObjects &opened, const OpenedObjectRow &row)
     {
-        for (std::uint32_t index = 0u; index < OpenedObjects::max_objects; index++)
-            opened.rows_[index] = OpenedObjectRow{index + 1u, made + index, bytes, SharedObjectKind::memory};
-        opened.live_ = OpenedObjects::max_objects;
+        OpenedObjectRow *made = nullptr;
+        CHECK_STATUS(opened.rows_.create(made, row), Status::ok);
     }
-    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
 };
 
 }  // namespace av::icd
@@ -90,8 +90,8 @@ private:
  * table over it, and a transport playing the device. */
 class Process {
 public:
-    Process() : trace_(), lock_(trace_, 'S'), kmt_(), log_(), wire_(), device_(0u),
-                handles_(kmt_, lock_), memory_(handles_, log_)
+    Process() : blocks_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), wire_(), device_(0u),
+                handles_(kmt_, lock_, blocks_), memory_(handles_, blocks_, log_)
     {
         kmt_.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
         std::uint32_t adapter = 0u;
@@ -101,6 +101,7 @@ public:
     }
 
     ClExternalMemory &memory() { return memory_; }
+    av::MockPlatform &blocks() { return blocks_; }
     MockTransport    &wire() { return wire_; }
     av::RecordingLog &log() { return log_; }
     std::uint32_t     device() const { return device_; }
@@ -137,6 +138,7 @@ public:
     }
 
 private:
+    av::MockPlatform        blocks_;
     av::LockTrace           trace_;
     av::RecordingThreadLock lock_;
     MockKmt                 kmt_;
@@ -450,24 +452,22 @@ TEST(cl_external_memory, an_object_this_context_already_holds_is_not_opened_agai
   CHECK(process.memory().invariants_hold());
   CHECK_EQ(process.log().holding("avcl: an object this context already imported"), 1u); }
 
-/* A table with no room refuses before the device is asked: an object opened
- * into a table with nowhere to put it would be one nothing ever gave back.
- * Filled by hand, because filling it honestly would need more shared
- * allocations than the kernel this runs on holds. */
-TEST(cl_external_memory, it_holds_as_many_as_its_table_and_no_more)
-{ Process process;
-  av::icd::OpenedObjectsProbe::fill(ClExternalMemoryProbe::opened(process.memory()), host_buffer, object_bytes);
-  CHECK(process.memory().invariants_hold());
-
+/* No row to keep the object in refuses before the device is asked, as the
+ * host-memory failure it is: an object opened with nowhere to put it would be
+ * one nothing ever gave back. The handle's row is the first allocation, the
+ * object's the second. */
+TEST(cl_external_memory, no_memory_for_a_row_refuses_before_the_device_is_asked)
+{ Process             process;
   const std::uint64_t named = process.handle();
   const Properties    properties(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, named);
   const std::uint32_t sends = process.wire().sends();
-  std::uint64_t       made = 9u;
+  process.blocks().fail_allocation_at(2u);
+  std::uint64_t made = 9u;
   CHECK_EQ(process.memory().open(process.wire(), process.device(), properties.list(), object_bytes, made),
-           CL_OUT_OF_RESOURCES);
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(made, 0u);
   CHECK_EQ(process.wire().sends(), sends);
-  CHECK_EQ(process.memory().live(), av::icd::OpenedObjects::max_objects);
+  CHECK_EQ(process.memory().live(), 0u);
   CHECK(process.memory().invariants_hold()); }
 
 /* The table's invariants are the opened objects' own (OpenedObjects): a row
@@ -475,5 +475,6 @@ TEST(cl_external_memory, it_holds_as_many_as_its_table_and_no_more)
 TEST(cl_external_memory, invariants_reject_rows_no_open_leaves_behind)
 { Process process;
   CHECK(process.memory().invariants_hold());
-  av::icd::OpenedObjectsProbe::set_live(ClExternalMemoryProbe::opened(process.memory()), 1u);
+  av::icd::OpenedObjectsProbe::add(ClExternalMemoryProbe::opened(process.memory()),
+                                   av::icd::OpenedObjectRow{});
   CHECK(!process.memory().invariants_hold()); }

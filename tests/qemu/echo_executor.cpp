@@ -36,17 +36,17 @@
 // forgets it all: the ids start again), and a surface let go of exports
 // nothing.
 //
-// Version 4 (feature 050): create_with_options records what it was asked for.
-// With AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan, and with
-// AV_ECHO_ABI_VERSION_3 it answers the version 3 table, which makes only
-// default contexts.
+// create records the options it was asked for (feature 050). With
+// AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan.
 //
-// It is a version 3 library (feature 045): import_blob records a host pointer
-// the device hands it, imported_handle answers blob_id | 0x4000000000000000 for
-// one it holds, and release_blob forgets it - so qtest can judge the device's
-// side of IMPORT_BLOB, reading and writing the guest's pages through the
-// pointer, without a GPU. With AV_ECHO_ABI_VERSION_1 set it answers the
-// version 1 table instead, a library that imports nothing.
+// import_blob records a host pointer the device hands it (feature 045),
+// imported_handle answers blob_id | 0x4000000000000000 for one it holds, and
+// release_blob forgets it - so qtest can judge the device's side of
+// IMPORT_BLOB, reading and writing the guest's pages through the pointer,
+// without a GPU.
+//
+// Domains are counted and nothing else: a device's domain is the one the last
+// open_domain answered.
 //
 // Two controls make a real timeout happen without rebuilding anything
 // (feature 040, FR-006), read from the environment at load:
@@ -167,6 +167,8 @@ void answer_poke(Executor *executor, const std::uint8_t *payload, std::size_t si
 }
 
 std::uint64_t created = 0u;
+/* Domains opened: the main loop opens them, any worker reads the count. */
+std::uint32_t domains = 0u;
 
 /* A number the environment names, or 0. */
 std::uint64_t from_environment(const char *name)
@@ -193,7 +195,7 @@ std::uint32_t sub_apis(void *)
     return AV_EXECUTOR_SUB_API_VULKAN | opengl;
 }
 
-AvExecutor *create(void *opaque, std::uint32_t sub_api, const std::uint8_t *)
+AvExecutor *make(void *opaque, std::uint32_t sub_api)
 {
     /* Only what sub_apis offers. Accepting anything looks harmless in a test
      * library and is not: the device would hand that context commands of an
@@ -212,20 +214,21 @@ AvExecutor *create(void *opaque, std::uint32_t sub_api, const std::uint8_t *)
 bool defaults(const AvContextOptions *options)
 {
     return options == nullptr || (options->major == 0u && options->minor == 0u && options->profile == 0u &&
-                                  options->flags == 0u && options->reserved == 0u);
+                                  options->flags == 0u);
 }
 
-/* Options and a share only for OpenGL, and a share only of an OpenGL executor. */
-AvExecutor *create_with_options(void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
-                                 const AvContextOptions *options, AvExecutor *share)
+/* Options and a share only for OpenGL, and a share only of an OpenGL executor;
+ * in a domain this library opened. */
+AvExecutor *create(void *opaque, std::uint32_t sub_api, const AvContextOptions *options, AvExecutor *share)
 {
     const bool opengl = sub_api == AV_EXECUTOR_SUB_API_OPENGL;
+    if (options == nullptr || options->domain == 0u || options->domain > __atomic_load_n(&domains, __ATOMIC_ACQUIRE)) return nullptr;
     if ((!defaults(options) || share != nullptr) && !opengl) return nullptr;
-    if (options != nullptr && (options->major > 4u || options->reserved != 0u)) return nullptr;
-    AvExecutor *const made = create(opaque, sub_api, uuid);
+    if (options->major > 4u) return nullptr;
+    AvExecutor *const made = make(opaque, sub_api);
     if (made == nullptr) return nullptr;
     Executor *const executor = executor_of(made);
-    if (options != nullptr) executor->options = *options;
+    executor->options = *options;
     executor->shares = share != nullptr ? executor_of(share)->ordinal : 0u;
     return made;
 }
@@ -320,21 +323,45 @@ std::uint64_t imported_handle(void *, AvExecutor *handle, std::uint64_t blob_id)
  * what the device must be able to cope with. */
 void set_signal(void *, AvExecutor *, void (*)(void *), void *) {}
 
-/* Version 6: an echo library has no host API behind it, so it makes no host
- * object and exports no descriptor of one. The device answers every
- * shared-object command with "the executor refused", which is a status and not
- * a fault, and that refusal is what the qemu suites see. */
-uint32_t export_object(void *, AvExecutor *, uint32_t, uint64_t, uint32_t *, int *)
-{
-    return AV_UNKNOWN;
-}
-uint32_t import_object(void *, AvExecutor *, uint32_t, uint32_t, int, uint64_t, uint64_t *)
-{
-    return AV_UNKNOWN;
-}
-void release_object(void *, AvExecutor *, uint32_t, uint64_t) {}
+std::uint32_t open_domain(void *, const std::uint8_t *) { return __atomic_add_fetch(&domains, 1u, __ATOMIC_ACQ_REL); }
+void          close_domain(void *, std::uint32_t) {}
 
-/* Version 15's shared surfaces: what the guest let go of, under a lock, since
+void          end_batch(void *, AvExecutor *) {}
+std::uint32_t poll(void *, AvExecutor *) { return 0u; }
+void          gpu_progress(void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+{
+    *marked = 0u;
+    *reached = 0u;
+}
+
+/* An echo library has no host API behind it, so it makes no host object and
+ * shares none. The device answers every shared-object command with "the
+ * executor refused", which is a status and not a fault, and that refusal is
+ * what the qemu suites see. */
+std::uint32_t share_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t)
+{
+    return AV_SHARED_REFUSED;
+}
+std::uint32_t open_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t *)
+{
+    return AV_SHARED_REFUSED;
+}
+void close_object(void *, AvExecutor *, std::uint64_t) {}
+
+/* Nothing is drawn here, so there is no image to read or export and no frame
+ * staged. */
+std::uint32_t read_image(void *, std::uint32_t, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t)
+{
+    return AV_UNKNOWN;
+}
+std::uint32_t export_image(void *, std::uint32_t, std::uint64_t, AvExportedImage *) { return AV_UNKNOWN; }
+std::uint32_t map_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint32_t, AvFrameView *)
+{
+    return AV_UNKNOWN;
+}
+void unmap_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t) {}
+
+/* Shared surfaces (docs/external-export.md): what the guest let go of, under a lock, since
  * the export socket asks from a thread of its own and the release comes on
  * the main loop. */
 constexpr std::uint32_t surface_edge = 64u;
@@ -351,7 +378,7 @@ bool surface_released(std::uint64_t surface)
     return found;
 }
 
-void release_shared(void *, const std::uint8_t *, std::uint64_t object_id)
+void release_shared(void *, std::uint32_t, std::uint64_t object_id)
 {
     pthread_mutex_lock(&released_lock);
     if (object_id == 0u) std::memset(released, 0, sizeof released);
@@ -363,7 +390,7 @@ void release_shared(void *, const std::uint8_t *, std::uint64_t object_id)
     pthread_mutex_unlock(&released_lock);
 }
 
-std::uint32_t export_surface(void *, const std::uint8_t *, std::uint64_t surface, AvExportedImage *image)
+std::uint32_t export_surface(void *, std::uint32_t, std::uint64_t surface, AvExportedImage *image)
 {
     constexpr std::uint32_t stride = surface_edge * 4u;
     constexpr std::size_t   bytes = std::size_t{stride} * surface_edge;
@@ -383,7 +410,7 @@ std::uint32_t export_surface(void *, const std::uint8_t *, std::uint64_t surface
     return AV_EXECUTED;
 }
 
-std::uint32_t sync_surface(void *, const std::uint8_t *, std::uint64_t surface, std::uint64_t *writes, int *fd)
+std::uint32_t sync_surface(void *, std::uint32_t, std::uint64_t surface, std::uint64_t *writes, int *fd)
 {
     if (writes == nullptr || fd == nullptr || surface_released(surface)) return AV_UNKNOWN;
     *fd = eventfd(1u, EFD_CLOEXEC);
@@ -395,66 +422,29 @@ std::uint32_t sync_surface(void *, const std::uint8_t *, std::uint64_t surface, 
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
+                              import_kinds,
+                              open_domain,
+                              close_domain,
                               create,
                               destroy,
                               execute,
-                              import_kinds,
+                              end_batch,
+                              poll,
+                              gpu_progress,
+                              set_signal,
                               import_blob,
                               release_blob,
                               imported_handle,
-                              create_with_options,
-                              set_signal,
-                              export_object,
-                              import_object,
-                              release_object,
-                              nullptr,
-                              nullptr,
-                              nullptr,
-                              nullptr,
-                              nullptr,
+                              share_object,
+                              open_object,
+                              close_object,
                               release_shared,
-                              nullptr,
-                              nullptr,
+                              read_image,
+                              export_image,
+                              map_frame,
+                              unmap_frame,
                               export_surface,
                               sync_surface};
-
-/* Version 3: default contexts only (feature 050). */
-const AvExecutorOps version_3_table = {AV_EXECUTOR_ABI_VERSION_HANDLES,
-                                        nullptr,
-                                        sub_apis,
-                                        create,
-                                        destroy,
-                                        execute,
-                                        import_kinds,
-                                        import_blob,
-                                        release_blob,
-                                        imported_handle,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                        nullptr, nullptr, nullptr};
-
-/* Version 1, carrying none of the memory operations: the device must keep
- * accepting a library that imports nothing, and a suite whose only library is
- * the newest version never proves it (feature 042). */
-const AvExecutorOps version_1_table = {AV_EXECUTOR_ABI_VERSION_MINIMUM,
-                                        nullptr,
-                                        sub_apis,
-                                        create,
-                                        destroy,
-                                        execute,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr,
-                                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                        nullptr, nullptr, nullptr};
 
 }  // namespace
 
@@ -463,8 +453,7 @@ extern "C" {
 __attribute__((visibility("default")))
 const AvExecutorOps *av_executor_ops(void)
 {
-    if (std::getenv("AV_ECHO_ABI_VERSION_1") != nullptr) return &version_1_table;
-    return std::getenv("AV_ECHO_ABI_VERSION_3") != nullptr ? &version_3_table : &table;
+    return &table;
 }
 
 }

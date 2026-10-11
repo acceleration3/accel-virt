@@ -81,8 +81,8 @@ TEST(gl_context_attributes, only_what_was_asked_is_listed)
 TEST(gl_context_attributes, options_no_opengl_has_are_invalid_and_list_nothing)
 { const AvContextOptions refused[] = {
       {5u, 0u, 1u, 0u, 0u}, {4u, 7u, 1u, 0u, 0u}, {3u, 4u, 1u, 0u, 0u}, {2u, 2u, 0u, 0u, 0u},
-      {1u, 6u, 0u, 0u, 0u}, {4u, 6u, 3u, 0u, 0u}, {4u, 6u, 1u, 0x10u, 0u}, {4u, 6u, 1u, 0u, 1u},
-      {0u, 1u, 0u, 0u, 0u}, {0u, 0u, 1u, 0u, 0u}, {0u, 0u, 0u, 1u, 0u}, {0u, 0u, 0u, 0u, 1u},
+      {1u, 6u, 0u, 0u, 0u}, {4u, 6u, 3u, 0u, 0u}, {4u, 6u, 1u, 0x10u, 0u},
+      {0u, 1u, 0u, 0u, 0u}, {0u, 0u, 1u, 0u, 0u}, {0u, 0u, 0u, 1u, 0u},
   };
   for (const AvContextOptions &options : refused) {
       const GlContextAttributes attributes(&options);
@@ -91,4 +91,7 @@ TEST(gl_context_attributes, options_no_opengl_has_are_invalid_and_list_nothing)
   }
   const AvContextOptions highest[] = {{1u, 5u, 0u, 0u, 0u}, {2u, 1u, 0u, 0u, 0u}, {3u, 3u, 2u, 15u, 0u},
                                        {4u, 0u, 1u, 0u, 0u}};
-  for (const AvContextOptions &options : highest) CHECK(GlContextAttributes(&options).valid()); }
+  for (const AvContextOptions &options : highest) CHECK(GlContextAttributes(&options).valid());
+  /* The domain is the device's, not OpenGL's: any one is a valid context. */
+  const AvContextOptions in_domain = {4u, 6u, 1u, 0u, 7u};
+  CHECK(GlContextAttributes(&in_domain).valid()); }

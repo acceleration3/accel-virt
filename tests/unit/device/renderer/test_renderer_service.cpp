@@ -86,7 +86,7 @@ struct Published {
 };
 Published published = {};
 
-std::uint32_t export_published(void *, const std::uint8_t *, std::uint64_t key, AvExportedImage *image)
+std::uint32_t export_published(void *, std::uint32_t, std::uint64_t key, AvExportedImage *image)
 {
     if (!published.found || key != 0x77u) return AV_UNKNOWN;
     *image = published.image;

@@ -8,6 +8,7 @@
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "executor/sharing/host_shares.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
@@ -22,7 +23,8 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][ContextSession::arena_
 }  // namespace
 
 ExecutorRoot::ExecutorRoot()
-    : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, apis_of_{}, gpus_of_{}, apis_(nullptr)
+    : gpus_(), domains_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
+      apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
 }
@@ -51,74 +53,87 @@ uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) c
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
-bool ExecutorRoot::export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image)
+uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid)
+{
+    AV_SCOPE("ExecutorRoot::open_domain");
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    return gpu != nullptr ? domains_.open(gpu->index()) : 0u;
+}
+
+void ExecutorRoot::close_domain(uint32_t domain)
+{
+    AV_SCOPE("ExecutorRoot::close_domain");
+    release_shared(domain, 0u);
+    uint32_t gpu = 0u;
+    static_cast<void>(domains_.close(domain, gpu));
+}
+
+bool ExecutorRoot::export_image(uint32_t domain, uint64_t id, AvExportedImage &image)
 {
     AV_SCOPE("ExecutorRoot::export_image");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->export_image(key, image);
+    return device != nullptr && device->export_image(domain, id, image);
 }
 
-void ExecutorRoot::release_shared(const uint8_t *gpu_uuid, uint64_t object_id)
+void ExecutorRoot::release_shared(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("ExecutorRoot::release_shared");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
-    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    SharedSurfaces *const  surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
-    if (device != nullptr) device->release_shared(object_id);
-    if (surfaces != nullptr) surfaces->release(object_id);
+    const HostGpu *const gpu = gpu_of(domain);
+    if (gpu == nullptr) return;
+    /* A GPU the host has has both: they are null only past its count. */
+    apis_->shares(gpu->index())->release(domain, id);
+    apis_->surfaces(gpu->index())->release(id);
+    retire(gpu->index());
 }
 
-bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+bool ExecutorRoot::read_image(uint32_t domain, uint64_t id, void *pixels, uint32_t stride, uint32_t width,
                               uint32_t height)
 {
     AV_SCOPE("ExecutorRoot::read_image");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->read_image(key, pixels, stride, width, height);
+    return device != nullptr && device->read_image(domain, id, pixels, stride, width, height);
 }
 
-bool ExecutorRoot::map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
+bool ExecutorRoot::map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view)
 {
     AV_SCOPE("ExecutorRoot::map_frame");
-    const HostGpu *const  gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const  gpu = gpu_of(domain);
     SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
     return surfaces != nullptr && surfaces->map(frame, wait_ms, view);
 }
 
-void ExecutorRoot::unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame)
+void ExecutorRoot::unmap_frame(uint32_t domain, const SurfacePoint &frame)
 {
     AV_SCOPE("ExecutorRoot::unmap_frame");
-    const HostGpu *const  gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const  gpu = gpu_of(domain);
     SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
     if (surfaces != nullptr) surfaces->unmap(frame);
 }
 
-bool ExecutorRoot::export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image)
+bool ExecutorRoot::export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image)
 {
     AV_SCOPE("ExecutorRoot::export_surface");
-    const HostGpu *const   gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->export_surface(surface, image);
+    return device != nullptr && device->export_surface(domain, surface, image);
 }
 
-bool ExecutorRoot::sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd)
+bool ExecutorRoot::sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd)
 {
     AV_SCOPE("ExecutorRoot::sync_surface");
-    const HostGpu *const   gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->sync_surface(surface, writes, fd);
+    return device != nullptr && device->sync_surface(domain, surface, writes, fd);
 }
 
-ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
-                                   ContextSession *share)
+ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &options, ContextSession *share)
 {
     AV_SCOPE("ExecutorRoot::open");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const gpu = gpu_of(options.domain);
     if (gpu == nullptr) return nullptr;
-    const bool options_asked = options != nullptr && (options->major != 0u || options->minor != 0u ||
-                                                      options->profile != 0u || options->flags != 0u ||
-                                                      options->reserved != 0u);
+    const bool options_asked = options.major != 0u || options.minor != 0u || options.profile != 0u || options.flags != 0u;
     if (options_asked && sub_api != AV_EXECUTOR_SUB_API_OPENGL) return nullptr;
     /* An OpenGL context shares another's lists; an OpenCL one shares a GL
      * context's objects (cl_khr_gl_sharing); nothing else shares anything. */
@@ -139,15 +154,17 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         /* A slot in use refuses to be bound again, which is the test for in use
          * rather than a second one beside it. */
-        if (sessions_[slot].initialize(*backend_in(slot, sub_api), decode_blocks[slot],
-                                       ContextSession::arena_bytes) != Status::ok)
+        SessionBackend &backend = *backend_in(slot, sub_api);
+        if (sessions_[slot].initialize(backend, decode_blocks[slot], ContextSession::arena_bytes) != Status::ok)
             continue;
+        shares_[slot].bind(*apis_->shares(gpu->index()), options.domain, backend);
         /* Opened here, at the context's setup, on what the host found when it
          * was asked: the guest's first batch waits behind this, inside
          * dxgkrnl's timeout, so it may cost a context and never a driver
          * start-up (feature 044, T035). A GPU the capset said runs the API can
          * still refuse a context, and then the slot goes back. */
         if (!bind(slot, sub_api, *gpu, options, shared)) {
+            shares_[slot].end();
             sessions_[slot].release();
             return nullptr;
         }
@@ -187,7 +204,7 @@ const OpenGlBackend *ExecutorRoot::sharing(const ContextSession *share, const Ho
     return nullptr;
 }
 
-bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions *options,
+bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions &options,
                         const OpenGlBackend *share)
 {
     AV_SCOPE("ExecutorRoot::bind");
@@ -199,9 +216,9 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     case AV_EXECUTOR_SUB_API_OPENCL:
         return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share);
     case AV_EXECUTOR_SUB_API_OPENGL:
-        return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
+        return opengl_[slot].initialize(apis_->gl_display(gpu.index()), &options, share);
     case AV_EXECUTOR_SUB_API_D3D:
-        return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
+        return d3d_[slot].initialize(shares_[slot], apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
                                      apis_->surfaces(gpu.index()), apis_->d3d9_device(gpu.index()));
     default: vulkan_[slot].initialize(gpu); return true;
     }
@@ -215,15 +232,17 @@ void ExecutorRoot::close(ContextSession *session)
     /* And the host objects the guest never destroyed. A context that dies
      * owning a VkInstance would otherwise leak it for the life of the process,
      * which is a guest's to trigger as often as it likes. */
-    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (&sessions_[slot] != session) continue;
-        apis_of_[slot] = 0u;
-        gpus_of_[slot] = 0u;
-        vulkan_[slot].shut_down();
-        opencl_[slot].shut_down();
-        opengl_[slot].shut_down();
-        d3d_[slot].shut_down();
-    }
+    const uint32_t slot = slot_of(session);
+    /* Its holds go before its backend destroys what it imported. */
+    shares_[slot].end();
+    const uint32_t gpu = gpus_of_[slot];
+    apis_of_[slot] = 0u;
+    gpus_of_[slot] = 0u;
+    vulkan_[slot].shut_down();
+    opencl_[slot].shut_down();
+    opengl_[slot].shut_down();
+    d3d_[slot].shut_down();
+    retire(gpu);
 }
 
 uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id)
@@ -232,27 +251,44 @@ uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id
     return owns(session) ? session->imported_handle(blob_id) : 0u;
 }
 
-bool ExecutorRoot::export_object(ContextSession *session, uint32_t kind, uint64_t wire_handle,
-                                 uint32_t &handle_kind, int &fd)
+uint32_t ExecutorRoot::share_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
+                                    uint64_t wire_handle)
 {
-    AV_SCOPE("ExecutorRoot::export_object");
-    handle_kind = 0u;
-    fd = -1;
-    return owns(session) && session->export_object(kind, wire_handle, handle_kind, fd);
+    AV_SCOPE("ExecutorRoot::share_object");
+    const uint32_t slot = slot_of(session);
+    if (slot == max_sessions || session->faulted()) return AV_SHARED_REFUSED;
+    return shared_answer(shares_[slot].publish(object_id, kind, size, wire_handle));
 }
 
-bool ExecutorRoot::import_object(ContextSession *session, uint32_t kind, uint32_t handle_kind, int fd,
-                                 uint64_t size, uint64_t &wire_handle)
+uint32_t ExecutorRoot::open_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
+                                   uint64_t &wire_handle)
 {
-    AV_SCOPE("ExecutorRoot::import_object");
+    AV_SCOPE("ExecutorRoot::open_object");
     wire_handle = 0u;
-    return owns(session) && session->import_object(kind, handle_kind, fd, size, wire_handle);
+    const uint32_t slot = slot_of(session);
+    if (slot == max_sessions || session->faulted()) return AV_SHARED_REFUSED;
+    return shared_answer(shares_[slot].open(object_id, kind, size, wire_handle));
 }
 
-void ExecutorRoot::release_object(ContextSession *session, uint32_t kind, uint64_t wire_handle)
+uint32_t ExecutorRoot::shared_answer(Status answered) const
 {
-    AV_SCOPE("ExecutorRoot::release_object");
-    if (owns(session)) session->release_object(kind, wire_handle);
+    AV_SCOPE("ExecutorRoot::shared_answer");
+    switch (answered) {
+    case Status::ok: return AV_SHARED_DONE;
+    case Status::not_found: return AV_SHARED_UNKNOWN;
+    case Status::invalid_parameter: return AV_SHARED_MISMATCHED;
+    case Status::conflict: return AV_SHARED_CONFLICT;
+    default: return AV_SHARED_REFUSED;
+    }
+}
+
+/* What a close frees is given back when the guest or a session next lets go
+ * on the main loop: the session's own worker may hold the Direct3D 11 lock. */
+void ExecutorRoot::close_object(ContextSession *session, uint64_t object_id)
+{
+    AV_SCOPE("ExecutorRoot::close_object");
+    const uint32_t slot = slot_of(session);
+    if (slot != max_sessions) shares_[slot].close(object_id);
 }
 
 void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *context), void *context)
@@ -270,11 +306,21 @@ void ExecutorRoot::report(StateWriter &writer)
     writer.number("gpus", gpus_.count());
     writer.flag("overflowed", gpus_.overflowed());
     gpus_.report(writer);
+    domains_.report(writer);
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (!sessions_[slot].live()) continue;
         writer.open("session", slot);
         writer.text("api", api_name(apis_of_[slot]));
         writer.number("gpu", gpus_of_[slot]);
+        writer.number("domain", shares_[slot].domain());
+        writer.close();
+    }
+    /* No GPU is counted before the host is asked. */
+    for (uint32_t index = 0u; index < gpus_.count(); index++) {
+        writer.open("gpu_shares", index);
+        D3d11HostDevice *const device = apis_->d3d11_device(index);
+        apis_->shares(index)->report(writer);
+        if (device != nullptr) device->report(writer);
         writer.close();
     }
     writer.close();
@@ -305,10 +351,29 @@ uint32_t ExecutorRoot::live() const
 bool ExecutorRoot::owns(const ContextSession *session) const
 {
     AV_SCOPE("ExecutorRoot::owns");
-    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (&sessions_[slot] == session) return true;
-    }
-    return false;
+    return slot_of(session) != max_sessions;
+}
+
+uint32_t ExecutorRoot::slot_of(const ContextSession *session) const
+{
+    AV_SCOPE("ExecutorRoot::slot_of");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++)
+        if (&sessions_[slot] == session) return slot;
+    return max_sessions;
+}
+
+const HostGpu *ExecutorRoot::gpu_of(uint32_t domain) const
+{
+    AV_SCOPE("ExecutorRoot::gpu_of");
+    uint32_t index = 0u;
+    return apis_ != nullptr && domains_.gpu_of(domain, index) ? gpus_.at(index) : nullptr;
+}
+
+void ExecutorRoot::retire(uint32_t gpu)
+{
+    AV_SCOPE("ExecutorRoot::retire");
+    D3d11HostDevice *const device = apis_->d3d11_device(gpu);
+    if (device != nullptr) device->retire_shares();
 }
 
 bool ExecutorRoot::invariants_hold() const

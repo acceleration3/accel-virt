@@ -15,8 +15,6 @@
 
 namespace av {
 
-class MockHost;
-
 class MockExecutorOps {
 public:
     static constexpr std::uint32_t unknown_id = 0x1FFF0u;
@@ -46,12 +44,13 @@ public:
     void              hold_creates();
     void              release_creates();
     std::uint32_t     creates_waiting();
-    /* Version 4's creates, what the last one was asked, and whether its share
-     * was an executor of this table still alive when that create returned. */
+    /* Creates, what the last one was asked - its domain included - and
+     * whether its share was an executor of this table still alive when that
+     * create returned. */
     std::uint32_t     option_creates();
     /* What the device gave this library to call when a host thread finishes
-     * work (executor ABI version 5), and calling it: the one thing in the
-     * table that runs device-ward, so a test fires it rather than waits. */
+     * work, and calling it: the one thing in the table that runs
+     * device-ward, so a test fires it rather than waits. */
     std::uint32_t     signals_set();
     bool              signal_bound() const;
     /* Calls it, as a host API's own thread would. False when nothing is
@@ -60,7 +59,7 @@ public:
     AvContextOptions last_options();
     AvExecutor      *last_share();
     bool              last_share_live();
-    /* The Nth create from now answers NULL (either spelling). */
+    /* The Nth create from now answers NULL. */
     void          fail_create_at(std::uint32_t nth);
     std::uint32_t created();
     std::uint32_t destroyed();
@@ -69,13 +68,19 @@ public:
     /* Commands executed, in order, across executors. */
     std::uint32_t id_at(std::uint32_t index);
     std::uint32_t size_at(std::uint32_t index);
-    /* The sub-API and GPU UUID's first byte of the last create. */
+    /* The sub-API of the last create. */
     std::uint32_t last_sub_api();
-    std::uint8_t  last_uuid_byte();
+    /* Domains: the Nth open_domain from now answers 0, and what was opened,
+     * closed, and on which GPU (its UUID's first byte) the last was opened. */
+    void          refuse_domain_at(std::uint32_t nth);
+    std::uint32_t domains_opened();
+    std::uint32_t domains_closed();
+    std::uint32_t last_closed_domain();
+    std::uint8_t  last_domain_gpu();
     /* Calls on an executor this table never made or already destroyed, and
      * calls from another thread than the one that created it. */
     std::uint32_t misuses();
-    /* What version 2's import_kinds answers, for every sub-API and GPU. */
+    /* What import_kinds answers, for every sub-API and GPU. */
     void          set_import_kinds(std::uint32_t kinds);
     /* Blobs imported and released, so a test can prove destroy released what
      * the guest never did. */
@@ -97,48 +102,39 @@ public:
      * a test scripted another. */
     static constexpr std::uint64_t handle_bit = 0x4000000000000000u;
 
-    /* Version 6's shared objects (feature 053). A descriptor this table
-     * exports is a real one, taken from `host` so the device that closes it is
-     * the one counting it; without a host, every export is refused, which is
-     * what a library that exports nothing looks like. */
-    void          descriptors_from(MockHost &host);
-    /* The abi_version the table reports, so a test can present a library from
-     * before a version it needs. Back to AV_EXECUTOR_ABI_VERSION with 0. */
+    /* Shared objects (feature 053), kept as the library keeps them: an id
+     * shared in a domain by one executor, and opened by others, each holding
+     * its own handle, until it closes or is destroyed. */
+    /* The abi_version the table reports, so a test can present a library of
+     * another version. Back to AV_EXECUTOR_ABI_VERSION with 0. */
     void          set_abi_version(std::uint32_t version);
-    /* The AV_BLOB_* kind an export says its descriptor is. */
-    void          export_handle_kind(std::uint32_t kind);
-    /* The Nth export from now answers success with nothing behind it - no
-     * descriptor and no kind - which is a library the device must not
-     * believe. */
-    void          lie_on_export_at(std::uint32_t nth);
-    /* The Nth export, or import, of an object from now is refused. */
-    void          refuse_export_at(std::uint32_t nth);
-    void          refuse_object_import_at(std::uint32_t nth);
-    /* The Nth object import from now answers AV_EXECUTED naming nothing, a
-     * library that imported and cannot say what it made. */
-    void          withhold_object_handle_at(std::uint32_t nth);
-    std::uint32_t exported_objects();
-    std::uint32_t imported_objects();
-    std::uint32_t released_objects();
-    std::uint32_t live_objects();
-    /* The guest's shared releases the library was told of (ABI 12): how many,
-     * and the last one's id and GPU. */
+    /* The Nth share, or open, from now is refused (AV_SHARED_REFUSED). */
+    void          refuse_share_at(std::uint32_t nth);
+    void          refuse_open_at(std::uint32_t nth);
+    /* The Nth open from now answers done naming nothing, a library that
+     * opened and cannot say what it made. */
+    void          withhold_open_handle_at(std::uint32_t nth);
+    std::uint32_t shared_objects();
+    std::uint32_t opened_objects();
+    std::uint32_t closed_objects();
+    std::uint32_t live_opens();
+    /* Whether `executor` holds `object_id` open, and as what. */
+    bool          opened_as(AvExecutor *executor, std::uint64_t object_id, std::uint64_t &wire_handle);
     /* map_frame answers `view` for `surface` at `point` until it is unmapped. */
     void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
-    /* Version 15: export_surface answers `image` for `surface`, and
-     * sync_surface `writes` and `fence` - neither descriptor looked at here;
-     * every other surface is AV_UNKNOWN. The GPU the last asked about. */
+    /* export_surface answers `image` for `surface`, and sync_surface `writes`
+     * and `fence` - neither descriptor looked at here; every other surface is
+     * AV_UNKNOWN. */
     void                 serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
                                        int fence);
-    const std::uint8_t  *last_surface_gpu() const;
+    /* The domain the last frame, surface, image or release call named. */
+    std::uint32_t        last_domain() const;
+    /* The guest's shared releases the library was told of: how many, and the
+     * last one's id. */
     std::uint32_t        shared_releases();
     std::uint64_t        last_shared_release();
-    const std::uint8_t *last_shared_gpu();
-    /* What a live imported object was made of: false when there is none. */
-    bool          object_of(std::uint64_t wire_handle, std::uint32_t &kind, std::uint32_t &handle_kind,
-                            std::uint64_t &size, int &fd);
-    /* The handle an object import answers, above every blob handle. */
+    /* The handle an object open answers, above every blob handle. */
     static constexpr std::uint64_t object_bit = 0x2000000000000000u;
 
 private:
@@ -151,16 +147,25 @@ private:
         AvBlobHandle handle;
         bool          live;
     };
-    struct SharedObject {
-        std::uint64_t wire_handle;
+    struct Share {
+        std::uint64_t object_id;
+        std::uint32_t domain;
         std::uint32_t kind;
-        std::uint32_t handle_kind;
         std::uint64_t size;
-        int           fd;
+        AvExecutor   *publisher;
+        bool          live;
+    };
+    struct Open {
+        std::uint64_t object_id;
+        AvExecutor   *executor;
+        std::uint64_t wire_handle;
         bool          live;
     };
     static constexpr std::uint32_t max_imports = 512u;
-    static constexpr std::uint32_t max_objects = 64u;
+    /* More than any per-context table the device kept, so a test can show
+     * there is none now. */
+    static constexpr std::uint32_t max_objects = 256u;
+    static constexpr std::uint32_t domain_bit = 0x100u;
 
     Executor *executor_of(AvExecutor *executor);
     bool      alive(AvExecutor *executor);
@@ -182,7 +187,6 @@ private:
     std::uint32_t              ids_[journal_capacity];
     std::uint32_t              sizes_[journal_capacity];
     std::uint32_t              last_sub_api_;
-    std::uint8_t               last_uuid_byte_;
     std::atomic<std::uint32_t> misuses_;
     Import                     imports_[max_imports];
     std::uint32_t              refuse_import_;
@@ -197,16 +201,20 @@ private:
     bool                       last_share_live_;
     bool                       creates_held_;
     std::uint32_t              creates_waiting_;
-    MockHost                  *descriptors_;
-    std::uint32_t              export_handle_kind_;
-    std::uint32_t              refuse_export_;
-    std::uint32_t              lie_on_export_;
-    std::uint32_t              refuse_object_import_;
-    std::uint32_t              withhold_object_handle_;
-    std::uint32_t              exported_objects_;
-    std::uint32_t              imported_objects_;
-    std::uint32_t              released_objects_;
+    std::uint32_t              refuse_domain_ = 0u;
+    std::uint32_t              domains_opened_ = 0u;
+    std::uint32_t              domains_closed_ = 0u;
+    std::uint32_t              last_closed_domain_ = 0u;
+    std::uint8_t               last_domain_gpu_ = 0u;
+    std::uint32_t              refuse_share_ = 0u;
+    std::uint32_t              refuse_open_ = 0u;
+    std::uint32_t              withhold_open_handle_ = 0u;
+    std::uint32_t              shared_objects_ = 0u;
+    std::uint32_t              opened_objects_ = 0u;
+    std::uint32_t              closed_objects_ = 0u;
     std::uint32_t              shared_releases_ = 0u;
+    std::uint64_t              last_shared_release_ = 0u;
+    std::uint32_t              last_domain_ = 0u;
     std::uint64_t              frame_surface_ = 0u;
     std::uint32_t              frame_point_ = 0u;
     AvFrameView               frame_ = {};
@@ -215,11 +223,9 @@ private:
     AvExportedImage            surface_image_ = {};
     std::uint64_t              surface_writes_ = 0u;
     int                        surface_fence_ = -1;
-    const std::uint8_t        *surface_gpu_ = nullptr;
-    std::uint64_t              last_shared_release_ = 0u;
-    const std::uint8_t        *last_shared_gpu_ = nullptr;
-    std::uint64_t              next_object_;
-    SharedObject               objects_[max_objects];
+    std::uint64_t              next_object_ = 0u;
+    Share                      shares_[max_objects] = {};
+    Open                       opens_[max_objects] = {};
 };
 
 }  // namespace av

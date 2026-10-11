@@ -56,6 +56,9 @@ using av::OpenClBackend;
 
 namespace {
 
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
+
 /* One page, which is what udmabuf and every exporter here agree on. */
 constexpr std::uint64_t page = 4096u;
 
@@ -253,7 +256,7 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
 
       std::uint64_t shared = 0u;
       if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page,
-                                 shared)) {
+                                 shared, detail)) {
           std::fprintf(stderr, "gpu %u imports no shared object into OpenCL\n", index);
           backend.shut_down();
           continue;
@@ -288,11 +291,9 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
 
       /* Released, and the descriptor is still the caller's: an import took a
        * duplicate, as every other import on this device does. */
-      backend.release_object(AV_SHARED_MEMORY, shared);
+      backend.release_object(AV_SHARED_MEMORY, shared, detail);
       CHECK(backend.handle_for(av::clproto::HandleKind::mem, shared) == nullptr);
       CHECK(::fcntl(written.handle(), F_GETFD) != -1);
-      /* A handle this context no longer holds releases nothing, twice over. */
-      backend.release_object(AV_SHARED_MEMORY, shared);
       static_cast<void>(::clReleaseCommandQueue(queue));
       backend.shut_down();
       /* Put back for the next GPU. */
@@ -345,19 +346,19 @@ TEST(opencl_backend_device, an_import_with_no_guest_context_is_refused_and_costs
   if (!written.make(hosts.uuid(0u))) { backend.shut_down(); return; }
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made, detail));
   CHECK_EQ(made, 0u);
 
   /* And with a context, the same descriptor imports: the refusal cost it
    * nothing. */
   if (guest_context(backend, *hosts.device(0u)) == nullptr) { backend.shut_down(); return; }
-  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made)) {
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made, detail)) {
       CHECK(made != 0u);
-      backend.release_object(AV_SHARED_MEMORY, made);
+      backend.release_object(AV_SHARED_MEMORY, made, detail);
   }
-  /* One still held when the context closes is released once: the registry
-   * lets go of it before it releases everything the guest made. */
-  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made))
+  /* One still held when the context closes goes with everything the guest
+   * made: in a session HostShares released it before. */
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made, detail))
       CHECK(backend.handle_for(av::clproto::HandleKind::mem, made) != nullptr);
   backend.shut_down(); }
 
@@ -414,16 +415,16 @@ TEST(opencl_backend_device, an_import_of_the_wrong_shape_makes_nothing)
   /* A fence is a host semaphore, which this API names through an extension
    * this host has not got. */
   CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u,
-                               made));
+                               made, detail));
   CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u,
-                               made));
+                               made, detail));
   /* An opaque fd is another driver's private handle, which OpenGL cannot read
    * - and OpenGL is how this one reaches OpenCL. */
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, written.handle(), page, made));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, page, made));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, written.handle(), page, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, page, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, made, detail));
   CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, written.handle(),
-                               page, made));
+                               page, made, detail));
   CHECK_EQ(made, 0u);
   /* This API exports nothing, whatever it can import. */
   std::uint32_t handle_kind = 9u;
@@ -431,10 +432,11 @@ TEST(opencl_backend_device, an_import_of_the_wrong_shape_makes_nothing)
   CHECK(!backend.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
   backend.shut_down(); }
 
-/* A context torn down with objects still open gives every one of them back:
- * the cl_mem, the buffer under it and the memory object under that. Nothing
- * else on the host would ever free them. */
-TEST(opencl_backend_device, a_shut_down_gives_back_what_the_guest_did_not)
+/* Each import answers the GL objects under its cl_mem - the buffer and the
+ * memory object - beside its handle, and its release is handed them back:
+ * HostShares keeps them with the hold, so the backend keeps no table, and
+ * nothing else on the host would ever free them. */
+TEST(opencl_backend_device, each_import_is_released_with_the_gl_objects_it_answered)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
   Exported written;
@@ -446,16 +448,25 @@ TEST(opencl_backend_device, a_shut_down_gives_back_what_the_guest_did_not)
   if (context == nullptr) { backend.shut_down(); return; }
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
-  if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, first)) {
+  if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, first, detail)) {
       backend.shut_down();
       return;
   }
-  CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, second));
-  CHECK(first != second);
+  const std::uint64_t first_detail = detail;
+  CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, second, detail));
+  const std::uint64_t second_detail = detail;
   /* Two imports of one descriptor are two host objects over one allocation,
    * which is what two guest contexts opening one shared object look like. */
+  CHECK(first != second);
+  CHECK(first_detail != second_detail);
+  CHECK((first_detail >> 32u) != 0u);   /* a buffer */
+  CHECK((first_detail & 0xFFFFFFFFu) != 0u);   /* and the memory under it */
+  backend.release_object(AV_SHARED_MEMORY, second, second_detail);
+  backend.release_object(AV_SHARED_MEMORY, first, first_detail);
+  CHECK(backend.handle_for(av::clproto::HandleKind::mem, first) == nullptr);
+  CHECK(backend.handle_for(av::clproto::HandleKind::mem, second) == nullptr);
   backend.shut_down();
-  /* The descriptor outlived both, as it must: it is the device's, and every
+  /* The descriptor outlived both, as it must: it is HostShares', and every
    * import took a duplicate. */
   CHECK(::fcntl(written.handle(), F_GETFD) != -1); }
 

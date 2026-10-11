@@ -506,15 +506,16 @@ TEST(replay_context, holds_one_executor_and_compares_the_answer_it_produced)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   ReplayContext context;
   CHECK(!context.created());
   CHECK(!context.answered());
   CHECK(context.invariants_hold());
-  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::ok);
   CHECK(context.created());
   CHECK_EQ(context.context(), 3u);
   CHECK_EQ(context.command_api(), 1u);
-  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan, uuid), Status::invalid_state);
+  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::invalid_state);
   CHECK(context.invariants_hold());
   CHECK(!context.gave_up());
   context.give_up();
@@ -530,11 +531,12 @@ TEST(replay_context, names_each_sub_apis_command_half)
                       | AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   struct Case { SubApi api; std::uint16_t half; };
   const Case cases[] = {{SubApi::vulkan, 1u}, {SubApi::opencl, 2u}, {SubApi::opengl, 3u}};
   for (const Case &c : cases) {
       ReplayContext context;
-      CHECK_STATUS(context.create(library, 1u, c.api, uuid), Status::ok);
+      CHECK_STATUS(context.create(library, 1u, c.api), Status::ok);
       CHECK_EQ(context.command_api(), c.half);
       /* And the library was asked for that API, not for the one the last
        * context happened to want. */
@@ -546,8 +548,9 @@ TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batc
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   ReplayContext context;
-  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::ok);
 
   Batch batch;
   batch.add(0x00010006u, 4u, CommandHeader::generate_reply, 0x2Au)
@@ -583,6 +586,7 @@ TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   struct Case { std::uint32_t id; Status status; };
   const Case cases[] = {{MockExecutorOps::unknown_id, Status::not_found},
                         {MockExecutorOps::undecodable_id, Status::malformed},
@@ -590,7 +594,7 @@ TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
                         {MockExecutorOps::garbage_id, Status::invalid_state}};
   for (const Case &c : cases) {
       ReplayContext context;
-      CHECK_STATUS(context.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+      CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::ok);
       Batch batch;
       batch.add(c.id, 0u);
       av::RecordedCommand command;
@@ -619,7 +623,7 @@ TEST(recording_replay_run, a_gpu_of_its_own_is_the_one_it_asks_the_library_for)
   replay.use_gpu(other);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
-  CHECK_EQ(ops.last_uuid_byte(), 0x99u);
+  CHECK_EQ(ops.last_domain_gpu(), 0x99u);
   CHECK(replay.invariants_hold()); }
 
 /* The other half of the same sentence: with no GPU named - and with a null one
@@ -637,7 +641,7 @@ TEST(recording_replay_run, with_no_gpu_named_it_asks_the_library_for_the_recordi
       if (named != 0u) replay.use_gpu(nullptr);
       const RecordingFilter filter;
       CHECK_STATUS(replay.run(reader, filter), Status::ok);
-      CHECK_EQ(ops.last_uuid_byte(), uuid[0]);
+      CHECK_EQ(ops.last_domain_gpu(), uuid[0]);
       CHECK_EQ(ops.created(), 1u);
   } }
 
@@ -851,8 +855,9 @@ TEST(replay_context, an_answer_longer_than_it_keeps_is_reported_rather_than_comp
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   ReplayContext context;
-  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::ok);
   av::ReplayContextProbe::answer_too_long(context);
   const std::uint8_t recorded[4] = {};
   CHECK(!context.answers_with(recorded, sizeof recorded));
@@ -867,6 +872,7 @@ TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   ReplayContext context;
   CHECK(context.invariants_hold());
   av::ReplayContextProbe::answer_with_no_executor(context);
@@ -877,14 +883,14 @@ TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have
   CHECK(!kept.invariants_hold());
 
   ReplayContext second;
-  CHECK_STATUS(second.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  CHECK_STATUS(second.create(library, 3u, SubApi::vulkan), Status::ok);
   CHECK(second.invariants_hold());
   av::ReplayContextProbe::forget_the_context(second);
   CHECK(!second.invariants_hold());
   second.destroy(library);
 
   ReplayContext third;
-  CHECK_STATUS(third.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  CHECK_STATUS(third.create(library, 3u, SubApi::vulkan), Status::ok);
   av::ReplayContextProbe::answer_without_a_length(third);
   CHECK(!third.invariants_hold());
   third.destroy(library); }

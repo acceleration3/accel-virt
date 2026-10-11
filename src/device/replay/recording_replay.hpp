@@ -35,7 +35,9 @@ public:
     static constexpr size_t   finding_bytes = 192u;
     static constexpr size_t   uuid_bytes = DeviceUuid::bytes;
 
-    explicit RecordingReplay(const ExecutorLibrary &library);
+    /* Opens its own domain in `library`, on the GPU it replays on, and closes
+     * it as it goes. */
+    explicit RecordingReplay(ExecutorLibrary &library);
     /* Destroys every executor it made. */
     ~RecordingReplay();
     RecordingReplay(const RecordingReplay &) = delete;
@@ -74,7 +76,7 @@ private:
     /* The commonest finding: something about a record, said in one phrase. */
     void           finding_about(const RecordHeader &record, const char *what);
 
-    const ExecutorLibrary &library_;
+    ExecutorLibrary       &library_;
     DeviceUuid             gpu_;
     bool                   gpu_chosen_;
     bool                   ran_;

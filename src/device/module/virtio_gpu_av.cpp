@@ -55,7 +55,7 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         return Status::invalid_parameter;
     }
     if (contexts_->accept(executor) == Status::invalid_parameter) {
-        message.append("virtio-gpu-av: the executor library's table is not ABI version 1 to 4, or lacks an operation");
+        message.append("virtio-gpu-av: the executor library's table is not this ABI version, or lacks an operation");
         host_.log(message.text());
         return Status::invalid_parameter;
     }
@@ -71,7 +71,7 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         return Status::no_memory;
     }
     if (contexts_->initialize() == Status::no_memory) {
-        message.append("virtio-gpu-av: the host has no mutex for the contexts' shared objects and executors");
+        message.append("virtio-gpu-av: the host has no mutex for the contexts' ordering and executors");
         host_.log(message.text());
         return Status::no_memory;
     }
@@ -100,6 +100,9 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         }
     }
     capset_.describe(binding_.index(), contexts_->sub_apis(), features);
+    /* In this process the library's domain for the device opens now, on the
+     * GPU just described; a renderer opened it as it started. */
+    if (!isolated) static_cast<void>(contexts_->start(capset_.info().gpu().uuid(), capset_.info()));
     /* The probe proved this device can hand a guest blob to a host API; only
      * the library knows whether the API will take one. Both have to be true
      * before the guest is told its memory arrives without a copy. */
@@ -123,9 +126,7 @@ void VirtioGpuAv::attach_exports()
     const uint8_t *const uuid = capset_.info().gpu().uuid();
     PciAddress           address;
     const bool           on_pci = host_.gpu_pci_address(binding_.index(), address) == Status::ok;
-    exports_.attach(*contexts_, uuid,
-                    on_pci ? address.greeting(uuid, ExportConnection::max_surfaces)
-                           : ExportGreeting(uuid, ExportConnection::max_surfaces));
+    exports_.attach(*contexts_, uuid, on_pci ? address.greeting(uuid) : ExportGreeting(uuid));
 }
 
 /* After the GPU is bound, so the recording's header names the GPU it recorded

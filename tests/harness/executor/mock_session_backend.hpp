@@ -28,8 +28,10 @@ public:
     static constexpr std::uint32_t lose_id = 0x10005u;
     /* An adopted blob's wire handle is its id plus this. */
     static constexpr std::uint64_t wire_offset = 0x2000u;
-    /* An imported object's wire handle, which no adopted blob can be. */
+    /* An imported object's wire handle, which no adopted blob can be, and what
+     * its detail is: the handle with these bits flipped. */
     static constexpr std::uint64_t object_handle = 0x9000u;
+    static constexpr std::uint64_t detail_mask = 0xD000000000000000u;
 
     MockSessionBackend();
 
@@ -59,8 +61,8 @@ public:
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
                                      std::uint32_t &handle_kind, int &fd) override;
     [[nodiscard]] bool import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
-                                     std::uint64_t size, std::uint64_t &wire_handle) override;
-    void               release_object(std::uint32_t kind, std::uint64_t wire_handle) override;
+                                     std::uint64_t size, std::uint64_t &wire_handle, std::uint64_t &detail) override;
+    void               release_object(std::uint32_t kind, std::uint64_t wire_handle, std::uint64_t detail) override;
 
     /* Whether this backend shares objects at all, so a test can be both an API
      * that does and one that does not. */
@@ -68,6 +70,11 @@ public:
     std::uint32_t exported_objects() const;
     std::uint32_t imported_objects() const;
     std::uint32_t released_objects() const;
+    /* What the last release was handed back of what its import answered. */
+    std::uint64_t last_released_detail() const;
+    /* Called once, inside the next export_object, before it answers: what
+     * another session does between an export and the table it is kept in. */
+    void          before_next_export(void (*during)(void *context), void *context);
 
 private:
     std::size_t   answer_bytes_;
@@ -80,9 +87,12 @@ private:
     std::uint32_t exported_objects_;
     std::uint32_t imported_objects_;
     std::uint32_t released_objects_;
+    std::uint64_t last_released_detail_ = 0u;
     int           descriptor_;
     void        (*signal_)(void *context);
     void         *signal_context_;
+    void        (*during_export_)(void *context);
+    void         *during_export_context_;
 };
 
 }  // namespace av

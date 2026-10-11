@@ -47,6 +47,9 @@ extern "C" const char *__lsan_default_suppressions(void)
 
 namespace {
 
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
+
 constexpr std::size_t block_bytes = 65536u;
 
 /* The context's blob arena, as the device sees it: whole pages, because the
@@ -355,7 +358,7 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
   /* Nothing is opened into it, and the extension it would have been opened
    * through is not shown. */
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
   CHECK_EQ(made, 0u);
   char   answered[4096] = {};
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),

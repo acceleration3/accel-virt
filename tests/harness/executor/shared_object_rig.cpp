@@ -13,10 +13,9 @@ constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 
 }  // namespace
 
-SharedObjectContext::SharedObjectContext(MockHost &host, const ExecutorLibrary &library,
-                                         ExecutorShares &shares, HostSharedObjects &objects,
+SharedObjectContext::SharedObjectContext(MockHost &host, const ExecutorLibrary &library, ExecutorShares &shares,
                                          std::uint32_t id)
-    : host_(host), executor_(host, library, shares, id), objects_(objects, executor_), start_(nullptr),
+    : host_(host), executor_(host, library, shares, id), start_(nullptr),
       done_(nullptr), thread_(nullptr), job_(nullptr), job_context_(nullptr), stopping_(false)
 {}
 
@@ -40,7 +39,6 @@ void SharedObjectContext::stop()
 {
     if (thread_ == nullptr) return;
     on_worker([this] { executor_.destroy(); });
-    objects_.release_all();
     stopping_ = true;
     host_.signal_event(start_);
     host_.join_thread(thread_);
@@ -49,8 +47,7 @@ void SharedObjectContext::stop()
     thread_ = nullptr;
 }
 
-ContextExecutor      &SharedObjectContext::executor() { return executor_; }
-ContextSharedObjects &SharedObjectContext::objects() { return objects_; }
+ContextExecutor &SharedObjectContext::executor() { return executor_; }
 
 void SharedObjectContext::run_job(void (*job)(void *), void *context)
 {
@@ -69,11 +66,10 @@ void SharedObjectContext::serve()
 }
 
 SharedObjectRig::SharedObjectRig(bool second_executor)
-    : host_(), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_), objects_(host_),
-      first_(host_, library_, shares_, objects_, 1u), second_(host_, library_, shares_, objects_, 2u)
+    : host_(), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_),
+      first_(host_, library_, shares_, 1u), second_(host_, library_, shares_, 2u)
 {
-    ops_.descriptors_from(host_);
-    if (library_.accept(&ops_.table()) != Status::ok || objects_.initialize() != Status::ok ||
+    if (library_.accept(&ops_.table()) != Status::ok || library_.open_domain(no_uuid) != Status::ok ||
         first_.start(true) != Status::ok || second_.start(second_executor) != Status::ok)
         std::abort();
 }
@@ -82,18 +78,17 @@ SharedObjectRig::~SharedObjectRig()
 {
     second_.stop();
     first_.stop();
-    objects_.release_all();
+    library_.close_domain();
 }
 
 MockHost            &SharedObjectRig::host() { return host_; }
 MockExecutorOps     &SharedObjectRig::ops() { return ops_; }
-HostSharedObjects   &SharedObjectRig::shared() { return objects_; }
 SharedObjectContext &SharedObjectRig::first() { return first_; }
 SharedObjectContext &SharedObjectRig::second() { return second_; }
 
-bool SharedObjectRig::invariants_hold() const
+bool SharedObjectRig::invariants_hold()
 {
-    return objects_.invariants_hold();
+    return ops_.misuses() == 0u;
 }
 
 }  // namespace av

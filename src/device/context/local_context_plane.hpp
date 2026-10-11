@@ -1,12 +1,12 @@
 /* Contexts that run in QEMU's own process: the executor library loaded here,
- * one worker thread per context, and the objects they share. */
+ * the device's domain in it - where the library keeps the objects the
+ * contexts share - and one worker thread per context. */
 #ifndef AV_LOCAL_CONTEXT_PLANE_HPP
 #define AV_LOCAL_CONTEXT_PLANE_HPP
 
 #include "device/context/context_plane.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/execution/executor_library.hpp"
-#include "device/memory/host_shared_objects.hpp"
 
 #include <stdint.h>
 
@@ -61,9 +61,6 @@ public:
 
 private:
     ExecutorLibrary    library_;
-    /* Before the contexts, which let go of shared objects as they are
-     * destroyed. */
-    HostSharedObjects  shared_;
     DeviceContextTable contexts_;
 
     friend struct LocalContextPlaneProbe;

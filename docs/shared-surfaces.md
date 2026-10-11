@@ -1,6 +1,59 @@
 # Shared surfaces: design
 
-**Status: proposal, for review before any code.**
+**Status: the sharing half is built (`HostShares`, §0); the staging half is
+built as `SharedSurfaces` (§4, step 2). The rest of this note is the proposal
+it grew from, kept for the reasoning, with what changed marked where it
+stands.**
+
+## 0. Where it stands: `HostShares`
+
+Every shared object on one host GPU, of every API, is one row of that GPU's
+`HostShares` (`src/executor/sharing/`), keyed by **(domain, id)**:
+
+- **id** is the miniport's, minted per adapter (§1.1);
+- **domain** is the guest device the id was minted on: one `virtio-gpu-av`
+  device, one guest adapter. The device opens it as it starts
+  (`open_domain`, executor ABI 16), names it in every context it makes and
+  every device-level call, and closes it as it is destroyed. Two devices on
+  one GPU no longer mix their ids (§2.1).
+
+```
+guest   miniport SharedObjectTable: ids, and when one is gone everywhere (0x02F1)
+          |  SHARE_OBJECT / OPEN_SHARED_OBJECT / RELEASE_SHARED_OBJECT,
+          |  D3D CreateResource(shared_key) / OpenResource / ShareResource12
+device  routing only: SharedObjectCommand, LocalContextPlane, ExportService
+          |  ABI 16: share_object / open_object / close_object / release_shared,
+          |  every call named by the domain
+library HostShares, one per host GPU: Share rows (domain, id)
+          |- the descriptor other APIs import (a backend's export_object)
+          |- the Direct3D resource, its Direct3D 11 view, its flip copy
+          |- holders: each session that imported it, with its handle
+          `- ExportableImages (shim): the Vulkan memory under a shared
+             Direct3D 11 texture, freed once DXVK destroys the texture
+```
+
+**Lifetimes.** The guest holds every row from its publish until 0x02F1 (or a
+reset, id 0, which also unindexes what sessions still hold, as the guest mints
+the ids again). A session that imported a row holds it until it closes it or
+ends; its backend releases what it imported. The publisher is recorded - it
+may publish again and may not open its own - but holds nothing: what it made
+is its own, and a Direct3D opener holds its resource by its own COM reference.
+A row nobody holds is freed, its descriptor closed and its COM references
+given back under the Direct3D 11 device's lock.
+
+**Locks.** `HostShares` has its own lock and holds it around its rows only:
+never across a backend's export, import or release, nor while taking the
+Direct3D 11 lock (that lock first, `HostShares`' second). A row worked on
+outside the lock is pinned.
+
+**Capacity.** None fixed. Rows, holders and the index grow from the heap; DWM
+keeps every Windows.Graphics.Capture buffer it ever opened, and the slot
+tables this replaced (4096 Direct3D keys, 1024 interop images, 256 device
+descriptors, 64 per context) were all reached.
+
+**Replaced.** `D3dSharedResources`, `InteropTextures`, the device's
+`HostSharedObjects` and `ContextSharedObjects`, and the executor ABI's
+`export_object` / `import_object` / `release_object`.
 
 One host system class, `SharedSurfaces`, owns every surface the guest shares,
 whatever API made it and whatever API reads it. Every API session and the
@@ -40,16 +93,16 @@ So "which surface" already has one answer in the guest: `docs/protocol.md`
 (shared objects, 0x02F1) and `docs/kb/04-memory.md` ("key host-side objects off
 the global allocation identity").
 
-### 1.2 The host has three owners for it
+### 1.2 The host had three owners for it
 
-The host has more than one owner for that id, and each is tied to one API:
+Before `HostShares` (§0) the host had more than one owner for that id, and
+each was tied to one API:
 
 | Owner | Holds | Scope | Who uses it |
 |---|---|---|---|
 | `D3dSharedResources` (in `D3d11HostDevice`) | key → `IUnknown*`, 4096 rows | per GPU, per process | Direct3D `CreateResource(shared_key)`, `OpenResource`, `ShareResource12`; scanout `export_image` / `read_image` |
 | `InteropTextures` (in `D3d11HostDevice`) | a D3D12 texture remade on DXVK's device over vkd3d-proton's exported memory | per GPU | `ShareResource12` |
 | `D3d12Presentation` | a shared `ID3D12Fence`, imported into DXVK as a timeline | per D3D12 session | `PresentResource12`: DXVK waits for the presenting queue |
-| `SnapshotPool` (in `D3d11HostDevice`) | 16 staging textures, keyed by a *random* key the UMD chose | per GPU | D3D11 blt presents (`PresentSnapshot`); the present engine's `map_snapshot` |
 | `HostImageExport` | one linear dma-buf image on DXVK's device | per GPU | scanout to QEMU's display |
 | `HostSharedObjects` | fd descriptors, 256 | per device | feature 053: Vulkan exports; Vulkan, OpenGL and OpenCL import |
 | `HostExportedFds`, `GlSharedObjects`, `ClSharedObjects` | what one context exported or imported | per context | Vulkan, OpenGL, OpenCL |
@@ -109,16 +162,19 @@ DXVK's queue through its interop interface.
 `SharedSurfaces` is a system class. There is one per device, which is one
 adapter and so one id space. It lives in whichever process runs the device's
 contexts: QEMU's for the local plane, `av-renderer`'s for the isolated one.
-The plane owns it beside `HostSharedObjects`, which it absorbs (§4, step 4).
+Its sharing half is `HostShares` (§0), in the executor's process beside the
+GPU's host devices.
 
 It is injected into every API backend of every context of the device, and into
 the plane's present-engine and scanout calls. It holds references to the GPU's
 host devices: DXVK's, vkd3d-proton's, the native Vulkan instance and the EGL
 display. It never makes them.
 
-One per device, not one per GPU, because the id space is per adapter. Today's
-per-GPU `D3dSharedResources` would mix two devices' ids if two devices were ever
-bound to one GPU, and nothing stops that.
+One per device, not one per GPU, because the id space is per adapter. The
+per-GPU `D3dSharedResources` would have mixed two devices' ids if two devices
+were ever bound to one GPU. Closed by the domain: `HostShares` is per GPU,
+because one GPU's sessions open each other's resources, and keys its rows by
+(domain, id) (§0).
 
 ### 2.2 A surface
 
@@ -135,7 +191,7 @@ A row is one guest id:
   other API's view is made over. D3D12 already exports one (vkd3d-proton
   `0003-shared-image-fd`); D3D11 and Vulkan make shared resources exportable;
 - **views:** the surface as each API that opened it sees it, made on first
-  open and released with the row. `InteropTextures` becomes the D3D11 view
+  open and released with the row. `ExportableImages` is the D3D11 view
   maker, and the rest follow it;
 - **points:** the last point written and the last one each reader finished
   (§2.4);
@@ -227,15 +283,14 @@ read-back too.
 
 - **Release.** `SharedReleaseRequest(id)` releases the row. The row's views and
   canonical memory are freed once no reader holds them and the GPUs are done
-  with them. `InteropTextures::collect` is the model.
+  with them. `ExportableImages::collect` is the model.
 - **Reset.** A reset (id 0) releases every row.
 - **Destroying sessions.** A row outlives the session that made it, for as long
   as the guest holds the id. DWM opens surfaces whose creators are already gone,
-  and `D3dSharedResources` holds them for exactly that reason; the row inherits
-  the rule.
-- **Capacity.** Fixed per device, with no allocation on the present path. The
-  row count is today's 4096 plus the descriptor table's 256. The staging slot
-  count must be more than the presents the engine holds outstanding.
+  and `HostShares` keeps the guest's hold for exactly that reason.
+- **Capacity.** Not fixed (§0): a fixed table was reached, by DWM's capture
+  buffers. The staging slot count must be more than the presents the engine
+  holds outstanding.
 
 ### 2.7 Locks and threads
 
@@ -287,7 +342,8 @@ dma-bufs already do.
    runtime's queue. Now each present is one blt (123 of 123), and the frames
    are black instead of missing.
 1. **`SharedSurfaces` with D3D11 and D3D12 behind `SurfaceApi`.** This
-   replaces `D3dSharedResources`, `InteropTextures` and `D3d12Presentation`'s
+   replaces `D3dSharedResources`, `InteropTextures` (both since replaced by
+   `HostShares` and `ExportableImages`) and `D3d12Presentation`'s
    fence. Behaviour is unchanged, except that the self-deadlock goes.
 2. **Points and blt reads.** This adds `read_surface` and `PresentPointRecord`,
    with staging for blt-read surfaces. D3D11 blts move onto it, and
@@ -311,12 +367,13 @@ dma-bufs already do.
      mark_all`), so an idle queue reaching a shared fence first no longer
      ends it early.
 3. **Scanout.** `HostImageExport` and `read_image` move under `SharedSurfaces`.
-4. **Feature 053 joins.** `HostSharedObjects` becomes the rows' descriptor
-   store, and Vulkan, OpenGL and OpenCL open Direct3D surfaces and the reverse.
-   Fence kinds are reconciled in one place (§1.3).
+4. **Feature 053 joins.** Done as `HostShares` (§0): one row per (domain,
+   id) holds the descriptor, the Direct3D resource and every holder, and
+   Vulkan, OpenGL and OpenCL open Direct3D surfaces through it. Fence kinds
+   are still each API's (§1.3).
 
    Begun, Direct3D 11 to the others: a shared texture of one 2D mip, layer and
-   sample (`ExportableImageInfo`) is made by `InteropTextures` over dedicated
+   sample (`ExportableImageInfo`) is made by `ExportableImages` over dedicated
    memory exported as a dma-buf, wrapped for DXVK, and the UMD publishes it
    with SHARE_OBJECT under the key the miniport minted, so OpenGL and Vulkan
    open it by that id like any shared object. OpenGL imports memory as

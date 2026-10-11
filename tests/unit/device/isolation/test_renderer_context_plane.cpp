@@ -80,7 +80,7 @@ struct Published {
 };
 Published published = {};
 
-std::uint32_t export_published(void *, const std::uint8_t *, std::uint64_t key, AvExportedImage *image)
+std::uint32_t export_published(void *, std::uint32_t, std::uint64_t key, AvExportedImage *image)
 {
     if (!published.found || key != 0x77u) return AV_UNKNOWN;
     *image = published.image;
@@ -639,7 +639,7 @@ TEST(renderer_context_plane_shared, a_guest_release_reaches_the_renderer_s_execu
       sched_yield();
   CHECK_EQ(fixture.ops().shared_releases(), before + 1u);
   CHECK(fixture.ops().last_shared_release() == 0x2Au);
-  CHECK(fixture.ops().last_shared_gpu() != nullptr);
+  CHECK(fixture.ops().last_domain() != 0u);   /* the domain the renderer opened */
   CHECK(fixture.plane().alive());
   fixture.plane().shared_released(nullptr, 0u);
   for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().shared_releases() == before + 1u; spins++)

@@ -7,6 +7,8 @@
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/poll_budget.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "core/trace/state_writer.hpp"
 #include "executor/shim/d3d_runtime.hpp"
 #include "executor/shim/vkd3d_image_export.hpp"
 
@@ -15,7 +17,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), interop_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), exports_(vulkan_), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -28,10 +30,11 @@ D3d11HostDevice::~D3d11HostDevice()
     pthread_mutex_destroy(&mutex_);
 }
 
-bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
+bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostShares &shares)
 {
     AV_SCOPE("D3d11HostDevice::open");
     if (device_ != nullptr) return false;
+    shares_ = &shares;
     IDXGIAdapter1 *const adapter = runtime.adapter_for(uuid);
     if (adapter == nullptr) return false;
     DXGI_ADAPTER_DESC1 description = {};
@@ -67,9 +70,11 @@ void D3d11HostDevice::close()
 {
     AV_SCOPE("D3d11HostDevice::close");
     exports_.release();
-    shared_.clear();
+    /* Every share of this GPU holds this device's textures: they go first. */
+    if (shares_ != nullptr) shares_->clear();
+    retire_locked();
     if (context_ != nullptr) frames_.clear();
-    interop_.release();
+    images_.release();
     vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
     staging_ = nullptr;
@@ -86,33 +91,30 @@ void D3d11HostDevice::close()
 /* The copy is queued under the lock and waited for outside it: the wait is
  * the GPU finishing everything queued ahead, and every session's commands
  * need the lock meanwhile. */
-bool D3d11HostDevice::read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
+bool D3d11HostDevice::read_image(uint32_t domain, uint64_t id, void *pixels, uint32_t stride, uint32_t width,
+                                 uint32_t height)
 {
     AV_SCOPE("D3d11HostDevice::read_image");
     if (device_ == nullptr || pixels == nullptr) return false;
     lock(nullptr);
     D3D11_TEXTURE2D_DESC wanted = {};
-    const bool staged = stage(key, wanted);
+    const bool staged = stage(domain, id, wanted);
     unlock();
     if (!staged) return false;
     return drain(wanted, static_cast<uint8_t *>(pixels), stride, width, height);
 }
 
 /* Queued under the lock and waited for outside it, as a readback is. */
-bool D3d11HostDevice::export_image(uint64_t key, AvExportedImage &image)
+bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_image");
     constexpr uint32_t poll_nanoseconds = 50000u;
     constexpr uint32_t most_polls = 400u;   /* 20 ms */
     if (device_ == nullptr) return false;
     lock(nullptr);
-    IUnknown        *const published = find_shared(key);
-    ID3D11Texture2D *texture = nullptr;
-    const bool found = published != nullptr &&
-                       SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
-    if (published != nullptr) published->Release();
-    uint32_t   slot = 0u;
-    const bool staged = found && exports_.stage(device_, context_, texture, slot);
+    ID3D11Texture2D *const texture = shared_texture(domain, id);
+    uint32_t               slot = 0u;
+    const bool             staged = texture != nullptr && exports_.stage(device_, context_, texture, slot);
     if (texture != nullptr) texture->Release();
     unlock();
     if (!staged) return false;
@@ -127,18 +129,14 @@ bool D3d11HostDevice::export_image(uint64_t key, AvExportedImage &image)
     return true;
 }
 
-bool D3d11HostDevice::export_surface(uint64_t surface, AvExportedImage &image)
+bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_surface");
     image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
     if (device_ == nullptr) return false;
     lock(nullptr);
-    IUnknown *const  published = find_shared(surface);
-    ID3D11Texture2D *texture = nullptr;
-    const bool       found = published != nullptr && SUCCEEDED(published->QueryInterface(
-                                                         __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
-    if (published != nullptr) published->Release();
-    const bool exported = found && interop_.export_image(texture, image);
+    ID3D11Texture2D *const texture = shared_texture(domain, surface);
+    const bool             exported = texture != nullptr && images_.export_image(texture, image);
     if (texture != nullptr) texture->Release();
     unlock();
     return exported;
@@ -147,14 +145,14 @@ bool D3d11HostDevice::export_surface(uint64_t surface, AvExportedImage &image)
 /* The count is read under the lock every copy into the surface is made and
  * counted under, and the sync_file made before it is let go, so the sync_file
  * covers every copy the count says ran. */
-bool D3d11HostDevice::sync_surface(uint64_t surface, uint64_t &writes, int &fd)
+bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd)
 {
     AV_SCOPE("D3d11HostDevice::sync_surface");
     writes = 0u;
     fd = -1;
     if (device_ == nullptr) return false;
     lock(nullptr);
-    const bool synced = shared_.writes(surface, writes) && vulkan_.sync_file(fd);
+    const bool synced = shares_->writes(domain, surface, writes) && vulkan_.sync_file(fd);
     unlock();
     return synced;
 }
@@ -166,30 +164,32 @@ StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subr
     return device_ != nullptr ? frames_.stage(source, subresource, width, height, format) : nullptr;
 }
 
-void D3d11HostDevice::release_shared(uint64_t object_id)
+void D3d11HostDevice::retire_shares()
 {
-    AV_SCOPE("D3d11HostDevice::release_shared");
+    AV_SCOPE("D3d11HostDevice::retire_shares");
+    if (device_ == nullptr) return;
     lock(nullptr);
-    /* A reset is rare and ends every id the guest had: the log says it came,
-     * since a surface held past it would be refused its key again. */
-    if (object_id == 0u) {
-        LogLine(lines_).text("the guest's shared ids start again; ").number(shared_.count()).text(" released").write();
-        shared_.clear();
-    } else {
-        shared_.release(object_id);
-    }
+    retire_locked();
     unlock();
 }
 
-bool D3d11HostDevice::stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted)
+void D3d11HostDevice::retire_locked()
+{
+    AV_SCOPE("D3d11HostDevice::retire_locked");
+    constexpr uint32_t batch = 32u;
+    IUnknown          *objects[batch];
+    if (shares_ == nullptr) return;
+    for (uint32_t taken = shares_->take_retired(objects, batch); taken != 0u;
+         taken = shares_->take_retired(objects, batch))
+        for (uint32_t index = 0u; index < taken; index++) objects[index]->Release();
+    images_.collect();
+}
+
+bool D3d11HostDevice::stage(uint32_t domain, uint64_t id, D3D11_TEXTURE2D_DESC &wanted)
 {
     AV_SCOPE("D3d11HostDevice::stage");
-    IUnknown *const published = find_shared(key);
-    if (published == nullptr) return false;
-    ID3D11Texture2D *texture = nullptr;
-    const bool found = SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
-    published->Release();
-    if (!found) return false;
+    ID3D11Texture2D *const texture = shared_texture(domain, id);
+    if (texture == nullptr) return false;
     texture->GetDesc(&wanted);
     D3D11_TEXTURE2D_DESC have = {};
     if (staging_ != nullptr) staging_->GetDesc(&have);
@@ -340,12 +340,12 @@ ID3D11Device5 *D3d11HostDevice::device() const
     return device_;
 }
 
-bool D3d11HostDevice::show(uint64_t key, ID3D11Texture2D *presented)
+bool D3d11HostDevice::show(uint32_t domain, uint64_t id, ID3D11Texture2D *presented)
 {
     AV_SCOPE("D3d11HostDevice::show");
     if (device_ == nullptr || context_ == nullptr || presented == nullptr) return false;
     ID3D11Texture2D *copy = nullptr;
-    IUnknown *const  held = shared_.shown(key);
+    IUnknown *const  held = shares_->shown(domain, id);
     if (held != nullptr) {
         static_cast<void>(held->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&copy)));
         held->Release();
@@ -358,7 +358,9 @@ bool D3d11HostDevice::show(uint64_t key, ID3D11Texture2D *presented)
         desc.CPUAccessFlags = 0u;
         desc.MiscFlags &= D3D11_RESOURCE_MISC_TEXTURECUBE;
         if (FAILED(device_->CreateTexture2D(&desc, nullptr, &copy)) || copy == nullptr) return false;
-        if (!shared_.show(key, copy)) {
+        const bool kept = shares_->keep_shown(domain, id, copy);
+        retire_locked();
+        if (!kept) {
             copy->Release();
             return false;
         }
@@ -368,10 +370,38 @@ bool D3d11HostDevice::show(uint64_t key, ID3D11Texture2D *presented)
     return true;
 }
 
-IUnknown *D3d11HostDevice::find_shown(uint64_t key)
+IUnknown *D3d11HostDevice::open_shared(uint32_t domain, uint64_t id)
 {
-    AV_SCOPE("D3d11HostDevice::find_shown");
-    return shared_.shown(key);
+    AV_SCOPE("D3d11HostDevice::open_shared");
+    if (shares_ == nullptr) return nullptr;
+    return viewed(domain, id, shares_->open_resource(domain, id));
+}
+
+ID3D11Texture2D *D3d11HostDevice::shared_texture(uint32_t domain, uint64_t id)
+{
+    AV_SCOPE("D3d11HostDevice::shared_texture");
+    if (shares_ == nullptr) return nullptr;
+    IUnknown *const found = viewed(domain, id, shares_->view(domain, id));
+    if (found == nullptr) return nullptr;
+    ID3D11Texture2D *texture = nullptr;
+    const bool cast = SUCCEEDED(found->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
+    found->Release();
+    return cast ? texture : nullptr;
+}
+
+IUnknown *D3d11HostDevice::viewed(uint32_t domain, uint64_t id, IUnknown *found)
+{
+    AV_SCOPE("D3d11HostDevice::viewed");
+    if (found == nullptr) return nullptr;
+    ID3D12Resource *resource = nullptr;
+    if (FAILED(found->QueryInterface(__uuidof(ID3D12Resource), reinterpret_cast<void **>(&resource)))) return found;
+    found->Release();
+    ID3D11Texture2D *const texture = view_of(resource);
+    resource->Release();
+    if (texture == nullptr) return nullptr;
+    static_cast<void>(shares_->keep_view(domain, id, texture));
+    retire_locked();
+    return texture;
 }
 
 ID3D11Fence *D3d11HostDevice::make_fence(uint64_t initial)
@@ -411,60 +441,6 @@ void D3d11HostDevice::pair(D3d12HostDevice *device12)
     device12_ = device12;
 }
 
-bool D3d11HostDevice::publish_shared(uint64_t key, IUnknown *surface)
-{
-    AV_SCOPE("D3d11HostDevice::publish_shared");
-    if (device_ == nullptr) return false;
-    lock(nullptr);
-    const bool published = shared_.publish(key, surface);
-    unlock();
-    if (!published)
-        LogLine(lines_)
-            .text("surface key ")
-            .hex(key, 16u)
-            .text(" not shared: already shared, or ")
-            .number(shared_.count())
-            .text(" of ")
-            .number(D3dSharedResources::capacity)
-            .text(" held")
-            .write();
-    return published;
-}
-
-bool D3d11HostDevice::shares(uint64_t key)
-{
-    AV_SCOPE("D3d11HostDevice::shares");
-    if (device_ == nullptr) return false;
-    lock(nullptr);
-    IUnknown *const found = shared_.find(key);
-    unlock();
-    if (found == nullptr) return false;
-    found->Release();
-    return true;
-}
-
-IUnknown *D3d11HostDevice::find_shared(uint64_t key)
-{
-    AV_SCOPE("D3d11HostDevice::find_shared");
-    IUnknown *const published = shared_.find(key);
-    if (published == nullptr) return nullptr;
-    ID3D11Resource *own = nullptr;
-    if (SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Resource), reinterpret_cast<void **>(&own)))) {
-        own->Release();
-        return published;
-    }
-    ID3D12Resource *resource = nullptr;
-    const bool      twelve =
-        SUCCEEDED(published->QueryInterface(__uuidof(ID3D12Resource), reinterpret_cast<void **>(&resource)));
-    published->Release();
-    if (!twelve) return nullptr;
-    ID3D11Texture2D *const texture = view_of(resource);
-    resource->Release();
-    if (texture == nullptr) return nullptr;
-    static_cast<void>(shared_.replace(key, texture));
-    return texture;
-}
-
 /* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a
  * texture it samples, and the view formats vkd3d-proton made it with are what
  * DXVK may view it as. */
@@ -487,7 +463,7 @@ ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
     shown.Usage = D3D11_USAGE_DEFAULT;
     shown.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     if ((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0) shown.BindFlags |= D3D11_BIND_RENDER_TARGET;
-    ID3D11Texture2D *const texture = interop_.import(image, shown);
+    ID3D11Texture2D *const texture = images_.import(image, shown);
     if (texture == nullptr)
         LogLine(lines_)
             .text("a Direct3D 12 surface ")
@@ -503,16 +479,16 @@ ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
     return texture;
 }
 
-ID3D11Texture2D *D3d11HostDevice::make_shareable(const D3D11_TEXTURE2D_DESC1 &desc)
+ID3D11Texture2D *D3d11HostDevice::make_exportable(const D3D11_TEXTURE2D_DESC1 &desc)
 {
-    AV_SCOPE("D3d11HostDevice::make_shareable");
-    return interop_.make(desc);
+    AV_SCOPE("D3d11HostDevice::make_exportable");
+    return images_.make(desc);
 }
 
 bool D3d11HostDevice::export_memory(ID3D11Texture2D *texture, int &fd)
 {
     AV_SCOPE("D3d11HostDevice::export_memory");
-    return interop_.export_memory(texture, fd);
+    return images_.export_memory(texture, fd);
 }
 
 DxvkVulkanDevice &D3d11HostDevice::vulkan()
@@ -521,10 +497,10 @@ DxvkVulkanDevice &D3d11HostDevice::vulkan()
     return vulkan_;
 }
 
-D3dSharedResources &D3d11HostDevice::shared()
+void D3d11HostDevice::report(StateWriter &writer) const
 {
-    AV_SCOPE("D3d11HostDevice::shared");
-    return shared_;
+    AV_SCOPE("D3d11HostDevice::report");
+    images_.report(writer);
 }
 
 }  // namespace av

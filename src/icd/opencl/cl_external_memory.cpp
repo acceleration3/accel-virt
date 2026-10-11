@@ -19,8 +19,8 @@ static_assert(ClExternalMemory::handle_properties[2] == CL_EXTERNAL_MEMORY_HANDL
 static_assert(ClExternalMemory::handle_properties[3] == CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_FD_KHR);
 static_assert(ClExternalMemory::handle_properties[4] == CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR);
 
-ClExternalMemory::ClExternalMemory(icd::SharedHandles &handles, LogSink &log)
-    : log_(log), opened_(handles, log, "avcl: ")
+ClExternalMemory::ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, LogSink &log)
+    : log_(log), opened_(handles, memory, log, "avcl: ")
 {
     AV_SCOPE("ClExternalMemory::ClExternalMemory");
 }
@@ -68,7 +68,8 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
         return CL_INVALID_PROPERTY;
     }
     const Status opened = opened_.open(wire, device, named, SharedObjectKind::memory, size, made);
-    if (opened == Status::no_space || opened == Status::invalid_state) return CL_OUT_OF_RESOURCES;
+    if (opened == Status::no_memory) return CL_OUT_OF_HOST_MEMORY;
+    if (opened == Status::invalid_state) return CL_OUT_OF_RESOURCES;
     return opened == Status::ok ? CL_SUCCESS : CL_INVALID_VALUE;
 }
 

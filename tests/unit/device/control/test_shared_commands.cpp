@@ -35,7 +35,7 @@ class Fixture {
 public:
     Fixture() : exports_(host_), commands_(host_, plane_, exports_, gpu)
     {
-        exports_.attach(plane_, gpu, av::ExportGreeting(gpu, av::ExportConnection::max_surfaces));
+        exports_.attach(plane_, gpu, av::ExportGreeting(gpu));
     }
 
     /* The response type, or 0 when the core left the request to the rest. */

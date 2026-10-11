@@ -8,12 +8,10 @@
 #include "device/execution/batch_executor.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/blob_imports.hpp"
-#include "device/execution/context_shared_objects.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/memory/blob_table.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 
@@ -41,12 +39,7 @@ private:
     ExecutorShares  shares_;
     ContextExecutor executor_;
     BlobTable            blobs_;
-    /* Deliberately not initialized: a table with no lock costs no mutex, which
-     * is what lets a worker test assert that none is live, and a batch that
-     * names a shared object is refused rather than answered here. */
-    HostSharedObjects    shared_objects_;
     BlobImports          imports_;
-    ContextSharedObjects shared_;
     BatchStaging    staging_;
     BatchExecutor   batches_;
 };

@@ -85,7 +85,6 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
   CHECK(std::strcmp(one.dump(), "module/0 devices=1\n"
                                 "module/0/device/1 realized=true gpu=0 capsets=0 blobs=0 scanouts=0 "
                                 "contexts=0 driver_ok=false\n"
-                                "module/0/device/1/shared/0 live=0\n"
                                 "module/0/device/1/contexts/0 live=0") == 0);
   CHECK_STATUS(module.destroy(second), Status::ok); }
 

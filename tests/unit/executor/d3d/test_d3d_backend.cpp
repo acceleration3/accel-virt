@@ -6,9 +6,14 @@
  * test_d3d_backend_device.cpp. */
 #include "core/support/object_storage.hpp"
 #include "device/abi/av_executor.h"
+#include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
+#include "core/log/driver_log.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
@@ -271,12 +276,17 @@ Selected select_devices()
     Selected seen = {};
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::D3dRuntime      runtime;
+    av::HostHeap        heap;
+    av::RecordingLog    log;
+    av::DriverLog       lines(log, "shares: ");
+    av::HostShares      shares(heap, lines);
     av::D3d11HostDevice device11;
     std::uint8_t        uuid[VK_UUID_SIZE] = {};
-    if (!runtime.open() || !first_gpu(uuid) || !device11.open(runtime, uuid)) return seen;
+    if (!runtime.open() || !first_gpu(uuid) || !device11.open(runtime, uuid, shares)) return seen;
     FreshBackend fresh;
     D3dBackend  &backend = fresh.backend();
-    if (!backend.initialize(&device11, nullptr)) return seen;
+    av::SessionShares unshared;
+    if (!backend.initialize(unshared, &device11, nullptr)) return seen;
     seen.ran = 1u;
     device11.lock(nullptr);
     std::uint32_t hresult = 1u, level = 0u;

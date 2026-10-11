@@ -37,13 +37,8 @@ public:
     /* Main loop, at setup: the executor create() makes, with `options`, whose
      * share context is the device's id of the context to share with. */
     void                 configure(SubApi api, const uint8_t *gpu_uuid, const GlContextOptions &options);
-    /* Whether the library can make a context with `options`: the defaults
-     * always, anything else only from version 4. */
-    bool                 accepts(const GlContextOptions &options) const;
     /* Main loop, before create: what the library is to call when a host API
-     * finishes work on a thread of its own. A library older than version 5 is
-     * given nothing, and a guest on one waits at a synchronising call
-     * instead. */
+     * finishes work on a thread of its own. */
     void                 signals_through(ContextSignal &signal);
     /* Worker. invalid_state when created or not configured, or for an OpenGL
      * executor that cannot be published, which is given back; no_memory when
@@ -62,28 +57,25 @@ public:
                                  size_t reply_capacity, size_t &reply_size);
     /* Worker. `handle` imported under `blob_id`, with `device_memory` the wire
      * handle the import became: invalid_state without an executor;
-     * not_supported, leaving nothing imported, for a library that cannot name
-     * an import, refuses this one or names it nothing. */
+     * not_supported, leaving nothing imported, for a library that refuses
+     * this one or names it nothing. */
     [[nodiscard]] Status import(uint64_t blob_id, const AvBlobHandle &handle, uint64_t &device_memory);
     /* Worker. Nothing without an executor: destroying it released every import. */
     void                 release(uint64_t blob_id);
 
-    /* Worker. A descriptor for the object `wire_handle` names in this
-     * context's commands, for the device to publish (feature 053).
-     * invalid_state without an executor; not_supported for a library older
-     * than the ABI version that shares objects, a handle it did not make, or a
-     * kind it cannot export - only Vulkan exports anything. The descriptor is
-     * the caller's on ok and nothing is held here. */
-    [[nodiscard]] Status export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd);
-    /* Worker. `fd` made into an object of this context's, with `wire_handle`
-     * what the guest names it by. The descriptor stays the caller's whatever
-     * the answer: it is the device's, and an importer that keeps one
-     * duplicates it. Same refusals as export_object. */
-    [[nodiscard]] Status import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                       uint64_t &wire_handle);
-    /* Worker. Nothing without an executor: destroying it released every
-     * object it made. */
-    void                 release_object(uint32_t kind, uint64_t wire_handle);
+    /* Worker. The object `wire_handle` names in this context's commands
+     * shared as `object_id`, which the library keeps (feature 053). ok;
+     * invalid_state without an executor; not_found, invalid_parameter or
+     * conflict as the library judged the id; not_supported for an object the
+     * host API will not share. */
+    [[nodiscard]] Status share_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t wire_handle);
+    /* Worker. The object shared as `object_id` opened as one of this
+     * context's, with `wire_handle` what the guest names it by. Same answers
+     * as share_object. */
+    [[nodiscard]] Status open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle);
+    /* Worker. What open_object made of `object_id` let go of. Nothing
+     * without an executor: destroying it closed everything it opened. */
+    void                 close_object(uint64_t object_id);
     /* The API half (id >> 16) of the commands this context runs. */
     uint16_t             command_api() const;
     bool                 created() const;
@@ -92,6 +84,8 @@ public:
 
 private:
     AvExecutor *make() const;
+    /* What the library's AV_SHARED_* answer is to the device. */
+    Status      status_of(uint32_t answered) const;
 
     Host                  &host_;
     const ExecutorLibrary &library_;

@@ -134,8 +134,7 @@ its minor's is malformed.
 
 Options belong to OpenGL: a setup of another sub-API carries all eight option
 bytes zero. The device refuses (`ERR_INVALID_PARAMETER`) a share context that
-is not another bound OpenGL context of the device, and non-default options when
-its executor library is older than version 4.
+is not another bound OpenGL context of the device.
 
 The checks that need the capset (major, sub_api membership, ring order range,
 doorbell index) are a separate validation against a decoded capset; the decoder
@@ -313,7 +312,7 @@ NOP with a body. Every other refusal is an answer, and the context runs on:
 | 2 | the resource is no blob in one of the context's chunk slots |
 | 3 | `offset + size` is past the blob |
 | 4 | the host cannot map the blob's pages as one range (RAM with no file behind it, pages that are not whole, more than 16384 runs, a host blob with no mapping) |
-| 5 | the context has no executor, its library is older than ABI version 3, or the library refused the import |
+| 5 | the context has no executor, or the library refused the import |
 | 6 | the context holds 256 imports, or the host has no memory for the table of them |
 
 A refused import answers `device_memory` 0. RELEASE_BLOB of a handle the context
@@ -330,23 +329,29 @@ from the creating process to the opening one (docs/kb/04-memory.md). `kind` is
 1 memory, 2 a monitored fence, 3 a native fence; `size` is whole non-zero pages
 for memory and 0 for either fence.
 
-**SHARE_OBJECT** publishes an object this context's guest already made. The
-device asks the context's executor for a descriptor of `wire_handle`, records
-it under `object_id` for the whole device, and counts this context as its first
-holder. The same context publishing the same handle under the same id again
-answers ok and changes nothing.
+The device only routes them: the executor library keeps every shared object,
+of every API, in one table per host GPU (`HostShares`, docs/shared-surfaces.md
+§0), under the device's domain and the id.
 
-**OPEN_SHARED_OBJECT** hands the context's executor that descriptor and answers
-the handle its executor made of it - a `VkDeviceMemory`, a GL memory object
-name - which the guest names in that API's own commands from then on. A context
-opening an id it already holds is refused: a second handle for one object in
-one context is one the guest could free twice.
+**SHARE_OBJECT** publishes an object this context's guest already made. The
+library's session for this context exports a descriptor of `wire_handle` and
+the library records it under `object_id`, held by the guest. The same context
+publishing the same handle under the same id again answers ok and changes
+nothing; a Direct3D texture the context made shared is described and exported
+by its first SHARE_OBJECT.
+
+**OPEN_SHARED_OBJECT** has the context's session import that descriptor and
+answers the handle it made of it - a `VkDeviceMemory`, a GL memory object name
+- which the guest names in that API's own commands from then on. The context
+holds the object until it releases it or is destroyed. A context opening an id
+it already holds, or one it published, is refused: a second handle for one
+object in one context is one the guest could free twice.
 
 **RELEASE_SHARED_OBJECT** destroys what this context made of the object and
-drops its reference. An id this context never held answers ok and does nothing,
-as RELEASE_BLOB does. A context destroyed releases everything it still holds,
-and the device's last holder dropping closes the descriptor - so an object
-outlives the context that published it, which is the whole point.
+drops its hold. An id this context never held answers ok and does nothing, as
+RELEASE_BLOB does. A context destroyed lets go of everything it still holds.
+The object lives while the guest holds it (0x02F1, below) or any context does,
+so it outlives the context that published it, which is the whole point.
 
 Only Vulkan exports a descriptor; OpenGL imports one and exports none, and
 OpenCL does neither yet. A guest asking an executor for what its API cannot do
@@ -356,11 +361,11 @@ is answered status 4.
 |--:|---|
 | 0 | not refused: an OPEN answers a non-zero `wire_handle`, the other two answer 0 |
 | 1 | `object_id` is 0, `kind` is not one of the three, a reserved field is not 0, `size` is not what its kind has, or a `wire_handle` travelled with a command that allows none |
-| 2 | SHARE: a wire handle this context's executor never made. OPEN and RELEASE: an object this device does not hold |
-| 3 | the kind or the size disagrees with the object the device holds |
-| 4 | the context has no executor, its library is older than ABI version 6, or the library refused the export or the import |
-| 5 | the device holds 256 objects, or this context holds 64, or the host has no memory for one more |
-| 6 | SHARE: this id is already published with a different descriptor. OPEN: this context already holds it |
+| 2 | OPEN: an object nothing in this device shares under the id |
+| 3 | the kind or the size disagrees with the object shared under the id |
+| 4 | the context has no executor, or the library refused: a wire handle its session never made, an API that exports or imports nothing of the kind, no memory for one more |
+| 5 | not answered: there is no count of objects past which one is refused |
+| 6 | SHARE: the id is already shared otherwise. OPEN: this context already holds it, or published it |
 
 A refused command answers `wire_handle` 0, and a guest that sees one on a
 refusal must not believe it: the answer's own decode refuses that shape.
@@ -393,16 +398,16 @@ everywhere, and the miniport then tells the device on the control queue:
 | 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F1`, context 0, no fence |
 | 24 | 8 | object_id | the id the miniport minted; never 0 |
 
-The device drops its own hold on the object (the descriptor a SHARE_OBJECT
-recorded, which a context's own destroy no longer closes for the context that
-published it) and hands the id to the executor library (ABI version 12), which
-lets go of what its sessions shared under it - a Direct3D 11 surface - once no
-session holds it. It answers `OK_NODATA`, an id it never held included, and
+The device hands the id to the executor library in its domain
+(`release_shared`), which drops the guest's hold on what was shared under it -
+a feature 053 object, a Direct3D 11 surface - and frees it once no context
+holds it either. It answers `OK_NODATA`, an id it never held included, and
 `ERR_INVALID_PARAMETER` for a request that is short or names id 0. The miniport
 sends it synchronously, after its allocation table's lock is dropped; a device
 that is not there is told nothing, since a reset already let go of everything.
 A device reset releases every id at once, which is id 0 inside the device and
-the library.
+the library; what a context still holds stays its own, but no longer answers
+to the id, which the guest mints again.
 
 #### The present copy (control queue)
 
@@ -497,87 +502,58 @@ asking for no answer leaves the slot as it was.
 
 ### The executor ABI (device <-> host library)
 
+`src/device/abi/av_executor.h`, version 16, is what runs a context's commands
+on the host's API, and the library behind it is where every object the
+contexts share is kept. The QEMU device loads the library its `executor`
+property names and calls `av_executor_ops` for the table; a library that does
+not load, lacks the symbol, has another ABI version or a null in its table
+fails realize. There is one version: the device, the library and the guest
+drivers are built together, and an older table is a build to fix, not one to
+serve. The executor that answers for real is this project's own, built on the
+generated server dispatch in `src/proto/generated/*/` over host API backends
+(feature 042); the qemu configuration builds `av_echo_executor` for the tests.
+
+- **Domain.** A device is a domain of the library: `open_domain(gpu_uuid)`
+  answers it as the device starts (in QEMU, or in the renderer that runs its
+  contexts), `close_domain` ends it as the device is destroyed. The guest
+  mints its shared ids per device, and the domain keeps two devices' ids
+  apart on one GPU. Every call below that is not an executor's names the
+  domain, not the GPU.
+- **Executors.** `create(sub_api, options, share)` makes a context's executor
+  in the domain `options` names, with an OpenGL context's version, profile and
+  flags (feature 050) and the executor of the context it shares objects with,
+  which the device resolves from the setup's `share_context` and keeps alive
+  until the create returns; other sub-APIs refuse options and shares. Each
+  executor is created, run (`execute`, answering executed, unknown,
+  undecodable or device lost; `end_batch`, `poll`, `gpu_progress`) and
+  destroyed on its context's worker, and only that thread calls it.
+- **Signals.** `set_signal(executor, signal, context)` (feature 052) runs the
+  other way: the library calls `signal(context)` when the host API finishes
+  something on a thread the device never gave it - the host's OpenCL driver
+  calling back an event callback. Nothing about what completed crosses; the
+  call must do almost nothing and must not call back into the table. Because
+  OpenCL cannot unregister a callback, a signal may arrive after the executor
+  it names is destroyed: the `context` the device hands over lives as long as
+  the device does, and a signal for a context that is gone is tolerated.
+- **Memory.** `import_kinds`, `import_blob`, `release_blob` and
+  `imported_handle` are the memory channel (features 042 and 045), below.
+- **Shared objects** (feature 053). `share_object(executor, id, kind, size,
+  wire_handle)`, `open_object(executor, id, kind, size, &wire_handle)` and
+  `close_object(executor, id)` are the three transport commands above, run on
+  the context's worker and answered `AV_SHARED_DONE`, `_UNKNOWN`,
+  `_MISMATCHED`, `_CONFLICT` or `_REFUSED`; an open answering done with no
+  handle is refused and closed. `release_shared(domain, id)` is the guest's
+  release (0x02F1) on the main loop, id 0 a reset.
+- **Images.** `read_image` and `export_image` read and export what is shared
+  under a key for QEMU's display; `map_frame` and `unmap_frame` read the
+  frames a present staged (docs/shared-surfaces.md); `export_surface` and
+  `sync_surface` hand a shared surface to a process outside QEMU - a dma-buf
+  the caller owns, whose modifier is `AV_EXPORT_MODIFIER_IMPLICIT`, and how
+  many copies into it ran with a sync_file for them (docs/external-export.md).
+  The frame and surface calls run on any thread.
+
 Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
-
-
-`src/device/abi/av_executor.h`, now version 15, is what runs a context's commands on
-the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
-`execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
-unknown, undecodable or device lost. The QEMU device loads the library its
-`executor` property names and calls `av_executor_ops` for the table; a library
-that does not load, lacks the symbol, or has another ABI version fails realize.
-Each context's executor is created and destroyed on the context's worker, and
-only that thread calls it. The executor that answers for real is this
-project's own, built on the generated server dispatch in
-`src/proto/generated/*/` over host API backends (feature 042); the qemu
-configuration builds `av_echo_executor` for the tests.
-
-**Version 2 adds a memory channel**, because version 1 had none: the only bytes
-an executor could see were one command's payload, so a command naming a blob had
-nothing to name it with. It adds `import_kinds`, `import_blob` and
-`release_blob`, and changes nothing else. The device accepts both versions and a
-version 1 library simply imports nothing; a table claiming version 2 and
-carrying only part of it is refused at realize rather than found out one blob
-later on a worker.
-
-**Version 3 adds `imported_handle(executor, blob_id)`**, because `import_blob`
-answers only whether it imported and IMPORT_BLOB's guest needs the handle the
-import became. The device chooses every `blob_id` - a per-context count, never
-reused - calls `import_blob` with an `AV_BLOB_HOST_POINTER` handle whose
-`reserved` field carries the memory type the guest asked for, then asks
-`imported_handle` for the wire handle; 0 means the import made nothing a guest
-can name, and the device releases it and answers status 5. Two imports
-answering to one handle are refused the same way, since RELEASE_BLOB of one
-would release both. A version 2 library still loads and still imports for the
-capset's purposes, but the device never asks it for an IMPORT_BLOB; a table
-claiming version 3 without `imported_handle` fails realize.
-
-**Version 4 adds `create_with_options(sub_api, gpu_uuid, options, share)`**
-(feature 050): `create` with an OpenGL context's version, profile and flags
-(`AvContextOptions`, null for the defaults) and the executor of the context it
-shares objects with (null for none), which the device resolves from the setup's
-`share_context` among the executors its contexts published, on the same GPU, and
-keeps alive until the create returns. Other sub-APIs refuse options and shares;
-a version the host refuses is a null executor, which the guest sees as the
-context's fault. A version 3 library is only handed the defaults; a table
-claiming version 4 without `create_with_options` fails realize. On OpenGL,
-`import_kinds` answers `AV_BLOB_HOST_POINTER` and `import_blob` takes the
-pointer as the context's bulk-data region - one at a time, its handle the
-pointer's address - rather than as a GL object.
-
-**Version 5 adds `set_signal(executor, signal, context)`** (feature 052), the
-first entry in the table that runs the other way: the device hands the library
-a function and an opaque, and the library calls `signal(context)` when the host
-API finishes something on a thread the device never gave it - the host's OpenCL
-driver calling back an event callback. Nothing about what completed crosses
-here; the call must do almost nothing and must not call back into the table,
-and the guest asks. The device gives it on the context's worker as soon as
-there is an executor to give it to, and never takes it back; a table claiming
-version 5 without `set_signal` fails realize, and a version 4 library signals
-nothing, so a guest on one waits for its events at a synchronising call
-instead. Because OpenCL cannot unregister a callback, a signal may arrive after
-the executor it names is destroyed: the `context` the device hands over lives
-as long as the device does, and a signal for a context that is gone is
-tolerated rather than a fault.
-
-**Version 12 adds `release_shared(opaque, gpu_uuid, object_id)`**, the guest's
-release of a shared object reaching the library (see the control queue's
-`0x02F1` above): what the sessions on that GPU shared under `object_id` goes
-once none holds it, and `object_id` 0 lets go of everything, which the device
-sends when it resets. It runs on the main loop. Before version 12 a library had
-nothing to release by, and a surface shared across processes lived only as
-long as the session that made it; a version 11 library is told nothing.
-
-**Version 15 adds `export_surface(opaque, gpu_uuid, surface, image)` and
-`sync_surface(opaque, gpu_uuid, surface, &writes, &fd)`**, what a device's
-export socket asks for a process outside QEMU (docs/external-export.md): the
-surface shared under `surface` as its own memory - a dma-buf the caller owns,
-described in an `AvExportedImage` whose modifier is
-`AV_EXPORT_MODIFIER_IMPLICIT` - and how many copies into it the host has run,
-with a sync_file the caller owns that signals once the GPU has finished them.
-Both run on any thread. A library before version 15, or one missing either
-call, exports nothing, and the socket answers every request `unavailable`.
 
 A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
 API can take without a copy - with no offset, because the device hands over a

@@ -9,6 +9,7 @@
  * vkd3d-proton is loaded as test_d3d12_session_device.cpp loads it; a host
  * without it, or whose GPU has no sparse residency, returns without judging. */
 #include "core/support/object_storage.hpp"
+#include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d12_session.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -222,7 +223,8 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     av::D3d12HostDevice *device12 = nullptr;
     if (!host_devices(apis, device11, device12)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!tiled_here(*device12, wire)) {
         backend.shut_down();
@@ -431,7 +433,8 @@ TEST(d3d12_session_tiles_device, each_region_or_range_past_its_resource_or_heap_
     if (!host_devices(apis, device11, device12)) return;
     for (const Misuse misuse : misuses) {
         av::D3dBackend backend;
-        CHECK(backend.initialize(device11, device12));
+        av::SessionShares unshared;
+        CHECK(backend.initialize(unshared, device11, device12));
         av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
         if (!tiled_here(*device12, wire)) {
             backend.shut_down();

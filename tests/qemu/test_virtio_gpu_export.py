@@ -129,10 +129,8 @@ class VirtioGpuExport(unittest.TestCase):
         self.start()
         answer = self.consumer().ask(HELLO, 0, 7)
         self.expect(answer, HELLO, OK, tag=7)
-        uuid, domain, bus, device, function, flags, capacity, reserved = struct.unpack_from("<16sIBBBBII",
-                                                                                              answer.body)
+        uuid, domain, bus, device, function, flags, reserved = struct.unpack_from("<16sIBBBBQ", answer.body)
         self.assertNotEqual(uuid, bytes(16))
-        self.assertEqual(capacity, 64)
         self.assertEqual(reserved, 0)
         self.assertIn(flags, (0, 1))
         if flags == 0:

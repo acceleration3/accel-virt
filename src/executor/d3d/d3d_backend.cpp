@@ -1,5 +1,8 @@
 #include "executor/d3d/d3d_backend.hpp"
 
+#include "executor/sharing/host_shares.hpp"
+#include "executor/sharing/session_shares.hpp"
+
 #include <sched.h>
 #include <stdio.h>
 #include <time.h>
@@ -12,7 +15,6 @@
 #include "executor/imported_blob.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
-#include "executor/shim/d3d_shared_resources.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/surface_identity.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
@@ -73,20 +75,21 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(), progress11_(),
+    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(), progress11_(),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
 
-bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12, SharedSurfaces *surfaces,
-                            D3d9HostDevice *device9)
+bool D3dBackend::initialize(SessionShares &shares, D3d11HostDevice *device11, D3d12HostDevice *device12,
+                            SharedSurfaces *surfaces, D3d9HostDevice *device9)
 {
     AV_SCOPE("D3dBackend::initialize");
     if (device11 == nullptr || !device11->opened()) return false;
     device11_ = device11;
     surfaces_ = surfaces;
-    d3d12_.initialize(device12, device11, surfaces);
+    shares_ = &shares;
+    d3d12_.initialize(device12, device11, surfaces, &shares);
     d3d9_.initialize(device9, surfaces);
     lost_ = false;
     return true;
@@ -116,6 +119,7 @@ void D3dBackend::shut_down()
     }
     static_cast<void>(states_.select(0u));
     device11_ = nullptr;
+    shares_ = nullptr;
     region_.give_back();
 }
 
@@ -251,7 +255,7 @@ ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint
     described.Usage = texture.Usage;
     described.BindFlags = texture.BindFlags;
     described.MiscFlags = texture.MiscFlags;
-    return device11_->make_shareable(described);
+    return device11_->make_exportable(described);
 }
 
 /* A shared texture's memory, as the dma-buf OpenGL and Vulkan import. The
@@ -278,14 +282,15 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
     return exported;
 }
 
-bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle)
+bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("D3dBackend::import_object");
     wire_handle = 0u;
+    detail = 0u;
     return false;
 }
 
-void D3dBackend::release_object(uint32_t, uint64_t)
+void D3dBackend::release_object(uint32_t, uint64_t, uint64_t)
 {
     AV_SCOPE("D3dBackend::release_object");
 }
@@ -734,17 +739,16 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
         static_cast<void>(SurfaceIdentity(shared_key).mark(child));
         child->Release();
     }
-    /* A key the table refuses is one no other process can open: the host log
-     * is where the refusal is seen, since the creator is not told. */
-    if (shared_key != 0u && !device11_->shared().publish(shared_key, made))
+    /* A key refused is one no other process can open: the host log is where
+     * the refusal is seen, since the creator is not told. */
+    const Status published =
+        shared_key != 0u ? shares_->publish_resource(shared_key, made, ShareOrigin::d3d11) : Status::ok;
+    if (published != Status::ok)
         LogLine(lines_)
             .text("shared key ")
             .hex(shared_key, 16u)
-            .text(" not shared: already shared, or ")
-            .number(device11_->shared().count())
-            .text(" of ")
-            .number(D3dSharedResources::capacity)
-            .text(" held")
+            .text(" not shared, status ")
+            .number(static_cast<uint32_t>(published))
             .write();
     return true;
 }
@@ -756,15 +760,14 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     desc = d3dproto::ResourceDesc{};
     if (!has_device()) return false;
     /* A flip-model buffer is read as its latest present's copy (show). */
-    IUnknown *const shown = device11_->find_shown(shared_key);
-    IUnknown *const shared = shown != nullptr ? shown : device11_->find_shared(shared_key);
+    IUnknown *const shared = device11_->open_shared(shares_->domain(), shared_key);
     if (shared == nullptr) {
         if (shared_key != missed_key_)
             LogLine(lines_)
                 .text("no resource shared under key ")
                 .hex(shared_key, 16u)
                 .text("; ")
-                .number(device11_->shared().count())
+                .number(shares_->bound() ? shares_->shares()->live() : 0u)
                 .text(" shared")
                 .write();
         missed_key_ = shared_key;
@@ -1554,7 +1557,7 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
 void D3dBackend::counted(ID3D11Resource *destination)
 {
     AV_SCOPE("D3dBackend::counted");
-    device11_->shared().written(SurfaceIdentity(destination).surface());
+    shares_->written(SurfaceIdentity(destination).surface());
 }
 
 bool D3dBackend::on_ResolveSubresource(uint32_t destination, uint32_t destination_subresource, uint32_t source,
@@ -1689,7 +1692,8 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
     /* A flip names no frame: its present is the copy its compositor reads. */
     if (point == 0u) {
         if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D && frame.surface() != 0u &&
-            !device11_->show(frame.surface(), static_cast<ID3D11Texture2D *>(found)) && !show_refused_) {
+            !device11_->show(shares_->domain(), frame.surface(), static_cast<ID3D11Texture2D *>(found)) &&
+            !show_refused_) {
             LogLine(lines_).text("a flip of surface ").hex(frame.surface(), 16u).text(" has no copy to show: DWM reads the buffer itself").write();
             show_refused_ = true;
         }

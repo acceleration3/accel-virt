@@ -84,7 +84,7 @@ AvExecutor *ExecutorShares::create_sharing(SubApi api, uint32_t share_id, const 
     const uint32_t index = index_of(share_id);
     AvExecutor   *made = nullptr;
     if (index != none && on_gpu(index, uuid))
-        made = library_.create(api, uuid, &options, executors_[index]);
+        made = library_.create(api, options, executors_[index]);
     host_.unlock_mutex(lock_);
     return made;
 }

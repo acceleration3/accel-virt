@@ -103,11 +103,11 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `context/` | `DeviceContext`, the context table, its ring consumer, the local and remote context planes |
 | `threading/` | per-context `Worker`, `Doorbell`, `WorkItem` |
 | `fence/` | fence pages, the fence reporter, the device interrupt line |
-| `memory/` | blobs, guest page mappings, hostmem, shared objects |
+| `memory/` | blobs, guest page mappings, hostmem |
 | `control/` | answers to virtio-gpu control commands |
 | `display/` | heads, modes, scanout, the display clock |
 | `present/` | the present engine, queued presents, region moves |
-| `execution/` | the device's side of `av_executor.h`: loading the executor library and running batches through it |
+| `execution/` | the device's side of `av_executor.h`: loading the executor library, the device's domain in it, and running batches - shared-object commands included, which it routes to the library - through it |
 | `export/` | the export socket's connections, their threads and revocations (docs/external-export.md) |
 | `isolation/` | the device's side of av-renderer: `RendererContextPlane`, `RemoteContext`, `RendererLink` |
 | `renderer/` | av-renderer's process service |
@@ -123,10 +123,11 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 
 | Directory | Holds |
 |---|---|
-| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, host GPUs and APIs, blob imports, guest regions, the GPU clock hold, `PollBudget`, `WakeSignal` |
+| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs, blob imports, guest regions, the GPU clock hold, `PollBudget`, `WakeSignal` |
+| `sharing/` | `HostShares`, every shared object of one GPU of every API by (domain, id), its `Share`s, their holders and index, and `SessionShares`, what one session reaches it through (docs/shared-surfaces.md §0) |
 | `vulkan/`, `opengl/`, `opencl/` | each API's backend and its tables |
 | `d3d/` | Direct3D 9, 11 and 12 sessions, DXBC, the present surfaces and frame pools |
-| `shim/` | the host runtimes the executor loads: Vulkan imports, EGL/GL, OpenCL, DXVK and vkd3d-proton, dma-buf; and `executor_ops.cpp`, the library's entry point |
+| `shim/` | the host runtimes the executor loads: Vulkan imports, EGL/GL, OpenCL, DXVK and vkd3d-proton (`ExportableImages`, the Vulkan memory under shared Direct3D 11 textures), dma-buf, the heap (`HostHeap`); and `executor_ops.cpp`, the library's entry point |
 
 ## src/guest, src/icd, src/um - the guest's user mode
 

@@ -226,10 +226,11 @@ a `SharedObjectRecord`; `DxgkDdiCreateAllocation` mints a 64-bit id and the
 adapter's own number into it and writes both back into the creator's own bytes.
 `SharedObjectTable` is one per adapter, and at open it believes nothing it did
 not write - an id it never minted, an id another adapter minted, a record that
-does not decode, a kind or a size that disagrees. `HostSharedObjects` is the
-other half, on the device: one host descriptor per id for the whole device,
-refcounted by the contexts holding it, so the object outlives the context that
-published it and the descriptor is closed exactly once.
+does not decode, a kind or a size that disagrees. `HostShares` is the other
+half, in the executor library: one record per (device, id) for every API,
+held by the guest until its release and by each context that opened it, so
+the object outlives the context that published it and its descriptor is
+closed exactly once (docs/shared-surfaces.md §0).
 
 ## What the host GPUs here can actually do (feature 039)
 

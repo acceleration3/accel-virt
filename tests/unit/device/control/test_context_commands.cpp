@@ -16,7 +16,6 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/context/ring_blob_writer.hpp"
@@ -117,6 +116,7 @@ public:
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
         capset_.describe(0u, sub_apis, av::CapsetInfo::feature_host_visible_memory);
+        static_cast<void>(plane_.start(uuid, capset_.info()));
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
         static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
@@ -388,14 +388,3 @@ TEST(context_commands_submit, a_gl_context_shares_only_another_bound_gl_context)
   CHECK_EQ(fixture.send(submit(3u, gl_setup(third_ring, 3u, core_33.sharing(1u)))), ok_nodata);
   CHECK(fixture.contexts().find(3u)->binding().bound());
   CHECK(fixture.contexts().invariants_hold()); }
-
-/* A library before version 4 makes default contexts: options are refused
- * before anything is bound, and the defaults still bind. */
-TEST(context_commands_submit, options_a_version_three_library_cannot_make_are_refused)
-{ Fixture fixture(vulkan_and_gl, AV_EXECUTOR_ABI_VERSION_HANDLES);
-  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
-  CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, core_33))), err_invalid_parameter);
-  CHECK(!fixture.contexts().find(1u)->binding().bound());
-  CHECK_EQ(fixture.host().live_doorbells(), 0u);
-  CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, av::GlContextOptions()))), ok_nodata);
-  CHECK(fixture.contexts().find(1u)->binding().bound()); }

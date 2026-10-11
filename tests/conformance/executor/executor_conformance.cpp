@@ -36,7 +36,7 @@ constexpr std::uint8_t no_such_gpu[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x
 }  // namespace
 
 ExecutorConformance::ExecutorConformance()
-    : gpu_{}, real_gpu_(false), library_(nullptr), ops_(nullptr), findings_{}, skip_reasons_{},
+    : gpu_{}, real_gpu_(false), domain_(0u), library_(nullptr), ops_(nullptr), findings_{}, skip_reasons_{},
       found_(0u), skips_(0u),
       checked_(0u), worked_(0u), frame_{}, reply_{}, produced_(0u)
 {}
@@ -121,67 +121,70 @@ bool ExecutorConformance::run(const char *path)
     check_table();
     if (found_ != 0u) return false;
     check_sub_apis();
+    domain_ = ops_->open_domain(ops_->opaque, real_gpu_ ? gpu_ : no_such_gpu);
+    if (domain_ == 0u) skipped_because("the library opened no domain on this GPU; no executor could be made");
     check_create_and_destroy();
-    if (ops_->abi_version >= options_version) check_create_with_options();
+    check_options();
+    if (domain_ != 0u) ops_->close_domain(ops_->opaque, domain_);
     return found_ == 0u;
 }
 
 void ExecutorConformance::check_table()
 {
-    require(ops_->abi_version >= AV_EXECUTOR_ABI_VERSION_MINIMUM &&
-                ops_->abi_version <= AV_EXECUTOR_ABI_VERSION,
-            "the table's abi_version is one this device does not know");
-    require(ops_->sub_apis != nullptr && ops_->create != nullptr && ops_->destroy != nullptr &&
-                ops_->execute != nullptr,
-            "the table is missing an operation version 1 requires");
-    if (ops_->abi_version < memory_channel_version) {
-        require(true, "a version 1 table needs no memory channel");
-        return;
-    }
-    /* All three or none: a table claiming the version and carrying half of it
-     * is found out one blob later, on a worker, with a guest waiting. */
-    require(ops_->import_kinds != nullptr && ops_->import_blob != nullptr &&
-                ops_->release_blob != nullptr,
-            "the table claims version 2 and is missing one of its memory operations");
-    if (ops_->abi_version < imported_handle_version) return;
-    require(ops_->imported_handle != nullptr, "the table claims version 3 and has no imported_handle");
-    if (ops_->abi_version < options_version) return;
-    require(ops_->create_with_options != nullptr, "the table claims version 4 and has no create_with_options");
+    require(ops_->abi_version == AV_EXECUTOR_ABI_VERSION, "the table's abi_version is not this device's");
+    /* Every operation: a table missing one is found out one call later, on a
+     * worker, with a guest waiting. */
+    require(ops_->sub_apis != nullptr && ops_->import_kinds != nullptr && ops_->open_domain != nullptr &&
+                ops_->close_domain != nullptr && ops_->create != nullptr && ops_->destroy != nullptr &&
+                ops_->execute != nullptr && ops_->end_batch != nullptr && ops_->poll != nullptr &&
+                ops_->gpu_progress != nullptr && ops_->set_signal != nullptr && ops_->import_blob != nullptr &&
+                ops_->release_blob != nullptr && ops_->imported_handle != nullptr &&
+                ops_->share_object != nullptr && ops_->open_object != nullptr && ops_->close_object != nullptr &&
+                ops_->release_shared != nullptr && ops_->read_image != nullptr && ops_->export_image != nullptr &&
+                ops_->map_frame != nullptr && ops_->unmap_frame != nullptr && ops_->export_surface != nullptr &&
+                ops_->sync_surface != nullptr,
+            "the table is missing an operation");
 }
 
-/* Version 4 (feature 050): no options is create; options belong to OpenGL
+AvContextOptions ExecutorConformance::in_domain(const AvContextOptions &options) const
+{
+    AvContextOptions placed = options;
+    placed.domain = domain_;
+    return placed;
+}
+
+/* No options but the domain is a default context; options belong to OpenGL
  * alone; and on a real GPU, an OpenGL 4.6 core context is made, one sharing it
  * too, and OpenGL 5.0 is refused. */
-void ExecutorConformance::check_create_with_options()
+void ExecutorConformance::check_options()
 {
-    const std::uint32_t   offered = ops_->sub_apis(ops_->opaque);
-    const std::uint8_t   *gpu = real_gpu_ ? gpu_ : no_such_gpu;
-    const AvContextOptions core_46 = {4u, 6u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
-    const AvContextOptions gl_50 = {5u, 0u, AV_CONTEXT_PROFILE_CORE, 0u, 0u};
-    require(ops_->create_with_options(ops_->opaque, unclaimed_sub_api, gpu, nullptr, nullptr) == nullptr,
-            "create_with_options answered an executor for a sub-API nobody defined");
+    const std::uint32_t    offered = ops_->sub_apis(ops_->opaque);
+    const AvContextOptions plain_options = in_domain(AvContextOptions{});
+    const AvContextOptions core_46 = in_domain({4u, 6u, AV_CONTEXT_PROFILE_CORE, 0u, 0u});
+    const AvContextOptions gl_50 = in_domain({5u, 0u, AV_CONTEXT_PROFILE_CORE, 0u, 0u});
+    require(ops_->create(ops_->opaque, unclaimed_sub_api, &plain_options, nullptr) == nullptr,
+            "create answered an executor for a sub-API nobody defined");
     for (const ApiBit &api : api_bits) {
         if ((offered & api.sub_api) == 0u) continue;
-        AvExecutor *const plain = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, nullptr);
+        AvExecutor *const plain = ops_->create(ops_->opaque, api.sub_api, &plain_options, nullptr);
         if (plain == nullptr) {
             skipped_because("an offered sub-API made no executor with no options; its options went unchecked");
             continue;
         }
         if (api.sub_api != AV_EXECUTOR_SUB_API_OPENGL) {
-            require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr) == nullptr,
-                    "create_with_options made a context with OpenGL options for another sub-API");
-            require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, plain) == nullptr,
-                    "create_with_options shared an executor of a sub-API that shares nothing");
+            require(ops_->create(ops_->opaque, api.sub_api, &core_46, nullptr) == nullptr,
+                    "create made a context with OpenGL options for another sub-API");
+            require(ops_->create(ops_->opaque, api.sub_api, &plain_options, plain) == nullptr,
+                    "create shared an executor of a sub-API that shares nothing");
         } else if (real_gpu_) {
-            AvExecutor *const core = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr);
-            require(core != nullptr, "create_with_options refused an OpenGL 4.6 core context on a real GPU");
-            AvExecutor *const shared = core != nullptr
-                                            ? ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, core)
-                                            : nullptr;
+            AvExecutor *const core = ops_->create(ops_->opaque, api.sub_api, &core_46, nullptr);
+            require(core != nullptr, "create refused an OpenGL 4.6 core context on a real GPU");
+            AvExecutor *const shared = core != nullptr ? ops_->create(ops_->opaque, api.sub_api, &core_46, core)
+                                                       : nullptr;
             require(core == nullptr || shared != nullptr,
-                    "create_with_options refused an OpenGL context sharing another on its GPU");
-            require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &gl_50, nullptr) == nullptr,
-                    "create_with_options made an OpenGL 5.0 context");
+                    "create refused an OpenGL context sharing another on its GPU");
+            require(ops_->create(ops_->opaque, api.sub_api, &gl_50, nullptr) == nullptr,
+                    "create made an OpenGL 5.0 context");
             if (shared != nullptr) ops_->destroy(ops_->opaque, shared);
             if (core != nullptr) ops_->destroy(ops_->opaque, core);
         } else {
@@ -196,9 +199,8 @@ void ExecutorConformance::check_sub_apis()
     /* Asked first, before anything else has happened, because the device asks
      * it on its main loop during realize with no GPU context in hand. */
     const std::uint32_t offered = ops_->sub_apis(ops_->opaque);
-    require((offered & ~7u) == 0u, "sub_apis offers a bit the protocol does not define");
+    require((offered & ~15u) == 0u, "sub_apis offers a bit the protocol does not define");
 
-    if (ops_->abi_version < memory_channel_version) return;
     for (const ApiBit &api : api_bits) {
         const std::uint32_t kinds =
             ops_->import_kinds(ops_->opaque, api.sub_api, real_gpu_ ? gpu_ : no_such_gpu);
@@ -210,21 +212,26 @@ void ExecutorConformance::check_sub_apis()
 
 void ExecutorConformance::check_create_and_destroy()
 {
-    const std::uint32_t offered = ops_->sub_apis(ops_->opaque);
-    require(ops_->create(ops_->opaque, unclaimed_sub_api, no_such_gpu) == nullptr,
+    const std::uint32_t    offered = ops_->sub_apis(ops_->opaque);
+    const AvContextOptions options = in_domain(AvContextOptions{});
+    const AvContextOptions nowhere = {0u, 0u, 0u, 0u, domain_ + 0x1000u};
+    require(ops_->create(ops_->opaque, unclaimed_sub_api, &options, nullptr) == nullptr,
             "create answered an executor for a sub-API nobody defined");
-    require(ops_->create(ops_->opaque, 0u, no_such_gpu) == nullptr,
+    require(ops_->create(ops_->opaque, 0u, &options, nullptr) == nullptr,
             "create answered an executor for no sub-API at all");
+    require(ops_->create(ops_->opaque, AV_EXECUTOR_SUB_API_VULKAN, &nowhere, nullptr) == nullptr,
+            "create made an executor in a domain no device opened");
+    require(ops_->create(ops_->opaque, AV_EXECUTOR_SUB_API_VULKAN, nullptr, nullptr) == nullptr,
+            "create made an executor with no options, so in no domain");
 
     bool made_any = false;
     for (const ApiBit &api : api_bits) {
         if ((offered & api.sub_api) == 0u) {
-            require(ops_->create(ops_->opaque, api.sub_api, no_such_gpu) == nullptr,
+            require(ops_->create(ops_->opaque, api.sub_api, &options, nullptr) == nullptr,
                     "create answered an executor for a sub-API sub_apis does not offer");
             continue;
         }
-        AvExecutor *const executor =
-            ops_->create(ops_->opaque, api.sub_api, real_gpu_ ? gpu_ : no_such_gpu);
+        AvExecutor *const executor = ops_->create(ops_->opaque, api.sub_api, &options, nullptr);
         if (executor == nullptr) {
             /* Refusing a GPU nobody has is correct for a library that binds
              * one, so this is not a finding - but it does mean the statements
@@ -237,9 +244,8 @@ void ExecutorConformance::check_create_and_destroy()
         check_execute(executor, api.commands);
         check_workload(executor, api.sub_api);
         check_reply_capacity(executor, api.commands);
-        if (ops_->abi_version >= memory_channel_version) check_memory_channel(executor);
-        if (ops_->abi_version >= imported_handle_version && api.sub_api == AV_EXECUTOR_SUB_API_VULKAN)
-            check_imported_handle(executor);
+        check_memory_channel(executor);
+        if (api.sub_api == AV_EXECUTOR_SUB_API_VULKAN) check_imported_handle(executor);
         ops_->destroy(ops_->opaque, executor);
     }
     if (!made_any && offered != 0u)

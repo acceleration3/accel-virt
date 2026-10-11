@@ -307,7 +307,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
       entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_), templates_(lock),
-      externals_(lock), shared_handles_(kmt, lock), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
+      externals_(lock, memory), shared_handles_(kmt, lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
       semaphore_handles_(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT,
@@ -724,35 +724,42 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     uint64_t     handle = 0u;
     const Status shared = shared_handles_.mint(guest_device, carrier, minted.object_id(), handle);
     if (shared != Status::ok) {
-        refused("vkAllocateMemory: no NT handle for a shared object, NTSTATUS");
         static_cast<void>(call.release(minted.object_id(), kind, size));
+        if (shared == Status::no_memory) {
+            log_.write("avvk: no memory to keep a shared object's NT handle");
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        refused("vkAllocateMemory: no NT handle for a shared object, NTSTATUS");
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
-    /* Not branched on, because it cannot fail: every row here is one an NT
-     * handle was minted for a moment ago, so the handle table fills first and
-     * answers no_space before this can. The assertion is what keeps that true
-     * - the day the sizes differ it is a compile error rather than a rollback
-     * no test could ever reach. */
-    static_assert(ExternalObjects::max_objects <= SharedHandles::max_handles,
-                  "an externals row always follows a handle row, so the handle table must fill first");
-    static_cast<void>(externals_.remember(device, memory, semaphore, minted.object_id(), size, handle,
-                                          carrier));
+    /* A row the arguments here always make: what refuses one is a process
+     * with no memory left, and then nothing published is left behind. */
+    if (!externals_.remember(device, memory, semaphore, minted.object_id(), size, handle, carrier)) {
+        log_.write("avvk: no memory to remember a shared object; it is given back");
+        shared_handles_.forget(handle);
+        static_cast<void>(call.release(minted.object_id(), kind, size));
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     unwind.dismiss();
     return VK_SUCCESS;
 }
 
-uint64_t IcdRoot::object_of(LoaderHandle &made, void *handle)
+VkResult IcdRoot::object_of(LoaderHandle &made, void *handle, const char *api, uint64_t &object_id)
 {
     AV_SCOPE("IcdRoot::object_of");
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
-    uint64_t       object_id = 0u;
     /* One this process holds answers its id; any other, the kernel is asked
      * whether this process may open it, which is the only thing that can tell
      * a handle another process sent from a number an application invented. */
     const Status adopted = shared_handles_.adopt(made.connection()->device(), named, object_id);
-    if (adopted == Status::ok) return object_id;
+    if (adopted == Status::ok) return VK_SUCCESS;
+    if (adopted == Status::no_memory) {
+        lines_.name("no memory to keep the Win32 handle named to", api);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     refused("a Win32 handle this process may not open, NTSTATUS");
-    return 0u;
+    lines_.name("a handle this process may not open was named to", api);
+    return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
 
 void IcdRoot::release_shared(LoaderHandle &made, const ExternalObjectSlot &row)
@@ -880,11 +887,9 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
     if (foreign_enum(request->type_) != static_cast<int32_t>(import_semaphore_win32_handle_info) ||
         request->handle_type_ != opaque_win32_semaphore)
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    const uint64_t object_id = object_of(*made, request->handle_);
-    if (object_id == 0u) {
-        log_.write("avvk: vkImportSemaphoreWin32HandleKHR names a handle this process may not open");
-        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    }
+    uint64_t       object_id = 0u;
+    const VkResult named = object_of(*made, request->handle_, "vkImportSemaphoreWin32HandleKHR", object_id);
+    if (named != VK_SUCCESS) return named;
     /* Vulkan imports a payload into a semaphore the application already made,
      * and OPEN_SHARED_OBJECT answers a semaphore the *device* made - there is
      * no field on that command for "into this one". So an object this process
@@ -1060,11 +1065,9 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
     AV_SCOPE("IcdRoot::imported_allocation");
     if (importing.name_ != nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     if (importing.handle_type_ != opaque_win32_memory) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    const uint64_t object_id = object_of(made, importing.handle_);
-    if (object_id == 0u) {
-        log_.write("avvk: vkAllocateMemory names a Win32 handle this process may not open");
-        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    }
+    uint64_t       object_id = 0u;
+    const VkResult named = object_of(made, importing.handle_, "vkAllocateMemory", object_id);
+    if (named != VK_SUCCESS) return named;
     ExternalObjectSlot holder = {};
     if (externals_.holder_of(object_id, holder) && holder.memory_ != VK_NULL_HANDLE)
         return own_process_allocation(made, device, holder, info, allocator, memory);
@@ -1080,12 +1083,15 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
      * non-zero one is a copy of the same width. A branch nothing can take is
      * one no test can judge. */
     static_cast<void>(vkproto::wire_to_handle(opened, memory));
-    /* As in publish, and not branched on for the same reason: the handle was
-     * adopted before this, so the handle table is the one that runs out. */
-    static_cast<void>(externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
-                                          static_cast<uint64_t>(reinterpret_cast<uintptr_t>(
-                                              importing.handle_)),
-                                          0u));
+    /* As in publish: only a process with no memory left refuses the row, and
+     * then what the device opened is given back. */
+    if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
+                             static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), 0u)) {
+        log_.write("avvk: no memory to remember an opened shared object; it is given back");
+        static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));
+        memory = VK_NULL_HANDLE;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
     return VK_SUCCESS;
 }
 

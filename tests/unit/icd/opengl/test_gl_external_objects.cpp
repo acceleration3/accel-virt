@@ -15,6 +15,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "icd/common/opened_objects.hpp"
 #include "icd/common/shared_handles.hpp"
@@ -35,7 +36,14 @@
 namespace av::icd {
 
 struct OpenedObjectsProbe {
-    static void set_live(OpenedObjects &opened, std::uint32_t live) { opened.live_ = live; }
+    /* A row naming nothing, then gone again. */
+    static void add_empty(OpenedObjects &opened)
+    {
+        OpenedObjectRow *made = nullptr;
+        CHECK_STATUS(opened.rows_.create(made, OpenedObjectRow{}), Status::ok);
+    }
+    static void drop_empty(OpenedObjects &opened)
+    { opened.rows_.destroy_if([](const OpenedObjectRow &row) { return row.made_ == 0u; }); }
 };
 
 }  // namespace av::icd
@@ -43,9 +51,9 @@ struct OpenedObjectsProbe {
 namespace av::glicd {
 
 struct GlExternalObjectsProbe {
-    static GlSharedObjectRow &row(GlExternalObjects &objects, std::uint32_t index)
-    { return objects.rows_[index]; }
-    static void set_live(GlExternalObjects &objects, std::uint32_t live) { objects.live_ = live; }
+    /* The row of `name`, of either namespace. */
+    static GlSharedObjectRow &row(GlExternalObjects &objects, std::uint32_t name)
+    { return *objects.rows_.find_if([name](const GlSharedObjectRow &row) { return row.name_ == name; }); }
     static icd::OpenedObjects &opened(GlExternalObjects &objects) { return objects.opened_; }
 };
 
@@ -83,8 +91,8 @@ private:
  * table over it, and a transport playing the device. */
 class Process {
 public:
-    Process() : trace_(), lock_(trace_, 'S'), kmt_(), log_(), device_(0u),
-                handles_(kmt_, lock_), objects_(handles_, log_)
+    Process() : memory_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), device_(0u),
+                handles_(kmt_, lock_, memory_), objects_(handles_, memory_, log_)
     {
         kmt_.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
         std::uint32_t adapter = 0u;
@@ -94,6 +102,7 @@ public:
     }
 
     GlExternalObjects &objects() { return objects_; }
+    av::MockPlatform  &memory() { return memory_; }
     MockTransport     &wire() { return wire_; }
     av::RecordingLog  &log() { return log_; }
     std::uint32_t      device() const { return device_; }
@@ -120,6 +129,7 @@ public:
     }
 
 private:
+    av::MockPlatform         memory_;
     av::LockTrace            trace_;
     av::RecordingThreadLock  lock_;
     MockKmt                  kmt_;
@@ -333,18 +343,28 @@ TEST(gl_external_objects, refuses_a_count_or_an_array_no_call_can_have)
   CHECK_EQ(one.objects().live(), 0u); }
 
 /* All of them or none: a half-filled array is one an application reads whole,
- * and the names it did not get would be whatever was on its stack. */
-TEST(gl_external_objects_create, fills_up_and_then_writes_no_names_at_all)
+ * and the names it did not get would be whatever was on its stack. A pool
+ * block holds 64 rows, so the second of these two is the one with no memory,
+ * and the first is taken back with it. */
+TEST(gl_external_objects_create, writes_no_names_at_all_when_one_row_cannot_be_had)
 { Process       one;
-  std::uint32_t names[GlExternalObjects::max_objects] = {};
-  CHECK_EQ(one.objects().create(SharedObjectKind::memory, GlExternalObjects::max_objects - 1, names),
-           GlExternalObjects::gl_no_error);
+  std::uint32_t names[63] = {};
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 63, names), GlExternalObjects::gl_no_error);
+  one.memory().fail_allocation_at(1u);
   std::uint32_t two[2] = {0xAAAAu, 0xBBBBu};
   CHECK_EQ(one.objects().create(SharedObjectKind::monitored_fence, 2, two), GlExternalObjects::gl_out_of_memory);
   CHECK_EQ(two[0], 0xAAAAu);
   CHECK_EQ(two[1], 0xBBBBu);
-  CHECK_EQ(one.objects().create(SharedObjectKind::monitored_fence, 1, two), GlExternalObjects::gl_no_error);
-  CHECK_EQ(one.objects().live(), GlExternalObjects::max_objects);
+  CHECK_EQ(one.objects().live(), 63u);
+  CHECK(!one.objects().holds(SharedObjectKind::monitored_fence, 64u));
+  CHECK_EQ(one.log().holding("avgl: no memory for a memory object or semaphore name"), 1u);
+  CHECK(one.objects().invariants_hold());
+  /* And nothing past it is refused: the next names are the ones the refused
+   * call would have had. */
+  CHECK_EQ(one.objects().create(SharedObjectKind::monitored_fence, 2, two), GlExternalObjects::gl_no_error);
+  CHECK_EQ(two[0], 64u);
+  CHECK_EQ(two[1], 65u);
+  CHECK_EQ(one.objects().live(), 65u);
   CHECK(one.objects().invariants_hold()); }
 
 /* A context torn down gives every object back: the device counts it as a
@@ -385,7 +405,7 @@ TEST(gl_external_objects_invariants, refuse_each_state_a_create_or_an_import_nev
   std::uint32_t names[2] = {};
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 2, names), GlExternalObjects::gl_no_error);
   CHECK(one.objects().invariants_hold());
-  GlSharedObjectRow &second = GlExternalObjectsProbe::row(one.objects(), 1u);
+  GlSharedObjectRow &second = GlExternalObjectsProbe::row(one.objects(), names[1]);
   const GlSharedObjectRow whole = second;
 
   second.name_ = 0u;
@@ -418,13 +438,10 @@ TEST(gl_external_objects_invariants, refuse_each_state_a_create_or_an_import_nev
   second.made_ = host_name;
   CHECK(one.objects().invariants_hold());
   /* The opened objects' own invariants are this table's too. */
-  av::icd::OpenedObjectsProbe::set_live(GlExternalObjectsProbe::opened(one.objects()),
-                                        av::icd::OpenedObjects::max_objects + 1u);
+  av::icd::OpenedObjectsProbe::add_empty(GlExternalObjectsProbe::opened(one.objects()));
   CHECK(!one.objects().invariants_hold());
-  av::icd::OpenedObjectsProbe::set_live(GlExternalObjectsProbe::opened(one.objects()), 1u);
-  CHECK(one.objects().invariants_hold());
-  GlExternalObjectsProbe::set_live(one.objects(), GlExternalObjects::max_objects + 1u);
-  CHECK(!one.objects().invariants_hold()); }
+  av::icd::OpenedObjectsProbe::drop_empty(GlExternalObjectsProbe::opened(one.objects()));
+  CHECK(one.objects().invariants_hold()); }
 
 /* The three kinds the wire has, and the two it does not. A native fence is a
  * semaphore here exactly as a monitored one is - the guest tells them apart and

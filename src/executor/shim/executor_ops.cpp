@@ -37,11 +37,10 @@ public:
      * A sub-API with no backend is refused by the root rather than given a
      * session that would answer nothing; the capset already says which those
      * are, because it offers only what a GPU here reports running. */
-    av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
-                               av::ContextSession *share)
+    av::ContextSession *create(uint32_t sub_api, const AvContextOptions &options, av::ContextSession *share)
     {
         AV_SCOPE("Library::create");
-        return root().open(sub_api, gpu_uuid, options, share);
+        return root().open(sub_api, options, share);
     }
 
     void destroy(av::ContextSession *session)
@@ -117,17 +116,22 @@ uint32_t sub_apis(void *)
     return library.root().sub_apis();
 }
 
-AvExecutor *create(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
+uint32_t open_domain(void *, const uint8_t *gpu_uuid)
 {
-    AV_SCOPE("create");
-    return handle_of(library.create(sub_api, gpu_uuid, nullptr, nullptr));
+    AV_SCOPE("open_domain");
+    return library.root().open_domain(gpu_uuid);
 }
 
-AvExecutor *create_with_options(void *, uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options,
-                                 AvExecutor *share)
+void close_domain(void *, uint32_t domain)
 {
-    AV_SCOPE("create_with_options");
-    return handle_of(library.create(sub_api, gpu_uuid, options, session_of(share)));
+    AV_SCOPE("close_domain");
+    library.root().close_domain(domain);
+}
+
+AvExecutor *create(void *, uint32_t sub_api, const AvContextOptions *options, AvExecutor *share)
+{
+    AV_SCOPE("create");
+    return options != nullptr ? handle_of(library.create(sub_api, *options, session_of(share))) : nullptr;
 }
 
 void destroy(void *, AvExecutor *executor)
@@ -184,76 +188,72 @@ void set_signal(void *, AvExecutor *executor, void (*signal)(void *context), voi
     library.root().set_signal(session_of(executor), signal, context);
 }
 
-uint32_t export_object(void *, AvExecutor *executor, uint32_t kind, uint64_t wire_handle,
-                       uint32_t *handle_kind, int *fd)
+uint32_t share_object(void *, AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
+                      uint64_t wire_handle)
 {
-    AV_SCOPE("export_object");
-    return library.root().export_object(session_of(executor), kind, wire_handle, *handle_kind, *fd)
-               ? AV_EXECUTED
-               : AV_UNKNOWN;
+    AV_SCOPE("share_object");
+    return library.root().share_object(session_of(executor), object_id, kind, size, wire_handle);
 }
 
-uint32_t import_object(void *, AvExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
-                       uint64_t size, uint64_t *wire_handle)
+uint32_t open_object(void *, AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
+                     uint64_t *wire_handle)
 {
-    AV_SCOPE("import_object");
-    return library.root().import_object(session_of(executor), kind, handle_kind, fd, size, *wire_handle)
-               ? AV_EXECUTED
-               : AV_UNKNOWN;
+    AV_SCOPE("open_object");
+    return wire_handle != nullptr ? library.root().open_object(session_of(executor), object_id, kind, size, *wire_handle)
+                                  : AV_SHARED_REFUSED;
 }
 
-void release_object(void *, AvExecutor *executor, uint32_t kind, uint64_t wire_handle)
+void close_object(void *, AvExecutor *executor, uint64_t object_id)
 {
-    AV_SCOPE("release_object");
-    library.root().release_object(session_of(executor), kind, wire_handle);
+    AV_SCOPE("close_object");
+    library.root().close_object(session_of(executor), object_id);
 }
 
-uint32_t read_image(void *, const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+uint32_t read_image(void *, uint32_t domain, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                     uint32_t height)
 {
     AV_SCOPE("read_image");
-    return library.root().read_image(gpu_uuid, key, pixels, stride, width, height) ? AV_EXECUTED : AV_UNKNOWN;
+    return library.root().read_image(domain, key, pixels, stride, width, height) ? AV_EXECUTED : AV_UNKNOWN;
 }
 
-uint32_t export_image(void *, const uint8_t *gpu_uuid, uint64_t key, AvExportedImage *image)
+uint32_t export_image(void *, uint32_t domain, uint64_t key, AvExportedImage *image)
 {
     AV_SCOPE("export_image");
-    return image != nullptr && library.root().export_image(gpu_uuid, key, *image) ? AV_EXECUTED : AV_UNKNOWN;
+    return image != nullptr && library.root().export_image(domain, key, *image) ? AV_EXECUTED : AV_UNKNOWN;
 }
 
-uint32_t map_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point, uint32_t wait_ms,
-                   AvFrameView *view)
+uint32_t map_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms, AvFrameView *view)
 {
     AV_SCOPE("map_frame");
-    return view != nullptr && library.root().map_frame(gpu_uuid, av::SurfacePoint(surface, point), wait_ms, *view)
+    return view != nullptr && library.root().map_frame(domain, av::SurfacePoint(surface, point), wait_ms, *view)
                ? AV_EXECUTED
                : AV_UNKNOWN;
 }
 
-void unmap_frame(void *, const uint8_t *gpu_uuid, uint64_t surface, uint32_t point)
+void unmap_frame(void *, uint32_t domain, uint64_t surface, uint32_t point)
 {
     AV_SCOPE("unmap_frame");
-    library.root().unmap_frame(gpu_uuid, av::SurfacePoint(surface, point));
+    library.root().unmap_frame(domain, av::SurfacePoint(surface, point));
 }
 
-uint32_t export_surface(void *, const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage *image)
+uint32_t export_surface(void *, uint32_t domain, uint64_t surface, AvExportedImage *image)
 {
     AV_SCOPE("export_surface");
-    return image != nullptr && library.root().export_surface(gpu_uuid, surface, *image) ? AV_EXECUTED : AV_UNKNOWN;
+    return image != nullptr && library.root().export_surface(domain, surface, *image) ? AV_EXECUTED : AV_UNKNOWN;
 }
 
-uint32_t sync_surface(void *, const uint8_t *gpu_uuid, uint64_t surface, uint64_t *writes, int *fd)
+uint32_t sync_surface(void *, uint32_t domain, uint64_t surface, uint64_t *writes, int *fd)
 {
     AV_SCOPE("sync_surface");
-    return writes != nullptr && fd != nullptr && library.root().sync_surface(gpu_uuid, surface, *writes, *fd)
+    return writes != nullptr && fd != nullptr && library.root().sync_surface(domain, surface, *writes, *fd)
                ? AV_EXECUTED
                : AV_UNKNOWN;
 }
 
-void release_shared(void *, const uint8_t *gpu_uuid, uint64_t object_id)
+void release_shared(void *, uint32_t domain, uint64_t object_id)
 {
     AV_SCOPE("release_shared");
-    library.root().release_shared(gpu_uuid, object_id);
+    library.root().release_shared(domain, object_id);
 }
 
 void end_batch(void *, AvExecutor *executor)
@@ -284,24 +284,25 @@ void gpu_progress(void *, AvExecutor *executor, uint64_t *marked, uint64_t *reac
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
+                              import_kinds,
+                              open_domain,
+                              close_domain,
                               create,
                               destroy,
                               execute,
-                              import_kinds,
+                              end_batch,
+                              poll,
+                              gpu_progress,
+                              set_signal,
                               import_blob,
                               release_blob,
                               imported_handle,
-                              create_with_options,
-                              set_signal,
-                              export_object,
-                              import_object,
-                              release_object,
-                              read_image,
-                              end_batch,
-                              export_image,
-                              poll,
-                              gpu_progress,
+                              share_object,
+                              open_object,
+                              close_object,
                               release_shared,
+                              read_image,
+                              export_image,
                               map_frame,
                               unmap_frame,
                               export_surface,

@@ -20,7 +20,7 @@ public:
     void append_to(TextBuffer &text) const;
     /* What a device's export socket answers hello with for the GPU here,
      * whose Vulkan UUID is `uuid` (docs/external-export.md). */
-    ExportGreeting greeting(const uint8_t *uuid, uint32_t capacity) const;
+    ExportGreeting greeting(const uint8_t *uuid) const;
 
 private:
     uint32_t domain_;

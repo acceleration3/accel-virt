@@ -36,6 +36,18 @@ bool SharedObject::names(const Allocation &allocation) const
     return allocation_ == &allocation;
 }
 
+void SharedObject::forget()
+{
+    AV_SCOPE("SharedObject::forget");
+    allocation_ = nullptr;
+}
+
+bool SharedObject::forgotten() const
+{
+    AV_SCOPE("SharedObject::forgotten");
+    return allocation_ == nullptr;
+}
+
 uint32_t SharedObject::opens() const
 {
     AV_SCOPE("SharedObject::opens");
@@ -63,7 +75,10 @@ Status SharedObject::close()
 bool SharedObject::invariants_hold() const
 {
     AV_SCOPE("SharedObject::invariants_hold");
-    if (id_ == 0u || !kind_.known() || allocation_ == nullptr) return false;
+    if (id_ == 0u || !kind_.known()) return false;
+    /* A forgotten object is held by nobody: dxgkrnl destroys a shared
+     * allocation only once every device let go of it. */
+    if (allocation_ == nullptr && opens_ != 0u) return false;
     /* Each kind's own size, which is the record's rule and the wire body's: a
      * fence has none at all (feature 053, T031). */
     if (kind_.is_fence()) return size_ == 0u;

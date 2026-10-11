@@ -13,6 +13,7 @@
 #include "fixtures/d3d12/fill_cs.hpp"
 #include "fixtures/d3d12/textured_ps.hpp"
 #include "fixtures/d3d12/textured_vs.hpp"
+#include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
@@ -290,7 +291,8 @@ TEST(d3d12_session_features_device, a_texture_from_guest_memory_is_sampled_throu
     av::D3d12HostDevice *device12 = nullptr;
     if (!host_devices(apis, device11, device12)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
@@ -349,7 +351,8 @@ TEST(d3d12_session_features_device, a_compute_dispatch_writes_through_a_view_wit
     av::D3d12HostDevice *device12 = nullptr;
     if (!host_devices(apis, device11, device12)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
@@ -404,7 +407,8 @@ TEST(d3d12_session_features_device, a_multisampled_target_resolves_into_a_single
     av::D3d12HostDevice *device12 = nullptr;
     if (!host_devices(apis, device11, device12)) return;
     av::D3dBackend backend;
-    CHECK(backend.initialize(device11, device12));
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, device12));
     av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();

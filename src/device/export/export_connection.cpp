@@ -10,8 +10,8 @@
 namespace av {
 
 ExportConnection::ExportConnection(Host &host, const ExportedGpu &gpu)
-    : host_(host), gpu_(gpu), lock_(nullptr), thread_(nullptr), descriptor_(-1), ended_(false), surfaces_{},
-      held_(0u)
+    : host_(host), gpu_(gpu), lock_(nullptr), thread_(nullptr), descriptor_(-1), ended_(false), surfaces_(nullptr),
+      room_(0u), held_(0u)
 {
     AV_SCOPE("ExportConnection::ExportConnection");
 }
@@ -21,6 +21,7 @@ ExportConnection::~ExportConnection()
     AV_SCOPE("ExportConnection::~ExportConnection");
     close();
     if (lock_ != nullptr) host_.destroy_mutex(lock_);
+    if (surfaces_ != nullptr) host_.release(surfaces_);
 }
 
 Status ExportConnection::open(int descriptor)
@@ -96,7 +97,9 @@ ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descri
     default: break;
     }
     const bool held = holds(surface);
-    if (!held && held_ == max_surfaces) return ExportAnswer(request, Status::no_space);
+    /* Room first: a surface exported with nowhere to record it is one the
+     * consumer would never be told is gone. */
+    if (!held && !room_for_one()) return ExportAnswer(request, Status::no_space);
     const ExportAnswer exported = gpu_.export_surface(request, descriptor);
     if (exported.status() == Status::ok && !held) surfaces_[held_++] = surface;
     return exported;
@@ -171,6 +174,20 @@ bool ExportConnection::holds(uint64_t surface) const
     return false;
 }
 
+bool ExportConnection::room_for_one()
+{
+    AV_SCOPE("ExportConnection::room_for_one");
+    if (held_ < room_) return true;
+    const uint32_t  grown = room_ == 0u ? first_room : room_ * 2u;
+    uint64_t *const list = static_cast<uint64_t *>(host_.allocate(grown * sizeof(uint64_t)));
+    if (list == nullptr) return false;
+    for (uint32_t index = 0u; index < held_; index++) list[index] = surfaces_[index];
+    if (surfaces_ != nullptr) host_.release(surfaces_);
+    surfaces_ = list;
+    room_ = grown;
+    return true;
+}
+
 void ExportConnection::drop(uint64_t surface)
 {
     AV_SCOPE("ExportConnection::drop");
@@ -186,7 +203,7 @@ void ExportConnection::drop(uint64_t surface)
 bool ExportConnection::invariants_hold() const
 {
     AV_SCOPE("ExportConnection::invariants_hold");
-    if (held_ > max_surfaces) return false;
+    if (held_ > room_) return false;
     if (thread_ == nullptr && (descriptor_ != -1 || held_ != 0u)) return false;
     for (uint32_t index = 0u; index < held_; index++) {
         if (surfaces_[index] == 0u) return false;

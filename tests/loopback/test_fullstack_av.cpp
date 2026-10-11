@@ -101,30 +101,38 @@ void run_alone(FullStackRig &rig, GuestReport &report)
 
 /* The Vulkan object chain made on the host GPU and destroyed: every call the
  * guest encoded was decoded and run by the host's Vulkan. */
-/* Feature 053, T020. What the device loads is this table, and a table whose
- * version says it shares objects but whose entries are null would be called
- * and crash the device. This is the only binary that links the library's own
- * entry point, so it is the only place the published table can be judged. */
-TEST(fullstack_av, the_published_table_shares_objects_and_fills_every_entry_it_claims)
+/* What the device loads is this table, and a null entry in it would be
+ * called and crash the device. This is the only binary that links the
+ * library's own entry point, so it is the only place the published table can
+ * be judged whole. */
+TEST(fullstack_av, the_published_table_is_this_abi_and_fills_every_entry)
 { const AvExecutorOps *const ops = av_executor_ops();
   CHECK(ops != nullptr);
   CHECK_EQ(ops->abi_version, std::uint32_t{AV_EXECUTOR_ABI_VERSION});
-  CHECK(ops->abi_version >= AV_EXECUTOR_ABI_VERSION_SHARING);
-  CHECK(ops->export_object != nullptr);
-  CHECK(ops->import_object != nullptr);
-  CHECK(ops->release_object != nullptr);
-  /* Every entry of every earlier version is still there: a device that took
-   * the version at its word and found a null would call it. */
   CHECK(ops->sub_apis != nullptr);
+  CHECK(ops->import_kinds != nullptr);
+  CHECK(ops->open_domain != nullptr);
+  CHECK(ops->close_domain != nullptr);
   CHECK(ops->create != nullptr);
   CHECK(ops->destroy != nullptr);
   CHECK(ops->execute != nullptr);
-  CHECK(ops->import_kinds != nullptr);
+  CHECK(ops->end_batch != nullptr);
+  CHECK(ops->poll != nullptr);
+  CHECK(ops->gpu_progress != nullptr);
+  CHECK(ops->set_signal != nullptr);
   CHECK(ops->import_blob != nullptr);
   CHECK(ops->release_blob != nullptr);
   CHECK(ops->imported_handle != nullptr);
-  CHECK(ops->create_with_options != nullptr);
-  CHECK(ops->set_signal != nullptr); }
+  CHECK(ops->share_object != nullptr);
+  CHECK(ops->open_object != nullptr);
+  CHECK(ops->close_object != nullptr);
+  CHECK(ops->release_shared != nullptr);
+  CHECK(ops->read_image != nullptr);
+  CHECK(ops->export_image != nullptr);
+  CHECK(ops->map_frame != nullptr);
+  CHECK(ops->unmap_frame != nullptr);
+  CHECK(ops->export_surface != nullptr);
+  CHECK(ops->sync_surface != nullptr); }
 
 TEST(fullstack_av, the_vulkan_chain_runs_on_the_host_gpu)
 { const WidestHostGpu gpu;

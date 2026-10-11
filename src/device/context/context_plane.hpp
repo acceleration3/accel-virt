@@ -29,7 +29,8 @@ public:
     [[nodiscard]] virtual Status initialize() = 0;
     /* Where the contexts run is made ready for GPU `gpu_uuid` and a capset
      * offering at least what the one the guest reads will: the renderer is
-     * started and greeted. Whatever went wrong, named for the log. */
+     * started and greeted, and the library opens the device's domain there.
+     * Whatever went wrong, named for the log. */
     [[nodiscard]] virtual Status start(const uint8_t *gpu_uuid, const CapsetInfo &capset) = 0;
     virtual uint32_t             sub_apis() const = 0;
     virtual uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const = 0;
@@ -37,7 +38,7 @@ public:
     /* invalid_parameter for id 0, conflict for a live id, no_space when full. */
     [[nodiscard]] virtual Status create(uint32_t id) = 0;
     [[nodiscard]] virtual Status destroy(uint32_t id) = 0;
-    /* Every context, then every object they shared. */
+    /* Every context. */
     virtual void                 destroy_all() = 0;
     virtual bool                 holds(uint32_t id) = 0;
     /* not_found for a resource the setup names that is not there, no_memory,

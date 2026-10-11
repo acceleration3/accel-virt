@@ -22,7 +22,7 @@ guest application (remotewin-guest.exe)          host process (remotewin host)
   virtio-gpu-av device  <------- EXPORT(id) ------- consumer
     executor: the texture's            -------- dma-buf + layout ------>
     memory, exportable from            <------- SYNC(id) ---------------  (per frame)
-    the start (InteropTextures)        -------- copies run + sync_file ->
+    the start (ExportableImages)       -------- copies run + sync_file ->
                                        -------- REVOKED(id) ------------  (guest released it, or reset)
 ```
 
@@ -103,7 +103,7 @@ Bodies of an answer with status ok:
 
 | Operation | Body | Beside it |
 |---|---|---|
-| hello | 16 bytes GPU UUID (`VkPhysicalDeviceIDProperties::deviceUUID`), u32 PCI domain, u8 bus, u8 device, u8 function, u8 flags (bit 0: on PCI; otherwise the address is 0), u32 surfaces a connection may hold (64), u32 reserved | nothing |
+| hello | 16 bytes GPU UUID (`VkPhysicalDeviceIDProperties::deviceUUID`), u32 PCI domain, u8 bus, u8 device, u8 function, u8 flags (bit 0: on PCI; otherwise the address is 0), 8 bytes reserved | nothing |
 | export | u32 width, u32 height, u32 DRM fourcc, u32 stride (bytes), u32 offset (bytes), u32 reserved, u64 DRM format modifier | the dma-buf |
 | sync | u64 copies run, 24 bytes zero | the sync_file |
 | release | zero | nothing |
@@ -125,8 +125,9 @@ sync and none otherwise. It is the consumer's to close.
   nothing.
 - **export** hands over the surface's own memory: the dma-buf of the image the
   host made the guest's texture as. The connection holds the surface from then
-  on, up to 64; a 65th is `no_space`, and a surface already held is answered
-  again with a fresh descriptor of the same memory. `not_found` for an id no
+  on, as many as it exports; `no_space` only when the device has no memory to
+  record one more, and a surface already held is answered again with a fresh
+  descriptor of the same memory. `not_found` for an id no
   guest process shares, or one whose memory no other API can open (§5.1).
 - **sync** answers how many copies into the surface the host has run since the
   guest shared it, and a sync_file that signals once the GPU has finished
@@ -184,7 +185,7 @@ here), 2D, one mip, one array layer, one sample,
 usage default, binds no more than `SHADER_RESOURCE | RENDER_TARGET`, in
 `B8G8R8A8_UNORM(_SRGB)`, `R8G8B8A8_UNORM(_SRGB)`, `R10G10B10A2_UNORM` or
 `R16G16B16A16_FLOAT`. avumd.dll makes such a texture on the host over memory
-other APIs can open (`ExportableImageInfo`, `InteropTextures::make`), which is
+other APIs can open (`ExportableImageInfo`, `ExportableImages::make`), which is
 what is exported. Any other texture is `not_found`.
 
 ### 5.2 The id, from user mode
@@ -299,5 +300,5 @@ above; nothing here makes one yet.
 | The socket and its connections' I/O | the glue, `src/device/qemu/virtio-gpu-av-host.c`, through `AvHostOps` (`receive_export`, `send_export`, `shutdown_export`, `close_export`) and `av_device_export_accepted` |
 | The device property | `export-socket`, `src/device/qemu/virtio-gpu-av.c` |
 | Revocation | `SharedCommands` (0x02F1) and `VirtioGpuAv::reset` |
-| The executor | ABI 15, `export_surface` and `sync_surface` (`av_executor.h`, docs/protocol.md); `ExecutorRoot`, `D3d11HostDevice`, `InteropTextures::export_image`, `DxvkVulkanDevice::sync_file`; the counted copies in `D3dBackend` and `D3dSharedResources` |
+| The executor | ABI 16, `export_surface` and `sync_surface` in the device's domain (`av_executor.h`, docs/protocol.md); `ExecutorRoot`, `D3d11HostDevice`, `ExportableImages::export_image`, `DxvkVulkanDevice::sync_file`; the surface and its counted copies in `HostShares`, counted by `D3dBackend` |
 | Tests | the units under `tests/unit/proto/export/` and `tests/unit/device/export/` (a real socketpair, `FakeExportConsumer`); `test_d3d_external_export_device` on the GPU; `tests/qemu/test_virtio_gpu_export.py` against QEMU under seccomp, with the echo executor and this project's |

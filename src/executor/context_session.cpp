@@ -146,29 +146,10 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, const AvBlobHandle &handl
     return AV_EXECUTED;
 }
 
-bool ContextSession::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
+bool ContextSession::faulted() const
 {
-    AV_SCOPE("ContextSession::export_object");
-    handle_kind = 0u;
-    fd = -1;
-    if (backend_ == nullptr || faulted_) return false;
-    return backend_->export_object(kind, wire_handle, handle_kind, fd);
-}
-
-bool ContextSession::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                   uint64_t &wire_handle)
-{
-    AV_SCOPE("ContextSession::import_object");
-    wire_handle = 0u;
-    if (backend_ == nullptr || faulted_) return false;
-    return backend_->import_object(kind, handle_kind, fd, size, wire_handle);
-}
-
-void ContextSession::release_object(uint32_t kind, uint64_t wire_handle)
-{
-    AV_SCOPE("ContextSession::release_object");
-    if (backend_ == nullptr) return;
-    backend_->release_object(kind, wire_handle);
+    AV_SCOPE("ContextSession::faulted");
+    return faulted_;
 }
 
 void ContextSession::release_blob(uint64_t blob_id)

@@ -23,13 +23,12 @@
 
 namespace av {
 
-DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared,
-                             FenceInterrupts &interrupts, const ExecutorLibrary &library,
+DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, const ExecutorLibrary &library,
                              ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id)
     : ordering_(ordering), recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
-      imports_(host, blobs, executor_, recorder, id), shared_(shared, executor_),
+      imports_(host, blobs, executor_, recorder, id),
       executor_(host, library, shares, id), staging_(host),
-      batches_(host, executor_, imports_, shared_, staging_, fences_, recorder, id),
+      batches_(host, executor_, imports_, staging_, fences_, recorder, id),
       ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
       {
           AV_SCOPE("DeviceContext::DeviceContext");
@@ -78,7 +77,6 @@ Status DeviceContext::refused(const char *step, Status status) const
 Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
 {
     AV_SCOPE("DeviceContext::bind");
-    if (!executor_.accepts(setup.options())) return refused("options", Status::invalid_parameter);
     Status status = binding_.bind(setup, capset);
     if (status != Status::ok) return refused("binding", status);
     ScopeExit unbind([this] { binding_.unbind(); });

@@ -11,6 +11,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/external_objects.hpp"
 
 #include <cstdint>
@@ -20,8 +21,12 @@ namespace av::icd {
 /* The states no remember can leave a slot in, which is what makes each clause
  * of the invariant worth stating. */
 struct ExternalObjectsProbe {
+    /* The row remembered `index`th, as the pool keeps them. */
     static ExternalObjectSlot &slot(ExternalObjects &objects, std::uint32_t index)
-    { return objects.slots_[index]; }
+    {
+        std::uint32_t at = 0u;
+        return *objects.slots_.find_if([&at, index](const ExternalObjectSlot &) { return at++ == index; });
+    }
 };
 
 }  // namespace av::icd
@@ -47,11 +52,13 @@ constexpr std::uint64_t object_bytes = 4u * 4096u;
  * leaves the lock held. */
 class Table {
 public:
-    Table() : trace_(), lock_(trace_, 'E'), objects_(lock_) {}
+    Table() : memory_(), trace_(), lock_(trace_, 'E'), objects_(lock_, memory_) {}
     ExternalObjects &objects() { return objects_; }
+    av::MockPlatform &memory() { return memory_; }
     av::RecordingThreadLock &lock() { return lock_; }
 
 private:
+    av::MockPlatform        memory_;
     av::LockTrace           trace_;
     av::RecordingThreadLock lock_;
     ExternalObjects         objects_;
@@ -122,17 +129,19 @@ TEST(external_objects_remember, refuses_every_row_that_would_name_nothing_or_two
   CHECK_EQ(table.objects().live(), 1u);
   CHECK(table.objects().invariants_hold()); }
 
-TEST(external_objects, fills_up_and_then_remembers_nothing_more)
+/* No count of objects past which one is refused: the table this replaced
+ * stopped at 64. A row that cannot be had remembers nothing. */
+TEST(external_objects, holds_more_than_any_fixed_table_did_and_nothing_without_memory)
 { Table table;
-  for (std::uint32_t i = 1u; i <= ExternalObjects::max_objects; i++)
+  for (std::uint32_t i = 1u; i <= 100u; i++)
       CHECK(table.objects().remember(device_at(1u), memory_at(i), VK_NULL_HANDLE, first_id + i, object_bytes, first_handle + i * 4u, 0u));
-  CHECK_EQ(table.objects().live(), ExternalObjects::max_objects);
-  CHECK(!table.objects().remember(device_at(1u), memory_at(0x9999u), VK_NULL_HANDLE, 0x9999u, object_bytes, 0x9999u, 0u));
+  CHECK_EQ(table.objects().live(), 100u);
+  CHECK_EQ(table.objects().handle_of_memory(memory_at(100u)), first_handle + 400u);
   CHECK(table.objects().invariants_hold());
-  ExternalObjectSlot row = {};
-  CHECK(table.objects().take_memory(memory_at(1u), row));
-  CHECK(table.objects().remember(device_at(1u), memory_at(0x9999u), VK_NULL_HANDLE, 0x9999u, object_bytes, 0x9999u, 0u));
-  CHECK(table.objects().invariants_hold()); }
+  Table empty;
+  empty.memory().fail_allocation_at(1u);
+  CHECK(!empty.objects().remember(device_at(1u), memory_at(1u), VK_NULL_HANDLE, first_id, object_bytes, first_handle, 0u));
+  CHECK_EQ(empty.objects().live(), 0u); }
 
 /* A device destroyed hands back every row it held, once each, so a teardown
  * can release each object rather than leak the device's reference to it. */
@@ -203,23 +212,10 @@ TEST(external_objects_invariants, refuse_each_state_a_remember_never_leaves)
   CHECK_EQ(table.objects().handle_of_memory(memory_at(0x11u)), first_handle + 4u);
   CHECK_EQ(table.objects().handle_of_semaphore(semaphore_at(0x11u)), 0u);
 
-  /* And an empty slot holding anything at all. */
-  ExternalObjectSlot &empty = ExternalObjectsProbe::slot(table.objects(), 2u);
-  empty.memory_ = memory_at(0x77u);
+  /* And a row of no device. */
+  second.device_ = VK_NULL_HANDLE;
   CHECK(!table.objects().invariants_hold());
-  empty = ExternalObjectSlot{};
-  empty.semaphore_ = semaphore_at(0x77u);
-  CHECK(!table.objects().invariants_hold());
-  empty = ExternalObjectSlot{};
-  empty.object_id_ = 5u;
-  CHECK(!table.objects().invariants_hold());
-  empty = ExternalObjectSlot{};
-  empty.handle_ = 5u;
-  CHECK(!table.objects().invariants_hold());
-  empty = ExternalObjectSlot{};
-  empty.carrier_ = 5u;
-  CHECK(!table.objects().invariants_hold());
-  empty = ExternalObjectSlot{};
+  second = whole;
   CHECK(table.objects().invariants_hold()); }
 
 /* Each kind carries its own size, because the wire body demands it: memory in
@@ -267,8 +263,4 @@ TEST(external_objects_invariants, refuse_a_row_whose_size_is_not_its_kinds)
   only.size_ = 0u;
   CHECK(!table.objects().invariants_hold());
   only.size_ = object_bytes;
-  CHECK(table.objects().invariants_hold());
-  /* And an empty slot holding a size. */
-  ExternalObjectSlot &empty = ExternalObjectsProbe::slot(table.objects(), 1u);
-  empty.size_ = object_bytes;
-  CHECK(!table.objects().invariants_hold()); }
+  CHECK(table.objects().invariants_hold()); }

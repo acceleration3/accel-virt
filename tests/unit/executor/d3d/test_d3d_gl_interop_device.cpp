@@ -4,6 +4,7 @@
  * memory object, a pattern is written into a texture over it through GL, and
  * Direct3D reads back every texel where GL put it. This is how an OpenGL window's frames reach a DXGI chain.
  * A host without DXVK or without OpenGL on one GPU returns without judging. */
+#include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -46,6 +47,9 @@ struct OpenGlBackendProbe {
 
 namespace {
 
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
+
 using namespace av::d3dproto;
 
 constexpr std::uint32_t size = 64u;
@@ -75,7 +79,8 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
         return;
     }
     av::D3dBackend direct3d;
-    CHECK(direct3d.initialize(apis.d3d11_device(gpu)));
+    av::SessionShares unshared;
+    CHECK(direct3d.initialize(unshared, apis.d3d11_device(gpu)));
     av::D3dLoopback wire(direct3d);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -99,7 +104,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     av::OpenGlBackend opengl;
     CHECK(opengl.initialize(apis.gl_display(gpu), nullptr, nullptr));
     std::uint64_t memory = 0u;
-    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, bytes, memory));
+    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, bytes, memory, detail));
     close(fd);
     {
         const av::glproto::RealGl &gl = av::OpenGlBackendProbe::gl(opengl);
@@ -134,7 +139,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
         CHECK_EQ(pixels[at * 4u + 1u], static_cast<std::uint8_t>(at / size));
         CHECK_EQ(pixels[at * 4u + 2u], static_cast<std::uint8_t>(at * 7u));
     }
-    opengl.release_object(AV_SHARED_MEMORY, memory);
+    opengl.release_object(AV_SHARED_MEMORY, memory, detail);
     opengl.shut_down();
     direct3d.shut_down();
 }

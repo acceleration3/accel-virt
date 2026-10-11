@@ -10,7 +10,6 @@
 #include "executor/opencl/cl_event_signals.hpp"
 #include "executor/opencl/cl_handle_registry.hpp"
 #include "executor/opencl/cl_read_ahead.hpp"
-#include "executor/opencl/cl_shared_objects.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/session_backend.hpp"
@@ -81,8 +80,8 @@ public:
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     uint64_t &wire_handle) override;
-    void               release_object(uint32_t kind, uint64_t wire_handle) override;
+                                     uint64_t &wire_handle, uint64_t &detail) override;
+    void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
     /* What the generated decoder asks before it hands the host's OpenCL a
      * handle, and tells it after: the object a guest's number names, and what
@@ -261,7 +260,6 @@ private:
     GlContext      vehicle_;
     GlHostImport   import_;
     GlSharedBuffer buffers_;
-    ClSharedObjects    shared_;
     /* The first context the guest made, which is the one a shared object is
      * opened into. An OpenCL application makes one; a second is a context this
      * cannot share with, and an open into it is refused rather than answered

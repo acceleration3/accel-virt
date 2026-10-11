@@ -15,8 +15,8 @@ constexpr uint32_t semaphore_kind = SharedObjectKind::monitored_fence;
 
 }  // namespace
 
-GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, LogSink &log)
-    : log_(log), opened_(handles, log, "avgl: "), rows_{}, live_(0u), next_name_(1u)
+GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, LogSink &log)
+    : log_(log), opened_(handles, memory, log, "avgl: "), rows_(memory), next_name_(1u)
 {
     AV_SCOPE("GlExternalObjects::GlExternalObjects");
 }
@@ -37,18 +37,16 @@ GlSharedObjectRow *GlExternalObjects::row_of(bool memory, uint32_t name)
 {
     AV_SCOPE("GlExternalObjects::row_of");
     if (name == 0u) return nullptr;
-    for (uint32_t index = 0u; index < live_; index++)
-        if (rows_[index].name_ == name && rows_[index].memory_ == memory) return &rows_[index];
-    return nullptr;
+    return rows_.find_if(
+        [memory, name](const GlSharedObjectRow &row) { return row.name_ == name && row.memory_ == memory; });
 }
 
 const GlSharedObjectRow *GlExternalObjects::row_of(bool memory, uint32_t name) const
 {
     AV_SCOPE("GlExternalObjects::row_of");
     if (name == 0u) return nullptr;
-    for (uint32_t index = 0u; index < live_; index++)
-        if (rows_[index].name_ == name && rows_[index].memory_ == memory) return &rows_[index];
-    return nullptr;
+    return rows_.find_if(
+        [memory, name](const GlSharedObjectRow &row) { return row.name_ == name && row.memory_ == memory; });
 }
 
 uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names)
@@ -60,13 +58,17 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
     const uint32_t wanted = static_cast<uint32_t>(count);
     /* All of them or none: a half-filled array is one an application reads
      * whole, and the names it did not get would be numbers of its own stack. */
-    if (wanted > max_objects - live_) return gl_out_of_memory;
+    const uint32_t first = next_name_;
     for (uint32_t index = 0u; index < wanted; index++) {
-        rows_[live_] = GlSharedObjectRow{next_name_, 0u, memory, false, false};
-        names[index] = next_name_;
-        next_name_++;
-        live_++;
+        GlSharedObjectRow *row = nullptr;
+        if (rows_.create(row, GlSharedObjectRow{first + index, 0u, memory, false, false}) != Status::ok) {
+            rows_.destroy_if([first](const GlSharedObjectRow &made) { return made.name_ >= first; });
+            log_.write("avgl: no memory for a memory object or semaphore name");
+            return gl_out_of_memory;
+        }
     }
+    for (uint32_t index = 0u; index < wanted; index++) names[index] = first + index;
+    next_name_ = first + wanted;
     return gl_no_error;
 }
 
@@ -157,8 +159,7 @@ void GlExternalObjects::give_back(ClientTransport &wire, GlSharedObjectRow &row)
 {
     AV_SCOPE("GlExternalObjects::give_back");
     static_cast<void>(opened_.give_back(wire, wire_kind(row), row.made_));
-    live_--;
-    row = rows_[live_];
+    static_cast<void>(rows_.destroy(&row));
 }
 
 uint32_t GlExternalObjects::destroy(ClientTransport &wire, uint32_t kind, int32_t count, const uint32_t *names)
@@ -188,20 +189,21 @@ uint32_t GlExternalObjects::made(uint32_t kind, uint32_t name) const
 void GlExternalObjects::release_all(ClientTransport &wire)
 {
     AV_SCOPE("GlExternalObjects::release_all");
-    while (live_ != 0u) give_back(wire, rows_[live_ - 1u]);
+    opened_.release_all(wire);
+    rows_.destroy_all();
 }
 
 uint32_t GlExternalObjects::live() const
 {
     AV_SCOPE("GlExternalObjects::live");
-    return live_;
+    return rows_.live();
 }
 
 void GlExternalObjects::report(StateWriter &writer) const
 {
     AV_SCOPE("GlExternalObjects::report");
     writer.open("external_objects", 0u);
-    writer.number("live", live_);
+    writer.number("live", rows_.live());
     writer.close();
 }
 
@@ -209,22 +211,23 @@ uint32_t GlExternalObjects::imported() const
 {
     AV_SCOPE("GlExternalObjects::imported");
     uint32_t found = 0u;
-    for (uint32_t index = 0u; index < live_; index++) found += rows_[index].made_ != 0u ? 1u : 0u;
+    rows_.for_each([&found](const GlSharedObjectRow &row) { found += row.made_ != 0u ? 1u : 0u; });
     return found;
 }
 
 bool GlExternalObjects::invariants_hold() const
 {
     AV_SCOPE("GlExternalObjects::invariants_hold");
-    if (live_ > max_objects || !opened_.invariants_hold() || opened_.live() != imported()) return false;
-    for (uint32_t index = 0u; index < live_; index++) {
-        const GlSharedObjectRow &row = rows_[index];
+    if (!opened_.invariants_hold() || opened_.live() != imported()) return false;
+    return rows_.all_of([this](const GlSharedObjectRow &row) {
         if (row.name_ == 0u || row.name_ >= next_name_) return false;
         if (row.made_ != 0u && !opened_.answered(wire_kind(row), row.made_)) return false;
-        for (uint32_t earlier = 0u; earlier < index; earlier++)
-            if (rows_[earlier].memory_ == row.memory_ && rows_[earlier].name_ == row.name_) return false;
-    }
-    return true;
+        uint32_t alike = 0u;
+        rows_.for_each([&row, &alike](const GlSharedObjectRow &other) {
+            if (other.memory_ == row.memory_ && other.name_ == row.name_) alike++;
+        });
+        return alike == 1u;
+    });
 }
 
 }  // namespace av::glicd

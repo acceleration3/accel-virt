@@ -46,6 +46,9 @@ public:
     /* Releases the session for reuse. Safe on one that never ran. */
     void                 release();
     bool                 live() const;
+    /* Whether a command broke it: it then refuses every command, and shares
+     * and opens nothing (feature 053). */
+    bool                 faulted() const;
     /* The clocks of the GPU this session runs on, told of every batch. */
     void                 hold_clocks(GpuClockHold &clocks);
 
@@ -76,14 +79,6 @@ public:
     uint64_t imported_handle(uint64_t blob_id);
     uint32_t imports() const;
 
-    /* One host object shared with every other context of this device (feature
-     * 053). Whether this API exports or imports one at all is the backend's
-     * answer; a faulted session answers no to both, as it refuses every
-     * command. */
-    [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd);
-    [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     uint64_t &wire_handle);
-    void               release_object(uint32_t kind, uint64_t wire_handle);
 
     /* Commands this session refused because the block was too small rather
      * than because the frame was bad. The guest is told the same thing either

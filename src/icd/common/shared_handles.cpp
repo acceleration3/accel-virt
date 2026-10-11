@@ -8,7 +8,8 @@
 
 namespace av::icd {
 
-SharedHandles::SharedHandles(Kmt &kmt, ThreadLock &lock) : kmt_(kmt), lock_(lock), slots_(), live_(0u)
+SharedHandles::SharedHandles(Kmt &kmt, ThreadLock &lock, BlockSource &memory)
+    : kmt_(kmt), lock_(lock), slots_(memory)
 {
     AV_SCOPE("SharedHandles::SharedHandles");
 }
@@ -17,28 +18,24 @@ SharedHandleSlot *SharedHandles::row_of(uint64_t handle)
 {
     AV_SCOPE("SharedHandles::row_of");
     if (handle == 0u) return nullptr;
-    for (uint32_t index = 0u; index < live_; index++)
-        if (slots_[index].handle_ == handle) return &slots_[index];
-    return nullptr;
+    return slots_.find_if([handle](const SharedHandleSlot &row) { return row.handle_ == handle; });
 }
 
 const SharedHandleSlot *SharedHandles::row_of(uint64_t handle) const
 {
     AV_SCOPE("SharedHandles::row_of");
     if (handle == 0u) return nullptr;
-    for (uint32_t index = 0u; index < live_; index++)
-        if (slots_[index].handle_ == handle) return &slots_[index];
-    return nullptr;
+    return slots_.find_if([handle](const SharedHandleSlot &row) { return row.handle_ == handle; });
 }
 
 SharedHandleSlot *SharedHandles::row_for(uint64_t object_id)
 {
     AV_SCOPE("SharedHandles::row_for");
-    for (uint32_t index = 0u; index < live_; index++)
-        if (slots_[index].object_id_ == object_id) return &slots_[index];
-    return nullptr;
+    return slots_.find_if([object_id](const SharedHandleSlot &row) { return row.object_id_ == object_id; });
 }
 
+/* The row is taken before the kernel is asked, so a handle the kernel made is
+ * never one this table has nowhere to keep. */
 Status SharedHandles::mint(uint32_t device, uint32_t carrier, uint64_t object_id, uint64_t &handle)
 {
     AV_SCOPE("SharedHandles::mint");
@@ -50,12 +47,16 @@ Status SharedHandles::mint(uint32_t device, uint32_t carrier, uint64_t object_id
         handle = already->handle_;
         return Status::ok;
     }
-    if (live_ == max_handles) return Status::no_space;
+    SharedHandleSlot *row = nullptr;
+    const Status      room = slots_.create(row, SharedHandleSlot{0u, object_id, device, 0u});
+    if (room != Status::ok) return room;
     uint64_t     made = 0u;
     const Status shared = kmt_.share_object(device, carrier, made);
-    if (shared != Status::ok) return shared;
-    slots_[live_] = SharedHandleSlot{made, object_id, device, 0u};
-    live_++;
+    if (shared != Status::ok) {
+        static_cast<void>(slots_.destroy(row));
+        return shared;
+    }
+    row->handle_ = made;
     handle = made;
     return Status::ok;
 }
@@ -71,12 +72,17 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
         object_id = already->object_id_;
         return Status::ok;
     }
-    if (live_ == max_handles) return Status::no_space;
+    SharedHandleSlot *row = nullptr;
+    const Status      room = slots_.create(row, SharedHandleSlot{0u, 0u, device, 0u});
+    if (room != Status::ok) return room;
     uint8_t      carried[max_private] = {};
     uint32_t     written = 0u;
     uint32_t     resource = 0u;
     const Status opened = kmt_.open_shared_object(device, handle, resource, carried, max_private, written);
-    if (opened != Status::ok) return opened;
+    if (opened != Status::ok) {
+        static_cast<void>(slots_.destroy(row));
+        return opened;
+    }
     /* What came back is the creating process's bytes, which this process did
      * not write: a record that is not there, or one with no id minted into it,
      * names no object and the open is given back. */
@@ -88,10 +94,10 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
         record.assigned();
     if (!carries) {
         static_cast<void>(kmt_.destroy_shared_allocation(device, resource));
+        static_cast<void>(slots_.destroy(row));
         return Status::invalid_parameter;
     }
-    slots_[live_] = SharedHandleSlot{handle, record.object_id(), device, resource};
-    live_++;
+    *row = SharedHandleSlot{handle, record.object_id(), device, resource};
     object_id = record.object_id();
     return Status::ok;
 }
@@ -106,7 +112,7 @@ bool SharedHandles::resolve(uint64_t handle, uint64_t &object_id) const
     return true;
 }
 
-void SharedHandles::give_back(SharedHandleSlot &row)
+void SharedHandles::give_back(const SharedHandleSlot &row)
 {
     AV_SCOPE("SharedHandles::give_back");
     static_cast<void>(kmt_.close_shared_object(row.handle_));
@@ -114,54 +120,48 @@ void SharedHandles::give_back(SharedHandleSlot &row)
      * application's, and destroying it would take away what it is using. */
     if (row.resource_ != 0u)
         static_cast<void>(kmt_.destroy_shared_allocation(row.device_, row.resource_));
-    live_--;
-    row = slots_[live_];
 }
 
 void SharedHandles::forget(uint64_t handle)
 {
     AV_SCOPE("SharedHandles::forget");
-    ThreadLockHold              held(lock_);
+    ThreadLockHold          held(lock_);
     SharedHandleSlot *const row = row_of(handle);
     if (row == nullptr) return;
     give_back(*row);
+    static_cast<void>(slots_.destroy(row));
 }
 
 void SharedHandles::forget_device(uint32_t device)
 {
     AV_SCOPE("SharedHandles::forget_device");
-    ThreadLockHold     held(lock_);
-    uint32_t index = 0u;
-    while (index < live_) {
-        if (slots_[index].device_ != device) {
-            index++;
-            continue;
-        }
-        /* give_back moves the last row into this one, so the same index is
-         * looked at again. */
-        give_back(slots_[index]);
-    }
+    ThreadLockHold held(lock_);
+    slots_.destroy_if([this, device](const SharedHandleSlot &row) {
+        if (row.device_ != device) return false;
+        give_back(row);
+        return true;
+    });
 }
 
 uint32_t SharedHandles::live() const
 {
     AV_SCOPE("SharedHandles::live");
     ThreadLockHold held(lock_);
-    return live_;
+    return slots_.live();
 }
 
+/* Every row names a handle and an object, and no two name either alike. */
 bool SharedHandles::invariants_hold() const
 {
     AV_SCOPE("SharedHandles::invariants_hold");
-    if (live_ > max_handles) return false;
-    for (uint32_t index = 0u; index < live_; index++) {
-        if (slots_[index].handle_ == 0u || slots_[index].object_id_ == 0u) return false;
-        for (uint32_t earlier = 0u; earlier < index; earlier++)
-            if (slots_[earlier].handle_ == slots_[index].handle_ ||
-                slots_[earlier].object_id_ == slots_[index].object_id_)
-                return false;
-    }
-    return true;
+    return slots_.all_of([this](const SharedHandleSlot &row) {
+        if (row.handle_ == 0u || row.object_id_ == 0u) return false;
+        uint32_t alike = 0u;
+        slots_.for_each([&row, &alike](const SharedHandleSlot &other) {
+            if (other.handle_ == row.handle_ || other.object_id_ == row.object_id_) alike++;
+        });
+        return alike == 1u;
+    });
 }
 
 }  // namespace av::icd

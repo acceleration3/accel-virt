@@ -115,6 +115,8 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     if (blobs_.initialize() == Status::no_memory || interrupts_.initialize() == Status::no_memory ||
         plane_.initialize() == Status::no_memory)
         return Status::no_memory;
+    /* The device's domain is opened here, where the library runs. */
+    static_cast<void>(plane_.start(hello.gpu_uuid(), capset_));
     uint32_t import_kinds[ReadyMessage::lanes] = {};
     const uint32_t sub_apis = plane_.sub_apis() & ((1u << ReadyMessage::lanes) - 1u);
     for (uint32_t lane = 0u; lane < ReadyMessage::lanes; lane++)

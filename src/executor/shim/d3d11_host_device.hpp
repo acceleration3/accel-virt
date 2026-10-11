@@ -20,11 +20,10 @@
 #include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
 #include "executor/shim/d3d11_capabilities.hpp"
-#include "executor/shim/d3d_shared_resources.hpp"
-#include "executor/shim/dxvk_vulkan_device.hpp"
-#include "executor/shim/host_image_export.hpp"
-#include "executor/shim/interop_textures.hpp"
 #include "executor/shim/d3d11_frame_pool.hpp"
+#include "executor/shim/dxvk_vulkan_device.hpp"
+#include "executor/shim/exportable_images.hpp"
+#include "executor/shim/host_image_export.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -42,7 +41,9 @@ struct IUnknown;
 namespace av {
 
 class D3dRuntime;
+class HostShares;
 class StagedFrame;
+class StateWriter;
 class D3d12HostDevice;
 class Vkd3dImageExport;
 
@@ -53,9 +54,10 @@ public:
     D3d11HostDevice(const D3d11HostDevice &) = delete;
     D3d11HostDevice &operator=(const D3d11HostDevice &) = delete;
 
-    /* The device on the GPU `uuid` names, and what it can do. False for a GPU
-     * DXVK does not find, or one it will not make a device on. */
-    [[nodiscard]] bool open(const D3dRuntime &runtime, const uint8_t *uuid);
+    /* The device on the GPU `uuid` names, and what it can do, sharing through
+     * that GPU's `shares`. False for a GPU DXVK does not find, or one it will
+     * not make a device on. */
+    [[nodiscard]] bool open(const D3dRuntime &runtime, const uint8_t *uuid, HostShares &shares);
     void               close();
     bool               opened() const;
 
@@ -74,17 +76,21 @@ public:
     /* Under the lock a session's command already holds: `presented`, a
      * flip-model buffer just presented, copied - in the presenting session's
      * order - into the texture its compositor reads in its place, made the
-     * first time. DWM learns of the present only once the guest's kernel has
-     * run it, and composes on its own clock: it read the buffer itself after
-     * the kernel had handed it back to the application, which was drawing its
-     * next frame there. A copy taken at the present is what a flip shows, and
-     * nothing drawn afterwards reaches it - as UTM's driver copies a composed
-     * present inside the application's own stream. False for a key not
-     * shared, or a copy the device will not make. */
-    [[nodiscard]] bool      show(uint64_t key, ID3D11Texture2D *presented);
-    /* Under the lock: the copy shown for `key`, with a reference the caller
-     * owns; null for a key never presented as a flip. */
-    IUnknown               *find_shown(uint64_t key);
+     * first time and kept with the share. DWM learns of the present only once
+     * the guest's kernel has run it, and composes on its own clock: it read
+     * the buffer itself after the kernel had handed it back to the
+     * application, which was drawing its next frame there. A copy taken at
+     * the present is what a flip shows, and nothing drawn afterwards reaches
+     * it - as UTM's driver copies a composed present inside the application's
+     * own stream. False for an id not shared, or a copy the device will not
+     * make. */
+    [[nodiscard]] bool      show(uint32_t domain, uint64_t id, ID3D11Texture2D *presented);
+    /* Under the lock: what a session opening `id` gets (HostShares::
+     * open_resource), with a reference the caller owns; null for none. A
+     * Direct3D 12 resource is made a texture of DXVK's over the same memory
+     * the first time (ExportableImages), kept with the share as its view -
+     * only the surfaces something opens cost an import. */
+    IUnknown               *open_shared(uint32_t domain, uint64_t id);
     /* A fence of the device's, starting at `initial`, the caller's; null when
      * the device makes none (D3d11BatchProgress). */
     ID3D11Fence            *make_fence(uint64_t initial);
@@ -94,51 +100,41 @@ public:
      * signal. */
     [[nodiscard]] bool      signal(ID3D11Fence *fence, uint64_t value);
 
-    /* The texture published under `key`, read into `pixels` as B8G8R8A8 rows
+    /* The texture shared as `id`, read into `pixels` as B8G8R8A8 rows
      * `stride` bytes apart, as much of it as fits `width` by `height`. False
-     * for a key nothing is published under. Takes the device's lock. */
-    [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
-    /* The image published under `key` as a dma-buf (HostImageExport). */
-    [[nodiscard]] bool export_image(uint64_t key, AvExportedImage &image);
-    /* The surface shared under `surface` as its own memory, a dma-buf the
-     * caller owns, for a process outside QEMU (InteropTextures::export_image).
-     * False for a surface nothing shares here, or one made over memory no
-     * other API can open. Takes the lock. */
-    [[nodiscard]] bool export_surface(uint64_t surface, AvExportedImage &image);
-    /* The copies into `surface` the host has run (D3dSharedResources::writes)
-     * and a sync_file, the caller's, that signals once the GPU is done with
-     * them (DxvkVulkanDevice::sync_file). False for a surface nothing shares
-     * here, or a device that makes no sync_file. Takes the lock. */
-    [[nodiscard]] bool sync_surface(uint64_t surface, uint64_t &writes, int &fd);
+     * for an id nothing is shared under. Takes the device's lock. */
+    [[nodiscard]] bool read_image(uint32_t domain, uint64_t id, void *pixels, uint32_t stride, uint32_t width,
+                                  uint32_t height);
+    /* The image shared as `id` as a dma-buf (HostImageExport). */
+    [[nodiscard]] bool export_image(uint32_t domain, uint64_t id, AvExportedImage &image);
+    /* The surface shared as `surface` as its own memory, a dma-buf the caller
+     * owns, for a process outside QEMU (ExportableImages::export_image).
+     * False for a surface nothing shares, or one made over memory no other
+     * API can open. Takes the lock. */
+    [[nodiscard]] bool export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image);
+    /* The copies into `surface` the host has run (HostShares::writes) and a
+     * sync_file, the caller's, that signals once the GPU is done with them
+     * (DxvkVulkanDevice::sync_file). False for a surface nothing shares, or a
+     * device that makes no sync_file. Takes the lock. */
+    [[nodiscard]] bool sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd);
     /* Under the lock a session's command already holds: subresource
      * `subresource` of `source` staged for the present engine
      * (D3d11FramePool::stage); null when no frame is free. */
     StagedFrame       *stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                                    uint32_t format);
-    /* The guest let go of the surface shared under `object_id` everywhere, or
-     * of every one for 0 - the device was reset and its ids start again. Takes
-     * the lock itself. */
-    void               release_shared(uint64_t object_id);
+    /* The COM references of shares HostShares freed given back, under the
+     * lock, which this takes; and the images whose textures went with them
+     * freed. After anything that may free a share: a guest's release, a
+     * session's end. */
+    void               retire_shares();
     /* The GPU's Direct3D 12 device, whose surfaces this one makes views of
-     * (find_shared); null for none. */
+     * (open_shared); null for none. */
     void               pair(D3d12HostDevice *device12);
-    /* Another API's surface - a Direct3D 12 resource - shared under `key`,
-     * taking a reference: no view of it is made until something here opens
-     * it. False for a key already shared or a full table. Takes the lock. */
-    [[nodiscard]] bool publish_shared(uint64_t key, IUnknown *surface);
-    /* Whether anything is shared under `key`. Takes the lock. */
-    bool               shares(uint64_t key);
-    /* Under the lock: what `key` shares, as this device sees it, with a
-     * reference the caller owns; null for none. A Direct3D 12 resource is
-     * made a texture of DXVK's over the same memory the first time
-     * (InteropTextures), which then takes its place in the table - only the
-     * surfaces something opens cost an import. */
-    IUnknown          *find_shared(uint64_t key);
     /* Under the lock: a shared texture described as `desc`, made over memory
-     * OpenGL and Vulkan can open (InteropTextures::make), with a reference the
-     * caller owns; null for one only DXVK's own allocation can hold. */
-    ID3D11Texture2D   *make_shareable(const D3D11_TEXTURE2D_DESC1 &desc);
-    /* Under the lock: a dma-buf of the memory make_shareable made `texture`
+     * OpenGL and Vulkan can open (ExportableImages::make), with a reference
+     * the caller owns; null for one only DXVK's own allocation can hold. */
+    ID3D11Texture2D   *make_exportable(const D3D11_TEXTURE2D_DESC1 &desc);
+    /* Under the lock: a dma-buf of the memory make_exportable made `texture`
      * over, which the caller owns; false for any other texture. */
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
     /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
@@ -147,15 +143,26 @@ public:
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;
     const D3d11Capabilities &capabilities() const;
-    D3dSharedResources   &shared();
+    /* The exportable images, for the executor's state dump. */
+    void                  report(StateWriter &writer) const;
 
 private:
     /* Under the lock: a texture of DXVK's over `resource`'s memory, with a
      * reference the caller owns; null for one DXVK cannot import - not one
      * 2D image of one mip and one sample. */
     ID3D11Texture2D   *view_of(ID3D12Resource *resource);
-    /* The published texture copied into staging_, queued, under the lock. */
-    [[nodiscard]] bool stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted);
+    /* Under the lock: what `id` shares, as a texture of this device's, with a
+     * reference the caller owns; null for none. Not an open: the scanout and
+     * the export socket read it. */
+    ID3D11Texture2D   *shared_texture(uint32_t domain, uint64_t id);
+    /* Under the lock: `found`, what `id` shares, as this device sees it - a
+     * Direct3D 12 resource made its view, kept with the share, the first time
+     * - with the reference `found` came with; null for none. */
+    IUnknown          *viewed(uint32_t domain, uint64_t id, IUnknown *found);
+    /* Under the lock: what retire_shares does. */
+    void               retire_locked();
+    /* The shared texture copied into staging_, queued, under the lock. */
+    [[nodiscard]] bool stage(uint32_t domain, uint64_t id, D3D11_TEXTURE2D_DESC &wanted);
     /* staging_ read once the GPU is done with it, taking the lock only to look. */
     [[nodiscard]] bool drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels, uint32_t stride, uint32_t width,
                              uint32_t height);
@@ -166,10 +173,10 @@ private:
     ID3DDeviceContextState *active_;
     uint32_t                feature_level_;
     D3d11Capabilities       capabilities_;
-    D3dSharedResources      shared_;
+    HostShares             *shares_;
     DxvkVulkanDevice        vulkan_;
     HostImageExport         exports_;
-    InteropTextures        interop_;
+    ExportableImages        images_;
     D3d11FramePool          frames_;
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */

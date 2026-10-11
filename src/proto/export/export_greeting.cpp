@@ -5,21 +5,19 @@
 namespace av {
 
 ExportGreeting::ExportGreeting()
-    : uuid_{}, capacity_(0u), on_pci_(false), domain_(0u), bus_(0u), device_(0u), function_(0u)
+    : uuid_{}, on_pci_(false), domain_(0u), bus_(0u), device_(0u), function_(0u)
 {
     AV_SCOPE("ExportGreeting::ExportGreeting");
 }
 
-ExportGreeting::ExportGreeting(const uint8_t *uuid, uint32_t capacity) : ExportGreeting()
+ExportGreeting::ExportGreeting(const uint8_t *uuid) : ExportGreeting()
 {
     AV_SCOPE("ExportGreeting::ExportGreeting");
     for (uint32_t index = 0u; index < uuid_bytes; index++) uuid_[index] = uuid[index];
-    capacity_ = capacity;
 }
 
-ExportGreeting::ExportGreeting(const uint8_t *uuid, uint32_t capacity, uint32_t domain, uint8_t bus, uint8_t device,
-                               uint8_t function)
-    : ExportGreeting(uuid, capacity)
+ExportGreeting::ExportGreeting(const uint8_t *uuid, uint32_t domain, uint8_t bus, uint8_t device, uint8_t function)
+    : ExportGreeting(uuid)
 {
     AV_SCOPE("ExportGreeting::ExportGreeting");
     on_pci_ = true;
@@ -33,12 +31,6 @@ const uint8_t *ExportGreeting::uuid() const
 {
     AV_SCOPE("ExportGreeting::uuid");
     return uuid_;
-}
-
-uint32_t ExportGreeting::capacity() const
-{
-    AV_SCOPE("ExportGreeting::capacity");
-    return capacity_;
 }
 
 bool ExportGreeting::on_pci() const
@@ -71,20 +63,20 @@ uint8_t ExportGreeting::function() const
     return function_;
 }
 
-/* Off PCI, no constructor sets an address field, so a capacity is all there
- * is to check. */
+/* Off PCI, no constructor sets an address field, so the UUID is all there is
+ * to check. */
 bool ExportGreeting::valid() const
 {
     AV_SCOPE("ExportGreeting::valid");
-    return capacity_ != 0u;
+    for (const uint8_t byte : uuid_)
+        if (byte != 0u) return true;
+    return false;
 }
 
 bool ExportGreeting::empty() const
 {
     AV_SCOPE("ExportGreeting::empty");
-    bool blank = capacity_ == 0u && !on_pci_;
-    for (const uint8_t byte : uuid_) blank = blank && byte == 0u;
-    return blank;
+    return !on_pci_ && !valid();
 }
 
 }  // namespace av

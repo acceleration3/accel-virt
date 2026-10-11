@@ -10,7 +10,6 @@
 
 #include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
-#include "executor/opengl/gl_shared_objects.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/opengl/gl_error_tally.hpp"
 #include "executor/session_backend.hpp"
@@ -67,10 +66,10 @@ public:
      * driver, which glImportMemoryFdEXT would read as one of its own. A host
      * without the matching GL_EXT_*_fd extension imports nothing. */
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     uint64_t &wire_handle) override;
+                                     uint64_t &wire_handle, uint64_t &detail) override;
     /* What an import made, destroyed; nothing for a name this context did not
      * import, which is what stops a guest deleting an object of another's. */
-    void               release_object(uint32_t kind, uint64_t wire_handle) override;
+    void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
     /* How many of the table's entry points this host actually has. A driver
      * short of some is not a failure: the decoder refuses each command whose
@@ -100,7 +99,6 @@ private:
     GlContext   context_;
     glproto::RealGl gl_;
     GlHostImport    import_;
-    GlSharedObjects objects_;
     SyncTokens  fences_;
     GuestRegion region_;
     GlErrorTally errors_;

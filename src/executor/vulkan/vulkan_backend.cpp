@@ -600,10 +600,11 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
 }
 
 bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                  uint64_t &wire_handle)
+                                  uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("VulkanBackend::import_object");
     wire_handle = 0u;
+    detail = 0u;
     if (device_ == VK_NULL_HANDLE || fd < 0) return false;
     if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         if (handle_kind != AV_SHARED_HANDLE_OPAQUE_FD) return false;
@@ -629,7 +630,9 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     return true;
 }
 
-void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle)
+/* The guest may have freed the memory itself, with the commands it frees any
+ * by: then the registry no longer knows it and there is nothing to do. */
+void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t)
 {
     AV_SCOPE("VulkanBackend::release_object");
     if (wire_handle == 0u || device_ == VK_NULL_HANDLE || !handles_.knows(wire_handle)) return;

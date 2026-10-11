@@ -55,6 +55,9 @@ namespace vkproto = av::vkproto;
 
 namespace {
 
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
+
 constexpr std::size_t block_bytes = 65536u;
 constexpr std::size_t page = ImportedBlob::page_bytes;
 
@@ -1482,26 +1485,26 @@ TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_
        * opaque fd where memory needs a dma-buf, are each refused with nothing
        * made. */
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, imported));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, imported, detail));
       CHECK_EQ(imported, 0u);
       CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, fd, page,
-                                          imported));
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, imported));
-      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, imported));
+                                          imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, imported, detail));
 
-      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, imported));
+      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, imported, detail));
       CHECK(imported != 0u);
       CHECK(imported != handle);
       /* What an import made is a handle the guest may name, and releasing it
        * takes it back - which is also what frees the memory. */
       CHECK(made.probe().handles().knows(imported));
-      made.backend().release_object(AV_SHARED_MEMORY, imported);
+      made.backend().release_object(AV_SHARED_MEMORY, imported, detail);
       CHECK(!made.probe().handles().knows(imported));
       /* The descriptor stays the device's: the import duplicated it. */
       CHECK(::fcntl(fd, F_GETFD) != -1);
       /* A handle this backend never made releases nothing. */
-      made.backend().release_object(AV_SHARED_MEMORY, handle + 0x1000u);
-      made.backend().release_object(AV_SHARED_MEMORY, 0u);
+      made.backend().release_object(AV_SHARED_MEMORY, handle + 0x1000u, detail);
+      made.backend().release_object(AV_SHARED_MEMORY, 0u, detail);
       ::close(fd);
   }
 }
@@ -1533,14 +1536,14 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       ::close(ends[1]);
       std::uint64_t imported = 9u;
       CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page,
-                                          imported));
+                                          imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
 
       /* And memory the guest still holds is freed through a release naming it,
        * which is the path an importer's own memory takes. */
       CHECK(made.probe().handles().knows(as_wire(plain)));
-      made.backend().release_object(AV_SHARED_MEMORY, as_wire(plain));
+      made.backend().release_object(AV_SHARED_MEMORY, as_wire(plain), detail);
       CHECK(!made.probe().handles().knows(as_wire(plain)));
   }
 }
@@ -1564,7 +1567,7 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       plain_create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       VkSemaphore plain = VK_NULL_HANDLE;
       CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &plain_create, nullptr, &plain), VK_SUCCESS);
-      made.backend().release_object(AV_SHARED_MONITORED_FENCE, as_wire(plain));
+      made.backend().release_object(AV_SHARED_MONITORED_FENCE, as_wire(plain), detail);
       CHECK(!made.probe().handles().knows(as_wire(plain)));
 
       std::uint32_t handle_kind = 9u;
@@ -1593,21 +1596,21 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
        * driver sees it. */
       std::uint64_t imported = 9u;
       CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, fd, 0u,
-                                          imported));
+                                          imported, detail));
       CHECK_EQ(imported, 0u);
       /* And a descriptor that is not a semaphore is the driver's refusal. */
       int ends[2] = {-1, -1};
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
       CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
-                                          0u, imported));
+                                          0u, imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
 
-      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, imported));
+      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, imported, detail));
       CHECK(imported != 0u);
       CHECK(made.probe().handles().knows(imported));
-      made.backend().release_object(AV_SHARED_NATIVE_FENCE, imported);
+      made.backend().release_object(AV_SHARED_NATIVE_FENCE, imported, detail);
       CHECK(!made.probe().handles().knows(imported));
       CHECK(::fcntl(fd, F_GETFD) != -1);
       ::close(fd);
@@ -1654,13 +1657,13 @@ TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_ei
       ::close(ends[1]);
       std::uint64_t imported = 9u;
       CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
-                                          0u, imported));
+                                          0u, imported, detail));
       CHECK_EQ(imported, 0u);
       /* Memory is the same answer by a different route: with no entry point
        * to ask, the descriptor's memory types are none, and an import with no
        * type to bind into is refused rather than bound into type 0. */
       CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page,
-                                          imported));
+                                          imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
   }

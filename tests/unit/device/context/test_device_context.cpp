@@ -16,7 +16,6 @@
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
@@ -100,15 +99,15 @@ ContextSetup setup(std::uint32_t doorbell = 3u, std::uint32_t reply_id = 0u)
 class Fixture {
 public:
     Fixture()
-        : blobs_(host_), shared_(host_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
+        : blobs_(host_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
           shares_(host_, library_), recorder_(host_), ordering_(host_),
-          context_(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
+          context_(host_, blobs_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
     {
         static_cast<void>(ordering_.initialize());
         static_cast<void>(blobs_.initialize());
-        static_cast<void>(shared_.initialize());
         static_cast<void>(shares_.initialize());
         static_cast<void>(library_.accept(&ops_.table()));
+        static_cast<void>(library_.open_domain(capset().gpu().uuid()));
         host_.add_guest_ram(ram, 0x2000u);
         GpuRequestBuilder entries(0u);
         entries.u64(ram).u32(0x2000u).u32(0u);
@@ -159,7 +158,6 @@ private:
     /* Declared before the context, which unpins its blobs as it goes. */
     MockHost            host_;
     BlobTable           blobs_;
-    av::HostSharedObjects shared_;
     av::FenceInterrupts interrupts_;
     av::MockExecutorOps ops_;
     av::ExecutorLibrary library_;
@@ -390,27 +388,6 @@ TEST(device_context_bind, an_opengl_setups_options_reach_the_executor_it_makes)
   CHECK_EQ(asked.flags, AV_CONTEXT_FLAG_ROBUST_ACCESS);
   CHECK_EQ(fixture.ops().last_sub_api(), AV_EXECUTOR_SUB_API_OPENGL);
   CHECK(fixture.ops().last_share() == nullptr); }
-
-TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
-{ MockHost               host;
-  av::BlobTable          blobs(host);
-  av::HostSharedObjects  shared(host);
-  av::FenceInterrupts    interrupts(host);
-  av::MockExecutorOps    ops(AV_EXECUTOR_SUB_API_OPENGL);
-  ops.editable().abi_version = AV_EXECUTOR_ABI_VERSION_HANDLES;
-  ops.editable().create_with_options = nullptr;
-  av::ExecutorLibrary    old;
-  CHECK_STATUS(old.accept(&ops.table()), Status::ok);
-  av::ExecutorShares     shares(host, old);
-  av::WireRecorder       recorder(host);
-  av::D3dOrdering        ordering(host);
-  DeviceContext          context(host, blobs, shared, interrupts, old, shares, recorder, ordering, 9u);
-  const ContextSetup with_options(ProtocolVersion(1u, 1u), SubApi::opengl, ring, 12u, fence, 3u, 0u,
-                                  av::GlContextOptions(3u, 3u, av::GlContextOptions::Profile::core, 0u, 0u));
-  CHECK_STATUS(context.bind(with_options, capset()), Status::invalid_parameter);
-  CHECK(!context.binding().bound());
-  CHECK_EQ(ops.created(), 0u);
-  CHECK_EQ(host.live_doorbells(), 0u); }
 
 TEST(device_context_bind, records_the_setup_it_bound_and_nothing_for_a_bind_it_refused)
 { Fixture fixture;

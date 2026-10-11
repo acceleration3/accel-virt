@@ -16,7 +16,12 @@
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_runtime.hpp"
+#include "core/log/driver_log.hpp"
+#include "core/support/object_storage.hpp"
+#include "device/host/stdio_log.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "proto/context/device_uuid.hpp"
@@ -47,6 +52,7 @@ public:
     D3d12HostDevice    *d3d12_device(uint32_t index) override;
     D3d9HostDevice     *d3d9_device(uint32_t index) override;
     SharedSurfaces     *surfaces(uint32_t index) override;
+    HostShares         *shares(uint32_t index) override;
 
 private:
     /* Room for a driver's whole extension list in one call, because the
@@ -80,6 +86,13 @@ private:
     D3d12HostDevice d3d12_devices_[HostGpuSet::max_gpus];
     D3d9HostDevice  d3d9_devices_[HostGpuSet::max_gpus];
     SharedSurfaces  surfaces_[HostGpuSet::max_gpus];
+    /* What every GPU's shares are kept in, and the shares, before the
+     * devices whose textures they hold are closed and after they are made. */
+    HostHeap                   heap_;
+    /* QEMU's stderr, where what the shares see is written. */
+    StdioLog                   share_sink_;
+    DriverLog                  share_lines_;
+    ObjectStorage<HostShares>  shares_[HostGpuSet::max_gpus];
     VkExtensionProperties extensions_[max_extensions];
     uint32_t count_;
     bool     opened_;

@@ -14,7 +14,8 @@ namespace av {
 MockSessionBackend::MockSessionBackend()
     : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), adopts_(true),
       shares_(true), exported_objects_(0u), imported_objects_(0u), released_objects_(0u),
-      descriptor_(-1), signal_(nullptr), signal_context_(nullptr)
+      descriptor_(-1), signal_(nullptr), signal_context_(nullptr), during_export_(nullptr),
+      during_export_context_(nullptr)
 {}
 
 void MockSessionBackend::set_answer_bytes(std::size_t bytes) { answer_bytes_ = bytes; }
@@ -103,6 +104,13 @@ void MockSessionBackend::set_shares(bool shares) { shares_ = shares; }
 std::uint32_t MockSessionBackend::exported_objects() const { return exported_objects_; }
 std::uint32_t MockSessionBackend::imported_objects() const { return imported_objects_; }
 std::uint32_t MockSessionBackend::released_objects() const { return released_objects_; }
+std::uint64_t MockSessionBackend::last_released_detail() const { return last_released_detail_; }
+
+void MockSessionBackend::before_next_export(void (*during)(void *context), void *context)
+{
+    during_export_ = during;
+    during_export_context_ = context;
+}
 
 /* A real descriptor, because whoever takes it closes it: a made-up number
  * would be a close of some other file of this process. */
@@ -118,23 +126,30 @@ bool MockSessionBackend::export_object(std::uint32_t kind, std::uint64_t wire_ha
     fd = ends[0];
     handle_kind = AV_SHARED_HANDLE_DMA_BUF;
     exported_objects_++;
+    void (*const during)(void *) = during_export_;
+    during_export_ = nullptr;
+    if (during != nullptr) during(during_export_context_);
     return true;
 }
 
 bool MockSessionBackend::import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
-                                       std::uint64_t size, std::uint64_t &wire_handle)
+                                       std::uint64_t size, std::uint64_t &wire_handle, std::uint64_t &detail)
 {
     wire_handle = 0u;
+    detail = 0u;
     if (!shares_ || fd < 0 || kind == 0u || handle_kind == 0u || size == 0u) return false;
     descriptor_ = fd;
     imported_objects_++;
     wire_handle = object_handle + imported_objects_;
+    detail = wire_handle ^ detail_mask;
     return true;
 }
 
-void MockSessionBackend::release_object(std::uint32_t, std::uint64_t wire_handle)
+void MockSessionBackend::release_object(std::uint32_t, std::uint64_t wire_handle, std::uint64_t detail)
 {
-    if (wire_handle != 0u) released_objects_++;
+    if (wire_handle == 0u) return;
+    released_objects_++;
+    last_released_detail_ = detail;
 }
 
 }  // namespace av

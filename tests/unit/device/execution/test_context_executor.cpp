@@ -44,6 +44,7 @@ public:
           executor_(host_, library_, shares_, 5u), sharing_(host_, library_, shares_, 6u)
     {
         static_cast<void>(library_.accept(&ops_.table()));
+        static_cast<void>(library_.open_domain(uuid));
         static_cast<void>(shares_.initialize());
     }
 
@@ -104,7 +105,7 @@ TEST(context_executor_create, makes_the_configured_executor_on_the_worker_and_re
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK_EQ(fixture.ops().destroyed(), 1u);
   CHECK_EQ(fixture.ops().last_sub_api(), AV_EXECUTOR_SUB_API_VULKAN);
-  CHECK_EQ(fixture.ops().last_uuid_byte(), 0x5Au);
+  CHECK(fixture.ops().last_options().domain != 0u);   /* the device's domain */
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
 TEST(context_executor_create, an_unconfigured_context_or_a_library_that_makes_nothing_has_no_executor)
@@ -152,6 +153,7 @@ TEST(context_executor, an_executor_left_behind_is_released_with_the_context)
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   {
       ExecutorShares  shares(host, library);
       ContextExecutor executor(host, library, shares, 1u);
@@ -250,32 +252,6 @@ TEST(context_executor_import, a_refusal_or_an_import_named_nothing_leaves_nothin
       executor.destroy();
   }); }
 
-/* A version 2 library imports, but nothing it imports could be named: the
- * device does not ask it to make an import no guest command can reach. */
-TEST(context_executor_import, a_library_before_version_3_is_not_asked)
-{ MockHost host;
-  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
-  ops.editable().abi_version = AV_EXECUTOR_ABI_VERSION_IMPORTS;
-  ops.editable().imported_handle = nullptr;
-  ExecutorLibrary library;
-  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  ExecutorShares  shares(host, library);
-  ContextExecutor executor(host, library, shares, 1u);
-  executor.configure(SubApi::vulkan, uuid, GlContextOptions());
-  struct Call { ContextExecutor *executor; Status status; std::uint64_t device_memory; };
-  Call call{&executor, Status::ok, 5u};
-  void *thread = nullptr;
-  CHECK_STATUS(host.start_thread([](void *context) {
-                   auto *const c = static_cast<Call *>(context);
-                   static_cast<void>(c->executor->create());
-                   c->status = c->executor->import(1u, host_pointer(0u), c->device_memory);
-                   c->executor->destroy();
-               }, &call, thread), Status::ok);
-  host.join_thread(thread);
-  CHECK_STATUS(call.status, Status::not_supported);
-  CHECK_EQ(call.device_memory, 0u);
-  CHECK_EQ(ops.imported(), 0u); }
-
 TEST(context_executor_import, runs_on_a_worker)
 { Fixture fixture;
   std::uint64_t device_memory = 0u;
@@ -309,7 +285,7 @@ TEST(context_executor_create, an_opengl_executor_is_made_with_its_options_and_pu
   CHECK_EQ(asked.minor, 6u);
   CHECK_EQ(asked.profile, AV_CONTEXT_PROFILE_CORE);
   CHECK_EQ(asked.flags, AV_CONTEXT_FLAG_DEBUG | AV_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET);
-  CHECK_EQ(asked.reserved, 0u);
+  CHECK(asked.domain != 0u);
   CHECK(fixture.ops().last_share() == nullptr);
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
   fixture.on_worker([&fixture](ContextExecutor &executor) {
@@ -367,6 +343,7 @@ TEST(context_executor_create, an_opengl_executor_that_cannot_be_published_is_giv
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid), Status::ok);
   ExecutorShares  unlocked(host, library);
   ContextExecutor executor(host, library, unlocked, 3u);
   executor.configure(SubApi::opengl, uuid, GlContextOptions());
@@ -381,92 +358,46 @@ TEST(context_executor_create, an_opengl_executor_that_cannot_be_published_is_giv
   CHECK_EQ(ops.live(), 0u);
   CHECK_EQ(ops.misuses(), 0u); }
 
-/* What a library before version 4 can make: the defaults, and nothing else. */
-TEST(context_executor, accepts_options_only_from_a_library_that_makes_them)
-{ Fixture fixture;
-  CHECK(fixture.executor().accepts(GlContextOptions()));
-  CHECK(fixture.executor().accepts(core_46));
-  CHECK(fixture.executor().accepts(GlContextOptions().sharing(2u)));
-  MockHost host;
-  MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
-  AvExecutorOps &table = ops.editable();
-  table.abi_version = AV_EXECUTOR_ABI_VERSION_HANDLES;
-  table.create_with_options = nullptr;
-  ExecutorLibrary old;
-  CHECK_STATUS(old.accept(&table), Status::ok);
-  ExecutorShares  shares(host, old);
-  ContextExecutor executor(host, old, shares, 1u);
-  CHECK(executor.accepts(GlContextOptions()));
-  CHECK(!executor.accepts(core_46));
-  CHECK(!executor.accepts(GlContextOptions().sharing(2u))); }
-
-/* Feature 053: the three calls that move one host object between executors.
- * A context with no executor and a library from before the version that has
- * them are each a refusal, never a call into a table that has no entry. */
-TEST(context_executor_export_object, refuses_without_an_executor_and_on_a_library_that_shares_nothing)
+/* Feature 053: a context with no executor shares, opens and closes nothing,
+ * and never calls into the library. */
+TEST(context_executor_shared, refuses_without_an_executor)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
   fixture.on_worker([](ContextExecutor &executor) {
-      std::uint32_t handle_kind = 9u;
-      int           fd = 9;
-      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::invalid_state);
-      CHECK_EQ(handle_kind, 0u);
-      CHECK_EQ(fd, -1);
+      CHECK_STATUS(executor.share_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), Status::invalid_state);
       std::uint64_t made = 9u;
-      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
-                   Status::invalid_state);
+      CHECK_STATUS(executor.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, made), Status::invalid_state);
       CHECK_EQ(made, 0u);
-      /* And a release without one does nothing at all. */
-      executor.release_object(AV_SHARED_MEMORY, 0x40u);
+      executor.close_object(0x2Au);
   });
-  CHECK_EQ(fixture.ops().released_objects(), 0u); }
+  CHECK_EQ(fixture.ops().shared_objects(), 0u);
+  CHECK_EQ(fixture.ops().closed_objects(), 0u); }
 
-TEST(context_executor_export_object, refuses_on_a_library_from_before_the_sharing_version)
+/* What the library answers is what the device tells the guest: done, an id
+ * it does not share, one that disagrees, one already held, and a refusal. */
+TEST(context_executor_shared, shares_opens_and_closes_through_the_library)
 { Fixture fixture;
-  fixture.ops().set_abi_version(AV_EXECUTOR_ABI_VERSION_EVENTS);
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
-  fixture.on_worker([](ContextExecutor &executor) {
-      CHECK_STATUS(executor.create(), Status::ok);
-      std::uint32_t handle_kind = 9u;
-      int           fd = 9;
-      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
-      CHECK_EQ(fd, -1);
-      std::uint64_t made = 9u;
-      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
-                   Status::not_supported);
-      CHECK_EQ(made, 0u);
-      executor.release_object(AV_SHARED_MEMORY, 0x40u);
-      executor.destroy();
-  });
-  CHECK_EQ(fixture.ops().exported_objects(), 0u);
-  CHECK_EQ(fixture.ops().released_objects(), 0u); }
-
-/* And on a library that has them, all three reach it. */
-TEST(context_executor_export_object, exports_imports_and_releases_through_a_library_that_shares)
-{ Fixture fixture;
-  fixture.ops().descriptors_from(fixture.host());
-  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
-  fixture.on_worker([&fixture](ContextExecutor &executor) {
-      CHECK_STATUS(executor.create(), Status::ok);
-      std::uint32_t handle_kind = 0u;
-      int           fd = -1;
-      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::ok);
-      CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
-      CHECK(fd >= 0);
+  fixture.sharing().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.on_worker([&fixture](ContextExecutor &maker) {
+      ContextExecutor &reader = fixture.sharing();
+      CHECK_STATUS(maker.create(), Status::ok);
+      CHECK_STATUS(reader.create(), Status::ok);
+      CHECK_STATUS(maker.share_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), Status::ok);
       std::uint64_t made = 0u;
-      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, handle_kind, fd, 4096u, made), Status::ok);
+      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, made), Status::ok);
       CHECK(made != 0u);
-      executor.release_object(AV_SHARED_MEMORY, made);
-      /* An executor that refuses is a refusal, not a fault. */
-      fixture.ops().refuse_export_at(1u);
-      CHECK_STATUS(executor.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
-      fixture.ops().refuse_object_import_at(1u);
-      CHECK_STATUS(executor.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made),
-                   Status::not_supported);
-      CHECK_EQ(made, 0u);
-      executor.destroy();
-      fixture.host().close_dmabuf(fd);
+      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, made), Status::conflict);
+      CHECK_STATUS(reader.open_object(0x2Bu, AV_SHARED_MEMORY, 4096u, made), Status::not_found);
+      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 8192u, made), Status::invalid_parameter);
+      fixture.ops().refuse_share_at(1u);
+      CHECK_STATUS(maker.share_object(0x2Cu, AV_SHARED_MEMORY, 4096u, 0x41u), Status::not_supported);
+      reader.close_object(0x2Au);
+      CHECK_EQ(fixture.ops().closed_objects(), 1u);
+      CHECK_EQ(fixture.ops().live_opens(), 0u);
+      reader.destroy();
+      maker.destroy();
   });
-  CHECK_EQ(fixture.ops().exported_objects(), 1u);
-  CHECK_EQ(fixture.ops().imported_objects(), 1u);
-  CHECK_EQ(fixture.ops().released_objects(), 1u); }
+  CHECK_EQ(fixture.ops().shared_objects(), 1u);
+  CHECK_EQ(fixture.ops().opened_objects(), 1u);
+  CHECK_EQ(fixture.ops().misuses(), 0u); }

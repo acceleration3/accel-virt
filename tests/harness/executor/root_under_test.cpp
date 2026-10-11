@@ -5,6 +5,8 @@
 #include "executor/executor_root.hpp"
 #include "harness/framework/test_registry.hpp"
 
+#include <cstring>
+
 namespace av {
 
 namespace {
@@ -15,7 +17,7 @@ ObjectStorage<ExecutorRoot> storage;
 
 }  // namespace
 
-RootUnderTest::RootUnderTest() : held_(false)
+RootUnderTest::RootUnderTest() : held_(false), gpus_{}, domains_{}
 {
     AV_SCOPE("RootUnderTest::RootUnderTest");
     /* A second one alive at the same time would hand both tests the same
@@ -48,6 +50,32 @@ ExecutorRoot &RootUnderTest::operator*() const
 {
     AV_SCOPE("RootUnderTest::operator*");
     return storage.object();
+}
+
+std::uint32_t RootUnderTest::domain_of(const std::uint8_t *gpu_uuid)
+{
+    AV_SCOPE("RootUnderTest::domain_of");
+    if (gpu_uuid == nullptr) return 0u;
+    for (std::uint32_t entry = 0u; entry < max_domains; entry++)
+        if (domains_[entry] != 0u && std::memcmp(gpus_[entry], gpu_uuid, sizeof gpus_[entry]) == 0)
+            return domains_[entry];
+    const std::uint32_t opened = storage.object().open_domain(gpu_uuid);
+    for (std::uint32_t entry = 0u; entry < max_domains && opened != 0u; entry++) {
+        if (domains_[entry] != 0u) continue;
+        std::memcpy(gpus_[entry], gpu_uuid, sizeof gpus_[entry]);
+        domains_[entry] = opened;
+        break;
+    }
+    return opened;
+}
+
+ContextSession *RootUnderTest::open(std::uint32_t sub_api, const std::uint8_t *gpu_uuid,
+                                    const AvContextOptions *options, ContextSession *share)
+{
+    AV_SCOPE("RootUnderTest::open");
+    AvContextOptions asked = options != nullptr ? *options : AvContextOptions{};
+    asked.domain = domain_of(gpu_uuid);
+    return storage.object().open(sub_api, asked, share);
 }
 
 bool RootUnderTest::invariants_hold() const

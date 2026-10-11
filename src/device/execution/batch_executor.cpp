@@ -17,10 +17,9 @@
 
 namespace av {
 
-BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports,
-                             ContextSharedObjects &shared, BatchStaging &staging, FenceReporter &fences,
-                             WireRecorder &recorder, uint32_t context)
-    : host_(host), executor_(executor), imports_(imports), shared_(shared), staging_(staging), fences_(fences),
+BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
+                             FenceReporter &fences, WireRecorder &recorder, uint32_t context)
+    : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences),
       recorder_(recorder), context_(context), fault_(FaultCode::none), reply_(),
       batches_(0u), commands_(0u), skipped_(0u)
       {
@@ -153,7 +152,7 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
     const size_t   capacity = replying ? staging_.reply_capacity() : 0u;
     size_t         produced = 0u;
     const Status   status =
-        transport ? TransportCommand(imports_, shared_, header, payload).run(reply, capacity, produced)
+        transport ? TransportCommand(imports_, executor_, header, payload).run(reply, capacity, produced)
                   : executor_.execute(header.id(), payload, header.size() - CommandHeader::encoded_size, reply,
                                       capacity, produced);
     if (status == Status::not_found) {

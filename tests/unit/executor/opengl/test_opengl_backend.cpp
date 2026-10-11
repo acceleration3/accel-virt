@@ -60,6 +60,9 @@ extern "C" const char *__lsan_default_suppressions(void)
 
 namespace {
 
+/* What the last import answered beside its handle, handed back to its release. */
+std::uint64_t detail = 0u;
+
 alignas(4096) std::uint8_t region[2u * 4096u];
 alignas(4096) std::uint8_t second_region[4096];
 
@@ -314,9 +317,9 @@ TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_noth
   CHECK_EQ(handle_kind, 0u);
   CHECK_EQ(fd, -1);
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
   CHECK_EQ(made, 0u);
-  backend.release_object(AV_SHARED_MEMORY, 1u);
+  backend.release_object(AV_SHARED_MEMORY, 1u, detail);
   backend.shut_down(); }
 
 /* What is refused before any driver is asked, which is every question the
@@ -325,12 +328,12 @@ TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_noth
 TEST(opengl_backend, an_import_of_the_wrong_shape_never_reaches_a_driver)
 { OpenGlBackend backend;
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, made, detail));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, 4096u, made));
-  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
-  CHECK(!backend.import_object(0u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 0u, made));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, 4096u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
+  CHECK(!backend.import_object(0u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 0u, made, detail));
   CHECK_EQ(made, 0u); }
 
 namespace {

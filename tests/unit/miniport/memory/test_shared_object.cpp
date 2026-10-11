@@ -175,5 +175,19 @@ TEST(shared_object_invariants, refuse_an_object_with_no_id_no_kind_no_allocation
   SharedObjectProbe::set_size(rig.object(), 2u * page);
   CHECK(rig.object().invariants_hold());
 
+  /* Forgotten while still held is a count that lost track: dxgkrnl destroys
+   * a shared allocation only once nobody holds it. */
+  CHECK_STATUS(rig.object().open(), Status::ok);
   SharedObjectProbe::forget_allocation(rig.object());
-  CHECK(!rig.object().invariants_hold()); }
+  CHECK(!rig.object().invariants_hold());
+  CHECK_STATUS(rig.object().close(), Status::ok);
+  CHECK(rig.object().invariants_hold()); }
+
+/* Forgotten as its allocation is destroyed: it names that allocation no more,
+ * and says so. */
+TEST(shared_object, a_forgotten_object_names_no_allocation)
+{ Fixture rig;
+  CHECK(!rig.object().forgotten());
+  rig.object().forget();
+  CHECK(rig.object().forgotten());
+  CHECK(rig.object().invariants_hold()); }

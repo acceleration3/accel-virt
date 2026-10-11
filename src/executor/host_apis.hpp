@@ -24,6 +24,7 @@ class D3d12HostDevice;
 class D3d9HostDevice;
 class GlDisplay;
 class OpenClDevice;
+class HostShares;
 class SharedSurfaces;
 
 class HostApis {
@@ -70,6 +71,10 @@ public:
      * them (docs/shared-surfaces.md): every Direct3D session on it and the
      * present engine's reads share it. Null for an index nobody has. */
     virtual SharedSurfaces     *surfaces(uint32_t index) = 0;
+    /* Every shared object on this GPU, of every API (HostShares): every
+     * session on it publishes and opens through it. Null for an index nobody
+     * has. */
+    virtual HostShares         *shares(uint32_t index) = 0;
 
 protected:
     HostApis() = default;

@@ -144,14 +144,20 @@ private:
  * is a present flag, a length and the bytes. */
 bool host_renderer(const AvExecutorOps &ops, const std::uint8_t *uuid, char *out)
 {
-    AvExecutor *const executor = ops.create(ops.opaque, AV_EXECUTOR_SUB_API_OPENGL, uuid);
-    if (executor == nullptr) return false;
+    const std::uint32_t    domain = ops.open_domain(ops.opaque, uuid);
+    const AvContextOptions options = {0u, 0u, 0u, 0u, domain};
+    AvExecutor *const      executor = ops.create(ops.opaque, AV_EXECUTOR_SUB_API_OPENGL, &options, nullptr);
+    if (executor == nullptr) {
+        if (domain != 0u) ops.close_domain(ops.opaque, domain);
+        return false;
+    }
     const std::uint8_t name[] = {0x81u, 0x3Eu};
     std::uint8_t       reply[renderer_bytes] = {};
     std::size_t        length = 0u;
     const std::uint32_t ran = ops.execute(ops.opaque, executor, av::glproto::kCmd_glGetString, name, sizeof name,
                                           reply, sizeof reply, &length);
     ops.destroy(ops.opaque, executor);
+    ops.close_domain(ops.opaque, domain);
     if (ran != AV_EXECUTED || length < 2u || reply[0] != 1u || reply[1] >= 0x80u) return false;
     const std::size_t text = reply[1];
     if (2u + text > length) return false;

@@ -21,8 +21,7 @@
  * OpenCL never took ownership of it - and `icd::SharedHandles::forget` closes
  * what it forgets, which would close a handle the application still holds. The
  * price is that the process's handle table keeps a row per distinct handle
- * adopted, and an application that imports more than it holds is refused once
- * that table is full rather than once this one is. */
+ * adopted for as long as the process lives. */
 #ifndef AV_CLICD_CL_EXTERNAL_MEMORY_HPP
 #define AV_CLICD_CL_EXTERNAL_MEMORY_HPP
 
@@ -33,6 +32,7 @@
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class LogSink;
 }  // namespace av
 
@@ -65,7 +65,8 @@ public:
         0x2060u,  /* CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_FD_KHR         */
         0x2067u}; /* CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR           */
 
-    ClExternalMemory(icd::SharedHandles &handles, LogSink &log);
+    /* Rows are kept in `memory`. */
+    ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, LogSink &log);
     ClExternalMemory(const ClExternalMemory &) = delete;
     ClExternalMemory &operator=(const ClExternalMemory &) = delete;
 
@@ -86,8 +87,8 @@ public:
      * a size of 0 or one no whole number of pages holds, and an object this
      * context already holds - which the device refuses too, because a context
      * with two cl_mem over one object could release it twice;
-     * CL_OUT_OF_RESOURCES when the table is full or the device would not open
-     * it. `made` is 0 unless CL_SUCCESS. */
+     * CL_OUT_OF_HOST_MEMORY when no row can be had; CL_OUT_OF_RESOURCES when
+     * the device would not open it. `made` is 0 unless CL_SUCCESS. */
     cl_int open(ClientTransport &wire, uint32_t device, const ClPropertyList &list, uint64_t size,
                 uint64_t &made);
 

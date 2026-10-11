@@ -29,9 +29,9 @@ struct ExportConnectionProbe;
 
 class ExportConnection {
 public:
-    /* Surfaces one consumer holds at once: a mirror's ring of slots for each
-     * window it shows, with room to spare. */
-    static constexpr uint32_t max_surfaces = 64u;
+    /* Room the list of held surfaces starts with, doubled as it fills: a
+     * mirror holds a ring of slots for each window it shows. */
+    static constexpr uint32_t first_room = 16u;
 
     ExportConnection(Host &host, const ExportedGpu &gpu);
     ~ExportConnection();
@@ -68,6 +68,9 @@ private:
     bool         send(const ExportAnswer &answer, int descriptor);
     bool         holds(uint64_t surface) const;
     void         drop(uint64_t surface);
+    /* Under the lock: room for one more held surface, the list grown from the
+     * host if it is full. False when the host has no memory. */
+    bool         room_for_one();
 
     Host              &host_;
     const ExportedGpu &gpu_;
@@ -76,7 +79,9 @@ private:
     int                descriptor_;
     /* Written by the thread as it leaves, under the lock. */
     bool               ended_;
-    uint64_t           surfaces_[max_surfaces];
+    /* From the host, kept until the connection is destroyed. */
+    uint64_t          *surfaces_;
+    uint32_t           room_;
     uint32_t           held_;
 
     friend struct ExportConnectionProbe;

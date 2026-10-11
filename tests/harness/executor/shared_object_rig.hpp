@@ -1,5 +1,6 @@
 /* Two guest contexts of one device, each with its own executor on its own
- * worker thread, over one device-global table of shared objects (feature 053).
+ * worker thread, in one domain of a mock library that keeps the objects they
+ * share (feature 053).
  *
  * Two, not one, because the whole claim of US3 is about what two contexts see
  * of one object, and a rig with one context can only assert bookkeeping. Each
@@ -12,10 +13,8 @@
 
 #include "core/support/status.hpp"
 #include "device/execution/context_executor.hpp"
-#include "device/execution/context_shared_objects.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/host/mock_host.hpp"
 
@@ -23,25 +22,23 @@
 
 namespace av {
 
-/* One context of the rig: its executor, its table, and the thread both run on.
+/* One context of the rig: its executor, and the thread it runs on.
  * A type of its own because a context is a real thing here, not a pair of
  * fields the rig would otherwise have twice. */
 class SharedObjectContext {
 public:
-    SharedObjectContext(MockHost &host, const ExecutorLibrary &library, ExecutorShares &shares,
-                        HostSharedObjects &objects, std::uint32_t id);
+    SharedObjectContext(MockHost &host, const ExecutorLibrary &library, ExecutorShares &shares, std::uint32_t id);
     ~SharedObjectContext();
     SharedObjectContext(const SharedObjectContext &) = delete;
     SharedObjectContext &operator=(const SharedObjectContext &) = delete;
 
-    /* The worker, its executor and its table. `executor` false leaves the
+    /* The worker and its executor. `executor` false leaves the
      * context with no executor at all, which is a context whose ring never
      * attached. */
     [[nodiscard]] Status start(bool executor);
     void                 stop();
 
-    ContextExecutor      &executor();
-    ContextSharedObjects &objects();
+    ContextExecutor &executor();
 
     /* Runs `body` on this context's worker and waits for it. */
     template <typename Body>
@@ -53,7 +50,6 @@ private:
 
     MockHost            &host_;
     ContextExecutor      executor_;
-    ContextSharedObjects objects_;
     void                *start_;
     void                *done_;
     void                *thread_;
@@ -74,20 +70,17 @@ public:
 
     MockHost             &host();
     MockExecutorOps      &ops();
-    HostSharedObjects    &shared();
     SharedObjectContext  &first();
     SharedObjectContext  &second();
 
-    /* Both tables' invariants and the device's, which a test asserts after
-     * every mutation. */
-    bool invariants_hold() const;
+    /* The executors' calls each stayed on their own thread. */
+    bool invariants_hold();
 
 private:
     MockHost            host_;
     MockExecutorOps     ops_;
     ExecutorLibrary     library_;
     ExecutorShares      shares_;
-    HostSharedObjects   objects_;
     SharedObjectContext first_;
     SharedObjectContext second_;
 };

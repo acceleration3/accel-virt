@@ -12,7 +12,7 @@ namespace av {
 
 SharedObjectTable::SharedObjectTable(Platform &platform)
     : platform_(platform), mutex_(platform, LockRank::shared_objects), objects_(platform), next_id_(1u),
-      adapter_(0u), released_{}, released_count_(0u), released_dropped_(0u)
+      adapter_(0u)
     {
         AV_SCOPE("SharedObjectTable::SharedObjectTable");
     }
@@ -43,7 +43,7 @@ uint64_t SharedObjectTable::adapter() const
 SharedObject *SharedObjectTable::find(uint64_t id)
 {
     AV_SCOPE("SharedObjectTable::find");
-    return objects_.find_if([id](const SharedObject &object) { return object.id() == id; });
+    return objects_.find_if([id](const SharedObject &object) { return object.id() == id && !object.forgotten(); });
 }
 
 Status SharedObjectTable::mint(Allocation &allocation, SharedObjectRecord &record)
@@ -123,10 +123,7 @@ void SharedObjectTable::forget(const Allocation &allocation)
     InvariantScope<SharedObjectTable> guard(platform_, *this, "forget");
     SharedObject *const named =
         objects_.find_if([&allocation](const SharedObject &object) { return object.names(allocation); });
-    if (named == nullptr) return;
-    if (released_count_ < max_released) released_[released_count_++] = named->id();
-    else released_dropped_++;
-    static_cast<void>(objects_.destroy(named));
+    if (named != nullptr) named->forget();
 }
 
 uint32_t SharedObjectTable::take_released(uint64_t *ids, uint32_t capacity)
@@ -136,17 +133,23 @@ uint32_t SharedObjectTable::take_released(uint64_t *ids, uint32_t capacity)
     if (ids == nullptr) return 0u;
     MutexGuard lock(mutex_);
     InvariantScope<SharedObjectTable> guard(platform_, *this, "take_released");
-    const uint32_t taken = released_count_ < capacity ? released_count_ : capacity;
-    for (uint32_t index = 0u; index < taken; index++) ids[index] = released_[index];
-    for (uint32_t index = taken; index < released_count_; index++) released_[index - taken] = released_[index];
-    released_count_ -= taken;
+    uint32_t taken = 0u;
+    objects_.destroy_if([ids, capacity, &taken](const SharedObject &object) {
+        if (!object.forgotten() || taken == capacity) return false;
+        ids[taken++] = object.id();
+        return true;
+    });
     return taken;
 }
 
 uint32_t SharedObjectTable::live() const
 {
     AV_SCOPE("SharedObjectTable::live");
-    return objects_.live();
+    uint32_t held = 0u;
+    objects_.for_each([&held](const SharedObject &object) {
+        if (!object.forgotten()) held++;
+    });
+    return held;
 }
 
 void SharedObjectTable::report(StateWriter &writer)
@@ -160,10 +163,10 @@ void SharedObjectTable::report(StateWriter &writer)
         /* Not the adapter's own number: it is a value a dump is read across
          * and an operator traces objects by their ids, which are what a record
          * carries anyway. */
-        writer.number("live", objects_.live());
-        writer.number("released", released_count_);
-        writer.number("released_dropped", released_dropped_);
+        writer.number("live", live());
+        writer.number("released", objects_.live() - live());
         objects_.for_each([&](const SharedObject &object) {
+            if (object.forgotten()) return;
             writer.open("object", object.id());
             writer.number("kind", object.kind().value());
             writer.number("size", object.size());
@@ -177,9 +180,6 @@ void SharedObjectTable::report(StateWriter &writer)
 bool SharedObjectTable::invariants_hold() const
 {
     AV_SCOPE("SharedObjectTable::invariants_hold");
-    if (released_count_ > max_released) return false;
-    for (uint32_t index = 0u; index < released_count_; index++)
-        if (released_[index] == 0u || released_[index] >= next_id_) return false;
     return objects_.all_of([this](const SharedObject &object) {
         if (!object.invariants_hold() || object.id() >= next_id_) return false;
         uint32_t named = 0u;

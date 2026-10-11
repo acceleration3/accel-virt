@@ -16,12 +16,12 @@
 namespace av {
 
 class BlobImports;
-class ContextSharedObjects;
+class ContextExecutor;
 
 class TransportCommand {
 public:
     /* `body` is what follows the header, as the stream framed it. */
-    TransportCommand(BlobImports &imports, ContextSharedObjects &shared, const CommandHeader &header,
+    TransportCommand(BlobImports &imports, ContextExecutor &executor, const CommandHeader &header,
                      const uint8_t *body);
 
     /* Worker. ok for a NOP, whose answer is empty; malformed for a NOP of any
@@ -32,8 +32,8 @@ public:
     [[nodiscard]] Status run(uint8_t *reply, size_t capacity, size_t &produced);
 
 private:
-    BlobImports          &imports_;
-    ContextSharedObjects &shared_;
+    BlobImports     &imports_;
+    ContextExecutor &executor_;
     CommandHeader  header_;
     const uint8_t *body_;
 };

@@ -18,14 +18,14 @@
 
 namespace av {
 
-class ContextSharedObjects;
+class ContextExecutor;
 class SharedObjectRequest;
 
 class SharedObjectCommand {
 public:
     /* `body` is the header's size less the header's bytes, as the stream
      * framed it. */
-    SharedObjectCommand(ContextSharedObjects &objects, const CommandHeader &header, const uint8_t *body);
+    SharedObjectCommand(ContextExecutor &executor, const CommandHeader &header, const uint8_t *body);
 
     /* Worker. malformed for a body of any length but the request's;
      * not_found for any other transport id; ok otherwise, with `produced` the
@@ -33,8 +33,8 @@ public:
     [[nodiscard]] Status run(uint8_t *reply, size_t capacity, size_t &produced);
 
 private:
-    /* The status a refusal of this command is, given what the table answered
-     * and the request that reached it. */
+    /* The status a refusal of this command is, given what the executor
+     * answered. */
     uint32_t             refusal_of(Status answered) const;
     [[nodiscard]] Status answer(uint32_t status, uint64_t wire_handle, uint8_t *reply, size_t capacity,
                                 size_t &produced);
@@ -43,9 +43,9 @@ private:
     bool                 handle_allowed() const;
     size_t               body_size() const;
 
-    ContextSharedObjects &objects_;
-    CommandHeader         header_;
-    const uint8_t        *body_;
+    ContextExecutor &executor_;
+    CommandHeader    header_;
+    const uint8_t   *body_;
 };
 
 }  // namespace av

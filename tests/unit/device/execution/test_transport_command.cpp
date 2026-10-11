@@ -7,11 +7,9 @@
 #include "device/recording/wire_recorder.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
-#include "device/execution/context_shared_objects.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/execution/transport_command.hpp"
 #include "device/memory/blob_table.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
@@ -34,8 +32,7 @@ class Fixture {
 public:
     Fixture()
         : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
-          objects_(host_), recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u),
-          shared_(objects_, executor_)
+          recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u)
     {}
 
     av::MockHost &host() { return host_; }
@@ -43,7 +40,7 @@ public:
     {
         reply_[0] = 0xEEu;
         produced_ = 99u;
-        return TransportCommand(imports_, shared_, header, body).run(reply_, sizeof reply_, produced_);
+        return TransportCommand(imports_, executor_, header, body).run(reply_, sizeof reply_, produced_);
     }
     std::size_t         produced() const { return produced_; }
     const std::uint8_t *reply() const { return reply_; }
@@ -54,10 +51,8 @@ private:
     av::ExecutorShares  shares_;
     av::ContextExecutor executor_;
     av::BlobTable       blobs_;
-    av::HostSharedObjects objects_;
     av::WireRecorder    recorder_;
     av::BlobImports     imports_;
-    av::ContextSharedObjects shared_;
     std::uint8_t        reply_[32] = {};
     std::size_t         produced_ = 0u;
 };

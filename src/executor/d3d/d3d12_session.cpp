@@ -113,14 +113,15 @@ D3d12Session::D3d12Session(GuestRegion &region, D3dObjectTable &objects)
     AV_SCOPE("D3d12Session::D3d12Session");
 }
 
-void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by, SharedSurfaces *surfaces)
+void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by, SharedSurfaces *surfaces,
+                              SessionShares *shares)
 {
     AV_SCOPE("D3d12Session::initialize");
     device_ = device != nullptr && device->opened() ? device : nullptr;
     surfaces_ = surfaces;
     views_.bind(device_ != nullptr ? device_->device() : nullptr);
     pipelines_.bind(device_);
-    presentation_.bind(device_, shown_by);
+    presentation_.bind(device_, shown_by, shares);
     removed_ = 0u;
 }
 
@@ -128,7 +129,7 @@ void D3d12Session::shut_down()
 {
     AV_SCOPE("D3d12Session::shut_down");
     drain();
-    presentation_.bind(nullptr, nullptr);
+    presentation_.bind(nullptr, nullptr, nullptr);
     fences_.clear();
     progress_.clear();
     wake_.unbind();

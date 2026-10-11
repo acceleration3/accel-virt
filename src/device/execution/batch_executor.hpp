@@ -20,7 +20,6 @@ namespace av {
 class BatchHeader;
 class BatchStaging;
 class BlobImports;
-class ContextSharedObjects;
 class CommandHeader;
 class ContextExecutor;
 class FenceReporter;
@@ -31,8 +30,8 @@ struct BatchExecutorProbe;
 
 class BatchExecutor {
 public:
-    BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, ContextSharedObjects &shared,
-                  BatchStaging &staging, FenceReporter &fences, WireRecorder &recorder, uint32_t context);
+    BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
+                  FenceReporter &fences, WireRecorder &recorder, uint32_t context);
     BatchExecutor(const BatchExecutor &) = delete;
     BatchExecutor &operator=(const BatchExecutor &) = delete;
 
@@ -83,7 +82,6 @@ private:
     Host            &host_;
     ContextExecutor &executor_;
     BlobImports     &imports_;
-    ContextSharedObjects &shared_;
     BatchStaging    &staging_;
     FenceReporter   &fences_;
     WireRecorder    &recorder_;

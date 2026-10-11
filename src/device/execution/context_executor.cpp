@@ -45,19 +45,13 @@ void ContextExecutor::configure(SubApi api, const uint8_t *gpu_uuid, const GlCon
     configured_ = true;
 }
 
-bool ContextExecutor::accepts(const GlContextOptions &options) const
-{
-    AV_SCOPE("ContextExecutor::accepts");
-    return options.defaults() || library_.names_options();
-}
-
 AvExecutor *ContextExecutor::make() const
 {
     AV_SCOPE("ContextExecutor::make");
     const AvContextOptions wanted = {options_.major(), options_.minor(),
                                       static_cast<uint8_t>(options_.profile()), options_.flags(), 0u};
     if (options_.share_context() != 0u) return shares_.create_sharing(api_, options_.share_context(), uuid_.raw(), wanted);
-    return library_.create(api_, uuid_.raw(), options_.defaults() ? nullptr : &wanted);
+    return library_.create(api_, wanted, nullptr);
 }
 
 void ContextExecutor::signals_through(ContextSignal &signal)
@@ -142,7 +136,7 @@ Status ContextExecutor::import(uint64_t blob_id, const AvBlobHandle &handle, uin
     host_.require_worker("ContextExecutor::import");
     device_memory = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
-    if (!library_.names_imports() || library_.import_blob(executor_, blob_id, handle) != AV_EXECUTED)
+    if (library_.import_blob(executor_, blob_id, handle) != AV_EXECUTED)
         return Status::not_supported;
     device_memory = library_.imported_handle(executor_, blob_id);
     if (device_memory != 0u) return Status::ok;
@@ -157,36 +151,40 @@ void ContextExecutor::release(uint64_t blob_id)
     if (executor_ != nullptr) library_.release_blob(executor_, blob_id);
 }
 
-Status ContextExecutor::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
+Status ContextExecutor::share_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t wire_handle)
 {
-    AV_SCOPE("ContextExecutor::export_object");
-    host_.require_worker("ContextExecutor::export_object");
-    handle_kind = 0u;
-    fd = -1;
+    AV_SCOPE("ContextExecutor::share_object");
+    host_.require_worker("ContextExecutor::share_object");
     if (executor_ == nullptr) return Status::invalid_state;
-    if (!library_.shares_objects()) return Status::not_supported;
-    return library_.export_object(executor_, kind, wire_handle, handle_kind, fd) ? Status::ok
-                                                                              : Status::not_supported;
+    return status_of(library_.share_object(executor_, object_id, kind, size, wire_handle));
 }
 
-Status ContextExecutor::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                      uint64_t &wire_handle)
+Status ContextExecutor::open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle)
 {
-    AV_SCOPE("ContextExecutor::import_object");
-    host_.require_worker("ContextExecutor::import_object");
+    AV_SCOPE("ContextExecutor::open_object");
+    host_.require_worker("ContextExecutor::open_object");
     wire_handle = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
-    if (!library_.shares_objects()) return Status::not_supported;
-    return library_.import_object(executor_, kind, handle_kind, fd, size, wire_handle) ? Status::ok
-                                                                                     : Status::not_supported;
+    return status_of(library_.open_object(executor_, object_id, kind, size, wire_handle));
 }
 
-void ContextExecutor::release_object(uint32_t kind, uint64_t wire_handle)
+void ContextExecutor::close_object(uint64_t object_id)
 {
-    AV_SCOPE("ContextExecutor::release_object");
-    host_.require_worker("ContextExecutor::release_object");
-    if (executor_ != nullptr && library_.shares_objects())
-        library_.release_object(executor_, kind, wire_handle);
+    AV_SCOPE("ContextExecutor::close_object");
+    host_.require_worker("ContextExecutor::close_object");
+    if (executor_ != nullptr) library_.close_object(executor_, object_id);
+}
+
+Status ContextExecutor::status_of(uint32_t answered) const
+{
+    AV_SCOPE("ContextExecutor::status_of");
+    switch (answered) {
+    case AV_SHARED_DONE: return Status::ok;
+    case AV_SHARED_UNKNOWN: return Status::not_found;
+    case AV_SHARED_MISMATCHED: return Status::invalid_parameter;
+    case AV_SHARED_CONFLICT: return Status::conflict;
+    default: return Status::not_supported;
+    }
 }
 
 uint16_t ContextExecutor::command_api() const

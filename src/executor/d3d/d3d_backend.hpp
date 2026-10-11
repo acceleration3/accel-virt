@@ -42,6 +42,7 @@ struct D3dBackendProbe;
 class D3d11HostDevice;
 class D3d12HostDevice;
 class D3d9HostDevice;
+class SessionShares;
 class SharedSurfaces;
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
@@ -51,12 +52,15 @@ public:
 
     D3dBackend();
 
-    /* Binds this session to its GPU's Direct3D 11 device and, where it has
-     * them, its Direct3D 12 device and its Direct3D 9, and to the surfaces its
-     * presents publish (SharedSurfaces); all must outlive it. False for a GPU
-     * with no Direct3D 11 device: that is what says Direct3D is served at all. */
-    [[nodiscard]] bool initialize(D3d11HostDevice *device11, D3d12HostDevice *device12 = nullptr,
-                                  SharedSurfaces *surfaces = nullptr, D3d9HostDevice *device9 = nullptr);
+    /* Binds this session to what the guest shares through `shares` - bound
+     * to its domain, or not, and then it shares nothing - to its GPU's
+     * Direct3D 11 device and, where it has them, its Direct3D 12 device and
+     * its Direct3D 9, and to the surfaces its presents publish
+     * (SharedSurfaces); all must outlive it. False for a GPU with no
+     * Direct3D 11 device: that is what says Direct3D is served at all. */
+    [[nodiscard]] bool initialize(SessionShares &shares, D3d11HostDevice *device11,
+                                  D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
+                                  D3d9HostDevice *device9 = nullptr);
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;
@@ -69,13 +73,13 @@ public:
     void bind_signal(void (*signal)(void *context), void *context) override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
-    /* Direct3D shares through the device's own table (D3dSharedResources),
-     * not through the device's shared objects: nothing is exported. */
+    /* A shared texture's memory, which other APIs import (feature 053);
+     * Direct3D imports nothing, as it opens what it shares by id. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     uint64_t &wire_handle) override;
-    void               release_object(uint32_t kind, uint64_t wire_handle) override;
+                                     uint64_t &wire_handle, uint64_t &detail) override;
+    void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
     const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
     uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
@@ -217,6 +221,9 @@ private:
 
     D3d11HostDevice        *device11_;
     SharedSurfaces         *surfaces_;
+    /* What this session shares and opens, in its domain; null only while the
+     * session is not initialized. */
+    SessionShares          *shares_;
     /* The device lock, taken at a batch's first command and held to its end. */
     bool                    held_;
     /* The most devices one process runs at once. */

@@ -51,7 +51,7 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
 }
 
 OpenClBackend::OpenClBackend()
-    : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), shared_(), context_(nullptr),
+    : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), context_(nullptr),
       queue_(nullptr), handles_(), svm_(), events_(), ran_(0u), lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -412,24 +412,8 @@ cl_int OpenClBackend::answers_type(cl_device_type device_type) const
 void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");
-    /* The shared objects before the handles, because each holds a cl_mem the
-     * registry would otherwise release underneath it - and the registry lets
-     * go of each first, so release_all does not release it again - and its
-     * GL objects go with it while the vehicle context is still there to
-     * delete them. */
-    uint64_t mem = 0u;
-    uint32_t buffer = 0u;
-    uint32_t memory = 0u;
-    while (shared_.take_any(mem, buffer, memory)) {
-        cl_mem const shared = reinterpret_cast<cl_mem>(mem);
-        handles_.release(clproto::HandleKind::mem, shared);
-        static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
-                                                      nullptr, nullptr));
-        static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
-        static_cast<void>(::clReleaseMemObject(shared));
-        buffers_.destroy(buffer);
-        import_.delete_memory(memory);
-    }
+    /* What this context imported is released by HostShares as the session
+     * ends, before this: the registry holds no shared cl_mem by now. */
     handles_.release_all(*this);
     /* Before the ranges go: a release may free an allocation, and nothing
      * afterwards may resolve one. */
@@ -647,10 +631,11 @@ bool OpenClBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int
 }
 
 bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                  uint64_t &wire_handle)
+                                  uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenClBackend::import_object");
     wire_handle = 0u;
+    detail = 0u;
     /* Memory only, and only as a dma-buf: a fence is a host semaphore that
      * OpenCL names through a different extension this host has not got, and an
      * opaque fd is another driver's private handle that OpenGL cannot read
@@ -684,7 +669,7 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     /* Named in the guest's commands from now on, as any cl_mem the host made
      * is: one the registry did not hold would resolve to nothing in every
      * enqueue that names it. */
-    if (!taken || !handles_.remember(clproto::HandleKind::mem, shared) || !shared_.remember(reinterpret_cast<uint64_t>(shared), buffer, memory)) { AV_UNTESTABLE("the acquire above, and tables no guest fills without thousands of live objects");
+    if (!taken || !handles_.remember(clproto::HandleKind::mem, shared)) { AV_UNTESTABLE("the acquire above, and tables no guest fills without thousands of live objects");
         handles_.release(clproto::HandleKind::mem, shared);
         static_cast<void>(::clReleaseMemObject(shared));
         buffers_.destroy(buffer);
@@ -692,15 +677,17 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         return false;
     }
     wire_handle = reinterpret_cast<uint64_t>(shared);
+    /* The GL objects behind it, which the release deletes: HostShares keeps
+     * them with the hold. */
+    detail = (uint64_t{buffer} << 32u) | memory;
     return true;
 }
 
-void OpenClBackend::release_object(uint32_t, uint64_t wire_handle)
+void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t detail)
 {
     AV_SCOPE("OpenClBackend::release_object");
-    uint32_t buffer = 0u;
-    uint32_t memory = 0u;
-    if (!shared_.forget(wire_handle, buffer, memory)) return;
+    const auto buffer = static_cast<uint32_t>(detail >> 32u);
+    const auto memory = static_cast<uint32_t>(detail);
     /* The reverse of the making: the turn given back, then the cl_mem, then
      * the buffer that was its storage, and the memory object last. */
     /* The queue is the import's own and outlives every row it made, so a row

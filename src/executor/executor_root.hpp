@@ -15,10 +15,12 @@
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/executor_domains.hpp"
 #include "executor/gpu_clock_hold.hpp"
 #include "executor/host_gpu_set.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/opengl/opengl_backend.hpp"
+#include "executor/sharing/session_shares.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 
 #include <stddef.h>
@@ -53,39 +55,43 @@ public:
     /* The AV_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names.
      * Zero for a GPU nobody has, which is also what a null UUID gets. */
     uint32_t import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const;
-    /* The host image under `key` on the GPU `gpu_uuid` names, into `pixels`. */
-    bool     export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image);
-    /* The Direct3D surface shared under `object_id` on `gpu_uuid` goes: the
-     * guest let go of it everywhere. Main loop. */
-    void     release_shared(const uint8_t *gpu_uuid, uint64_t object_id);
-    bool     read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
-                        uint32_t height);
-    /* The present snapshot under `key` on `gpu_uuid`, mapped and let go
-     * (D3d11HostDevice::map_frame). Any thread. */
-    bool     map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
-    void     unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame);
-    /* The surface shared under `surface` on `gpu_uuid` as its own memory, for
-     * a process outside QEMU (D3d11HostDevice::export_surface), and the copies
+    /* A domain for a guest device on the GPU `gpu_uuid` names: what every
+     * other call below and every context of the device names it by. 0 for a
+     * GPU nobody has, or no room. Main loop. */
+    uint32_t open_domain(const uint8_t *gpu_uuid);
+    /* The device is going: every share in `domain` is released, as a reset
+     * releases them, and the domain names nothing more. Main loop. */
+    void     close_domain(uint32_t domain);
+    /* The image shared as `id` in `domain`, copied into an exportable image. */
+    bool     export_image(uint32_t domain, uint64_t id, AvExportedImage &image);
+    /* The guest let go of `id` everywhere, or of every id for 0 - a reset:
+     * HostShares::release, and the frames staged of it. Main loop. */
+    void     release_shared(uint32_t domain, uint64_t id);
+    bool     read_image(uint32_t domain, uint64_t id, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
+    /* A present's staged frame of a surface in `domain`, mapped and let go
+     * (SharedSurfaces). Any thread. */
+    bool     map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
+    void     unmap_frame(uint32_t domain, const SurfacePoint &frame);
+    /* The surface shared as `surface` in `domain` as its own memory, for a
+     * process outside QEMU (D3d11HostDevice::export_surface), and the copies
      * into it the host has run with a sync_file for them
      * (D3d11HostDevice::sync_surface). Any thread. */
-    bool     export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image);
-    bool     sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd);
+    bool     export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image);
+    bool     sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd);
 
-    /* A session for one context of `sub_api` on the GPU `gpu_uuid` names, or
-     * null: for a sub-API that GPU does not run, for a GPU nobody has, and
-     * when every slot is taken. The device turns a null into a context fault
+    /* A session for one context of `sub_api` in the domain `options` names, on
+     * that domain's GPU, or null: for a sub-API that GPU does not run, for a
+     * domain not open, and when every slot is taken. The device turns a null into a context fault
      * and keeps running, so this is a refusal rather than a failure.
      *
      * The backend is the session's own, not shared: a context that dies still
      * owning a VkInstance has to take it with it, and one shared by every
      * session has nowhere to do that (feature 042, found by fuzzing).
      *
-     * `options` (null: the defaults) and `share` (null: none) are version 4's
-     * (feature 050): only OpenGL takes options other than the defaults or a
-     * share, which must be a live OpenGL session of this root on the same GPU;
-     * anything else is null. */
-    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, const AvContextOptions *options = nullptr,
-                         ContextSession *share = nullptr);
+     * Only OpenGL takes options other than the defaults, and a `share` (null:
+     * none), which must be a live OpenGL session of this root on the same GPU
+     * (feature 050); anything else is null. */
+    ContextSession *open(uint32_t sub_api, const AvContextOptions &options, ContextSession *share = nullptr);
     /* Gives a session's slot and block back. Safe on a null, which is what the
      * device passes if it ever destroys twice. */
     void            close(ContextSession *session);
@@ -98,18 +104,20 @@ public:
      * session of another API: neither Vulkan nor OpenGL completes anything
      * except on the thread that asked. */
     void            set_signal(ContextSession *session, void (*signal)(void *context), void *context);
-    /* The version 6 calls, on a session this root handed out: false, and
-     * nothing made, for one it did not - the device's pointer is all the ABI
-     * gives to tell them apart. */
-    [[nodiscard]] bool export_object(ContextSession *session, uint32_t kind, uint64_t wire_handle,
-                                     uint32_t &handle_kind, int &fd);
-    [[nodiscard]] bool import_object(ContextSession *session, uint32_t kind, uint32_t handle_kind, int fd,
-                                     uint64_t size, uint64_t &wire_handle);
-    void               release_object(ContextSession *session, uint32_t kind, uint64_t wire_handle);
+    /* Feature 053 on a session this root handed out, through its domain's
+     * HostShares (publish, open, close), answered as AV_SHARED_*: refused,
+     * and nothing done, for a faulted session or one it did not hand out -
+     * the device's pointer is all the ABI gives to tell them apart. */
+    uint32_t share_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
+                          uint64_t wire_handle);
+    uint32_t open_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
+                         uint64_t &wire_handle);
+    void                 close_object(ContextSession *session, uint64_t object_id);
     uint32_t        live() const;
-    /* The library's state dump (docs/trace.md): the GPUs asked about and each
-     * live session's API and GPU. Takes no lock: everything it reads is a
-     * plain word a session's own thread writes. */
+    /* The library's state dump (docs/trace.md): the GPUs asked about, the
+     * domains, each live session's API and GPU, and each GPU's shares. Takes
+     * no lock of its own: a session's words are written by its own thread,
+     * and HostShares reports busy rather than wait. */
     void            report(StateWriter &writer) override;
 
     bool invariants_hold() const;
@@ -127,8 +135,17 @@ private:
     SessionBackend *backend_in(uint32_t slot, uint32_t sub_api);
     /* Binds the backend of `sub_api` in `slot` to `gpu`, with what the host
      * found for it: false when the host found nothing for this API there. */
-    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions *options,
+    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const AvContextOptions &options,
                             const OpenGlBackend *share);
+    /* The GPU `domain` is on, or null. */
+    const HostGpu *gpu_of(uint32_t domain) const;
+    /* The slot `session` is in, or max_sessions for one not ours. */
+    uint32_t       slot_of(const ContextSession *session) const;
+    /* What the ABI calls `answered`. */
+    uint32_t       shared_answer(Status answered) const;
+    /* The Direct3D 11 device of the GPU at `gpu` gives back what its shares
+     * let go of. */
+    void           retire(uint32_t gpu);
     /* The OpenGL backend `share` runs on, when it is a live OpenGL session of
      * this root on `gpu`; null otherwise. */
     const OpenGlBackend *sharing(const ContextSession *share, const HostGpu &gpu) const;
@@ -138,13 +155,16 @@ private:
     /* What a dump calls a sub-API. */
     const char *api_name(uint32_t sub_api) const;
 
-    HostGpuSet     gpus_;
+    HostGpuSet      gpus_;
+    ExecutorDomains domains_;
     GpuClockHold   clocks_[HostGpuSet::max_gpus];
     ContextSession sessions_[max_sessions];
     VulkanBackend  vulkan_[max_sessions];
     OpenClBackend  opencl_[max_sessions];
     OpenGlBackend  opengl_[max_sessions];
     D3dBackend     d3d_[max_sessions];
+    /* What each session shares through, bound as it opens. */
+    SessionShares  shares_[max_sessions];
     /* What each open session runs: its sub-API and its GPU's index, for a
      * share's check and the dump. */
     uint32_t       apis_of_[max_sessions];

@@ -21,12 +21,6 @@ namespace av {
 class ExecutorConformance {
 public:
     static constexpr std::uint32_t max_findings = 64u;
-    /* The versions that added the memory channel and the imported handle. The
-     * header names only the newest, and a library of each is held to what its
-     * own version promised. */
-    static constexpr std::uint32_t memory_channel_version = 2u;
-    static constexpr std::uint32_t imported_handle_version = 3u;
-    static constexpr std::uint32_t options_version = 4u;
 
     ExecutorConformance();
     ExecutorConformance(const ExecutorConformance &) = delete;
@@ -67,7 +61,9 @@ private:
     /* Version 3: an import of real memory answers a handle the executor's own
      * commands accept back. Needs a Vulkan device, so a real GPU. */
     void check_imported_handle(AvExecutor *executor);
-    void check_create_with_options();
+    void check_options();
+    /* The options of a context in the suite's domain. */
+    AvContextOptions in_domain(const AvContextOptions &options) const;
     /* SC-002: something each API can actually be asked to do, rather than only
      * commands it refuses. A library that answers every malformed frame
      * correctly and runs nothing is not one the device can use. */
@@ -105,6 +101,9 @@ private:
     /* The GPU asked for, and whether it is a real one. */
     std::uint8_t          gpu_[16];
     bool                  real_gpu_;
+    /* The domain the suite asked for on that GPU, as a device would; 0 when
+     * the library has no such GPU. */
+    std::uint32_t         domain_;
     void                 *library_;
     const AvExecutorOps *ops_;
     const char           *findings_[max_findings];

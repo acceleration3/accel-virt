@@ -295,6 +295,17 @@ TEST(cl_buffer_paths, an_object_the_guest_cannot_keep_is_given_back_to_the_devic
   if (!opened.made()) return;
   const std::uint64_t handle = shared_handle(rig);
 
+  /* One import first, so the handle and opened-object tables already have
+   * the memory the refused one needs: what runs out below is the cl_mem's. */
+  const std::uint64_t earlier = shared_handle(rig);
+  const cl_mem_properties first[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
+                                     static_cast<cl_mem_properties>(earlier), 0u};
+  rig.host().shared_object(0u, 0x9000u);
+  cl_int imported = CL_OUT_OF_RESOURCES;
+  CHECK(rig.loader().create_buffer_with_properties(opened.context(), first, CL_MEM_READ_WRITE, buffer_bytes,
+                                                   &imported) != nullptr);
+  CHECK_EQ(imported, CL_SUCCESS);
+
   /* The object table takes its memory a chunk at a time, so the refusal only
    * happens on the object that needs a new one: buffers are made until one
    * costs a chunk, and then the rest of that chunk is filled. */

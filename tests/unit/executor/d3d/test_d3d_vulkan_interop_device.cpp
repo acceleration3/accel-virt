@@ -7,6 +7,7 @@
  * This is how a Vulkan swapchain's frames reach a DXGI chain, in both channel
  * orders a chain's slot has. A host without DXVK and Vulkan on one GPU returns
  * without judging. */
+#include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
@@ -237,7 +238,8 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         return;
     }
     av::D3dBackend direct3d;
-    CHECK(direct3d.initialize(apis.d3d11_device(gpu)));
+    av::SessionShares unshared;
+    CHECK(direct3d.initialize(unshared, apis.d3d11_device(gpu)));
     av::D3dLoopback wire(direct3d);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));

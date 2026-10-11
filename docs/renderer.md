@@ -10,7 +10,9 @@ from, and QEMU starts a new renderer.
 ## Where the line is
 
 The whole per-context worker moves: ring consumer, batch executor, executor
-library, blob imports, fence reporter, D3D ordering, shared objects. QEMU keeps
+library, blob imports, fence reporter, D3D ordering, and the device's domain in
+the library, where the objects the contexts share are kept: the renderer opens
+it as QEMU's hello reaches it. QEMU keeps
 the control plane - the virtqueue, the authoritative `BlobTable`, the hostmem
 BAR, the display heads, doorbell ioeventfds and guest notifiers.
 

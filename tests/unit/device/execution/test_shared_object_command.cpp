@@ -45,7 +45,7 @@ public:
         const CommandHeader header(id, static_cast<std::uint32_t>(CommandHeader::encoded_size + body_bytes),
                                    0u);
         context.on_worker([&] {
-            ran_ = SharedObjectCommand(context.objects(), header, body).run(reply_, capacity, produced_);
+            ran_ = SharedObjectCommand(context.executor(), header, body).run(reply_, capacity, produced_);
         });
     }
 
@@ -80,8 +80,7 @@ SharedObjectRequest memory(std::uint64_t id, std::uint64_t wire_handle)
 
 void check(SharedObjectRig &rig)
 {
-    if (!rig.invariants_hold() || !rig.first().objects().invariants_hold() ||
-        !rig.second().objects().invariants_hold())
+    if (!rig.invariants_hold())
         av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "invariants broken");
 }
 
@@ -101,9 +100,9 @@ TEST(shared_object_command_run, a_share_then_an_open_from_another_context_names_
   CHECK_EQ(opened.status(), SharedObjectAnswer::done);
   CHECK(opened.wire_handle() != 0u);
   check(rig);
-  CHECK_EQ(rig.shared().live(), 1u);
-  CHECK_EQ(rig.ops().exported_objects(), 1u);
-  CHECK_EQ(rig.ops().imported_objects(), 1u); }
+  CHECK_EQ(rig.ops().shared_objects(), 1u);
+  CHECK_EQ(rig.ops().shared_objects(), 1u);
+  CHECK_EQ(rig.ops().opened_objects(), 1u); }
 
 TEST(shared_object_command_run, a_release_destroys_what_this_context_made_and_answers_done)
 { SharedObjectRig rig;
@@ -116,14 +115,14 @@ TEST(shared_object_command_run, a_release_destroys_what_this_context_made_and_an
   CHECK_EQ(released.status(), SharedObjectAnswer::done);
   CHECK_EQ(released.wire_handle(), 0u);
   check(rig);
-  CHECK_EQ(rig.ops().released_objects(), 1u);
-  CHECK_EQ(rig.shared().live(), 1u);
-  /* An id this context never held answers done and does nothing, as
-   * RELEASE_BLOB does. */
+  CHECK_EQ(rig.ops().closed_objects(), 1u);
+  CHECK_EQ(rig.ops().live_opens(), 0u);
+  /* An id this context never held answers done and the library does
+   * nothing with it, as RELEASE_BLOB does. */
   const Sent again(rig.second(), CommandHeader::release_shared_object_id, memory(9u, 0u));
   CHECK_EQ(again.status(), SharedObjectAnswer::done);
   check(rig);
-  CHECK_EQ(rig.ops().released_objects(), 1u); }
+  CHECK_EQ(rig.ops().live_opens(), 0u); }
 
 TEST(shared_object_command_run, a_body_of_any_length_but_its_own_is_framing_and_answers_nothing)
 { SharedObjectRig rig;
@@ -137,7 +136,7 @@ TEST(shared_object_command_run, a_body_of_any_length_but_its_own_is_framing_and_
           CHECK_EQ(sent.produced(), 0u);
       }
   check(rig);
-  CHECK_EQ(rig.shared().live(), 0u); }
+  CHECK_EQ(rig.ops().shared_objects(), 0u); }
 
 TEST(shared_object_command_run, an_id_that_is_not_one_of_the_three_is_not_known)
 { SharedObjectRig rig;
@@ -165,8 +164,8 @@ TEST(shared_object_command_run, a_body_no_request_can_be_is_refused_as_a_request
       CHECK_EQ(sent.wire_handle(), 0u);
   }
   check(rig);
-  CHECK_EQ(rig.shared().live(), 0u);
-  CHECK_EQ(rig.ops().exported_objects(), 0u); }
+  CHECK_EQ(rig.ops().shared_objects(), 0u);
+  CHECK_EQ(rig.ops().shared_objects(), 0u); }
 
 TEST(shared_object_command_run, only_a_share_may_carry_a_wire_handle)
 { SharedObjectRig rig;
@@ -184,7 +183,7 @@ TEST(shared_object_command_run, only_a_share_may_carry_a_wire_handle)
   const Sent nothing(rig.second(), CommandHeader::share_object_id, memory(9u, 0u));
   CHECK_EQ(nothing.status(), SharedObjectAnswer::refused_request);
   check(rig);
-  CHECK_EQ(rig.shared().live(), 1u); }
+  CHECK_EQ(rig.ops().shared_objects(), 1u); }
 
 TEST(shared_object_command_run, an_open_of_an_id_the_device_never_published_is_an_unknown_object)
 { SharedObjectRig rig;
@@ -209,11 +208,11 @@ TEST(shared_object_command_run, an_open_whose_kind_or_size_disagrees_is_a_mismat
       CHECK_EQ(sent.wire_handle(), 0u);
   }
   check(rig);
-  CHECK_EQ(rig.ops().imported_objects(), 0u); }
+  CHECK_EQ(rig.ops().opened_objects(), 0u); }
 
-TEST(shared_object_command_run, an_executor_that_will_not_export_or_import_is_an_executor_refusal)
+TEST(shared_object_command_run, a_library_that_will_not_share_or_open_is_an_executor_refusal)
 { SharedObjectRig rig;
-  rig.ops().refuse_export_at(1u);
+  rig.ops().refuse_share_at(1u);
   const Sent refused(rig.first(), CommandHeader::share_object_id, memory(7u, made_by_guest));
   CHECK_STATUS(refused.ran(), Status::ok);
   CHECK_EQ(refused.status(), SharedObjectAnswer::executor_refused);
@@ -221,24 +220,12 @@ TEST(shared_object_command_run, an_executor_that_will_not_export_or_import_is_an
 
   CHECK_EQ(Sent(rig.first(), CommandHeader::share_object_id, memory(7u, made_by_guest)).status(),
            SharedObjectAnswer::done);
-  rig.ops().refuse_object_import_at(1u);
+  rig.ops().refuse_open_at(1u);
   const Sent opened(rig.second(), CommandHeader::open_shared_object_id, memory(7u, 0u));
   CHECK_EQ(opened.status(), SharedObjectAnswer::executor_refused);
   CHECK_EQ(opened.wire_handle(), 0u);
   check(rig);
-  CHECK_EQ(rig.shared().live(), 1u); }
-
-TEST(shared_object_command_run, a_library_from_before_the_sharing_version_refuses_every_one_of_them)
-{ SharedObjectRig rig;
-  rig.ops().set_abi_version(AV_EXECUTOR_ABI_VERSION_EVENTS);
-  /* The library was accepted at its newest version, so this is the device
-   * finding out mid-flight what a real one says at accept: either way the
-   * guest is answered, not faulted. */
-  const Sent shared(rig.first(), CommandHeader::share_object_id, memory(7u, made_by_guest));
-  CHECK_STATUS(shared.ran(), Status::ok);
-  CHECK_EQ(shared.status(), SharedObjectAnswer::executor_refused);
-  check(rig);
-  CHECK_EQ(rig.shared().live(), 0u); }
+  CHECK_EQ(rig.ops().shared_objects(), 1u); }
 
 TEST(shared_object_command_run, a_second_publisher_of_one_id_and_a_second_open_by_one_context_conflict)
 { SharedObjectRig rig;
@@ -255,17 +242,18 @@ TEST(shared_object_command_run, a_second_publisher_of_one_id_and_a_second_open_b
   CHECK_EQ(again.status(), SharedObjectAnswer::conflict);
   CHECK_EQ(again.wire_handle(), 0u);
   check(rig);
-  CHECK_EQ(rig.ops().imported_objects(), 1u); }
+  CHECK_EQ(rig.ops().opened_objects(), 1u); }
 
-TEST(shared_object_command_run, a_context_holding_all_it_can_has_no_room)
+/* No count of objects a context shares is one past which it is refused: the
+ * table this replaces stopped at 64. */
+TEST(shared_object_command_run, a_context_shares_more_than_any_fixed_table_held)
 { SharedObjectRig rig;
-  for (std::uint64_t id = 1u; id <= av::ContextSharedObjects::max_objects; id++)
+  for (std::uint64_t id = 1u; id <= 64u; id++)
       CHECK_EQ(Sent(rig.first(), CommandHeader::share_object_id, memory(id, made_by_guest)).status(),
                SharedObjectAnswer::done);
-  check(rig);
-  const Sent full(rig.first(), CommandHeader::share_object_id, memory(0xFFFFu, made_by_guest));
-  CHECK_STATUS(full.ran(), Status::ok);
-  CHECK_EQ(full.status(), SharedObjectAnswer::no_room);
+  const Sent more(rig.first(), CommandHeader::share_object_id, memory(65u, made_by_guest));
+  CHECK_STATUS(more.ran(), Status::ok);
+  CHECK_EQ(more.status(), SharedObjectAnswer::done);
   check(rig); }
 
 TEST(shared_object_command_run, an_answer_slot_too_small_is_written_nothing_and_still_says_what_it_needed)
@@ -276,5 +264,5 @@ TEST(shared_object_command_run, an_answer_slot_too_small_is_written_nothing_and_
   CHECK_EQ(shared.produced(), SharedObjectAnswer::encoded_size);
   check(rig);
   /* The command still did what it was asked; only the answer did not fit. */
-  CHECK_EQ(rig.shared().live(), 1u);
-  CHECK_EQ(rig.ops().exported_objects(), 1u); }
+  CHECK_EQ(rig.ops().shared_objects(), 1u);
+  CHECK_EQ(rig.ops().shared_objects(), 1u); }
