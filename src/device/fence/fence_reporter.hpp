@@ -36,10 +36,11 @@ public:
     void                 complete(uint64_t fence);
     /* Worker: progress moves on, with no interrupt. */
     void                 heartbeat();
-    /* Worker: progress moves on and the guest is interrupted, with nothing
-     * claimed completed - what a host event finishing on a thread the device
-     * never gave the host reports (feature 052). */
-    void                 nudge();
+    /* Worker: progress and raised move on and the guest is interrupted, with
+     * nothing claimed completed - what a host event finishing on a thread the
+     * device never gave the host reports (feature 052). raised counts these
+     * alone, so the driver can tell one from a command's progress. */
+    void                 raise();
     /* Worker: the page reads faulted with `code`; nothing is reported after. */
     void                 fault(FaultCode code);
     /* Worker: one interrupt when anything completed or faulted since the last. */
@@ -48,6 +49,7 @@ public:
 
     uint64_t completed() const;
     uint64_t progress() const;
+    uint64_t raised() const;
 
     bool invariants_hold() const;
 
@@ -60,6 +62,7 @@ private:
     uint32_t         line_;
     uint64_t         completed_;
     uint64_t         progress_;
+    uint64_t         raised_;
     FaultCode        fault_;
     bool             prepared_;
     bool             faulted_;

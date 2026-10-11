@@ -62,7 +62,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock), device_(0u),
-      device_object_(nullptr), device_answers_(), watcher_(watcher_thread, log, lock, *this), waits_(kmt), reads_(), refusals_(log)
+      device_object_(nullptr), device_answers_(), watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), reads_(), refusals_(log)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -421,6 +421,9 @@ void *ClIcdRoot::wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t 
         report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
     }
+    /* Its place on its queue, which the watcher asks in. */
+    if (kind == ClObject::Kind::event && parent != nullptr && parent->kind() == ClObject::Kind::command_queue)
+        object->stamp(parent->take_ordinal());
     report_error(error, CL_SUCCESS);
     return object;
 }
@@ -501,7 +504,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     lock_.acquire();
     GuestClContext *context = nullptr;
     Status          made = contexts_.create(context, connection_, memory_, send_lock_, blocks_lock_, log_, shared_handles_);
-    if (made == Status::ok) made = context->make(gl_share);
+    if (made == Status::ok) made = context->make(gl_share, watcher_.wake_handle());
     if (made == Status::ok) context->keep_properties(properties);
     if (made != Status::ok) {
         if (context != nullptr) static_cast<void>(contexts_.destroy(context));
@@ -642,6 +645,8 @@ void ClIcdRoot::report(StateWriter &writer)
     objects_.report(writer);
     writer.number("reads_outstanding", reads_.outstanding());
     writer.number("reads_delivered", reads_.delivered());
+    writer.number("wait_rounds", waits_.rounds());
+    writer.number("wait_raises", waits_.raises_asked());
     connection_.report(writer);
     writer.close();
 }
@@ -1509,7 +1514,7 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     /* clWaitForEvents has no timeout, so the wait is unbounded - but every
      * host call it makes answers at once, which is the whole difference
      * between an unbounded wait and a held worker. */
-    const cl_int reached = waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever);
+    const cl_int reached = waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever, context->wakes());
     /* And a wait is where an application learns a non-blocking read is done,
      * so it is where the bytes have to be there. */
     const cl_int delivered = deliver_reads(*wire, context->staging(), handles, waited);
@@ -1705,7 +1710,7 @@ cl_int ClIcdRoot::watch_event(cl_event event, cl_int status, ClWatchedEvent::Not
     lock_.acquire();
     held->retain();
     lock_.release();
-    const cl_int registered = watcher_.watch(held, held->wire(), wire, status, notify, user_data);
+    const cl_int registered = watcher_.watch(held, held->wire(), wire, status, notify, user_data, context->wakes());
     if (registered != CL_SUCCESS) static_cast<void>(release(held, ClObject::Kind::event));
     return registered;
 }
@@ -1782,14 +1787,14 @@ void ClIcdRoot::release_watched(ClObject &event)
     static_cast<void>(release(&event, ClObject::Kind::event));
 }
 
-cl_int ClIcdRoot::drain(ClientTransport &wire, uint64_t queue)
+cl_int ClIcdRoot::drain(ClientTransport &wire, uint64_t queue, bool driven)
 {
     AV_SCOPE("ClIcdRoot::drain");
     uint64_t     marker = 0u;
     const cl_int enqueued =
         av::clproto::av_clEnqueueMarkerWithWaitList(wire, queue, 0u, nullptr, &marker);
     if (enqueued != CL_SUCCESS) return enqueued;
-    const cl_int waited = waits_.until_queued_completes(wire, queue, marker);
+    const cl_int waited = waits_.until_queued_completes(wire, queue, marker, driven);
     static_cast<void>(av::clproto::av_clReleaseEvent(wire, marker));
     return waited;
 }
@@ -1811,7 +1816,8 @@ cl_int ClIcdRoot::drain_unless_idle(ClientTransport &wire, ClObject &queue)
 {
     AV_SCOPE("ClIcdRoot::drain_unless_idle");
     if (queue.known_idle()) return CL_SUCCESS;
-    const cl_int drained = drain(wire, queue.wire());
+    const GuestClContext *const context = queue.context();
+    const cl_int drained = drain(wire, queue.wire(), context != nullptr && context->wakes());
     if (drained == CL_SUCCESS) queue.idle();
     return drained;
 }

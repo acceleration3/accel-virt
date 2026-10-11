@@ -35,6 +35,10 @@ public:
     static constexpr uint64_t feature_present_engine = 16u;
     /* A queued present's source may be a host image, read by its key. */
     static constexpr uint64_t feature_present_from_image = 32u;
+    /* The fence page counts out-of-band raises in `raised`, apart from
+     * progress (docs/protocol.md, "Fence page"), so the driver can wake a
+     * process waiting for one rather than have it ask. */
+    static constexpr uint64_t feature_raises = 64u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,

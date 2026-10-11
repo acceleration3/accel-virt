@@ -3,7 +3,9 @@
 namespace av {
 
 ScriptedThread::ScriptedThread()
-    : loop_(nullptr), turns_(0u), starts_(0u), stops_(0u), rests_(0u), pauses_(0u), wakes_(0u), stopping_(false), refusing_(false)
+    : loop_(nullptr), turns_(0u), starts_(0u), stops_(0u), rests_(0u), pauses_(0u), driven_pauses_(0u), wakes_(0u),
+      awaits_(0u), wake_handle_(0u), woken_(0u), last_seen_(0u), last_timeout_(0u), await_hook_(nullptr),
+      await_context_(nullptr), stopping_(false), refusing_(false)
 {
 }
 
@@ -53,9 +55,38 @@ std::uint32_t ScriptedThread::rests() const { return rests_; }
 std::uint32_t ScriptedThread::pauses() const { return pauses_; }
 std::uint32_t ScriptedThread::wakes() const { return wakes_; }
 void ScriptedThread::rest() { ++rests_; }
-void ScriptedThread::pause() { ++pauses_; }
+void ScriptedThread::pause(bool driven)
+{
+    ++pauses_;
+    if (driven) ++driven_pauses_;
+}
 void ScriptedThread::wake() { ++wakes_; }
 
 void ScriptedThread::refuse_start() { refusing_ = true; }
+
+std::uint64_t ScriptedThread::wake_handle() const { return wake_handle_; }
+std::uint64_t ScriptedThread::woken() const { return woken_; }
+
+void ScriptedThread::await_woken(std::uint64_t seen, std::uint64_t timeout)
+{
+    ++awaits_;
+    last_seen_ = seen;
+    last_timeout_ = timeout;
+    if (await_hook_ != nullptr) await_hook_(await_context_);
+}
+
+void ScriptedThread::offer_wake(std::uint64_t handle) { wake_handle_ = handle; }
+void ScriptedThread::driver_woke() { ++woken_; }
+
+void ScriptedThread::on_await(void (*hook)(void *context), void *context)
+{
+    await_hook_ = hook;
+    await_context_ = context;
+}
+
+std::uint32_t ScriptedThread::driven_pauses() const { return driven_pauses_; }
+std::uint32_t ScriptedThread::awaits() const { return awaits_; }
+std::uint64_t ScriptedThread::last_seen() const { return last_seen_; }
+std::uint64_t ScriptedThread::last_timeout() const { return last_timeout_; }
 
 }  // namespace av

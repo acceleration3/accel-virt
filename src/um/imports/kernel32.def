@@ -1,6 +1,7 @@
 LIBRARY kernel32.dll
 EXPORTS
 AcquireSRWLockExclusive
+AcquireSRWLockShared
 CloseHandle
 CreateDirectoryA
 CreateDirectoryW
@@ -29,6 +30,7 @@ GetModuleHandleW
 GetProcAddress
 GetProcessHeap
 GetStdHandle
+GetTickCount64
 GetWriteWatch
 HeapAlloc
 HeapFree
@@ -50,6 +52,8 @@ QueryPerformanceCounter
 QueryPerformanceFrequency
 ReadFile
 ReleaseSRWLockExclusive
+ReleaseSRWLockShared
+ResetEvent
 ResetWriteWatch
 RtlLookupFunctionEntry
 RtlVirtualUnwind
@@ -58,6 +62,7 @@ SetLastError
 SetUnhandledExceptionFilter
 SetWaitableTimerEx
 Sleep
+SleepConditionVariableSRW
 TlsAlloc
 TlsFree
 TlsGetValue
@@ -69,5 +74,6 @@ VirtualFree
 VirtualQuery
 WaitForMultipleObjects
 WaitForSingleObject
+WakeAllConditionVariable
 WideCharToMultiByte
 WriteFile

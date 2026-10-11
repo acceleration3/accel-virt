@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "proto/escape/context_views_record.hpp"
 #include "proto/escape/tail_publish_record.hpp"
+#include "proto/escape/wake_event_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -157,6 +158,16 @@ Status KmtTransport::adopt_views()
     if (ring_bound != Status::ok) return ring_bound;
     reply_ = ReplyReader(reinterpret_cast<uint8_t *>(reply), reply_bytes_);
     return Status::ok;
+}
+
+Status KmtTransport::wake_on_raise(uint64_t handle)
+{
+    AV_SCOPE("KmtTransport::wake_on_raise");
+    if (!established() || faulted()) return Status::invalid_state;
+    uint8_t               bytes[WakeEventRecord::encoded_size] = {};
+    const WakeEventRecord request(handle);
+    if (request.encode(bytes, sizeof bytes) != Status::ok) return Status::invalid_parameter;
+    return connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, bytes, sizeof bytes);
 }
 
 bool KmtTransport::record_carries(const GlContextOptions &options) const

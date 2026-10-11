@@ -91,6 +91,15 @@ public:
      * addresses there of its ring and of its reply slot, in `record`.
      * invalid_parameter for a context not live. */
     [[nodiscard]] Status views(void *context, ContextViewsRecord &record);
+    /* PASSIVE, inside the Escape of the process that created `context`: the
+     * event `handle` names there is set whenever the context's host raises
+     * (its fence page's `raised` moves), once when the context is lost, when
+     * the device is reset, and when the context is unbound - so a thread
+     * asleep on it always wakes to ask (docs/protocol.md, "Wake event
+     * record"). The event is held until the context is unbound; a second
+     * replaces the first. invalid_parameter for a context not live or a
+     * handle that is no event the process may set. */
+    [[nodiscard]] Status wake_on_raise(void *context, uint64_t handle);
     /* The shared object `object_id` is gone from the guest: the device is
      * told, in turn with this table's own sequences, because the control
      * queue answers one exchange at a time (SharedObjectRelease). PASSIVE. */
@@ -174,6 +183,8 @@ private:
     uint32_t             slot_of(const void *context) const;
     /* The host faulted the slot's context, or its fence page failed it. */
     bool                 lost(uint32_t slot) const;
+    /* Sets the slot's wake when its raises moved or it was just lost. */
+    void                 wake(uint32_t slot, uint64_t raised, bool lost_now);
     /* Claims a free slot for `context` under the lock; no_slot when full or
      * when `context` already holds one (in `duplicate`). */
     uint32_t             claim(void *context, bool &duplicate);
@@ -224,6 +235,12 @@ private:
     /* The pages of every RAM chunk a slot holds. */
     ObjectPool<GuestPages>           ram_chunks_;
     uint8_t                          orders_[max_contexts];
+    /* The event each slot's process asked to be woken by, or null; the raises
+     * its fence page had shown when it was last set; and whether it was set
+     * for the context being lost, which happens once. */
+    void                            *wakes_[max_contexts];
+    uint64_t                         raised_[max_contexts];
+    bool                             told_lost_[max_contexts];
     /* Bindings each slot has had, so each takes fresh device ids. */
     uint32_t                         generations_[max_contexts];
     bool                             live_[max_contexts];

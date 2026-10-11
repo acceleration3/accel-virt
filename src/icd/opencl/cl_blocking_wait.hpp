@@ -17,10 +17,13 @@
  * nothing and gets one round, which is what makes a broken clock a failed wait
  * rather than a hung one.
  *
- * The cost this accepts is one round trip per round: the ring paces the loop,
- * not a spin. A wait for work that takes a second is a second of round trips
- * rather than a second of a held worker, and only the second of those can take
- * the adapter down. */
+ * A wait asks back to back for its first millisecond: most end inside it, and
+ * asking again is sooner than any wake could come. Past that it sleeps between
+ * rounds. On a context the driver wakes (GuestClContext::wakes) it has the
+ * host raise when the first event still outstanding finishes - the host's own
+ * callback on it, which wakes the context - and sleeps until the driver's wake
+ * is seen, a slice at most: a round per thing the host finished, and none in
+ * between. Elsewhere it asks once a millisecond. */
 #ifndef AV_CLICD_CL_BLOCKING_WAIT_HPP
 #define AV_CLICD_CL_BLOCKING_WAIT_HPP
 
@@ -35,9 +38,15 @@ class Kmt;
 
 namespace av::clicd {
 
+class ClEventWatcher;
+
 class ClBlockingWait {
 public:
-    ClBlockingWait(Kmt &kmt);
+    /* How long a wait asks back to back before it asks once a millisecond:
+     * a second's fraction, 1 ms. */
+    static constexpr uint64_t spin_per_second = 1000u;
+    /* `watcher` is the thread the driver's wake ends, which tells this. */
+    ClBlockingWait(Kmt &kmt, ClEventWatcher &watcher);
     ClBlockingWait(const ClBlockingWait &) = delete;
     ClBlockingWait &operator=(const ClBlockingWait &) = delete;
 
@@ -47,9 +56,10 @@ public:
      * when one of them carries a command's own failure, the host's own error
      * when it refused a query, and CL_SUCCESS on a deadline that passed -
      * because the API this serves has no timeout to report, and a caller that
-     * wants one asks the events afterwards. */
+     * wants one asks the events afterwards. `driven`: the events' context is
+     * one the driver wakes. */
     cl_int until_complete(ClientTransport &wire, const uint64_t *events, uint32_t count,
-                          uint64_t timeout);
+                          uint64_t timeout, bool driven);
 
     /* Waits for one event this side has just enqueued on `queue`, having
      * first told the host to start it.
@@ -62,19 +72,24 @@ public:
      * wait without one never ends. A flush the host refuses is returned
      * rather than waited past, because work that may never start is work no
      * wait can outlive. */
-    cl_int until_queued_completes(ClientTransport &wire, uint64_t queue, uint64_t event);
+    cl_int until_queued_completes(ClientTransport &wire, uint64_t queue, uint64_t event, bool driven);
 
     /* Rounds made since the ICD started, which is what a state dump and a test
      * read to say a wait polled once rather than not at all. */
     uint64_t rounds() const;
+    /* Events the host was asked to raise on, so a wait could sleep. */
+    uint64_t raises_asked() const;
 
 private:
     /* Whether all of them are complete. `answer` carries what to return when
-     * this says the wait is over. */
-    bool settled(ClientTransport &wire, const uint64_t *events, uint32_t count, cl_int &answer);
+     * this says the wait is over, and `pending` the first that is not. */
+    bool settled(ClientTransport &wire, const uint64_t *events, uint32_t count, cl_int &answer,
+                 uint32_t &pending);
 
-    Kmt     &kmt_;
-    uint64_t rounds_;
+    Kmt            &kmt_;
+    ClEventWatcher &watcher_;
+    uint64_t        rounds_;
+    uint64_t        raises_asked_;
 };
 
 }  // namespace av::clicd

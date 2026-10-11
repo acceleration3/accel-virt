@@ -28,6 +28,7 @@
 #include "proto/escape/present_point_record.hpp"
 #include "miniport/present/present_ticket_record.hpp"
 #include "proto/escape/context_views_record.hpp"
+#include "proto/escape/wake_event_record.hpp"
 #include "proto/escape/tail_publish_record.hpp"
 #include "miniport/ddi/dxgkarg_native_fence_records.hpp"
 #include "miniport/ddi/dxgkddi_feature_interface_record.hpp"
@@ -776,6 +777,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     if (magic == TailPublishRecord::magic) return publish_own_tail(*escape);
     if (magic == HostWindowRecord::magic) return window_chunk(*escape);
     if (magic == ContextViewsRecord::magic) return context_views(*escape);
+    if (magic == WakeEventRecord::magic) return wake_event(*escape);
     if (magic != TraceEscapeRecord::magic) return NtStatus(Status::not_supported).value();
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
@@ -815,6 +817,24 @@ int32_t Adapter::context_views(const DxgkargEscapeRecord &escape)
         av_contexts_.views(escape.hContext, record) != Status::ok)
         return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, ContextViewsRecord::encoded_size));   /* decode checked the length */
+    return NtStatus(Status::ok).value();
+}
+
+/* A process handing over an event to be set whenever its av context's host
+ * raises (docs/protocol.md, "Wake event record"). A device that never moves
+ * `raised` would never set it, and the process is told so rather than left to
+ * sleep: STATUS_NOT_SUPPORTED, as from a driver without the record. Every
+ * other refusal is STATUS_INVALID_PARAMETER. */
+int32_t Adapter::wake_event(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::wake_event");
+    if (!identity_.offers(CapsetInfo::feature_raises)) return NtStatus(Status::not_supported).value();
+    WakeEventRecord record;
+    if (escape.hContext == nullptr ||
+        record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize) !=
+            Status::ok ||
+        av_contexts_.wake_on_raise(escape.hContext, record.event()) != Status::ok)
+        return NtStatus(Status::invalid_parameter).value();
     return NtStatus(Status::ok).value();
 }
 

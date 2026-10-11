@@ -87,6 +87,13 @@ public:
     void     busy();
     void     idle();
     bool     known_idle() const;
+    /* A queue's count of the events made on it, in the order they were: a
+     * queue here runs in order, so an event's place says which of a queue's
+     * events completes first. `take_ordinal` is the queue's, the next one;
+     * `stamp` gives an event its own; 0 is an event of no queue. */
+    uint64_t take_ordinal();
+    void     stamp(uint64_t ordinal);
+    uint64_t ordinal() const;
 
     /* A mem's answers to the info queries that cannot change once it is made
      * (ClInfoAnswers): `kept_answer` gives one kept to `asked`, false when
@@ -114,6 +121,9 @@ private:
     /* Atomic: an application's threads may share a queue, and the API leaves
      * ordering their enqueues to it - each only needs to see the other's. */
     bool                   idle_;
+    /* Atomic for a queue, which threads may share; an event's is written once,
+     * before it is handed out. */
+    uint64_t               ordinal_;
     /* One each for the type, the flags, the size, the offset and whether it
      * uses shared memory: none is longer than a word. */
     ClInfoAnswers<5u, sizeof(uint64_t)> fixed_;

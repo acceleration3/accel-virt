@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
                    ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), fixed_()
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinal_(0u), fixed_()
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -148,6 +148,24 @@ bool ClObject::known_idle() const
 {
     AV_SCOPE("ClObject::known_idle");
     return __atomic_load_n(&idle_, __ATOMIC_ACQUIRE);
+}
+
+uint64_t ClObject::take_ordinal()
+{
+    AV_SCOPE("ClObject::take_ordinal");
+    return __atomic_add_fetch(&ordinal_, uint64_t{1}, __ATOMIC_RELAXED);
+}
+
+void ClObject::stamp(uint64_t ordinal)
+{
+    AV_SCOPE("ClObject::stamp");
+    ordinal_ = ordinal;
+}
+
+uint64_t ClObject::ordinal() const
+{
+    AV_SCOPE("ClObject::ordinal");
+    return __atomic_load_n(&ordinal_, __ATOMIC_RELAXED);
 }
 
 bool ClObject::kept_answer(cl_mem_info name, const ClInfoRequest &asked, cl_int &result) const

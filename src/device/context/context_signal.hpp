@@ -5,7 +5,7 @@
  * arena - is the worker's alone. So the foreign thread does two things and
  * nothing else: it sets a flag, and it wakes the worker, the way the doorbell's
  * ioeventfd already wakes it from outside. The worker clears the flag on its
- * own thread and nudges the fence reporter, which is what reaches the guest.
+ * own thread and raises on the fence reporter, which is what reaches the guest.
  *
  * The flag is one word, changed with the compiler's atomics, so the foreign
  * thread never blocks and never waits on a lock the worker holds. */
@@ -30,7 +30,7 @@ public:
     /* Any thread: something the guest is waiting for has finished. Signals
      * coalesce - the guest is told to ask what completed, never what did. */
     void raise();
-    /* Worker: one nudge for everything raised since the last drain, and
+    /* Worker: one raise for everything raised since the last drain, and
      * nothing at all when nothing was raised. */
     void drain();
 

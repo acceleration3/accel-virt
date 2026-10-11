@@ -57,7 +57,13 @@ public:
      * enqueue waited behind it for over half a second and the canvas froze.
      * The turns go round the table from where the last one stopped, so every
      * registration is asked about in time; one that has completed never
-     * counts against this. */
+     * counts against this.
+     *
+     * Of a queue's events only the oldest registered is asked about: a queue
+     * here runs in order, so none after it has completed while it has not.
+     * One completed, the turn goes on without a pause and the next of that
+     * queue is the oldest. An event of no queue - a user event - is asked
+     * about on its own. */
     static constexpr uint32_t asks_per_turn = 8u;
 
     /* `lock` is the ICD's: the table is written by application threads and
@@ -74,14 +80,36 @@ public:
      * there is no room, CL_INVALID_VALUE for a callback of nothing.
      *
      * The caller has already taken the reference this gives back through the
-     * owner; a refusal here leaves it to the caller to drop. */
+     * owner; a refusal here leaves it to the caller to drop.
+     *
+     * `driven`: the event's context handed the driver this process's wake
+     * (GuestClContext::wakes), so the driver sets it when the host finishes
+     * the event and the thread need not ask before then. */
     cl_int watch(ClObject *event, uint64_t wire, ClientTransport *wire_of_context,
-                 cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data);
+                 cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data, bool driven);
+
+    /* What a context hands the driver to be woken by (icd::ServiceThread::
+     * wake_handle); 0 when there is none. */
+    uint64_t wake_handle() const;
+    /* Has the thread running, which a wait on another thread needs: it is
+     * the one the driver's wake ends, and it is what tells the others. False
+     * when it cannot be started. */
+    bool     attend();
+    /* The driver's wakes the thread has seen, and a wait on another thread
+     * for the next (icd::ServiceThread::woken, await_woken). */
+    uint64_t woken() const;
+    void     await_woken(uint64_t seen, uint64_t timeout);
 
     /* One turn: ask what has completed and run its callbacks, then pause if
      * none had - or, with nothing registered, rest until a registration
      * wakes it. Always to be called again: the thread lasts until the ICD
-     * stops it. */
+     * stops it.
+     *
+     * The pause is driven - it lasts until the driver's wake - only when
+     * every registration is on a context the driver wakes, and the turn
+     * asked about every one it could: a turn its asks ran out on may have
+     * spent the very wake that would have told it about one it never
+     * reached, so it pauses a millisecond and asks the rest. */
     bool turn() override;
 
     /* Forgets everything registered on `context_wire`, without running any of
@@ -107,12 +135,17 @@ private:
     /* Runs `asked`'s callback if the row at `slot` is still that
      * registration, and answers whether it ran. */
     bool deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int status);
+    /* Sets `oldest[slot]` for the registrations a turn may ask about, and
+     * answers whether every registration is driven. */
+    bool mark_oldest(bool *oldest);
 
     icd::ServiceThread &thread_;
     LogSink       &log_;
     icd::ThreadLock    &lock_;
     ClEventOwner       &owner_;
     ClWatchedEvent      registrations_[max_registrations];
+    /* Whether each row's context is one the driver wakes. */
+    bool                driven_[max_registrations];
     uint32_t            held_;
     uint64_t            delivered_;
     /* The slot the next turn starts asking from. */

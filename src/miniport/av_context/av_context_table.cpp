@@ -37,7 +37,7 @@ AvContextTable::AvContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, Al
     : platform_(platform), dxgkrnl_(dxgkrnl), allocations_(allocations), window_(window),
       lock_(platform, LockRank::av_context_slots),
       reader_(platform), bindings_(), contexts_{}, names_{}, memories_(), chunks_(), ram_chunks_(platform), orders_{},
-      generations_{}, live_{}, request_{}, requests_(platform, LockRank::av_control_requests)
+      wakes_{}, raised_{}, told_lost_{}, generations_{}, live_{}, request_{}, requests_(platform, LockRank::av_control_requests)
       {
           AV_SCOPE("AvContextTable::AvContextTable");
       }
@@ -220,11 +220,23 @@ void AvContextTable::release(uint32_t slot)
     AV_SCOPE("AvContextTable::release");
     bindings_[slot].destroy();
     memories_[slot].destroy();
-    SpinLockGuard locked(lock_);
-    names_[slot] = nullptr;
-    for (ContextChunk &chunk : chunks_[slot]) chunk.clear();
-    orders_[slot] = 0u;
-    contexts_[slot] = nullptr;
+    void *wake = nullptr;
+    {
+        SpinLockGuard locked(lock_);
+        names_[slot] = nullptr;
+        for (ContextChunk &chunk : chunks_[slot]) chunk.clear();
+        orders_[slot] = 0u;
+        wake = wakes_[slot];
+        wakes_[slot] = nullptr;
+        raised_[slot] = 0u;
+        told_lost_[slot] = false;
+        contexts_[slot] = nullptr;
+    }
+    /* Whoever still waits on the context wakes to find it gone. */
+    if (wake != nullptr) {
+        platform_.signal_event(wake);
+        platform_.release_event(wake);
+    }
 }
 
 void AvContextTable::release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go)
@@ -279,6 +291,35 @@ Status AvContextTable::views(void *context, ContextViewsRecord &record)
     if (slot == no_slot || !live_[slot]) return Status::invalid_parameter;
     const ContextMemory &memory = memories_[slot].object();
     record = record.answered(memory.ring_view(), memory.reply_view());
+    return Status::ok;
+}
+
+/* The reference is taken before the slot is looked at, because taking it may
+ * not happen under the spin lock; one the slot turns out not to want is let
+ * go of again. */
+Status AvContextTable::wake_on_raise(void *context, uint64_t handle)
+{
+    AV_SCOPE("AvContextTable::wake_on_raise");
+    platform_.require_irql_at_most(Irql::passive, "AvContextTable::wake_on_raise");
+    void *event = nullptr;
+    if (platform_.reference_event(handle, event) != Status::ok) return Status::invalid_parameter;
+    void *previous = nullptr;
+    bool  stored = false;
+    {
+        SpinLockGuard  locked(lock_);
+        const uint32_t slot = slot_of(context);
+        if (slot != no_slot && live_[slot]) {
+            previous = wakes_[slot];
+            wakes_[slot] = event;
+            stored = true;
+        }
+    }
+    if (!stored) {
+        platform_.release_event(event);
+        return Status::invalid_parameter;
+    }
+    /* The same event named again holds two references, and this lets go of one. */
+    if (previous != nullptr) platform_.release_event(previous);
     return Status::ok;
 }
 
@@ -453,12 +494,26 @@ void AvContextTable::serve(ExecutionNode &node, HwQueueSubmissions &queues)
         if (!live_[slot]) continue;
         AvContextBinding &binding = bindings_[slot].object();
         static_cast<void>(binding.serve());
-        const uint64_t completed = lost(slot) ? UINT64_MAX : binding.completed();
+        const bool     lost_now = lost(slot);
+        const uint64_t completed = lost_now ? UINT64_MAX : binding.completed();
+        wake(slot, binding.raised(), lost_now);
         node.finish(contexts_[slot], completed);
         /* What a hardware queue of this context submitted waits on the same
          * fence, and its progress is where the process reads it (feature 049). */
         queues.completed_through(contexts_[slot], completed);
     }
+}
+
+/* Under the lock. A raise the process has not been woken for, or the context
+ * just lost - after which no raise ever comes, and a thread asleep on the
+ * event would sleep for good. */
+void AvContextTable::wake(uint32_t slot, uint64_t raised, bool lost_now)
+{
+    AV_SCOPE("AvContextTable::wake");
+    const bool moved = raised != raised_[slot] || (lost_now && !told_lost_[slot]);
+    raised_[slot] = raised;
+    told_lost_[slot] = told_lost_[slot] || lost_now;
+    if (moved && wakes_[slot] != nullptr) platform_.signal_event(wakes_[slot]);
 }
 
 bool AvContextTable::lost(uint32_t slot) const
@@ -479,6 +534,8 @@ void AvContextTable::abandon_all()
             SpinLockGuard locked(lock_);
             if (!live_[slot]) continue;
             live_[slot] = false;
+            /* Nothing more is ever served on it. */
+            if (wakes_[slot] != nullptr) platform_.signal_event(wakes_[slot]);
         }
         bindings_[slot].object().abandon();
     }
@@ -612,6 +669,8 @@ void AvContextTable::report(StateWriter &writer)
             writer.number("completed", binding.completed());
             writer.flag("live", live_[slot]);
             writer.flag("lost", lost(slot));
+            writer.flag("wakes", wakes_[slot] != nullptr);
+            writer.number("raised", raised_[slot]);
             for (uint32_t chunk = 0u; chunk < AvContextBinding::chunk_slots; chunk++) {
                 const ContextChunk &held = chunks_[slot][chunk];
                 if (!held.bound()) continue;
@@ -639,7 +698,8 @@ bool AvContextTable::invariants_hold() const
         const bool running = memories_[slot].constructed() && memories_[slot].object().allocated() &&
                              memories_[slot].object().ring_view() != 0u;
         if (live_[slot] && !(bound_slot && running && bindings_[slot].constructed())) return false;
-        if (!bound_slot && (bindings_[slot].constructed() || memories_[slot].constructed() || names_[slot] != nullptr))
+        if (!bound_slot && (bindings_[slot].constructed() || memories_[slot].constructed() || names_[slot] != nullptr ||
+                            wakes_[slot] != nullptr || raised_[slot] != 0u || told_lost_[slot]))
             return false;
         if (bound_slot && names_[slot] == nullptr) return false;
         if (memories_[slot].constructed() && !memories_[slot].object().invariants_hold()) return false;

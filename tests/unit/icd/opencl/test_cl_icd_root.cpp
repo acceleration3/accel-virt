@@ -1321,6 +1321,47 @@ TEST(cl_icd_root, a_read_the_application_wanted_no_event_for_keeps_the_marker_un
   CHECK_EQ(ClIcdRootProbe::outstanding_reads(rig.root()), 0u);
   CHECK(rig.root().invariants_hold()); }
 
+/* On a context the driver wakes, a finish sleeps while the host works: it has
+ * the host raise on its marker and waits for the watcher's thread to see the
+ * driver's wake, rather than asking a thousand times a second. The process's
+ * wake is handed over by the application's contexts only - the ICD's own is
+ * never waited on. */
+TEST(cl_icd_root, a_finish_on_a_context_the_driver_wakes_sleeps_until_it_does)
+{ ClIcdRig rig;
+  rig.watcher().offer_wake(0x2A0u);
+  rig.kmt().accept_wake_events();
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  CHECK_EQ(rig.kmt().wake_events(), 1u);
+  CHECK_EQ(rig.kmt().wake_event(), 0x2A0u);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+  unsigned char into[8] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, nullptr),
+           CL_SUCCESS);
+
+  const cl_int running = CL_RUNNING;
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);   /* the finish's own marker */
+  rig.host().cl_result(CL_SUCCESS);                      /* the queue flushed */
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&running), sizeof running);
+  rig.host().cl_result(CL_SUCCESS);                      /* the host will raise on the marker */
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);                      /* that marker released */
+  const unsigned char answered[8] = {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  rig.host().cl_result(CL_SUCCESS);                      /* the read's marker released */
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(rig.loader().finish(queue), CL_SUCCESS);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
+  CHECK_EQ(rig.kmt().command_id(before + 3u), av::clproto::kCmd_clSetEventCallback);
+  CHECK_EQ(rig.watcher().awaits(), 1u);
+  CHECK(rig.watcher().running());
+  CHECK(rig.root().invariants_hold()); }
+
 TEST(cl_icd_root, releasing_a_queue_forgets_the_reads_nobody_will_wait_for)
 { ClIcdRig rig;
   cl_device_id device = nullptr;

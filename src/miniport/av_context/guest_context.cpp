@@ -203,6 +203,11 @@ uint64_t            GuestContext::completed() const
     AV_SCOPE("GuestContext::completed");
     return observer_.completed();
 }
+uint64_t            GuestContext::raised() const
+{
+    AV_SCOPE("GuestContext::raised");
+    return fences_.raised();
+}
 bool                GuestContext::faulted() const
 {
     AV_SCOPE("GuestContext::faulted");

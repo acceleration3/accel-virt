@@ -20,7 +20,7 @@ namespace {
 const char *const violation_names[] = {
     "irql_ceiling", "allocation_at_dispatch", "blocking_at_dispatch", "lock_order",
     "release_order", "lock_stack_overflow", "null_release", "broken_invariant",
-    "time_overflow", "unmapped_register", "frame_misuse",
+    "time_overflow", "unmapped_register", "frame_misuse", "event_misuse",
 };
 
 }  // namespace
@@ -71,6 +71,11 @@ MockPlatform::~MockPlatform()
         registry.record_failure(__FILE__, __LINE__, "%u process view(s) left mapped", process_mappings());
     if (bugcheck_routine_ != nullptr)
         registry.record_failure(__FILE__, __LINE__, "a bugcheck callback was never deregistered");
+    for (std::uint32_t i = 0u; i < event_count_; i++) {
+        if (events_[i].references != 0u)
+            registry.record_failure(__FILE__, __LINE__, "event 0x%llx still referenced %u time(s)",
+                                    static_cast<unsigned long long>(events_[i].handle), events_[i].references);
+    }
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
     for (std::uint32_t i = 0u; i < contiguous_count_; i++)
         if (!contiguous_[i].borrowed) std::free(contiguous_[i].block);
@@ -707,6 +712,91 @@ void MockPlatform::deregister_bugcheck()
 }
 
 void MockPlatform::refuse_bugcheck_registration() { refuse_bugcheck_ = true; }
+
+/* Only an open handle of the process's own resolves: one it closed, or a
+ * number it never had, is what ObReferenceObjectByHandle refuses. */
+Status MockPlatform::reference_event(std::uint64_t handle, void *&event)
+{
+    event = nullptr;
+    if (irql_ != Irql::passive)
+        record(Violation::irql_ceiling, "reference_event at IRQL %u", static_cast<unsigned>(irql_));
+    for (std::uint32_t i = 0u; i < event_count_; i++) {
+        if (events_[i].handle != handle || !events_[i].open) continue;
+        events_[i].references++;
+        event = &events_[i];
+        return Status::ok;
+    }
+    return Status::invalid_parameter;
+}
+
+void MockPlatform::signal_event(void *event)
+{
+    if (irql_ > Irql::dispatch)
+        record(Violation::irql_ceiling, "signal_event at IRQL %u", static_cast<unsigned>(irql_));
+    MockEvent *const found = referenced(event);
+    if (found == nullptr) {
+        record(Violation::event_misuse, "signal_event of an event not referenced");
+        return;
+    }
+    found->signals++;
+}
+
+void MockPlatform::release_event(void *event)
+{
+    if (irql_ > Irql::dispatch)
+        record(Violation::irql_ceiling, "release_event at IRQL %u", static_cast<unsigned>(irql_));
+    MockEvent *const found = referenced(event);
+    if (found == nullptr) {
+        record(Violation::event_misuse, "release_event of an event not referenced");
+        return;
+    }
+    found->references--;
+}
+
+MockPlatform::MockEvent *MockPlatform::referenced(void *event)
+{
+    for (std::uint32_t i = 0u; i < event_count_; i++)
+        if (event == &events_[i] && events_[i].references != 0u) return &events_[i];
+    return nullptr;
+}
+
+const MockPlatform::MockEvent *MockPlatform::event_of(std::uint64_t handle) const
+{
+    for (std::uint32_t i = 0u; i < event_count_; i++)
+        if (events_[i].handle == handle) return &events_[i];
+    return nullptr;
+}
+
+std::uint64_t MockPlatform::make_process_event()
+{
+    if (event_count_ == max_events) {
+        std::fprintf(stderr, "\n    more than %u events\n", max_events);
+        std::abort();
+    }
+    MockEvent &made = events_[event_count_];
+    made.handle = first_event_handle + 4u * event_count_;
+    made.open = true;
+    event_count_++;
+    return made.handle;
+}
+
+void MockPlatform::close_process_event(std::uint64_t handle)
+{
+    for (std::uint32_t i = 0u; i < event_count_; i++)
+        if (events_[i].handle == handle) events_[i].open = false;
+}
+
+std::uint32_t MockPlatform::event_signals(std::uint64_t handle) const
+{
+    const MockEvent *const found = event_of(handle);
+    return found != nullptr ? found->signals : 0u;
+}
+
+std::uint32_t MockPlatform::event_references(std::uint64_t handle) const
+{
+    const MockEvent *const found = event_of(handle);
+    return found != nullptr ? found->references : 0u;
+}
 
 bool MockPlatform::device_write_refused(const char *function)
 {

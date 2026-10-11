@@ -296,7 +296,13 @@ public:
     void complete_through(std::uint64_t completed, std::uint32_t fault = 0u)
     {
         const FencePage written = fault == 0u ? FencePage(completed, completed) : FencePage(completed, completed, fault);
-        static_cast<void>(written.encode(fence_page(), 32u));
+        static_cast<void>(written.encode(fence_page(), FencePage::encoded_size));
+    }
+    /* What the host writes when it raises out of band (feature 052): progress
+     * and the raises move, the completion stays. */
+    void raise(std::uint64_t completed, std::uint64_t progress, std::uint64_t raised)
+    {
+        static_cast<void>(FencePage(completed, progress).raising(raised).encode(fence_page(), FencePage::encoded_size));
     }
     void serve()
     {
@@ -410,6 +416,89 @@ TEST(av_context_table_views, answers_the_process_where_its_ring_and_reply_slot_a
   CHECK_STATUS(fixture.table().views(&first_context, lost), Status::invalid_parameter);
   CHECK_EQ(lost.ring(), 0u);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* The process's event is set when its host raises - the fence page's raised
+ * moving - once for each serve that finds it moved, however far, and not for
+ * progress alone. The kernel holds the event, so the process may close its
+ * handle, and lets go of it with the context, setting it a last time. */
+TEST(av_context_table_wake, the_event_is_set_once_for_each_serve_that_finds_a_raise)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const std::uint64_t event = fixture.platform().make_process_event();
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, event), Status::invalid_parameter);
+  CHECK_EQ(fixture.platform().event_references(event), 0u);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, event + 4u), Status::invalid_parameter);   /* no such handle */
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, event), Status::ok);
+  fixture.platform().close_process_event(event);
+  CHECK_EQ(fixture.platform().event_references(event), 1u);
+  fixture.raise(0u, 0u, 0u);   /* the fresh page the device writes at setup */
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 0u);
+  fixture.raise(0u, 1u, 1u);
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 1u);
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 1u);
+  fixture.raise(0u, 3u, 3u);
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 2u);
+  fixture.raise(0u, 4u, 3u);
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 2u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().event_signals(event), 3u);
+  CHECK_EQ(fixture.platform().event_references(event), 0u); }
+
+/* A context lost raises nothing ever again, so the event is set for the loss
+ * itself, once; a reset that abandons the context sets it too. Either way a
+ * thread asleep on it wakes to ask and learns the context is gone. */
+TEST(av_context_table_wake, a_lost_or_abandoned_context_sets_the_event)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const std::uint64_t event = fixture.platform().make_process_event();
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, event), Status::ok);
+  fixture.complete_through(5u);   /* nothing was ever submitted */
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 1u);
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(event), 1u);
+  fixture.table().abandon_all();
+  CHECK_EQ(fixture.platform().event_signals(event), 2u);
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, event), Status::invalid_parameter);
+  CHECK_EQ(fixture.platform().event_references(event), 1u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().event_references(event), 0u); }
+
+/* A second event replaces the first, which is let go of; the same event named
+ * twice is held once. Two contexts may share one event, as every context of a
+ * process does. */
+TEST(av_context_table_wake, a_second_event_replaces_the_first_and_contexts_may_share_one)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const std::uint64_t first = fixture.platform().make_process_event();
+  const std::uint64_t second = fixture.platform().make_process_event();
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, first), Status::ok);
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, second), Status::ok);
+  CHECK_EQ(fixture.platform().event_references(first), 0u);
+  CHECK_EQ(fixture.platform().event_references(second), 1u);
+  CHECK_STATUS(fixture.table().wake_on_raise(&first_context, second), Status::ok);
+  CHECK_EQ(fixture.platform().event_references(second), 1u);
+  fixture.raise(0u, 1u, 1u);
+  fixture.serve();
+  CHECK_EQ(fixture.platform().event_signals(first), 0u);
+  CHECK_EQ(fixture.platform().event_signals(second), 1u);
+  ProcessAllocation other(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
+                         page);
+  CHECK_STATUS(fixture.bind(&second_context, AvContextRecord(SubApi::vulkan, 12u, other.handle(), page)), Status::ok);
+  CHECK_STATUS(fixture.table().wake_on_raise(&second_context, second), Status::ok);
+  CHECK_EQ(fixture.platform().event_references(second), 2u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().event_references(second), 1u);
+  CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().event_references(second), 0u); }
 
 /* A submission the process describes lands in its ring and rings its doorbell,
  * and the node completes it only when the host's fence page says so. */
@@ -1336,7 +1425,8 @@ TEST(av_context_table_report, writes_each_live_context_its_memory_and_its_chunks
   std::snprintf(expected, sizeof expected,
                 "av_context_table/0 busy=false bound=1\n"
                 "av_context_table/0/av_context/0 handle=0x%016llX doorbell=0 ring_order=12 name=0x%016llX"
-                " ring_view=%llu reply_view=%llu state=2 context_id=1 completed=0 live=true lost=false\n"
+                " ring_view=%llu reply_view=%llu state=2 context_id=1 completed=0 live=true lost=false"
+                " wakes=false raised=0\n"
                 "av_context_table/0/av_context/0/chunk/0 resource=%u ram_bytes=4096",
                 hex_of(&first_context), hex_of(fixture.ring().allocation()),
                 static_cast<unsigned long long>(fixture.memory().ring_view()),
@@ -1349,7 +1439,7 @@ TEST(av_context_table_report, writes_each_live_context_its_memory_and_its_chunks
   fixture.serve();
   av::StateWriter faulted(bytes, sizeof bytes);
   fixture.table().report(faulted);
-  CHECK(std::strstr(faulted.dump(), " lost=true\n") != nullptr);
+  CHECK(std::strstr(faulted.dump(), " lost=true wakes=false raised=0\n") != nullptr);
   fixture.platform().hold_elsewhere(av::LockRank::av_context_slots);
   av::StateWriter busy(bytes, sizeof bytes);
   fixture.table().report(busy);

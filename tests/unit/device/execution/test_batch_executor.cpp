@@ -222,7 +222,7 @@ private:
     std::uint8_t    reply_[32u + 4096u];
     void           *reply_pointer_;
     std::uint64_t   reply_length_;
-    std::uint8_t    page_[32];
+    std::uint8_t    page_[FencePage::encoded_size];
     void           *page_pointer_;
     std::uint64_t   page_length_;
     MockHost        host_;

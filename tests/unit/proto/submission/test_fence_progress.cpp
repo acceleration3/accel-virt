@@ -83,6 +83,21 @@ TEST(fence_progress_observe, progress_moving_backwards_is_rejected)
   CHECK_STATUS(progress.observe(FencePage(6u, 20u)), Status::ok);
   CHECK_STATUS(progress.observe(FencePage(6u, 19u)), Status::invalid_state); }
 
+/* The raises a device counts only move forward, as progress does: one going
+ * back is a page that contradicts what the driver already woke a process for. */
+TEST(fence_progress_observe, raises_move_forward_and_moving_backwards_is_rejected)
+{ FenceProgress progress;
+  CHECK_STATUS(progress.record_submission(9u), Status::ok);
+  CHECK(progress.raised() == 0u);
+  CHECK_STATUS(progress.observe(FencePage(6u, 20u).raising(3u)), Status::ok);
+  CHECK(progress.raised() == 3u);
+  CHECK_STATUS(progress.observe(FencePage(6u, 21u).raising(2u)), Status::invalid_state);
+  CHECK(progress.raised() == 3u);
+  /* A device that counts none leaves it at zero, which is no move at all. */
+  FenceProgress older;
+  CHECK_STATUS(older.observe(FencePage(0u, 5u)), Status::ok);
+  CHECK(older.raised() == 0u); }
+
 TEST(fence_progress_observe, a_fault_is_latched)
 { FenceProgress progress;
   CHECK_STATUS(progress.record_submission(2u), Status::ok);
@@ -143,7 +158,7 @@ TEST(fence_progress, what_user_mode_submitted_is_completed_without_the_driver_ha
 
 /* Feature 052: a host event completes on a thread the device did not give the
  * host, and the device reports it by moving progress alone
- * (FenceReporter::nudge). If the guest failed its context over that, the whole
+ * (FenceReporter::raise). If the guest failed its context over that, the whole
  * out-of-band completion channel would be illegal. */
 TEST(fence_progress_observe, progress_advancing_with_nothing_completed_is_accepted)
 { FenceProgress progress;

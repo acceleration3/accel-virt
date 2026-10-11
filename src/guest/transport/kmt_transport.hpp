@@ -78,6 +78,13 @@ public:
     void                 hold(PublishGate &gate);
     /* `gate` is going away: a hold by it is dropped, one by another kept. */
     void                 forget(const PublishGate &gate);
+    /* Has the driver set the event `handle` names - this process's, one it may
+     * set - whenever the host raises on this context, and when the context is
+     * lost or goes (docs/protocol.md, "Wake event record"). invalid_state
+     * before the context is set up or once lost; the Kmt's own error
+     * otherwise, which is not_supported from a driver or device that never
+     * raises, and the context goes on without. */
+    [[nodiscard]] Status wake_on_raise(uint64_t handle);
     uint64_t             submissions_through_kernel() const;
     /* Every batch this transport has submitted: what has not moved has sent
      * nothing in between. */

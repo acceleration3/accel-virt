@@ -6,7 +6,7 @@
 namespace av {
 
 FenceProgress::FenceProgress()
-    : submitted_(0u), driver_submits_(true), completed_(0u), progress_(0u), faulted_(false)
+    : submitted_(0u), driver_submits_(true), completed_(0u), progress_(0u), raised_(0u), faulted_(false)
 {
     AV_SCOPE("FenceProgress::FenceProgress");
 }
@@ -37,12 +37,14 @@ Status FenceProgress::record_submission(uint64_t fence_id)
 Status FenceProgress::observe(const FencePage &page)
 {
     AV_SCOPE("FenceProgress::observe");
-    const bool regressed = page.completed_fence() < completed_ || page.progress() < progress_;
+    const bool regressed =
+        page.completed_fence() < completed_ || page.progress() < progress_ || page.raised() < raised_;
     const bool unsubmitted = driver_submits_ && page.completed_fence() > submitted_;
     const bool unfaulted = faulted_ && !page.faulted();
     if (regressed || unsubmitted || unfaulted) return Status::invalid_state;
     completed_ = page.completed_fence();
     progress_ = page.progress();
+    raised_ = page.raised();
     faulted_ = page.faulted();
     return Status::ok;
 }
@@ -61,6 +63,11 @@ uint64_t FenceProgress::progress() const
 {
     AV_SCOPE("FenceProgress::progress");
     return progress_;
+}
+uint64_t FenceProgress::raised() const
+{
+    AV_SCOPE("FenceProgress::raised");
+    return raised_;
 }
 bool     FenceProgress::faulted() const
 {

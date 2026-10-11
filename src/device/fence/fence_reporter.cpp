@@ -12,7 +12,7 @@ namespace av {
 FenceReporter::FenceReporter(Host &host, FenceInterrupts &interrupts, WireRecorder &recorder,
                              uint32_t context)
     : host_(host), interrupts_(interrupts), recorder_(recorder), context_(context), page_(), line_(0u), completed_(0u), progress_(0u),
-      fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false)
+      raised_(0u), fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false)
       {
           AV_SCOPE("FenceReporter::FenceReporter");
       }
@@ -28,6 +28,7 @@ Status FenceReporter::prepare(const FenceWindow &page, uint32_t line)
     line_ = line;
     completed_ = 0u;
     progress_ = 0u;
+    raised_ = 0u;
     prepared_ = true;
     return Status::ok;
 }
@@ -51,7 +52,7 @@ void FenceReporter::complete(uint64_t fence)
     completed_ = fence;
     progress_++;
     pending_ = true;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_)));   /* checked when prepared */
+    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));   /* checked when prepared */
     recorder_.record_fence(context_, fence);
 }
 
@@ -61,19 +62,20 @@ void FenceReporter::heartbeat()
     host_.require_worker("FenceReporter::heartbeat");
     if (!prepared_ || faulted_) return;
     progress_++;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_)));   /* checked when prepared */
+    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));   /* checked when prepared */
 }
 
-/* The guest's FenceProgress accepts progress advancing on its own and nothing
- * else out of band, so completed_ is what this must not touch. */
-void FenceReporter::nudge()
+/* The guest's FenceProgress accepts progress and raised advancing on their own
+ * and nothing else out of band, so completed_ is what this must not touch. */
+void FenceReporter::raise()
 {
-    AV_SCOPE("FenceReporter::nudge");
-    host_.require_worker("FenceReporter::nudge");
+    AV_SCOPE("FenceReporter::raise");
+    host_.require_worker("FenceReporter::raise");
     if (!prepared_ || faulted_) return;
     progress_++;
+    raised_++;
     pending_ = true;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_)));   /* checked when prepared */
+    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));   /* checked when prepared */
 }
 
 void FenceReporter::fault(FaultCode code)
@@ -84,7 +86,7 @@ void FenceReporter::fault(FaultCode code)
     faulted_ = true;
     fault_ = code;
     pending_ = true;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_, static_cast<uint32_t>(code))));
+    static_cast<void>(page_.publish(FencePage(completed_, progress_, static_cast<uint32_t>(code)).raising(raised_)));
 }
 
 void FenceReporter::signal()
@@ -111,6 +113,11 @@ uint64_t FenceReporter::progress() const
     AV_SCOPE("FenceReporter::progress");
     return progress_;
 }
+uint64_t FenceReporter::raised() const
+{
+    AV_SCOPE("FenceReporter::raised");
+    return raised_;
+}
 
 /* Nothing completes or faults before the page exists, every completion moved
  * progress, and a fault always has a reason. */
@@ -118,7 +125,7 @@ bool FenceReporter::invariants_hold() const
 {
     AV_SCOPE("FenceReporter::invariants_hold");
     if (!prepared_) return !pending_ && !faulted_;
-    return page_.invariants_hold() && (completed_ == 0u || progress_ != 0u) &&
+    return page_.invariants_hold() && (completed_ == 0u || progress_ != 0u) && raised_ <= progress_ &&
            (!faulted_ || fault_ != FaultCode::none);
 }
 

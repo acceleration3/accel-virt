@@ -29,7 +29,7 @@ void ContextSignal::drain()
     host_.require_worker("ContextSignal::drain");
     if (!__atomic_exchange_n(&pending_, false, __ATOMIC_ACQUIRE)) return;
     delivered_++;
-    fences_.nudge();
+    fences_.raise();
 }
 
 bool ContextSignal::pending() const

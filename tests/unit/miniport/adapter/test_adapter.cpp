@@ -117,6 +117,7 @@
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/escape/context_views_record.hpp"
+#include "proto/escape/wake_event_record.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/escape/tail_publish_record.hpp"
@@ -324,6 +325,12 @@ public:
     {
         capset_ = host_capset(first_gpu, 1u,
                               av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_present_engine);
+    }
+    /* A device whose fence pages count the raises (feature_raises). */
+    void                   offer_raises()
+    {
+        capset_ = host_capset(first_gpu, 1u,
+                              av::CapsetInfo::feature_host_visible_memory | av::CapsetInfo::feature_raises);
     }
     /* A device whose engine reads present snapshots as well. */
     void                   offer_present_snapshots()
@@ -4448,11 +4455,11 @@ public:
      * finishes batches through `completed`. */
     void host_completes(std::uint64_t completed)
     {
-        static_cast<void>(av::FencePage(completed, completed).encode(fence_page(), 32u));
+        static_cast<void>(av::FencePage(completed, completed).encode(fence_page(), av::FencePage::encoded_size));
     }
     void host_faults(std::uint64_t completed, std::uint32_t code)
     {
-        static_cast<void>(av::FencePage(completed, completed, code).encode(fence_page(), 32u));
+        static_cast<void>(av::FencePage(completed, completed, code).encode(fence_page(), av::FencePage::encoded_size));
     }
     TransportAllocation &ring() { return ring_; }
     void                *device() const { return device_.hDevice; }
@@ -4996,6 +5003,54 @@ TEST(adapter_av_context, a_timeout_reset_loses_the_host_context_and_a_new_one_se
  * the answer back from the same bytes: views of the driver's own pages,
  * mapped when the context was made, the ring's header already written.
  * Anything else about the escape is refused. */
+/* A process hands over its event to be set when its context's host raises
+ * (docs/protocol.md, "Wake event record"). A device that never counts the
+ * raises would never set it, and the process is told so as a driver without
+ * the record would tell it, so that it waits on a timer instead. */
+TEST(adapter_escape, a_wake_event_is_taken_only_from_a_device_that_counts_raises)
+{ for (const bool raises : {false, true}) {
+      Fixture fixture; av::FakeHandleTable handles;
+      fixture.function().add_doorbell_region();
+      if (raises) fixture.offer_raises();
+      CHECK_EQ(fixture.start(), success);
+      AvProcess process(fixture, handles);
+      av::DxgkargCreateContextRecord context = {};
+      CHECK_EQ(process.create_context(context), success);
+      const std::uint64_t event = fixture.platform().make_process_event();
+      std::uint8_t data[av::WakeEventRecord::encoded_size] = {};
+      CHECK_STATUS(av::WakeEventRecord(event).encode(data, sizeof data), av::Status::ok);
+      DxgkargEscapeRecord escape = {};
+      escape.pPrivateDriverData = data;
+      escape.PrivateDriverDataSize = sizeof data;
+      escape.hContext = context.hContext;
+      if (!raises) {
+          CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
+          CHECK_EQ(fixture.platform().event_references(event), 0u);
+          CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+          continue;
+      }
+      CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+      CHECK_EQ(fixture.platform().event_references(event), 1u);
+      /* A handle that is no event of the process, a context of no one, none
+       * named, and the wrong length. */
+      CHECK_STATUS(av::WakeEventRecord(event + 4u).encode(data, sizeof data), av::Status::ok);
+      CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+      CHECK_STATUS(av::WakeEventRecord(event).encode(data, sizeof data), av::Status::ok);
+      int stranger = 0;
+      escape.hContext = &stranger;
+      CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+      escape.hContext = nullptr;
+      CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+      escape.hContext = context.hContext;
+      escape.PrivateDriverDataSize = sizeof data - 1u;
+      CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+      CHECK_EQ(fixture.platform().event_references(event), 1u);
+      /* The event goes with the context, set a last time for whoever waits. */
+      CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+      CHECK_EQ(fixture.platform().event_references(event), 0u);
+      CHECK_EQ(fixture.platform().event_signals(event), 1u);
+  } }
+
 TEST(adapter_escape, a_context_s_views_are_answered_in_the_private_data)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();

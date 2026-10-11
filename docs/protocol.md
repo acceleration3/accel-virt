@@ -89,6 +89,7 @@ Each feature bit is something the host **proved**, not something it hopes for
 | 3 | `dmabuf_scanout` | a display head's console can show a dma-buf, so a blob may be scanned out instead of transferred (feature 058) |
 | 4 | `present_engine` | the device moves queued presents on its own thread (see "Present engine") |
 | 5 | `present_from_image` | a queued present's source may be a host image, which this device can read (see "Present engine"); set only with bit 4 |
+| 6 | `raises` | the fence page counts out-of-band raises in `raised`, so the driver can wake a process that waits on them (see "Fence page" and "Wake event record") |
 
 Bit 3 is the one bit the device cannot decide when it describes the capset, and
 the reason is QEMU's own order: `qemu_init_displays()` runs after
@@ -734,6 +735,45 @@ else as one. An escape whose data is no record the miniport knows answers
 reserved field, addresses already filled in, no context named or one that is
 not a live av context - is `STATUS_INVALID_PARAMETER` and writes nothing back.
 
+### Wake event record (user mode -> guest driver, escape)
+
+The private data of one `D3DKMTEscape` whose `hContext` names a live av
+context: a process handing the miniport an event of its own to set whenever the
+host raises on that context, so that a thread waiting for the host to finish
+something sleeps on the event instead of asking on a timer. The miniport
+decodes it at `PASSIVE` and writes nothing back. 32 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `AVE` = `0x00455641` |
+| 4 | u16 | version | 1 |
+| 6 | u16 | reserved | 0 |
+| 8 | u64 | event | the process's handle to an event, with `EVENT_MODIFY_STATE` |
+| 16 | u64 | reserved | 0 |
+| 24 | u64 | reserved | 0 |
+
+The miniport takes a reference to the event, so the process may close its
+handle, and holds it until the context is destroyed. A second record on the
+same context replaces the first. Several contexts may name the same event. The
+miniport sets it from its interrupt path:
+
+- whenever the context's fence page shows `raised` moved (see Fence page);
+- once when the context is lost, because the host faulted it or its fence page
+  failed it;
+- when the device is reset, and when the context is destroyed.
+
+The last three mean a thread asleep on the event is never left there with
+nothing more to come: it wakes, asks, and learns that the context is gone. The
+event says only that something happened, never what, and the process asks over
+the wire as it would have anyway.
+
+`STATUS_NOT_SUPPORTED` comes from a device without capset bit 6
+(`raises`), whose page never moves `raised`, and from a miniport that
+predates this record. A process that gets it waits on a timer as before. Every
+other refusal is `STATUS_INVALID_PARAMETER`: a wrong length, magic, version or
+reserved field, a handle of 0, no context named or one that is not a live av
+context, or a handle that is not an event the process may set.
+
 ### The submission path
 
 With a context set up, a process submits by writing a batch into the ring the
@@ -958,7 +998,7 @@ the head is hidden.
 ## Fence page (device -> guest)
 
 Offset 0 of the fence resource. The device updates it from its worker thread;
-the guest reads it from its interrupt path. 32 bytes.
+the guest reads it from its interrupt path. 40 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
@@ -968,6 +1008,7 @@ the guest reads it from its interrupt path. 32 bytes.
 | 16 | u64 | progress | increments whenever the device makes progress (TDR heartbeat) |
 | 24 | u32 | fault_code | 0 unless `faulted` |
 | 28 | u32 | reserved | 0 |
+| 32 | u64 | raised | out-of-band raises delivered (feature 052); capset bit 6 |
 
 The fault codes, which say where to look rather than only that something
 failed: 1 ring header, 2 ring tail, 3 batch header, 4 batch order, 5 command
@@ -976,8 +1017,8 @@ last is a library answering a value the executor ABI does not define, and it is
 separate from device lost on purpose - folded together, a bug in an executor
 reads as a GPU fault and is chased in the wrong place.
 
-Against what the guest has seen: `completed_fence` and `progress` never
-decrease, `completed_fence` never exceeds the highest fence id submitted, and
+Against what the guest has seen: `completed_fence`, `progress` and `raised`
+never decrease, `completed_fence` never exceeds the highest fence id submitted, and
 once `faulted` is observed it stays set for the context's lifetime.
 
 **When the device writes it.** At the context setup, before the ring is
@@ -995,12 +1036,19 @@ by the next write.
 thread the device never gave it - OpenCL's event callbacks - reaches the guest
 through this page too, and the shape it is allowed is exactly what the guest's
 history check already accepts: **`progress` moves, `completed_fence` does not,
-and the interrupt is raised.** Nothing completed, because no batch did. The
+and the interrupt is raised**, and `raised` moves with it. Nothing completed,
+because no batch did. The
 foreign thread only sets a flag and wakes the context's worker, the way the
 doorbell's ioeventfd does; the worker writes the page. Raises coalesce, so a
 burst of host completions is one move of `progress` and one interrupt, and the
 page never says which event finished - there is no room for one and no need,
 since the guest asks over the wire. A faulted context raises nothing.
+
+`raised` counts the raises alone, apart from `progress`, which every command
+moves too. A device announcing capset bit 6 (`raises`) keeps it;
+one that does not leaves it 0. The driver uses it to wake a process that
+registered a wake event on its context (the `AVW` escape, below), so that
+process sleeps until the host finishes something instead of asking on a timer.
 
 | Fault code | Reason |
 |--:|---|

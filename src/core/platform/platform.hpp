@@ -146,6 +146,18 @@ public:
     /* Of the registration made; nothing without one. PASSIVE. */
     virtual void deregister_bugcheck() = 0;
 
+    /* The event `handle` names in the calling process, which must let it be
+     * set, held by the kernel until release_event: the process may close its
+     * handle, or exit, and the event stays for whoever still waits on it.
+     * invalid_parameter for a handle that is no such event. PASSIVE, in the
+     * process's own context. */
+    [[nodiscard]] virtual Status reference_event(uint64_t handle, void *&event) = 0;
+    /* Sets an event reference_event answered, waking a thread that waits on
+     * it. DISPATCH at most. */
+    virtual void signal_event(void *event) = 0;
+    /* Lets go of an event reference_event answered. DISPATCH at most. */
+    virtual void release_event(void *event) = 0;
+
     /* The device's DEVPKEY_Device_DeviceDesc, kept across boots: `text` is
      * UTF-16 and `bytes` counts its NUL. PASSIVE. */
     [[nodiscard]] virtual Status set_device_description(void *physical_device_object, const uint16_t *text,

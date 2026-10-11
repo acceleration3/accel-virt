@@ -288,7 +288,7 @@ TEST(av_context_binding, forwards_a_submission_and_a_serve_once_established)
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   /* The device writes the fence page; a no-progress page is what serve reads
    * before any batch completes. */
-  static_cast<void>(FencePage(0u, 0u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), 32u));
+  static_cast<void>(FencePage(0u, 0u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
   fixture.mapped().platform().set_irql(Irql::dispatch);
   CHECK_STATUS(binding.submit(SubmissionDescriptor(1u, 0u, 16u)), Status::ok);
   CHECK_STATUS(binding.serve(), Status::ok);
@@ -433,11 +433,11 @@ TEST(av_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
   binding.user_mode_submits(&progress);
   /* A fence page completing what the driver never submitted is believed now,
    * and reported where the process waits. */
-  static_cast<void>(av::FencePage(2u, 64u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), 32u));
+  static_cast<void>(av::FencePage(2u, 64u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
   CHECK_STATUS(binding.serve(), Status::ok);
   CHECK_EQ(progress, 2u);
   binding.driver_submits();
-  static_cast<void>(av::FencePage(3u, 96u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), 32u));
+  static_cast<void>(av::FencePage(3u, 96u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
   CHECK_STATUS(binding.serve(), Status::invalid_state);
   CHECK_EQ(progress, 2u);
   fixture.mapped().platform().set_irql(av::Irql::passive);

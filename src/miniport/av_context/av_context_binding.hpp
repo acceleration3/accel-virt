@@ -102,6 +102,7 @@ public:
     uint32_t            context_id() const;
     SubApi              sub_api() const;
     uint64_t            completed() const;
+    uint64_t            raised() const;
     bool                faulted() const;
 
     bool invariants_hold() const;

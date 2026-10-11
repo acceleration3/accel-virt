@@ -98,8 +98,16 @@ public:
      *
      * `gl_share` is the share name of the OpenGL context this one shares
      * objects with (cl_khr_gl_sharing), or 0 for none: the device then makes
-     * the host's context in that GL context's share group. */
-    [[nodiscard]] Status make(uint32_t gl_share = 0u);
+     * the host's context in that GL context's share group.
+     *
+     * `wake` is the process's driver wake (icd::ServiceThread::wake_handle),
+     * or 0 for none: the context hands it over, and wakes() says whether the
+     * driver took it - which a driver or device that never raises does not,
+     * and the context goes on with its waits asking on a timer. */
+    [[nodiscard]] Status make(uint32_t gl_share = 0u, uint64_t wake = 0u);
+    /* Whether the driver sets the process's wake when the host finishes
+     * something on this context. */
+    bool                 wakes() const;
     State                state() const;
     /* Whether this context was made from an OpenGL context, so that a GL name
      * an application hands it means that context's object. */
@@ -175,6 +183,7 @@ private:
     LogSink       &log_;
     icd::ContextLink    link_;
     uint32_t            gl_share_;
+    bool                wakes_;
     icd::HostChannel                     channel_;
     ObjectStorage<icd::LockedTransport>  locked_;
     ClArenaBlocks                        blocks_;

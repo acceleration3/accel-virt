@@ -14,6 +14,7 @@
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/escape/context_views_record.hpp"
+#include "proto/escape/wake_event_record.hpp"
 #include "proto/escape/host_window_record.hpp"
 
 #include <sys/mman.h>
@@ -972,9 +973,24 @@ Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_
     std::uint32_t magic = 0u;
     for (std::uint32_t i = 0u; i < sizeof magic && i < size; i++) magic |= std::uint32_t{data[i]} << (8u * i);
     if (magic == ContextViewsRecord::magic) return context_views(context, data, size);
+    if (magic == WakeEventRecord::magic) return wake_event(data, size);
     if (magic == HostWindowRecord::magic) return window_chunk(context, data, size);
     return refuse(not_supported);
 }
+
+Status MockKmt::wake_event(const std::uint8_t *data, std::uint32_t size)
+{
+    if (!accepts_wakes_) return refuse(not_supported);
+    WakeEventRecord record;
+    if (record.decode(data, size) != Status::ok) return refuse(invalid_parameter);
+    wake_event_ = record.event();
+    ++wake_events_;
+    return succeed();
+}
+
+void          MockKmt::accept_wake_events() { accepts_wakes_ = true; }
+std::uint64_t MockKmt::wake_event() const { return wake_event_; }
+std::uint32_t MockKmt::wake_events() const { return wake_events_; }
 
 Status MockKmt::context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size)
 {

@@ -66,6 +66,9 @@ public:
     void     log_at_bugcheck(const char *message) override;
     bool     register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine) override;
     void     deregister_bugcheck() override;
+    Status   reference_event(uint64_t handle, void *&event) override;
+    void     signal_event(void *event) override;
+    void     release_event(void *event) override;
     void     report_broken_invariant(const char *what, const char *function) override;
     uint32_t read_service_u32(void *registry_path, const char *name, uint32_t fallback) override;
     int32_t  register_miniport(void *driver_object, void *registry_path,

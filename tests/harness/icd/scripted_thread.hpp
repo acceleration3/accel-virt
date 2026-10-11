@@ -24,8 +24,22 @@ public:
     /* Counted rather than slept: the test is the one that decides when the
      * loop turns again. */
     void   rest() override;
-    void   pause() override;
+    /* Counted, and the driven ones apart. */
+    void   pause(bool driven) override;
     void   wake() override;
+    /* 0 until offer_wake. */
+    std::uint64_t wake_handle() const override;
+    std::uint64_t woken() const override;
+    /* Counted rather than slept, with what it was asked to wait past; runs
+     * the hook first if there is one, which is the test playing whatever
+     * happens on other threads meanwhile. */
+    void          await_woken(std::uint64_t seen, std::uint64_t timeout) override;
+
+    /* The process has a driver wake to hand its contexts, by this handle. */
+    void   offer_wake(std::uint64_t handle);
+    /* The driver set the wake and the loop's wait saw it: woken() moves. */
+    void   driver_woke();
+    void   on_await(void (*hook)(void *context), void *context);
 
     /* The next start refuses, as an OS out of threads does. What the ICD
      * does with that is a path of its own: a callback registered on a
@@ -44,7 +58,12 @@ public:
     std::uint32_t stops() const;
     std::uint32_t rests() const;
     std::uint32_t pauses() const;
+    std::uint32_t driven_pauses() const;
     std::uint32_t wakes() const;
+    std::uint32_t awaits() const;
+    /* What the last await_woken was asked to wait past, and for how long. */
+    std::uint64_t last_seen() const;
+    std::uint64_t last_timeout() const;
 
 private:
     icd::ServiceLoop *loop_;
@@ -53,7 +72,15 @@ private:
     std::uint32_t     stops_;
     std::uint32_t     rests_;
     std::uint32_t     pauses_;
+    std::uint32_t     driven_pauses_;
     std::uint32_t     wakes_;
+    std::uint32_t     awaits_;
+    std::uint64_t     wake_handle_;
+    std::uint64_t     woken_;
+    std::uint64_t     last_seen_;
+    std::uint64_t     last_timeout_;
+    void            (*await_hook_)(void *context);
+    void             *await_context_;
     bool              stopping_;
     bool              refusing_;
 };

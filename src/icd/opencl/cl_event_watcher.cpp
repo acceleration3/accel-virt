@@ -10,7 +10,7 @@
 namespace av::clicd {
 
 ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock, ClEventOwner &owner)
-    : thread_(thread), log_(log), lock_(lock), owner_(owner), registrations_(), held_(0u), delivered_(0u), next_(0u)
+    : thread_(thread), log_(log), lock_(lock), owner_(owner), registrations_(), driven_(), held_(0u), delivered_(0u), next_(0u)
 {
     AV_SCOPE("ClEventWatcher::ClEventWatcher");
 }
@@ -25,7 +25,7 @@ ClEventWatcher::~ClEventWatcher()
 }
 
 cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wire_of_context,
-                             cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data)
+                             cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data, bool driven)
 {
     AV_SCOPE("ClEventWatcher::watch");
     lock_.acquire();
@@ -39,25 +39,51 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
         lock_.release();
         return CL_INVALID_VALUE;
     }
+    driven_[slot] = driven;
     ++held_;
     lock_.release();
     /* The thread starts with the first registration, so a process that never
      * asks for a callback never starts one; from then on it rests while
-     * nothing is registered, and this ends the rest. */
-    if (thread_.running()) {
+     * nothing is registered, and this ends the rest. Started already is the
+     * start refused as invalid_state - asked by two threads at once, one of
+     * them started it. */
+    const Status started = thread_.start(*this);
+    if (started == Status::invalid_state) {
         thread_.wake();
-    } else {
-        const Status started = thread_.start(*this);
-        if (started != Status::ok) {
-            lock_.acquire();
-            registrations_[slot].give_up();
-            --held_;
-            lock_.release();
-            log_.write("avcl: no thread to watch events on");
-            return CL_OUT_OF_RESOURCES;
-        }
+    } else if (started != Status::ok) {
+        lock_.acquire();
+        registrations_[slot].give_up();
+        --held_;
+        lock_.release();
+        log_.write("avcl: no thread to watch events on");
+        return CL_OUT_OF_RESOURCES;
     }
     return CL_SUCCESS;
+}
+
+uint64_t ClEventWatcher::wake_handle() const
+{
+    AV_SCOPE("ClEventWatcher::wake_handle");
+    return thread_.wake_handle();
+}
+
+bool ClEventWatcher::attend()
+{
+    AV_SCOPE("ClEventWatcher::attend");
+    const Status started = thread_.start(*this);
+    return started == Status::ok || started == Status::invalid_state;
+}
+
+uint64_t ClEventWatcher::woken() const
+{
+    AV_SCOPE("ClEventWatcher::woken");
+    return thread_.woken();
+}
+
+void ClEventWatcher::await_woken(uint64_t seen, uint64_t timeout)
+{
+    AV_SCOPE("ClEventWatcher::await_woken");
+    thread_.await_woken(seen, timeout);
 }
 
 bool ClEventWatcher::completed(const ClWatchedEvent &registration, cl_int &status) const
@@ -92,11 +118,14 @@ bool ClEventWatcher::turn()
         thread_.rest();
         return true;
     }
+    bool oldest[max_registrations] = {};
+    const bool driven = mark_oldest(oldest);
     uint32_t asks = 0u;
     bool     ran = false;
     uint32_t step = 0u;
     for (; step < max_registrations && asks < asks_per_turn; ++step) {
         const uint32_t slot = (next_ + step) % max_registrations;
+        if (!oldest[slot]) continue;
         lock_.acquire();
         const ClWatchedEvent asked = registrations_[slot];
         lock_.release();
@@ -109,8 +138,43 @@ bool ClEventWatcher::turn()
         if (deliver(slot, asked, status)) ran = true;
     }
     next_ = (next_ + step) % max_registrations;
-    if (!ran) thread_.pause();
+    if (!ran) thread_.pause(driven && step == max_registrations);
     return true;
+}
+
+/* Each queue's registration with the lowest place on it, and every one of no
+ * queue. A queue's events are few next to the table, so the queues seen are a
+ * short list searched as the table is walked. */
+bool ClEventWatcher::mark_oldest(bool *oldest)
+{
+    AV_SCOPE("ClEventWatcher::mark_oldest");
+    const ClObject *queues[max_registrations] = {};
+    uint32_t        best[max_registrations] = {};
+    uint32_t        seen = 0u;
+    bool            driven = true;
+    lock_.acquire();
+    for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
+        const ClWatchedEvent &row = registrations_[slot];
+        if (!row.held()) continue;
+        driven = driven && driven_[slot];
+        const ClObject *const event = row.event();
+        const ClObject *const queue = event->parent();
+        if (queue == nullptr || queue->kind() != ClObject::Kind::command_queue || event->ordinal() == 0u) {
+            oldest[slot] = true;
+            continue;
+        }
+        uint32_t known = 0u;
+        while (known < seen && queues[known] != queue) ++known;
+        if (known == seen) {
+            queues[seen] = queue;
+            best[seen++] = slot;
+        } else if (event->ordinal() < registrations_[best[known]].event()->ordinal()) {
+            best[known] = slot;
+        }
+    }
+    lock_.release();
+    for (uint32_t known = 0u; known < seen; ++known) oldest[best[known]] = true;
+    return driven;
 }
 
 bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int status)

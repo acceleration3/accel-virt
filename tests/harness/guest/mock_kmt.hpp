@@ -390,6 +390,13 @@ public:
     /* The window's first byte, how a test plays the host on a chunk's
      * memory; null without a window. */
     std::uint8_t       *window_base() const;
+    /* The driver takes wake events (WakeEventRecord), as one on a device
+     * that counts raises does; refused as not supported until then. */
+    void                accept_wake_events();
+    /* The handle the last wake event taken named, 0 for none, and how many
+     * were taken. */
+    std::uint64_t       wake_event() const;
+    std::uint32_t       wake_events() const;
     /* The data of the last escape as it was sent, and its size. */
     const std::uint8_t *last_escape() const;
     std::uint32_t       last_escape_size() const;
@@ -507,6 +514,7 @@ private:
     void          consume(const Object &context);
     bool          played();
     Status        context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size);
+    Status        wake_event(const std::uint8_t *data, std::uint32_t size);
     /* The ring and reply slot the record sizes, mapped for `context`, with the
      * ring's header written, as the driver makes them. */
     void          map_context_memory(Object &context, std::uint8_t order, std::uint32_t reply_bytes);
@@ -550,6 +558,9 @@ private:
     std::uint8_t  escape_answer_[max_private];
     std::uint32_t escape_answer_size_;
     bool          escape_scripted_;
+    bool          accepts_wakes_ = false;
+    std::uint64_t wake_event_ = 0u;
+    std::uint32_t wake_events_ = 0u;
     AdapterEscapes *adapter_escapes_;
     /* One host window chunk held: the resource it answered, the context that
      * holds it, and where it lies in the window, in pages; 0 resource is a

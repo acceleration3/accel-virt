@@ -154,7 +154,7 @@ TEST(context_signal_raise, a_thread_that_is_not_the_worker_touches_nothing_the_w
   CHECK_EQ(fixture.host().raised(line), 0u);
   CHECK(fixture.signal().invariants_hold()); }
 
-TEST(context_signal_drain, the_worker_nudges_once_for_everything_raised_since)
+TEST(context_signal_drain, the_worker_raises_once_for_everything_raised_since)
 { Fixture fixture;
   fixture.prepare_page();
   fixture.signal().raise();
@@ -162,6 +162,8 @@ TEST(context_signal_drain, the_worker_nudges_once_for_everything_raised_since)
   fixture.signal().raise();
   fixture.on_another_thread(&drain_as_worker, &fixture.signal());
   CHECK_EQ(fixture.page().progress(), 1u);
+  /* Coalesced: one raise on the page for three on the signal. */
+  CHECK_EQ(fixture.page().raised(), 1u);
   CHECK_EQ(fixture.page().completed_fence(), 0u);
   CHECK_EQ(fixture.signal().delivered(), 1u);
   CHECK_EQ(fixture.signal().raised(), 3u);
@@ -173,6 +175,7 @@ TEST(context_signal_drain, the_worker_nudges_once_for_everything_raised_since)
   fixture.signal().raise();
   fixture.on_another_thread(&drain_as_worker, &fixture.signal());
   CHECK_EQ(fixture.page().progress(), 2u);
+  CHECK_EQ(fixture.page().raised(), 2u);
   CHECK_EQ(fixture.page().completed_fence(), 0u);
   CHECK_EQ(fixture.signal().delivered(), 2u);
   CHECK(fixture.signal().invariants_hold()); }
@@ -224,7 +227,7 @@ TEST(context_signal, the_drain_is_the_workers_and_the_landing_pad_is_attached_on
   fixture.signal().raise();
   fixture.signal().drain();
   CHECK(fixture.host().claim(HostViolation::worker_required));   /* ContextSignal::drain */
-  CHECK(fixture.host().claim(HostViolation::worker_required));   /* FenceReporter::nudge */
+  CHECK(fixture.host().claim(HostViolation::worker_required));   /* FenceReporter::raise */
   struct Attachment {
       Worker        *worker;
       ContextSignal *signal;

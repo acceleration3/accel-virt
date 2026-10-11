@@ -141,13 +141,13 @@ TEST(cl_event_watcher, a_watcher_with_nothing_registered_runs_no_thread)
 TEST(cl_event_watcher, registering_the_first_callback_starts_the_thread)
 { forget();
   Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   CHECK_EQ(rig.watcher().registered(), 1u);
   CHECK(rig.thread().running());
   CHECK_EQ(rig.thread().starts(), 1u);
   /* A second registration joins the thread that is already running. */
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   CHECK_EQ(rig.thread().starts(), 1u);
   CHECK_EQ(rig.watcher().registered(), 2u);
@@ -156,7 +156,7 @@ TEST(cl_event_watcher, registering_the_first_callback_starts_the_thread)
 TEST(cl_event_watcher, a_callback_runs_once_when_its_event_completes)
 { forget();
   Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
 
   /* The host says the event has not finished; nothing runs, and the watcher
@@ -186,7 +186,7 @@ TEST(cl_event_watcher, a_callback_runs_once_when_its_event_completes)
 TEST(cl_event_watcher, the_loop_rests_when_nothing_is_left_and_a_registration_wakes_it)
 { forget();
   Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   event_is(rig.rig(), CL_COMPLETE);
   CHECK(rig.thread().step());
@@ -197,7 +197,7 @@ TEST(cl_event_watcher, the_loop_rests_when_nothing_is_left_and_a_registration_wa
   CHECK_EQ(rig.thread().rests(), 1u);
   CHECK(rig.thread().running());
   /* The second registration wakes it, and its callback comes. */
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   CHECK_EQ(rig.thread().starts(), 1u);
   CHECK_EQ(rig.thread().wakes(), 1u);
@@ -210,7 +210,7 @@ TEST(cl_event_watcher, the_loop_rests_when_nothing_is_left_and_a_registration_wa
 TEST(cl_event_watcher, an_event_that_ended_in_an_error_runs_its_callback_too)
 { forget();
   Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   /* A negative status is a command that failed, and the API says a callback
    * runs then as well - an application waiting on a completion it will never
@@ -227,7 +227,7 @@ TEST(cl_event_watcher, a_callback_registered_for_an_earlier_status_runs_at_that_
    * registration's status_wanted is a floor rather than a ceiling. */
   /* CL_RUNNING is earlier than CL_COMPLETE in the API's ordering, and a
    * callback registered for it runs when the command starts. */
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_RUNNING, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_RUNNING, &note, &user_data, false),
            CL_SUCCESS);
   event_is(rig.rig(), CL_SUBMITTED);
   CHECK(rig.thread().step());
@@ -239,13 +239,13 @@ TEST(cl_event_watcher, a_callback_registered_for_an_earlier_status_runs_at_that_
 
 TEST(cl_event_watcher, a_registration_of_nothing_is_refused)
 { Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, nullptr, nullptr),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, nullptr, nullptr, false),
            CL_INVALID_VALUE);
-  CHECK_EQ(rig.watcher().watch(nullptr, 0x6900u, rig.wire(), CL_COMPLETE, &note, nullptr),
+  CHECK_EQ(rig.watcher().watch(nullptr, 0x6900u, rig.wire(), CL_COMPLETE, &note, nullptr, false),
            CL_INVALID_VALUE);
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0u, rig.wire(), CL_COMPLETE, &note, nullptr),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0u, rig.wire(), CL_COMPLETE, &note, nullptr, false),
            CL_INVALID_VALUE);
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, nullptr, CL_COMPLETE, &note, nullptr),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, nullptr, CL_COMPLETE, &note, nullptr, false),
            CL_INVALID_VALUE);
   CHECK_EQ(rig.watcher().registered(), 0u);
   CHECK(!rig.thread().running());
@@ -255,11 +255,11 @@ TEST(cl_event_watcher, a_watcher_that_is_full_refuses_and_keeps_what_it_has)
 { Watching rig;
   for (std::uint32_t index = 0u; index < ClEventWatcher::max_registrations; ++index) {
       CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u + index, rig.wire(), CL_COMPLETE, &note,
-                                   nullptr),
+                                   nullptr, false),
                CL_SUCCESS);
   }
   CHECK_EQ(rig.watcher().registered(), ClEventWatcher::max_registrations);
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x7000u, rig.wire(), CL_COMPLETE, &note, nullptr),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x7000u, rig.wire(), CL_COMPLETE, &note, nullptr, false),
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.watcher().registered(), ClEventWatcher::max_registrations);
   CHECK(rig.watcher().invariants_hold()); }
@@ -267,7 +267,7 @@ TEST(cl_event_watcher, a_watcher_that_is_full_refuses_and_keeps_what_it_has)
 TEST(cl_event_watcher, a_context_that_goes_takes_its_registrations_with_it_and_runs_none_of_them)
 { forget();
   Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   CHECK_EQ(rig.watcher().registered(), 1u);
   /* Releasing a context is not the event completing: a callback that has not
@@ -281,7 +281,7 @@ TEST(cl_event_watcher, a_context_that_goes_takes_its_registrations_with_it_and_r
 TEST(cl_event_watcher, an_event_the_host_can_no_longer_be_asked_about_is_dropped_rather_than_kept)
 { forget();
   Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   /* The host refuses the query - a lost device, a released event. Keeping the
    * registration would leave the application waiting for ever, so the
@@ -296,7 +296,7 @@ TEST(cl_event_watcher, a_delivered_registration_gives_its_event_back_once_and_af
 { Watching watching;
   forget();
   CHECK_EQ(watching.watcher().watch(&watching.event(), 0x6900u, watching.wire(), CL_COMPLETE,
-                                    &note, &user_data),
+                                    &note, &user_data, false),
            CL_SUCCESS);
   /* Nothing is given back while it is still registered. */
   CHECK_EQ(watching.owner().releases(), 0u);
@@ -331,7 +331,7 @@ TEST(cl_event_watcher, an_event_whose_context_is_forgotten_is_not_given_back)
 { Watching watching;
   forget();
   CHECK_EQ(watching.watcher().watch(&watching.event(), 0x6900u, watching.wire(), CL_COMPLETE,
-                                    &note, &user_data),
+                                    &note, &user_data, false),
            CL_SUCCESS);
   /* The context is going, and its objects with it: there is nothing left to
    * give the reference back to, and giving it back would reach into a table
@@ -390,14 +390,14 @@ TEST(cl_event_watcher, a_registrations_invariant_catches_a_callback_that_could_n
 TEST(cl_event_watcher, a_registration_with_no_thread_to_run_it_on_is_given_back)
 { Watching rig;
   rig.thread().refuse_start();
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.watcher().registered(), 0u);
   CHECK_EQ(rig.rig().log().holding("no thread to watch events on"), 1u);
   CHECK(rig.watcher().invariants_hold());
 
   /* And the next registration still works, because nothing was kept. */
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   CHECK_EQ(rig.watcher().registered(), 1u);
   CHECK(rig.watcher().invariants_hold()); }
@@ -407,7 +407,7 @@ TEST(cl_event_watcher, a_registration_with_no_thread_to_run_it_on_is_given_back)
  * run after this one dies. */
 TEST(cl_event_watcher, forgetting_one_context_leaves_every_other_contexts_registrations)
 { Watching rig;
-  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
   /* A second context, sharing the watcher: its registration must survive the
    * first context dying. */
@@ -418,7 +418,7 @@ TEST(cl_event_watcher, forgetting_one_context_leaves_every_other_contexts_regist
                Status::ok);
   CHECK_STATUS(second.object().make(), Status::ok);
   CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, second.object().wire(), CL_COMPLETE, &note,
-                               &user_data),
+                               &user_data, false),
            CL_SUCCESS);
   CHECK_EQ(rig.watcher().registered(), 2u);
   rig.watcher().forget_context(rig.wire());
@@ -447,7 +447,7 @@ using av::clicd::ClEventWatcherProbe;
 TEST(cl_event_watcher, the_invariant_catches_a_count_or_a_registration_that_is_wrong)
 { { Watching rig;
     CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note,
-                                 &user_data),
+                                 &user_data, false),
              CL_SUCCESS);
     CHECK(rig.watcher().invariants_hold());
     ClEventWatcherProbe::miscount(rig.watcher());
@@ -456,7 +456,7 @@ TEST(cl_event_watcher, the_invariant_catches_a_count_or_a_registration_that_is_w
     CHECK(!rig.watcher().invariants_hold()); }
   { Watching rig;
     CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note,
-                                 &user_data),
+                                 &user_data, false),
              CL_SUCCESS);
     /* One registration broken: the watcher says so through it rather than
      * only checking its own count. */
@@ -489,7 +489,7 @@ TEST(cl_event_watcher, a_turn_asks_about_a_few_running_events_pauses_and_the_nex
   constexpr std::uint32_t asks = ClEventWatcher::asks_per_turn;
   constexpr std::uint32_t done = 4u;
   for (std::uint32_t index = 0u; index < asks + done; ++index)
-      CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u + index, rig.wire(), CL_COMPLETE, &note, &user_data),
+      CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u + index, rig.wire(), CL_COMPLETE, &note, &user_data, false),
                CL_SUCCESS);
   for (std::uint32_t index = 0u; index < asks; ++index) event_is(rig.rig(), CL_RUNNING);
   for (std::uint32_t index = 0u; index < done; ++index) event_is(rig.rig(), CL_COMPLETE);
@@ -512,3 +512,135 @@ TEST(cl_event_watcher, a_turn_asks_about_a_few_running_events_pauses_and_the_nex
       CHECK(!ClEventWatcherProbe::registration(rig.watcher(), slot).held());
   CHECK_EQ(rig.thread().rests(), 0u);
   CHECK(rig.watcher().invariants_hold()); }
+
+TEST(cl_event_watcher, of_one_queues_events_only_the_oldest_is_asked_about_and_the_next_follows_at_once)
+{ forget();
+  Watching rig;
+  /* A queue runs in order, so its later events have not completed while an
+   * earlier one has not: asking about them is a round trip each for nothing,
+   * which is what a turn of hundreds of Affinity's callbacks was made of. */
+  ClObject queue(dispatch, ClObject::Kind::command_queue, 0x5100u, nullptr, nullptr);
+  ClObject first(dispatch, ClObject::Kind::event, 0x6901u, nullptr, &queue);
+  ClObject second(dispatch, ClObject::Kind::event, 0x6902u, nullptr, &queue);
+  ClObject third(dispatch, ClObject::Kind::event, 0x6903u, nullptr, &queue);
+  first.stamp(queue.take_ordinal());
+  second.stamp(queue.take_ordinal());
+  third.stamp(queue.take_ordinal());
+  /* Registered newest first: the order asked in is the queue's, not the table's. */
+  CHECK_EQ(rig.watcher().watch(&third, 0x6903u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  CHECK_EQ(rig.watcher().watch(&second, 0x6902u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  CHECK_EQ(rig.watcher().watch(&first, 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  /* One answer for one ask: a second ask would find none and run a callback
+   * with the error. */
+  event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 0u);
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  /* The oldest completes, and the turn after it - with no pause between -
+   * asks about the next. */
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  CHECK(ran.event == reinterpret_cast<cl_event>(&first));
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 2u);
+  CHECK(ran.event == reinterpret_cast<cl_event>(&second));
+  event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 2u);
+  CHECK_EQ(rig.thread().pauses(), 2u);
+  CHECK_EQ(rig.watcher().registered(), 1u);
+  CHECK(rig.watcher().invariants_hold()); }
+
+/* A context the driver wakes has the driver set the process's wake when the
+ * host finishes something on it (docs/protocol.md, "Wake event record"), so a
+ * turn that found nothing done sleeps until then rather than asking again a
+ * millisecond later - the 1000 round trips a second the colour picker's
+ * callbacks were costing. */
+TEST(cl_event_watcher, a_turn_on_driven_contexts_alone_pauses_until_the_driver_wakes_it)
+{ forget();
+  Watching rig;
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, true),
+           CL_SUCCESS);
+  event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  CHECK_EQ(rig.thread().driven_pauses(), 1u);
+  /* One on a context the driver does not wake, and nothing would end the
+   * pause for it: every pause is a millisecond again. */
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
+           CL_SUCCESS);
+  event_is(rig.rig(), CL_RUNNING);
+  event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(rig.thread().pauses(), 2u);
+  CHECK_EQ(rig.thread().driven_pauses(), 1u);
+  /* Gone again, the pauses are the driver's. */
+  event_is(rig.rig(), CL_RUNNING);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(rig.thread().pauses(), 3u);
+  CHECK_EQ(rig.thread().driven_pauses(), 2u);
+  CHECK(rig.watcher().invariants_hold()); }
+
+/* A turn its asks ran out on never asked about the rest - and the wake that
+ * started it may have been for one of those, spent already. Sleeping until the
+ * next wake could sleep past a callback that is due, so it pauses a
+ * millisecond and asks the rest. Only a turn that asked about every one sleeps
+ * on the driver: more running than a turn asks about is a millisecond's pause
+ * every time. */
+TEST(cl_event_watcher, a_turn_whose_asks_ran_out_does_not_sleep_on_the_driver)
+{ forget();
+  Watching rig;
+  constexpr std::uint32_t asks = ClEventWatcher::asks_per_turn;
+  for (std::uint32_t index = 0u; index < asks + 1u; ++index)
+      CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u + index, rig.wire(), CL_COMPLETE, &note, &user_data, true),
+               CL_SUCCESS);
+  for (std::uint32_t index = 0u; index < asks; ++index) event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  CHECK_EQ(rig.thread().driven_pauses(), 0u);
+  /* The one left over has finished, and the turn goes on round the table. */
+  event_is(rig.rig(), CL_COMPLETE);
+  for (std::uint32_t index = 0u; index < asks; ++index) event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  CHECK_EQ(rig.thread().pauses(), 1u);
+  /* As many left as a turn asks about: every one asked, and the pause is the
+   * driver's. */
+  for (std::uint32_t index = 0u; index < asks; ++index) event_is(rig.rig(), CL_RUNNING);
+  CHECK(rig.thread().step());
+  CHECK_EQ(rig.thread().pauses(), 2u);
+  CHECK_EQ(rig.thread().driven_pauses(), 1u);
+  CHECK(rig.watcher().invariants_hold()); }
+
+/* The process's wake is the thread's, and a wait on another thread is told
+ * through it: the watcher starts the thread for one, and passes its waits
+ * through. */
+TEST(cl_event_watcher, a_wait_elsewhere_has_the_thread_running_and_waits_on_it)
+{ forget();
+  Watching rig;
+  CHECK_EQ(rig.watcher().wake_handle(), 0u);
+  rig.thread().offer_wake(0x2A0u);
+  CHECK_EQ(rig.watcher().wake_handle(), 0x2A0u);
+  CHECK(!rig.thread().running());
+  CHECK(rig.watcher().attend());
+  CHECK(rig.thread().running());
+  CHECK(rig.watcher().attend());
+  CHECK_EQ(rig.thread().starts(), 1u);
+  CHECK_EQ(rig.watcher().woken(), 0u);
+  rig.thread().driver_woke();
+  CHECK_EQ(rig.watcher().woken(), 1u);
+  rig.watcher().await_woken(1u, 5000u);
+  CHECK_EQ(rig.thread().awaits(), 1u);
+  CHECK_EQ(rig.thread().last_seen(), 1u);
+  CHECK_EQ(rig.thread().last_timeout(), 5000u);
+  /* A thread that cannot be started is no wait's to rely on. */
+  Watching refused;
+  refused.thread().refuse_start();
+  CHECK(!refused.watcher().attend()); }

@@ -102,13 +102,14 @@ TEST(fence_reporter_prepare, writes_a_fresh_page)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   CHECK(fixture.reporter().invariants_hold());
-  const ByteLayout layout(fixture.bytes(), 32u);
+  const ByteLayout layout(fixture.bytes(), FencePage::encoded_size);
   CHECK(layout.at(0u, 4u) == 0x00465641u);
   CHECK(layout.at(4u, 4u) == 0u);
   CHECK(layout.at(8u, 8u) == 0u);
   CHECK(layout.at(16u, 8u) == 0u);
   CHECK(layout.at(24u, 8u) == 0u);
-  CHECK_EQ(fixture.bytes()[32], 0xEEu);
+  CHECK(layout.at(32u, 8u) == 0u);
+  CHECK_EQ(fixture.bytes()[FencePage::encoded_size], 0xEEu);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::invalid_state); }
 
 TEST(fence_reporter_prepare, a_blob_too_small_for_a_page_or_a_line_past_the_queues_writes_nothing)
@@ -228,14 +229,14 @@ TEST(fence_reporter_fault, an_unprepared_reporter_writes_nothing_and_preparing_s
  * the host, so the worker reports it with nothing claimed finished - progress
  * moves, the completion stays where it was, and the guest is interrupted. That
  * is the only shape an out-of-band wake may take (FenceProgress::observe). */
-TEST(fence_reporter_nudge, raises_on_progress_alone_with_the_completion_where_it_was)
+TEST(fence_reporter_raise, raises_on_progress_alone_with_the_completion_where_it_was)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   fixture.on_worker([](FenceReporter &reporter) {
       reporter.complete(7u);
       reporter.signal();
-      reporter.nudge();
-      reporter.nudge();
+      reporter.raise();
+      reporter.raise();
       reporter.signal();
       reporter.signal();
   });
@@ -244,36 +245,58 @@ TEST(fence_reporter_nudge, raises_on_progress_alone_with_the_completion_where_it
   CHECK(!fixture.page().faulted());
   CHECK_EQ(fixture.reporter().completed(), 7u);
   CHECK_EQ(fixture.reporter().progress(), 3u);
-  /* One for the batch, one for everything nudged since - and not one more. */
+  /* Counted apart from progress, which the batch moved too: what the driver
+   * wakes a waiting process for. */
+  CHECK_EQ(fixture.page().raised(), 2u);
+  CHECK_EQ(fixture.reporter().raised(), 2u);
+  /* One for the batch, one for everything raised since - and not one more. */
   CHECK_EQ(fixture.host().raised(line), 2u); }
 
-/* The wake a context gets before it has ever completed anything: the guest
- * reads a page whose completed fence is still zero. */
-TEST(fence_reporter_nudge, wakes_a_context_that_has_completed_nothing)
+/* Every page is written whole from the reporter's counters, so a batch
+ * completing after a raise still carries the raises: raised never reads as
+ * moving backwards to a driver that checks it does not. */
+TEST(fence_reporter_raise, the_pages_after_a_raise_keep_its_count)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   fixture.on_worker([](FenceReporter &reporter) {
-      reporter.nudge();
+      reporter.raise();
+      reporter.complete(1u);
+      reporter.heartbeat();
+  });
+  CHECK_EQ(fixture.page().raised(), 1u);
+  CHECK_EQ(fixture.page().completed_fence(), 1u);
+  CHECK_EQ(fixture.page().progress(), 3u);
+  fixture.on_worker([](FenceReporter &reporter) { reporter.fault(FaultCode::device_lost); });
+  CHECK(fixture.page().faulted());
+  CHECK_EQ(fixture.page().raised(), 1u); }
+
+/* The wake a context gets before it has ever completed anything: the guest
+ * reads a page whose completed fence is still zero. */
+TEST(fence_reporter_raise, wakes_a_context_that_has_completed_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.raise();
       reporter.signal();
   });
   CHECK_EQ(fixture.page().completed_fence(), 0u);
   CHECK_EQ(fixture.page().progress(), 1u);
   CHECK_EQ(fixture.host().raised(line), 1u); }
 
-TEST(fence_reporter_nudge, an_unprepared_or_faulted_reporter_writes_and_raises_nothing)
+TEST(fence_reporter_raise, an_unprepared_or_faulted_reporter_writes_and_raises_nothing)
 { Fixture fixture;
   fixture.on_worker([](FenceReporter &reporter) {
-      reporter.nudge();
+      reporter.raise();
       reporter.signal();
   });
   CHECK_EQ(fixture.bytes()[0], 0xEEu);
   CHECK_EQ(fixture.host().raised(line), 0u);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   fixture.on_worker([](FenceReporter &reporter) {
-      reporter.nudge();
+      reporter.raise();
       reporter.fault(FaultCode::device_lost);
       reporter.signal();
-      reporter.nudge();
+      reporter.raise();
       reporter.signal();
   });
   CHECK_EQ(fixture.page().progress(), 1u);
@@ -286,7 +309,7 @@ TEST(fence_reporter, prepares_on_the_main_loop_and_reports_on_a_worker)
   fixture.reporter().complete(1u);
   fixture.reporter().signal();
   fixture.reporter().heartbeat();
-  fixture.reporter().nudge();
+  fixture.reporter().raise();
   fixture.reporter().fault(FaultCode::ring_header);
   for (int count = 0; count < 5; count++) CHECK(fixture.host().claim(HostViolation::worker_required));
   fixture.on_worker([](FenceReporter &reporter) {

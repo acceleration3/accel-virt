@@ -87,7 +87,7 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
      * to the answer before any guest reads it. QEMU checks each context's
      * setup against the narrowed one before the renderer sees it. */
     /* Snapshots are read where the contexts run: in this process only. */
-    const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine |
+    const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine | CapsetInfo::feature_raises |
                               (contexts_->reads_frames() ? CapsetInfo::feature_present_from_image : 0u);
     if (isolated) {
         capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, features);

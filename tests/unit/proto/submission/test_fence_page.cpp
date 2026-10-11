@@ -32,23 +32,25 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
 
 TEST(fence_page_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[FencePage::encoded_size] = {};
-  CHECK_STATUS(FencePage(41u, 900u, 0xDEADu).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(FencePage(41u, 900u, 0xDEADu).raising(77u).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
   CHECK(layout.at(0u, 4u) == 0x00465641u);
   CHECK(layout.at(4u, 4u) == 1u);
   CHECK(layout.at(8u, 8u) == 41u);
   CHECK(layout.at(16u, 8u) == 900u);
   CHECK(layout.at(24u, 4u) == 0xDEADu);
-  CHECK(layout.at(28u, 4u) == 0u); }
+  CHECK(layout.at(28u, 4u) == 0u);
+  CHECK(layout.at(32u, 8u) == 77u); }
 
 TEST(fence_page, round_trips_healthy_and_faulted_pages)
 { std::uint8_t bytes[FencePage::encoded_size] = {};
-  CHECK_STATUS(FencePage(12u, 30u).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(FencePage(12u, 30u).raising(4u).encode(bytes, sizeof bytes), Status::ok);
   FencePage decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK(!decoded.faulted());
   CHECK(decoded.completed_fence() == 12u);
   CHECK(decoded.progress() == 30u);
+  CHECK(decoded.raised() == 4u);
   CHECK_EQ(decoded.fault_code(), 0u);
   CHECK_STATUS(FencePage(13u, 31u, 7u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
@@ -84,11 +86,11 @@ TEST(fence_page_decode, survives_the_hostile_sweep)
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
   /* The page constrains its magic, its flags and its reserved word, and leaves
-   * the values to FenceProgress: the completed fence and the progress counter
-   * are 128 free bits, and once the page says faulted the 32 bits of the fault
+   * the values to FenceProgress: the completed fence, the progress counter and
+   * the raises counted are 192 free bits, and once the page says faulted the 32 bits of the fault
    * code are free too. A flipped flag word either names a flag nobody defined
    * or clears "faulted" while a code stands. Every shorter input is short of
-   * 32 bytes, all-zero and all-ones carry no magic, and the untouched input is
+   * 40 bytes, all-zero and all-ones carry no magic, and the untouched input is
    * the last acceptance. */
-  const std::uint32_t acceptable = 128u + 32u + 1u;
+  const std::uint32_t acceptable = 192u + 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

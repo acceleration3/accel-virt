@@ -106,6 +106,9 @@ public:
     void     log_at_bugcheck(const char *message) override;
     bool     register_bugcheck(void *buffer, std::size_t bytes, BugcheckRoutine routine) override;
     void     deregister_bugcheck() override;
+    Status   reference_event(std::uint64_t handle, void *&event) override;
+    void     signal_event(void *event) override;
+    void     release_event(void *event) override;
     void     report_broken_invariant(const char *what, const char *function) override;
     std::int32_t register_miniport(void *driver_object, void *registry_path,
                                    const DdiTable &table) override;
@@ -172,6 +175,17 @@ public:
      * it, until released_elsewhere. */
     void hold_elsewhere(LockRank rank);
     void released_elsewhere();
+
+    /* An event the modelled process holds a handle to, which may be set;
+     * the handle reference_event takes. */
+    std::uint64_t make_process_event();
+    /* The process closes its handle: the event lives on while the kernel
+     * still holds it. */
+    void          close_process_event(std::uint64_t handle);
+    /* The times the kernel set the event `handle` named, and the references
+     * it still holds on it. */
+    std::uint32_t event_signals(std::uint64_t handle) const;
+    std::uint32_t event_references(std::uint64_t handle) const;
 
     /* The next register_bugcheck is refused. */
     void refuse_bugcheck_registration();
@@ -242,6 +256,9 @@ private:
     static constexpr std::uint32_t max_page_frames = 256u;
     static constexpr std::uint32_t max_frame_views = 256u;
     static constexpr std::uint32_t max_process_views = 256u;
+    static constexpr std::uint32_t max_events = 32u;
+    /* A handle value as a process's look: a multiple of four, never 0. */
+    static constexpr std::uint64_t first_event_handle = 0x1F0u;
     /* Where the modelled process's views start: a user-mode address, so a test
      * reading one back can tell it from any host pointer. */
     static constexpr std::uint64_t first_process_view = 0x00007FF000000000ull;
@@ -256,6 +273,18 @@ private:
         /* Memory a page backer lent, which is the rig's to free. */
         bool          borrowed = false;
     };
+
+    struct MockEvent {
+        std::uint64_t handle = 0u;
+        std::uint32_t references = 0u;
+        std::uint32_t signals = 0u;
+        /* Whether the process still holds its handle. */
+        bool          open = false;
+    };
+
+    /* The event reference_event answered as `event`, or null for none. */
+    MockEvent *referenced(void *event);
+    const MockEvent *event_of(std::uint64_t handle) const;
 
     struct ProcessView {
         std::uint64_t physical;
@@ -350,6 +379,8 @@ private:
     void         *acquire_context_ = nullptr;
     bool          holding_elsewhere_ = false;
     LockRank      held_elsewhere_ = LockRank::log_budget;
+    MockEvent     events_[max_events] = {};
+    std::uint32_t event_count_ = 0u;
     bool          refuse_bugcheck_ = false;
     void         *bugcheck_buffer_ = nullptr;
     std::size_t   bugcheck_bytes_ = 0u;

@@ -536,6 +536,33 @@ void KernelPlatform::deregister_bugcheck()
     static_cast<void>(KeDeregisterBugCheckCallback(&bugcheck_record_));
 }
 
+/* UserMode: the handle came from a process, so its access is checked against
+ * what that process was granted - an event it may only wait on is refused. */
+Status KernelPlatform::reference_event(uint64_t handle, void *&event)
+{
+    AV_SCOPE("KernelPlatform::reference_event");
+    event = nullptr;
+    PVOID          object = nullptr;
+    const NTSTATUS status = ObReferenceObjectByHandle(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(handle)),
+                                                      EVENT_MODIFY_STATE, *ExEventObjectType, UserMode, &object,
+                                                      nullptr);
+    if (!NT_SUCCESS(status)) return Status::invalid_parameter;
+    event = object;
+    return Status::ok;
+}
+
+void KernelPlatform::signal_event(void *event)
+{
+    AV_SCOPE("KernelPlatform::signal_event");
+    static_cast<void>(KeSetEvent(static_cast<PKEVENT>(event), IO_NO_INCREMENT, FALSE));
+}
+
+void KernelPlatform::release_event(void *event)
+{
+    AV_SCOPE("KernelPlatform::release_event");
+    ObDereferenceObject(event);
+}
+
 /* The table's layout is proven identical to DRIVER_INITIALIZATION_DATA by
  * ddi_table_layout.cpp. */
 int32_t KernelPlatform::register_miniport(void *driver_object, void *registry_path,

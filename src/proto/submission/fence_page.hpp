@@ -12,7 +12,7 @@ namespace av {
 
 class FencePage {
 public:
-    static constexpr size_t encoded_size = 32u;
+    static constexpr size_t encoded_size = 40u;
 
     FencePage();
     /* A healthy context. */
@@ -20,10 +20,15 @@ public:
     /* A faulted context, with the device's reason. */
     FencePage(uint64_t completed_fence, uint64_t progress, uint32_t fault_code);
 
+    /* This page carrying `raised`: how many out-of-band raises the device has
+     * delivered (feature 052), counted apart from progress, which every
+     * command moves too. */
+    FencePage raising(uint64_t raised) const;
     bool     faulted() const;
     uint64_t completed_fence() const;
     uint64_t progress() const;
     uint32_t fault_code() const;
+    uint64_t raised() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* Structure only; FenceProgress judges the values. Unchanged unless ok. */
@@ -37,6 +42,7 @@ private:
     uint64_t completed_fence_;
     uint64_t progress_;
     uint32_t fault_code_;
+    uint64_t raised_;
 };
 
 }  // namespace av

@@ -17,6 +17,7 @@ enum class Violation : unsigned {
     time_overflow,
     unmapped_register,
     frame_misuse,
+    event_misuse,
     count
 };
 

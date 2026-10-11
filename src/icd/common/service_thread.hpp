@@ -17,6 +17,8 @@
 
 #include "core/support/status.hpp"
 
+#include <stdint.h>
+
 namespace av::icd {
 
 /* One turn of that loop. */
@@ -41,7 +43,8 @@ public:
     ServiceThread &operator=(const ServiceThread &) = delete;
 
     /* Runs `loop` until it answers false or `stop` is called. `loop` must
-     * outlive the thread. invalid_state when one is already running. */
+     * outlive the thread. invalid_state when one is already running, which
+     * two threads starting it at once may both ask: one of them starts it. */
     [[nodiscard]] virtual Status start(ServiceLoop &loop) = 0;
     /* Asks the loop to end and waits for it. The caller is what makes a
      * blocked turn return; this alone will wait for ever if nothing does.
@@ -56,12 +59,32 @@ public:
     virtual void   rest() = 0;
     /* From the loop, on its own thread: what it waits for is not done yet, so
      * it gives the processor - and whatever it shares with the application -
-     * up for a millisecond, or until wake() or stop(). A loop that asked again
-     * at once held the transport it asks over for nearly all of every second,
-     * and the application's own calls queued behind it. */
-    virtual void   pause() = 0;
+     * up until wake() or stop(), or the driver sets wake_handle(). `driven`
+     * says the driver will set it when any of what the loop waits for
+     * finishes - every bit of it is on a context that handed the handle over
+     * - so the pause lasts until then; otherwise a millisecond at most, and
+     * the loop asks again. A loop that asked again at once held the transport
+     * it asks over for nearly all of every second, and the application's own
+     * calls queued behind it. */
+    virtual void   pause(bool driven) = 0;
     /* From any thread: the loop has something to do, so a rest ends now. */
     virtual void   wake() = 0;
+
+    /* The handle of the event the driver sets when a host finishes something
+     * on a context that handed it over (KmtTransport::wake_on_raise): one for
+     * the process, made with this object, so that a context made before the
+     * thread starts has it too. 0 when there is none, and every pause is then
+     * a millisecond. */
+    virtual uint64_t wake_handle() const = 0;
+    /* How many times the driver has set the event, as seen here: what another
+     * thread, waiting for the host itself, watches move. The event wakes one
+     * waiter, so one waits on it for everybody - never the loop itself, which
+     * only waits between turns and would keep every other waiter behind the
+     * callbacks it runs. */
+    virtual uint64_t woken() const = 0;
+    /* From a thread other than the loop's: returns once woken() is past
+     * `seen`, or after `timeout` nanoseconds. */
+    virtual void     await_woken(uint64_t seen, uint64_t timeout) = 0;
 
 protected:
     ServiceThread() = default;

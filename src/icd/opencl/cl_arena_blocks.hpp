@@ -31,8 +31,11 @@ struct ClArenaBlocksProbe;
 
 class ClArenaBlocks {
 public:
-    /* Buffers one context may have backed by its arena at once. */
-    static constexpr uint32_t max_blocks = 64u;
+    /* Buffers one context may have backed by its arena at once. Affinity
+     * keeps hundreds of small host-accessible buffers alive and maps each
+     * every frame; past this each is staged, and its map and unmap are a
+     * read and a write over the wire. */
+    static constexpr uint32_t max_blocks = 1024u;
     /* What every block's offset and length are a whole number of. */
     static constexpr uint64_t alignment = 4096u;
 

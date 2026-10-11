@@ -34,6 +34,9 @@ public:
     uint64_t highest_submitted() const;
     uint64_t completed_fence() const;
     uint64_t progress() const;
+    /* The out-of-band raises the device has delivered: 0 from a device that
+     * counts none (no feature_raises). */
+    uint64_t raised() const;
     bool     faulted() const;
 
     bool invariants_hold() const;
@@ -43,6 +46,7 @@ private:
     bool     driver_submits_;
     uint64_t completed_;
     uint64_t progress_;
+    uint64_t raised_;
     bool     faulted_;
 
     friend struct FenceProgressProbe;

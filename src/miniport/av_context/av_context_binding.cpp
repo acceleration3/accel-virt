@@ -169,6 +169,11 @@ uint64_t            AvContextBinding::completed() const
     AV_SCOPE("AvContextBinding::completed");
     return context_.completed();
 }
+uint64_t            AvContextBinding::raised() const
+{
+    AV_SCOPE("AvContextBinding::raised");
+    return context_.raised();
+}
 bool                AvContextBinding::faulted() const
 {
     AV_SCOPE("AvContextBinding::faulted");

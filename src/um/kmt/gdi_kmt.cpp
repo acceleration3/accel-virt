@@ -298,10 +298,22 @@ Status GdiKmt::query_native_gpu_fences(uint32_t adapter, bool &supported)
     return status;
 }
 
+/* A millisecond on a high-resolution timer of the caller's own: Sleep(1) runs
+ * on the system tick, 15.6 ms unless something raised it, which is what a
+ * wait that outlasted spinning paid each round. A Windows without them
+ * (before 10 1803) sleeps as before. */
 void GdiKmt::sleep_briefly()
 {
     AV_SCOPE("GdiKmt::sleep_briefly");
-    Sleep(1u);
+    const HANDLE timer =
+        CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    LARGE_INTEGER due = {};
+    due.QuadPart = -10000;
+    if (timer != nullptr && SetWaitableTimerEx(timer, &due, 0, nullptr, nullptr, nullptr, 0u) != FALSE)
+        static_cast<void>(WaitForSingleObject(timer, INFINITE));
+    else
+        Sleep(1u);
+    if (timer != nullptr) static_cast<void>(CloseHandle(timer));
 }
 
 Status GdiKmt::close_adapter(uint32_t adapter)

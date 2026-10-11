@@ -16,7 +16,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
                                icd::ThreadLock &send_lock, icd::ThreadLock &blocks_lock, LogSink &log,
                                icd::SharedHandles &handles)
     : memory_(memory), send_lock_(send_lock), log_(log),
-      link_(connection), gl_share_(0u), 
+      link_(connection), gl_share_(0u), wakes_(false),
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
       locked_(), blocks_(blocks_lock), staging_(blocks_lock),
       svm_(memory), external_(handles, memory, log), mappings_(), properties_(), state_(State::created)
@@ -30,7 +30,7 @@ GuestClContext::~GuestClContext()
     teardown();
 }
 
-Status GuestClContext::make(uint32_t gl_share)
+Status GuestClContext::make(uint32_t gl_share, uint64_t wake)
 {
     AV_SCOPE("GuestClContext::make");
     if (state_ != State::created) return Status::invalid_state;
@@ -38,9 +38,20 @@ Status GuestClContext::make(uint32_t gl_share)
     const Status built = build(gl_share);
     if (built != Status::ok) return built;
     undo.dismiss();
+    if (wake != 0u) {
+        wakes_ = channel_.transport().wake_on_raise(wake) == Status::ok;
+        log_.write(wakes_ ? "avcl: the driver wakes this context's waits"
+                          : "avcl: this context's waits ask on a timer; the driver does not wake them");
+    }
     gl_share_ = gl_share;
     state_ = State::made;
     return Status::ok;
+}
+
+bool GuestClContext::wakes() const
+{
+    AV_SCOPE("GuestClContext::wakes");
+    return wakes_;
 }
 
 bool GuestClContext::shares_gl() const
@@ -91,6 +102,7 @@ void GuestClContext::teardown()
 {
     AV_SCOPE("GuestClContext::teardown");
     gl_share_ = 0u;
+    wakes_ = false;
     /* A buffer released with a mapping live keeps the mapping's memory until
      * the unmap, so the blocks go here rather than with the buffer. */
     for (uint32_t slot = 0u; slot < max_mappings; ++slot) give_back_mapping(mappings_[slot]);

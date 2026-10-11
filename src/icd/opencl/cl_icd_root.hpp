@@ -419,8 +419,9 @@ private:
     /* Waits for everything enqueued on `queue` so far without holding the
      * host's worker: a marker is the queue's end as an event, and this side
      * asks after it (ClBlockingWait). What a finish is, and what every
-     * transfer that asks the host to block does first. */
-    cl_int           drain(ClientTransport &wire, uint64_t queue);
+     * transfer that asks the host to block does first. `driven`: the queue's
+     * context is one the driver wakes (GuestClContext::wakes). */
+    cl_int           drain(ClientTransport &wire, uint64_t queue, bool driven);
     /* A drain, unless the queue is known idle; idle after one (ClObject). */
     [[nodiscard]] cl_int drain_unless_idle(ClientTransport &wire, ClObject &queue);
     /* The queue, looked up for a command that leaves work on it: it is no

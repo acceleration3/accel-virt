@@ -77,6 +77,8 @@ public:
     const uint8_t *fence_page() const;
     uint64_t       tail() const;
     uint64_t       completed() const;
+    /* The out-of-band raises the fence page has shown (feature_raises). */
+    uint64_t       raised() const;
     bool           faulted() const;
     uint32_t       fault_code() const;
 

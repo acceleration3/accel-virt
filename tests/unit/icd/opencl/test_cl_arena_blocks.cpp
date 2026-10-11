@@ -54,6 +54,8 @@ struct ClArenaBlocksProbe {
 namespace {
 
 alignas(4096) std::uint8_t arena[64u * 4096u];
+/* Room for a block in every row, so a table that refuses is full by its rows. */
+alignas(4096) std::uint8_t roomy[(ClArenaBlocks::max_blocks + 8u) * 4096u];
 
 /* The lock every test's blocks hold: nothing else takes it. */
 av::LockTrace           trace;
@@ -176,7 +178,7 @@ TEST(cl_arena_blocks, a_block_of_nothing_is_not_a_block)
 
 TEST(cl_arena_blocks, the_table_being_full_refuses_rather_than_forgetting_one)
 { ClArenaBlocks blocks(lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(roomy, sizeof roomy);
   std::uint64_t offset = 0u;
   for (std::uint32_t index = 0u; index < ClArenaBlocks::max_blocks; ++index)
       CHECK(blocks.take(16u, offset));

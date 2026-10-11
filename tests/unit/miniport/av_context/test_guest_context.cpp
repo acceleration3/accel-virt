@@ -108,7 +108,7 @@ public:
         CHECK_STATUS(context_.set_up(capset(), 3u, setup(), memory_.pages()), Status::ok);
         CHECK_EQ(answer_all(), 5u);
         CHECK(context_.state() == GuestContext::State::established);
-        static_cast<void>(FencePage(0u, 0u).encode(page(), 32u));
+        static_cast<void>(FencePage(0u, 0u).encode(page(), av::FencePage::encoded_size));
     }
     std::uint8_t *page() { return const_cast<std::uint8_t *>(context_.fence_page()); }
     Status at_dispatch(Status (GuestContext::*call)())
@@ -146,7 +146,7 @@ TEST(guest_context, sets_up_submits_serves_and_tears_down)
   CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
   CHECK_EQ(fixture.doorbells().rings(2u), 1u);
   CHECK(fixture.context().tail() == 24u);
-  static_cast<void>(FencePage(1u, 2u).encode(fixture.page(), 32u));
+  static_cast<void>(FencePage(1u, 2u).encode(fixture.page(), av::FencePage::encoded_size));
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(fixture.context().completed(), 1u);
   CHECK(!fixture.context().faulted());
@@ -165,7 +165,7 @@ TEST(guest_context, a_fault_is_reported_and_the_context_still_tears_down)
 { Fixture fixture;
   fixture.established();
   CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
-  static_cast<void>(FencePage(0u, 1u, 6u).encode(fixture.page(), 32u));
+  static_cast<void>(FencePage(0u, 1u, 6u).encode(fixture.page(), av::FencePage::encoded_size));
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK(fixture.context().faulted());
   CHECK_EQ(fixture.context().fault_code(), 6u);
@@ -185,7 +185,7 @@ TEST(guest_context, a_device_that_lies_fails_the_context)
   CHECK_STATUS(ring_lie.at_dispatch(&GuestContext::serve), Status::invalid_state);
   Fixture page_lie;
   page_lie.established();
-  static_cast<void>(FencePage(5u, 1u).encode(page_lie.page(), 32u));   /* nothing was submitted */
+  static_cast<void>(FencePage(5u, 1u).encode(page_lie.page(), av::FencePage::encoded_size));   /* nothing was submitted */
   CHECK_STATUS(page_lie.at_dispatch(&GuestContext::serve), Status::invalid_state);
   CHECK(page_lie.context().state() == GuestContext::State::failed);
   CHECK_STATUS(page_lie.at_dispatch(&GuestContext::tear_down), Status::ok);   /* the device still holds it */
@@ -322,7 +322,7 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
    * never submitted: it is believed, and reported. */
   std::uint64_t tail = 96u;
   std::memcpy(fixture.memory().pages().ring_view() + 8u, &tail, 8u);
-  static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), 32u));
+  static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), av::FencePage::encoded_size));
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(progress, 3u);
 
@@ -337,7 +337,7 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   fixture.platform().set_irql(Irql::dispatch);
   fixture.context().driver_submits();
   fixture.platform().set_irql(Irql::passive);
-  static_cast<void>(FencePage(4u, 128u).encode(fixture.page(), 32u));
+  static_cast<void>(FencePage(4u, 128u).encode(fixture.page(), av::FencePage::encoded_size));
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(progress, 3u);
   CHECK_EQ(fixture.context().completed(), 4u); }

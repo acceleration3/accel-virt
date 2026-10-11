@@ -49,7 +49,7 @@ public:
     }
 
 private:
-    std::uint8_t  page_[32];
+    std::uint8_t  page_[FencePage::encoded_size];
     MockPlatform  platform_;
     FenceProgress fences_;
     FenceObserver observer_;
