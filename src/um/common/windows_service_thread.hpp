@@ -35,6 +35,13 @@ private:
     HANDLE            thread_;
     /* Auto-reset: what a resting loop waits on, set by wake() and stop(). */
     HANDLE            woken_;
+    /* A high-resolution timer a pause waits on beside woken_, so that a
+     * millisecond is one: WaitForSingleObject's own timeout runs on the
+     * system tick, 15.6 ms unless something raised it, and the OpenCL
+     * watcher pausing that long between turns made every callback - Affinity
+     * chains its tiles through one per kernel - a tick late. Null on a
+     * Windows without them (before 10 1803), which pauses as before. */
+    HANDLE            ticker_;
     /* Read by the thread, written by whoever stops it. */
     volatile LONG     stopping_;
 };
