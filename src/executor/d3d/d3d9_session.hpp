@@ -175,12 +175,15 @@ private:
      * CPU can lock: a render target goes through a system-memory copy. */
     int32_t            read(IDirect3DSurface9 *surface, uint32_t &pitch, uint8_t *pixels, uint64_t capacity,
                             uint64_t &written);
-    /* WriteTexture9's copy into one 2D or cube level, and into a volume's. */
+    /* WriteTexture9's copy into one 2D or cube level, into a volume's, and
+     * into a surface. */
     bool               write_level(uint32_t texture, uint32_t subresource, const d3d9proto::Box &box,
                                    uint32_t row_pitch, uint32_t flags, const uint8_t *data, uint64_t data_size);
     bool               write_volume(uint32_t texture, uint32_t subresource, const d3d9proto::Box &box,
                                     uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags, const uint8_t *data,
                                     uint64_t data_size);
+    bool               write_surface(uint32_t id, uint32_t subresource, const d3d9proto::Box &box,
+                                     uint32_t row_pitch, const uint8_t *data, uint64_t data_size);
     /* A shader's tokens copied out of the arena with end tokens past them, for
      * DXVK to read; null where the arena has no room. */
     const uint32_t    *padded(const uint8_t *code, uint64_t code_size);

@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 
 namespace {
 
@@ -199,7 +200,8 @@ constexpr std::uint32_t green = 0xff00ff00u;
 constexpr std::uint32_t black = 0xff000000u;
 
 enum DrawId : std::uint32_t {
-    draw_device = 10, draw_target, vertices, declaration, vertex_shader, pixel_shader, texture, dxt_texture
+    draw_device = 10, draw_target, vertices, declaration, vertex_shader, pixel_shader, texture, dxt_texture,
+    plain_surface, lockable_target, unlockable_target
 };
 
 /* vs_2_0: dcl_position v0; dcl_color v1; mov oPos, v0; mov oD0, v1. */
@@ -357,6 +359,56 @@ TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
     /* A box past the level, or data short of it, is refused and removes the device. */
     CHECK(av_d3d9_WriteTexture9(wire, texture, 0u, Box{0u, 0u, 0u, 9u, 8u, 1u}, 36u, 0u, 0u,
                                 reinterpret_cast<const std::uint8_t *>(zeros), sizeof(zeros)));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK(hresult != 0u);
+}
+
+/* A surface's lock in the guest, or an UpdateSurface into it, writes it: an
+ * offscreen plain surface and a lockable render target where they are, a
+ * render target made unlockable through system memory. Each reads back with
+ * the box written and the rest as it was cleared. */
+TEST(d3d9_session_device, a_surface_write_reads_back_where_it_was_written)
+{
+    av::LoaderHostApis      apis;
+    av::D3d11HostDevice    *device11 = nullptr;
+    av::D3d9HostDevice     *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::D3dBackend backend;
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend);
+    std::uint32_t hresult = 1u;
+    CHECK(av_d3d9_CreateDevice9(wire, draw_device, 0u, &hresult));
+    CHECK_EQ(hresult, 0u);
+
+    constexpr std::uint32_t kind_offscreen_plain = 3u;
+    constexpr std::uint32_t lockable = 0x1u;
+    CHECK(av_d3d9_CreateSurface9(wire, plain_surface, kind_offscreen_plain, 8u, 8u, format_a8r8g8b8, 0u, 0u, 0u));
+    CHECK(av_d3d9_CreateSurface9(wire, lockable_target, kind_render_target, 8u, 8u, format_a8r8g8b8, 0u, 0u,
+                                 lockable));
+    CHECK(av_d3d9_CreateSurface9(wire, unlockable_target, kind_render_target, 8u, 8u, format_a8r8g8b8, 0u, 0u, 0u));
+    const std::uint32_t corner[4] = {red, blue, blue, red};
+    for (const std::uint32_t surface : {plain_surface, lockable_target, unlockable_target}) {
+        CHECK(av_d3d9_ColorFill9(wire, surface, 0u, Rect{0, 0, 0, 0}, black));
+        CHECK(av_d3d9_WriteTexture9(wire, surface, 0u, Box{6u, 6u, 0u, 8u, 8u, 1u}, 8u, 0u, 0u,
+                                    reinterpret_cast<const std::uint8_t *>(corner), sizeof(corner)));
+        Pixels pixels;
+        CHECK(read(wire, surface, pixels));
+        CHECK_EQ(pixels.hresult, 0u);
+        CHECK_EQ(pixels.at(6u, 6u), red);
+        CHECK_EQ(pixels.at(7u, 6u), blue);
+        CHECK_EQ(pixels.at(6u, 7u), blue);
+        CHECK_EQ(pixels.at(7u, 7u), red);
+        CHECK_EQ(pixels.at(5u, 6u), black);
+        CHECK_EQ(pixels.at(0u, 0u), black);
+    }
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK_EQ(hresult, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+
+    /* A box past the surface, or data short of it, is refused and removes the device. */
+    CHECK(av_d3d9_WriteTexture9(wire, plain_surface, 0u, Box{6u, 6u, 0u, 9u, 8u, 1u}, 12u, 0u, 0u,
+                                reinterpret_cast<const std::uint8_t *>(corner), sizeof(corner)));
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK(hresult != 0u);
 }

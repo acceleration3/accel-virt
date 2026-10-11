@@ -151,6 +151,8 @@ bool D3d9Session::on_WriteTexture9(uint32_t texture, uint32_t subresource, const
     AV_SCOPE("D3d9Session::on_WriteTexture9");
     if (mine<IDirect3DVolumeTexture9>(texture, D3dObjectKind::volume_texture9) != nullptr)
         return write_volume(texture, subresource, box, row_pitch, slice_pitch, flags, data, data_size);
+    if (mine<IDirect3DSurface9>(texture, D3dObjectKind::surface9) != nullptr)
+        return write_surface(texture, subresource, box, row_pitch, data, data_size);
     return write_level(texture, subresource, box, row_pitch, flags, data, data_size);
 }
 
@@ -214,6 +216,49 @@ bool D3d9Session::write_volume(uint32_t texture, uint32_t subresource, const d3d
                    data + uint64_t{slice} * slice_pitch + uint64_t{row} * row_pitch, write.row_bytes());
     volume->UnlockBox(subresource);
     return fits;
+}
+
+/* A surface's lock and unlock in the guest, or an UpdateSurface from its
+ * system memory. An offscreen plain surface or a lockable render target is
+ * locked where it is; one the host cannot lock - a render target made
+ * unlockable - takes the rows through a system-memory surface of the box's
+ * size and UpdateSurface. A plain surface has no dynamic usage, so the
+ * guest's discard and no-overwrite do not reach its lock. */
+bool D3d9Session::write_surface(uint32_t id, uint32_t subresource, const d3d9proto::Box &box, uint32_t row_pitch,
+                                const uint8_t *data, uint64_t data_size)
+{
+    AV_SCOPE("D3d9Session::write_surface");
+    auto *const     target = mine<IDirect3DSurface9>(id, D3dObjectKind::surface9);
+    D3DSURFACE_DESC desc = {};
+    if (subresource != 0u || FAILED(target->GetDesc(&desc))) return false;
+    const D3d9FormatLayout layout(static_cast<uint32_t>(desc.Format));
+    const D3d9TextureWrite write(box, row_pitch, 0u, data_size, layout);
+    if (!write.fits(desc.Width, desc.Height, 1u)) return false;
+    const auto copy = [&](const D3DLOCKED_RECT &locked) {
+        if (static_cast<uint32_t>(locked.Pitch) < write.row_bytes()) return false;
+        for (uint32_t row = 0u; row < write.rows(); row++)
+            memcpy(static_cast<uint8_t *>(locked.pBits) + uint64_t{row} * static_cast<uint32_t>(locked.Pitch),
+                   data + uint64_t{row} * row_pitch, write.row_bytes());
+        return true;
+    };
+    const RECT     area = {static_cast<LONG>(box.left), static_cast<LONG>(box.top), static_cast<LONG>(box.right),
+                           static_cast<LONG>(box.bottom)};
+    D3DLOCKED_RECT locked = {};
+    if (SUCCEEDED(target->LockRect(&locked, &area, 0u))) {
+        const bool fits = copy(locked);
+        target->UnlockRect();
+        return fits;
+    }
+    IDirect3DSurface9 *staging = nullptr;
+    if (FAILED(device()->CreateOffscreenPlainSurface(box.right - box.left, box.bottom - box.top, desc.Format,
+                                                     D3DPOOL_SYSTEMMEM, &staging, nullptr)))
+        return false;
+    ScopeExit release([staging] { staging->Release(); });
+    if (FAILED(staging->LockRect(&locked, nullptr, 0u))) return false;
+    const bool fits = copy(locked);
+    staging->UnlockRect();
+    const POINT at = {static_cast<LONG>(box.left), static_cast<LONG>(box.top)};
+    return fits && SUCCEEDED(device()->UpdateSurface(staging, nullptr, target, &at));
 }
 
 bool D3d9Session::on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t flags, const uint8_t *data,

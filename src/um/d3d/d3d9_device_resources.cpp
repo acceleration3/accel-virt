@@ -354,10 +354,6 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
         const uint32_t fit = bytes < subresource.width - start ? bytes : subresource.width - start;
         return write_buffer(resource.id, start, subresource.shadow + start, fit, flags);
     }
-    if (resource.kind == D3d9Resource::Kind::surface) {
-        lines_.once("a lock wrote to a surface, which the host takes no writes into");
-        return S_OK;
-    }
     D3DDDIBOX box = {0u, 0u, subresource.width, subresource.height, 0u, subresource.depth};
     if (lock.Flags.BoxValid) box = lock.Box;
     if (lock.Flags.AreaValid)
@@ -401,18 +397,23 @@ bool D3d9Device::TextureWriter::piece(const d3dproto::Box &box, const uint8_t *d
                                first ? flags_ : flags_ & ~write_discard);
 }
 
-/* A Direct3D 9 box with Back on Front is a 2D one: one slice. */
+/* A Direct3D 9 box with Back on Front is a 2D one: one slice. A surface
+ * resource's subresource is a host surface of its own; a texture's is its
+ * subresource of the one host texture. */
 HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box,
                                   const uint8_t *data, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags)
 {
     AV_SCOPE("D3d9Device::write_texture");
     if (box.Right <= box.Left || box.Bottom <= box.Top) return S_OK;
+    uint32_t id = resource.id, subresource = index;
+    if (resource.kind != D3d9Resource::Kind::volume && !surface_of(resource, index, id, subresource))
+        return E_INVALIDARG;
     const uint32_t           back = box.Back > box.Front ? box.Back : box.Front + 1u;
     const d3dproto::Box      region = {box.Left, box.Top, box.Front, box.Right, box.Bottom, back};
     const d3d::TextureUpload upload(D3d9FormatLayout(static_cast<uint32_t>(resource.format)), region, row_pitch,
                                     slice_pitch, d3d::D3dCommandStream::arena_piece);
     if (!upload.readable()) return E_INVALIDARG;
-    TextureWriter writer(*this, resource.id, index, flags);
+    TextureWriter writer(*this, id, subresource, flags);
     return upload.send(writer, data) ? S_OK : lost(__func__);
 }
 

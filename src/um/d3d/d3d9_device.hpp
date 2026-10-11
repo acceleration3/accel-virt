@@ -170,8 +170,8 @@ private:
     size_t   lock_offset(const D3d9Resource &resource, const D3DDDIARG_LOCK &lock, uint32_t pitch,
                          uint32_t slice_pitch) const;
     [[nodiscard]] bool make_shadow(const D3d9Resource &resource, D3d9Subresource &subresource);
-    /* Data into a texture's subresource at `box`, crossing in pieces of rows
-     * when it is larger than a piece of the arena. */
+    /* Data into a texture's or a surface's subresource at `box`, crossing in
+     * pieces of rows when it is larger than a piece of the arena. */
     HRESULT write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box, const uint8_t *data,
                           uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags);
     /* One piece of a texture write, sent; false when it could not be, after
