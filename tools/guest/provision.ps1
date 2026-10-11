@@ -82,11 +82,18 @@ function Sign($Path, $Certificate) {
     if ($signature.Status -ne 'Valid') { throw "signing $Path left it $($signature.Status)" }
 }
 
+# One valid now: a certificate made while the clock ran ahead - a guest that
+# read its RTC in another time zone than the host's - starts hours from now,
+# and until then no chain is built to it and nothing is signed. A new one
+# starts days back, so a clock that is ahead when it is made does not do that.
 function SigningCertificate {
-    $certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq $Subject | Select-Object -First 1
+    $now = Get-Date
+    $certificate = Get-ChildItem Cert:\LocalMachine\My |
+        Where-Object { $_.Subject -eq $Subject -and $_.NotBefore -le $now -and $_.NotAfter -gt $now } |
+        Select-Object -First 1
     if (-not $certificate) {
         $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject $Subject `
-            -CertStoreLocation Cert:\LocalMachine\My
+            -CertStoreLocation Cert:\LocalMachine\My -NotBefore $now.AddDays(-2) -NotAfter $now.AddYears(10)
     }
     Trust $certificate 'Root'
     Trust $certificate 'TrustedPublisher'
@@ -192,6 +199,32 @@ function WriteModels($Inf) {
 # installed it: every Direct3D 11 device failed and DWM restarted in a loop.
 # Before sign changes avgpu.sys and the INF, every byte is still the host's.
 # Both checks write with Write-Host: what a function outputs is what it returns.
+# Windows keeps the driver an adapter runs over a package of the same
+# DriverVer, and pnputil then installs the package on nothing (exit 259, no
+# more items). A package that is no newer than the accel-virt driver running
+# is given a build past the running one's, as the upgrade stage does; a first
+# install, over Windows' own driver, is left as built.
+function RaiseDriverVer($Inf) {
+    $device = AvDevice
+    if (-not $device) { return }
+    $provider = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_DriverProvider).Data
+    $running = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_DriverVersion).Data
+    if ($provider -ne 'accel-virt' -or -not $running) { return }
+    $lines = @(Get-Content $Inf)
+    for ($at = 0; $at -lt $lines.Count; $at++) {
+        $match = [regex]::Match($lines[$at], '^DriverVer\s*=\s*([0-9/]+),([0-9.]+)\s*$')
+        if (-not $match.Success) { continue }
+        if ([version]$match.Groups[2].Value -gt [version]$running) { return }
+        $parts = $running.Split('.')
+        $parts[2] = [string]([int]$parts[2] + 1)
+        $version = $parts -join '.'
+        $lines[$at] = "DriverVer   = $($match.Groups[1].Value),$version"
+        Set-Content -Path $Inf -Value $lines -Encoding Unicode
+        Write-Output "sign: DriverVer $version, past the running $running"
+        return
+    }
+}
+
 function PackageMatchesManifest {
     $path = Join-Path $Package $Manifest
     if (-not (Test-Path $path)) { Write-Host 'package: no manifest, so no file is checked'; return $true }
@@ -418,6 +451,7 @@ switch ($Stage) {
     'sign' {
         if (-not (PackageMatchesManifest)) { exit 1 }
         WriteModels "$Package\avgpu.inf"
+        RaiseDriverVer "$Package\avgpu.inf"
         $certificate = SigningCertificate
         Sign "$Package\avgpu.sys" $certificate
         Remove-Item "$Package\avgpu.cat" -ErrorAction SilentlyContinue
