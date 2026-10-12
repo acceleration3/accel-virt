@@ -216,6 +216,31 @@ VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const Vk
     icd_binding.root().destroy_instance(instance, pAllocator);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
+                                                                VkPhysicalDevice *pPhysicalDevices)
+{
+    AV_SCOPE("local_vkEnumeratePhysicalDevices");
+    return icd_binding.root().enumerate_physical_devices(instance, pPhysicalDeviceCount, pPhysicalDevices);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDeviceGroups(
+    VkInstance instance, uint32_t *pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
+{
+    AV_SCOPE("local_vkEnumeratePhysicalDeviceGroups");
+    return icd_binding.root().enumerate_physical_device_groups(&vkicd::generated::Wrap_vkEnumeratePhysicalDeviceGroups,
+                                                               instance, pPhysicalDeviceGroupCount,
+                                                               pPhysicalDeviceGroupProperties);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDeviceGroupsKHR(
+    VkInstance instance, uint32_t *pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
+{
+    AV_SCOPE("local_vkEnumeratePhysicalDeviceGroupsKHR");
+    return icd_binding.root().enumerate_physical_device_groups(
+        &vkicd::generated::Wrap_vkEnumeratePhysicalDeviceGroupsKHR, instance, pPhysicalDeviceGroupCount,
+        pPhysicalDeviceGroupProperties);
+}
+
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                                      VkPhysicalDeviceMemoryProperties *pMemoryProperties)
 {

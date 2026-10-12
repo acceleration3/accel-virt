@@ -3,6 +3,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 
 namespace av {
 
@@ -13,8 +14,8 @@ ClIcdRig::ClIcdRig()
             clicd::cl_icd_binding),
       loader_(root_)
 {
-    const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                             AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+    const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                             AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);
     /* The transport watches the reply slot for a budget of the guest's clock

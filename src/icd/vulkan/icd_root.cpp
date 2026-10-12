@@ -15,6 +15,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/vulkan/host_extension_list.hpp"
@@ -91,6 +92,12 @@ const Entry        local_rows[] = {
     {"vkQueueWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueueWaitIdle), Level::device},
     {"vkDeviceWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDeviceWaitIdle), Level::device},
     {"vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyInstance), Level::instance},
+    {"vkEnumeratePhysicalDevices", reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumeratePhysicalDevices),
+            Level::instance},
+    {"vkEnumeratePhysicalDeviceGroups",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumeratePhysicalDeviceGroups), Level::instance},
+    {"vkEnumeratePhysicalDeviceGroupsKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumeratePhysicalDeviceGroupsKHR), Level::instance},
     {"vkAvForceContextFault", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAvForceContextFault),
             Level::physical_device},
     {"vkAvLastKernelStatus", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAvLastKernelStatus),
@@ -305,7 +312,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
-      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
+      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr), spans_(memory),
       entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_), templates_(lock),
       externals_(lock, memory), shared_handles_(kmt, lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
@@ -396,13 +403,13 @@ VkResult IcdRoot::enumerate_instance_version(uint32_t *version)
     return VK_SUCCESS;
 }
 
-Status IcdRoot::open_connection(Connection *&opened)
+Status IcdRoot::open_connection(Connection *&opened, uint64_t luid)
 {
     AV_SCOPE("IcdRoot::open_connection");
     const icd::ThreadLockHold release(lock_);
     const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_);
     if (made != Status::ok) return made;
-    const Status status = opened->open();
+    const Status status = opened->open(luid);
     if (status == Status::ok) return Status::ok;
     static_cast<void>(connections_.destroy(opened));
     opened = nullptr;
@@ -414,7 +421,7 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
 {
     AV_SCOPE("IcdRoot::create_instance");
     Connection  *opened = nullptr;
-    const Status status = open_connection(opened);
+    const Status status = open_connection(opened, 0u);
     if (status != Status::ok) {
         lines_.note("vkCreateInstance: no Vulkan connection to an avgpu adapter, status", static_cast<uint64_t>(status));
         return status == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INCOMPATIBLE_DRIVER;
@@ -438,11 +445,144 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
         lines_.note("vkCreateInstance: the host refused, result", static_cast<uint32_t>(result));
         return result;
     }
-    if (*instance != VK_NULL_HANDLE) return VK_SUCCESS;
+    if (*instance != VK_NULL_HANDLE) {
+        span_adapters(forwarded, allocator, *instance);
+        return VK_SUCCESS;
+    }
     /* The host made an instance no handle could be made for: closing its
      * context is what destroys it. */
     release_connection(opened);
     return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAllocationCallbacks *allocator,
+                            VkInstance own)
+{
+    AV_SCOPE("IcdRoot::span_adapters");
+    InstanceSpan *span = nullptr;
+    {
+        const icd::ThreadLockHold release(lock_);
+        if (spans_.create(span, own) != Status::ok) {
+            log_.write("avvk: no room to span the other adapters; the instance has the primary display's alone");
+            return;
+        }
+    }
+    const Connection *const primary = connection_of(own, LoaderHandle::Kind::instance);
+    /* The LUIDs alone: each instance's connection opens its adapter itself,
+     * and the list's handles are closed before any does. */
+    uint64_t luids[AvgpuAdapters::max_adapters] = {};
+    uint32_t count = 0u;
+    {
+        AvgpuAdapters adapters(kmt_);
+        if (adapters.learn() != Status::ok) return;
+        for (uint32_t index = 0u; index < adapters.count(); ++index) luids[count++] = adapters.luid(index);
+    }
+    for (uint32_t index = 0u; index < count; ++index) {
+        if (luids[index] == 0u || (primary != nullptr && luids[index] == primary->luid())) continue;
+        Connection  *opened = nullptr;
+        const Status status = open_connection(opened, luids[index]);
+        if (status != Status::ok) {
+            lines_.note("vkCreateInstance: no Vulkan connection to another avgpu adapter, status",
+                        static_cast<uint64_t>(status));
+            continue;
+        }
+        pending_ = opened;
+        VkInstance     sibling = VK_NULL_HANDLE;
+        const VkResult made = vkicd::generated::Wrap_vkCreateInstance(&forwarded, allocator, &sibling);
+        /* A refusal has released the connection already. */
+        if (made != VK_SUCCESS) {
+            lines_.note("vkCreateInstance: another adapter's host refused, result", static_cast<uint32_t>(made));
+            continue;
+        }
+        if (sibling == VK_NULL_HANDLE) {
+            release_connection(opened);
+            continue;
+        }
+        if (span->add(sibling) != Status::ok) destroy_one_instance(sibling, allocator);
+    }
+}
+
+InstanceSpan *IcdRoot::span_of(VkInstance instance)
+{
+    AV_SCOPE("IcdRoot::span_of");
+    return spans_.find_if([instance](const InstanceSpan &span) { return span.spans_from(instance); });
+}
+
+VkResult IcdRoot::enumerate_physical_devices(VkInstance instance, uint32_t *count, VkPhysicalDevice *physical_devices)
+{
+    AV_SCOPE("IcdRoot::enumerate_physical_devices");
+    InstanceSpan *span = nullptr;
+    {
+        const icd::ThreadLockHold release(lock_);
+        span = span_of(instance);
+    }
+    /* An instance spanning no other asks its host as it always has. */
+    if (span == nullptr || span->count() == 1u)
+        return vkicd::generated::Wrap_vkEnumeratePhysicalDevices(instance, count, physical_devices);
+    uint32_t total = 0u;
+    VkResult answer = VK_SUCCESS;
+    for (uint32_t index = 0u; index < span->count(); ++index) {
+        const VkInstance on = span->at(index);
+        uint32_t         has = 0u;
+        const VkResult   counted = vkicd::generated::Wrap_vkEnumeratePhysicalDevices(on, &has, nullptr);
+        /* The application's own instance answers for itself; another
+         * adapter's that cannot is left out, as an adapter with no device. */
+        if (counted != VK_SUCCESS) {
+            if (index == 0u) return counted;
+            continue;
+        }
+        if (physical_devices == nullptr) {
+            total += has;
+            continue;
+        }
+        uint32_t room = *count > total ? *count - total : 0u;
+        if (room < has) answer = VK_INCOMPLETE;
+        if (room > has) room = has;
+        if (room == 0u) continue;
+        const VkResult listed = vkicd::generated::Wrap_vkEnumeratePhysicalDevices(on, &room, physical_devices + total);
+        if (listed != VK_SUCCESS && listed != VK_INCOMPLETE) return listed;
+        for (uint32_t at = 0u; at < room; at++)
+            if (physical_devices[total + at] == VK_NULL_HANDLE) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        total += room;
+    }
+    *count = total;
+    return answer;
+}
+
+VkResult IcdRoot::enumerate_physical_device_groups(GroupEnumerator enumerate, VkInstance instance, uint32_t *count,
+                                                   VkPhysicalDeviceGroupProperties *groups)
+{
+    AV_SCOPE("IcdRoot::enumerate_physical_device_groups");
+    InstanceSpan *span = nullptr;
+    {
+        const icd::ThreadLockHold release(lock_);
+        span = span_of(instance);
+    }
+    if (span == nullptr || span->count() == 1u) return enumerate(instance, count, groups);
+    uint32_t total = 0u;
+    VkResult answer = VK_SUCCESS;
+    for (uint32_t index = 0u; index < span->count(); ++index) {
+        const VkInstance on = span->at(index);
+        uint32_t         has = 0u;
+        const VkResult   counted = enumerate(on, &has, nullptr);
+        if (counted != VK_SUCCESS) {
+            if (index == 0u) return counted;
+            continue;
+        }
+        if (groups == nullptr) {
+            total += has;
+            continue;
+        }
+        uint32_t room = *count > total ? *count - total : 0u;
+        if (room < has) answer = VK_INCOMPLETE;
+        if (room > has) room = has;
+        if (room == 0u) continue;
+        const VkResult listed = enumerate(on, &room, groups + total);
+        if (listed != VK_SUCCESS && listed != VK_INCOMPLETE) return listed;
+        total += room;
+    }
+    *count = total;
+    return answer;
 }
 
 VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64_t luid, uint32_t *count,
@@ -455,11 +595,29 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (lost(*connection, "vk_icdEnumerateAdapterPhysicalDevices")) return VK_ERROR_DEVICE_LOST;
-    if (luid != connection->luid()) {
+    /* The instance on that adapter: the application's own, or one it spans. */
+    VkInstance        on = luid == connection->luid() ? instance : VK_NULL_HANDLE;
+    const Connection *on_connection = connection;
+    VkInstance        spanned[InstanceSpan::max_instances] = {};
+    uint32_t          spans = 0u;
+    {
+        const icd::ThreadLockHold release(lock_);
+        const InstanceSpan *const span = span_of(instance);
+        for (uint32_t index = 1u; span != nullptr && index < span->count(); ++index) spanned[spans++] = span->at(index);
+    }
+    for (uint32_t index = 0u; on == VK_NULL_HANDLE && index < spans; ++index) {
+        const Connection *const spanning = connection_of(spanned[index], LoaderHandle::Kind::instance);
+        if (spanning == nullptr || spanning->luid() != luid) continue;
+        on = spanned[index];
+        on_connection = spanning;
+    }
+    if (on == VK_NULL_HANDLE) {
         *count = 0u;
         return VK_SUCCESS;
     }
-    const VkResult result = vkicd::generated::Wrap_vkEnumeratePhysicalDevices(instance, count, physical_devices);
+    if (on_connection != connection && lost(*on_connection, "vk_icdEnumerateAdapterPhysicalDevices"))
+        return VK_ERROR_DEVICE_LOST;
+    const VkResult result = vkicd::generated::Wrap_vkEnumeratePhysicalDevices(on, count, physical_devices);
     if (physical_devices == nullptr || (result != VK_SUCCESS && result != VK_INCOMPLETE)) return result;
     for (uint32_t index = 0u; index < *count; index++) {
         if (physical_devices[index] == VK_NULL_HANDLE) return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -1133,6 +1291,23 @@ void IcdRoot::release_idle_fences(LoaderHandle &device)
 void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("IcdRoot::destroy_instance");
+    InstanceSpan *span = nullptr;
+    {
+        const icd::ThreadLockHold release(lock_);
+        span = span_of(instance);
+    }
+    if (span != nullptr) {
+        for (uint32_t index = 1u; index < span->count(); ++index) destroy_one_instance(span->at(index), allocator);
+        const icd::ThreadLockHold release(lock_);
+        /* Found in the pool just now, so the pool cannot refuse it. */
+        static_cast<void>(spans_.destroy(span));
+    }
+    destroy_one_instance(instance, allocator);
+}
+
+void IcdRoot::destroy_one_instance(VkInstance instance, const VkAllocationCallbacks *allocator)
+{
+    AV_SCOPE("IcdRoot::destroy_one_instance");
     LoaderHandle *const made = handle_of(instance, LoaderHandle::Kind::instance);
     if (made == nullptr) return;
     for (uint32_t physical = 0u;; physical++) {
@@ -1290,7 +1465,8 @@ void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhy
     AV_SCOPE("IcdRoot::physical_device_properties");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
-    PhysicalDeviceView view(connection->transport(), connection->luid(), api_version_, log_);
+    PhysicalDeviceView view(connection->transport(), connection->luid(), connection->adapter_name(), api_version_,
+                            log_);
     view.properties(physical_device, properties);
 }
 
@@ -1299,7 +1475,8 @@ void IcdRoot::physical_device_properties2(VkPhysicalDevice physical_device, VkPh
     AV_SCOPE("IcdRoot::physical_device_properties2");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
-    PhysicalDeviceView view(connection->transport(), connection->luid(), api_version_, log_);
+    PhysicalDeviceView view(connection->transport(), connection->luid(), connection->adapter_name(), api_version_,
+                            log_);
     view.properties2(physical_device, properties);
 }
 
@@ -1682,6 +1859,8 @@ bool IcdRoot::invariants_hold() const
     if (!batches_.all_of([](const CommandBatch &batch) { return batch.invariants_hold(); })) return false;
     if (!memories_.invariants_hold() || memories_.live() != handles_.memories()) return false;
     if (!memories_.all_of([](const DeviceMemory &memory) { return memory.invariants_hold(); })) return false;
+    if (!spans_.invariants_hold() || !spans_.all_of([](const InstanceSpan &span) { return span.invariants_hold(); }))
+        return false;
     return connections_.all_of([](const Connection &connection) {
         return connection.opened() && connection.invariants_hold();
     });

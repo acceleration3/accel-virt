@@ -93,7 +93,7 @@ class BatchRig {
 public:
     BatchRig() : connection_(rig_.kmt(), rig_.platform(), rig_.send_lock(), rig_.log()), batch_(rig_.platform(), connection_)
     {
-        CHECK_STATUS(connection_.open(), Status::ok);
+        CHECK_STATUS(connection_.open(0u), Status::ok);
         baseline_ = rig_.platform().live_allocations();
         CHECK(batch_.invariants_hold());
     }
@@ -250,7 +250,7 @@ TEST(command_batch, memory_refused_while_recording_answers_no_memory_at_end_and_
 TEST(command_batch, the_block_goes_with_the_batch)
 { IcdRig rig;
   Connection connection(rig.kmt(), rig.platform(), rig.send_lock(), rig.log());
-  CHECK_STATUS(connection.open(), Status::ok);
+  CHECK_STATUS(connection.open(0u), Status::ok);
   const std::uint32_t baseline = rig.platform().live_allocations();
   {
       CommandBatch batch(rig.platform(), connection);

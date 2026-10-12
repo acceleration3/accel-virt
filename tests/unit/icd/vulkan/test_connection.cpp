@@ -7,8 +7,10 @@
  * after every step. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "guest/kmt/pci_location.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "core/support/object_storage.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/host_window_chunk.hpp"
@@ -35,6 +37,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuestConnection;
 using av::KmtTransport;
 using av::LockTrace;
@@ -85,8 +88,8 @@ using av::icd::HostChannelProbe;
 
 namespace {
 
-const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 /* The avgpu adapter is the second one added. */
 constexpr std::uint32_t avgpu_index = 1u;
@@ -151,7 +154,7 @@ TEST(connection, opens_a_vulkan_context_on_the_avgpu_adapter_with_its_luid)
 { Rig rig;
   rig.kmt().set_adapter_luid(0u, 0x0000000500000011ull);
   rig.kmt().set_adapter_luid(avgpu_index, 0x0000000700000042ull);
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   CHECK(rig.connection().invariants_hold());
   CHECK(rig.connection().opened());
   CHECK(!rig.connection().faulted());
@@ -170,7 +173,7 @@ TEST(connection, opens_a_vulkan_context_on_the_avgpu_adapter_with_its_luid)
 
 TEST(connection, a_command_crosses_under_the_lock_and_its_answer_comes_back)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   ScriptedHost host(rig.kmt());
   host.vk_handle(0, ScriptedHost::vk_instance);
   std::uint64_t instance = 0u;
@@ -186,7 +189,7 @@ TEST(connection, a_command_crosses_under_the_lock_and_its_answer_comes_back)
  * command's header. */
 TEST(connection, lends_a_command_all_of_its_staging)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   av::WireWriter writer = rig.connection().transport().request_writer();
   writer.write_zeros(Connection::command_bytes - 8u);
   CHECK_STATUS(writer.status(), Status::ok);
@@ -221,8 +224,11 @@ TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leave
       Connection          connection(kmt, platform, lock, log);
       kmt.add_adapter(basic_render, 3100u);
       if (!refusal.no_avgpu) kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
-      if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, 1u, MockKmt::invalid_parameter);
-      const Status status = connection.open();
+      /* The LUID is asked twice: once as the adapters are listed, once by the
+       * connection. The connection's own is the one refused. */
+      const std::uint32_t nth = refusal.call == MockKmt::Call::adapter_luid ? 2u : 1u;
+      if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, nth, MockKmt::invalid_parameter);
+      const Status status = connection.open(0u);
       if (status != Status::not_supported)
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "%s: status %u", refusal.why,
                                                        static_cast<unsigned>(status));
@@ -238,16 +244,16 @@ TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leave
 TEST(connection, answers_no_memory_when_its_staging_cannot_be_had_and_leaves_nothing_open)
 { Rig rig;
   rig.platform().fail_allocation_at(1u);
-  CHECK_STATUS(rig.connection().open(), Status::no_memory);
+  CHECK_STATUS(rig.connection().open(0u), Status::no_memory);
   rig.check_nothing_open();
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 0u);
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   CHECK(rig.connection().invariants_hold()); }
 
 TEST(connection, opening_twice_is_refused_and_keeps_the_first)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
-  CHECK_STATUS(rig.connection().open(), Status::invalid_state);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::invalid_state);
   CHECK(rig.connection().invariants_hold());
   CHECK(rig.connection().opened());
   CHECK_EQ(rig.kmt().open_objects(), open_objects);
@@ -255,18 +261,18 @@ TEST(connection, opening_twice_is_refused_and_keeps_the_first)
 
 TEST(connection, closes_everything_it_opened_and_opens_again)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   rig.connection().close();
   rig.check_nothing_open();
   rig.connection().close();
   rig.check_nothing_open();
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   CHECK(rig.connection().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), open_objects); }
 
 TEST(connection, a_host_failure_faults_it_and_later_sends_fail_without_a_submission)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   rig.kmt().withhold_answer_at(1u);
   std::uint64_t instance = 0u;
   CHECK_EQ(create_instance(rig.connection(), instance), VK_ERROR_DEVICE_LOST);
@@ -296,7 +302,7 @@ TEST(connection, invariants_see_a_half_open_connection)
   channel.drop_transport();
   CHECK(channel.swap_staging(nullptr) == &stray);
   CHECK(connection.invariants_hold());
-  CHECK_STATUS(search.find(avgpu), Status::ok);
+  CHECK_STATUS(search.find_avgpu(0u), Status::ok);
   CHECK(!connection.invariants_hold());
   CHECK_STATUS(guest.open(search.adapter()), Status::ok);
   CHECK_STATUS(search.close(), Status::ok);
@@ -305,7 +311,7 @@ TEST(connection, invariants_see_a_half_open_connection)
   CHECK(connection.invariants_hold());
   /* Open, with a context it does not name, no staging, the device gone, a
    * device without its queue, another adapter. */
-  CHECK_STATUS(connection.open(), Status::ok);
+  CHECK_STATUS(connection.open(0u), Status::ok);
   KmtTransport &transport = channel.channel.transport();
   const std::uint32_t name = KmtTransportProbe::forget_name(transport);
   CHECK(!connection.invariants_hold());
@@ -353,7 +359,7 @@ std::size_t frame(std::uint8_t *bytes, std::uint32_t id, std::uint32_t count)
 
 TEST(connection, a_batch_of_framed_commands_is_one_submission_under_the_lock)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   std::uint8_t framed[48] = {};
   const std::size_t length = frame(framed, av::vkproto::kCmd_vkCmdDraw, 3u);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
@@ -371,7 +377,7 @@ TEST(connection, a_batch_of_framed_commands_is_one_submission_under_the_lock)
 
 TEST(connection, a_batch_that_does_not_frame_is_refused_before_it_is_published)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   std::uint8_t framed[48] = {};
   const std::size_t length = frame(framed, av::vkproto::kCmd_vkCmdDraw, 3u);
   CHECK(rig.connection().send_batch(framed, length - 1u) == av::TransportResult::failed);
@@ -393,7 +399,7 @@ constexpr std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
  * back. */
 TEST(connection, opens_a_chunk_under_its_lock_and_closes_it)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   CHECK_EQ(rig.connection().adapter(), ConnectionProbe::search(rig.connection()).adapter());
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   av::ObjectStorage<av::HostWindowChunk> chunk;
@@ -423,7 +429,7 @@ TEST(connection, opens_a_chunk_under_its_lock_and_closes_it)
 /* A chunk the kernel refuses is the answer, with nothing made. */
 TEST(connection, a_chunk_refused_leaves_nothing)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   const std::uint32_t before = rig.kmt().calls(MockKmt::Call::escape);
   rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
   av::ObjectStorage<av::HostWindowChunk> chunk;
@@ -445,7 +451,7 @@ TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
   CHECK(!chunk.constructed());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 0u);
 
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
   const std::uint32_t asked = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::invalid_state);
@@ -474,7 +480,7 @@ TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
 TEST(connection, opens_a_window_chunk_under_its_lock_and_closes_it)
 { Rig rig;
   rig.kmt().open_host_window(2u * chunk_bytes);
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   const std::uint32_t allocations = rig.kmt().calls(MockKmt::Call::create_allocation);
   av::ObjectStorage<av::HostWindowChunk> chunk;
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
@@ -496,7 +502,7 @@ TEST(connection, opens_a_window_chunk_under_its_lock_and_closes_it)
  * go of it all the same: the kernel closes it with the context. */
 TEST(connection, a_chunk_whose_release_is_refused_is_still_closed)
 { Rig rig;
-  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
   av::ObjectStorage<av::HostWindowChunk> chunk;
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
   rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
@@ -522,3 +528,20 @@ TEST(connection, remembers_whether_the_host_shares_by_dma_buf_and_starts_saying_
   rig.connection().note_host_dma_buf();
   CHECK(rig.connection().host_has_dma_buf());
   CHECK(rig.connection().invariants_hold()); }
+
+/* The adapter's name is read as the connection opens - what its physical
+ * device is called - and gone once it closes; a name Windows will not give
+ * opens the adapter all the same, with none. */
+TEST(connection, learns_what_windows_calls_its_adapter)
+{ { Rig rig;
+    rig.kmt().describe_adapter(avgpu_index, av::PciLocation(0x7Bu, 0u, 0u), "AMD Radeon(TM) Graphics", 0u);
+    CHECK(std::strcmp(rig.connection().adapter_name(), "") == 0);
+    CHECK_STATUS(rig.connection().open(0u), Status::ok);
+    CHECK(std::strcmp(rig.connection().adapter_name(), "AMD Radeon(TM) Graphics") == 0);
+    rig.connection().close();
+    CHECK(std::strcmp(rig.connection().adapter_name(), "") == 0); }
+  { Rig rig;
+    rig.kmt().describe_adapter(avgpu_index, av::PciLocation(0x7Bu, 0u, 0u), "AMD Radeon(TM) Graphics", 0u);
+    rig.kmt().fail_at(MockKmt::Call::query_adapter_name, 1u, MockKmt::invalid_parameter);
+    CHECK_STATUS(rig.connection().open(0u), Status::ok);
+    CHECK(std::strcmp(rig.connection().adapter_name(), "") == 0); } }

@@ -4,6 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -22,6 +23,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::MockKmt;
 using av::MockPlatform;
 using av::PciIdentity;
@@ -33,8 +35,8 @@ namespace {
 
 constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
 
-const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;

@@ -174,7 +174,7 @@ TEST(gl_connection, no_avgpu_adapter_or_no_device_is_not_supported_with_nothing_
 TEST(gl_connection, other_adapters_are_not_the_avgpu_one)
 { av::MockKmt kmt;
   kmt.add_adapter(av::PciIdentity(0x8086u, 0x46A6u, 0u, 0u), 3200u);
-  av::icd::IcdConnection connection(kmt);
+  av::icd::IcdConnection connection(kmt, 0u);
   std::uint32_t link = 0u;
   CHECK_STATUS(connection.acquire(link), Status::not_supported);
   CHECK_EQ(kmt.open_objects(), 0u); }
@@ -183,7 +183,7 @@ TEST(gl_connection, a_connection_destroyed_with_users_closes_what_it_opened)
 { av::MockKmt kmt;
   kmt.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
   {
-    av::icd::IcdConnection connection(kmt);
+    av::icd::IcdConnection connection(kmt, 0u);
     std::uint32_t link = no_link;
     CHECK_STATUS(connection.acquire(link), Status::ok);
     CHECK_STATUS(connection.acquire(link), Status::ok);
@@ -198,7 +198,7 @@ TEST(gl_connection, reports_its_users_and_each_link)
   char bytes[256];
   av::StateWriter idle(bytes, sizeof bytes);
   rig.connection().report(idle);
-  CHECK(std::strcmp(idle.dump(), "connection/0 users=0 adapter=0") == 0);
+  CHECK(std::strcmp(idle.dump(), "connection/0 users=0 adapter=0 luid=0") == 0);
   std::uint32_t link = no_link;
   CHECK_STATUS(rig.connection().acquire(link), Status::ok);
   rig.connection().lose(link);
@@ -208,7 +208,7 @@ TEST(gl_connection, reports_its_users_and_each_link)
   rig.connection().report(open);
   char expected[256];
   std::snprintf(expected, sizeof expected,
-                "connection/0 users=2 adapter=%u\n"
+                "connection/0 users=2 adapter=%u luid=0\n"
                 "connection/0/link/%u users=1 lost=true device=%u\n"
                 "connection/0/link/%u users=1 lost=false device=%u",
                 static_cast<unsigned>(rig.connection().device(link).adapter()), static_cast<unsigned>(link),

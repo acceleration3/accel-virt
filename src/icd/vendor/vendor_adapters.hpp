@@ -1,6 +1,6 @@
 /* The avgpu adapters of this machine, as the vendor libraries describe them
  * (docs/vendor-libraries.md): read from Windows on each ask, every adapter
- * handle closed again. avgpu presents its host GPU's vendor, device and
+ * handle closed again, in the order every user-mode driver shows them. avgpu presents its host GPU's vendor, device and
  * revision as its own, so each adapter reads as that vendor's GPU; an
  * application that trusts only a GPU its vendor's library vouches for finds
  * it there, described as everything else in the machine describes it. */
@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 namespace av {
+class AvgpuAdapters;
 class Kmt;
 }  // namespace av
 
@@ -26,21 +27,20 @@ public:
     VendorAdapters(const VendorAdapters &) = delete;
     VendorAdapters &operator=(const VendorAdapters &) = delete;
 
-    /* Every avgpu adapter Windows enumerates (subsystem 1af4:5256, whatever
-     * vendor it presents), in enumeration order. The kernel's refusal to
+    /* Every avgpu adapter, in AvgpuAdapters' order. The kernel's refusal to
      * enumerate is the answer, with nothing learnt; an adapter one of whose
      * facts Windows will not give is left out - nothing is guessed. */
     [[nodiscard]] Status learn();
 
     /* Of the adapters presenting `vendor` (a PCI vendor ID), how many, and
-     * the `index`th in enumeration order - null past them. */
+     * the `index`th in AvgpuAdapters' order - null past them. */
     uint32_t             count_of(uint32_t vendor) const;
     const VendorAdapter *nth_of(uint32_t vendor, uint32_t index) const;
 
 private:
-    /* The facts of `adapter`, whose identity is `identity`, in `out`; false
-     * where one cannot be read. */
-    bool describe(uint32_t adapter, const PciIdentity &identity, uint64_t primary_luid, VendorAdapter &out);
+    /* The facts of `avgpu`'s `index`th adapter in `out`; false where one
+     * cannot be read. */
+    bool describe(const AvgpuAdapters &avgpu, uint32_t index, VendorAdapter &out);
 
     Kmt          &kmt_;
     VendorAdapter adapters_[max_adapters];

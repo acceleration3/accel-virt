@@ -41,6 +41,9 @@ public:
     [[nodiscard]] bool   lost(const HostChannel &channel);
     /* The link's number, for a report; IcdConnection::no_link when not held. */
     uint32_t             link() const;
+    /* Whether the link is on `connection`, held or not: which adapter a
+     * driver context is made on. */
+    bool                 on(const IcdConnection &connection) const;
 
 private:
     friend struct ContextLinkProbe;

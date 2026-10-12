@@ -4,6 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "icd/d3d/umd_connection.hpp"
@@ -14,6 +15,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::MockKmt;
 using av::PciIdentity;
 using av::StateWriter;
@@ -23,8 +25,8 @@ using av::d3d::UmdConnections;
 
 namespace {
 
-const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 constexpr std::uint64_t first_luid = 0x0000000200001234ull;
 constexpr std::uint64_t second_luid = 0x0000000300005678ull;

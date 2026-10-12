@@ -3,6 +3,7 @@
 #include "guest/inspect/inspect_program.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_inspect_host.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::AvgpuAdapters;
 using av::InspectProgram;
 using av::MockInspectHost;
 using av::MockKmt;
@@ -64,8 +66,8 @@ struct Rig {
     Rig()
     {
         host.set_clock(777u);
-        kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
-                                        av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
+        kmt.add_adapter(av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                        av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         driver.set_clock(555u);

@@ -9,6 +9,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/probe_device.hpp"
 #include "guest/probe/shaders/double_spv.hpp"
@@ -27,6 +28,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuestReport;
 using av::MockKmt;
 using av::PciIdentity;
@@ -36,8 +38,8 @@ using Call = av::ScriptedVulkan::Call;
 
 namespace {
 
-const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* LowPart 0x1234, HighPart 2: a HighPart the report must not print. */
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 
@@ -227,10 +229,11 @@ TEST(vulkan_probe, no_adapter_ends_the_run)
   CHECK_EQ(vulkan.calls(Call::enumerate_physical_devices), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }
 
-/* The adapter found but its LUID not answered. */
+/* The adapter found but its LUID not answered: the second ask, after the
+ * one finding it made. */
 TEST(vulkan_probe, an_unanswered_luid_ends_the_run)
 { ProbeRig rig;
-  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 1u, 0xC0000001u);
+  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 2u, 0xC0000001u);
   rig.run();
   CHECK(rig.holds("FAIL vulkan.adapter_luid status="));
   CHECK_EQ(rig.report().failed(), 1u);

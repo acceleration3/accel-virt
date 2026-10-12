@@ -7,6 +7,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -17,6 +18,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::MockKmt;
 using av::PciIdentity;
 using av::RecordingLog;
@@ -29,8 +31,8 @@ constexpr std::uint64_t some_luid = 0x0000000200001234ull;
 constexpr std::uint64_t local_budget = 512ull * 1024ull * 1024ull;
 constexpr std::uint64_t non_local_budget = 3ull * 1024ull * 1024ull * 1024ull;
 
-const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 class Fixture {
 public:
@@ -68,8 +70,8 @@ TEST(adapter_identity, learns_the_luid_the_ids_and_both_budgets_from_the_kernel)
   CHECK(identity.invariants_hold());
   CHECK_STATUS(identity.learn(fixture.kmt(), fixture.adapter(), fixture.log()), Status::ok);
   CHECK_EQ(identity.luid(), some_luid);
-  CHECK_EQ(identity.vendor_id(), AdapterSearch::virtio_vendor);
-  CHECK_EQ(identity.device_id(), AdapterSearch::virtio_gpu_device);
+  CHECK_EQ(identity.vendor_id(), AvgpuAdapters::virtio_vendor);
+  CHECK_EQ(identity.device_id(), AvgpuAdapters::virtio_gpu_device);
   CHECK_EQ(identity.dedicated_video_memory(), local_budget);
   CHECK_EQ(identity.shared_system_memory(), non_local_budget);
   CHECK_EQ(fixture.log().lines(), 0u);

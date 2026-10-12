@@ -17,9 +17,18 @@ change, this page should tell you the directory before you search.
 | `av-renderer` | host, own process | `src/device/renderer/` + the device core, entry point `src/device/shim/renderer_main.cpp` |
 | `avrecord` | host tool | `src/device/replay/` + `src/device/recording/`, entry point `src/device/shim/recording_tool.cpp` |
 
-Every guest user-mode binary also links `src/guest/kmt/` (the D3DKMT contract
-and AdapterSearch) and `src/guest/transport/` (the av transport over it). Every
-binary links `src/core/`.
+Every guest user-mode binary also links `src/guest/kmt/` (the D3DKMT contract,
+AvgpuAdapters and AdapterSearch) and `src/guest/transport/` (the av transport
+over it). Every binary links `src/core/`.
+
+A guest has one avgpu adapter per host GPU. `AvgpuAdapters` is the one list of
+them every user-mode driver builds its devices from - the primary display's
+first, then the kernel's order - so every API shows the same GPUs in the same
+order: the Direct3D runtimes open each adapter themselves (`AdapterSearch` by
+LUID), the OpenCL ICD shows a device per adapter (`ClDevices`), the Vulkan ICD
+a physical device per adapter through an instance per adapter
+(`InstanceSpan`), and the vendor libraries describe each. OpenGL, which has no
+device selection, runs on the first.
 
 ## Layers
 
@@ -133,7 +142,7 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 
 | Directory | Holds |
 |---|---|
-| `guest/kmt/` | the `Kmt` contract (D3DKMT), its small value types, `AdapterSearch` and avgpu's PCI identity |
+| `guest/kmt/` | the `Kmt` contract (D3DKMT), its small value types, `AvgpuAdapters` (every avgpu adapter, the primary display's first), `AdapterSearch` (one of them, held open) and avgpu's PCI identity |
 | `guest/transport/` | the av transport over Kmt |
 | `guest/suite/` | avtest's scenarios, and the step and report framework the probes use too |
 | `guest/probe/` | the probe programs' portable halves: Vulkan, GL, CL and D3D work, the `*_entry` seams, shaders |

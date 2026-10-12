@@ -12,6 +12,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
 #include "guest/suite/host_visible_import_scenario.hpp"
@@ -52,6 +53,7 @@ extern "C" const char *__lsan_default_suppressions(void)
 }
 
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::FullStackRig;
 using av::GuestReport;
 using av::GuestSuite;
@@ -61,8 +63,8 @@ using av::WidestHostGpu;
 
 namespace {
 
-const PciIdentity av_gpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint32_t every_sub_api =
     AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENGL | AV_EXECUTOR_SUB_API_OPENCL;
 
@@ -88,7 +90,7 @@ template <typename Scenario>
 void run_alone(FullStackRig &rig, GuestReport &report)
 {
     AdapterSearch search(rig.kmt());
-    CHECK_STATUS(search.find(av_gpu), Status::ok);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
     { Scenario scenario(rig.kmt(), report, search);
       scenario.run(); }
     CHECK_STATUS(search.close(), Status::ok);

@@ -5,6 +5,7 @@
 #include "guest/inspect/escape_reader.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/platform/mock_platform.hpp"
 
@@ -45,8 +46,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     {
         av::MockKmt  kmt;
         FuzzedDriver driver(data + 1u, size - 1u);
-        kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
-                                        av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
+        kmt.add_adapter(av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                        av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         av::EscapeReader reader(kmt, platform);

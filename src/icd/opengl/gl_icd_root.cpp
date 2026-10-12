@@ -128,7 +128,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
                      GlPresentLoop &presents, GlIcdBinding &binding)
     : lock_(lock), log_(log), lines_(log, "avgl: "), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
-      query_(formats_), windows_(), currents_(slot), connection_(kmt),
+      query_(formats_), windows_(), currents_(slot), connection_(kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
       contexts_(memory, connection_, send_lock, log, extensions_, shared_handles_),

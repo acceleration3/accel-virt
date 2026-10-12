@@ -5,7 +5,8 @@
 
 namespace av::icd {
 
-IcdConnection::IcdConnection(Kmt &kmt) : kmt_(kmt), search_(kmt), devices_{}, users_{}, lost_{}, current_(no_link)
+IcdConnection::IcdConnection(Kmt &kmt, uint64_t luid)
+    : kmt_(kmt), luid_(luid), search_(kmt), devices_{}, users_{}, lost_{}, current_(no_link)
 {
     AV_SCOPE("IcdConnection::IcdConnection");
 }
@@ -63,6 +64,12 @@ bool IcdConnection::lost(uint32_t link) const
     return link < max_links && lost_[link];
 }
 
+uint32_t IcdConnection::adapter() const
+{
+    AV_SCOPE("IcdConnection::adapter");
+    return search_.adapter();
+}
+
 uint32_t IcdConnection::users() const
 {
     AV_SCOPE("IcdConnection::users");
@@ -83,6 +90,7 @@ void IcdConnection::report(StateWriter &writer) const
     writer.open("connection", 0u);
     writer.number("users", users());
     writer.number("adapter", search_.adapter());
+    writer.number("luid", luid_);
     for (uint32_t link = 0u; link < max_links; link++) {
         if (!held(link)) continue;
         writer.open("link", link);
@@ -125,7 +133,7 @@ bool IcdConnection::held(uint32_t link) const
 Status IcdConnection::open_link(uint32_t link)
 {
     AV_SCOPE("IcdConnection::open_link");
-    if (!search_.found() && search_.find_avgpu(0u) != Status::ok) return Status::not_supported;
+    if (!search_.found() && search_.find_avgpu(luid_) != Status::ok) return Status::not_supported;
     /* The link is not held, so its storage is empty. */
     static_cast<void>(devices_[link].construct(kmt_));
     if (devices_[link].object().open(search_.adapter()) != Status::ok) {

@@ -124,7 +124,8 @@ TEST(umd_root_open, no_avgpu_adapter_is_a_failure_and_a_log_line)
  * report, so the open fails and gives the kernel adapter back. */
 TEST(umd_root_open, an_adapter_whose_identity_is_refused_is_given_back)
 { UmdRig rig;
-  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);
+  /* The identity's ask, after the one listing the adapters. */
+  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 2u, MockKmt::invalid_parameter);
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
   CHECK_EQ(runtime.open(), hr_fail);
   CHECK(runtime.adapter() == nullptr);

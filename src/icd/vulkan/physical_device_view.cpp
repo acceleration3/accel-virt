@@ -6,9 +6,9 @@
 
 namespace av::icd {
 
-PhysicalDeviceView::PhysicalDeviceView(ClientTransport &transport, uint64_t luid, uint32_t latest_version,
-                                       LogSink &log)
-    : transport_(transport), luid_(luid), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u)
+PhysicalDeviceView::PhysicalDeviceView(ClientTransport &transport, uint64_t luid, const char *name,
+                                       uint32_t latest_version, LogSink &log)
+    : transport_(transport), luid_(luid), name_(name), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u)
     {
         AV_SCOPE("PhysicalDeviceView::PhysicalDeviceView");
     }
@@ -19,6 +19,7 @@ void PhysicalDeviceView::properties(VkPhysicalDevice physical_device, VkPhysical
     *answer = VkPhysicalDeviceProperties{};
     vkproto::av_vkGetPhysicalDeviceProperties(transport_, physical_device, answer);
     if (answer->apiVersion > latest_version_) answer->apiVersion = latest_version_;
+    write_name(*answer);
 }
 
 void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties2 *answer)
@@ -32,6 +33,7 @@ void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysica
     vkproto::av_vkGetPhysicalDeviceProperties2(transport_, physical_device, answer);
     restore();
     if (answer->properties.apiVersion > latest_version_) answer->properties.apiVersion = latest_version_;
+    write_name(answer->properties);
     write_luid();
 }
 
@@ -77,6 +79,20 @@ void PhysicalDeviceView::write_luid()
             core11->deviceLUIDValid = VK_TRUE;
         }
     }
+}
+
+/* The adapter's name is at most AdapterString::bytes, well inside the 256 a
+ * device name has room for; written whole with its terminator. */
+void PhysicalDeviceView::write_name(VkPhysicalDeviceProperties &properties) const
+{
+    AV_SCOPE("PhysicalDeviceView::write_name");
+    if (name_ == nullptr || name_[0] == '\0') return;
+    size_t length = 0u;
+    while (name_[length] != '\0' && length + 1u < sizeof properties.deviceName) {
+        properties.deviceName[length] = name_[length];
+        ++length;
+    }
+    properties.deviceName[length] = '\0';
 }
 
 bool PhysicalDeviceView::invariants_hold() const

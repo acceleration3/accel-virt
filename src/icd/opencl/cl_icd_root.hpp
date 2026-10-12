@@ -7,6 +7,12 @@
  * ever calls clGetPlatformIDs, including processes with no interest in this
  * adapter, so those are answered from the platform alone.
  *
+ * One platform, and on it one device per avgpu adapter (ClDevice), in the
+ * order AvgpuAdapters gives - the primary display's first, which is the one an
+ * application that takes the first device should get. The Khronos loader
+ * loads this DLL once however many adapters name it, so the devices of every
+ * adapter are this one ICD's to show.
+ *
  * A cl_context is where a transport lives, so everything below one - a queue,
  * a buffer, a program, a kernel, an event - is an object of that context and
  * dies with it. What the application holds is a ClObject, whose first word is
@@ -21,16 +27,14 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/trace/state_reporter.hpp"
-#include "icd/common/icd_connection.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
-#include "icd/opencl/cl_device_report.hpp"
+#include "icd/opencl/cl_devices.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
 #include "icd/opencl/cl_event_owner.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
-#include "icd/opencl/cl_extension_policy.hpp"
-#include "icd/opencl/cl_info_answers.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
+#include "icd/opencl/cl_info_answers.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
 #include "icd/opencl/cl_refusal_log.hpp"
@@ -55,6 +59,7 @@ class StateWriter;
 }  // namespace av
 
 namespace av::icd {
+class AdapterString;
 class ServiceThread;
 class ThreadLock;
 }  // namespace av::icd
@@ -82,10 +87,11 @@ public:
      * a few hundred bytes, and a host whose list will not fit is a host this
      * cannot confirm a single extension against, which is its own answer. */
     static constexpr size_t  host_extensions_bytes = 4096u;
-    /* The device's answers kept (ClInfoAnswers): more than the properties an
-     * application asks of a device, each as long as the longest - the
-     * extension list - so every one the host gives is kept. */
-    static constexpr uint32_t device_answers = 48u;
+    /* The host's device answers kept (ClInfoAnswers), keyed by the device
+     * they are about: more than the properties an application asks of two
+     * devices, each as long as the longest - the extension list - so every
+     * one the host gives is kept. */
+    static constexpr uint32_t device_answers = 96u;
 
     /* `objects_lock` is the object table's own (ClObjectTable): every entry
      * point looks its arguments up there without `lock`. `blocks_lock` is
@@ -114,12 +120,13 @@ public:
 
     /* ---- devices -------------------------------------------------------- */
 
-    /* One device per avgpu adapter, made on the first ask and kept. */
+    /* Every device, each opened on the first ask and kept; one whose adapter
+     * will not open is left out. */
     cl_int device_ids(cl_platform_id platform, cl_device_type type, cl_uint num_entries,
                       cl_device_id *devices, cl_uint *num_devices);
     cl_int device_info(cl_device_id device, cl_device_info name, size_t value_bytes, void *value,
                        size_t *size_ret);
-    /* clRetainDevice and clReleaseDevice: the one device is a root device,
+    /* clRetainDevice and clReleaseDevice: every device here is a root device,
      * which the API keeps no count of, so either is CL_SUCCESS for it. */
     cl_int device_reference(cl_device_id device);
     /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD (cl_amd_device_attribute_query), which
@@ -166,8 +173,8 @@ public:
 
     /* ---- what a program and a kernel say about themselves on a device --- */
 
-    /* Asked of the host about its own device, which is the one this ICD's
-     * device stands for. */
+    /* Asked of the host about its own device, which is the one the device of
+     * the object's context stands for; another device is CL_INVALID_DEVICE. */
     cl_int program_build_info(cl_program program, cl_device_id device, cl_program_build_info name,
                               size_t value_bytes, void *value, size_t *size_ret);
     cl_int kernel_work_group_info(cl_kernel kernel, cl_device_id device,
@@ -258,8 +265,8 @@ public:
                               const cl_event *events, cl_event *event);
     cl_int enqueue_release_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
                               const cl_event *events, cl_event *event);
-    /* clGetGLContextInfoKHR, answered here: the one device this ICD shows is
-     * the one every OpenGL context of ours runs on. */
+    /* clGetGLContextInfoKHR, answered here: every OpenGL context of ours runs
+     * on the adapter the primary display is on, which is the first device. */
     cl_int gl_context_info(const cl_context_properties *properties, cl_gl_context_info name, size_t value_bytes,
                            void *value, size_t *size_ret);
 
@@ -274,11 +281,11 @@ public:
     static constexpr cl_uint d3d10_context_device = 0x4014u;
     static constexpr cl_int  invalid_d3d10_device = -1002;
 
-    /* clGetDeviceIDsFromD3D10KHR: this ICD's one device for a DXGI adapter or
-     * an ID3D10Device on the avgpu adapter that device runs on - preferred
-     * and all alike, since there is one - and CL_DEVICE_NOT_FOUND for any
-     * other adapter, which is how an application tells which of its adapters
-     * a device of ours belongs to. */
+    /* clGetDeviceIDsFromD3D10KHR: the device on the avgpu adapter a DXGI
+     * adapter or an ID3D10Device is - preferred and all alike, since one
+     * adapter is one device - and CL_DEVICE_NOT_FOUND for any other adapter,
+     * which is how an application tells which of its adapters a device of
+     * ours belongs to. */
     cl_int device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
                                  cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices);
     /* An object over a Direct3D 10 one, and its acquire and release, belong to
@@ -437,7 +444,7 @@ private:
     ClObject        *judged(const void *pointer, ClObject::Kind kind);
     /* The host's answer to a device query, kept the first time and given
      * from the guest after: a device's properties never change. */
-    cl_int           host_device_info(ClientTransport &wire, ClObject &device, cl_device_info name,
+    cl_int           host_device_info(ClientTransport &wire, ClDevice &device, cl_device_info name,
                                       size_t value_bytes, void *value, size_t *size_ret);
     /* The host's answer to a mem query, kept and given from the guest after
      * for the five that cannot change once the object is made. */
@@ -453,12 +460,12 @@ private:
     /* CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, answered from what
      * this driver takes rather than from the host: the host's own types are
      * file descriptors and a guest has none. */
-    cl_int           import_handle_types(ClObject &device, size_t value_bytes, void *value,
+    cl_int           import_handle_types(ClDevice &device, size_t value_bytes, void *value,
                                          size_t *size_ret);
-    cl_int           device_extensions(ClObject &device, size_t value_bytes, void *value,
+    cl_int           device_extensions(ClDevice &device, size_t value_bytes, void *value,
                                        size_t *size_ret);
     /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD, from D3DKMTQueryVideoMemoryInfo. */
-    cl_int           free_memory(size_t value_bytes, void *value, size_t *size_ret);
+    cl_int           free_memory(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
      * no property named twice, and every name one of `allowed`. */
     template <typename Property>
@@ -478,16 +485,23 @@ private:
      * transfer that asks the host to block does first. `driven`: the queue's
      * context is one the driver wakes (GuestClContext::wakes). */
     cl_int           drain(ClientTransport &wire, uint64_t queue, bool driven);
-    /* The adapter's vendor, name and PCI location, to the device report, the
-     * extension policy and the platform name. */
-    void             describe_adapter(Kmt &kmt, uint32_t adapter);
+    /* The adapter's vendor, name and PCI location, to the device's report and
+     * extension policy; its name into `name`. */
+    void             describe_adapter(uint32_t adapter, ClDevice &device, icd::AdapterString &name);
+    /* Learns the devices, once: which avgpu adapters there are and what
+     * Windows calls each, and the platform's name from them - asked again
+     * while one device has no name. No device is opened. Under lock_. */
+    void             learn_devices();
+    /* The host's handle for the device the context of `object` is on, which
+     * is what a command naming a device sends; 0 when it has none. */
+    uint64_t         host_device_of(ClObject &object);
     /* clGetDeviceIDsFromD3D10KHR's and 11's answer for an object on the adapter
-     * of `luid`: this ICD's device, or CL_DEVICE_NOT_FOUND. */
+     * of `luid`: that adapter's device, opened, or CL_DEVICE_NOT_FOUND. */
     cl_int           device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_uint *num_devices);
     /* The ID3D11Device `list` names, into `device`: null for none, and
      * CL_INVALID_D3D11_DEVICE_KHR for an object that is not one or is on
-     * another adapter. */
-    cl_int           d3d11_device_for(const ClPropertyList &list, void *&device);
+     * another adapter than `on`'s. */
+    cl_int           d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device);
     /* What a create over `resource` is judged by: `context` made from a
      * Direct3D 11 device, `flags` only the three access flags, `resource` of
      * `kind` and made on that device with `subresource` one of its, and no
@@ -533,7 +547,7 @@ private:
     /* The context object `context` names when it was made from a GL context
      * and can still send; null with the error set otherwise. */
     ClObject        *gl_sharing(cl_context context, cl_int *error);
-    void             note_build_log(ClientTransport &wire, uint64_t program, const char *options);
+    void             note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options);
     /* What a host create over a GL object answered, wrapped as a mem object. */
     cl_mem           gl_object(ClientTransport &wire, ClObject &context, uint64_t made, cl_int host_error,
                                cl_int *error);
@@ -552,18 +566,18 @@ private:
     /* Writes the application's bytes into an image just made, on a queue of
      * its own that is released again; CL_INVALID_OPERATION for an image type
      * whose layout is not rows and slices. */
-    cl_int           fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t image,
-                                const cl_image_desc &desc, const void *from);
+    cl_int           fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t device,
+                                uint64_t image, const cl_image_desc &desc, const void *from);
     /* The same for a buffer whose bytes one create could not carry. */
-    cl_int           fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t buffer,
-                                 size_t bytes,
-                                 const void *from);
-    /* A host queue on `context` that nothing else has, for a fill: nothing is
-     * ahead of its writes for the host to wait behind. 0, with the error, when
-     * the host will not make one. */
-    uint64_t         own_queue(ClientTransport &wire, uint64_t context, cl_int &error);
-    /* Opens the device this ICD shows, once, on the first ask. */
-    [[nodiscard]] Status open_device();
+    cl_int           fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t device,
+                                 uint64_t buffer, size_t bytes, const void *from);
+    /* A host queue on `context` and `device` that nothing else has, for a
+     * fill: nothing is ahead of its writes for the host to wait behind. 0,
+     * with the error, when the host will not make one. */
+    uint64_t         own_queue(ClientTransport &wire, uint64_t context, uint64_t device, cl_int &error);
+    /* Opens `device`, once, on the first ask: the ICD's own context on its
+     * adapter, and the host's handle for its GPU. Under lock_. */
+    [[nodiscard]] Status open_device(ClDevice &device);
     /* Gives one host object back, by the kind that says which call does it.
      * The one place that knows the mapping, so a guest object that cannot be
      * made and one the application released take the same path. A context is
@@ -590,11 +604,11 @@ private:
     ClIcdBinding          &binding_;
     ClDispatchTable        dispatch_;
     ClPlatform             platform_;
-    ClExtensionPolicy      extensions_;
     ClObjectTable          objects_;
-    icd::IcdConnection     connection_;
-    /* What the platform name is found with before a device exists. */
+    /* What the adapters are found with. */
     Kmt                   &kmt_;
+    /* Before the contexts, which hold links on the devices' connections. */
+    ClDevices              devices_;
     /* The NT handles this process holds for shared objects, which every
      * context's imports resolve through (feature 053). */
     icd::SharedHandles     shared_handles_;
@@ -602,12 +616,9 @@ private:
     BlockSource           &memory_;
     icd::ThreadLock       &send_lock_;
     icd::ThreadLock       &blocks_lock_;
-    /* The one device this ICD shows, made on the first clGetDeviceIDs. */
-    ClDeviceReport         device_;
-    ClObject              *device_object_;
-    ClInfoAnswers<device_answers, host_extensions_bytes> device_answers_;
     ClEventWatcher         watcher_;
     ClBlockingWait         waits_;
+    ClInfoAnswers<device_answers, host_extensions_bytes> device_answers_;
     ClPendingReads         reads_;
     ClRefusalLog           refusals_;
 };

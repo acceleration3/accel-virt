@@ -13,6 +13,7 @@
  * says nothing. */
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
@@ -29,6 +30,7 @@
 #include <cstring>
 #include <initializer_list>
 
+using av::AvgpuAdapters;
 using av::ClIcdRig;
 using av::FakeClLoader;
 using av::MockKmt;
@@ -686,10 +688,14 @@ struct ClIcdRootProbe {
      * believed itself sound while one of them was not would be a driver
      * answering calls over a table it cannot trust. */
     static ClPlatform        &platform(ClIcdRoot &root) { return root.platform_; }
-    static ClExtensionPolicy &extensions(ClIcdRoot &root) { return root.extensions_; }
     static ClObjectTable     &objects_of(ClIcdRoot &root) { return root.objects_; }
-    static icd::IcdConnection &connection(ClIcdRoot &root) { return root.connection_; }
-    static ClDeviceReport    &device(ClIcdRoot &root) { return root.device_; }
+    /* The first device's parts, which exist once the devices are learnt. */
+    static ClDevice &first_device(ClIcdRoot &root)
+    { root.learn_devices();
+      return root.devices_.at(0u); }
+    static ClExtensionPolicy &extensions(ClIcdRoot &root) { return first_device(root).extensions(); }
+    static icd::IcdConnection &connection(ClIcdRoot &root) { return first_device(root).connection(); }
+    static ClDeviceReport    &device(ClIcdRoot &root) { return first_device(root).decided(); }
     static ClPendingReads    &reads_of(ClIcdRoot &root) { return root.reads_; }
     static ClEventWatcher    &watcher(ClIcdRoot &root) { return root.watcher_; }
 
@@ -2028,7 +2034,8 @@ TEST(cl_icd_root, a_state_dump_reads_under_the_lock_or_says_busy)
   char            free_bytes[2048] = {};
   av::StateWriter free_writer(free_bytes, sizeof free_bytes);
   rig.root().report(free_writer);
-  CHECK(std::strstr(free_writer.dump(), "clicd/0 busy=false device=false") != nullptr);
+  CHECK(std::strstr(free_writer.dump(), "clicd/0 busy=false") != nullptr);
+  CHECK(std::strstr(free_writer.dump(), "devices/0 learnt=false left_out=0") != nullptr);
   CHECK(std::strstr(free_writer.dump(), "reads_outstanding=0") != nullptr);
   CHECK(!rig.lock().held());
   rig.lock().held_elsewhere(true);
@@ -2160,8 +2167,8 @@ TEST(cl_icd_root, a_queue_says_its_context_and_device_and_asks_the_host_the_rest
  * KiB; on another vendor's it is the host's question. */
 TEST(cl_icd_root, an_amd_adapter_answers_its_free_memory_from_windows)
 { ClIcdRig rig;
-  rig.kmt().set_identity(0u, av::PciIdentity(0x1002u, 0x13C0u, av::AdapterSearch::virtio_vendor,
-                                             av::AdapterSearch::av_subsystem, 0xC9u));
+  rig.kmt().set_identity(0u, av::PciIdentity(0x1002u, 0x13C0u, av::AvgpuAdapters::virtio_vendor,
+                                             av::AvgpuAdapters::av_subsystem, 0xC9u));
   rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
   rig.kmt().set_video_memory(av::MemorySegmentGroup::local, 512ull << 20u, 128ull << 20u);
   cl_device_id device = opened_device(rig);

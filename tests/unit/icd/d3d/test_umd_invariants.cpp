@@ -7,6 +7,7 @@
  * are the same kind of thing: a branch a caller can reach and a test must. */
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
@@ -30,6 +31,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::FakeD3dRuntime;
 using av::MockKmt;
 using av::MockPlatform;
@@ -127,8 +129,8 @@ namespace {
 
 constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
 
-const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                         AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
@@ -459,7 +461,8 @@ TEST(umd_root_open, a_kernel_that_refuses_the_adapter_close_is_logged_not_lost)
  * found, the identity was not, and what was made is handed back. */
 TEST(umd_root_open, a_refused_identity_gives_the_adapter_back_and_logs_a_refused_close)
 { UmdRig rig;
-  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);
+  /* The identity's ask, after the one listing the adapters. */
+  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 2u, MockKmt::invalid_parameter);
   rig.kmt().fail_at(MockKmt::Call::close_adapter, 1u, MockKmt::invalid_parameter);
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
   CHECK_EQ(runtime.open(), hr_fail);

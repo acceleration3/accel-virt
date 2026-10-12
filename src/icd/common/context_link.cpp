@@ -32,6 +32,12 @@ void ContextLink::release()
     link_ = IcdConnection::no_link;
 }
 
+bool ContextLink::on(const IcdConnection &connection) const
+{
+    AV_SCOPE("ContextLink::on");
+    return &connection_ == &connection;
+}
+
 bool ContextLink::held() const
 {
     AV_SCOPE("ContextLink::held");

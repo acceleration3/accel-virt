@@ -7,6 +7,7 @@
 #include "core/support/status.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -32,6 +33,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::AvgpuAdapters;
 using av::CommandHeader;
 using av::IcdRig;
 using av::MockKmt;
@@ -215,7 +217,9 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
        * over the host's fd rather than passed on as Win32 (research.md §10). */
       "vkDestroySemaphore", "vkGetPhysicalDeviceExternalBufferProperties",
       "vkGetPhysicalDeviceExternalBufferPropertiesKHR", "vkGetPhysicalDeviceExternalSemaphoreProperties",
-      "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"};
+      "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR",
+      /* Every adapter's devices, through the instances one spans. */
+      "vkEnumeratePhysicalDevices", "vkEnumeratePhysicalDeviceGroups", "vkEnumeratePhysicalDeviceGroupsKHR"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);
@@ -442,8 +446,9 @@ TEST(icd_root, create_instance_opens_its_own_connection_and_wraps_the_hosts_inst
   CHECK_EQ(rig.kmt().commands(), 1u);
   CHECK_EQ(rig.kmt().command_id(0u), static_cast<std::uint32_t>(kCmd_vkCreateInstance));
   /* The connection opened under the root's lock, the command under the send
-   * lock, and the handle wrapped under the root's lock again. */
-  CHECK(std::strcmp(rig.trace().text(), "HhSsHh") == 0);
+   * lock, and the handle wrapped under the root's lock again; then its span
+   * made and its adapter looked up, each under the root's lock. */
+  CHECK(std::strcmp(rig.trace().text(), "HhSsHhHhHh") == 0);
   const Connection *const connection = av::icd::connection_of(instance);
   CHECK(connection != nullptr && connection->opened());
   CHECK_EQ(connection->luid(), IcdRig::adapter_luid);
@@ -494,11 +499,12 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::ScriptedWindowChains chains;
       IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows, chains);
       if (!refusal.no_adapter) {
-          kmt.add_adapter(av::PciIdentity(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
-                                          av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem),
+          kmt.add_adapter(av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                          av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                           av::AdapterScenario::wddm_3_2);
       }
-      if (refusal.no_luid) kmt.fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);
+      /* The connection's own ask, after the one listing the adapters. */
+      if (refusal.no_luid) kmt.fail_at(MockKmt::Call::adapter_luid, 2u, MockKmt::invalid_parameter);
       if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, 1u, MockKmt::invalid_parameter);
       VkInstanceCreateInfo info = {};
       info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -579,8 +585,8 @@ TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_do
   rig.host().vk_physical_devices(0, 1u);
   CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, &physical_device), VK_SUCCESS);
   /* The instance is unwrapped under the root's lock inside the send lock, never
-   * the other way round. */
-  CHECK(std::strcmp(rig.trace().text(), "HhHhSHhsHh") == 0);
+   * the other way round; its span is looked up under the root's lock alone. */
+  CHECK(std::strcmp(rig.trace().text(), "HhHhHhSHhsHh") == 0);
   CHECK(physical_device != VK_NULL_HANDLE);
   CHECK_EQ(av::vkproto::handle_to_wire(physical_device), ScriptedHost::vk_physical_device);
   const EnumeratePhysical enumerate = rig.entry<EnumeratePhysical>(instance, "vkEnumeratePhysicalDevices");
@@ -927,7 +933,7 @@ TEST(icd_root, invariants_see_a_connection_left_pending_closed_or_unowned_and_a_
   /* Closed under the root, which never leaves one closed: the root says so. */
   connection->close();
   CHECK(!rig.root().invariants_hold());
-  CHECK_STATUS(connection->open(), Status::ok);
+  CHECK_STATUS(connection->open(0u), Status::ok);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }

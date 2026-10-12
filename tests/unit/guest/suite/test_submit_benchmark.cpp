@@ -12,6 +12,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/submit_benchmark.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -22,6 +23,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuestReport;
 using av::MockKmt;
 using av::PciIdentity;
@@ -30,8 +32,8 @@ using av::SubmitBenchmark;
 
 namespace {
 
-const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* Ticks per second in MockKmt's clock, and the cost of one kernel submission:
  * 20 ticks is two microseconds there. */
 constexpr std::uint64_t submit_ticks = 20u;
@@ -47,7 +49,7 @@ public:
     Rig() : search_(kmt_)
     {
         kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(av), Status::ok);
+        CHECK_STATUS(search_.find_avgpu(0u), Status::ok);
         kmt_.answer_waits(nullptr, 0u);
         kmt_.spend_on_submit(submit_ticks);
     }

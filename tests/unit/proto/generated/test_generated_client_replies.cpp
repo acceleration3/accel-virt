@@ -11,6 +11,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
@@ -37,6 +38,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuardedBuffer;
 using av::GuestReport;
 using av::MockKmt;
@@ -54,8 +56,8 @@ using av::WireWriter;
 
 namespace {
 
-const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint8_t  untouched = 0xC3u;
 constexpr std::uint32_t never_reported = 77u;
 /* A Vulkan reply's result and count, before its elements. */
@@ -68,7 +70,7 @@ public:
         : search_(kmt_), host_(kmt_), steps_(kmt_, report_, "replies"), link_(kmt_, search_, steps_, sub_api)
     {
         kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(av), Status::ok);
+        CHECK_STATUS(search_.find_avgpu(0u), Status::ok);
         CHECK_STATUS(link_.open(), Status::ok);
     }
 

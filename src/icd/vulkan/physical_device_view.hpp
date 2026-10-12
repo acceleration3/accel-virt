@@ -1,7 +1,11 @@
 /* The physical device's properties as this guest's adapter presents them
  * (research.md §8): the host GPU's answers, with what the guest owns written
- * over them - an API version no newer than the ICD implements, and the adapter's
- * LUID, which is how an application pairs the Vulkan device with the DXGI one.
+ * over them - an API version no newer than the ICD implements, the adapter's
+ * LUID, which is how an application pairs the Vulkan device with the DXGI one,
+ * and the adapter's name, which is what every other API calls the same GPU:
+ * the host driver's own ("AMD Ryzen 9 9950X3D ... (RADV RAPHAEL_MENDOCINO)")
+ * names a processor, and a GPU list with it in names a device the guest's
+ * Device Manager, DXGI and OpenCL call by another name.
  *
  * The reply is the host's to write, and the generated decoder writes every
  * structure's sType from it, including the application's own nodes in the
@@ -36,8 +40,10 @@ public:
     /* An adapter is one node: the mask a valid LUID comes with. */
     static constexpr uint32_t only_node = 1u;
 
-    /* `latest_version` is the API version the ICD implements. */
-    PhysicalDeviceView(ClientTransport &transport, uint64_t luid, uint32_t latest_version, LogSink &log);
+    /* `latest_version` is the API version the ICD implements; `name` the
+     * adapter's (Connection::adapter_name), empty to keep the host's. */
+    PhysicalDeviceView(ClientTransport &transport, uint64_t luid, const char *name, uint32_t latest_version,
+                       LogSink &log);
     PhysicalDeviceView(const PhysicalDeviceView &) = delete;
     PhysicalDeviceView &operator=(const PhysicalDeviceView &) = delete;
 
@@ -51,9 +57,11 @@ private:
     [[nodiscard]] bool remember(VkPhysicalDeviceProperties2 *answer);
     void               restore();
     void               write_luid();
+    void               write_name(VkPhysicalDeviceProperties &properties) const;
 
     ClientTransport    &transport_;
     uint64_t            luid_;
+    const char         *name_;
     uint32_t            latest_version_;
     LogSink            &log_;
     VkBaseOutStructure *nodes_[max_chain];

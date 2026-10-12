@@ -11,6 +11,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/shared_object_probe.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -23,6 +24,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuestReport;
 using av::MockKmt;
 using av::PciIdentity;
@@ -32,8 +34,8 @@ using av::Status;
 
 namespace {
 
-const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 /* What the probe fills the exportable allocation with before it exports it,
  * which is what its OpenCL read is judged against. */

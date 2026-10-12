@@ -3,7 +3,7 @@
 #include "icd/opencl/d3d11_bridge.hpp"
 #include "icd/opencl/d3d11_object.hpp"
 
-#include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
@@ -73,9 +73,9 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      D3d11Bridge &d3d11,
                      ClIcdBinding &binding)
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
-      extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table(), objects_lock), connection_(kmt), kmt_(kmt),
-      shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock), device_(0u),
-      device_object_(nullptr), device_answers_(), watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), reads_(), refusals_(log)
+      objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(kmt),
+      shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
+      watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(), reads_(), refusals_(log)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -130,34 +130,56 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
         if (size_ret != nullptr) *size_ret = sizeof none;
         return CL_SUCCESS;
     }
-    /* Asked before any device exists, the name is found by the adapter's
-     * handle alone - no device is opened for it, which every process asking
+    /* Asked before any device exists, the name is found by the adapters'
+     * handles alone - no device is opened for it, which every process asking
      * would then pay. */
-    if (name == CL_PLATFORM_NAME && !platform_.names_an_adapter()) {
-        AdapterSearch search(kmt_);
-        if (search.find_avgpu(0u) == Status::ok) describe_adapter(kmt_, search.adapter());
+    if (name == CL_PLATFORM_NAME) {
+        lock_.acquire();
+        learn_devices();
+        lock_.release();
     }
     return platform_.info(platform, name, value_bytes, value, size_ret);
+}
+
+void ClIcdRoot::learn_devices()
+{
+    AV_SCOPE("ClIcdRoot::learn_devices");
+    /* A lone device Windows would not describe is asked about again: its name
+     * is the platform's, and an application shows the platform's name. */
+    if (devices_.learnt() && (devices_.count() != 1u || platform_.names_an_adapter())) return;
+    AvgpuAdapters adapters(kmt_);
+    if (adapters.learn() != Status::ok) return;
+    if (!devices_.learnt()) {
+        devices_.learn(adapters);
+        if (devices_.left_out() != 0u)
+            log_.write("avcl: an avgpu adapter is left out: no LUID, or past the devices shown");
+    }
+    icd::AdapterString name;
+    for (uint32_t index = 0u; index < devices_.count(); ++index) {
+        ClDevice &device = devices_.at(index);
+        describe_adapter(adapters.adapter(adapters.index_of(device.luid())), device, name);
+    }
+    /* The platform is named after its GPU when it has one; with several, no
+     * one GPU's name says what it is. */
+    if (devices_.count() == 1u) platform_.observe_adapter(name.text());
 }
 
 /* What Windows says of the adapter the device is on, which is what the
  * device's vendor, name and PCI location are (docs/vendor-libraries.md): an
  * adapter it will not describe leaves those as they were. */
-void ClIcdRoot::describe_adapter(Kmt &kmt, uint32_t adapter)
+void ClIcdRoot::describe_adapter(uint32_t adapter, ClDevice &device, icd::AdapterString &name)
 {
     AV_SCOPE("ClIcdRoot::describe_adapter");
     PciIdentity identity;
     PciLocation location;
-    uint16_t    name[icd::AdapterString::bytes] = {};
-    if (kmt.query_identity(adapter, identity) != Status::ok ||
-        kmt.query_adapter_location(adapter, location) != Status::ok ||
-        kmt.query_adapter_name(adapter, name, icd::AdapterString::bytes) != Status::ok)
+    uint16_t    wide[icd::AdapterString::bytes] = {};
+    if (kmt_.query_identity(adapter, identity) != Status::ok ||
+        kmt_.query_adapter_location(adapter, location) != Status::ok ||
+        kmt_.query_adapter_name(adapter, wide, icd::AdapterString::bytes) != Status::ok)
         return;
-    device_.observe_adapter(identity, location, name);
-    extensions_.observe_vendor(identity.vendor());
-    icd::AdapterString narrow;
-    narrow.take(name);
-    platform_.observe_adapter(narrow.text());
+    device.decided().observe_adapter(identity, location, wide);
+    device.extensions().observe_vendor(identity.vendor());
+    name.take(wide);
 }
 
 bool ClIcdRoot::spells(const char *name, const char *wanted) const
@@ -184,15 +206,16 @@ void *ClIcdRoot::extension_function(const char *name)
     return nullptr;
 }
 
-Status ClIcdRoot::open_device()
+Status ClIcdRoot::open_device(ClDevice &device)
 {
     AV_SCOPE("ClIcdRoot::open_device");
-    if (device_object_ != nullptr) return Status::ok;
+    if (device.object() != nullptr) return Status::ok;
     /* The ICD's own context: what its device queries are asked over, and what
      * holds the adapter open for as long as a device exists. An application's
      * contexts are its own, made beside this one. */
     GuestClContext *context = nullptr;
-    const Status    made = contexts_.create(context, connection_, memory_, send_lock_, blocks_lock_, log_, shared_handles_);
+    const Status    made =
+        contexts_.create(context, device.connection(), memory_, send_lock_, blocks_lock_, log_, shared_handles_);
     if (made != Status::ok) {
         log_.write("avcl: no room for the ICD's own context");
         return made;
@@ -209,7 +232,7 @@ Status ClIcdRoot::open_device()
         return opened;
     }
     /* What the host has, asked once. The device it answers is the one this
-     * ICD shows, because the executor bound one GPU to this context. */
+     * device stands for, because the executor bound one GPU to the adapter. */
     uint64_t host_platform = 0u;
     cl_uint  platforms = 0u;
     if (av::clproto::av_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) != CL_SUCCESS ||
@@ -225,36 +248,28 @@ Status ClIcdRoot::open_device()
         static_cast<void>(contexts_.destroy(context));
         return Status::not_supported;
     }
-    /* The adapter this device is on, which is what CL_DEVICE_LUID_KHR names:
-     * the host GPU's own LUID would send an application looking for a device
-     * that is not the one it has. */
-    uint64_t adapter_luid = 0u;
-    static_cast<void>(connection_.device(0u).kmt().adapter_luid(
-        connection_.device(0u).adapter(), adapter_luid));
-    device_.observe_luid(adapter_luid);
-    describe_adapter(connection_.device(0u).kmt(), connection_.device(0u).adapter());
     ClObject *object = nullptr;
     const Status held = objects_.make(ClObject::Kind::device, host_device, context, nullptr, object);
     if (held != Status::ok) {
         static_cast<void>(contexts_.destroy(context));
         return held;
     }
-    device_object_ = object;
+    device.opened(*object);
     /* What the device says about itself, capped at what this ICD implements. */
     char text[64] = {};
     size_t bytes = 0u;
     if (av::clproto::av_clGetDeviceInfo(*wire, host_device, CL_DEVICE_VERSION, sizeof text, text,
                                          &bytes) == CL_SUCCESS) {
-        static_cast<void>(device_.observe_version(text, bytes));
+        static_cast<void>(device.decided().observe_version(text, bytes));
     }
     if (av::clproto::av_clGetDeviceInfo(*wire, host_device, CL_DEVICE_OPENCL_C_VERSION, sizeof text,
                                          text, &bytes) == CL_SUCCESS) {
-        static_cast<void>(device_.observe_c_version(text, bytes));
+        static_cast<void>(device.decided().observe_c_version(text, bytes));
     }
     cl_device_svm_capabilities svm = 0u;
     if (av::clproto::av_clGetDeviceInfo(*wire, host_device, CL_DEVICE_SVM_CAPABILITIES, sizeof svm,
                                          &svm, &bytes) == CL_SUCCESS) {
-        device_.observe_svm(svm);
+        device.decided().observe_svm(svm);
     }
     return Status::ok;
 }
@@ -278,16 +293,28 @@ cl_int ClIcdRoot::device_ids(cl_platform_id platform, cl_device_type type, cl_ui
         if (num_devices != nullptr) *num_devices = 0u;
         return CL_DEVICE_NOT_FOUND;
     }
+    /* Every device whose adapter opens, in their order: the count is what
+     * there is, and the list as many of them as fit. */
+    cl_uint found = 0u;
     lock_.acquire();
-    const Status opened = open_device();
-    lock_.release();
-    if (opened != Status::ok) {
-        if (num_devices != nullptr) *num_devices = 0u;
-        return CL_DEVICE_NOT_FOUND;
+    learn_devices();
+    for (uint32_t index = 0u; index < devices_.count(); ++index) {
+        ClDevice &device = devices_.at(index);
+        if (open_device(device) != Status::ok) continue;
+        if (devices != nullptr && found < num_entries) devices[found] = reinterpret_cast<cl_device_id>(device.object());
+        ++found;
     }
-    if (devices != nullptr) devices[0] = reinterpret_cast<cl_device_id>(device_object_);
-    if (num_devices != nullptr) *num_devices = 1u;
-    return CL_SUCCESS;
+    lock_.release();
+    if (num_devices != nullptr) *num_devices = found;
+    return found != 0u ? CL_SUCCESS : CL_DEVICE_NOT_FOUND;
+}
+
+uint64_t ClIcdRoot::host_device_of(ClObject &object)
+{
+    AV_SCOPE("ClIcdRoot::host_device_of");
+    GuestClContext *const context = context_of(object);
+    ClDevice *const       device = context != nullptr ? devices_.running(*context) : nullptr;
+    return device != nullptr && device->object() != nullptr ? device->object()->wire() : 0u;
 }
 
 cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t value_bytes,
@@ -295,10 +322,11 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
 {
     AV_SCOPE("ClIcdRoot::device_info");
     ClObject *const object = judged(device, ClObject::Kind::device);
-    if (object == nullptr) return CL_INVALID_DEVICE;
+    ClDevice *const shown = object != nullptr ? devices_.of(*object) : nullptr;
+    if (shown == nullptr) return CL_INVALID_DEVICE;
     /* The four this ICD decides name the avgpu adapter rather than the host
      * GPU, or cap what it implements; everything else is the host's own. */
-    if (device_.decides(name)) return device_.info(name, value_bytes, value, size_ret);
+    if (shown->decided().decides(name)) return shown->decided().info(name, value_bytes, value, size_ret);
     /* The answers that are objects: the host's handles for its platform and
      * its parent device are nothing in this process - an application hands
      * the platform straight back, to clGetDeviceIDsFromD3D10KHR among others,
@@ -315,31 +343,31 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
      * GPU has and the policy is what this ICD carries, and passing the host's
      * through would offer an application every extension rusticl implements
      * over a wire that carries none of them. */
-    if (name == CL_DEVICE_EXTENSIONS) return device_extensions(*object, value_bytes, value, size_ret);
+    if (name == CL_DEVICE_EXTENSIONS) return device_extensions(*shown, value_bytes, value, size_ret);
     /* And the handle types an import may name, which is the question an
      * application asks before it names one: this driver takes the opaque
      * Win32 handle and nothing else, and answers so only where it reports the
      * extension that defines the query. */
     if (name == CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR)
-        return import_handle_types(*object, value_bytes, value, size_ret);
-    if (name == free_memory_amd && device_.on_vendor(ClDeviceReport::amd_vendor))
-        return free_memory(value_bytes, value, size_ret);
+        return import_handle_types(*shown, value_bytes, value, size_ret);
+    if (name == free_memory_amd && shown->decided().on_vendor(ClDeviceReport::amd_vendor))
+        return free_memory(*shown, value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;
-    return host_device_info(*wire, *object, name, value_bytes, value, size_ret);
+    return host_device_info(*wire, *shown, name, value_bytes, value, size_ret);
 }
 
 /* Asked of the host with room for the longest answer kept, whatever the
  * caller's room, so the answer kept is whole. A query refused as an invalid
  * value - an unknown name, or an answer longer than that room - is asked again
  * as the caller put it, so the caller gets the host's own answer to it. */
-cl_int ClIcdRoot::free_memory(size_t value_bytes, void *value, size_t *size_ret)
+cl_int ClIcdRoot::free_memory(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::free_memory");
     uint64_t budget = 0u;
     uint64_t usage = 0u;
-    if (connection_.device(0u).kmt().query_video_memory(connection_.device(0u).adapter(), MemorySegmentGroup::local,
-                                                       budget, usage) != Status::ok)
+    if (kmt_.query_video_memory(device.connection().adapter(), MemorySegmentGroup::local, budget, usage) !=
+        Status::ok)
         return CL_OUT_OF_RESOURCES;
     /* Nothing says how the free memory is broken up, so the largest block is
      * all of it, as AMD's own driver answers on an idle GPU. */
@@ -348,29 +376,32 @@ cl_int ClIcdRoot::free_memory(size_t value_bytes, void *value, size_t *size_ret)
     return ClInfoRequest(value_bytes, value, size_ret).give(answer, sizeof answer);
 }
 
-cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClObject &device, cl_device_info name,
+cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClDevice &device, cl_device_info name,
                                    size_t value_bytes, void *value, size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::host_device_info");
     const ClInfoRequest asked(value_bytes, value, size_ret);
+    const uint64_t      host = device.object()->wire();
+    /* Kept by the guest's device, which no two devices share: two host GPUs'
+     * handles are numbers of two drivers' making, and may be equal. */
+    const uint64_t      key = reinterpret_cast<uintptr_t>(device.object());
     cl_int              kept = CL_SUCCESS;
-    if (device_answers_.answer(device.wire(), name, asked, kept)) return kept;
+    if (device_answers_.answer(key, name, asked, kept)) return kept;
     uint8_t      answer[host_extensions_bytes];
     size_t       answered = 0u;
-    const cl_int fetched =
-        av::clproto::av_clGetDeviceInfo(wire, device.wire(), name, sizeof answer, answer, &answered);
+    const cl_int fetched = av::clproto::av_clGetDeviceInfo(wire, host, name, sizeof answer, answer, &answered);
     if (fetched == CL_INVALID_VALUE)
-        return av::clproto::av_clGetDeviceInfo(wire, device.wire(), name, value_bytes, value, size_ret);
+        return av::clproto::av_clGetDeviceInfo(wire, host, name, value_bytes, value, size_ret);
     if (fetched != CL_SUCCESS) return fetched;
-    device_answers_.keep(device.wire(), name, answer, answered);
+    device_answers_.keep(key, name, answer, answered);
     return asked.give(answer, answered);
 }
 
-cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *value,
+cl_int ClIcdRoot::device_extensions(ClDevice &device, size_t value_bytes, void *value,
                                     size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::device_extensions");
-    ClientTransport *const wire = wire_of(device);
+    ClientTransport *const wire = wire_of(*device.object());
     if (wire == nullptr) return CL_INVALID_DEVICE;
     char         host[host_extensions_bytes] = {};
     size_t       answered = 0u;
@@ -382,15 +413,15 @@ cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *
     /* Measured, then written: the policy writes nothing into room its answer
      * does not fit, which is what lets the size query and the fetch be the
      * same call twice. */
-    const size_t needed = extensions_.report(host, answered, nullptr, 0u);
+    const size_t needed = device.extensions().report(host, answered, nullptr, 0u);
     if (size_ret != nullptr) *size_ret = needed;
     if (value == nullptr) return CL_SUCCESS;
     if (value_bytes < needed) return CL_INVALID_VALUE;
-    static_cast<void>(extensions_.report(host, answered, static_cast<char *>(value), value_bytes));
+    static_cast<void>(device.extensions().report(host, answered, static_cast<char *>(value), value_bytes));
     return CL_SUCCESS;
 }
 
-cl_int ClIcdRoot::import_handle_types(ClObject &device, size_t value_bytes, void *value,
+cl_int ClIcdRoot::import_handle_types(ClDevice &device, size_t value_bytes, void *value,
                                       size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::import_handle_types");
@@ -399,7 +430,7 @@ cl_int ClIcdRoot::import_handle_types(ClObject &device, size_t value_bytes, void
     if (asked != CL_SUCCESS) return asked;
     /* A query of an extension this device does not report is a query it does
      * not have, which is what the API answers CL_INVALID_VALUE for. */
-    if (!extensions_.offered_by(reported, sizeof reported, "cl_khr_external_memory"))
+    if (!device.extensions().offered_by(reported, sizeof reported, "cl_khr_external_memory"))
         return CL_INVALID_VALUE;
     const cl_external_memory_handle_type_khr taken = CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR;
     if (size_ret != nullptr) *size_ret = sizeof taken;
@@ -544,12 +575,6 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, shared);
         return nullptr;
     }
-    void        *d3d11_device = nullptr;
-    const cl_int d3d11_shared = d3d11_device_for(list, d3d11_device);
-    if (d3d11_shared != CL_SUCCESS) {
-        report_error(error, d3d11_shared);
-        return nullptr;
-    }
     /* A context may share with OpenGL and Direct3D 11 both. The extensions
      * say CL_INVALID_OPERATION, and AMD's and NVIDIA's drivers make the
      * context anyway - DaVinci Resolve asks for exactly that, and gets no GPU
@@ -565,14 +590,24 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, CL_INVALID_VALUE);
         return nullptr;
     }
-    /* One device, and it has to be this ICD's. */
-    if (num_devices != 1u || judged(devices[0], ClObject::Kind::device) == nullptr) {
+    /* One device, and it has to be this ICD's: devices on two adapters run on
+     * two host GPUs, which no one host context spans. */
+    ClObject *const named_device = num_devices == 1u ? judged(devices[0], ClObject::Kind::device) : nullptr;
+    ClDevice *const device = named_device != nullptr ? devices_.of(*named_device) : nullptr;
+    if (device == nullptr) {
         report_error(error, CL_INVALID_DEVICE);
+        return nullptr;
+    }
+    void        *d3d11_device = nullptr;
+    const cl_int d3d11_shared = d3d11_device_for(list, *device, d3d11_device);
+    if (d3d11_shared != CL_SUCCESS) {
+        report_error(error, d3d11_shared);
         return nullptr;
     }
     lock_.acquire();
     GuestClContext *context = nullptr;
-    Status          made = contexts_.create(context, connection_, memory_, send_lock_, blocks_lock_, log_, shared_handles_);
+    Status          made =
+        contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, log_, shared_handles_);
     if (made == Status::ok) made = context->make(gl_share, watcher_.wake_handle());
     if (made == Status::ok) context->keep_properties(properties);
     if (made != Status::ok) {
@@ -723,22 +758,19 @@ void ClIcdRoot::report(StateWriter &writer)
      * runs while application threads release objects and open devices. */
     const icd::ReportGate gate(lock_, writer, "clicd");
     if (!gate.held()) return;
-    writer.flag("device", device_object_ != nullptr);
+    devices_.report(writer);
     objects_.report(writer);
     writer.number("reads_outstanding", reads_.outstanding());
     writer.number("reads_delivered", reads_.delivered());
     writer.number("wait_rounds", waits_.rounds());
     writer.number("wait_raises", waits_.raises_asked());
-    connection_.report(writer);
     writer.close();
 }
 
 bool ClIcdRoot::invariants_hold() const
 {
     AV_SCOPE("ClIcdRoot::invariants_hold");
-    if (!platform_.invariants_hold() || !extensions_.invariants_hold()) return false;
-    if (!objects_.invariants_hold() || !connection_.invariants_hold()) return false;
-    if (!device_.invariants_hold()) return false;
+    if (!platform_.invariants_hold() || !objects_.invariants_hold() || !devices_.invariants_hold()) return false;
     if (!reads_.invariants_hold() || !watcher_.invariants_hold()) return false;
     /* A platform the loader would drop is one this ICD must never hand out. */
     return platform_.dispatchable();
@@ -765,7 +797,12 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
         report_error(error, CL_INVALID_CONTEXT);
         return nullptr;
     }
-    if (judged(device, ClObject::Kind::device) == nullptr) {
+    /* The device has to be the one the context is made on: a queue runs on
+     * its context's host GPU and no other. */
+    ClObject *const named_device = judged(device, ClObject::Kind::device);
+    const uint64_t  host_device = host_device_of(*held);
+    if (named_device == nullptr || host_device == 0u || named_device->wire() != host_device ||
+        devices_.of(*named_device) != devices_.running(*held->context())) {
         report_error(error, CL_INVALID_DEVICE);
         return nullptr;
     }
@@ -774,19 +811,12 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    /* The host's own device, which is what its context was made on: the
-     * application's cl_device_id names this ICD's, and the two are one GPU. */
-    ClObject *const host_device = device_object_;
-    if (host_device == nullptr) {
-        report_error(error, CL_INVALID_DEVICE);
-        return nullptr;
-    }
     uint64_t       bits = 0u;
     const bool     named = list.names(CL_QUEUE_PROPERTIES, bits);
     const uint64_t profiled[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), CL_QUEUE_PROFILING_ENABLE, 0u};
     cl_int         host_error = CL_SUCCESS;
     const uint64_t queue = av::clproto::av_clCreateCommandQueueWithProperties(
-        *wire, held->wire(), host_device->wire(),
+        *wire, held->wire(), host_device,
         named && (bits & CL_QUEUE_PROFILING_ENABLE) != 0u ? profiled : nullptr, &host_error);
     if (queue == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
@@ -921,7 +951,8 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         return nullptr;
     }
     if (copies_after) {
-        const cl_int filled = fill_buffer(*wire, on->staging(), held->wire(), buffer, bytes, host_pointer);
+        const cl_int filled =
+            fill_buffer(*wire, on->staging(), held->wire(), host_device_of(*held), buffer, bytes, host_pointer);
         if (filled != CL_SUCCESS) {
             give_back_to_host(*wire, ClObject::Kind::mem, buffer);
             report_error(error, filled);
@@ -974,17 +1005,17 @@ cl_int ClIcdRoot::build_program(cl_program program, const char *options)
     if (held == nullptr) return CL_INVALID_PROGRAM;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* Built for the one device this ICD shows; a null list is what the API
-     * means by "every device of the context", which is the same device. */
+    /* Built for the context's one device; a null list is what the API means
+     * by "every device of the context", which is that device. */
     const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, options);
-    if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), options);
+    if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
     return built;
 }
 
 /* The host compiler's own words for a program that did not build: an
  * application that reports only "a problem" leaves them nowhere else. Its
  * first lines, since a large program's log runs long. */
-void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, const char *options)
+void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options)
 {
     AV_SCOPE("ClIcdRoot::note_build_log");
     constexpr size_t   most_bytes = 1u << 20;
@@ -995,15 +1026,15 @@ void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, const ch
     line.append(options != nullptr ? options : "");
     log_.write(line.text());
     size_t size = 0u;
-    if (device_object_ == nullptr ||
-        av::clproto::av_clGetProgramBuildInfo(wire, program, device_object_->wire(), CL_PROGRAM_BUILD_LOG, 0u,
+    if (device == 0u ||
+        av::clproto::av_clGetProgramBuildInfo(wire, program, device, CL_PROGRAM_BUILD_LOG, 0u,
                                                nullptr, &size) != CL_SUCCESS ||
         size == 0u || size > most_bytes)
         return;
     char *const text = static_cast<char *>(memory_.allocate(size + 1u, Pool::paged));
     if (text == nullptr) return;
     ScopeExit given_back([&] { memory_.release(text); });
-    if (av::clproto::av_clGetProgramBuildInfo(wire, program, device_object_->wire(), CL_PROGRAM_BUILD_LOG, size,
+    if (av::clproto::av_clGetProgramBuildInfo(wire, program, device, CL_PROGRAM_BUILD_LOG, size,
                                                text, nullptr) != CL_SUCCESS)
         return;
     text[size] = '\0';
@@ -1649,8 +1680,8 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
     AV_SCOPE("ClIcdRoot::context_info");
     ClObject *const held = judged(context, ClObject::Kind::context);
     if (held == nullptr) return CL_INVALID_CONTEXT;
-    /* All of it this ICD's own: its one device, the application's count, the
-     * list the application gave. The host's context has other answers. */
+    /* All of it this ICD's own: its device, the application's count, the list
+     * the application gave. The host's context has other answers. */
     const ClInfoRequest asked(value_bytes, value, size_ret);
     switch (name) {
     case CL_CONTEXT_REFERENCE_COUNT: {
@@ -1664,7 +1695,8 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
         return asked.give(&one, sizeof one);
     }
     case CL_CONTEXT_DEVICES: {
-        const cl_device_id device = reinterpret_cast<cl_device_id>(device_object_);
+        ClDevice *const    on = devices_.running(*held->context());
+        const cl_device_id device = on != nullptr ? reinterpret_cast<cl_device_id>(on->object()) : nullptr;
         return asked.give(&device, sizeof device);
     }
     case CL_CONTEXT_PROPERTIES: {
@@ -1698,7 +1730,8 @@ cl_int ClIcdRoot::queue_info(cl_command_queue queue, cl_command_queue_info name,
         return asked.give(&owner, sizeof owner);
     }
     case CL_QUEUE_DEVICE: {
-        const cl_device_id device = reinterpret_cast<cl_device_id>(device_object_);
+        ClDevice *const    on = devices_.running(*held->context());
+        const cl_device_id device = on != nullptr ? reinterpret_cast<cl_device_id>(on->object()) : nullptr;
         return asked.give(&device, sizeof device);
     }
     case CL_QUEUE_REFERENCE_COUNT: {
@@ -1998,12 +2031,16 @@ cl_int ClIcdRoot::program_build_info(cl_program program, cl_device_id device,
     AV_SCOPE("ClIcdRoot::program_build_info");
     ClObject *const held = judged(program, ClObject::Kind::program);
     if (held == nullptr) return CL_INVALID_PROGRAM;
-    if (judged(device, ClObject::Kind::device) == nullptr) return CL_INVALID_DEVICE;
+    /* The program is its context's, built for that context's one device. */
+    ClObject *const named_device = judged(device, ClObject::Kind::device);
+    const uint64_t  host_device = host_device_of(*held);
+    if (named_device == nullptr || host_device == 0u || named_device->wire() != host_device ||
+        devices_.of(*named_device) != devices_.running(*held->context()))
+        return CL_INVALID_DEVICE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* judged() found a device, and the only one this ICD makes is this. */
-    return av::clproto::av_clGetProgramBuildInfo(*wire, held->wire(), device_object_->wire(), name,
-                                                  value_bytes, value, size_ret);
+    return av::clproto::av_clGetProgramBuildInfo(*wire, held->wire(), host_device, name, value_bytes, value,
+                                                  size_ret);
 }
 
 cl_int ClIcdRoot::kernel_work_group_info(cl_kernel kernel, cl_device_id device,
@@ -2013,12 +2050,16 @@ cl_int ClIcdRoot::kernel_work_group_info(cl_kernel kernel, cl_device_id device,
     AV_SCOPE("ClIcdRoot::kernel_work_group_info");
     ClObject *const held = judged(kernel, ClObject::Kind::kernel);
     if (held == nullptr) return CL_INVALID_KERNEL;
-    /* A null device is the kernel's only one, which the API allows. */
-    if (device != nullptr && judged(device, ClObject::Kind::device) == nullptr)
-        return CL_INVALID_DEVICE;
+    /* A null device is the kernel's only one, which the API allows; any other
+     * has to be its context's. */
+    const uint64_t host_device = host_device_of(*held);
+    if (device != nullptr) {
+        ClObject *const named_device = judged(device, ClObject::Kind::device);
+        if (named_device == nullptr || devices_.of(*named_device) != devices_.running(*held->context()))
+            return CL_INVALID_DEVICE;
+    }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const uint64_t host_device = device_object_ != nullptr ? device_object_->wire() : 0u;
     return av::clproto::av_clGetKernelWorkGroupInfo(*wire, held->wire(), host_device, name,
                                                      value_bytes, value, size_ret);
 }
@@ -2098,7 +2139,8 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
     return copied;
 }
 
-cl_int ClIcdRoot::fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t image,
+cl_int ClIcdRoot::fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t device,
+                             uint64_t image,
                              const cl_image_desc &desc, const void *from)
 {
     AV_SCOPE("ClIcdRoot::fill_image");
@@ -2123,7 +2165,7 @@ cl_int ClIcdRoot::fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint6
                                element_bytes(wire, image));
     if (!region.valid()) return CL_INVALID_IMAGE_DESCRIPTOR;
     cl_int         made = CL_SUCCESS;
-    const uint64_t queue = own_queue(wire, context, made);
+    const uint64_t queue = own_queue(wire, context, device, made);
     if (queue == 0u) return made;
     ClTransferChunks chunks(wire, queue, blocks);
     const cl_int     written = chunks.write_image(image, region, from);
@@ -2131,13 +2173,14 @@ cl_int ClIcdRoot::fill_image(ClientTransport &wire, ClArenaBlocks &blocks, uint6
     return written;
 }
 
-cl_int ClIcdRoot::fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t buffer,
+cl_int ClIcdRoot::fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t device,
+                              uint64_t buffer,
                               size_t bytes,
                               const void *from)
 {
     AV_SCOPE("ClIcdRoot::fill_buffer");
     cl_int         made = CL_SUCCESS;
-    const uint64_t queue = own_queue(wire, context, made);
+    const uint64_t queue = own_queue(wire, context, device, made);
     if (queue == 0u) return made;
     ClTransferChunks chunks(wire, queue, blocks);
     const cl_int     written = chunks.write(buffer, 0u, bytes, from);
@@ -2145,13 +2188,12 @@ cl_int ClIcdRoot::fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint
     return written;
 }
 
-uint64_t ClIcdRoot::own_queue(ClientTransport &wire, uint64_t context, cl_int &error)
+uint64_t ClIcdRoot::own_queue(ClientTransport &wire, uint64_t context, uint64_t device, cl_int &error)
 {
     AV_SCOPE("ClIcdRoot::own_queue");
-    /* A context exists only once the device does, so there is one to name. */
     cl_int         made = CL_SUCCESS;
-    const uint64_t queue = av::clproto::av_clCreateCommandQueueWithProperties(
-        wire, context, device_object_->wire(), nullptr, &made);
+    const uint64_t queue =
+        av::clproto::av_clCreateCommandQueueWithProperties(wire, context, device, nullptr, &made);
     if (queue == 0u) error = made != CL_SUCCESS ? made : CL_OUT_OF_RESOURCES;
     return queue;
 }
@@ -2237,7 +2279,8 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
         return nullptr;
     }
     if (copies) {
-        const cl_int filled = fill_image(*wire, context_of(*held)->staging(), held->wire(), image, described, host_pointer);
+        const cl_int filled = fill_image(*wire, context_of(*held)->staging(), held->wire(), host_device_of(*held),
+                                         image, described, host_pointer);
         if (filled != CL_SUCCESS) {
             give_back_to_host(*wire, ClObject::Kind::mem, image);
             report_error(error, filled);
@@ -2509,14 +2552,18 @@ cl_int ClIcdRoot::device_ids_from_d3d10(cl_platform_id platform, cl_uint source,
 cl_int ClIcdRoot::device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_uint *num_devices)
 {
     AV_SCOPE("ClIcdRoot::device_ids_for_luid");
+    /* Only the asked adapter's device is opened: an application asking about
+     * each of its adapters in turn opens no device it was not given. */
     lock_.acquire();
-    const Status opened = open_device();
+    learn_devices();
+    ClDevice *const device = devices_.on(luid);
+    const bool      opened = device != nullptr && open_device(*device) == Status::ok;
     lock_.release();
-    if (luid == 0u || opened != Status::ok || !device_.names_adapter(luid)) {
+    if (!opened) {
         if (num_devices != nullptr) *num_devices = 0u;
         return CL_DEVICE_NOT_FOUND;
     }
-    if (devices != nullptr) devices[0] = reinterpret_cast<cl_device_id>(device_object_);
+    if (devices != nullptr) devices[0] = reinterpret_cast<cl_device_id>(device->object());
     if (num_devices != nullptr) *num_devices = 1u;
     return CL_SUCCESS;
 }
@@ -2659,14 +2706,18 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
     if (share == 0u) return CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR;
     if (name != CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR && name != CL_DEVICES_FOR_GL_CONTEXT_KHR)
         return CL_INVALID_VALUE;
+    /* The OpenGL ICD runs every context on the adapter the primary display is
+     * on, which AvgpuAdapters lists first, as the first device is. */
     lock_.acquire();
-    const Status opened = open_device();
+    learn_devices();
+    ClDevice *const device = devices_.count() != 0u ? &devices_.at(0u) : nullptr;
+    const bool      opened = device != nullptr && open_device(*device) == Status::ok;
     lock_.release();
-    if (opened != Status::ok) return CL_OUT_OF_RESOURCES;
+    if (!opened) return CL_OUT_OF_RESOURCES;
     if (size_ret != nullptr) *size_ret = sizeof(cl_device_id);
     if (value == nullptr) return CL_SUCCESS;
     if (value_bytes < sizeof(cl_device_id)) return CL_INVALID_VALUE;
-    *static_cast<cl_device_id *>(value) = reinterpret_cast<cl_device_id>(device_object_);
+    *static_cast<cl_device_id *>(value) = reinterpret_cast<cl_device_id>(device->object());
     return CL_SUCCESS;
 }
 

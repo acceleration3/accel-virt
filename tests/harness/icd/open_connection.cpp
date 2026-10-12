@@ -4,6 +4,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "harness/framework/test_registry.hpp"
 
 namespace av {
@@ -11,10 +12,10 @@ namespace av {
 OpenConnection::OpenConnection()
     : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_)
 {
-    kmt_.add_adapter(PciIdentity(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                                 AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem),
+    kmt_.add_adapter(PciIdentity(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                                 AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem),
                      AdapterScenario::wddm_3_2);
-    CHECK_STATUS(connection_.open(), Status::ok);
+    CHECK_STATUS(connection_.open(0u), Status::ok);
 }
 
 MockKmt             &OpenConnection::kmt() { return kmt_; }

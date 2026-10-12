@@ -7,6 +7,7 @@
  * after every step. */
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -21,6 +22,7 @@
 
 #include <cstdint>
 
+using av::AvgpuAdapters;
 using av::GlIcdRig;
 using av::MockKmt;
 using av::Status;
@@ -208,10 +210,10 @@ TEST(gl_contexts, the_last_context_deleted_closes_the_device)
 TEST(gl_contexts, a_vulkan_connection_and_an_opengl_context_each_keep_their_own_av_context)
 { Scenario scenario;
   GlIcdRig &rig = scenario.rig;
-  const av::PciIdentity avgpu(av::AdapterSearch::virtio_vendor, av::AdapterSearch::virtio_gpu_device,
-                               av::AdapterSearch::virtio_vendor, av::AdapterSearch::av_subsystem);
+  const av::PciIdentity avgpu(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                               av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem);
   av::AdapterSearch     search(rig.kmt());
-  CHECK_STATUS(search.find(avgpu), Status::ok);
+  CHECK_STATUS(search.find_avgpu(0u), Status::ok);
   av::GuestConnection vulkan_device(rig.kmt());
   CHECK_STATUS(vulkan_device.open(search.adapter()), Status::ok);
   std::uint8_t     staging[4096] = {};

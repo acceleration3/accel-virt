@@ -31,6 +31,7 @@
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 #include "icd/vulkan/icd_entry_lookup.hpp"
+#include "icd/vulkan/instance_span.hpp"
 #include "icd/vulkan/descriptor_template_table.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/external_objects.hpp"
@@ -92,8 +93,20 @@ public:
     VkResult           enumerate_instance_version(uint32_t *version);
     VkResult           create_instance(const VkInstanceCreateInfo *create, const VkAllocationCallbacks *allocator,
                                        VkInstance *instance);
+    /* The physical devices of the instance on the adapter of `luid`, which
+     * may be one of the instances `instance` spans (InstanceSpan); none for an
+     * adapter it spans none on. */
     VkResult           enumerate_adapter_physical_devices(VkInstance instance, uint64_t luid, uint32_t *count,
                                                           VkPhysicalDevice *physical_devices);
+    /* Every instance's devices `instance` spans, in their order: the primary
+     * display's adapter's first. VK_INCOMPLETE when they do not all fit. */
+    VkResult           enumerate_physical_devices(VkInstance instance, uint32_t *count,
+                                                  VkPhysicalDevice *physical_devices);
+    /* The same for device groups, each a group of one adapter's devices:
+     * `enumerate` is the generated call the application's spelling names. */
+    using GroupEnumerator = VkResult(VKAPI_CALL *)(VkInstance, uint32_t *, VkPhysicalDeviceGroupProperties *);
+    VkResult           enumerate_physical_device_groups(GroupEnumerator enumerate, VkInstance instance,
+                                                        uint32_t *count, VkPhysicalDeviceGroupProperties *groups);
     /* The host's list filtered by the extension policy; the host is asked how
      * many it has, then for all of them. */
     VkResult           enumerate_device_extensions(VkPhysicalDevice physical_device, const char *layer,
@@ -253,7 +266,19 @@ public:
     void report(StateWriter &writer) override;
 
 private:
-    [[nodiscard]] Status open_connection(Connection *&opened); 
+    /* A connection opened on the adapter of `luid` (Connection::open). */
+    [[nodiscard]] Status open_connection(Connection *&opened, uint64_t luid);
+    /* An instance of this driver's on every avgpu adapter `own` is not on,
+     * made as `own` was, spanned with it. An adapter that will not take one is
+     * left out of the span and logged. */
+    void                 span_adapters(const VkInstanceCreateInfo &forwarded, const VkAllocationCallbacks *allocator,
+                                       VkInstance own);
+    /* The span the application's `instance` heads, or null. Under the root's
+     * lock. */
+    InstanceSpan        *span_of(VkInstance instance);
+    /* One instance and what is still made under it, as vkDestroyInstance takes
+     * an instance spanning no other. */
+    void                 destroy_one_instance(VkInstance instance, const VkAllocationCallbacks *allocator);
     /* Whether the host has faulted `connection`, logged as `entry`'s. */
     bool                 lost(const Connection &connection, const char *entry);
     /* The host's memory types into `types`, unless the connection is lost
@@ -293,6 +318,8 @@ private:
     HandleRegistry         handles_;
     ObjectPool<Connection> connections_;
     Connection            *pending_;
+    /* One per application instance: the instances it spans. */
+    ObjectPool<InstanceSpan> spans_;
     /* After the handles and connections: a swapchain's destruction calls the
      * device it was made on. */
     IcdEntryLookup         entries_;

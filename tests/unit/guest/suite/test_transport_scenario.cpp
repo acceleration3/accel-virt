@@ -7,6 +7,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/transport_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -19,6 +20,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuestReport;
 using av::MockKmt;
 using av::PciIdentity;
@@ -27,8 +29,8 @@ using av::TransportScenario;
 
 namespace {
 
-const PciIdentity av_gpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* Microsoft Basic Render, enumerated before av as it is in a real guest. */
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 constexpr std::uint32_t unsuccessful = 0xC0000001u;
@@ -45,7 +47,7 @@ public:
     {
         kmt_.add_adapter(basic_render, 3100u);
         kmt_.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(av_gpu), Status::ok);
+        CHECK_STATUS(search_.find_avgpu(0u), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }
@@ -232,7 +234,7 @@ TEST(transport_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
 { MockKmt kmt;
   kmt.add_adapter(basic_render, 3100u);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(av_gpu), Status::not_found);
+  CHECK_STATUS(search.find_avgpu(0u), Status::not_found);
   GuestReport report;
   TransportScenario scenario(kmt, report, search, av::SubApi::vulkan, "transport");
   scenario.run();

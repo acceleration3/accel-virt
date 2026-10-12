@@ -3,6 +3,7 @@
  * and gives back; no adapter, or one that cannot be waited on, is no period. */
 #include "core/support/status.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/probe/vblank_clock.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -11,14 +12,15 @@
 #include <cstdint>
 
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::MockKmt;
 using av::PciIdentity;
 using av::VblankClock;
 
 namespace {
 
-const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                        AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                        AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint32_t wddm_3_2 = 3200u;
 constexpr std::uint64_t blank = 166667u;
 

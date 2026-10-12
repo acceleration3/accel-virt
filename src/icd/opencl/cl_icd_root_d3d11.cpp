@@ -49,7 +49,7 @@ cl_int ClIcdRoot::device_ids_from_d3d11(cl_platform_id platform, cl_uint source,
     return device_ids_for_luid(luid, devices, num_devices);
 }
 
-cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, void *&device)
+cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device)
 {
     AV_SCOPE("ClIcdRoot::d3d11_device_for");
     device = nullptr;
@@ -60,8 +60,7 @@ cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, void *&device)
     if (!d3d11_.device(candidate)) return invalid_d3d11_device;
     /* A device on another adapter is one whose resources this device cannot
      * copy: its commands run on another GPU. */
-    if (device_ids_for_luid(d3d_adapters_.device_luid(candidate), nullptr, nullptr) != CL_SUCCESS)
-        return invalid_d3d11_device;
+    if (d3d_adapters_.device_luid(candidate) != on.luid()) return invalid_d3d11_device;
     device = candidate;
     return CL_SUCCESS;
 }

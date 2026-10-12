@@ -19,6 +19,7 @@
 #include "guest/kmt/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/adapter_string.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/locked_transport.hpp"
 
@@ -54,10 +55,11 @@ public:
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
 
-    /* invalid_state once open; no_memory when the staging cannot be had;
-     * not_supported for every other reason it cannot open. Nothing is left open
-     * unless ok. */
-    [[nodiscard]] Status open();
+    /* On the avgpu adapter whose LUID is `luid`; 0 takes the one the primary
+     * display is on (AdapterSearch::find_avgpu). invalid_state once open;
+     * no_memory when the staging cannot be had; not_supported for every other
+     * reason it cannot open. Nothing is left open unless ok. */
+    [[nodiscard]] Status open(uint64_t luid);
     /* Closes the context, the device and the adapter; nothing when not open. */
     void                 close();
     bool                 opened() const;
@@ -68,6 +70,10 @@ public:
     uint32_t             device() const;
     /* The adapter's LUID, 0 until open. */
     uint64_t             luid() const;
+    /* What Windows calls the adapter - the name Device Manager, DXGI and the
+     * OpenCL ICD show - read as it opens; empty until open, or where Windows
+     * gives none. */
+    const char          *adapter_name() const;
     /* Remembered from the one time the host was asked for its device
      * extensions: whether it has VK_EXT_external_memory_dma_buf, which decides
      * what a shared allocation is exported as. A host never asked is taken not
@@ -112,6 +118,7 @@ private:
     HostChannel                    channel_;
     ObjectStorage<LockedTransport> locked_;
     uint64_t                       luid_;
+    AdapterString                  name_;
     bool                           host_dma_buf_;
 
     friend struct ConnectionProbe;

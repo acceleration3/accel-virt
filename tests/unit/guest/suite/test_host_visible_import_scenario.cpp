@@ -9,6 +9,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/host_visible_import_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -29,6 +30,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::BlobImportAnswer;
 using av::BlobImportRequest;
 using av::CommandHeader;
@@ -42,8 +44,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity av(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::int32_t  vk_timeout = 2;
 constexpr std::int32_t  vk_error_out_of_device_memory = -2;
 constexpr std::int32_t  vk_error_device_lost = -4;
@@ -94,7 +96,7 @@ public:
     Rig() : search_(kmt_), host_(kmt_), gpu_(kmt_, 0u)
     {
         kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
-        CHECK_STATUS(search_.find(av), Status::ok);
+        CHECK_STATUS(search_.find_avgpu(0u), Status::ok);
     }
 
     MockKmt       &kmt() { return kmt_; }

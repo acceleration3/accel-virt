@@ -94,6 +94,13 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkAvForceContextFault(VkPhysicalDevice phys
 VKAPI_ATTR VkResult VKAPI_CALL local_vkAvLastKernelStatus(VkPhysicalDevice physicalDevice,
                                                            uint32_t *status);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
+/* Every adapter's devices and groups, through the instances it spans. */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
+                                                                VkPhysicalDevice *pPhysicalDevices);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDeviceGroups(
+    VkInstance instance, uint32_t *pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDeviceGroupsKHR(
+    VkInstance instance, uint32_t *pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                                      VkPhysicalDeviceMemoryProperties *pMemoryProperties);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,

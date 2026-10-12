@@ -54,6 +54,12 @@ bool GuestClContext::wakes() const
     return wakes_;
 }
 
+bool GuestClContext::on(const icd::IcdConnection &connection) const
+{
+    AV_SCOPE("GuestClContext::on");
+    return link_.on(connection);
+}
+
 bool GuestClContext::shares_gl() const
 {
     AV_SCOPE("GuestClContext::shares_gl");

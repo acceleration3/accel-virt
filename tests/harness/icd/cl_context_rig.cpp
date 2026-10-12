@@ -4,15 +4,16 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 
 namespace av {
 
 ClContextRig::ClContextRig()
-    : platform_(), kmt_(), host_(kmt_), trace_(), send_lock_(trace_, 'S'), blocks_lock_(trace_, 'B'), log_(), connection_(kmt_),
+    : platform_(), kmt_(), host_(kmt_), trace_(), send_lock_(trace_, 'S'), blocks_lock_(trace_, 'B'), log_(), connection_(kmt_, 0u),
       handles_lock_(trace_, 'H'), handles_(kmt_, handles_lock_, platform_)
 {
-    const PciIdentity avgpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                             AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+    const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                             AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     /* The transport watches the reply slot for a budget of the guest's clock
      * before it asks the kernel to wait, and a command no answer was queued

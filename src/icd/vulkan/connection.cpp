@@ -15,7 +15,7 @@ namespace av::icd {
 Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log)
     : kmt_(kmt), lock_(lock), search_(kmt), connection_(kmt),
       channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u)),
-      locked_(), luid_(0u), host_dma_buf_(false)
+      locked_(), luid_(0u), name_(), host_dma_buf_(false)
 {
     AV_SCOPE("Connection::Connection");
 }
@@ -26,13 +26,17 @@ Connection::~Connection()
     close();
 }
 
-Status Connection::open()
+Status Connection::open(uint64_t luid)
 {
     AV_SCOPE("Connection::open");
     if (opened()) return Status::invalid_state;
     ScopeExit undo([&] { close(); });
-    if (search_.find_avgpu(0u) != Status::ok) return Status::not_supported;
+    if (search_.find_avgpu(luid) != Status::ok) return Status::not_supported;
     if (kmt_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
+    /* A name Windows will not give is no reason to refuse the adapter: the
+     * host's own name stands. */
+    uint16_t wide[AdapterString::bytes] = {};
+    if (kmt_.query_adapter_name(search_.adapter(), wide, AdapterString::bytes) == Status::ok) name_.take(wide);
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
     const Status opened = channel_.open(connection_);
     if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::not_supported;
@@ -51,6 +55,7 @@ void Connection::close()
     /* Nothing is left to report a failed close to: the instance is gone. */
     static_cast<void>(search_.close());
     luid_ = 0u;
+    name_.take(nullptr);
 }
 
 void Connection::report(StateWriter &writer) const
@@ -91,6 +96,12 @@ uint64_t         Connection::luid() const
     AV_SCOPE("Connection::luid");
     return luid_;
 }
+const char *Connection::adapter_name() const
+{
+    AV_SCOPE("Connection::adapter_name");
+    return name_.text();
+}
+
 uint64_t Connection::submissions() const
 {
     AV_SCOPE("Connection::submissions");

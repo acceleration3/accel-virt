@@ -6,6 +6,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
@@ -19,6 +20,7 @@
 
 using av::AdapterScenario;
 using av::AdapterSearch;
+using av::AvgpuAdapters;
 using av::GuestReport;
 using av::KmtTransport;
 using av::MockKmt;
@@ -34,8 +36,8 @@ namespace {
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-const PciIdentity av_gpu(AdapterSearch::virtio_vendor, AdapterSearch::virtio_gpu_device,
-                      AdapterSearch::virtio_vendor, AdapterSearch::av_subsystem);
+const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 }  // namespace
 
@@ -43,7 +45,7 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(av_gpu), Status::ok);
+  CHECK_STATUS(search.find_avgpu(0u), Status::ok);
   GuestReport   report;
   ScenarioSteps steps(kmt, report, "probe");
   ScenarioTransport link(kmt, search, steps, SubApi::opencl);
@@ -82,7 +84,7 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
   { MockKmt kmt;
     kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
     AdapterSearch search(kmt);
-    CHECK_STATUS(search.find(av_gpu), Status::ok);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
     kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
     GuestReport   report;
     ScenarioSteps steps(kmt, report, "probe");
@@ -94,7 +96,7 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
   { MockKmt kmt;
     kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
     AdapterSearch search(kmt);
-    CHECK_STATUS(search.find(av_gpu), Status::ok);
+    CHECK_STATUS(search.find_avgpu(0u), Status::ok);
     kmt.fail_at(MockKmt::Call::create_context_virtual, 1u, 0xC0000017u);
     GuestReport   report;
     ScenarioSteps steps(kmt, report, "probe");

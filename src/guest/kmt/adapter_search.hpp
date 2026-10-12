@@ -1,11 +1,6 @@
-/* Finds the adapter the suite tests among every adapter D3DKMT opens: the
- * first whose PCI subsystem matches is kept, every other handle is closed at
- * once. The kept adapter is closed by close() or the destructor.
- *
- * Only the subsystem is compared: virtio-gpu-av-pci presents its host GPU's
- * vendor and device (docs/protocol.md), so an avgpu adapter reads as
- * 1002:7550 on one host and 10de:2684 on the next, and its subsystem
- * 1af4:5256 is the one part of its identity that is always this device's. */
+/* One avgpu adapter, held open: the one a Direct3D runtime opened, or the one
+ * an ICD that shows a single device is on. Which adapters there are, and in
+ * what order, is AvgpuAdapters'. */
 #ifndef AV_ADAPTER_SEARCH_HPP
 #define AV_ADAPTER_SEARCH_HPP
 
@@ -16,36 +11,18 @@
 namespace av {
 
 class Kmt;
-class PciIdentity;
 
 class AdapterSearch {
 public:
-    static constexpr uint32_t max_adapters = 16u;
-    /* avgpu's PCI identity: virtio-gpu's vendor and device, and the
-     * subsystem only this device presents. */
-    static constexpr uint32_t virtio_vendor = 0x1AF4u;
-    static constexpr uint32_t virtio_gpu_device = 0x1050u;
-    static constexpr uint32_t av_subsystem = 0x5256u;
-
     explicit AdapterSearch(Kmt &kmt);
     ~AdapterSearch();
     AdapterSearch(const AdapterSearch &) = delete;
     AdapterSearch &operator=(const AdapterSearch &) = delete;
 
-    /* invalid_state once found; the enumeration's failure; not_found when no
-     * adapter matches. */
-    [[nodiscard]] Status find(const PciIdentity &identity);
-    /* The matching adapter whose LUID is `luid`: the one a Direct3D runtime
-     * opened, where a guest has one avgpu adapter per host GPU. A `luid` of 0
-     * takes the first match. */
-    [[nodiscard]] Status find(const PciIdentity &identity, uint64_t luid);
-    /* The same for this driver's own adapter, avgpu's PCI identity: what
-     * every ICD, the guest suite and the inspector look for. A `luid` of 0
-     * takes the one the primary display is on, as find(identity) does: the
-     * kernel's order changes from boot to boot, and an ICD on the integrated
-     * GPU while the application's Direct3D runs on the discrete one is slower,
-     * and Affinity's canvas, computing on one and drawing on the other, drew
-     * stale tiles. */
+    /* The avgpu adapter whose LUID is `luid`; for a `luid` of 0, the first
+     * AvgpuAdapters lists - the one the primary display is on. invalid_state
+     * once found; the enumeration's failure; not_found when no adapter
+     * matches. */
     [[nodiscard]] Status find_avgpu(uint64_t luid);
     /* Closes the kept adapter, if any. */
     [[nodiscard]] Status close();
@@ -53,11 +30,8 @@ public:
     uint32_t             adapter() const;
 
 private:
-    void keep_or_close(uint32_t adapter, const PciIdentity &identity);
-
     Kmt     &kmt_;
     uint32_t adapter_;
-    uint64_t luid_;
 };
 
 }  // namespace av

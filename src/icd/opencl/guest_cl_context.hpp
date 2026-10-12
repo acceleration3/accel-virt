@@ -113,6 +113,8 @@ public:
     /* Whether this context was made from an OpenGL context, so that a GL name
      * an application hands it means that context's object. */
     bool                 shares_gl() const;
+    /* Whether it is made on `connection`'s adapter (ClDevice::runs). */
+    bool                 on(const icd::IcdConnection &connection) const;
     /* The list clCreateContext was given, kept for CL_CONTEXT_PROPERTIES: a
      * list already judged, so it reads. */
     void                 keep_properties(const cl_context_properties *properties);

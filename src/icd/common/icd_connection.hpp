@@ -36,7 +36,9 @@ public:
     static constexpr uint32_t max_links = 4u;
     static constexpr uint32_t no_link = max_links;
 
-    explicit IcdConnection(Kmt &kmt);
+    /* On the avgpu adapter whose LUID is `luid`; 0 takes the one the primary
+     * display is on (AdapterSearch::find_avgpu). */
+    IcdConnection(Kmt &kmt, uint64_t luid);
     ~IcdConnection();
     IcdConnection(const IcdConnection &) = delete;
     IcdConnection &operator=(const IcdConnection &) = delete;
@@ -54,6 +56,8 @@ public:
      * held is ignored. */
     void                 lose(uint32_t link);
     bool                 lost(uint32_t link) const;
+    /* The adapter's handle while any link is held, else 0. */
+    uint32_t             adapter() const;
     /* Contexts holding any link. */
     uint32_t             users() const;
     /* The device a held link names. */
@@ -68,6 +72,7 @@ private:
     void                 close_adapter_if_idle();
 
     Kmt                           &kmt_;
+    uint64_t                       luid_;
     AdapterSearch                  search_;
     ObjectStorage<GuestConnection> devices_[max_links];
     uint32_t                       users_[max_links];

@@ -193,7 +193,7 @@ TEST(guest_cl_context, with_no_avgpu_adapter_it_is_not_supported_and_holds_nothi
   av::LockTrace trace;
   av::RecordingThreadLock send_lock(trace, 'S');
   av::RecordingLog log;
-  av::icd::IcdConnection connection(kmt);
+  av::icd::IcdConnection connection(kmt, 0u);
   av::RecordingThreadLock handles_lock(trace, 'H');
   av::icd::SharedHandles  handles(kmt, handles_lock, platform);
   /* No adapter was added: what a process on a machine with no avgpu sees. */

@@ -3,6 +3,7 @@
 #include "core/log/log_line.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
@@ -39,7 +40,6 @@ constexpr char flipped_source[] = "Texture2D slot : register(t0);"
 constexpr char chain_open_key[] = "chain open";
 constexpr char chain_presented_key[] = "chain presented";
 constexpr uint32_t buffer_count = 2u;
-constexpr uint32_t max_adapters = 16u;
 constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
 
 }  // namespace
@@ -218,16 +218,9 @@ bool DxgiWindowChains::make_device(uint64_t luid, Device &made)
 bool DxgiWindowChains::kernel_device(uint64_t luid, Device &made)
 {
     AV_SCOPE("DxgiWindowChains::kernel_device");
-    uint32_t adapters[max_adapters] = {};
-    uint32_t count = 0u;
-    if (kmt_.enumerate_adapters(adapters, max_adapters, count) != Status::ok) return false;
-    for (uint32_t index = 0u; index < count; index++) {
-        uint64_t named = 0u;
-        const bool ours = made.kmt_adapter == 0u && kmt_.adapter_luid(adapters[index], named) == Status::ok &&
-                          named == luid;
-        if (ours) made.kmt_adapter = adapters[index];
-        else static_cast<void>(kmt_.close_adapter(adapters[index]));
-    }
+    AvgpuAdapters avgpu(kmt_);
+    if (avgpu.learn() != Status::ok) return false;
+    made.kmt_adapter = avgpu.take(avgpu.index_of(luid));
     if (made.kmt_adapter == 0u || kmt_.create_device(made.kmt_adapter, made.kmt_device) != Status::ok) {
         refuse("D3DKMT opens no device on the context's adapter");
         return false;
