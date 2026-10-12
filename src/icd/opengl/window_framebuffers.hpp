@@ -108,6 +108,9 @@ public:
 
 private:
     uint32_t find(void *window) const;
+    /* The current window's `framebuffer`, bound for whichever of drawing and
+     * reading the application left on the window. */
+    void     bind_window(ClientTransport &wire, uint32_t framebuffer);
 
     BlockSource                        &memory_;
     LogSink                       &log_;

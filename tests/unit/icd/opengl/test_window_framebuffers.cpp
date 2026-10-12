@@ -315,6 +315,37 @@ TEST(window_framebuffers, a_window_made_again_under_its_old_names_is_bound_again
   CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - steady, 1u); }
 
+/* An application with a context per widget (DaVinci Resolve's Qt) makes
+ * another context current between frames, so the window's new size is first
+ * seen by the next make-current, not by a swap. The window is made again
+ * there, and what the application left on it is bound to it again: the host
+ * bound 0 when the old framebuffer was deleted, and every frame after went
+ * nowhere. */
+TEST(window_framebuffers, a_window_resized_while_another_context_was_current_is_bound_again)
+{ Rig rig;
+  CHECK_STATUS(rig.current_on(1, 200u), Status::ok);
+  rig.surface.resize(&rig.windows[1], 16u, 8u);
+  rig.context_rig.host().gl_window(1u, 1u, 300u);
+  std::uint32_t made = rig.commands();
+  CHECK_STATUS(rig.framebuffers.make_current_on(rig.wire(), &rig.windows[1], doubled, rig.surface), Status::ok);
+  CHECK_EQ(rig.commands() - made, 3u + 7u + 2u);
+  CHECK_EQ(rig.id(made + 10u), ids::kCmd_glBindFramebuffer);
+  CHECK_EQ(rig.argument(made + 10u, 0u), Windows::gl_draw_framebuffer);
+  CHECK_EQ(rig.argument(made + 10u, 1u), 300u);
+  CHECK_EQ(rig.argument(made + 11u, 0u), Windows::gl_read_framebuffer);
+  CHECK_EQ(rig.argument(made + 11u, 1u), 300u);
+  CHECK_EQ(rig.framebuffers.name_of(0u), 300u);
+  /* Under its old name, and with drawing moved off the window: only the read binding follows. */
+  rig.framebuffers.bound(Windows::gl_draw_framebuffer, 4u);
+  rig.surface.resize(&rig.windows[1], 8u, 8u);
+  rig.context_rig.host().gl_window(1u, 1u, 300u);
+  made = rig.commands();
+  CHECK_STATUS(rig.framebuffers.make_current_on(rig.wire(), &rig.windows[1], doubled, rig.surface), Status::ok);
+  CHECK_EQ(rig.commands() - made, 3u + 7u + 1u);
+  CHECK_EQ(rig.argument(made + 10u, 0u), Windows::gl_read_framebuffer);
+  CHECK_EQ(rig.argument(made + 10u, 1u), 300u);
+  CHECK(rig.framebuffers.invariants_hold()); }
+
 /* Feature 051: the host has no front buffer - the window is a framebuffer
  * object there - so GL_FRONT names the frame the swap put on the window, which
  * the guest still holds. A read of it is answered from there; a read of

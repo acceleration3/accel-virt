@@ -35,11 +35,19 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
         static_cast<void>(presenters_[slot].construct(memory_, log_));
     }
     BackBufferPresenter &presenter = presenters_[slot].object();
+    const uint32_t       before = presenter.framebuffer();
+    const uint32_t       old_width = presenter.width();
+    const uint32_t       old_height = presenter.height();
     const Status         prepared = presenter.prepare(wire, window, format, surface);
     if (prepared != Status::ok) {
         if (added) presenters_[slot].destroy();
         return prepared;
     }
+    /* A window that changed size while another context was current on this
+     * thread is made again here, not after a swap: what the application left
+     * on it is bound again all the same, or the host draws into nothing. */
+    const bool remade = !added && (presenter.framebuffer() != before || presenter.width() != old_width ||
+                                   presenter.height() != old_height);
     const bool moved = slot != current_;
     current_ = slot;
     if (!ever_current_) {
@@ -53,8 +61,7 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
         glproto::av_glScissor(wire, 0, 0, width, height);
         return Status::ok;
     }
-    if (moved && draws_window_) glproto::av_glBindFramebuffer(wire, gl_draw_framebuffer, presenter.framebuffer());
-    if (moved && reads_window_) glproto::av_glBindFramebuffer(wire, gl_read_framebuffer, presenter.framebuffer());
+    if (moved || remade) bind_window(wire, presenter.framebuffer());
     return Status::ok;
 }
 
@@ -154,8 +161,7 @@ void WindowFramebuffers::follow(ClientTransport &wire, void *window, const Pixel
      * the deleted one had - the host reuses names - while deleting it bound 0
      * in its place: so a new size rebinds whatever the name. */
     const bool remade = after != before || presenter.width() != width || presenter.height() != height;
-    if (remade && slot == current_ && draws_window_) glproto::av_glBindFramebuffer(wire, gl_draw_framebuffer, after);
-    if (remade && slot == current_ && reads_window_) glproto::av_glBindFramebuffer(wire, gl_read_framebuffer, after);
+    if (remade && slot == current_) bind_window(wire, after);
 }
 
 void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &surface)
@@ -222,6 +228,13 @@ bool WindowFramebuffers::invariants_hold() const
                 return false;
     }
     return true;
+}
+
+void WindowFramebuffers::bind_window(ClientTransport &wire, uint32_t framebuffer)
+{
+    AV_SCOPE("WindowFramebuffers::bind_window");
+    if (draws_window_) glproto::av_glBindFramebuffer(wire, gl_draw_framebuffer, framebuffer);
+    if (reads_window_) glproto::av_glBindFramebuffer(wire, gl_read_framebuffer, framebuffer);
 }
 
 /* The slot holding `window`; for null, the first free slot. */
