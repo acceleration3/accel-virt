@@ -21,6 +21,7 @@
 
 namespace av {
 
+class DisplayClock;
 class ExportAnswer;
 class ExportRequest;
 class ExportedGpu;
@@ -33,7 +34,8 @@ public:
      * mirror holds a ring of slots for each window it shows. */
     static constexpr uint32_t first_room = 16u;
 
-    ExportConnection(Host &host, const ExportedGpu &gpu);
+    /* A timing request moves `clock`'s blanks (DisplayClock::align). */
+    ExportConnection(Host &host, const ExportedGpu &gpu, DisplayClock &clock);
     ~ExportConnection();
     ExportConnection(const ExportConnection &) = delete;
     ExportConnection &operator=(const ExportConnection &) = delete;
@@ -74,6 +76,7 @@ private:
 
     Host              &host_;
     const ExportedGpu &gpu_;
+    DisplayClock      &clock_;
     void              *lock_;
     void              *thread_;
     int                descriptor_;

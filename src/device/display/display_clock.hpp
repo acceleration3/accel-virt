@@ -49,6 +49,11 @@ public:
     /* Main loop. invalid_parameter for a head past `heads` or a rate the
      * protocol does not allow. */
     [[nodiscard]] Status retime(uint32_t head, uint32_t millihz);
+    /* Any thread: the host's display (docs/external-export.md, timing). Every
+     * head blanks at `millihz` from its next blank on, in phase with `blank`
+     * (VblankSchedule::align). invalid_state before initialize;
+     * invalid_parameter for a rate the protocol does not allow. */
+    [[nodiscard]] Status align(uint32_t millihz, uint64_t blank);
     /* Main loop. Whether a frame posted on `head` is shown at a blank rather
      * than at once: a page is registered and the head is one of its. */
     bool                 latches(uint32_t head) const;

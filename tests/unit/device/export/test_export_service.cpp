@@ -2,8 +2,10 @@
  * of QEMU's own user is served, at most max_connections at once, a slot whose
  * consumer has gone serves the next one, a revocation reaches every consumer
  * holding the surface, and every thread has ended when the service goes. */
+#include "device/display/display_clock.hpp"
 #include "device/export/export_connection.hpp"
 #include "device/export/export_service.hpp"
+#include "device/fence/fence_interrupts.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/export/export_connection_probe.hpp"
 #include "harness/export/fake_export_consumer.hpp"
@@ -44,6 +46,17 @@ const std::uint8_t      gpu[ExportGreeting::uuid_bytes] = {0x6Bu};
 const AvExportedImage   picture = {-1, 0u, 32u, 32u, 128u, 0u, 0x34325241u, 0u, 0u};
 constexpr std::uint64_t surface = 0x40u;
 
+/* The clock a consumer's timing moves; nothing here registers a page, so
+ * nothing is ever shown. */
+void unshown(void *) {}
+
+struct Timing {
+    av::FenceInterrupts interrupts;
+    av::DisplayClock    clock;
+
+    explicit Timing(av::MockHost &host) : interrupts(host), clock(host, interrupts, &unshown, nullptr) {}
+};
+
 ExportAnswer ask(FakeExportConsumer &consumer, ExportOperation operation, std::uint64_t named)
 {
     ExportAnswer answer;
@@ -58,7 +71,8 @@ TEST(export_service, serves_only_this_user_s_processes_up_to_its_connections)
 { av::MockHost host;
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u);
-  ExportService service(host);
+  Timing timing(host);
+  ExportService service(host, timing.clock);
   service.attach(plane, gpu, ExportGreeting(gpu));
   FakeExportConsumer stranger;
   CHECK_STATUS(service.accept(stranger.device_end(), false), Status::invalid_parameter);
@@ -79,7 +93,8 @@ TEST(export_service, serves_only_this_user_s_processes_up_to_its_connections)
 TEST(export_service, a_slot_whose_consumer_left_serves_the_next)
 { av::MockHost host;
   av::RecordingContextPlane plane;
-  ExportService service(host);
+  Timing timing(host);
+  ExportService service(host, timing.clock);
   service.attach(plane, gpu, ExportGreeting(gpu));
   FakeExportConsumer consumers[ExportService::max_connections];
   for (FakeExportConsumer &consumer : consumers) CHECK_STATUS(service.accept(consumer.device_end(), true), Status::ok);
@@ -104,7 +119,8 @@ TEST(export_service, a_revocation_reaches_every_consumer_holding_the_surface)
 { av::MockHost host;
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u, 2u);
-  ExportService service(host);
+  Timing timing(host);
+  ExportService service(host, timing.clock);
   service.attach(plane, gpu, ExportGreeting(gpu));
   FakeExportConsumer holding, other, idle;
   CHECK_STATUS(service.accept(holding.device_end(), true), Status::ok);
@@ -132,7 +148,8 @@ TEST(export_service, a_revocation_reaches_every_consumer_holding_the_surface)
 TEST(export_service, a_host_with_no_thread_refuses_the_connection)
 { av::MockHost host;
   av::RecordingContextPlane plane;
-  ExportService service(host);
+  Timing timing(host);
+  ExportService service(host, timing.clock);
   FakeExportConsumer consumer;
   host.fail_thread_start_at(1u);
   CHECK_STATUS(service.accept(consumer.device_end(), true), Status::no_memory);
@@ -144,7 +161,8 @@ TEST(export_service, a_host_with_no_thread_refuses_the_connection)
 /* The service's invariants are its connections': one broken is caught. */
 TEST(export_service, its_invariants_are_every_connection_s)
 { av::MockHost host;
-  ExportService service(host);
+  Timing timing(host);
+  ExportService service(host, timing.clock);
   CHECK(service.invariants_hold());
   av::ExportConnectionProbe::describe(av::ExportServiceProbe::connection(service, 5u), 3);
   CHECK(!service.invariants_hold());

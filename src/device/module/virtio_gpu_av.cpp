@@ -30,7 +30,7 @@ VirtioGpuAv::VirtioGpuAv(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
       heads_(host, blobs_), display_modes_(host), interrupts_(host),
       clock_(host, interrupts_, &AvDisplayFramesShow, this), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
-      remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host)
+      remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host, clock_)
       {
           AV_SCOPE("VirtioGpuAv::VirtioGpuAv");
       }

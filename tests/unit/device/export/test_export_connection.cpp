@@ -2,8 +2,10 @@
  * requests answered in turn on the connection's own thread, what it may sync
  * and is told of being what it exported, and its end - leaving, an answer it
  * would not take, or the device closing it - noticed on both sides. */
+#include "device/display/display_clock.hpp"
 #include "device/export/export_connection.hpp"
 #include "device/export/exported_gpu.hpp"
+#include "device/fence/fence_interrupts.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/export/export_connection_probe.hpp"
 #include "harness/export/fake_export_consumer.hpp"
@@ -11,6 +13,7 @@
 #include "harness/host/mock_host.hpp"
 #include "proto/export/export_answer.hpp"
 #include "proto/export/export_request.hpp"
+#include "proto/pages/vblank_record.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -35,16 +38,22 @@ const std::uint8_t      gpu[ExportGreeting::uuid_bytes] = {0x5Au};
 const AvExportedImage   picture = {-1, 0u, 64u, 64u, 256u, 0u, 0x34325241u, 0u, 0x00FFFFFFFFFFFFFFull};
 constexpr std::uint64_t first = 0x100u;
 
+/* No page is registered here, so nothing is ever latched to be shown. */
+void unshown(void *) {}
+
 class Fixture {
 public:
-    Fixture() : host_(), plane_(), gpu_(host_), connection_(host_, gpu_)
+    Fixture()
+        : host_(), plane_(), gpu_(host_), interrupts_(host_), clock_(host_, interrupts_, &unshown, nullptr),
+          connection_(host_, gpu_, clock_)
     {
         plane_.export_as(first, picture, 3u, 2u * ExportConnection::first_room + 2u);
         gpu_.attach(plane_, gpu, ExportGreeting(gpu));
     }
 
-    av::MockHost     &host() { return host_; }
-    ExportConnection &connection() { return connection_; }
+    av::MockHost      &host() { return host_; }
+    ExportConnection  &connection() { return connection_; }
+    av::DisplayClock  &clock() { return clock_; }
 
     /* One request and its answer, with the answer's descriptor kept by the
      * consumer. */
@@ -73,6 +82,8 @@ private:
     av::MockHost              host_;
     av::RecordingContextPlane plane_;
     av::ExportedGpu           gpu_;
+    av::FenceInterrupts       interrupts_;
+    av::DisplayClock          clock_;
     ExportConnection          connection_;
 };
 
@@ -114,6 +125,36 @@ TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::sync, first).status(), Status::not_found);
   /* The descriptors the device handed over were its copies to close. */
   CHECK_EQ(fixture.host().exports_closed(), 3u);
+  CHECK(fixture.connection().invariants_hold()); }
+
+/* The consumer's display times the guest's: refused while the device has no
+ * clock to move, taken once it has - here before the guest registered its
+ * page, so the rate is what the page first says. */
+TEST(export_connection, a_timing_moves_the_display_clock_once_there_is_one)
+{ Fixture fixture;
+  FakeExportConsumer consumer;
+  CHECK_STATUS(fixture.connection().open(consumer.device_end()), Status::ok);
+  ExportAnswer answer;
+  CHECK(consumer.send(ExportRequest(144000u, 5000u, 77u)));
+  CHECK_STATUS(consumer.receive(answer), Status::ok);
+  CHECK(answer.operation() == ExportOperation::timing);
+  CHECK_STATUS(answer.status(), Status::invalid_state);
+  CHECK_EQ(answer.tag(), 77u);
+  CHECK_STATUS(fixture.clock().initialize(), Status::ok);
+  CHECK(consumer.send(ExportRequest(144000u, 5000u, 78u)));
+  CHECK_STATUS(consumer.receive(answer), Status::ok);
+  CHECK_STATUS(answer.status(), Status::ok);
+  CHECK_EQ(answer.surface(), 0u);
+  CHECK_EQ(answer.tag(), 78u);
+  constexpr std::uint64_t ram = 0x200000u;
+  fixture.host().add_guest_ram(ram, 0x2000u);
+  CHECK_STATUS(fixture.clock().attach(ram + 0x1000u), Status::ok);
+  av::VblankRecord record;
+  CHECK_STATUS(record.decode(fixture.host().guest_ram(ram + 0x1000u + 32u + av::VblankRecord::fields_at),
+                             av::VblankRecord::encoded_size),
+               Status::ok);
+  CHECK_EQ(record.refresh_millihz(), 144000u);
+  fixture.clock().detach();
   CHECK(fixture.connection().invariants_hold()); }
 
 /* A request the device cannot read is answered as unreadable and names

@@ -5,10 +5,11 @@
 
 namespace av {
 
-ExportService::ExportService(Host &host) : host_(host), gpu_(host), connections_()
+ExportService::ExportService(Host &host, DisplayClock &clock) : host_(host), gpu_(host), connections_()
 {
     AV_SCOPE("ExportService::ExportService");
-    for (ObjectStorage<ExportConnection> &storage : connections_) static_cast<void>(storage.construct(host, gpu_));
+    for (ObjectStorage<ExportConnection> &storage : connections_)
+        static_cast<void>(storage.construct(host, gpu_, clock));
 }
 
 /* Every connection's thread ends before the GPU it asks goes. */

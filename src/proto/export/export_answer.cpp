@@ -162,6 +162,7 @@ bool ExportAnswer::fields_valid() const
         return surface_ != 0u && greeting_.empty() && layout_.empty() &&
                (status_ == Status::ok || writes_ == 0u);
     case ExportOperation::release: return surface_ != 0u && body_empty();
+    case ExportOperation::timing: return surface_ == 0u && body_empty();
     default: return false;
     }
 }

@@ -24,7 +24,7 @@ public:
     static constexpr size_t   encoded_size = 64u;
     static constexpr uint32_t magic = 0x41585641u;   /* "AVXA" */
     static constexpr uint16_t major = 1u;
-    static constexpr uint16_t minor = 0u;
+    static constexpr uint16_t minor = 1u;
 
     /* A request that did not decode, refused as malformed. */
     ExportAnswer();

@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/abi/entry_points.hpp"
+#include "device/display/display_clock.hpp"
 #include "device/export/exported_gpu.hpp"
 #include "device/host/host.hpp"
 #include "proto/export/export_answer.hpp"
@@ -9,8 +10,8 @@
 
 namespace av {
 
-ExportConnection::ExportConnection(Host &host, const ExportedGpu &gpu)
-    : host_(host), gpu_(gpu), lock_(nullptr), thread_(nullptr), descriptor_(-1), ended_(false), surfaces_(nullptr),
+ExportConnection::ExportConnection(Host &host, const ExportedGpu &gpu, DisplayClock &clock)
+    : host_(host), gpu_(gpu), clock_(clock), lock_(nullptr), thread_(nullptr), descriptor_(-1), ended_(false), surfaces_(nullptr),
       room_(0u), held_(0u)
 {
     AV_SCOPE("ExportConnection::ExportConnection");
@@ -80,7 +81,8 @@ bool ExportConnection::answer(const uint8_t *bytes, size_t length)
 
 /* Sync and release name a surface this consumer exported: what it holds is
  * what it is told of when the surface goes. A release of one it does not hold
- * is answered ok all the same - releasing is idempotent. */
+ * is answered ok all the same - releasing is idempotent. A timing the clock
+ * cannot take yet - the device not realized - is unavailable. */
 ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descriptor)
 {
     AV_SCOPE("ExportConnection::respond");
@@ -94,6 +96,10 @@ ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descri
     case ExportOperation::sync:
         if (!holds(surface)) return ExportAnswer(request, Status::not_found);
         return gpu_.sync(request, descriptor);
+    case ExportOperation::timing:
+        return ExportAnswer(request, clock_.align(request.refresh_millihz(), request.blank()) == Status::ok
+                                         ? Status::ok
+                                         : Status::invalid_state);
     default: break;
     }
     const bool held = holds(surface);

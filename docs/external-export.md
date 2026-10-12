@@ -66,9 +66,10 @@ answers for the surfaces the guest shared.
 ## 3. Messages
 
 Little-endian, fixed size, one datagram each; each starts with a magic and a
-version. This document is version **1.0**. A device reads any minor of major 1
+version. This document is version **1.1**. A device reads any minor of major 1
 as this layout and answers a request of another major `not_supported`. A
-consumer should do the same with answers.
+consumer should do the same with answers. Version 1.1 added timing (§4);
+a 1.0 device answers it as a request it cannot read.
 
 ### 3.1 Request (consumer -> device), 32 bytes
 
@@ -76,10 +77,10 @@ consumer should do the same with answers.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXQ` = `0x51585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 0 |
-| 8 | u32 | operation | 1 hello, 2 export, 3 sync, 4 release |
-| 12 | u32 | reserved | 0 |
-| 16 | u64 | surface | the guest's shared id (§5); 0 for hello and only for hello |
+| 6 | u16 | minor | 1 |
+| 8 | u32 | operation | 1 hello, 2 export, 3 sync, 4 release, 5 timing |
+| 12 | u32 | reserved / refresh | 0; for timing, the consumer's display's refresh in millihertz, 1000 to 1000000 |
+| 16 | u64 | surface / blank | the guest's shared id (§5); 0 for hello. For timing, a moment on the host's `CLOCK_MONOTONIC`, in ns and not 0, that the guest's display is to blank in phase with |
 | 24 | u64 | tag | the consumer's own; the answer carries it back |
 
 A consumer sends no descriptors; any that come are closed. A request may be
@@ -92,10 +93,10 @@ the one connection.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXA` = `0x41585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 0 |
+| 6 | u16 | minor | 1 |
 | 8 | u32 | operation | the request's; 0 for one that could not be read; `0x80` revoked (an event) |
 | 12 | u32 | status | 0 ok, 1 malformed, 2 not_supported, 3 not_found, 4 no_space, 5 unavailable |
-| 16 | u64 | surface | the request's (0 for hello and for one that could not be read); an event's surface |
+| 16 | u64 | surface | the request's (0 for hello, for timing and for one that could not be read); an event's surface |
 | 24 | u64 | tag | the request's; 0 in an event and for a request that could not be read |
 | 32 | 32 bytes | body | by operation, below; all zero in any refusal |
 
@@ -107,6 +108,7 @@ Bodies of an answer with status ok:
 | export | u32 width, u32 height, u32 DRM fourcc, u32 stride (bytes), u32 offset (bytes), u32 reserved, u64 DRM format modifier | the dma-buf |
 | sync | u64 copies run, 24 bytes zero | the sync_file |
 | release | zero | nothing |
+| timing | zero | nothing |
 | revoked (event) | u32 reason (1 the guest released the surface, 2 the device was reset), 28 bytes zero | nothing |
 
 A descriptor travels with `SCM_RIGHTS`, exactly one beside an ok export or
@@ -144,6 +146,19 @@ sync and none otherwise. It is the consumer's to close.
   memory - a dma-buf keeps its pages - but nothing will write it again and the
   id may be minted afresh for another surface: drop the import, close the
   descriptor, and stop using the id.
+
+- **timing** puts the guest's display clock in step with the consumer's
+  display (docs/protocol.md, "Display clock"): from each head's next blank
+  on, the head blanks at the refresh given, each blank a whole number of
+  periods from the moment given. The next blank is the first such one at
+  least half a period after the last and still to come, so the guest never
+  sees two blanks closer than that, and the sequence carries on. `unavailable`
+  from a device that is not realized. The consumer chooses both: remotewin
+  gives the whole number of its output's periods nearest the guest mode's 60 Hz,
+  and puts the guest's blanks just far enough ahead of its own that each
+  frame the guest composes reaches the consumer's compositor in time for the
+  next one (remotewin's `DisplayLock`). With more than one consumer, the last
+  to ask wins.
 
 ### 4.1 Which copy a sync covers
 
@@ -299,6 +314,7 @@ above; nothing here makes one yet.
 | Connections, their threads, revocation | `src/device/export/`: `ExportService`, `ExportConnection`, `ExportedGpu` |
 | The socket and its connections' I/O | the glue, `src/device/qemu/virtio-gpu-av-host.c`, through `AvHostOps` (`receive_export`, `send_export`, `shutdown_export`, `close_export`) and `av_device_export_accepted` |
 | The device property | `export-socket`, `src/device/qemu/virtio-gpu-av.c` |
+| Timing | `ExportConnection` to `DisplayClock::align`, `VblankSchedule::align` |
 | Revocation | `SharedCommands` (0x02F1) and `VirtioGpuAv::reset` |
 | The executor | ABI 16, `export_surface` and `sync_surface` in the device's domain (`av_executor.h`, docs/protocol.md); `ExecutorRoot`, `D3d11HostDevice`, `ExportableImages::export_image`, `DxvkVulkanDevice::sync_file`; the surface and its counted copies in `HostShares`, counted by `D3dBackend` |
 | Tests | the units under `tests/unit/proto/export/` and `tests/unit/device/export/` (a real socketpair, `FakeExportConsumer`); `test_d3d_external_export_device` on the GPU; `tests/qemu/test_virtio_gpu_export.py` against QEMU under seccomp, with the echo executor and this project's |

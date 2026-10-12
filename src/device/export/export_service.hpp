@@ -18,6 +18,7 @@
 namespace av {
 
 class ContextPlane;
+class DisplayClock;
 class ExportGreeting;
 class Host;
 struct ExportServiceProbe;
@@ -26,7 +27,8 @@ class ExportService {
 public:
     static constexpr uint32_t max_connections = 8u;
 
-    explicit ExportService(Host &host);
+    /* Consumers' displays time `clock`. */
+    ExportService(Host &host, DisplayClock &clock);
     ~ExportService();
     ExportService(const ExportService &) = delete;
     ExportService &operator=(const ExportService &) = delete;

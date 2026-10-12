@@ -62,7 +62,7 @@ TEST(export_answer, an_export_carries_its_layout_at_the_documented_offsets_and_o
   CHECK_EQ(sent.descriptors(), 1u);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(u32_at(bytes, 0u), 0x41585641u);
-  CHECK_EQ(u32_at(bytes, 4u), 1u);   /* major 1, minor 0 */
+  CHECK_EQ(u32_at(bytes, 4u), 0x00010001u);   /* major 1, minor 1 */
   CHECK_EQ(u32_at(bytes, 8u), 2u);
   CHECK_EQ(u32_at(bytes, 12u), 0u);
   CHECK_EQ(u64_at(bytes, 16u), surface);
@@ -272,9 +272,37 @@ TEST(export_answer, another_major_length_magic_or_operation_is_refused)
   CHECK_STATUS(read.decode(bytes, ExportAnswer::encoded_size, 1u), Status::malformed);
   CHECK_STATUS(ExportAnswer(ExportRequest(ExportOperation::release, surface, tag), Status::ok).encode(bytes, sizeof bytes),
                Status::ok);
-  bytes[8] = 5u;
+  bytes[8] = 6u;
   CHECK_STATUS(read.decode(bytes, ExportAnswer::encoded_size, 0u), Status::malformed);
   CHECK_EQ(read.layout().width(), 1003u); }
+
+/* A timing names no surface and carries nothing back: ok, or unavailable from
+ * a device with no display clock yet. */
+TEST(export_answer, a_timing_is_answered_with_nothing_named_and_no_body)
+{ const Status statuses[] = {Status::ok, Status::invalid_state};
+  for (const Status status : statuses) {
+      std::uint8_t       bytes[ExportAnswer::encoded_size] = {};
+      const ExportAnswer sent(ExportRequest(144000u, 5u, tag), status);
+      CHECK_EQ(sent.surface(), 0u);
+      CHECK_EQ(sent.descriptors(), 0u);
+      CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
+      CHECK_EQ(u32_at(bytes, 8u), 5u);
+      for (std::size_t at = 16u; at < 24u; at++) CHECK_EQ(bytes[at], 0u);
+      ExportAnswer read;
+      CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::ok);
+      CHECK(read.operation() == ExportOperation::timing);
+      CHECK_STATUS(read.status(), status);
+      CHECK_EQ(read.tag(), tag);
+      bytes[16] = 1u;   /* naming a surface */
+      CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
+      bytes[16] = 0u;
+      bytes[32] = 1u;   /* carrying a body */
+      CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
+  }
+  ExportAnswer counted(ExportRequest(144000u, 5u, tag), Status::ok);
+  counted.count(1u);
+  std::uint8_t bytes[ExportAnswer::encoded_size] = {};
+  CHECK_STATUS(counted.encode(bytes, sizeof bytes), Status::invalid_parameter); }
 
 /* Each answer carries its operation's body and no other's: a greeting, a
  * layout or a count given to an answer that does not carry it is refused at

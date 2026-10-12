@@ -5,8 +5,10 @@
  * the device. */
 #include "device/control/control_request.hpp"
 #include "device/control/shared_commands.hpp"
+#include "device/display/display_clock.hpp"
 #include "device/export/export_connection.hpp"
 #include "device/export/export_service.hpp"
+#include "device/fence/fence_interrupts.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/export/fake_export_consumer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -31,9 +33,14 @@ namespace {
 constexpr std::uint32_t ok_nodata = 0x1100u, err_invalid_parameter = 0x1205u;
 const std::uint8_t      gpu[16] = {0x10u, 0x20u};
 
+/* No page is registered, so the display clock never shows anything. */
+void unshown(void *) {}
+
 class Fixture {
 public:
-    Fixture() : exports_(host_), commands_(host_, plane_, exports_, gpu)
+    Fixture()
+        : interrupts_(host_), clock_(host_, interrupts_, &unshown, nullptr), exports_(host_, clock_),
+          commands_(host_, plane_, exports_, gpu)
     {
         exports_.attach(plane_, gpu, av::ExportGreeting(gpu));
     }
@@ -52,6 +59,8 @@ public:
 private:
     MockHost                  host_;
     av::RecordingContextPlane plane_;
+    av::FenceInterrupts       interrupts_;
+    av::DisplayClock          clock_;
     av::ExportService         exports_;
     SharedCommands            commands_;
 };

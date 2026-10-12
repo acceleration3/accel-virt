@@ -1,5 +1,5 @@
 /* What a message on a device's export socket asks or tells
- * (docs/external-export.md): the consumer's four requests, and the one event
+ * (docs/external-export.md): the consumer's five requests, and the one event
  * the device sends unasked. */
 #ifndef AV_EXPORT_OPERATION_HPP
 #define AV_EXPORT_OPERATION_HPP
@@ -15,6 +15,8 @@ enum class ExportOperation : uint32_t {
     export_surface = 2u,
     sync = 3u,
     release = 4u,
+    /* The consumer's display: its refresh, and when it blanks. */
+    timing = 5u,
     /* Device -> consumer only: a surface it exported is gone. */
     revoked = 0x80u
 };

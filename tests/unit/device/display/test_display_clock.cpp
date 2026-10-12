@@ -341,3 +341,32 @@ TEST(display_clock, a_stopped_clock_ticks_no_more_and_one_destroyed_running_stop
   CHECK_EQ(host.live_threads(), 0u);
   CHECK_EQ(host.live_events(), 0u);
   CHECK_EQ(host.live_mutexes(), 0u); }
+
+/* The host's display, through its export socket: every head takes its rate
+ * and its phase from the next blank on, and a clock not yet made, or a rate
+ * the protocol does not have, is refused. */
+TEST(display_clock, aligned_every_head_blanks_in_phase_with_the_host_s_display)
+{ Rig rig;
+  constexpr std::uint64_t period_144 = 6944444u;
+  CHECK_STATUS(rig.clock.align(144000u, 5u), Status::invalid_state);
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  CHECK_STATUS(rig.clock.align(VblankRecord::least_millihz - 1u, 5u), Status::invalid_parameter);
+  CHECK_STATUS(rig.clock.align(VblankRecord::most_millihz + 1u, 5u), Status::invalid_parameter);
+  CHECK_STATUS(rig.clock.attach(page), Status::ok);
+  VblankRecord record;
+  rig.host.set_clock(start_at + period_60);
+  CHECK(rig.reaches(page, 0u, 1u, record));
+  const std::uint64_t last = record.vblank_ns();
+  CHECK_STATUS(rig.clock.align(144000u, last + 10u * period_144 + 77u), Status::ok);
+  CHECK(rig.host.wait_for_sleepers(1u, 2000u));
+  rig.host.set_clock(last + period_144 + 76u);
+  CHECK(rig.read(page, 0u, record));
+  CHECK_EQ(record.sequence(), 1u);
+  rig.host.set_clock(last + period_144 + 77u);
+  for (std::uint32_t head = 0u; head < DisplayClock::heads; head++) {
+      CHECK(rig.reaches(page, head, 2u, record));
+      CHECK_EQ(record.vblank_ns(), last + period_144 + 77u);
+      CHECK_EQ(record.refresh_millihz(), 144000u);
+      CHECK_EQ(record.period_ns(), period_144);
+  }
+  CHECK(rig.clock.invariants_hold()); }

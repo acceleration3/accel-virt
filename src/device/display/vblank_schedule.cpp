@@ -6,7 +6,7 @@
 namespace av {
 
 VblankSchedule::VblankSchedule()
-    : millihz_(default_millihz), epoch_(0u), epoch_sequence_(0u), sequence_(0u), running_(false)
+    : millihz_(default_millihz), epoch_(0u), epoch_sequence_(0u), sequence_(0u), last_(0u), running_(false)
 {
     AV_SCOPE("VblankSchedule::VblankSchedule");
 }
@@ -26,6 +26,7 @@ void VblankSchedule::rebase(uint64_t sequence, uint64_t at)
     AV_SCOPE("VblankSchedule::rebase");
     epoch_sequence_ = sequence;
     epoch_ = at;
+    last_ = at;
 }
 
 void VblankSchedule::start(uint64_t now)
@@ -48,6 +49,21 @@ void VblankSchedule::retime(uint32_t millihz, uint64_t now)
     millihz_ = millihz;
     rebase(sequence_, last_blank);
     if (due(sequence_ + 1u) <= now) rebase(sequence_, now);
+}
+
+void VblankSchedule::align(uint32_t millihz, uint64_t blank, uint64_t now)
+{
+    AV_SCOPE("VblankSchedule::align");
+    const uint64_t last_blank = last();
+    millihz_ = millihz;
+    if (!running_) return;
+    const uint64_t period = VblankRecord::nanoseconds_times_millihz / millihz_;
+    uint64_t       earliest = last_blank + period / 2u;
+    if (earliest <= now) earliest = now + 1u;
+    const uint64_t behind = blank >= earliest ? 0u : (earliest - blank) % period;
+    const uint64_t ahead = blank >= earliest ? (blank - earliest) % period : (period - behind) % period;
+    rebase(sequence_, earliest + ahead - period);
+    last_ = last_blank;
 }
 
 uint32_t VblankSchedule::refresh_millihz() const
@@ -74,6 +90,7 @@ uint64_t VblankSchedule::advance(uint64_t now)
         }
         sequence_++;
         passed++;
+        last_ = due(sequence_);
     }
     return passed;
 }
@@ -87,11 +104,11 @@ uint64_t VblankSchedule::sequence() const
 uint64_t VblankSchedule::last() const
 {
     AV_SCOPE("VblankSchedule::last");
-    return due(sequence_);
+    return last_;
 }
 
-/* The epoch is a blank the sequence has reached, and the rate is one the
- * protocol allows. */
+/* The epoch's place in the sequence is one the count has reached, and the
+ * rate is one the protocol allows. */
 bool VblankSchedule::invariants_hold() const
 {
     AV_SCOPE("VblankSchedule::invariants_hold");

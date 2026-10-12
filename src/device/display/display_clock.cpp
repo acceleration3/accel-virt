@@ -104,6 +104,21 @@ Status DisplayClock::retime(uint32_t head, uint32_t millihz)
     return Status::ok;
 }
 
+Status DisplayClock::align(uint32_t millihz, uint64_t blank)
+{
+    AV_SCOPE("DisplayClock::align");
+    if (lock_ == nullptr) return Status::invalid_state;
+    if (millihz < VblankRecord::least_millihz || millihz > VblankRecord::most_millihz)
+        return Status::invalid_parameter;
+    host_.lock_mutex(lock_);
+    const uint64_t now = host_.monotonic_nanoseconds();
+    for (VblankSchedule &schedule : schedules_) schedule.align(millihz, blank, now);
+    host_.unlock_mutex(lock_);
+    /* The thread sleeps toward the old phase's deadline. */
+    host_.signal_event(wake_);
+    return Status::ok;
+}
+
 bool DisplayClock::latches(uint32_t head) const
 {
     AV_SCOPE("DisplayClock::latches");

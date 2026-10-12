@@ -22,7 +22,7 @@ import time
 import unittest
 
 import virtio_qtest
-from av_context import REAL_EXECUTOR, av_device, header, response_type
+from av_context import PAGE, REAL_EXECUTOR, av_device, header, response_type
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 RENDERER = os.environ.get("AV_RENDERER", "")
@@ -30,16 +30,21 @@ SANDBOX = ("-sandbox", "on,obsolete=deny,elevateprivileges=deny,spawn=deny,resou
 
 REQUEST_MAGIC = 0x51585641
 ANSWER_MAGIC = 0x41585641
-UNREADABLE, HELLO, EXPORT, SYNC, RELEASE, REVOKED = 0, 1, 2, 3, 4, 0x80
+UNREADABLE, HELLO, EXPORT, SYNC, RELEASE, TIMING, REVOKED = 0, 1, 2, 3, 4, 5, 0x80
 OK, MALFORMED, NOT_SUPPORTED, NOT_FOUND, NO_SPACE, UNAVAILABLE = range(6)
 RELEASED, RESET = 1, 2
 CMD_SHARED_RELEASE = 0x02F1
+CMD_DISPLAY_CLOCK = 0x02F4
 RESP_OK_NODATA = 0x1100
 DRM_ARGB8888 = 0x34325241
 
 
 def request(operation, surface=0, tag=0, major=1):
     return struct.pack("<IHHIIQQ", REQUEST_MAGIC, major, 0, operation, 0, surface, tag)
+
+
+def timing(refresh_millihz, blank, tag):
+    return struct.pack("<IHHIIQQ", REQUEST_MAGIC, 1, 1, TIMING, refresh_millihz, blank, tag)
 
 
 class Answer:
@@ -166,6 +171,30 @@ class VirtioGpuExport(unittest.TestCase):
         consumer.socket.send(request(HELLO, 9))           # hello naming a surface
         self.expect(consumer.receive(), UNREADABLE, MALFORMED)
         self.expect(consumer.ask(HELLO, 0, 1), HELLO, OK, tag=1)
+
+    def test_a_timing_puts_the_guest_s_display_clock_in_phase_with_the_consumer_s(self):
+        gpu = self.start()
+        page = gpu.device.memory.allocate(PAGE)
+        answer = gpu.control(header(CMD_DISPLAY_CLOCK) + struct.pack("<Q", page))
+        self.assertEqual(hex(response_type(answer)), hex(RESP_OK_NODATA))
+        consumer = self.consumer()
+        blank = time.clock_gettime_ns(time.CLOCK_MONOTONIC) + 12345
+        consumer.socket.send(timing(144000, blank, 9))
+        self.expect(consumer.receive(), TIMING, OK, tag=9)
+        time.sleep(0.2)
+        record = page + 32
+        for _ in range(1000):
+            before = struct.unpack("<I", gpu.qtest.read_bytes(record, 4))[0]
+            fields = gpu.qtest.read_bytes(record + 4, 32)
+            after = struct.unpack("<I", gpu.qtest.read_bytes(record, 4))[0]
+            if before == after and before % 2 == 0:
+                break
+        _, _, vblank, period, refresh, _ = struct.unpack("<IQQIII", fields)
+        self.assertEqual((refresh, period), (144000, 6944444))
+        # The blank is a whole number of periods from the moment given, to
+        # the few nanoseconds the rate's fraction carries over 0.2 s.
+        apart = (vblank - blank) % period
+        self.assertLess(min(apart, period - apart), 1000)
 
     def test_the_guest_s_release_and_a_reset_reach_the_consumer(self):
         gpu = self.start()
