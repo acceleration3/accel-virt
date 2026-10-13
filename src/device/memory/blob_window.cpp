@@ -44,8 +44,11 @@ Status BlobWindow::read(uint64_t offset, uint8_t *bytes, size_t count) const
 {
     AV_SCOPE("BlobWindow::read");
     if (!contains(offset, count)) return Status::invalid_parameter;
+    /* A builtin: -ffreestanding keeps the compiler from making a loop one,
+     * and a texture's bytes copied one at a time held a Direct3D 9 video at
+     * a few frames a second. */
     walk(offset, count, [bytes](const uint8_t *source, size_t done, size_t chunk) {
-        for (size_t i = 0u; i < chunk; i++) bytes[done + i] = source[i];
+        __builtin_memcpy(bytes + done, source, chunk);
     });
     return Status::ok;
 }
@@ -55,7 +58,7 @@ Status BlobWindow::write(uint64_t offset, const uint8_t *bytes, size_t count) co
     AV_SCOPE("BlobWindow::write");
     if (!contains(offset, count)) return Status::invalid_parameter;
     walk(offset, count, [bytes](uint8_t *destination, size_t done, size_t chunk) {
-        for (size_t i = 0u; i < chunk; i++) destination[i] = bytes[done + i];
+        __builtin_memcpy(destination, bytes + done, chunk);
     });
     return Status::ok;
 }

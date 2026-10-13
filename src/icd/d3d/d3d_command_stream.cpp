@@ -161,6 +161,10 @@ bool D3dCommandStream::make_room_for(size_t bytes)
     ClientBlobArena &arena = blobs();
     if (!arena.ready()) return false;
     if (arena.room() >= bytes) return true;
+    /* The batches already published come back oldest first while the host
+     * runs the rest; only room the unsent commands hold needs them sent and
+     * answered. */
+    if (transport_.make_room_for_blobs(bytes)) return true;
     return finished() && arena.room() >= bytes;
 }
 

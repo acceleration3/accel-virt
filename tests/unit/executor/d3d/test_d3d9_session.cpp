@@ -52,7 +52,7 @@ public:
         region_.take(guest, sizeof guest);
         CHECK_STATUS(table_storage.construct(), av::Status::ok);
         CHECK_STATUS(session_storage.construct(region_, table_storage.object()), av::Status::ok);
-        session_storage.object().initialize(nullptr, nullptr);
+        session_storage.object().initialize(nullptr, nullptr, nullptr, nullptr);
     }
     ~FreshSession()
     {

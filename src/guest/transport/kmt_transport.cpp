@@ -312,6 +312,7 @@ bool KmtTransport::drain()
      * all done, and that is usually a matter of microseconds away. */
     if (consumed_within_spin()) {
         fences_.close(newest);
+        blobs_.retire_through(newest);
         return true;
     }
     const Status waited = wait_for_host(newest);
@@ -320,7 +321,26 @@ bool KmtTransport::drain()
         return false;
     }
     fences_.close(newest);
+    blobs_.retire_through(newest);
     return true;
+}
+
+/* The oldest batches the host has yet to run are waited for one at a time,
+ * so the host keeps working on the rest while their leases come back. */
+bool KmtTransport::make_room_for_blobs(size_t bytes)
+{
+    AV_SCOPE("KmtTransport::make_room_for_blobs");
+    retire_consumed();
+    while (blobs_.room() < bytes && fences_.outstanding() != 0u && !faulted_) {
+        const uint64_t oldest = fences_.oldest();
+        const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
+        if (ring_.head() < end && (wait_for_host(oldest) != Status::ok || ring_.head() < end)) {
+            faulted_ = true;
+            return false;
+        }
+        retire_consumed();
+    }
+    return blobs_.room() >= bytes;
 }
 
 /* The kernel's wait is bounded, so a host that died is reported rather than
@@ -354,7 +374,9 @@ void KmtTransport::retire_consumed()
         if (fence_ends_[fence % TransportFence::max_outstanding] > head) break;
         done = fence;
     }
-    if (done != 0u) fences_.close(done);
+    if (done == 0u) return;
+    fences_.close(done);
+    blobs_.retire_through(done);
 }
 
 /* A full fence window waits for its oldest batch, not for all of them: a
@@ -407,6 +429,7 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     fence = fences_.open();
     newest_fence_ = fence;
     fence_ends_[fence % TransportFence::max_outstanding] = end;
+    blobs_.mark(fence);
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
     static_cast<void>(SubmissionDescriptor(fence, begin, end).encode(descriptor, sizeof descriptor));
     const Status submitted = path_.submit(context_, dma_address_, descriptor, SubmissionDescriptor::encoded_size,

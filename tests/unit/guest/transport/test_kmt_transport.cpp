@@ -371,6 +371,57 @@ TEST(kmt_transport, an_answered_call_retires_every_blob_lease_and_nothing_else_d
   CHECK_EQ(transport.blobs().used(), 8u);
   CHECK(transport.invariants_hold()); }
 
+/* Room for a lease comes back from the oldest batches the host has run, one
+ * wait at a time, with the newer ones left lent; room only unsent commands
+ * hold is not found by waiting. */
+TEST(kmt_transport, room_for_a_lease_waits_for_the_oldest_batches_alone)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint8_t room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  const auto send_with_lease = [&](std::uint32_t value) {
+      CHECK(transport.blobs().take(24u).taken());
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(value);
+      CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  };
+  send_with_lease(1u);
+  send_with_lease(2u);
+  CHECK_EQ(transport.blobs().room(), 16u);
+  CHECK(transport.make_room_for_blobs(16u));   /* there already: no wait */
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u);
+  CHECK(transport.make_room_for_blobs(24u));   /* the host runs what was sent */
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 1u);
+  CHECK(transport.blobs().room() >= 24u);
+  /* A lease taken but not yet sent holds its room until it is. */
+  CHECK(transport.blobs().take(transport.blobs().room()).taken());
+  CHECK(!transport.make_room_for_blobs(1u));
+  CHECK(!transport.faulted());
+  CHECK(transport.invariants_hold()); }
+
+/* A host that stops while the room is waited for loses the context. */
+TEST(kmt_transport, room_waited_for_from_a_host_that_stopped_faults_the_context)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint8_t room[32] = {};
+  transport.blobs().lend(room, sizeof room);
+  CHECK(transport.blobs().take(32u).taken());
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  fixture.kmt().fail_first(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+  CHECK(!transport.make_room_for_blobs(8u));
+  CHECK(transport.faulted());
+  CHECK(!transport.make_room_for_blobs(8u)); }
+
 /* Sending before setup is refused; the decode arena and blob arena refuse. */
 TEST(kmt_transport, before_setup_and_the_refusing_arenas)
 { Fixture fixture;

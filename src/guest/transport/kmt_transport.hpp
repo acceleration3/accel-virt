@@ -121,6 +121,10 @@ public:
      * device kept - the last such command's; otherwise it is empty. An
      * answered batch ends its call as a synchronous command does: end_call
      * retires every blob lease. */
+    /* Room for a `bytes` lease in the blob arena, waiting for the oldest
+     * batches the host has yet to run to come back - not for all of them.
+     * false when what is unsent holds the room, or the context faulted. */
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes);
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
     TransportResult send_async_batch(const uint8_t *framed, size_t length);
     /* The GPU address a packet on another of this process's contexts names:

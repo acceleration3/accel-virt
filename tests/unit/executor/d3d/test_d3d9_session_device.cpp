@@ -504,7 +504,7 @@ TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
 }
 
 
-/* A fullscreen primary's flip (point 0) is kept where DWM opens the primary
+/* A fullscreen primary's flip (point 0) is kept by D3d9FlipShares where DWM opens the primary
  * and the scanout exports it: a Direct3D 11 texture shared under its key,
  * holding what the Direct3D 9 device drew before a flip - written at the
  * next flip, once the GPU has copied it, so no flip waits for the GPU. A

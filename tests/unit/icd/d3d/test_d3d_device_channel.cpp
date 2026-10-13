@@ -189,6 +189,23 @@ TEST(d3d_device_channel, room_is_made_by_one_finish_in_a_full_arena)
   CHECK(arena.room() >= past_inline);
   CHECK(!fixture.lock().held()); }
 
+/* Room a published batch holds comes back by waiting for the host to run
+ * it - no Finish is sent, and the lock is not held for the wait. */
+TEST(d3d_device_channel, room_a_sent_batch_holds_comes_back_without_a_finish)
+{ Fixture fixture;
+  alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
+  av::ClientBlobArena &arena = fixture.transport().blobs();
+  arena.lend(block, sizeof block);
+  CHECK(arena.take(arena.room()).taken());
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  const std::uint32_t sent = fixture.kmt().commands();
+  const std::size_t past_inline = av::d3d::D3dCommandStream::inline_data + 1u;
+  CHECK(fixture.a().make_room_for(past_inline));
+  CHECK(arena.room() >= past_inline);
+  CHECK_EQ(fixture.kmt().commands(), sent);
+  CHECK(!fixture.lock().held()); }
+
 TEST(d3d_device_channel, a_command_given_up_before_it_was_sent_lets_the_lock_go)
 { Fixture fixture;
   const Box whole = {};

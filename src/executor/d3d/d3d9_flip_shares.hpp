@@ -61,21 +61,21 @@ public:
 
 private:
     struct Copy {
-        IDirect3DSurface9 *staging;
-        IDirect3DQuery9   *copied;
+        IDirect3DSurface9 *staging_;
+        IDirect3DQuery9   *copied_;
         /* The flip it holds; 0 for none in flight. */
-        uint64_t           flip;
+        uint64_t           flip_;
     };
     struct Primary {
-        uint64_t           key;
-        ID3D11Texture2D   *texture;
+        uint64_t           key_;
+        ID3D11Texture2D   *texture_;
         /* Which device's frames these are; the staging surfaces hold it. */
-        IDirect3DDevice9  *device;
-        Copy               copies[copy_slots];
-        uint32_t           width;
-        uint32_t           height;
-        uint32_t           format;
-        uint64_t           used;
+        IDirect3DDevice9  *device_;
+        Copy               copies_[copy_slots];
+        uint32_t           width_;
+        uint32_t           height_;
+        uint32_t           format_;
+        uint64_t           used_;
     };
 
     /* The primary for `key` at that size and format, made and published if

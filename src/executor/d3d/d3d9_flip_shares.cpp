@@ -44,10 +44,10 @@ Status D3d9FlipShares::flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source,
     if (shown == nullptr) return Status::no_memory;
     write_finished(*shown, false);
     Copy *const copy = free_copy(*shown);
-    if (FAILED(device->GetRenderTargetData(source, copy->staging))) return Status::invalid_state;
-    copy->copied->Issue(D3DISSUE_END);
-    copy->flip = ++flips_;
-    shown->used = flips_;
+    if (FAILED(device->GetRenderTargetData(source, copy->staging_))) return Status::invalid_state;
+    copy->copied_->Issue(D3DISSUE_END);
+    copy->flip_ = ++flips_;
+    shown->used_ = flips_;
     return Status::ok;
 }
 
@@ -59,32 +59,32 @@ void D3d9FlipShares::write_finished(Primary &primary, bool wait)
     AV_SCOPE("D3d9FlipShares::write_finished");
     for (;;) {
         Copy *oldest = nullptr;
-        for (Copy &copy : primary.copies)
-            if (copy.flip != 0u && (oldest == nullptr || copy.flip < oldest->flip)) oldest = &copy;
+        for (Copy &copy : primary.copies_)
+            if (copy.flip_ != 0u && (oldest == nullptr || copy.flip_ < oldest->flip_)) oldest = &copy;
         if (oldest == nullptr) return;
-        HRESULT done = oldest->copied->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
-        while (wait && done == S_FALSE) done = oldest->copied->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
+        HRESULT done = oldest->copied_->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
+        while (wait && done == S_FALSE) done = oldest->copied_->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
         if (done == S_FALSE) return;
         wait = false;
-        oldest->flip = 0u;
+        oldest->flip_ = 0u;
         D3DLOCKED_RECT locked = {};
-        if (FAILED(done) || FAILED(oldest->staging->LockRect(&locked, nullptr, D3DLOCK_READONLY))) continue;
-        device11_->context()->UpdateSubresource(primary.texture, 0u, nullptr, locked.pBits,
+        if (FAILED(done) || FAILED(oldest->staging_->LockRect(&locked, nullptr, D3DLOCK_READONLY))) continue;
+        device11_->context()->UpdateSubresource(primary.texture_, 0u, nullptr, locked.pBits,
                                                 static_cast<UINT>(locked.Pitch), 0u);
-        oldest->staging->UnlockRect();
-        shares_->written(primary.key);
+        oldest->staging_->UnlockRect();
+        shares_->written(primary.key_);
     }
 }
 
 D3d9FlipShares::Copy *D3d9FlipShares::free_copy(Primary &primary)
 {
     AV_SCOPE("D3d9FlipShares::free_copy");
-    for (Copy &copy : primary.copies)
-        if (copy.flip == 0u) return &copy;
+    for (Copy &copy : primary.copies_)
+        if (copy.flip_ == 0u) return &copy;
     write_finished(primary, true);
-    for (Copy &copy : primary.copies)
-        if (copy.flip == 0u) return &copy;
-    return &primary.copies[0];
+    for (Copy &copy : primary.copies_)
+        if (copy.flip_ == 0u) return &copy;
+    return &primary.copies_[0];
 }
 
 /* Under the Direct3D 11 lock. A key already published by someone else
@@ -95,11 +95,11 @@ D3d9FlipShares::Primary *D3d9FlipShares::primary(IDirect3DDevice9 *device, uint6
     AV_SCOPE("D3d9FlipShares::primary");
     Primary *oldest = &primaries_[0];
     for (Primary &held : primaries_) {
-        if (held.key == key && held.device == device && held.width == width && held.height == height &&
-            held.format == format)
+        if (held.key_ == key && held.device_ == device && held.width_ == width && held.height_ == height &&
+            held.format_ == format)
             return &held;
-        if (held.key == key) forget(held);
-        if (held.used < oldest->used) oldest = &held;
+        if (held.key_ == key) forget(held);
+        if (held.used_ < oldest->used_) oldest = &held;
     }
     forget(*oldest);
     D3D11_TEXTURE2D_DESC1 described = {};
@@ -113,19 +113,19 @@ D3d9FlipShares::Primary *D3d9FlipShares::primary(IDirect3DDevice9 *device, uint6
     described.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
     described.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
     Primary made = {};
-    made.key = key;
-    made.device = device;
-    made.width = width;
-    made.height = height;
-    made.format = format;
-    made.texture = device11_->make_exportable(described);
-    bool whole = made.texture != nullptr;
-    for (Copy &copy : made.copies)
+    made.key_ = key;
+    made.device_ = device;
+    made.width_ = width;
+    made.height_ = height;
+    made.format_ = format;
+    made.texture_ = device11_->make_exportable(described);
+    bool whole = made.texture_ != nullptr;
+    for (Copy &copy : made.copies_)
         whole = whole &&
                 SUCCEEDED(device->CreateOffscreenPlainSurface(width, height, static_cast<D3DFORMAT>(format),
-                                                              D3DPOOL_SYSTEMMEM, &copy.staging, nullptr)) &&
-                SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_EVENT, &copy.copied));
-    if (!whole || shares_->publish_resource(key, made.texture, ShareOrigin::d3d11) != Status::ok) {
+                                                              D3DPOOL_SYSTEMMEM, &copy.staging_, nullptr)) &&
+                SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_EVENT, &copy.copied_));
+    if (!whole || shares_->publish_resource(key, made.texture_, ShareOrigin::d3d11) != Status::ok) {
         forget(made);
         return nullptr;
     }
@@ -136,10 +136,10 @@ D3d9FlipShares::Primary *D3d9FlipShares::primary(IDirect3DDevice9 *device, uint6
 void D3d9FlipShares::forget(Primary &primary)
 {
     AV_SCOPE("D3d9FlipShares::forget");
-    if (primary.texture != nullptr) primary.texture->Release();
-    for (Copy &copy : primary.copies) {
-        if (copy.staging != nullptr) copy.staging->Release();
-        if (copy.copied != nullptr) copy.copied->Release();
+    if (primary.texture_ != nullptr) primary.texture_->Release();
+    for (Copy &copy : primary.copies_) {
+        if (copy.staging_ != nullptr) copy.staging_->Release();
+        if (copy.copied_ != nullptr) copy.copied_->Release();
     }
     primary = Primary{};
 }
