@@ -49,6 +49,11 @@ bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void 
             close(&wire, chains);
             return false;
         }
+        /* A slot is a linear image (the host's ExportableImages), and GL
+         * takes the tiling of memory it imports from the texture over it:
+         * left at its optimal default, it draws tiled into memory Direct3D
+         * reads row by row, and the window shows streaks. */
+        glproto::av_glTextureParameteri(wire, textures_[slot], gl_texture_tiling, static_cast<GLint>(gl_linear_tiling));
         glproto::av_glTextureStorageMem2DEXT(wire, textures_[slot], 1, srgb ? gl_srgb8_alpha8 : gl_rgba8,
                                               static_cast<GLsizei>(width), static_cast<GLsizei>(height),
                                               memories_[slot], 0u);

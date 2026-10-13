@@ -1,5 +1,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "icd/opencl/cl_extension_policy.hpp"
+
 #include "icd/opencl/d3d11_bridge.hpp"
 #include "icd/opencl/d3d11_object.hpp"
 
@@ -118,16 +120,20 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
 {
     AV_SCOPE("ClIcdRoot::platform_info");
     if (name == CL_PLATFORM_EXTENSIONS) {
-        /* Before a device exists there is no host to intersect with, and the
-         * loader asks this while enumerating. Nothing is reported that
-         * nothing proves, so an empty list is the honest answer either way
-         * until a row exists. */
-        static const char none[] = "";
+        /* What every device of the platform carries: the extensions this ICD
+         * answers alone, whatever host or adapter is under it - asked of a
+         * policy that has seen neither, before any device exists, as the
+         * loader asks while enumerating. DaVinci Resolve looks here for
+         * cl_khr_d3d10_sharing before it asks which device a DXGI adapter is,
+         * and found no OpenCL GPU while this was empty. */
+        const ClExtensionPolicy platform_wide(reported_extensions, reported_extension_count);
+        static const char no_host[] = "";
+        const size_t needed = platform_wide.report(no_host, sizeof no_host, nullptr, 0u);
         if (value != nullptr) {
-            if (value_bytes < sizeof none) return CL_INVALID_VALUE;
-            static_cast<char *>(value)[0] = '\0';
+            if (value_bytes < needed) return CL_INVALID_VALUE;
+            static_cast<void>(platform_wide.report(no_host, sizeof no_host, static_cast<char *>(value), value_bytes));
         }
-        if (size_ret != nullptr) *size_ret = sizeof none;
+        if (size_ret != nullptr) *size_ret = needed;
         return CL_SUCCESS;
     }
     /* Asked before any device exists, the name is found by the adapters'

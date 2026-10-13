@@ -18,6 +18,7 @@
 
 #include <CL/cl_ext.h>
 #include <cstdint>
+#include <cstring>
 
 using av::ClIcdRig;
 using av::FakeClLoader;
@@ -241,19 +242,23 @@ TEST(cl_icd_root_refusals, the_extensions_the_loader_asks_for_need_room_for_the_
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  /* The loader asks this in every process, before anything is opened. An
-   * empty list is still a string, so a buffer with no room for its
-   * terminator is refused rather than written past. */
-  char        nothing[1] = {'x'};
+  /* The loader asks this in every process, before anything is opened: the
+   * extensions every device carries, which are the ones this ICD answers
+   * alone - and Resolve reads cl_khr_d3d10_sharing here before it pairs a
+   * DXGI adapter with a device. A buffer with no room for the terminator is
+   * refused rather than written past. */
+  static const char expected[] = "cl_khr_d3d10_sharing cl_khr_d3d11_sharing";
+  char        short_of[sizeof expected - 1u];
+  std::memset(short_of, 'x', sizeof short_of);
   std::size_t bytes = 0u;
-  CHECK_EQ(rig.root().platform_info(platform, CL_PLATFORM_EXTENSIONS, 0u, nothing, &bytes),
+  CHECK_EQ(rig.root().platform_info(platform, CL_PLATFORM_EXTENSIONS, 0u, nullptr, &bytes), CL_SUCCESS);
+  CHECK_EQ(bytes, sizeof expected);
+  CHECK_EQ(rig.root().platform_info(platform, CL_PLATFORM_EXTENSIONS, sizeof short_of, short_of, &bytes),
            CL_INVALID_VALUE);
-  CHECK_EQ(nothing[0], 'x');
-  CHECK_EQ(rig.root().platform_info(platform, CL_PLATFORM_EXTENSIONS, sizeof nothing, nothing,
-                                      &bytes),
-           CL_SUCCESS);
-  CHECK_EQ(nothing[0], '\0');
-  CHECK_EQ(bytes, 1u);
+  CHECK_EQ(short_of[0], 'x');
+  char listed[sizeof expected] = {};
+  CHECK_EQ(rig.root().platform_info(platform, CL_PLATFORM_EXTENSIONS, sizeof listed, listed, &bytes), CL_SUCCESS);
+  CHECK(std::strcmp(listed, expected) == 0);
   CHECK(rig.root().invariants_hold()); }
 
 /* ---- what a host that will not make an object leaves behind -------------- */

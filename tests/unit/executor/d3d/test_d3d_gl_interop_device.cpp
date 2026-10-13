@@ -63,6 +63,8 @@ constexpr unsigned gl_texture_2d = 0x0DE1;
 constexpr unsigned gl_rgba8 = 0x8058;
 constexpr unsigned gl_rgba = 0x1908;
 constexpr unsigned gl_unsigned_byte = 0x1401;
+constexpr unsigned gl_texture_tiling = 0x9580;
+constexpr unsigned gl_linear_tiling = 0x9585;
 
 }  // namespace
 
@@ -110,6 +112,9 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
         const av::glproto::RealGl &gl = av::OpenGlBackendProbe::gl(opengl);
         unsigned texture = 0u;
         gl.glCreateTextures(gl_texture_2d, 1, &texture);
+        /* The shared image is linear (ExportableImages); GL is told so, as a
+         * window chain's slot tells it (ChainedFrames). */
+        gl.glTextureParameteri(texture, gl_texture_tiling, static_cast<int>(gl_linear_tiling));
         gl.glTextureStorageMem2DEXT(texture, 1, gl_rgba8, size, size, static_cast<unsigned>(memory), 0u);
         /* Every texel its own value, so a layout the two drivers disagree on
          * moves texels where a clear would not show it. */

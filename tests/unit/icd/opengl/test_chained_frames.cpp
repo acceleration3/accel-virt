@@ -173,6 +173,13 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   CHECK_EQ(u64_at(second, 0u), ScriptedWindowChains::first_id + 1u);
   CHECK_EQ(u64_at(second, 24u), std::uint64_t{width} * height * 4u);
   CHECK_EQ(host.count(av::glproto::kCmd_glTextureStorageMem2DEXT), ChainedFrames::slot_count);
+  /* Each slot's texture is linear, as the image under it is, before its storage. */
+  CHECK_EQ(host.count(av::glproto::kCmd_glTextureParameteri), ChainedFrames::slot_count);
+  CHECK(host.last(av::glproto::kCmd_glTextureParameteri) + 1u == host.last(av::glproto::kCmd_glTextureStorageMem2DEXT));
+  WireReader tiling(host.payload(host.last(av::glproto::kCmd_glTextureParameteri)), ScriptedGlHost::slot_bytes);
+  CHECK_EQ(varint(tiling), first_name + 1u);
+  CHECK_EQ(varint(tiling), std::uint64_t{ChainedFrames::gl_texture_tiling});
+  CHECK_EQ(varint(tiling), std::uint64_t{ChainedFrames::gl_linear_tiling});
   WireReader storage(host.payload(host.last(av::glproto::kCmd_glTextureStorageMem2DEXT)), ScriptedGlHost::slot_bytes);
   CHECK_EQ(varint(storage), first_name + 1u);
   CHECK_EQ(varint(storage), 1u);

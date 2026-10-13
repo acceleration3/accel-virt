@@ -5,6 +5,7 @@
 
 #include <CL/cl.h>
 #include <CL/cl_ext.h>
+#include <stdlib.h>
 
 namespace av {
 
@@ -18,6 +19,12 @@ bool OpenClDevice::find(const uint8_t *uuid)
     AV_SCOPE("OpenClDevice::find");
     forget();
     if (uuid == nullptr) return false;
+    /* Mesa's rusticl offers no device of a driver it was not told to enable,
+     * and a desktop's QEMU is started with nothing telling it: on a host
+     * whose only OpenCL is Mesa's, the guest saw a platform with no GPU. The
+     * hardware drivers the host's GPUs run on are enabled before the first
+     * call loads it, unless whoever started QEMU chose otherwise. */
+    setenv("RUSTICL_ENABLE", rusticl_drivers, 0);
     cl_platform_id platforms[max_platforms];
     cl_uint        found = 0u;
     if (clGetPlatformIDs(max_platforms, platforms, &found) != CL_SUCCESS) return false;

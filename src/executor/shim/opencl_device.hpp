@@ -34,6 +34,8 @@ private:
     /* This host has three OpenCL platforms and two GPUs; neither number is
      * one anybody will meet. */
     static constexpr uint32_t max_platforms = 16u;
+    /* RUSTICL_ENABLE: Intel's iris and AMD's radeonsi. */
+    static constexpr const char *rusticl_drivers = "iris,radeonsi";
     static constexpr uint32_t max_gpu_devices = 16u;
 
     void *platform_;

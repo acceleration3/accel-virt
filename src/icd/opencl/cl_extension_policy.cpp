@@ -83,6 +83,10 @@ bool same_word(const char *text, const char *name, size_t length)
  * answers would name a bus the guest has no part of - and AMD's free memory
  * from Windows' own account of the adapter's (ClIcdRoot::free_memory), which
  * Resolve asks. The vendor rows are reported on that vendor's adapter alone;
+ * an Intel adapter has none, and Resolve pairs it with its DXGI adapter by
+ * `cl_khr_device_uuid`'s LUID instead - answered here from the guest's
+ * adapter, its UUIDs by the host - and found no OpenCL GPU while the
+ * extension went unreported.
  * their other queries go to the host, which answers them where its own driver
  * carries the extension and refuses them where it does not.
  */
@@ -101,6 +105,7 @@ const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_d3d11_sharing", 1u, "cl_d3d11_sharing.an_acquire_copies_each_resource_in_and_a_release_copies_it_back",
      "-"},
     {"cl_khr_pci_bus_info", 1u, "cl_device_report.the_pci_location_and_name_are_the_guest_adapter_s", "-*"},
+    {"cl_khr_device_uuid", 1u, "cl_device_report.the_luid_is_the_adapters_own_bytes_the_way_windows_reads_them"},
     {"cl_amd_device_attribute_query", 1u,
      "cl_device_report.an_amd_adapter_says_where_it_sits_as_amd_s_driver_does", "-1002"},
     {"cl_nv_device_attribute_query", 1u,
