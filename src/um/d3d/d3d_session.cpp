@@ -3,6 +3,8 @@
 #include "core/platform/block_source.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/log/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -81,6 +83,12 @@ HRESULT D3dSession::open(uint32_t adapter)
         static_cast<void>(timeline_.construct(stream_.object(), channel_.transport(), lock_));
         static_cast<void>(slices_.construct(timeline_.object(), slices_lock_));
         slices_.object().take(channel_.arena_view(), lent_bytes, query_results_.offset());
+        DriverLog lines(log_, "avumd: ");
+        LogLine(lines)
+            .text("dynamic buffers are drawn in place from ")
+            .number((slices_.object().end() - slices_.object().begin()) >> 20u)
+            .text(" MiB of the arena")
+            .write();
     }
     return S_OK;
 }

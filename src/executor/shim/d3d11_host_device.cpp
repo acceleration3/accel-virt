@@ -617,14 +617,10 @@ bool D3d11HostDevice::slices() const
     return slices_ != nullptr && vulkan_.connected();
 }
 
-bool D3d11HostDevice::import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer)
+bool D3d11HostDevice::import_to_draw(void *host, uint64_t bytes, VulkanBuffer &buffer)
 {
     AV_SCOPE("D3d11HostDevice::import_to_draw");
-    if (!slices()) {
-        if (fd >= 0) ::close(fd);
-        return false;
-    }
-    return buffer.import_dma_buf_to_draw(vulkan_.table(), fd, bytes);
+    return slices() && buffer.import_host_pointer_to_draw(vulkan_.table(), host, bytes);
 }
 
 bool D3d11HostDevice::bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset, uint64_t bytes,

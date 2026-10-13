@@ -31,8 +31,9 @@ extern "C" {
  * and the guest are built together, and an older table is a build to fix
  * rather than one to serve. 16 made the library the one place a shared object
  * is known (HostShares): the device names a guest device's objects by a
- * domain it opens, and the library publishes, opens and releases them. */
-#define AV_EXECUTOR_ABI_VERSION 18u
+ * domain it opens, and the library publishes, opens and releases them. 19
+ * hands a dma-buf with the device's own host mapping of the same memory. */
+#define AV_EXECUTOR_ABI_VERSION 19u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -88,7 +89,11 @@ typedef struct AvBlobHandle {
      * into a type the same way a host pointer is. The name stays so version 2
      * libraries keep compiling. */
     uint32_t reserved;
-    void *pointer;     /* AV_BLOB_HOST_POINTER; NULL otherwise */
+    /* AV_BLOB_HOST_POINTER: the memory. AV_BLOB_DMA_BUF: the device's own
+     * mapping of the same memory, page-aligned and mapped as long as the
+     * descriptor's memory is, or NULL - what a GPU that reads an imported
+     * dma-buf without snooping the CPU's caches imports instead. */
+    void *pointer;
     int fd;            /* AV_BLOB_DMA_BUF; -1 otherwise */
     uint64_t size;     /* bytes, a whole number of host pages */
 } AvBlobHandle;

@@ -85,8 +85,8 @@ TEST(imported_blob, a_handle_that_is_no_kind_or_two_is_refused)
   CHECK_STATUS(blob.take(1u, invented), Status::invalid_parameter);
   CHECK(!blob.live()); }
 
-/* The field the kind does not use must be empty, because a handle carrying
- * both is one nobody can say the meaning of. */
+/* A host pointer carries no descriptor, because a handle carrying both is one
+ * nobody can say the meaning of. */
 TEST(imported_blob, a_kind_carrying_the_other_kind_s_field_is_refused)
 { ImportedBlob blob;
   AvBlobHandle pointer_with_fd = host_pointer(ImportedBlob::page_bytes);
@@ -97,12 +97,24 @@ TEST(imported_blob, a_kind_carrying_the_other_kind_s_field_is_refused)
   pointer_without_pointer.pointer = nullptr;
   CHECK_STATUS(blob.take(1u, pointer_without_pointer), Status::invalid_parameter);
 
-  AvBlobHandle descriptor_with_pointer = dma_buf(4, ImportedBlob::page_bytes);
-  descriptor_with_pointer.pointer = backing;
-  CHECK_STATUS(blob.take(1u, descriptor_with_pointer), Status::invalid_parameter);
-
   CHECK_STATUS(blob.take(1u, dma_buf(-1, ImportedBlob::page_bytes)), Status::invalid_parameter);
   CHECK(!blob.live()); }
+
+/* From ABI 19 a dma-buf may come with the device's own mapping of the same
+ * memory, which a GPU that does not snoop an imported dma-buf imports
+ * instead; one without is still a dma-buf. */
+TEST(imported_blob, a_dma_buf_carries_the_device_s_mapping_beside_it_or_none)
+{ ImportedBlob blob;
+  AvBlobHandle descriptor_with_pointer = dma_buf(4, ImportedBlob::page_bytes);
+  descriptor_with_pointer.pointer = backing;
+  CHECK_STATUS(blob.take(1u, descriptor_with_pointer), Status::ok);
+  CHECK_EQ(blob.kind(), std::uint32_t{AV_BLOB_DMA_BUF});
+  CHECK(blob.pointer() == backing);
+  CHECK_EQ(blob.descriptor(), 4);
+  blob.give_back();
+  CHECK_STATUS(blob.take(1u, dma_buf(4, ImportedBlob::page_bytes)), Status::ok);
+  CHECK(blob.pointer() == nullptr);
+  blob.give_back(); }
 
 /* The reserved field is the Vulkan memory type the guest asked for (feature
  * 045), carried to the backend untouched: whether the type exists is the

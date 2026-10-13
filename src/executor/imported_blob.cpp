@@ -22,7 +22,8 @@ Status ImportedBlob::take(uint64_t blob_id, const AvBlobHandle &handle)
     if (handle.kind == AV_BLOB_HOST_POINTER) {
         if (handle.pointer == nullptr || handle.fd != -1) return Status::invalid_parameter;
     } else if (handle.kind == AV_BLOB_DMA_BUF) {
-        if (handle.fd < 0 || handle.pointer != nullptr) return Status::invalid_parameter;
+        /* With the device's own mapping of the memory, or none. */
+        if (handle.fd < 0) return Status::invalid_parameter;
     } else {
         return Status::invalid_parameter;
     }

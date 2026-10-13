@@ -104,7 +104,7 @@ Status BlobImports::hand_over_dmabuf(const HeldBlob &held, uint64_t offset, uint
     AvBlobHandle handle = {};
     handle.kind = AV_BLOB_DMA_BUF;
     handle.reserved = memory_type;
-    handle.pointer = nullptr;
+    handle.pointer = held.base() != nullptr ? static_cast<uint8_t *>(held.base()) + offset : nullptr;
     handle.fd = shared.handle();
     handle.size = size;
     const Status offered = offer(handle, blob_id, slot);

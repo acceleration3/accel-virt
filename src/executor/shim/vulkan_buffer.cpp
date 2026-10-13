@@ -24,17 +24,6 @@ bool VulkanBuffer::import_dma_buf(const VulkanDeviceTable &table, int fd, VkDevi
     return import(table, fd, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 }
 
-bool VulkanBuffer::import_dma_buf_to_draw(const VulkanDeviceTable &table, int fd, VkDeviceSize size)
-{
-    AV_SCOPE("VulkanBuffer::import_dma_buf_to_draw");
-    constexpr VkBufferUsageFlags drawn =
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
-        VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    return import(table, fd, size, drawn);
-}
-
 /* An allocation that succeeded owns the fd even when the bind after it fails;
  * one that failed left it with the caller. A buffer whose device address is
  * taken needs memory allocated for it. */
@@ -64,6 +53,32 @@ bool VulkanBuffer::import(const VulkanDeviceTable &table, int fd, VkDeviceSize s
     const uint32_t type = needs.size <= size ? table.memory_type(types & needs.memoryTypeBits) : VK_MAX_MEMORY_TYPES;
     if (table.bind_buffer(buffer_, chain, size, type, memory_)) return true;
     if (memory_ == VK_NULL_HANDLE) close(fd);
+    release();
+    return false;
+}
+
+bool VulkanBuffer::import_host_pointer_to_draw(const VulkanDeviceTable &table, void *pointer, VkDeviceSize size)
+{
+    AV_SCOPE("VulkanBuffer::import_host_pointer_to_draw");
+    constexpr VkBufferUsageFlags drawn =
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+        VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    const uint32_t types = table.host_pointer_types(pointer);
+    const VkExternalMemoryBufferCreateInfo external = {VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO, nullptr,
+                                                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT};
+    const VkBufferCreateInfo info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, &external, 0u, size, drawn,
+                                     VK_SHARING_MODE_EXCLUSIVE, 0u, nullptr};
+    if (made() || size == 0u || types == 0u || !table.create_buffer(info, buffer_)) return false;
+    table_ = &table;
+    const VkMemoryRequirements            needs = table.buffer_requirements(buffer_);
+    const VkImportMemoryHostPointerInfoEXT imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT, nullptr,
+                                                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer};
+    const VkMemoryAllocateFlagsInfo addressed = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO, &imported,
+                                                 VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, 0u};
+    const uint32_t type = needs.size <= size ? table.memory_type(types & needs.memoryTypeBits) : VK_MAX_MEMORY_TYPES;
+    if (table.bind_buffer_shared(buffer_, &addressed, size, type, memory_)) return true;
     release();
     return false;
 }

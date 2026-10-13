@@ -43,6 +43,8 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
         reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(entry("vkGetBufferMemoryRequirements"));
     bind_buffer_ = reinterpret_cast<PFN_vkBindBufferMemory>(entry("vkBindBufferMemory"));
     fd_properties_ = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(entry("vkGetMemoryFdPropertiesKHR"));
+    host_properties_ =
+        reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(entry("vkGetMemoryHostPointerPropertiesEXT"));
     copy_to_buffer_ = reinterpret_cast<PFN_vkCmdCopyImageToBuffer>(entry("vkCmdCopyImageToBuffer"));
     copy_buffer_ = reinterpret_cast<PFN_vkCmdCopyBuffer>(entry("vkCmdCopyBuffer"));
     create_semaphore_ = reinterpret_cast<PFN_vkCreateSemaphore>(entry("vkCreateSemaphore"));
@@ -208,6 +210,31 @@ uint32_t VulkanDeviceTable::dma_buf_types(int fd) const
     if (fd_properties_(device_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &properties) != VK_SUCCESS)
         return 0u;
     return properties.memoryTypeBits;
+}
+
+uint32_t VulkanDeviceTable::host_pointer_types(void *pointer) const
+{
+    AV_SCOPE("VulkanDeviceTable::host_pointer_types");
+    if (!loaded() || host_properties_ == nullptr || pointer == nullptr) return 0u;
+    VkMemoryHostPointerPropertiesEXT properties = {VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT, nullptr, 0u};
+    if (host_properties_(device_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer, &properties) !=
+        VK_SUCCESS)
+        return 0u;
+    return properties.memoryTypeBits;
+}
+
+bool VulkanDeviceTable::bind_buffer_shared(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
+                                           VkDeviceMemory &memory) const
+{
+    AV_SCOPE("VulkanDeviceTable::bind_buffer_shared");
+    memory = VK_NULL_HANDLE;
+    if (!loaded() || type == VK_MAX_MEMORY_TYPES) return false;
+    const VkMemoryAllocateInfo allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, chain, size, type};
+    if (allocate_(device_, &allocation, nullptr, &memory) != VK_SUCCESS) {
+        memory = VK_NULL_HANDLE;
+        return false;
+    }
+    return bind_buffer_(device_, buffer, memory, 0u) == VK_SUCCESS;
 }
 
 bool VulkanDeviceTable::bind_buffer(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,

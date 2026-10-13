@@ -52,9 +52,16 @@ public:
     VkMemoryRequirements buffer_requirements(VkBuffer buffer) const;
     /* The memory types a dma-buf `fd` may be imported as; 0 for none. */
     uint32_t           dma_buf_types(int fd) const;
+    /* The memory types `pointer`, host memory of this process, may be
+     * imported as; 0 for none, or a device without VK_EXT_external_memory_host. */
+    uint32_t           host_pointer_types(void *pointer) const;
     /* Memory for `buffer` alone, as bind_dedicated makes it for an image. */
     [[nodiscard]] bool bind_buffer(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
                                    VkDeviceMemory &memory) const;
+    /* The same, memory not dedicated to the buffer: an import of a host
+     * pointer may not be. */
+    [[nodiscard]] bool bind_buffer_shared(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
+                                          VkDeviceMemory &memory) const;
     [[nodiscard]] bool create_semaphore(const void *chain, VkSemaphore &semaphore) const;
     void               destroy_semaphore(VkSemaphore semaphore) const;
     [[nodiscard]] bool import_semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits type,
@@ -103,6 +110,7 @@ private:
     PFN_vkGetBufferMemoryRequirements buffer_requirements_;
     PFN_vkBindBufferMemory           bind_buffer_;
     PFN_vkGetMemoryFdPropertiesKHR   fd_properties_;
+    PFN_vkGetMemoryHostPointerPropertiesEXT host_properties_;
     PFN_vkCmdCopyImageToBuffer       copy_to_buffer_;
     PFN_vkCmdCopyBuffer              copy_buffer_;
     PFN_vkCreateSemaphore            create_semaphore_;

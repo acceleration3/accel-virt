@@ -170,9 +170,9 @@ public:
      * buffers to storage imported here (tools/dxvk-patches/0003) and offers
      * Vulkan interop to import it with. */
     bool               slices() const;
-    /* `bytes` of the dma-buf `fd` imported on DXVK's device, to draw from;
-     * the fd is the buffer's whatever happens. */
-    [[nodiscard]] bool import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer);
+    /* `bytes` of host memory at `host` imported on DXVK's device, to draw
+     * from (VulkanBuffer::import_host_pointer_to_draw). */
+    [[nodiscard]] bool import_to_draw(void *host, uint64_t bytes, VulkanBuffer &buffer);
     /* `buffer` from now on is `bytes` at `offset` of `storage`, which the CPU
      * reaches at `host`: recorded on the immediate context, so what was
      * recorded before reads its storage before. Under the device's lock. */

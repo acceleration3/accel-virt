@@ -131,7 +131,10 @@ TEST(blob_imports_import, a_chunk_is_aliased_and_the_executor_is_handed_the_rang
   CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_DMA_BUF});
   CHECK_EQ(handed.reserved, 5u);
   CHECK(handed.fd >= 0);
-  CHECK(handed.pointer == nullptr);
+  /* Beside it, the device's own mapping of the same pages (ABI 19), which a
+   * GPU that reads an imported dma-buf without snooping imports instead. */
+  CHECK(handed.pointer != nullptr);
+  CHECK(std::memcmp(handed.pointer, rig.guest_page(3u), page) == 0);
   CHECK_EQ(handed.size, 2u * page);
   Handed shared(handed);
   auto *const pointer = shared.bytes();
@@ -262,7 +265,7 @@ TEST(blob_imports_import, a_host_chunk_is_handed_as_a_dma_buf_over_its_own_memor
   CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_DMA_BUF});
   CHECK_EQ(handed.reserved, 4u);
   CHECK(handed.fd >= 0);
-  CHECK(handed.pointer == nullptr);
+  CHECK(handed.pointer != nullptr);   /* the device's own mapping, beside it */
   CHECK_EQ(handed.size, 2u * page);
   /* The blob is held for the import as a guest chunk is. */
   CHECK_STATUS(rig.blobs().release(rig.chunk(1u)), Status::invalid_state);

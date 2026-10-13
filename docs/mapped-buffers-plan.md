@@ -186,9 +186,9 @@ Each step builds, passes its tests, and is usable on its own.
 4. **Direct3D 11 vertex, index and other dynamic buffers on slices.**
    `WatchedShadows` goes. Subnautica, Half-Life 2's intro (the arena's
    throughput case) and DWM's many small NO_OVERWRITE appends are the checks.
-5. **Direct3D 11 dynamic constant buffers on slices**, suballocated small.
-   A DISCARD per draw becomes one command with no bytes, and the host's
-   `ConstantRing` goes.
+5. **Direct3D 11 dynamic constant buffers on slices** - done with step 4:
+   they are dynamic buffers the CPU writes too. The host's `ConstantRing`
+   stays, for a session whose host cannot draw from slices and copies.
 6. **Direct3D 9** on the same component and the same DXVK method.
 7. **OpenGL**, with the name indirection of 3.2.
 
@@ -201,16 +201,25 @@ These have to be answered before or during the steps they belong to.
    on every draw that reads it. DXVK already places dynamic buffers in
    host-visible memory, so this should be no worse than native, but it has to
    be measured on a discrete card.
-2. **dma-buf limits.** QEMU's log already warns *"a blob could not be a
-   dma-buf (raise udmabuf's size_limit_mb and list_limit?)"* for guest-RAM
-   chunks. Window chunks are memfd ranges and are not affected; the guest-RAM
-   fallback is, and falls back to a host pointer import.
-3. **DXVK's assumptions about imported allocations**: *"imported buffers must
-   not be renamed"* is DXVK's own comment. The patch swaps storage the other
-   way round, from its own to an imported one and between imported ones,
-   which is what `invalidateBuffer` is for, but views, descriptor caching and
-   the buffer's tracked GPU address must be checked against DXVK 3.1.1's code,
-   not assumed.
+2. **Coherency - answered.** An Intel GPU (Meteor Lake, Mesa ANV) reads an
+   imported dma-buf without snooping the CPU's caches: guest writes still in
+   the cache are invisible to the draw. Measured with a standalone Vulkan
+   program writing a fresh 4 KiB and copying it out, 200 times: 199 copies
+   stale through a udmabuf, 0 through the same memory imported by host
+   pointer (`VK_EXT_external_memory_host`). No memory type of either kind
+   snoops. A write-combined guest mapping does not help either: KVM maps
+   guest RAM write-back whatever the guest's page attributes say. So the
+   region is imported by host pointer (`tools/dxvk-patches/0004` enables the
+   extension on DXVK's device), from the device's own mapping of the memory,
+   which executor ABI 19 hands over beside a dma-buf; a mapping of the
+   dma-buf itself cannot be pinned. A host GPU that refuses the pointer
+   leaves the session copying, as before.
+3. **DXVK's assumptions - answered.** `importBufferResource` took an
+   allocation from the allocator's pool without its lock, which every other
+   path to the pool holds; DXVK only ever called it once, at D3D11On12 setup.
+   Called per bind from the embedder's thread, it raced DXVK's own frees for
+   the pool's free list: allocations were handed out twice, DWM drew garbage,
+   and one run crashed QEMU in that function. Patch 0003 now takes the lock.
 4. **Deferred contexts.** A command list records a DISCARD map; each
    `ExecuteCommandList` replays it. The slice the recording wrote must live as
    long as the list, and a replay must bind it again rather than take a new

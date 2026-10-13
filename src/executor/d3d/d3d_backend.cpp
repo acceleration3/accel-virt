@@ -1709,13 +1709,16 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t offset, uint64_t
     return device11_->bind_storage(buffer, region_storage_, offset, bytes, host);
 }
 
+/* By the region's host pages - the device's own mapping, for a region taken as
+ * a dma-buf: an Intel GPU reads imported host memory coherently, and a dma-buf
+ * not. */
 bool D3dBackend::region_to_draw()
 {
     AV_SCOPE("D3dBackend::region_to_draw");
     if (region_storage_.made()) return true;
-    if (region_storage_refused_ || region_.descriptor() < 0 || !device11_->slices()) return false;
-    const int descriptor = dup(region_.descriptor());
-    if (descriptor >= 0 && device11_->import_to_draw(descriptor, region_.length(), region_storage_)) return true;
+    uint8_t *const host = region_.host_pages();
+    if (region_storage_refused_ || host == nullptr || !device11_->slices()) return false;
+    if (device11_->import_to_draw(host, region_.length(), region_storage_)) return true;
     region_storage_refused_ = true;
     lines_.write("the session's region could not be imported to draw from: mapped buffers are copied");
     return false;

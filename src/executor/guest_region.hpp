@@ -45,6 +45,11 @@ public:
     void               abandon(ImportedBlob &blob);
     /* The dma-buf the region was taken as; -1 for one taken as a pointer. */
     int  descriptor() const;
+    /* The region as ordinary host pages a GPU can import by pointer: the
+     * pointer it was taken as, or the device's own mapping of a dma-buf - not
+     * this region's mapping of the dma-buf, whose pages a driver cannot pin.
+     * Null where the device handed over none. */
+    uint8_t *host_pages() const;
 
     /* `bytes` at `offset`, or null: for a region that is not there, an offset
      * past its end, a length past its end, and a sum that would wrap. */
@@ -69,6 +74,7 @@ private:
     uint8_t *base_;
     uint64_t length_;
     int      descriptor_;
+    uint8_t *host_pages_;
 };
 
 }  // namespace av

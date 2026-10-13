@@ -1,0 +1,51 @@
+From: accel-virt
+Subject: [PATCH] dxvk: enable VK_EXT_external_memory_host for an embedder
+
+accel-virt imports guest memory for this device to read in place (buffers on
+slices, tools/dxvk-patches/0003). Imported as a dma-buf, an Intel GPU reads it
+without snooping the CPU caches - 199 copies of 200 read stale bytes in a
+measurement - while the same memory imported by host pointer read 0 of 200
+stale.
+---
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -50,6 +50,7 @@
+     HANDLE_EXT(khrExternalSemaphoreWin32);         \
+     HANDLE_EXT(khrExternalMemoryFd);               \
+     HANDLE_EXT(extExternalMemoryDmaBuf);           \
++    HANDLE_EXT(extExternalMemoryHost);             \
+     HANDLE_EXT(khrExternalSemaphoreFd);            \
+     HANDLE_EXT(khrIncrementalPresent);             \
+     HANDLE_EXT(khrLoadStoreOpNone);                \
+@@ -1031,6 +1032,11 @@
+       ENABLE_EXT(khrExternalMemoryFd, false),
+       ENABLE_EXT(extExternalMemoryDmaBuf, false),
+ 
++      /* Memory an embedder imports by host pointer for this device's GPU to
++       * read in place: guest memory, which an Intel GPU reads coherently
++       * only imported this way (accel-virt's buffers on slices) */
++      ENABLE_EXT(extExternalMemoryHost, false),
++
+       /* A timeline an embedder imports to order this device's work after
+        * another's on the same GPU (accel-virt's Direct3D 12 swapchains) */
+       ENABLE_EXT(khrExternalSemaphoreFd, false),
+diff --git a/src/dxvk/dxvk_device_info.h b/src/dxvk/dxvk_device_info.h
+--- a/src/dxvk/dxvk_device_info.h
++++ b/src/dxvk/dxvk_device_info.h
+@@ -93,6 +93,7 @@
+     VkBool32                                                  khrExternalSemaphoreWin32       = VK_FALSE;
+     VkBool32                                                  khrExternalMemoryFd             = VK_FALSE;
+     VkBool32                                                  extExternalMemoryDmaBuf         = VK_FALSE;
++    VkBool32                                                  extExternalMemoryHost           = VK_FALSE;
+     VkBool32                                                  khrExternalSemaphoreFd          = VK_FALSE;
+     VkBool32                                                  khrIncrementalPresent           = VK_FALSE;
+     VkBool32                                                  khrLoadStoreOpNone              = VK_FALSE;
+@@ -172,6 +173,7 @@
+     VkExtensionProperties khrExternalSemaphoreWin32         = vk::makeExtension(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME);
+     VkExtensionProperties khrExternalMemoryFd               = vk::makeExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+     VkExtensionProperties extExternalMemoryDmaBuf           = vk::makeExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
++    VkExtensionProperties extExternalMemoryHost             = vk::makeExtension(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+     VkExtensionProperties khrExternalSemaphoreFd            = vk::makeExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+     VkExtensionProperties khrIncrementalPresent             = vk::makeExtension(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME);
+     VkExtensionProperties khrLoadStoreOpNone                = vk::makeExtension(VK_KHR_LOAD_STORE_OP_NONE_EXTENSION_NAME);

@@ -93,7 +93,7 @@ private:
     static constexpr size_t   batch_bytes = 1u << 20u;
     /* What the blob arena is lent of a session that places buffers in its
      * arena: the rest, short of the query results, is theirs. */
-    static constexpr uint64_t lent_bytes = uint64_t{32} << 20u;
+    static constexpr uint64_t lent_bytes = uint64_t{24} << 20u;
 
     HRESULT open(uint32_t adapter);
     void    close();

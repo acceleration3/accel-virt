@@ -9,7 +9,7 @@
 
 namespace av {
 
-GuestRegion::GuestRegion() : base_(nullptr), length_(0u), descriptor_(-1)
+GuestRegion::GuestRegion() : base_(nullptr), length_(0u), descriptor_(-1), host_pages_(nullptr)
 {
     AV_SCOPE("GuestRegion::GuestRegion");
 }
@@ -19,6 +19,7 @@ void GuestRegion::take(uint8_t *base, uint64_t length)
     AV_SCOPE("GuestRegion::take");
     base_ = base;
     length_ = base == nullptr ? 0u : length;
+    host_pages_ = base;
 }
 
 /* mmap places a mapping at page alignment only, which left a 1 GiB arena where
@@ -61,12 +62,19 @@ void GuestRegion::give_back()
     base_ = nullptr;
     length_ = 0u;
     descriptor_ = -1;
+    host_pages_ = nullptr;
 }
 
 int GuestRegion::descriptor() const
 {
     AV_SCOPE("GuestRegion::descriptor");
     return descriptor_;
+}
+
+uint8_t *GuestRegion::host_pages() const
+{
+    AV_SCOPE("GuestRegion::host_pages");
+    return host_pages_;
 }
 
 uint8_t *GuestRegion::at(uint64_t offset, uint64_t bytes) const
@@ -115,6 +123,7 @@ bool GuestRegion::adopt_pointer_or_buffer(ImportedBlob &blob)
     AV_SCOPE("GuestRegion::adopt_pointer_or_buffer");
     if (length_ != 0u || blob.kind() != AV_BLOB_DMA_BUF) return adopt_pointer(blob);
     if (!take_shared(blob.descriptor(), blob.size())) return false;
+    host_pages_ = static_cast<uint8_t *>(blob.pointer());
     record(blob);
     return true;
 }

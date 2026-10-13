@@ -6,7 +6,10 @@ range the embedder imported, recorded on the context as a discard renames it,
 so commands recorded before read the old storage and those after the new.
 accel-virt points a guest buffer the CPU writes at the guest memory the guest
 writes it in, so the GPU reads what the guest wrote when the draw runs.
-DxvkBuffer::importStorage makes the storage as the importing constructor does.
+DxvkBuffer::importStorage makes the storage as the importing constructor does,
+and importBufferResource now takes the allocator's lock as every other path
+to its allocation pool does: called from the embedder's thread while DXVK's
+own freed allocations, it raced them for the pool's free list.
 ---
 diff --git a/src/d3d11/d3d11_buffer.h b/src/d3d11/d3d11_buffer.h
 index 853d261f..52309c35 100644
@@ -199,3 +202,19 @@ index 003fb74c..df865d69 100644
      /**
       * \brief Allocates new buffer slice with cache
       *
+diff --git a/src/dxvk/dxvk_memory.cpp b/src/dxvk/dxvk_memory.cpp
+index fc18044d..c5723fca 100644
+--- a/src/dxvk/dxvk_memory.cpp
++++ b/src/dxvk/dxvk_memory.cpp
+@@ -1306,6 +1306,11 @@ namespace dxvk {
+     const VkBufferCreateInfo&         createInfo,
+     const DxvkAllocationInfo&         allocationInfo,
+     const DxvkBufferImportInfo&       importInfo) {
++    // The pool is the allocator's, which every other path that creates or
++    // frees an allocation reaches under the lock: an embedder importing
++    // storage while the device frees allocations would race them for it.
++    std::unique_lock lock(m_mutex);
++
+     Rc<DxvkResourceAllocation> allocation = m_allocationPool.create(this, nullptr);
+     allocation->m_flags.set(DxvkAllocationFlag::Imported);
+     allocation->m_resourceCookie = allocationInfo.resourceCookie;
