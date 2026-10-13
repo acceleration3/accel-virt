@@ -59,6 +59,10 @@ public:
      * adapter handle) for the first. The HRESULT a failed open answers the
      * runtime with; nothing joined then. */
     HRESULT join(uint32_t adapter);
+    /* `size` bytes of `data` handed to the miniport's DxgkDdiEscape on the
+     * session's device, and its answer copied back over them; scoped there to
+     * the calling process. */
+    [[nodiscard]] Status escape(uint8_t *data, uint32_t size);
     /* One device fewer; the last closes the session. */
     void    leave();
 

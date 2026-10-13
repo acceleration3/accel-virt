@@ -219,6 +219,20 @@ DeviceAllocation *DeviceTable::opened(void *handle)
     return opens_.find(handle);
 }
 
+Status DeviceTable::name_point(void *process, uint64_t surface, uint32_t point)
+{
+    AV_SCOPE("DeviceTable::name_point");
+    platform_.require_irql_at_most(Irql::passive, "DeviceTable::name_point");
+    if (process == nullptr) return Status::invalid_parameter;
+    MutexGuard              lock(mutex_);
+    DeviceAllocation *const open = opens_.find_if([process, surface](const DeviceAllocation &held) {
+        return held.device().process() == process && held.allocation().shared_id() == surface;
+    });
+    if (open == nullptr) return Status::not_found;
+    open->name_point(point);
+    return Status::ok;
+}
+
 Device *DeviceTable::find(void *device)
 {
     AV_SCOPE("DeviceTable::find");

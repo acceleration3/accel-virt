@@ -41,3 +41,21 @@ TEST(device_allocation, carries_the_shared_object_its_open_counted)
                           allocation);
   const DeviceAllocation open(device, allocation, &object);
   CHECK(open.shared() == &object); }
+
+/* A point named for the next present from the open is kept until forgotten,
+ * and a later name replaces it (NextPointRecord). */
+TEST(device_allocation, keeps_the_point_named_for_its_next_present_until_forgotten)
+{ MockPlatform platform; int pdo = 0;
+  Adapter adapter(platform, &pdo);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
+  av::ApertureSegment aperture(platform);
+  const av::MemorySegments segments(platform, aperture);
+  Allocation allocation(platform, segments, AllocationDescriptor(), 0x1000u);
+  DeviceAllocation open(device, allocation, nullptr);
+  CHECK_EQ(open.point(), 0u);
+  open.name_point(7u);
+  CHECK_EQ(open.point(), 7u);
+  open.name_point(8u);
+  CHECK_EQ(open.point(), 8u);
+  open.forget_point();
+  CHECK_EQ(open.point(), 0u); }

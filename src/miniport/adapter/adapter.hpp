@@ -383,6 +383,7 @@ private:
     int32_t          window_chunk(const DxgkargEscapeRecord &escape);
     int32_t          context_views(const DxgkargEscapeRecord &escape);
     int32_t          wake_event(const DxgkargEscapeRecord &escape);
+    int32_t          next_point(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an av context: published, rung, and held on
      * the node until the fence page says the host finished it. */

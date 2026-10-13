@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
+#include "guest/kmt/kmt.hpp"
 
 namespace av::d3d {
 
@@ -46,6 +47,13 @@ void D3dSession::leave()
     if (members_ == 0u) return;
     members_--;
     if (members_ == 0u) close();
+}
+
+Status D3dSession::escape(uint8_t *data, uint32_t size)
+{
+    AV_SCOPE("D3dSession::escape");
+    if (!connection_.opened()) return Status::invalid_state;
+    return connection_.kmt().escape(connection_.adapter(), connection_.device(), 0u, data, size);
 }
 
 HRESULT D3dSession::open(uint32_t adapter)

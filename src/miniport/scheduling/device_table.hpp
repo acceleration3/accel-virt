@@ -45,6 +45,11 @@ public:
     /* The allocation `handle` names, if this table opened it; null otherwise.
      * What a present's allocation list is read through (feature 046). */
     DeviceAllocation    *opened(void *handle);
+    /* `point` named on an open of the allocation minted as `surface` by a
+     * device of `process`, the hKmdProcess CreateProcess answered
+     * (NextPointRecord): invalid_parameter for no process, not_found where no
+     * device of it has such an open. */
+    [[nodiscard]] Status name_point(void *process, uint64_t surface, uint32_t point);
     uint32_t             devices() const;
     uint32_t             opens() const;
 

@@ -94,6 +94,7 @@
 #include "miniport/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "miniport/scheduling/execution_node.hpp"
 #include "proto/escape/follow_record.hpp"
+#include "proto/escape/next_point_record.hpp"
 #include "miniport/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "miniport/ddi/linked_device_record.hpp"
 #include "miniport/display/display_mode.hpp"
@@ -3154,6 +3155,91 @@ TEST(adapter_present, a_blt_naming_a_point_on_a_host_surface_is_queued_from_its_
   std::memcpy(&named_point, fixture.last_queued() + 36u, sizeof named_point);
   CHECK_EQ(kind, 0u);
   CHECK_EQ(named_point, 0u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* Direct3D 9's present cannot carry a point, so the process names it first
+ * by escape on its device's open of the source (NextPointRecord): the blt that
+ * follows is queued from that frame, and the one after it, naming none, from
+ * pages again. A surface no device of the process opened, or no process, is
+ * refused. */
+TEST(adapter_present, a_point_named_by_escape_is_the_next_blt_s_frame)
+{ Fixture fixture;
+  fixture.offer_present_snapshots();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  int                           process = 0;
+  av::DxgkargCreateDeviceRecord device = {};
+  device.hKmdProcess = &process;
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t dma[512] = {};
+  std::uint8_t point[av::PresentPointRecord::encoded_size] = {};
+  CHECK_STATUS(av::PresentPointRecord(1u).encode(point, sizeof point), av::Status::ok);
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPrivateDriverData = point;
+  present.PrivateDriverDataSize = sizeof point;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  fixture.serve();
+  std::uint64_t surface = 0u;
+  std::memcpy(&surface, fixture.last_queued() + 40u, sizeof surface);
+  CHECK(surface != 0u);
+
+  std::uint8_t named[av::NextPointRecord::encoded_size] = {};
+  CHECK_STATUS(av::NextPointRecord(surface, 0x55u).encode(named, sizeof named), av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.hKmdProcessHandle = &process;
+  escape.pPrivateDriverData = named;
+  escape.PrivateDriverDataSize = sizeof named;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  av::DxgkargPresentRecord bare = present;
+  bare.pDmaBuffer = dma;
+  bare.pPrivateDriverData = nullptr;
+  bare.PrivateDriverDataSize = 0u;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &bare)), success);
+  fixture.serve();
+  std::uint32_t kind = 0u, named_point = 0u;
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  std::memcpy(&named_point, fixture.last_queued() + 36u, sizeof named_point);
+  CHECK_EQ(kind, 1u);
+  CHECK_EQ(named_point, 0x55u);
+  /* Named once: the next blt is from pages. */
+  av::DxgkargPresentRecord again = bare;
+  again.pDmaBuffer = dma;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &again)), success);
+  fixture.serve();
+  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
+  CHECK_EQ(kind, 0u);
+
+  /* A surface the process has not opened, another process, none, another
+   * length. */
+  CHECK_STATUS(av::NextPointRecord(surface + 1000u, 0x55u).encode(named, sizeof named), av::Status::ok);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  CHECK_STATUS(av::NextPointRecord(surface, 0x56u).encode(named, sizeof named), av::Status::ok);
+  int stranger = 0;
+  escape.hKmdProcessHandle = &stranger;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.hKmdProcessHandle = nullptr;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.hKmdProcessHandle = &process;
+  escape.PrivateDriverDataSize = sizeof named - 1u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
   fixture.stop_presents();
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }

@@ -15,7 +15,10 @@
 #include "icd/d3d/pitched_rows.hpp"
 #include "icd/d3d/present_format.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
+#include "proto/escape/next_point_record.hpp"
 #include "um/d3d/d3d9_device.hpp"
+#include "um/d3d/d3d_session.hpp"
+#include "um/d3d/d3d9_host_caps.hpp"
 
 #include <string.h>
 
@@ -117,11 +120,43 @@ HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
 }
 
 /* The pixels a present hands the kernel: a keyed primary's on the host,
- * anything else's read back into its pages. */
+ * anything else's staged there at a point (publish_point). */
 HRESULT D3d9Device::publish_presented(D3d9Resource &resource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::publish_presented");
     if (resource.allocation_resource != nullptr && resource.shared_key != 0u) return show_primary(resource, index);
+    return publish_point(resource, index);
+}
+
+/* d3d9.dll's PresentCB builds the kernel's present itself and drops the
+ * private driver data a point rides in, so the point reaches the miniport by
+ * escape instead (NextPointRecord), before the present. The host stages only
+ * the two formats a window is drawn from (D3d9Session::on_PresentPoint9). */
+HRESULT D3d9Device::publish_point(D3d9Resource &resource, uint32_t index)
+{
+    AV_SCOPE("D3d9Device::publish_point");
+    const bool staged_format = resource.format == D3DDDIFMT_X8R8G8B8 || resource.format == D3DDDIFMT_A8R8G8B8;
+    uint32_t   id = 0u, subresource = 0u;
+    if (!caps_.present_snapshots() || resource.shared_key == 0u || !staged_format ||
+        !surface_of(resource, index, id, subresource))
+        return publish(resource, index);
+    /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
+    resource.presents = resource.presents + 1u == 0u ? 1u : resource.presents + 1u;
+    if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, resource.shared_key, resource.presents) ||
+        wire().flush() != Status::ok)
+        return lost(__func__);
+    uint8_t      record[NextPointRecord::encoded_size] = {};
+    const Status named = NextPointRecord(resource.shared_key, resource.presents).encode(record, sizeof record) ==
+                                 Status::ok
+                             ? session_.escape(record, sizeof record)
+                             : Status::invalid_parameter;
+    if (named == Status::ok) return S_OK;
+    if (lines_.first("a Direct3D 9 point the miniport refused", static_cast<int64_t>(named)))
+        LogLine(lines_)
+            .text("the miniport took no point for a Direct3D 9 present, status ")
+            .number(static_cast<uint32_t>(named))
+            .text("; its frames are read back")
+            .write();
     return publish(resource, index);
 }
 
@@ -185,9 +220,6 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
             return made;
         }
     }
-    /* Read back, not staged on the host (PresentPoint9): d3d9.dll's PresentCB
-     * builds the kernel's present itself and drops the private driver data a
-     * point rides in, so the miniport would blt pages nothing wrote. */
     const HRESULT published = publish_presented(*source, args->SrcSubResourceIndex);
     if (FAILED(published)) {
         lines_.once("a Direct3D 9 present whose buffer could not be read back");

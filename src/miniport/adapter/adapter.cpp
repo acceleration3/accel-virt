@@ -24,6 +24,7 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/escape/umd_adapter_info.hpp"
 #include "proto/escape/follow_record.hpp"
+#include "proto/escape/next_point_record.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/escape/present_point_record.hpp"
 #include "miniport/present/present_ticket_record.hpp"
@@ -785,6 +786,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     if (magic == HostWindowRecord::magic) return window_chunk(*escape);
     if (magic == ContextViewsRecord::magic) return context_views(*escape);
     if (magic == WakeEventRecord::magic) return wake_event(*escape);
+    if (magic == NextPointRecord::magic) return next_point(*escape);
     if (magic != TraceEscapeRecord::magic) return NtStatus(Status::not_supported).value();
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
@@ -810,6 +812,32 @@ int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
     if (status != Status::ok) return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, HostWindowRecord::encoded_size));   /* the length was checked */
     return NtStatus(Status::ok).value();
+}
+
+/* A process naming the point of its next blt from a surface one of its
+ * devices opened, which Direct3D 9's present cannot carry (NextPointRecord).
+ * The escape is the adapter's - the runtime takes no device on it - so the
+ * process is what scopes it. Every refusal is STATUS_INVALID_PARAMETER. */
+int32_t Adapter::next_point(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::next_point");
+    NextPointRecord record;
+    const Status    decoded =
+        record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize);
+    const Status named = decoded != Status::ok
+                             ? Status::invalid_parameter
+                             : devices_.name_point(escape.hKmdProcessHandle, record.surface(), record.point());
+    if (named == Status::ok) return NtStatus(Status::ok).value();
+    if (budget_.allows()) {
+        char       bytes[128];
+        TextBuffer message(bytes, sizeof bytes);
+        message.append(escape.hKmdProcessHandle == nullptr ? "avgpu: a point named by no process"
+                                                           : "avgpu: a point named on no open of its surface");
+        message.append(", status ");
+        message.append_decimal(static_cast<uint32_t>(named));
+        platform_.log(message.text());
+    }
+    return NtStatus(Status::invalid_parameter).value();
 }
 
 /* A process asking where its av context's ring and reply slot are: the driver
@@ -1607,6 +1635,8 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
                                 destination->allocation().descriptor().kind(), from, into);
     }
     present_rows_ += blit.rows();
+    /* A point names one present, whichever pass of it ends it. */
+    if (source != nullptr && end == request.SubRectCnt) source->forget_point();
     return ticket.ticket();
 }
 
@@ -1619,11 +1649,13 @@ SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const Device
 {
     AV_SCOPE("Adapter::image_of");
     PresentPointRecord record;
-    if (source == nullptr || !identity_.offers(CapsetInfo::feature_present_from_image) ||
-        record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) !=
-            Status::ok)
-        return SurfacePoint();
-    return SurfacePoint(source->allocation().shared_id(), record.point());
+    if (source == nullptr || !identity_.offers(CapsetInfo::feature_present_from_image)) return SurfacePoint();
+    if (record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) ==
+        Status::ok)
+        return SurfacePoint(source->allocation().shared_id(), record.point());
+    /* Named by escape where the present could carry none (NextPointRecord). */
+    if (source->point() == 0u) return SurfacePoint();
+    return SurfacePoint(source->allocation().shared_id(), source->point());
 }
 
 PixelMover &Adapter::immediate_mover()

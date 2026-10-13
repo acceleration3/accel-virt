@@ -220,6 +220,10 @@ private:
     HRESULT show_primary(D3d9Resource &primary, uint32_t index);
     HRESULT publish_presented(D3d9Resource &resource, uint32_t index);
     HRESULT publish(D3d9Resource &resource, uint32_t index);
+    /* The frame staged on the host at the resource's next point, and the
+     * point named to the miniport for the blt; read back (publish) where the
+     * host stages none or the miniport takes no point. */
+    HRESULT publish_point(D3d9Resource &resource, uint32_t index);
     HRESULT follow_host();
 
     d3d::D3dSession                     &session_;

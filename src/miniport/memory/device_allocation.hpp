@@ -3,6 +3,8 @@
 #ifndef AV_DEVICE_ALLOCATION_HPP
 #define AV_DEVICE_ALLOCATION_HPP
 
+#include <stdint.h>
+
 namespace av {
 
 class Allocation;
@@ -21,11 +23,18 @@ public:
     Device       &device() const;
     Allocation   &allocation() const;
     SharedObject *shared() const;
+    /* The point the device named for its next present from this allocation
+     * (NextPointRecord), 0 when none was named; forgotten once that present's
+     * last pass has moved. */
+    void          name_point(uint32_t point);
+    uint32_t      point() const;
+    void          forget_point();
 
 private:
     Device       &device_;
     Allocation   &allocation_;
     SharedObject *shared_;
+    uint32_t      point_;
 };
 
 }  // namespace av

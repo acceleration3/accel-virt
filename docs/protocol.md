@@ -735,6 +735,39 @@ else as one. An escape whose data is no record the miniport knows answers
 reserved field, addresses already filled in, no context named or one that is
 not a live av context - is `STATUS_INVALID_PARAMETER` and writes nothing back.
 
+### Next point record (user mode -> guest driver, escape)
+
+The private data of one adapter-level `D3DKMTEscape`. A process names the
+present point of its next blt from a host surface, where the present itself
+cannot carry the point.
+
+d3d9.dll's `PresentCB` builds the kernel's present itself and drops the
+private driver data a `PresentPointRecord` rides in. The Direct3D 9 driver
+therefore stages the frame on the host (`PresentPoint9` with a point), then
+names that point here before the present. The miniport decodes it at
+`PASSIVE` and writes nothing back. 16 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `AVN` = `0x004E5641` |
+| 4 | u32 | point | not 0 |
+| 8 | u64 | surface | the shared id the allocation was minted as; not 0 |
+
+The miniport scopes the escape by the calling process (`hKmdProcessHandle`):
+it finds an open of the allocation minted as `surface` by a device of that
+process, and keeps the point on that open. The next present from the
+allocation takes it as it would a `PresentPointRecord` in the present's own
+private data. If the present carries its own record, that record wins. The
+point is forgotten once that present's last pass has moved, so a later
+present naming none is a blt from pages again.
+
+Every refusal is `STATUS_INVALID_PARAMETER`:
+- another length or magic, a point or surface of 0;
+- no process;
+- no open of the surface by a device of the process.
+
+The driver reads its frames back into the allocation then, as it did before.
+
 ### Wake event record (user mode -> guest driver, escape)
 
 The private data of one `D3DKMTEscape` whose `hContext` names a live av
