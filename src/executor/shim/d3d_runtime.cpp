@@ -51,8 +51,14 @@ bool D3dRuntime::open()
     AV_SCOPE("D3dRuntime::open");
     if (d3d11_ != nullptr) return true;
     /* SDL3's driver is the one that loads with no display: the device never
-     * presents through DXVK, it only needs a factory. */
+     * presents through DXVK, it only needs a factory. SDL3 itself still wants
+     * a display to start its video subsystem, so with none - a VM started
+     * before anyone logged in to the host's desktop - it is told to run
+     * offscreen; without that DXVK made no factory and the guest had no
+     * Direct3D 11 at all. A display, or a driver someone chose, is kept. */
     setenv("DXVK_WSI_DRIVER", "SDL3", 0);
+    if (EnvSetting("WAYLAND_DISPLAY").text() == nullptr && EnvSetting("DISPLAY").text() == nullptr)
+        setenv("SDL_VIDEO_DRIVER", "offscreen", 0);
     dxgi_ = open_library("libdxvk_dxgi.so");
     d3d11_ = open_library("libdxvk_d3d11.so");
     if (dxgi_ == nullptr || d3d11_ == nullptr) {
