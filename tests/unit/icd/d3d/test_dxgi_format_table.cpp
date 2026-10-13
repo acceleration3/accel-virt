@@ -1,11 +1,12 @@
 /* What a Direct3D runtime is told of each DXGI format, from what the host's
- * device answered: the host's D3D11 support words become DDI bits, a family's
- * multisampling is pooled for Direct3D 12 and each format's own for
- * Direct3D 11, and no answer is one the runtime refuses the driver over. */
+ * device answered: the host's D3D11 support words become DDI bits, each
+ * family's multisampling settles on one story for both runtimes, and no
+ * answer is one the runtime refuses the driver over. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/dxgi_format_table.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 
 using av::d3d::DxgiFormatTable;
 
@@ -36,17 +37,46 @@ constexpr std::uint32_t ddi_display = 0x200000u;
 
 /* DXGI_FORMAT numbers. */
 constexpr std::uint32_t rgba32_float = 2u;
+constexpr std::uint32_t rgb32_typeless = 5u, rgb32_float = 6u, rgb32_uint = 7u;
 constexpr std::uint32_t rgba8_typeless = 27u, rgba8_unorm = 28u, rgba8_srgb = 29u, rgba8_uint = 30u,
                         rgba8_snorm = 31u;
 constexpr std::uint32_t d24_s8 = 45u;
 constexpr std::uint32_t bgra_unorm = 87u, bgra_typeless = 90u;
 constexpr std::uint32_t r16_typeless = 53u;
 
+/* DXGI's typeless families, numbered after their head, and the two BGRA
+ * families, named member by member: the runtime's own parent of each format,
+ * written out here apart from the table's. */
+struct Family {
+    std::uint32_t head, last;
+};
+constexpr Family families[] = {{1u, 4u},   {5u, 8u},   {9u, 14u},  {15u, 18u}, {19u, 22u}, {23u, 25u},
+                               {27u, 32u}, {33u, 38u}, {39u, 43u}, {44u, 47u}, {48u, 52u}, {53u, 59u},
+                               {60u, 64u}, {70u, 72u}, {73u, 75u}, {76u, 78u}, {79u, 81u}, {82u, 84u},
+                               {94u, 96u}, {97u, 99u}};
+
+std::uint32_t typeless_parent(std::uint32_t format)
+{
+    if (format == 87u || format == 91u) return 90u;
+    if (format == 88u || format == 93u) return 92u;
+    for (const Family &family : families)
+        if (format >= family.head && format <= family.last) return family.head;
+    return format;
+}
+
+bool is_typeless(std::uint32_t format)
+{
+    if (format == 90u || format == 92u) return true;
+    for (const Family &family : families)
+        if (format == family.head) return true;
+    return false;
+}
+
 constexpr std::uint32_t renders = api_render_target | api_blendable | api_multisample_render_target |
                                   api_multisample_load | api_sample;
 
 /* An RGBA8 family whose two multisampled members disagree on their levels,
- * and a member that renders but does not multisample. */
+ * and a member that renders but only loads multisampled. */
 void record_rgba8(DxgiFormatTable &table)
 {
     table.record(rgba8_unorm, renders | api_display, 0u);
@@ -55,7 +85,7 @@ void record_rgba8(DxgiFormatTable &table)
     table.record(rgba8_srgb, renders, 0u);
     table.record_samples(rgba8_srgb, 2u, 2u);
     table.record_samples(rgba8_srgb, 4u, 5u);
-    table.record(rgba8_uint, api_render_target | api_sample, 0u);
+    table.record(rgba8_uint, api_render_target | api_sample | api_multisample_load, 0u);
 }
 
 }  // namespace
@@ -72,9 +102,7 @@ TEST(dxgi_format_table, the_hosts_bits_become_the_ddis_bits)
   /* Nothing recorded, nothing claimed; and no format is 0 or past the table. */
   CHECK_EQ(table.format_support(1u), 0u);
   CHECK_EQ(table.format_support(0u), 0u);
-  CHECK_EQ(table.format_support(DxgiFormatTable::format_count), 0u);
-  CHECK_EQ(table.own_format_support(0u), 0u);
-  CHECK_EQ(table.own_format_support(DxgiFormatTable::format_count), 0u); }
+  CHECK_EQ(table.format_support(DxgiFormatTable::format_count), 0u); }
 
 /* Whether the host tiles a format is its own bit, which only a driver that
  * carries tiled resources adds - Direct3D 11's never does - and no other
@@ -88,8 +116,7 @@ TEST(dxgi_format_table, a_format_the_host_tiles_is_told_apart_from_its_other_sup
   CHECK_EQ(table.tiled_support(rgba8_unorm), ddi_tiled);
   CHECK_EQ(table.tiled_support(rgba32_float), 0u);
   CHECK_EQ(table.tiled_support(DxgiFormatTable::format_count), 0u);
-  CHECK_EQ(table.format_support(rgba8_unorm) & ddi_tiled, 0u);
-  CHECK_EQ(table.own_format_support(rgba8_unorm) & ddi_tiled, 0u); }
+  CHECK_EQ(table.format_support(rgba8_unorm) & ddi_tiled, 0u); }
 
 /* Blending and multisampled rendering are rendering: claimed without a render
  * target, they are not told. */
@@ -120,10 +147,10 @@ TEST(dxgi_format_table, a_depth_format_renders_by_its_depth_stencil_and_is_never
   bare.settle();
   CHECK_EQ(bare.format_support(d24_s8), 0u); }
 
-/* Direct3D 12 holds a family to one story: every multisampled member answers
- * the fewest levels any of them has, the typeless parent the same, and a
- * member that does not multisample answers none. */
-TEST(dxgi_format_table, direct3d_12_is_told_each_familys_pooled_levels)
+/* A family tells one story: every member that keeps multisampling answers the
+ * family's levels, the typeless parent the same, and a member that does not
+ * multisample answers none. Both drivers are told it. */
+TEST(dxgi_format_table, a_family_answers_one_set_of_levels)
 { DxgiFormatTable table;
   record_rgba8(table);
   table.settle();
@@ -133,15 +160,6 @@ TEST(dxgi_format_table, direct3d_12_is_told_each_familys_pooled_levels)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 1u);
   CHECK_EQ(table.quality_levels(rgba8_srgb, 2u), 1u);
   CHECK_EQ(table.quality_levels(rgba8_uint, 4u), 0u);
-  /* A member that claims multisampling with no count of its own takes the
-   * whole family down to none: the fewest levels any claimant has. */
-  table.record(rgba8_snorm, renders, 0u);
-  table.settle();
-  CHECK_EQ(table.quality_levels(rgba8_unorm, 4u), 0u);
-  CHECK_EQ(table.quality_levels(rgba8_typeless, 4u), 0u);
-  CHECK_EQ(table.format_support(rgba8_unorm) & (ddi_multisample_render_target | ddi_multisample_load), 0u);
-  table.record(rgba8_snorm, 0u, 0u);
-  table.settle();
   /* No count past the family's recorded ones: 8 and 16 samples are none. */
   CHECK_EQ(table.quality_levels(rgba8_unorm, 8u), 0u);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 16u), 0u);
@@ -153,31 +171,145 @@ TEST(dxgi_format_table, direct3d_12_is_told_each_familys_pooled_levels)
   CHECK_EQ(table.quality_levels(0u, 1u), 0u);
   CHECK_EQ(table.quality_levels(DxgiFormatTable::format_count, 1u), 0u); }
 
-/* Direct3D 11 is told each format's own answer. Pooled, formats DWM draws its
- * acrylic backdrop in lost their multisampling. */
-TEST(dxgi_format_table, direct3d_11_is_told_each_formats_own_levels)
+/* A member that claims multisampled rendering at no count is told none, and
+ * its siblings keep theirs: pooled, it took its family down with it, and the
+ * formats DWM draws its acrylic backdrop in lost their multisampling. */
+TEST(dxgi_format_table, a_member_with_no_count_takes_nothing_from_its_siblings)
 { DxgiFormatTable table;
   record_rgba8(table);
-  table.settle();
-  CHECK_EQ(table.own_quality_levels(rgba8_srgb, 4u), 5u);
-  CHECK_EQ(table.own_quality_levels(rgba8_unorm, 4u), 3u);
-  CHECK_EQ(table.own_quality_levels(rgba8_srgb, 2u), 2u);
-  /* A member that claims multisampling with no level of its own is told none,
-   * and its multisampled bits go. */
   table.record(rgba8_snorm, renders, 0u);
-  CHECK_EQ(table.own_quality_levels(rgba8_snorm, 4u), 0u);
-  CHECK_EQ(table.own_format_support(rgba8_snorm) & (ddi_multisample_render_target | ddi_multisample_load), 0u);
-  CHECK_EQ(table.own_format_support(rgba8_unorm),
+  table.settle();
+  CHECK_EQ(table.quality_levels(rgba8_snorm, 4u), 0u);
+  /* It still loads from a multisampled view, which is its part in the family. */
+  CHECK_EQ(table.format_support(rgba8_snorm) & (ddi_multisample_render_target | ddi_multisample_load),
+           ddi_multisample_load);
+  CHECK_EQ(table.quality_levels(rgba8_unorm, 4u), 3u);
+  CHECK_EQ(table.quality_levels(rgba8_typeless, 4u), 3u);
+  CHECK_EQ(table.format_support(rgba8_unorm),
            ddi_sample | ddi_render_target | ddi_blendable | ddi_multisample_render_target | ddi_multisample_load |
-               ddi_display);
-  CHECK_EQ(table.own_quality_levels(rgba8_uint, 4u), 0u);
-  /* The typeless parent answers its own, which nothing recorded. */
-  CHECK_EQ(table.own_quality_levels(rgba8_typeless, 4u), 0u);
-  table.record_samples(rgba8_typeless, 4u, 7u);
-  CHECK_EQ(table.own_quality_levels(rgba8_typeless, 4u), 7u);
-  CHECK_EQ(table.own_quality_levels(rgba8_uint, 1u), 1u);
-  CHECK_EQ(table.own_quality_levels(rgba8_unorm, 3u), 0u);
-  CHECK_EQ(table.own_quality_levels(DxgiFormatTable::format_count, 1u), 0u); }
+               ddi_display); }
+
+/* An Intel GPU renders R32G32B32_FLOAT multisampled, and neither its typeless
+ * parent nor its UINT sibling - which cannot even load multisampled. The
+ * runtime refuses a member that takes no part in its family's multisampling,
+ * so the family offers none: told otherwise, it refused the driver and dxdiag
+ * found no feature level. */
+TEST(dxgi_format_table, a_member_that_takes_no_part_keeps_its_family_from_multisampling)
+{ DxgiFormatTable table;
+  table.record(rgb32_float, renders, 0u);
+  for (std::uint32_t samples = 2u; samples <= 16u; samples *= 2u) table.record_samples(rgb32_float, samples, 1u);
+  table.record(rgb32_uint, api_sample, 0u);
+  table.settle();
+  for (std::uint32_t samples = 2u; samples <= 16u; samples *= 2u) {
+      CHECK_EQ(table.quality_levels(rgb32_typeless, samples), 0u);
+      CHECK_EQ(table.quality_levels(rgb32_float, samples), 0u);
+      CHECK_EQ(table.quality_levels(rgb32_uint, samples), 0u);
+  }
+  CHECK_EQ(table.format_support(rgb32_float) & (ddi_multisample_render_target | ddi_multisample_load), 0u); }
+
+/* A member that only loads multisampled takes part: the typeless parent
+ * answers what the rendering member does, not the host's own answer for it,
+ * and the loading member keeps its loading with no levels of its own. */
+TEST(dxgi_format_table, a_typeless_parent_answers_what_its_members_do)
+{ DxgiFormatTable table;
+  table.record(rgb32_float, renders, 0u);
+  for (std::uint32_t samples = 2u; samples <= 16u; samples *= 2u) table.record_samples(rgb32_float, samples, 1u);
+  table.record(rgb32_uint, api_sample | api_multisample_load, 0u);
+  table.settle();
+  for (std::uint32_t samples = 2u; samples <= 16u; samples *= 2u) {
+      CHECK_EQ(table.quality_levels(rgb32_typeless, samples), 1u);
+      CHECK_EQ(table.quality_levels(rgb32_float, samples), 1u);
+      CHECK_EQ(table.quality_levels(rgb32_uint, samples), 0u);
+  }
+  CHECK_EQ(table.format_support(rgb32_uint), ddi_sample | ddi_multisample_load); }
+
+/* A member that multisamples at fewer counts than its siblings gives its
+ * multisampling up when keeping it would cost them more counts than it
+ * offers. */
+TEST(dxgi_format_table, a_weak_member_gives_way_to_its_siblings)
+{ DxgiFormatTable table;
+  for (const std::uint32_t member : {rgba8_unorm, rgba8_srgb}) {
+      table.record(member, renders, 0u);
+      for (std::uint32_t samples = 2u; samples <= 8u; samples *= 2u) table.record_samples(member, samples, 1u);
+  }
+  table.record(rgba8_snorm, renders, 0u);
+  table.record_samples(rgba8_snorm, 2u, 1u);
+  table.settle();
+  CHECK_EQ(table.quality_levels(rgba8_unorm, 8u), 1u);
+  CHECK_EQ(table.quality_levels(rgba8_srgb, 8u), 1u);
+  CHECK_EQ(table.quality_levels(rgba8_typeless, 8u), 1u);
+  CHECK_EQ(table.quality_levels(rgba8_snorm, 2u), 0u);
+  CHECK_EQ(table.format_support(rgba8_snorm) & ddi_multisample_render_target, 0u); }
+
+/* And a strong member gives its extra counts up when the rest of the family
+ * shares fewer: more members at the shared counts offer more. */
+TEST(dxgi_format_table, a_strong_member_gives_its_extra_counts_to_the_family)
+{ DxgiFormatTable table;
+  table.record(rgba8_unorm, renders, 0u);
+  for (std::uint32_t samples = 2u; samples <= 16u; samples *= 2u) table.record_samples(rgba8_unorm, samples, 1u);
+  for (const std::uint32_t member : {rgba8_srgb, rgba8_snorm}) {
+      table.record(member, renders, 0u);
+      table.record_samples(member, 2u, 1u);
+      table.record_samples(member, 4u, 1u);
+  }
+  table.settle();
+  for (const std::uint32_t member : {rgba8_typeless, rgba8_unorm, rgba8_srgb, rgba8_snorm}) {
+      CHECK_EQ(table.quality_levels(member, 4u), 1u);
+      CHECK_EQ(table.quality_levels(member, 8u), 0u);
+      CHECK_EQ(table.quality_levels(member, 16u), 0u);
+  } }
+
+/* Whatever the host answers, every family tells one story: each member that
+ * claims multisampled rendering answers its typeless parent's levels at every
+ * count, and offers no level the host did not answer for it; each member that
+ * does not answers none; and nothing claimed multisampled answers none at
+ * every count ("MSAA quality reported to be 0"). */
+TEST(dxgi_format_table, any_hosts_answers_keep_every_family_consistent)
+{ std::uint32_t seed = 0x2545f491u;
+  const auto next = [&seed]() {
+      seed = seed * 1664525u + 1013904223u;
+      return seed >> 8u;
+  };
+  for (int round = 0; round < 2000; round++) {
+      DxgiFormatTable table;
+      std::uint32_t   recorded[DxgiFormatTable::format_count][DxgiFormatTable::sample_steps] = {};
+      for (std::uint32_t format = 1u; format < DxgiFormatTable::format_count; format++) {
+          if (next() % 3u == 0u) continue;
+          const std::uint32_t kind = next() % 3u;
+          table.record(format,
+                       kind == 0u ? renders
+                                  : kind == 1u ? api_render_target | api_sample | api_multisample_load
+                                               : api_render_target | api_sample,
+                       0u);
+          for (std::uint32_t step = 1u; step < DxgiFormatTable::sample_steps; step++) {
+              if (next() % 3u == 0u) continue;
+              recorded[format][step] = 1u + next() % 3u;
+              table.record_samples(format, 1u << step, recorded[format][step]);
+          }
+      }
+      table.settle();
+      for (std::uint32_t format = 1u; format < DxgiFormatTable::format_count; format++) {
+          const bool claims = (table.format_support(format) & ddi_multisample_render_target) != 0u;
+          const std::uint32_t parent = typeless_parent(format);
+          bool counted = false;
+          for (std::uint32_t step = 1u; step < DxgiFormatTable::sample_steps; step++) {
+              const std::uint32_t levels = table.quality_levels(format, 1u << step);
+              counted = counted || levels != 0u;
+              if (parent == format) {
+                  CHECK(levels == 0u || claims || is_typeless(format));
+                  continue;
+              }
+              CHECK(claims ? levels == table.quality_levels(parent, 1u << step) : levels == 0u);
+              CHECK(levels <= recorded[format][step]);
+          }
+          if (claims) CHECK(counted);
+          /* A typed member that takes no part: its parent offers nothing. */
+          const bool takes_part = (table.format_support(format) & (ddi_multisample_render_target | ddi_multisample_load)) != 0u;
+          if (parent != format && !takes_part && table.format_support(format) != 0u)
+              for (std::uint32_t step = 1u; step < DxgiFormatTable::sample_steps; step++)
+                  CHECK_EQ(table.quality_levels(parent, 1u << step), 0u);
+      }
+  } }
 
 /* The two BGRA families are named member by member, not numbered after their
  * head. */
@@ -209,6 +341,6 @@ TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
   table.record_samples(rgba8_unorm, 3u, 9u);
   table.record_samples(rgba8_unorm, 32u, 9u);
   table.settle();
-  CHECK_EQ(table.own_quality_levels(rgba8_unorm, 4u), 0u);
-  CHECK_EQ(table.own_quality_levels(rgba8_unorm, 2u), 0u);
+  CHECK_EQ(table.quality_levels(rgba8_unorm, 4u), 0u);
+  CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_multisample_render_target, 0u); }

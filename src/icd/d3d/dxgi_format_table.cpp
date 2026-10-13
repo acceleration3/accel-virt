@@ -60,7 +60,7 @@ constexpr uint32_t depth_formats[] = {20u, 40u, 45u, 55u};
 
 }  // namespace
 
-DxgiFormatTable::DxgiFormatTable() : support_{}, support2_{}, levels_{}, family_levels_{}
+DxgiFormatTable::DxgiFormatTable() : support_{}, support2_{}, levels_{}, family_levels_{}, keeps_{}
 {
     AV_SCOPE("DxgiFormatTable::DxgiFormatTable");
 }
@@ -84,19 +84,95 @@ void DxgiFormatTable::record_samples(uint32_t format, uint32_t samples, uint32_t
 void DxgiFormatTable::settle()
 {
     AV_SCOPE("DxgiFormatTable::settle");
-    constexpr uint32_t unset = ~0u;
     for (auto &family : family_levels_)
-        for (uint32_t &levels : family) levels = unset;
-    for (uint32_t format = 1u; format < format_count; format++) {
-        const uint32_t claimed = carried(format);
-        if ((claimed & ddi_multisample_render_target) == 0u) continue;
-        uint32_t *const shared = family_levels_[family_of(format)];
-        for (uint32_t step = 1u; step < sample_steps; step++)
-            if (levels_[format][step] < shared[step]) shared[step] = levels_[format][step];
+        for (uint32_t &levels : family) levels = 0u;
+    for (bool &keeps : keeps_) keeps = false;
+    /* A head is its own family's: a typeless head, or a format in no family. */
+    for (uint32_t format = 1u; format < format_count; format++)
+        if (family_of(format) == format) settle_family(format);
+}
+
+/* The runtime holds a family's members that claim multisampled rendering to
+ * one level count at each sample count, so the family's counts are those every
+ * keeping member renders at - the fewest levels among some set of its members
+ * - and a member keeps multisampled rendering only if it renders at each of
+ * them; one that does not must still load from a multisampled view. Every
+ * set is tried (a family has at most seven members, so at most 127 sets), and
+ * the counts kept are the ones offering the most member-and-count pairs: then
+ * the most members, then the most counts. Nothing is offered past what the
+ * host answered for that format. */
+void DxgiFormatTable::settle_family(uint32_t head)
+{
+    AV_SCOPE("DxgiFormatTable::settle_family");
+    constexpr uint32_t most_members = 8u;
+    uint32_t members[most_members] = {};
+    uint32_t count = 0u, loads = 0u;
+    for (uint32_t format = 1u; format < format_count && count < most_members; format++) {
+        /* A member the host supports not at all is never viewed, so it has
+         * no part to take. */
+        if (family_of(format) != head || typeless(format) || carried(format) == 0u) continue;
+        const bool load = (carried(format) & ddi_multisample_load) != 0u;
+        bool       counted = false;
+        for (uint32_t step = 1u; step < sample_steps; step++) counted = counted || levels_[format][step] != 0u;
+        if ((carried(format) & ddi_multisample_render_target) != 0u && counted) {
+            if (load) loads |= 1u << count;
+            members[count++] = format;
+            continue;
+        }
+        /* A member that neither renders multisampled nor loads from a
+         * multisampled view keeps the whole family from multisampling: the
+         * runtime refuses one beside a parent that does. */
+        if (!load) return;
     }
-    for (auto &family : family_levels_)
-        for (uint32_t &levels : family)
-            if (levels == unset) levels = 0u;
+    uint32_t best[sample_steps] = {};
+    uint32_t best_keeping = 0u, best_score = 0u, best_members = 0u, best_counts = 0u;
+    for (uint32_t set = 1u; set < 1u << count; set++) {
+        uint32_t counts[sample_steps] = {};
+        for (uint32_t step = 1u; step < sample_steps; step++) {
+            counts[step] = ~0u;
+            for (uint32_t index = 0u; index < count; index++)
+                if ((set & (1u << index)) != 0u && levels_[members[index]][step] < counts[step])
+                    counts[step] = levels_[members[index]][step];
+        }
+        uint32_t offered = 0u;
+        for (uint32_t step = 1u; step < sample_steps; step++) offered += counts[step] != 0u ? 1u : 0u;
+        if (offered == 0u) continue;
+        /* Every member that renders at the set's counts keeps them, in the
+         * set or not. */
+        uint32_t keeping = 0u, kept = 0u;
+        for (uint32_t index = 0u; index < count; index++) {
+            bool renders = true;
+            for (uint32_t step = 1u; step < sample_steps; step++)
+                renders = renders && levels_[members[index]][step] >= counts[step];
+            if (!renders) continue;
+            keeping |= 1u << index;
+            kept++;
+        }
+        /* A member left out keeps taking part only by loading. */
+        const uint32_t everyone = (1u << count) - 1u;
+        if ((everyone & ~keeping & ~loads) != 0u) continue;
+        const uint32_t score = kept * offered;
+        const bool     better = score != best_score     ? score > best_score
+                                : kept != best_members ? kept > best_members
+                                                       : offered > best_counts;
+        if (!better) continue;
+        best_keeping = keeping;
+        best_score = score;
+        best_members = kept;
+        best_counts = offered;
+        for (uint32_t step = 1u; step < sample_steps; step++) best[step] = counts[step];
+    }
+    for (uint32_t step = 1u; step < sample_steps; step++) family_levels_[head][step] = best[step];
+    for (uint32_t index = 0u; index < count; index++) keeps_[members[index]] = (best_keeping & (1u << index)) != 0u;
+}
+
+bool DxgiFormatTable::family_multisamples(uint32_t format) const
+{
+    AV_SCOPE("DxgiFormatTable::family_multisamples");
+    const uint32_t *const shared = family_levels_[family_of(format)];
+    for (uint32_t step = 1u; step < sample_steps; step++)
+        if (shared[step] != 0u) return true;
+    return false;
 }
 
 uint32_t DxgiFormatTable::family_of(uint32_t format) const
@@ -152,7 +228,8 @@ bool DxgiFormatTable::multisamples(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::multisamples");
     if ((carried(format) & ddi_multisample_render_target) == 0u) return false;
-    const uint32_t *const shared = family_levels_[family_of(format)];
+    if (!typeless(format)) return keeps_[format];
+    const uint32_t *const shared = family_levels_[format];
     for (uint32_t step = 1u; step < sample_steps; step++)
         if (shared[step] != 0u) return true;
     return false;
@@ -171,15 +248,18 @@ uint32_t DxgiFormatTable::format_support(uint32_t format) const
     if (format == 0u || format >= format_count) return 0u;
     uint32_t support = carried(format);
     /* Multisampled use at no count past one is a table the runtime refuses
-     * the driver over ("MSAA quality reported to be 0"). */
-    if (!multisamples(format)) support &= ~(ddi_multisample_render_target | ddi_multisample_load);
+     * the driver over ("MSAA quality reported to be 0"). A member that only
+     * loads keeps loading while its family multisamples. */
+    if (!multisamples(format)) support &= ~ddi_multisample_render_target;
+    if (!multisamples(format) && !family_multisamples(format)) support &= ~ddi_multisample_load;
     return support;
 }
 
 /* One sample is every format's one quality level. Past one, the runtime holds
  * each family to one story: the typeless parent answers what its
  * multisampled children do, a child that claims multisampled rendering
- * answers the same, and a child that does not claim it answers none. */
+ * answers the same, and a child that does not claim it answers none (and
+ * loads, settle_family has seen to that). */
 uint32_t DxgiFormatTable::quality_levels(uint32_t format, uint32_t samples) const
 {
     AV_SCOPE("DxgiFormatTable::quality_levels");
@@ -188,27 +268,6 @@ uint32_t DxgiFormatTable::quality_levels(uint32_t format, uint32_t samples) cons
     if (step == 0u) return 1u;
     if (!typeless(format) && !multisamples(format)) return 0u;
     return family_levels_[family_of(format)][step];
-}
-
-uint32_t DxgiFormatTable::own_format_support(uint32_t format) const
-{
-    AV_SCOPE("DxgiFormatTable::own_format_support");
-    if (format == 0u || format >= format_count) return 0u;
-    uint32_t support = carried(format);
-    bool     counted = false;
-    for (uint32_t step = 1u; step < sample_steps; step++) counted = counted || levels_[format][step] != 0u;
-    if (!counted) support &= ~(ddi_multisample_render_target | ddi_multisample_load);
-    return support;
-}
-
-uint32_t DxgiFormatTable::own_quality_levels(uint32_t format, uint32_t samples) const
-{
-    AV_SCOPE("DxgiFormatTable::own_quality_levels");
-    const uint32_t step = step_of(samples);
-    if (format >= format_count || step == sample_steps) return 0u;
-    if (step == 0u) return 1u;
-    if (!typeless(format) && (own_format_support(format) & ddi_multisample_render_target) == 0u) return 0u;
-    return levels_[format][step];
 }
 
 bool DxgiFormatTable::multisample_candidate(uint32_t format) const

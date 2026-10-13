@@ -4,7 +4,22 @@
  * the same bits, and both runtimes check the answers against each other the
  * same way (LLOCompleteLayerConstruction) - a device is refused over one
  * inconsistent family ("MSAA quality for parent != child", "MSAA quality
- * reported to be 0") - so both drivers answer from this one table. */
+ * reported to be 0") - so both drivers answer from this one table.
+ *
+ * The host's answers are per format and need not agree within a family: a
+ * GPU can render one member multisampled and not its siblings (an Intel GPU
+ * renders R32G32B32_FLOAT at 2 to 16 samples, its typeless parent and its
+ * UINT and SINT siblings at none), or one member at fewer counts than the
+ * rest. The runtime holds a family to one story: the typeless parent answers
+ * the family's levels, a member that renders multisampled answers the same,
+ * every other member answers none - and every member takes part, rendering
+ * multisampled or loading from a multisampled view; one that does neither
+ * beside a parent that multisamples is refused. So each family settles on one
+ * set of counts and the members that render at all of them, the rest only
+ * loading; a family with a member that can do neither does not multisample.
+ * Of every such choice the one offering the most member-and-count pairs is
+ * taken, so one weak member neither refuses the driver nor takes more from
+ * its siblings than it must. */
 #ifndef AV_ICD_D3D_DXGI_FORMAT_TABLE_HPP
 #define AV_ICD_D3D_DXGI_FORMAT_TABLE_HPP
 
@@ -27,24 +42,17 @@ public:
     void record(uint32_t format, uint32_t support, uint32_t support2);
     /* The host's quality level count for `format` at `samples`. */
     void record_samples(uint32_t format, uint32_t samples, uint32_t levels);
-    /* Every answer recorded: each family's shared level counts are settled. */
+    /* Every answer recorded: each family's counts, and the members that keep
+     * multisampling, are settled. */
     void settle();
 
     /* D3D10_DDI_FORMAT_SUPPORT_* bits, which D3D12DDI_FORMAT_SUPPORT_* repeat,
-     * and level counts, as Direct3D 12 wants them: each family one story, its
-     * members' multisampling pooled (D3D12Core refuses "MSAA quality for
-     * parent != child"). */
+     * and level counts: each family one story. */
     uint32_t format_support(uint32_t format) const;
     /* D3D12DDI_FORMAT_SUPPORT_TILED for a format the host tiles, 0 for one it
      * does not: a driver that carries tiled resources adds it. */
     uint32_t tiled_support(uint32_t format) const;
     uint32_t quality_levels(uint32_t format, uint32_t samples) const;
-    /* The same as Direct3D 11 wants them: each format its own answer, a
-     * typeless parent included. Pooled, some formats DWM draws its acrylic
-     * backdrop in lost their multisampling, and the Start menu's backdrop
-     * drew black. */
-    uint32_t own_format_support(uint32_t format) const;
-    uint32_t own_quality_levels(uint32_t format, uint32_t samples) const;
     /* Whether the host would multisample `format` at all - worth asking its
      * level counts for. */
     bool     multisample_candidate(uint32_t format) const;
@@ -59,14 +67,20 @@ private:
     uint32_t carried(uint32_t format) const;
     /* Claims multisampled rendering, and its family can do it at some count. */
     bool     multisamples(uint32_t format) const;
+    /* Its family multisamples at some count. */
+    bool     family_multisamples(uint32_t format) const;
     uint32_t step_of(uint32_t samples) const;
+    /* Settles the family under `head`: its counts and who keeps them. */
+    void     settle_family(uint32_t head);
 
     uint32_t support_[format_count];
     uint32_t support2_[format_count];
     uint32_t levels_[format_count][sample_steps];
-    /* Per family head: the fewest levels any member that claims multisampled
-     * rendering has at each count. */
+    /* Per family head: the levels every member that keeps multisampling
+     * answers at each count, and the typeless head with them. */
     uint32_t family_levels_[format_count][sample_steps];
+    /* Per member: whether it keeps multisampling. */
+    bool     keeps_[format_count];
 };
 
 }  // namespace av::d3d
