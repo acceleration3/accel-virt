@@ -19,6 +19,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "icd/d3d/passthrough_geometry_shader.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/surface_point.hpp"
 
@@ -42,6 +43,14 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libglapi\n"
            "leak:libz\n";
 }
+
+namespace av {
+
+struct D3dBackendProbe {
+    static D3dObjectTable &objects(D3dBackend &backend) { return backend.objects_; }
+};
+
+}  // namespace av
 
 namespace {
 
@@ -234,6 +243,40 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
  * Windows DWM keeps a window's surface its creator already let go of, and
  * until the driver's release. A key already shared keeps naming what it
  * named. */
+/* A stream-output declaration with no shader streams the vertex shader's
+ * output: the guest's driver writes the pass-through geometry shader it stands
+ * for (PassthroughGeometryShader), and the host makes it, position declared as
+ * a system value and the streamed register named by the same signatures. */
+TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geometry_shader)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device));
+    av::D3dLoopback wire(backend);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    constexpr std::uint32_t position = 1u;
+    constexpr std::uint32_t float_type = 3u;
+    av::d3d::PassthroughGeometryShader shader;
+    CHECK(shader.add(0u, 0xFu, position));
+    CHECK(shader.add(1u, 0xFu, 0u));
+    const std::uint32_t *const tokens = shader.tokens();
+    CHECK(tokens != nullptr);
+    const SignatureEntry signature[2] = {{position, 0u, 0xFu, float_type, 0u, 0u}, {0u, 1u, 0xFu, float_type, 0u, 0u}};
+    const StreamOutEntry streamed[1] = {{0u, 0u, 1u, 0xFu}};
+    const std::uint32_t  stride = 16u;
+    constexpr std::uint32_t stage_geometry = 3u, made = 50u, no_rasterized_stream = 0xFFFFFFFFu;
+    CHECK(av_d3d_CreateShader(wire, made, stage_geometry, 2u, signature, 2u, signature, 0u, nullptr, 1u, streamed, 1u,
+                              &stride, no_rasterized_stream, tokens, shader.bytes()));
+    CHECK(av_d3d_Finish11(wire, &hresult));
+    CHECK(av::D3dBackendProbe::objects(backend).find(made, av::D3dObjectKind::geometry_shader) != nullptr);
+    CHECK_EQ(wire.refused(), 0u);
+}
+
 TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_releases_it)
 {
     av::LoaderHostApis apis;

@@ -223,6 +223,8 @@ private:
                               const UINT *first, const UINT *counts);
     void set_shader_resources(uint32_t stage, UINT start, UINT count, const D3D10DDI_HSHADERRESOURCEVIEW *views);
     void set_samplers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HSAMPLER *samplers);
+    void stream_vertex_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT &args, D3D10DDI_HSHADER shader,
+                              const D3D11_1DDIARG_STAGE_IO_SIGNATURES &signatures);
     void create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHADER shader,
                        const D3D11_1DDIARG_SIGNATURE_ENTRY2 *inputs, UINT input_count,
                        const D3D11_1DDIARG_SIGNATURE_ENTRY2 *outputs, UINT output_count,

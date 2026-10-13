@@ -172,6 +172,9 @@ public:
     void                  report(StateWriter &writer) const;
 
 private:
+    /* Whether the export copy into `slot` finished, waiting as long as a slow
+     * frame takes. */
+    [[nodiscard]] bool exported(uint32_t slot);
     /* Under the lock: a texture of DXVK's over `resource`'s memory, with a
      * reference the caller owns; null for one DXVK cannot import - not one
      * 2D image of one mip and one sample. */

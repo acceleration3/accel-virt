@@ -7,6 +7,7 @@
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/kernel_surface.hpp"
+#include "icd/d3d/passthrough_geometry_shader.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/shared_object_kind.hpp"
 #include "um/d3d/d3d11_device.hpp"
@@ -619,15 +620,37 @@ VOID D3d11Device::create_geometry_shader_with_stream_output(const D3D11DDIARG_CR
 {
     AV_SCOPE("D3d11Device::create_geometry_shader_with_stream_output");
     if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
-    /* A declaration with no shader streams the vertex shader's output: the
-     * runtime hands a null code pointer then, which the host cannot compile. */
     if (args->pShaderCode == nullptr) {
-        not_implemented("pfnCreateGeometryShaderWithStreamOutput with no shader");
+        stream_vertex_output(*args, shader, *signatures);
         return;
     }
     create_shader(stage_geometry, args->pShaderCode, shader, signatures->pInputSignature,
                   signatures->NumInputSignatureEntries, signatures->pOutputSignature,
                   signatures->NumOutputSignatureEntries, nullptr, 0u, args);
+}
+
+/* A declaration with no shader streams the vertex shader's output: the
+ * runtime hands no code then, only what the stage reads, so the shader it
+ * stands for is written here (PassthroughGeometryShader) and writes out what
+ * it read. */
+void D3d11Device::stream_vertex_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT &args,
+                                       D3D10DDI_HSHADER shader, const D3D11_1DDIARG_STAGE_IO_SIGNATURES &signatures)
+{
+    AV_SCOPE("D3d11Device::stream_vertex_output");
+    const bool reads = signatures.NumInputSignatureEntries != 0u;
+    const D3D11_1DDIARG_SIGNATURE_ENTRY2 *const passed = reads ? signatures.pInputSignature : signatures.pOutputSignature;
+    const UINT count = reads ? signatures.NumInputSignatureEntries : signatures.NumOutputSignatureEntries;
+    d3d::PassthroughGeometryShader written;
+    bool                           taken = passed != nullptr && count != 0u;
+    for (UINT index = 0u; taken && index < count; index++)
+        taken = written.add(passed[index].Register, passed[index].Mask, static_cast<uint32_t>(passed[index].SystemValue));
+    const uint32_t *const tokens = taken ? written.tokens() : nullptr;
+    if (tokens == nullptr) {
+        log_.write("avumd: a stream output with no shader names no register it can pass through");
+        set_error(E_INVALIDARG);
+        return;
+    }
+    create_shader(stage_geometry, tokens, shader, passed, count, passed, count, nullptr, 0u, &args);
 }
 
 VOID D3d11Device::create_hull_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,

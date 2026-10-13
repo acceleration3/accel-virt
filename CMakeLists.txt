@@ -511,6 +511,11 @@ foreach(src ${AV_UNIT_TESTS})
   if(name STREQUAL "test_fullstack_av")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
   endif()
+  # The host makes the shader the guest's driver writes for a stream output
+  # with no shader: the writer is the guest's, compiled here alone.
+  if(name STREQUAL "test_d3d_backend_device")
+    target_sources(${name} PRIVATE ${CMAKE_SOURCE_DIR}/src/icd/d3d/passthrough_geometry_shader.cpp)
+  endif()
   # The renderer's process code, for real (docs/renderer.md): its host loads
   # the echo executor, and the process test spawns the built av-renderer.
   if(name STREQUAL "test_posix_renderer_host" OR name STREQUAL "test_renderer_process")

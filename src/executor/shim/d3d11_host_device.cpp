@@ -113,8 +113,6 @@ bool D3d11HostDevice::read_image(uint32_t domain, uint64_t id, void *pixels, uin
 bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_image");
-    constexpr uint32_t poll_nanoseconds = 50000u;
-    constexpr uint32_t most_polls = 400u;   /* 20 ms */
     if (device_ == nullptr) return false;
     lock(nullptr);
     ID3D11Texture2D *const texture = shared_texture(domain, id);
@@ -122,16 +120,29 @@ bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage
     const bool             staged = texture != nullptr && exports_.stage(device_, context_, texture, slot);
     if (texture != nullptr) texture->Release();
     unlock();
-    if (!staged) return false;
-    PollBudget polls(poll_nanoseconds, most_polls);
+    if (!staged || !exported(slot)) return false;
+    exports_.describe(slot, image);
+    return true;
+}
+
+/* An image handed over before its copy is done shows whatever the slot held
+ * last - frames from before, which a game the GPU draws slower than the old
+ * 20 ms budget showed jumping back and forth. The copy waits behind every
+ * frame queued before it, so the wait is as long as a slow frame, and an
+ * image not done even then is not shown at all. */
+bool D3d11HostDevice::exported(uint32_t slot)
+{
+    AV_SCOPE("D3d11HostDevice::exported");
+    constexpr uint32_t poll_nanoseconds = 50000u;
+    constexpr uint32_t most_polls = 5000u;   /* 250 ms */
+    PollBudget         polls(poll_nanoseconds, most_polls);
     while (polls.next()) {
         lock(nullptr);
         const bool done = exports_.copied(context_, slot);
         unlock();
-        if (done) break;
+        if (done) return true;
     }
-    exports_.describe(slot, image);
-    return true;
+    return false;
 }
 
 /* Composed and queued under the lock, waited for outside it, as export_image
@@ -140,8 +151,6 @@ bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *plan
                                      uint32_t height, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::compose_planes");
-    constexpr uint32_t poll_nanoseconds = 50000u;
-    constexpr uint32_t most_polls = 400u;   /* 20 ms */
     if (device_ == nullptr || count > PlaneComposer::max_planes || (count != 0u && planes == nullptr)) return false;
     lock(nullptr);
     ID3D11Texture2D *textures[PlaneComposer::max_planes] = {};
@@ -157,14 +166,7 @@ bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *plan
     uint32_t   slot = 0u;
     const bool staged = composed != nullptr && exports_.stage(device_, context_, composed, slot);
     unlock();
-    if (!staged) return false;
-    PollBudget polls(poll_nanoseconds, most_polls);
-    while (polls.next()) {
-        lock(nullptr);
-        const bool done = exports_.copied(context_, slot);
-        unlock();
-        if (done) break;
-    }
+    if (!staged || !exported(slot)) return false;
     exports_.describe(slot, image);
     return true;
 }
