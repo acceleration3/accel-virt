@@ -15,7 +15,7 @@ namespace {
 /* What a Direct3D 11 session's bulk data crosses through: the blob arena's
  * 24 MiB (D3dSession::lent_bytes), and the rest, short of the query results,
  * for the dynamic buffers the host draws in place. */
-constexpr uint64_t session_arena_bytes = uint64_t{64} << 20u;
+constexpr uint64_t session_arena_bytes = uint64_t{160} << 20u;
 
 }  // namespace
 

@@ -34,17 +34,24 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     }
     /* A buffer on a slice is mapped in place: a discard renames it, anything
      * else writes where the host already reads. A deferred context records
-     * its writes as copies, and from then on the buffer is copied, so the
-     * host's buffer and the guest's never disagree about where it lives. */
+     * its writes as copies, and a discard with no slice free to rename to is
+     * one: from then on the buffer is copied, so the host's buffer and the
+     * guest's never disagree about where it lives. */
     if (resource.on_slice != 0u && parent_ != nullptr) {
-        resource.on_slice = 0u;
         lines_.once("a buffer on a slice mapped on a deferred context: copied from then on");
-    }
-    if (resource.on_slice != 0u) {
-        if (type == D3D10_DDI_MAP_WRITE_DISCARD && !rename_slice(resource)) {
+        if (!leave_slice_for_copies(resource)) {
             set_error(E_OUTOFMEMORY);
             return;
         }
+    }
+    if (resource.on_slice != 0u && type == D3D10_DDI_MAP_WRITE_DISCARD && !rename_slice(resource)) {
+        lines_.once("no slice free for a discarding map: the buffer is copied from then on");
+        if (!leave_slice_for_copies(resource)) {
+            set_error(E_OUTOFMEMORY);
+            return;
+        }
+    }
+    if (resource.on_slice != 0u) {
         mapped->pData = resource.shadow;
         mapped->RowPitch = static_cast<UINT>(resource.shadow_bytes);
         mapped->DepthPitch = static_cast<UINT>(resource.shadow_bytes);
@@ -244,6 +251,23 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
     resource.slice_bytes = fresh.bytes_;
     resource.shadow = session_.arena_view() + fresh.offset_;
     return bind_slice(resource);
+}
+
+/* The slice is retired behind what was recorded, for the GPU may still read
+ * it; the buffer's bytes go on in a shadow of its own, which the copies send
+ * from. The host's buffer leaves the slice at the first copy's discard. */
+bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::leave_slice_for_copies");
+    bool     watched = false;
+    uint8_t *shadow = shadows_.allocate(resource.shadow_bytes, watched);
+    if (shadow == nullptr) return false;
+    __builtin_memcpy(shadow, resource.shadow, resource.shadow_bytes);
+    if (watched) shadows_.forget_writes(shadow, resource.shadow_bytes);
+    leave_slice(resource);
+    resource.shadow = shadow;
+    resource.shadow_watched = watched ? 1u : 0u;
+    return true;
 }
 
 bool D3d11Device::bind_slice(const ResourceRecord &resource)
