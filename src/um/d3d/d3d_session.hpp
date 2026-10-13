@@ -17,7 +17,9 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/host_channel.hpp"
+#include "icd/d3d/buffer_slices.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
+#include "icd/d3d/stream_timeline.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "core/support/object_pool.hpp"
 #include "um/common/srw_lock.hpp"
@@ -79,15 +81,25 @@ public:
     KmtTransport          &transport();
     /* The deferred contexts of the session's Direct3D 11 devices. */
     ObjectPool<d3d11::D3d11Device> &contexts();
+    /* The slices CPU-written buffers live in, when the host draws them in
+     * place (docs/mapped-buffers-plan.md); null when it cannot, and every
+     * such buffer is then copied as before. */
+    BufferSlices                   *slices();
 
 private:
     static constexpr uint8_t  ring_order = 22u;
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
+    /* What the blob arena is lent of a session that places buffers in its
+     * arena: the rest, short of the query results, is theirs. */
+    static constexpr uint64_t lent_bytes = uint64_t{32} << 20u;
 
     HRESULT open(uint32_t adapter);
     void    close();
+    /* Whether the host draws buffers from the arena in place: asked once, of
+     * a Direct3D 11 session with an arena larger than the blob arena's. */
+    bool    host_has_slices();
 
     BlockSource                         &memory_;
     LogSink                        &log_;
@@ -95,6 +107,9 @@ private:
     GuestConnection                      connection_;
     icd::HostChannel                     channel_;
     ObjectStorage<d3d::D3dCommandStream> stream_;
+    SrwLock                              slices_lock_;
+    ObjectStorage<StreamTimeline>        timeline_;
+    ObjectStorage<BufferSlices>          slices_;
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
     uint8_t                             *batch_;

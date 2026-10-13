@@ -154,6 +154,16 @@ private:
     uint32_t subresource_count(const ResourceRecord &resource) const;
 
     [[nodiscard]] bool upload_written(const ResourceRecord &resource, uint32_t flags);
+    /* A dynamic buffer the CPU writes, made on a slice of the session's arena
+     * the host draws from in place; false, nothing taken, where the session
+     * has none or this is a deferred context. */
+    [[nodiscard]] bool place_on_slice(ResourceRecord &resource, size_t bytes);
+    /* A discarding map: a fresh slice, the old retired behind what was
+     * recorded so far, and the host told. */
+    [[nodiscard]] bool rename_slice(ResourceRecord &resource);
+    [[nodiscard]] bool bind_slice(const ResourceRecord &resource);
+    /* The slice, if any, retired behind what was recorded so far. */
+    void               leave_slice(ResourceRecord &resource);
     /* `box` (or the whole subresource) of one subresource from `data` at
      * these pitches, as UpdateSubresource1 takes it, in as many pieces as one
      * command of this context carries (TextureUpload). */

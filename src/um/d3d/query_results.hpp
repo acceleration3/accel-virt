@@ -31,7 +31,9 @@ public:
 
     /* Takes the slots off the end of the `bytes` at `view` the arena lends,
      * and lends it the rest. Nothing without an arena. */
-    void     reserve(ClientBlobArena &arena, uint8_t *view, uint64_t bytes);
+    void     reserve(ClientBlobArena &arena, uint8_t *view, uint64_t bytes, uint64_t lent);
+    /* Where the results begin in the arena; 0 unless reserved. */
+    uint64_t offset() const;
     /* Names the slots to the host, once: it takes them only with a device made. */
     void     bind(ClientTransport &wire);
     /* The count of the end being sent now, which the host will write back. */

@@ -153,9 +153,10 @@ TEST(buffer_slice_device, a_buffer_on_a_slice_reads_what_the_guest_wrote_when_th
     CHECK(backend.adopt(region));
     av::D3dLoopback wire(backend);
     std::uint32_t   hresult = 1u, level = 0u, supported = 0u;
-    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    /* Asked before the session has a device, as the guest asks. */
     CHECK(av_d3d_QueryBufferSlices11(wire, &supported));
     CHECK_EQ(supported, 1u);
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
 
     constexpr std::uint32_t mapped = 10u, early = 11u, late = 12u;
     CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));

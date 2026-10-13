@@ -51,9 +51,11 @@ public:
     /* A large slice is whole 64 KiB pages, which the host imports. */
     static constexpr uint64_t large_alignment = uint64_t{64} * 1024u;
     /* Slices of one small class that may exist, free or not: a class past it
-     * waits for its own to come back rather than carve more. */
-    static constexpr uint32_t max_per_class = 4096u;
-    static constexpr uint32_t max_retired = 4096u;
+     * waits for its own to come back rather than carve more. A game renames
+     * a constant buffer a draw, thousands a frame, while the GPU runs a frame
+     * behind: fewer than that in flight would stall it every frame. */
+    static constexpr uint32_t max_per_class = 16384u;
+    static constexpr uint32_t max_retired = 32768u;
     static constexpr uint32_t max_ranges = 4096u;
 
     BufferSlices(GpuTimeline &timeline, icd::ThreadLock &lock);

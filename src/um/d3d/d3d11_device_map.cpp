@@ -7,7 +7,10 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
+#include "icd/d3d/buffer_slices.hpp"
+#include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/d3d_session.hpp"
 
 namespace av::d3d11 {
 
@@ -27,6 +30,24 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     ResourceRecord &resource = record(handle);
     if (resource.shadow == nullptr || subresource >= subresource_count(resource) || mapped == nullptr) {
         set_error(E_INVALIDARG);
+        return;
+    }
+    /* A buffer on a slice is mapped in place: a discard renames it, anything
+     * else writes where the host already reads. A deferred context records
+     * its writes as copies, and from then on the buffer is copied, so the
+     * host's buffer and the guest's never disagree about where it lives. */
+    if (resource.on_slice != 0u && parent_ != nullptr) {
+        resource.on_slice = 0u;
+        lines_.once("a buffer on a slice mapped on a deferred context: copied from then on");
+    }
+    if (resource.on_slice != 0u) {
+        if (type == D3D10_DDI_MAP_WRITE_DISCARD && !rename_slice(resource)) {
+            set_error(E_OUTOFMEMORY);
+            return;
+        }
+        mapped->pData = resource.shadow;
+        mapped->RowPitch = static_cast<UINT>(resource.shadow_bytes);
+        mapped->DepthPitch = static_cast<UINT>(resource.shadow_bytes);
         return;
     }
     const uint32_t flags = type == D3D10_DDI_MAP_WRITE_DISCARD      ? copy_discard
@@ -66,6 +87,8 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
     AV_SCOPE("D3d11Device::unmap");
     ResourceRecord &resource = record(handle);
     uint32_t        flags = 0u;
+    /* What the application wrote is already where the host GPU reads it. */
+    if (resource.on_slice != 0u) return;
     if (resource.shadow == nullptr || !maps_.close(resource.id, subresource, flags)) return;
     if (resource.shadow_watched != 0u && upload_written(resource, flags)) return;
     uint32_t width = 0u, height = 0u, depth = 0u;
@@ -192,6 +215,53 @@ VOID D3d11Device::default_constant_buffer_update_subresource_up(D3D10DDI_HRESOUR
 {
     AV_SCOPE("D3d11Device::default_constant_buffer_update_subresource_up");
     resource_update_subresource_up(handle, subresource, box, data, row_pitch, depth_pitch, flags);
+}
+
+bool D3d11Device::place_on_slice(ResourceRecord &resource, size_t bytes)
+{
+    AV_SCOPE("D3d11Device::place_on_slice");
+    d3d::BufferSlices *const slices = session_.slices();
+    if (slices == nullptr || parent_ != nullptr || resource.dimension != D3D10DDIRESOURCE_BUFFER ||
+        (resource.cpu_access & D3D10_DDI_CPU_ACCESS_WRITE) == 0u)
+        return false;
+    d3d::BufferSlices::Slice slice = {};
+    if (slices->take_slice(bytes, slice) != Status::ok) return false;
+    resource.slice_offset = slice.offset_;
+    resource.slice_bytes = slice.bytes_;
+    resource.on_slice = 1u;
+    resource.shadow = session_.arena_view() + slice.offset_;
+    return true;
+}
+
+bool D3d11Device::rename_slice(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::rename_slice");
+    d3d::BufferSlices *const slices = session_.slices();
+    d3d::BufferSlices::Slice fresh = {};
+    if (slices == nullptr || slices->take_slice(resource.shadow_bytes, fresh) != Status::ok) return false;
+    slices->retire(d3d::BufferSlices::Slice{resource.slice_offset, resource.slice_bytes});
+    resource.slice_offset = fresh.offset_;
+    resource.slice_bytes = fresh.bytes_;
+    resource.shadow = session_.arena_view() + fresh.offset_;
+    return bind_slice(resource);
+}
+
+bool D3d11Device::bind_slice(const ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::bind_slice");
+    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.id, resource.slice_offset, resource.slice_bytes);
+}
+
+void D3d11Device::leave_slice(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::leave_slice");
+    d3d::BufferSlices *const slices = session_.slices();
+    if (slices != nullptr)
+        slices->retire(d3d::BufferSlices::Slice{resource.slice_offset, resource.slice_bytes});
+    resource.slice_offset = 0u;
+    resource.slice_bytes = 0u;
+    resource.on_slice = 0u;
+    resource.shadow = nullptr;
 }
 
 }  // namespace av::d3d11

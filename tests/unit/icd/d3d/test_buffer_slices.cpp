@@ -161,7 +161,7 @@ TEST(buffer_slices, a_full_arena_waits_for_the_oldest_retired_slice)
  * for its own to come back, even with the arena free. */
 TEST(buffer_slices, a_class_at_its_bound_waits_for_its_own_slices)
 { Rig rig;
-  rig.slices().take(base, base + 256u * page);
+  rig.slices().take(base, base + 1024u * page);
   BufferSlices::Slice slice = {};
   for (std::uint32_t index = 0u; index < BufferSlices::max_per_class; index++) {
       CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::ok);
@@ -174,13 +174,14 @@ TEST(buffer_slices, a_class_at_its_bound_waits_for_its_own_slices)
   CHECK(rig.slices().invariants_hold()); }
 
 /* A queue of retired slices that is full waits for its oldest before it
- * takes another, and keeps them in order of their batches. */
+ * takes another, and keeps them in order of their batches. Two small classes
+ * fill it, half each. */
 TEST(buffer_slices, a_full_retired_queue_waits_for_its_oldest)
 { Rig rig;
-  rig.slices().take(base, base + 4096u * page);
+  rig.slices().take(base, base + 1024u * page);
   BufferSlices::Slice slice = {};
   for (std::uint32_t index = 0u; index < BufferSlices::max_retired; index++) {
-      CHECK_STATUS(rig.slices().take_slice(64u * kib, slice), Status::ok);
+      CHECK_STATUS(rig.slices().take_slice(index % 2u == 0u ? 256u : 512u, slice), Status::ok);
       rig.slices().retire(slice);
       if (index % 1000u == 999u) rig.timeline().send();
   }

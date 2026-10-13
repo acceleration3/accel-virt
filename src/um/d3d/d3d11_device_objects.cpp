@@ -141,12 +141,15 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (args->Usage == D3D10_DDI_USAGE_DYNAMIC || args->Usage == D3D10_DDI_USAGE_STAGING || args->MapFlags != 0u) {
         size_t bytes = 0u;
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) bytes += subresource_bytes(resource, sub);
-        /* A buffer's writes are watched, so an unmap sends only what changed;
-         * one subresource, so no page is shared with another's. */
+        /* A dynamic buffer is a slice the host draws in place, where the
+         * session has them; any other buffer's writes are watched, so an
+         * unmap sends only what changed; one subresource, so no page is
+         * shared with another's. */
         bool watched = false;
-        resource.shadow = resource.dimension == D3D10DDIRESOURCE_BUFFER
-                              ? shadows_.allocate(bytes, watched)
-                              : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+        if (!(args->Usage == D3D10_DDI_USAGE_DYNAMIC && !kernel_visible && place_on_slice(resource, bytes)))
+            resource.shadow = resource.dimension == D3D10DDIRESOURCE_BUFFER
+                                  ? shadows_.allocate(bytes, watched)
+                                  : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
         resource.shadow_watched = watched ? 1u : 0u;
         resource.shadow_bytes = resource.shadow == nullptr ? 0u : bytes;
         if (resource.shadow == nullptr) set_error(E_OUTOFMEMORY);
@@ -154,7 +157,9 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (args->pInitialDataUP != nullptr) {
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) {
             const D3D10_DDIARG_SUBRESOURCE_UP &initial = args->pInitialDataUP[sub];
-            upload(resource, sub, nullptr, initial.pSysMem, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
+            /* A slice is read in place: the copy into it below is the upload. */
+            if (resource.on_slice == 0u)
+                upload(resource, sub, nullptr, initial.pSysMem, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
             if (resource.shadow == nullptr) continue;
             /* The shadow is packed; the application's rows are at its pitch. */
             uint32_t width = 0u, height = 0u, depth = 0u;
@@ -172,6 +177,8 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         /* The host was made with this data: it is not a write to send. */
         if (resource.shadow_watched != 0u) shadows_.forget_writes(resource.shadow, resource.shadow_bytes);
     }
+    /* Bound once its first contents are in the slice. */
+    if (resource.on_slice != 0u && !bind_slice(resource)) set_error(D3DDDIERR_DEVICEREMOVED);
 
     /* Another process - DWM - may open the key as soon as the kernel hands
      * it the handle, on its own stream: the host must have made the resource
@@ -265,7 +272,8 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     forget_guest_surface(resource);
     maps_.forget(resource.id);
     destroy_object(resource.id);
-    if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
+    if (resource.slice_bytes != 0u) leave_slice(resource);
+    else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     /* Keyed or not: a presented, scanned-out or shared resource's allocation
      * was this device's to make and is its to give back. Kept, every swap
      * chain DWM remade leaked its primaries. An opened one is its maker's. */

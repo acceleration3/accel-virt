@@ -1683,11 +1683,12 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
 }
 
 /* A host that answers 1 draws a buffer bound to a slice from the region in
- * place; 0 leaves the guest copying what it writes, as before. */
+ * place; 0 leaves the guest copying what it writes, as before. The session
+ * asks once, before it has a device of its own, so none need be selected. */
 bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
 {
     AV_SCOPE("D3dBackend::on_QueryBufferSlices11");
-    supported = ready() && region_to_draw() ? 1u : 0u;
+    supported = device11_ != nullptr && region_to_draw() ? 1u : 0u;
     return true;
 }
 

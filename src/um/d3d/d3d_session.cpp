@@ -5,6 +5,8 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "guest/kmt/kmt.hpp"
 
 namespace av::d3d {
@@ -14,7 +16,7 @@ D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t are
     : memory_(memory), log_(log), lock_(), connection_(kmt),
       channel_(memory, log, "avumd: ",
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, 0u, arena_size)),
-      stream_(), query_results_(), contexts_(memory), batch_(nullptr), members_(0u), next_id_(0u),
+      stream_(), slices_lock_(), timeline_(), slices_(), query_results_(), contexts_(memory), batch_(nullptr), members_(0u), next_id_(0u),
       select_command_(select_command),
       finish_command_(finish_command), flush_command_(flush_command)
 {
@@ -69,16 +71,46 @@ HRESULT D3dSession::open(uint32_t adapter)
      * and guest RAM's when not (the kernel decides). */
     const Status opened = channel_.open(connection_);
     if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
-    if (channel_.arena_view() != nullptr)
-        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes());
     static_cast<void>(stream_.construct(channel_.transport(), batch_, batch_bytes));
     stream_.object().speak_with(select_command_, finish_command_, flush_command_);
+    const bool slices = host_has_slices();
+    if (channel_.arena_view() != nullptr)
+        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes(),
+                               slices ? lent_bytes : channel_.arena_bytes());
+    if (slices && query_results_.offset() > lent_bytes) {
+        static_cast<void>(timeline_.construct(stream_.object(), channel_.transport(), lock_));
+        static_cast<void>(slices_.construct(timeline_.object(), slices_lock_));
+        slices_.object().take(lent_bytes, query_results_.offset());
+    }
     return S_OK;
+}
+
+/* Nothing is lent yet, so the call needs no room in the arena. */
+bool D3dSession::host_has_slices()
+{
+    AV_SCOPE("D3dSession::host_has_slices");
+    if (select_command_ != d3dproto::kCmd_SelectDevice11 || channel_.arena_view() == nullptr ||
+        channel_.arena_bytes() <= lent_bytes + d3d11::QueryResults::reserved_bytes * 2u)
+        return false;
+    uint32_t     supported = 0u;
+    const bool   asked = d3dproto::av_d3d_QueryBufferSlices11(stream_.object(), &supported);
+    stream_.object().end_call();
+    if (asked && supported == 1u) return true;
+    log_.write("avumd: the host copies mapped buffers: it cannot draw them from the arena in place");
+    return false;
+}
+
+BufferSlices *D3dSession::slices()
+{
+    AV_SCOPE("D3dSession::slices");
+    return slices_.constructed() ? &slices_.object() : nullptr;
 }
 
 void D3dSession::close()
 {
     AV_SCOPE("D3dSession::close");
+    if (slices_.constructed()) slices_.destroy();
+    if (timeline_.constructed()) timeline_.destroy();
     if (stream_.constructed()) {
         static_cast<void>(stream_.object().flush());
         stream_.destroy();

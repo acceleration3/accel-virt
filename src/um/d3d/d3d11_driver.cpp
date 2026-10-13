@@ -12,8 +12,10 @@ namespace av::d3d11 {
 
 namespace {
 
-/* What a Direct3D 11 session's bulk data crosses through. */
-constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
+/* What a Direct3D 11 session's bulk data crosses through: the blob arena's
+ * 32 MiB (D3dSession::lent_bytes), and 96 MiB past it for the dynamic buffers
+ * the host draws in place. */
+constexpr uint64_t session_arena_bytes = uint64_t{128} << 20u;
 
 }  // namespace
 

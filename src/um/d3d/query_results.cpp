@@ -11,7 +11,10 @@ QueryResults::QueryResults() : region_(nullptr), offset_(0u), bound_(false), end
     AV_SCOPE("QueryResults::QueryResults");
 }
 
-void QueryResults::reserve(ClientBlobArena &arena, uint8_t *view, uint64_t bytes)
+/* The results take the arena's last part; the blob arena is lent at most
+ * `lent` bytes from its start, and what lies between is the session's to
+ * place buffers in (BufferSlices). */
+void QueryResults::reserve(ClientBlobArena &arena, uint8_t *view, uint64_t bytes, uint64_t lent)
 {
     AV_SCOPE("QueryResults::reserve");
     constexpr uint64_t reserved = uint64_t{slots} * slot_bytes;
@@ -19,7 +22,13 @@ void QueryResults::reserve(ClientBlobArena &arena, uint8_t *view, uint64_t bytes
     offset_ = bytes - reserved;
     region_ = view + offset_;
     for (uint64_t i = 0u; i < reserved; i++) region_[i] = 0u;
-    arena.lend(view, static_cast<size_t>(offset_));
+    arena.lend(view, static_cast<size_t>(lent < offset_ ? lent : offset_));
+}
+
+uint64_t QueryResults::offset() const
+{
+    AV_SCOPE("QueryResults::offset");
+    return offset_;
 }
 
 void QueryResults::bind(ClientTransport &wire)
