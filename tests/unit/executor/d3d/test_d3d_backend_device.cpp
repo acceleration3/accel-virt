@@ -277,6 +277,65 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
     CHECK_EQ(wire.refused(), 0u);
 }
 
+/* What the pass-through geometry shader streams is what the vertex shader
+ * wrote, vertex for vertex: the fixture's position (x, y, 0, 1) and its colour
+ * (1, 0, 0, 1), eight floats a vertex in the declaration's order - the data a
+ * game's skinning streams out and then draws from. */
+TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_shader_wrote)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device));
+    av::D3dLoopback wire(backend);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    av::d3d::PassthroughGeometryShader shader;
+    for (std::uint32_t index = 0u; index < triangle_vs::outputs_count; index++)
+        CHECK(shader.add(triangle_vs::outputs[index].register_index, triangle_vs::outputs[index].mask,
+                         triangle_vs::outputs[index].system_value));
+    const std::uint32_t *const tokens = shader.tokens();
+    const StreamOutEntry streamed[2] = {{0u, 0u, 0u, 0xFu}, {0u, 0u, 1u, 0xFu}};
+    const std::uint32_t  stride = 32u;
+    constexpr std::uint32_t stage_geometry = 3u, gs = 50u, out = 60u, no_rasterized_stream = 0xFFFFFFFFu;
+    CHECK(av_d3d_CreateShader(wire, gs, stage_geometry, triangle_vs::outputs_count, triangle_vs::outputs,
+                              triangle_vs::outputs_count, triangle_vs::outputs, 0u, nullptr, 2u, streamed, 1u, &stride,
+                              no_rasterized_stream, tokens, shader.bytes()));
+    ResourceDesc buffer = {};
+    buffer.dimension = 1u;
+    buffer.width = 3u * stride;
+    buffer.bind_flags = 0x10u;   /* D3D11_BIND_STREAM_OUTPUT */
+    CHECK(av_d3d_CreateResource(wire, out, buffer, 0u));
+    bind_triangle(wire);
+    CHECK(av_d3d_SetTopology(wire, 1u));   /* points */
+    CHECK(av_d3d_SetShader(wire, stage_geometry, gs));
+    const StreamOutTarget target = {out, 0u};
+    CHECK(av_d3d_SetStreamOutTargets(wire, 1u, &target));
+    CHECK(av_d3d_Draw(wire, 3u, 0u));
+    static float streamed_out[3u * 8u];
+    std::uint32_t row_pitch = 0u, depth_pitch = 0u;
+    std::uint64_t read = 0u;
+    CHECK(av_d3d_ReadSubresource(wire, out, 0u, &hresult, &row_pitch, &depth_pitch, streamed_out, sizeof streamed_out,
+                                 &read));
+    CHECK_EQ(hresult, 0u);
+    const float expected[3u * 8u] = {-1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+                                     -1.0f, 1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+                                     0.0f,  1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f};
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < 3u * 8u; index++) {
+        if (streamed_out[index] != expected[index]) {
+            if (wrong < 8u) std::fprintf(stderr, "float %u: %f, not %f\n", index, streamed_out[index], expected[index]);
+            wrong++;
+        }
+    }
+    CHECK_EQ(wrong, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+}
+
 TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_releases_it)
 {
     av::LoaderHostApis apis;
