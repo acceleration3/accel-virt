@@ -172,6 +172,9 @@ public:
     void                  report(StateWriter &writer) const;
 
 private:
+    /* Under the lock: the copy a present of `id` showed, or the texture
+     * itself where none was taken; a reference the caller owns. */
+    ID3D11Texture2D   *presented_texture(uint32_t domain, uint64_t id);
     /* Whether the export copy into `slot` finished, waiting as long as a slow
      * frame takes. */
     [[nodiscard]] bool exported(uint32_t slot);

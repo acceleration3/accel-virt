@@ -121,12 +121,18 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
  * nothing drawn after this present reaches the window (D3d11HostDevice::show).
  * Only a buffer DXGI made to present from (D3D10_DDI_BIND_PRESENT): a
  * DirectComposition surface is shared and presented too, but drawn between
- * its presents as well, and a copy taken at one would hide those draws. */
+ * its presents as well, and a copy taken at one would hide those draws.
+ *
+ * A fullscreen primary is copied too: the scanout reads what it shows long
+ * after the present, by which time the application - and the Steam overlay
+ * drawing into its frames - may be drawing the next one into the same buffer,
+ * which the display then caught half drawn (Subnautica). */
 HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresource)
 {
     AV_SCOPE("D3d11Device::show_flip");
-    if (source.present_model != d3d::SwapChainBuffer::Model::flip || (source.bind & D3D10_DDI_BIND_PRESENT) == 0u)
-        return S_OK;
+    const bool flip = source.present_model == d3d::SwapChainBuffer::Model::flip &&
+                      (source.bind & D3D10_DDI_BIND_PRESENT) != 0u;
+    if (!flip && source.present_model != d3d::SwapChainBuffer::Model::scanout) return S_OK;
     if (d3dproto::av_d3d_PresentPoint(wire(), source.id, subresource, 0u)) return S_OK;
     set_error(D3DDDIERR_DEVICEREMOVED);
     return DXGI_ERROR_DEVICE_REMOVED;

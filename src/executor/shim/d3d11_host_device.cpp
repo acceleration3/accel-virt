@@ -115,7 +115,7 @@ bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage
     AV_SCOPE("D3d11HostDevice::export_image");
     if (device_ == nullptr) return false;
     lock(nullptr);
-    ID3D11Texture2D *const texture = shared_texture(domain, id);
+    ID3D11Texture2D *const texture = presented_texture(domain, id);
     uint32_t               slot = 0u;
     const bool             staged = texture != nullptr && exports_.stage(device_, context_, texture, slot);
     if (texture != nullptr) texture->Release();
@@ -156,7 +156,7 @@ bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *plan
     ID3D11Texture2D *textures[PlaneComposer::max_planes] = {};
     bool             found = true;
     for (uint32_t index = 0u; index < count; index++) {
-        textures[index] = shared_texture(domain, planes[index].key);
+        textures[index] = presented_texture(domain, planes[index].key);
         found = found && textures[index] != nullptr;
     }
     ID3D11Texture2D *const composed =
@@ -436,6 +436,20 @@ IUnknown *D3d11HostDevice::open_shared(uint32_t domain, uint64_t id)
     AV_SCOPE("D3d11HostDevice::open_shared");
     if (shares_ == nullptr) return nullptr;
     return viewed(domain, id, shares_->open_resource(domain, id));
+}
+
+/* What a present showed of `id` - the copy its flip took - where one was, and
+ * the texture itself otherwise: a scanout reads what was presented, never
+ * what the application has drawn into the buffer since. */
+ID3D11Texture2D *D3d11HostDevice::presented_texture(uint32_t domain, uint64_t id)
+{
+    AV_SCOPE("D3d11HostDevice::presented_texture");
+    IUnknown *const shown = shares_ != nullptr ? shares_->shown(domain, id) : nullptr;
+    if (shown == nullptr) return shared_texture(domain, id);
+    ID3D11Texture2D *texture = nullptr;
+    const bool cast = SUCCEEDED(shown->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
+    shown->Release();
+    return cast ? texture : shared_texture(domain, id);
 }
 
 ID3D11Texture2D *D3d11HostDevice::shared_texture(uint32_t domain, uint64_t id)
