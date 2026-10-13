@@ -363,44 +363,59 @@ TEST(swapchain, a_window_of_another_height_is_out_of_date_too)
 /* Every invariant a swapchain keeps, broken in turn: an image held past the
  * count, a count past the images, an RGBA one with no frame buffer, an image
  * the device lost, and a blank counted with no adapter to have counted it. */
+namespace {
+
+/* One rig at a time, kept off the stack: six of them in one function, each
+ * holding a MockKmt of half a megabyte, overflowed AddressSanitizer's stack. */
+av::ObjectStorage<SwapchainRig> invariant_rig;
+
+template <typename Check> void with_rig(Check check)
+{
+    static_cast<void>(invariant_rig.construct());
+    check(invariant_rig.object());
+    invariant_rig.destroy();
+}
+
+}  // namespace
+
 TEST(swapchain, its_invariants_refuse_a_hold_past_the_count_a_miscount_and_a_lost_image)
-{ SwapchainRig rig;
-  Swapchain &chain = rig.chain();
-  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
-  CHECK(chain.invariants_hold());
-  SwapchainProbe::hold_past_the_count(chain);
-  CHECK(!chain.invariants_hold());
-
-  SwapchainRig miscounted;
-  CHECK_EQ(miscounted.initialize(miscounted.chain(), create_info()), VK_SUCCESS);
-  SwapchainProbe::miscount(miscounted.chain());
-  CHECK(!miscounted.chain().invariants_hold());
-
-  SwapchainRig frameless;
-  VkSwapchainCreateInfoKHR rgba = create_info();
-  rgba.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-  CHECK_EQ(frameless.initialize(frameless.chain(), rgba), VK_SUCCESS);
-  std::uint8_t *const frame = SwapchainProbe::take_frame(frameless.chain());
-  CHECK(frame != nullptr);
-  CHECK(!frameless.chain().invariants_hold());
-  SwapchainProbe::put_frame(frameless.chain(), frame);
-  CHECK(frameless.chain().invariants_hold());
-
-
-  SwapchainRig lost;
-  CHECK_EQ(lost.initialize(lost.chain(), create_info()), VK_SUCCESS);
-  SwapchainProbe::undercount(lost.chain());
-  CHECK(!lost.chain().invariants_hold());
-
-  SwapchainRig broken;
-  CHECK_EQ(broken.initialize(broken.chain(), create_info()), VK_SUCCESS);
-  SwapchainProbe::forget_image(broken.chain());
-  CHECK(!broken.chain().invariants_hold());
-
-  SwapchainRig unpaced;
-  CHECK_EQ(unpaced.initialize(unpaced.chain(), create_info()), VK_SUCCESS);
-  SwapchainProbe::pace_without_an_adapter(unpaced.chain());
-  CHECK(!unpaced.chain().invariants_hold()); }
+{ with_rig([](SwapchainRig &rig) {
+      Swapchain &chain = rig.chain();
+      CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+      CHECK(chain.invariants_hold());
+      SwapchainProbe::hold_past_the_count(chain);
+      CHECK(!chain.invariants_hold());
+  });
+  with_rig([](SwapchainRig &miscounted) {
+      CHECK_EQ(miscounted.initialize(miscounted.chain(), create_info()), VK_SUCCESS);
+      SwapchainProbe::miscount(miscounted.chain());
+      CHECK(!miscounted.chain().invariants_hold());
+  });
+  with_rig([](SwapchainRig &frameless) {
+      VkSwapchainCreateInfoKHR rgba = create_info();
+      rgba.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+      CHECK_EQ(frameless.initialize(frameless.chain(), rgba), VK_SUCCESS);
+      std::uint8_t *const frame = SwapchainProbe::take_frame(frameless.chain());
+      CHECK(frame != nullptr);
+      CHECK(!frameless.chain().invariants_hold());
+      SwapchainProbe::put_frame(frameless.chain(), frame);
+      CHECK(frameless.chain().invariants_hold());
+  });
+  with_rig([](SwapchainRig &lost) {
+      CHECK_EQ(lost.initialize(lost.chain(), create_info()), VK_SUCCESS);
+      SwapchainProbe::undercount(lost.chain());
+      CHECK(!lost.chain().invariants_hold());
+  });
+  with_rig([](SwapchainRig &broken) {
+      CHECK_EQ(broken.initialize(broken.chain(), create_info()), VK_SUCCESS);
+      SwapchainProbe::forget_image(broken.chain());
+      CHECK(!broken.chain().invariants_hold());
+  });
+  with_rig([](SwapchainRig &unpaced) {
+      CHECK_EQ(unpaced.initialize(unpaced.chain(), create_info()), VK_SUCCESS);
+      SwapchainProbe::pace_without_an_adapter(unpaced.chain());
+      CHECK(!unpaced.chain().invariants_hold());
+  }); }
 
 /* A BGRA swapchain draws the read-back as it is, so one holding a frame
  * buffer breaks its invariant. */
