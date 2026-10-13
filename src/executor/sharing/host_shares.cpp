@@ -122,10 +122,12 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
     Share *const share = pinned(domain, id);
     if (share == nullptr) return Status::not_found;
     Status   answer = Status::ok;
-    uint32_t handle_kind = 0u;
-    int      fd = -1;
+    uint32_t         handle_kind = 0u;
+    int              fd = -1;
+    SharedImageShape shape;
     {
         const Lock locked(mutex_);
+        shape = share->shape();
         if (share->descriptor() < 0) answer = Status::not_found;
         else if (!share->accepts(kind, size)) answer = Status::invalid_parameter;
         else if (share->holder_of(session) != nullptr || share->publisher() == &session) answer = Status::conflict;
@@ -136,7 +138,7 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
      * keeps a duplicate of its own. */
     uint64_t made = 0u;
     uint64_t detail = 0u;
-    if (answer == Status::ok && !session.import_object(kind, handle_kind, fd, size, made, detail))
+    if (answer == Status::ok && !session.import_object(kind, handle_kind, fd, size, shape, made, detail))
         answer = Status::not_supported;
     if (answer == Status::ok) {
         const Lock   locked(mutex_);
@@ -260,6 +262,16 @@ bool HostShares::keep_shown(uint32_t domain, uint64_t id, IUnknown *copy)
     if (share->shown() != nullptr) retire(share->shown());
     copy->AddRef();
     share->keep_shown(copy);
+    return true;
+}
+
+bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape)
+{
+    AV_SCOPE("HostShares::describe_image");
+    const Lock   locked(mutex_);
+    Share *const share = index_.find(domain, id);
+    if (share == nullptr) return false;
+    share->describe_image(shape);
     return true;
 }
 

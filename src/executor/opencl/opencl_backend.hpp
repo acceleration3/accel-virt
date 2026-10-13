@@ -23,6 +23,8 @@
 
 namespace av {
 
+class SharedImageShape;
+
 class OpenGlBackend;
 
 class GlDisplay;
@@ -80,6 +82,7 @@ public:
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                     const SharedImageShape &shape,
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
@@ -217,6 +220,10 @@ public:
     uint64_t ran() const;
 
 private:
+    /* The image over the imported `buffer` that `shape` describes, holding the
+     * buffer's reference; the buffer itself where its memory is no image
+     * OpenCL names. */
+    cl_mem image_over(cl_mem buffer, const SharedImageShape &shape);
     friend struct OpenClBackendProbe;
 
     /* A context property list this device will copy: OpenCL defines a handful

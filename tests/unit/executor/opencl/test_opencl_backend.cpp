@@ -9,6 +9,7 @@
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -358,7 +359,7 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
   /* Nothing is opened into it, and the extension it would have been opened
    * through is not shown. */
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u);
   char   answered[4096] = {};
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),

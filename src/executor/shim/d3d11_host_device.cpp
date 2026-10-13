@@ -489,6 +489,12 @@ CompositorDevice *D3d11HostDevice::compositor() const
     return compositor_;
 }
 
+bool D3d11HostDevice::exportable_pitch(ID3D11Texture2D *texture, uint32_t &pitch)
+{
+    AV_SCOPE("D3d11HostDevice::exportable_pitch");
+    return images_.row_pitch(texture, pitch);
+}
+
 ID3D11Texture2D *D3d11HostDevice::adopt_exportable(int fd, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("D3d11HostDevice::adopt_exportable");

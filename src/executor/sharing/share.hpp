@@ -15,6 +15,8 @@
 #ifndef AV_SHARE_HPP
 #define AV_SHARE_HPP
 
+#include "executor/sharing/shared_image_shape.hpp"
+
 #include <stdint.h>
 
 struct IUnknown;
@@ -98,6 +100,11 @@ public:
      * forgotten here: at most three. */
     uint32_t  give_up_objects(IUnknown **objects);
 
+    /* What its memory is as an image, as the publisher described it; empty
+     * for memory that is none. */
+    const SharedImageShape &shape() const;
+    void                    describe_image(const SharedImageShape &shape);
+
     void     written();
     uint64_t writes() const;
     /* One more Direct3D open of it, for the report. */
@@ -112,6 +119,7 @@ private:
     IUnknown    *resource_;
     IUnknown    *view_;
     IUnknown    *shown_;
+    SharedImageShape shape_;
     ShareHolder *holders_;
     SessionBackend *publisher_;
     uint32_t     domain_;

@@ -7,7 +7,15 @@ namespace av {
 namespace {
 
 /* DXGI_FORMAT and D3D11_BIND_FLAG values. */
+constexpr uint32_t dxgi_r32g32b32a32_float = 2u;
 constexpr uint32_t dxgi_r16g16b16a16_float = 10u;
+constexpr uint32_t dxgi_r16g16b16a16_unorm = 11u;
+constexpr uint32_t dxgi_r32g32_float = 16u;
+constexpr uint32_t dxgi_r16g16_float = 34u;
+constexpr uint32_t dxgi_r32_float = 41u;
+constexpr uint32_t dxgi_r8g8_unorm = 49u;
+constexpr uint32_t dxgi_r16_float = 54u;
+constexpr uint32_t dxgi_r8_unorm = 61u;
 constexpr uint32_t dxgi_r10g10b10a2_unorm = 24u;
 constexpr uint32_t dxgi_r8g8b8a8_unorm = 28u;
 constexpr uint32_t dxgi_r8g8b8a8_unorm_srgb = 29u;
@@ -31,6 +39,16 @@ constexpr ViewPair pairs[] = {
     {dxgi_b8g8r8a8_unorm_srgb, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM},
     {dxgi_r10g10b10a2_unorm, VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_UNDEFINED},
     {dxgi_r16g16b16a16_float, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_UNDEFINED},
+    /* What an OpenCL image over a shared texture reads as itself
+     * (DxgiClFormat): video processing's float and single-channel planes. */
+    {dxgi_r32g32b32a32_float, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_UNDEFINED},
+    {dxgi_r16g16b16a16_unorm, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_UNDEFINED},
+    {dxgi_r32g32_float, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_UNDEFINED},
+    {dxgi_r16g16_float, VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_UNDEFINED},
+    {dxgi_r32_float, VK_FORMAT_R32_SFLOAT, VK_FORMAT_UNDEFINED},
+    {dxgi_r8g8_unorm, VK_FORMAT_R8G8_UNORM, VK_FORMAT_UNDEFINED},
+    {dxgi_r16_float, VK_FORMAT_R16_SFLOAT, VK_FORMAT_UNDEFINED},
+    {dxgi_r8_unorm, VK_FORMAT_R8_UNORM, VK_FORMAT_UNDEFINED},
 };
 
 }  // namespace

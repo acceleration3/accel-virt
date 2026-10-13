@@ -1,4 +1,5 @@
 #include "executor/vulkan/vulkan_backend.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
@@ -600,9 +601,11 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
 }
 
 bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                  const SharedImageShape &shape,
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("VulkanBackend::import_object");
+    static_cast<void>(shape);   /* memory alone: no image of this API is made over it */
     wire_handle = 0u;
     detail = 0u;
     if (device_ == VK_NULL_HANDLE || fd < 0) return false;

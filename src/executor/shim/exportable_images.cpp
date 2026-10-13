@@ -140,6 +140,16 @@ ID3D11Texture2D *ExportableImages::make(const D3D11_TEXTURE2D_DESC1 &desc)
     return wrap(made, memory, desc);
 }
 
+bool ExportableImages::row_pitch(ID3D11Texture2D *texture, uint32_t &pitch)
+{
+    AV_SCOPE("ExportableImages::row_pitch");
+    pitch = 0u;
+    const ExportableImage *const made = image_of(texture);
+    if (made == nullptr) return false;
+    pitch = static_cast<uint32_t>(vulkan_.table().row_layout(made->image()).rowPitch);
+    return pitch != 0u;
+}
+
 bool ExportableImages::export_memory(ID3D11Texture2D *texture, int &fd)
 {
     AV_SCOPE("ExportableImages::export_memory");

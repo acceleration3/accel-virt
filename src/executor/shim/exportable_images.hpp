@@ -64,6 +64,9 @@ public:
     /* A dma-buf of `texture`'s memory, which the caller owns; false for a
      * texture not made here. */
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
+    /* The bytes between `texture`'s rows as the GPU laid its linear image out;
+     * false for a texture not made here. */
+    [[nodiscard]] bool row_pitch(ID3D11Texture2D *texture, uint32_t &pitch);
     /* The same dma-buf, described for a process outside QEMU to import with
      * no copy (docs/external-export.md): the image's size, the DRM format of
      * its pixels, and where its rows are as the driver laid them out. The

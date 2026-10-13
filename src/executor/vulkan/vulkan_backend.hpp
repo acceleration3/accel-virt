@@ -26,6 +26,8 @@
 
 namespace av {
 
+class SharedImageShape;
+
 class HostGpu;
 class ImportedBlob;
 
@@ -148,6 +150,7 @@ public:
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                     const SharedImageShape &shape,
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 

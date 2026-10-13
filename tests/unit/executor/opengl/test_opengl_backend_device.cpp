@@ -10,6 +10,7 @@
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/probe_dma_buf.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
@@ -348,7 +349,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t memory = 9u;
       if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                 av::ProbeDmaBuf::page_size, memory, detail)) {
+                                 av::ProbeDmaBuf::page_size, av::SharedImageShape(), memory, detail)) {
           std::fprintf(stderr, "display %u imports no memory object from a descriptor\n", index);
           CHECK_EQ(memory, 0u);
           backend.shut_down();
@@ -360,7 +361,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * does. */
       std::uint64_t again = 0u;
       CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                  av::ProbeDmaBuf::page_size, again, detail));
+                                  av::ProbeDmaBuf::page_size, av::SharedImageShape(), again, detail));
       CHECK(again != 0u);
       CHECK(again != memory);
 
@@ -378,14 +379,14 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * ever release. */
       std::uint64_t fence = 0u;
       if (backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                0u, fence, detail)) {
+                                0u, av::SharedImageShape(), fence, detail)) {
           CHECK(fence != 0u);
           /* Either guest fence kind is the one host semaphore. */
           backend.release_object(AV_SHARED_NATIVE_FENCE, fence, detail);
       }
       std::uint64_t native = 0u;
       if (backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                4096u, native, detail)) {
+                                4096u, av::SharedImageShape(), native, detail)) {
           CHECK(native != 0u);
           backend.release_object(AV_SHARED_NATIVE_FENCE, native, detail);
       }
@@ -397,7 +398,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * depends on and no argument can force. */
       std::uint64_t after = 9u;
       CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF,
-                                   descriptor.handle(), 0u, after, detail));
+                                   descriptor.handle(), 0u, av::SharedImageShape(), after, detail));
       CHECK_EQ(after, 0u);
   } }
 
@@ -414,13 +415,13 @@ TEST(opengl_backend_device, a_context_imports_more_than_any_fixed_table_held)
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t made[many] = {};
       if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                 av::ProbeDmaBuf::page_size, made[0], detail)) {
+                                 av::ProbeDmaBuf::page_size, av::SharedImageShape(), made[0], detail)) {
           backend.shut_down();
           continue;
       }
       for (std::uint32_t i = 1u; i < many; i++)
           CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                      av::ProbeDmaBuf::page_size, made[i], detail));
+                                      av::ProbeDmaBuf::page_size, av::SharedImageShape(), made[i], detail));
       for (std::uint32_t i = 1u; i < many; i++) CHECK(made[i] != made[i - 1u]);
       for (const std::uint64_t name : made) backend.release_object(AV_SHARED_MEMORY, name, detail);
       backend.shut_down();

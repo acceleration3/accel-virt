@@ -1,5 +1,10 @@
 #include "executor/opencl/opencl_backend.hpp"
 
+#include "executor/opencl/dxgi_cl_format.hpp"
+#include "device/host/stdio_log.hpp"
+#include "core/log/driver_log.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
+
 #include "executor/opengl/opengl_backend.hpp"
 
 #include <CL/cl_gl.h>
@@ -631,6 +636,7 @@ bool OpenClBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int
 }
 
 bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                  const SharedImageShape &shape,
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenClBackend::import_object");
@@ -666,21 +672,58 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * and a read across enqueues under one acquire, and what OpenCL wrote read
      * back through the exporting Vulkan device's own mapping. */
     const bool taken = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS && ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;  // AV_UNTESTABLE("no host beside a test here refuses an acquire")
+    /* A Direct3D 11 texture's memory is that image, viewed over the buffer at
+     * the pitch the GPU laid it out with: nothing is copied either way. */
+    cl_mem const named = taken ? image_over(shared, shape) : nullptr;
     /* Named in the guest's commands from now on, as any cl_mem the host made
      * is: one the registry did not hold would resolve to nothing in every
      * enqueue that names it. */
-    if (!taken || !handles_.remember(clproto::HandleKind::mem, shared)) { AV_UNTESTABLE("the acquire above, and tables no guest fills without thousands of live objects");
-        handles_.release(clproto::HandleKind::mem, shared);
-        static_cast<void>(::clReleaseMemObject(shared));
+    if (!taken || !handles_.remember(clproto::HandleKind::mem, named)) { AV_UNTESTABLE("the acquire above, and tables no guest fills without thousands of live objects");
+        /* An image holds the buffer's one reference: letting it go lets both
+         * go. */
+        cl_mem const held = named != nullptr ? named : shared;
+        handles_.release(clproto::HandleKind::mem, held);
+        static_cast<void>(::clReleaseMemObject(held));
         buffers_.destroy(buffer);
         import_.delete_memory(memory);
         return false;
     }
-    wire_handle = reinterpret_cast<uint64_t>(shared);
+    wire_handle = reinterpret_cast<uint64_t>(named);
     /* The GL objects behind it, which the release deletes: HostShares keeps
      * them with the hold. */
     detail = (uint64_t{buffer} << 32u) | memory;
     return true;
+}
+
+/* The image over `buffer` that `shape` describes, holding a reference to the
+ * buffer of its own; `buffer` itself where the memory is no image OpenCL can
+ * name, or the host will not make one over it. */
+cl_mem OpenClBackend::image_over(cl_mem buffer, const SharedImageShape &shape)
+{
+    AV_SCOPE("OpenClBackend::image_over");
+    const DxgiClFormat format(shape.format());
+    if (!shape.described() || !format.known()) return buffer;
+    const cl_image_format named = {static_cast<cl_channel_order>(format.order()),
+                                   static_cast<cl_channel_type>(format.type())};
+    cl_image_desc         described = {};
+    described.image_type = CL_MEM_OBJECT_IMAGE2D;
+    described.image_width = shape.width();
+    described.image_height = shape.height();
+    described.image_row_pitch = shape.pitch();
+    described.buffer = buffer;
+    cl_int       made = CL_SUCCESS;
+    cl_mem const image = ::clCreateImage(static_cast<cl_context>(context_), CL_MEM_READ_WRITE, &named, &described,
+                                         nullptr, &made);
+    if (image == nullptr) {
+        StdioLog sink(stderr);
+        DriverLog(sink, "virtio-gpu-av: opencl: ")
+            .note_hex("a shared texture is opened as bytes, no image over its memory: error",
+                      static_cast<uint32_t>(-made), 8u);
+        return buffer;
+    }
+    /* The image holds the buffer: the reference the import took is its. */
+    static_cast<void>(::clReleaseMemObject(buffer));
+    return image;
 }
 
 void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t detail)
@@ -692,8 +735,18 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t deta
      * the buffer that was its storage, and the memory object last. */
     /* The queue is the import's own and outlives every row it made, so a row
      * to give back is a queue to give it back on. */
-    cl_mem const shared = reinterpret_cast<cl_mem>(wire_handle);
-    handles_.release(clproto::HandleKind::mem, shared);
+    cl_mem const named = reinterpret_cast<cl_mem>(wire_handle);
+    handles_.release(clproto::HandleKind::mem, named);
+    /* An image's turn was taken on the buffer under it, which the image
+     * holds: the buffer is what is given back, and the image let go first. */
+    cl_mem shared = named;
+    cl_mem under = nullptr;
+    if (::clGetMemObjectInfo(named, CL_MEM_ASSOCIATED_MEMOBJECT, sizeof under, &under, nullptr) == CL_SUCCESS &&
+        under != nullptr) {
+        static_cast<void>(::clRetainMemObject(under));
+        static_cast<void>(::clReleaseMemObject(named));
+        shared = under;
+    }
     static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
                                                   nullptr, nullptr));
     static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));

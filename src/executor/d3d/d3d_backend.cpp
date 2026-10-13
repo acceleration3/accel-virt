@@ -1,4 +1,5 @@
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
@@ -282,7 +283,8 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
     return exported;
 }
 
-bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle, uint64_t &detail)
+bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, const SharedImageShape &, uint64_t &wire_handle,
+                               uint64_t &detail)
 {
     AV_SCOPE("D3dBackend::import_object");
     wire_handle = 0u;
@@ -750,7 +752,26 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
             .text(" not shared, status ")
             .number(static_cast<uint32_t>(published))
             .write();
+    if (published == Status::ok) describe_shared_image(shared_key, made);
     return true;
+}
+
+/* A 2D texture made over exportable memory is described as the image it is,
+ * so an API that opens its memory - OpenCL - views it as that image with no
+ * copy (SharedImageShape). */
+void D3dBackend::describe_shared_image(uint64_t shared_key, IUnknown *made)
+{
+    AV_SCOPE("D3dBackend::describe_shared_image");
+    ID3D11Texture2D *texture = nullptr;
+    if (FAILED(made->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)))) return;
+    D3D11_TEXTURE2D_DESC described = {};
+    texture->GetDesc(&described);
+    uint32_t pitch = 0u;
+    if (described.MipLevels == 1u && described.ArraySize == 1u && described.SampleDesc.Count == 1u &&
+        device11_->exportable_pitch(texture, pitch))
+        static_cast<void>(shares_->describe_image(
+            shared_key, SharedImageShape(described.Width, described.Height, static_cast<uint32_t>(described.Format), pitch)));
+    texture->Release();
 }
 
 bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &found, d3dproto::ResourceDesc &desc)

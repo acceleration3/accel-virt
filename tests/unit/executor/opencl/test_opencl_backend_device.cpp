@@ -20,6 +20,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "executor/shim/probe_dma_buf.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <CL/cl.h>
@@ -255,7 +256,7 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
       if (context == nullptr) { std::fprintf(stderr, "gpu %u makes no context\n", index); backend.shut_down(); continue; }
 
       std::uint64_t shared = 0u;
-      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page,
+      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(),
                                  shared, detail)) {
           std::fprintf(stderr, "gpu %u imports no shared object into OpenCL\n", index);
           backend.shut_down();
@@ -346,19 +347,19 @@ TEST(opencl_backend_device, an_import_with_no_guest_context_is_refused_and_costs
   if (!written.make(hosts.uuid(0u))) { backend.shut_down(); return; }
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u);
 
   /* And with a context, the same descriptor imports: the refusal cost it
    * nothing. */
   if (guest_context(backend, *hosts.device(0u)) == nullptr) { backend.shut_down(); return; }
-  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made, detail)) {
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), made, detail)) {
       CHECK(made != 0u);
       backend.release_object(AV_SHARED_MEMORY, made, detail);
   }
   /* One still held when the context closes goes with everything the guest
    * made: in a session HostShares released it before. */
-  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, made, detail))
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), made, detail))
       CHECK(backend.handle_for(av::clproto::HandleKind::mem, made) != nullptr);
   backend.shut_down(); }
 
@@ -414,17 +415,17 @@ TEST(opencl_backend_device, an_import_of_the_wrong_shape_makes_nothing)
   std::uint64_t made = 9u;
   /* A fence is a host semaphore, which this API names through an extension
    * this host has not got. */
-  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u,
+  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(),
                                made, detail));
-  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u,
+  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(),
                                made, detail));
   /* An opaque fd is another driver's private handle, which OpenGL cannot read
    * - and OpenGL is how this one reaches OpenCL. */
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, written.handle(), page, made, detail));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, page, made, detail));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, written.handle(), page, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, page, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(), made, detail));
   CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, written.handle(),
-                               page, made, detail));
+                               page, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u);
   /* This API exports nothing, whatever it can import. */
   std::uint32_t handle_kind = 9u;
@@ -448,12 +449,12 @@ TEST(opencl_backend_device, each_import_is_released_with_the_gl_objects_it_answe
   if (context == nullptr) { backend.shut_down(); return; }
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
-  if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, first, detail)) {
+  if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), first, detail)) {
       backend.shut_down();
       return;
   }
   const std::uint64_t first_detail = detail;
-  CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, second, detail));
+  CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), second, detail));
   const std::uint64_t second_detail = detail;
   /* Two imports of one descriptor are two host objects over one allocation,
    * which is what two guest contexts opening one shared object look like. */

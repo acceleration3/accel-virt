@@ -109,6 +109,9 @@ public:
     IUnknown *shown(uint32_t domain, uint64_t id);
     /* `copy` kept as `id`'s flip copy, with a reference of the share's own. */
     bool      keep_shown(uint32_t domain, uint64_t id, IUnknown *copy);
+    /* What `id`'s memory is as an image, as its publisher made it: an
+     * importer views the memory as that image. False for an unknown id. */
+    bool      describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape);
     /* One more copy into `id` ran on the host. */
     void      written(uint32_t domain, uint64_t id);
     /* How many have: false for an unknown id. */

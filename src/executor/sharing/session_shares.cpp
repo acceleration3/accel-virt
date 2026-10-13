@@ -1,5 +1,7 @@
 #include "executor/sharing/session_shares.hpp"
 
+#include "executor/sharing/shared_image_shape.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "executor/sharing/host_shares.hpp"
 
@@ -68,6 +70,12 @@ void SessionShares::written(uint64_t id)
 {
     AV_SCOPE("SessionShares::written");
     if (shares_ != nullptr) shares_->written(domain_, id);
+}
+
+bool SessionShares::describe_image(uint64_t id, const SharedImageShape &shape)
+{
+    AV_SCOPE("SessionShares::describe_image");
+    return shares_ != nullptr && shares_->describe_image(domain_, id, shape);
 }
 
 void SessionShares::end()

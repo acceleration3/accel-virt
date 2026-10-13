@@ -25,6 +25,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
@@ -1485,14 +1486,14 @@ TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_
        * opaque fd where memory needs a dma-buf, are each refused with nothing
        * made. */
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, av::SharedImageShape(), imported, detail));
       CHECK_EQ(imported, 0u);
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, fd, page,
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, fd, page, av::SharedImageShape(),
                                           imported, detail));
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, imported, detail));
-      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, av::SharedImageShape(), imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, av::SharedImageShape(), imported, detail));
 
-      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, imported, detail));
+      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, av::SharedImageShape(), imported, detail));
       CHECK(imported != 0u);
       CHECK(imported != handle);
       /* What an import made is a handle the guest may name, and releasing it
@@ -1535,7 +1536,7 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page,
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page, av::SharedImageShape(),
                                           imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
@@ -1595,7 +1596,7 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       /* A dma-buf is memory: a fence import naming one is refused before the
        * driver sees it. */
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, fd, 0u,
+      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, fd, 0u, av::SharedImageShape(),
                                           imported, detail));
       CHECK_EQ(imported, 0u);
       /* And a descriptor that is not a semaphore is the driver's refusal. */
@@ -1603,11 +1604,11 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
       CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
-                                          0u, imported, detail));
+                                          0u, av::SharedImageShape(), imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
 
-      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, imported, detail));
+      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, av::SharedImageShape(), imported, detail));
       CHECK(imported != 0u);
       CHECK(made.probe().handles().knows(imported));
       made.backend().release_object(AV_SHARED_NATIVE_FENCE, imported, detail);
@@ -1657,12 +1658,12 @@ TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_ei
       ::close(ends[1]);
       std::uint64_t imported = 9u;
       CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
-                                          0u, imported, detail));
+                                          0u, av::SharedImageShape(), imported, detail));
       CHECK_EQ(imported, 0u);
       /* Memory is the same answer by a different route: with no entry point
        * to ask, the descriptor's memory types are none, and an import with no
        * type to bind into is refused rather than bound into type 0. */
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page,
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page, av::SharedImageShape(),
                                           imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);

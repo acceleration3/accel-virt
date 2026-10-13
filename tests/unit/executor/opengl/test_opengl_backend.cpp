@@ -11,6 +11,7 @@
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
@@ -317,7 +318,7 @@ TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_noth
   CHECK_EQ(handle_kind, 0u);
   CHECK_EQ(fd, -1);
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u);
   backend.release_object(AV_SHARED_MEMORY, 1u, detail);
   backend.shut_down(); }
@@ -328,12 +329,12 @@ TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_noth
 TEST(opengl_backend, an_import_of_the_wrong_shape_never_reaches_a_driver)
 { OpenGlBackend backend;
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, 4096u, made, detail));
-  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
-  CHECK(!backend.import_object(0u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, made, detail));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 0u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, 4096u, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(0u, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 0u, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u); }
 
 namespace {

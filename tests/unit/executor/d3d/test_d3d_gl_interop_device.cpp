@@ -9,6 +9,7 @@
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
@@ -106,7 +107,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     av::OpenGlBackend opengl;
     CHECK(opengl.initialize(apis.gl_display(gpu), nullptr, nullptr));
     std::uint64_t memory = 0u;
-    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, bytes, memory, detail));
+    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, bytes, av::SharedImageShape(), memory, detail));
     close(fd);
     {
         const av::glproto::RealGl &gl = av::OpenGlBackendProbe::gl(opengl);

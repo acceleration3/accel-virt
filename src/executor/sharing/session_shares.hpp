@@ -15,6 +15,8 @@ struct IUnknown;
 
 namespace av {
 
+class SharedImageShape;
+
 class HostShares;
 class SessionBackend;
 
@@ -35,6 +37,8 @@ public:
     void                 close(uint64_t id);
     [[nodiscard]] Status publish_resource(uint64_t id, IUnknown *resource, ShareOrigin origin);
     void                 written(uint64_t id);
+    /* HostShares::describe_image in this session's domain. */
+    bool                 describe_image(uint64_t id, const SharedImageShape &shape);
     /* Every hold of this session let go of (HostShares::session_closed), and
      * unbound. */
     void                 end();

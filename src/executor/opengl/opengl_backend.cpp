@@ -1,4 +1,5 @@
 #include "executor/opengl/opengl_backend.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -274,9 +275,11 @@ bool OpenGlBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int
 }
 
 bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                  const SharedImageShape &shape,
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenGlBackend::import_object");
+    static_cast<void>(shape);   /* memory alone: no image of this API is made over it */
     wire_handle = 0u;
     detail = 0u;
     if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0) return false;

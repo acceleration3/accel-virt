@@ -61,7 +61,12 @@ TEST(exportable_image_info, a_shared_colour_texture_is_an_exportable_image_mutab
 
 TEST(exportable_image_info, what_interop_does_not_share_is_left_to_dxvk)
 { const std::uint32_t binds = bind_shader_resource | bind_render_target;
-  CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 1u, r32_float, binds).supported());
+  constexpr std::uint32_t r32g32b32_float = 6u;
+  CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 1u, r32g32b32_float, binds).supported());
+  /* A single-channel float texture is shared, for an OpenCL image over it. */
+  const ExportableImageInfo plane(4u, 4u, 1u, 1u, 1u, r32_float, binds);
+  CHECK(plane.supported());
+  CHECK_EQ(plane.info().format, VK_FORMAT_R32_SFLOAT);
   CHECK(!ExportableImageInfo(4u, 4u, 2u, 1u, 1u, r8g8b8a8_unorm, binds).supported());
   CHECK(!ExportableImageInfo(4u, 4u, 1u, 6u, 1u, r8g8b8a8_unorm, binds).supported());
   CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 4u, r8g8b8a8_unorm, binds).supported());

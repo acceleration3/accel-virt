@@ -11,6 +11,7 @@
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/generated/vulkan/vk_serialize.h"
@@ -666,9 +667,9 @@ TEST(vulkan_backend, a_backend_with_no_device_exports_imports_and_releases_nothi
   CHECK(!backend.export_object(AV_SHARED_MONITORED_FENCE, 0x40u, handle_kind, fd));
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, av::SharedImageShape(), made, detail));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, av::SharedImageShape(), made, detail));
   /* And a release does nothing at all, with or without a handle. */
   backend.release_object(AV_SHARED_MEMORY, 0x40u, detail);
   backend.release_object(AV_SHARED_MONITORED_FENCE, 0u, detail); }

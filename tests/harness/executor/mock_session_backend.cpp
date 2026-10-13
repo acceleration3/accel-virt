@@ -133,8 +133,10 @@ bool MockSessionBackend::export_object(std::uint32_t kind, std::uint64_t wire_ha
 }
 
 bool MockSessionBackend::import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
-                                       std::uint64_t size, std::uint64_t &wire_handle, std::uint64_t &detail)
+                                       std::uint64_t size, const av::SharedImageShape &shape,
+                                       std::uint64_t &wire_handle, std::uint64_t &detail)
 {
+    imported_shape_ = shape;
     wire_handle = 0u;
     detail = 0u;
     if (!shares_ || fd < 0 || kind == 0u || handle_kind == 0u || size == 0u) return false;

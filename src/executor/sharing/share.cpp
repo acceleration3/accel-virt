@@ -223,6 +223,18 @@ uint32_t Share::give_up_objects(IUnknown **objects)
     return count;
 }
 
+const SharedImageShape &Share::shape() const
+{
+    AV_SCOPE("Share::shape");
+    return shape_;
+}
+
+void Share::describe_image(const SharedImageShape &shape)
+{
+    AV_SCOPE("Share::describe_image");
+    shape_ = shape;
+}
+
 void Share::written()
 {
     AV_SCOPE("Share::written");

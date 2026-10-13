@@ -15,6 +15,8 @@
 
 namespace av {
 
+class SharedImageShape;
+
 class ImportedBlob;
 class WireArena;
 class WireReader;
@@ -80,6 +82,7 @@ public:
      * of what it imported. `fd` stays the caller's whatever the answer: it is
      * HostShares', and a backend that keeps one duplicates it. */
     [[nodiscard]] virtual bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                             const SharedImageShape &shape,
                                              uint64_t &wire_handle, uint64_t &detail) = 0;
     /* What import_object made, destroyed: called by HostShares alone, with
      * what that import answered, on this session's thread - as the guest

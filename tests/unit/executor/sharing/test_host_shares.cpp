@@ -10,6 +10,7 @@
 #include "harness/executor/counted_object.hpp"
 #include "harness/executor/host_shares_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -113,6 +114,22 @@ TEST(host_shares, an_object_one_session_publishes_another_opens_as_its_own)
   const std::uint64_t made = f.opened(0x2Au, f.reader);
   CHECK_EQ(made, MockSessionBackend::object_handle + 1u);
   CHECK_EQ(f.reader.imported_objects(), 1u);
+  CHECK(f.shares.invariants_hold()); }
+
+/* An importer is handed what the publisher said the memory is as an image
+ * (SharedImageShape) - empty until it says, and nothing for an unknown id. */
+TEST(host_shares, an_open_hands_the_importer_the_image_the_publisher_described)
+{ Fixture f;
+  f.published(0x2Au);
+  CHECK(!f.shares.describe_image(domain, 0x2Bu, av::SharedImageShape(4u, 4u, 87u, 16u)));
+  static_cast<void>(f.opened(0x2Au, f.reader));
+  CHECK(!f.reader.imported_shape().described());
+  f.published(0x2Cu);
+  CHECK(f.shares.describe_image(domain, 0x2Cu, av::SharedImageShape(64u, 32u, 87u, 256u)));
+  static_cast<void>(f.opened(0x2Cu, f.reader));
+  CHECK(f.reader.imported_shape().described());
+  CHECK_EQ(f.reader.imported_shape().width(), 64u);
+  CHECK_EQ(f.reader.imported_shape().pitch(), 256u);
   CHECK(f.shares.invariants_hold()); }
 
 /* Windows lets a process share one object twice. */

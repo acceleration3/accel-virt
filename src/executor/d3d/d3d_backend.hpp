@@ -37,6 +37,8 @@ struct ID3D11Buffer;
 
 namespace av {
 
+class SharedImageShape;
+
 struct D3dBackendProbe;
 
 class D3d11HostDevice;
@@ -78,6 +80,7 @@ public:
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                     const SharedImageShape &shape,
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
@@ -187,6 +190,7 @@ private:
      * another kind. Id 0 is null too, which is what an unbinding names. */
     /* `texture` made over memory other APIs can open, when the guest's
      * `guest_misc` shares it and the host can; null otherwise. */
+    void             describe_shared_image(uint64_t shared_key, IUnknown *made);
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
     /* A copy into `destination` has run: counted when it is a shared surface. */
     void                     counted(ID3D11Resource *destination);

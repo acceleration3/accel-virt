@@ -8,6 +8,7 @@
 #define AV_MOCK_SESSION_BACKEND_HPP
 
 #include "executor/session_backend.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -61,7 +62,10 @@ public:
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
                                      std::uint32_t &handle_kind, int &fd) override;
     [[nodiscard]] bool import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
-                                     std::uint64_t size, std::uint64_t &wire_handle, std::uint64_t &detail) override;
+                                     std::uint64_t size, const av::SharedImageShape &shape,
+                                     std::uint64_t &wire_handle, std::uint64_t &detail) override;
+    /* The image the last import was told its memory is. */
+    const av::SharedImageShape &imported_shape() const { return imported_shape_; }
     void               release_object(std::uint32_t kind, std::uint64_t wire_handle, std::uint64_t detail) override;
 
     /* Whether this backend shares objects at all, so a test can be both an API
@@ -77,6 +81,7 @@ public:
     void          before_next_export(void (*during)(void *context), void *context);
 
 private:
+    av::SharedImageShape imported_shape_;
     std::size_t   answer_bytes_;
     std::uint32_t ran_;
     std::uint32_t adopted_;
