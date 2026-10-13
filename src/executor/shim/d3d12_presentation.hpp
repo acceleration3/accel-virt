@@ -14,6 +14,8 @@
 #define AV_D3D12_PRESENTATION_HPP
 
 #include <stdint.h>
+#include "executor/shim/vulkan_timeline.hpp"
+
 #include <vulkan/vulkan.h>
 
 struct ID3D12CommandQueue;
@@ -55,7 +57,7 @@ private:
     D3d11HostDevice *device11_;
     SessionShares   *shares_;
     ID3D12Fence     *fence_;
-    VkSemaphore      waited_;
+    VulkanTimeline   waited_;
     uint64_t         value_;
 };
 

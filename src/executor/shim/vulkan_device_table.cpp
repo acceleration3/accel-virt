@@ -1,0 +1,318 @@
+#include "executor/shim/vulkan_device_table.hpp"
+
+#include "core/trace/function_scope.hpp"
+
+#include <vulkan/vulkan.h>
+
+namespace av {
+
+VulkanDeviceTable::VulkanDeviceTable()
+    : physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), memory_{}, format_properties_(nullptr),
+      create_image_(nullptr), destroy_image_(nullptr), requirements_(nullptr), allocate_(nullptr), free_(nullptr),
+      bind_(nullptr), layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
+      import_semaphore_(nullptr), semaphore_fd_(nullptr), wait_semaphores_(nullptr), create_pool_(nullptr),
+      destroy_pool_(nullptr), allocate_buffers_(nullptr), begin_(nullptr), end_(nullptr), reset_(nullptr),
+      barrier_(nullptr), copy_image_(nullptr), submit_(nullptr), queue_idle_(nullptr)
+{
+    AV_SCOPE("VulkanDeviceTable::VulkanDeviceTable");
+}
+
+bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkDevice device)
+{
+    AV_SCOPE("VulkanDeviceTable::load");
+    forget();
+    if (instance == VK_NULL_HANDLE || physical == VK_NULL_HANDLE || device == VK_NULL_HANDLE) return false;
+    auto properties = reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
+        vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceMemoryProperties"));
+    format_properties_ = reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties2>(
+        vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceImageFormatProperties2"));
+    if (properties == nullptr) return false;
+    properties(physical, &memory_);
+    const auto entry = [device](const char *name) { return vkGetDeviceProcAddr(device, name); };
+    create_image_ = reinterpret_cast<PFN_vkCreateImage>(entry("vkCreateImage"));
+    destroy_image_ = reinterpret_cast<PFN_vkDestroyImage>(entry("vkDestroyImage"));
+    requirements_ = reinterpret_cast<PFN_vkGetImageMemoryRequirements>(entry("vkGetImageMemoryRequirements"));
+    allocate_ = reinterpret_cast<PFN_vkAllocateMemory>(entry("vkAllocateMemory"));
+    free_ = reinterpret_cast<PFN_vkFreeMemory>(entry("vkFreeMemory"));
+    bind_ = reinterpret_cast<PFN_vkBindImageMemory>(entry("vkBindImageMemory"));
+    layout_ = reinterpret_cast<PFN_vkGetImageSubresourceLayout>(entry("vkGetImageSubresourceLayout"));
+    memory_fd_ = reinterpret_cast<PFN_vkGetMemoryFdKHR>(entry("vkGetMemoryFdKHR"));
+    create_semaphore_ = reinterpret_cast<PFN_vkCreateSemaphore>(entry("vkCreateSemaphore"));
+    destroy_semaphore_ = reinterpret_cast<PFN_vkDestroySemaphore>(entry("vkDestroySemaphore"));
+    import_semaphore_ = reinterpret_cast<PFN_vkImportSemaphoreFdKHR>(entry("vkImportSemaphoreFdKHR"));
+    semaphore_fd_ = reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(entry("vkGetSemaphoreFdKHR"));
+    wait_semaphores_ = reinterpret_cast<PFN_vkWaitSemaphores>(entry("vkWaitSemaphores"));
+    create_pool_ = reinterpret_cast<PFN_vkCreateCommandPool>(entry("vkCreateCommandPool"));
+    destroy_pool_ = reinterpret_cast<PFN_vkDestroyCommandPool>(entry("vkDestroyCommandPool"));
+    allocate_buffers_ = reinterpret_cast<PFN_vkAllocateCommandBuffers>(entry("vkAllocateCommandBuffers"));
+    begin_ = reinterpret_cast<PFN_vkBeginCommandBuffer>(entry("vkBeginCommandBuffer"));
+    end_ = reinterpret_cast<PFN_vkEndCommandBuffer>(entry("vkEndCommandBuffer"));
+    reset_ = reinterpret_cast<PFN_vkResetCommandBuffer>(entry("vkResetCommandBuffer"));
+    barrier_ = reinterpret_cast<PFN_vkCmdPipelineBarrier>(entry("vkCmdPipelineBarrier"));
+    copy_image_ = reinterpret_cast<PFN_vkCmdCopyImage>(entry("vkCmdCopyImage"));
+    submit_ = reinterpret_cast<PFN_vkQueueSubmit>(entry("vkQueueSubmit"));
+    queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(entry("vkQueueWaitIdle"));
+    if (memory_fd_ == nullptr || import_semaphore_ == nullptr || semaphore_fd_ == nullptr ||
+        wait_semaphores_ == nullptr || create_image_ == nullptr || submit_ == nullptr) {
+        forget();
+        return false;
+    }
+    physical_ = physical;
+    device_ = device;
+    return true;
+}
+
+void VulkanDeviceTable::forget()
+{
+    AV_SCOPE("VulkanDeviceTable::forget");
+    physical_ = VK_NULL_HANDLE;
+    device_ = VK_NULL_HANDLE;
+}
+
+bool VulkanDeviceTable::loaded() const
+{
+    AV_SCOPE("VulkanDeviceTable::loaded");
+    return device_ != VK_NULL_HANDLE;
+}
+
+VkDevice VulkanDeviceTable::device() const
+{
+    AV_SCOPE("VulkanDeviceTable::device");
+    return device_;
+}
+
+bool VulkanDeviceTable::supports_exportable(const VkImageCreateInfo &info) const
+{
+    AV_SCOPE("VulkanDeviceTable::supports_exportable");
+    if (!loaded() || format_properties_ == nullptr) return false;
+    VkPhysicalDeviceExternalImageFormatInfo external = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
+                                                        nullptr, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    /* The view formats are part of what is asked: a mutable image is
+     * supported only as the formats it is viewed in are. */
+    VkImageFormatListCreateInfo views = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, nullptr};
+    for (auto *next = static_cast<const VkBaseInStructure *>(info.pNext); next != nullptr; next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) continue;
+        views = *reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
+        views.pNext = nullptr;
+        external.pNext = &views;
+    }
+    const VkPhysicalDeviceImageFormatInfo2 asked = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+                                                    &external,
+                                                    info.format,
+                                                    info.imageType,
+                                                    info.tiling,
+                                                    info.usage,
+                                                    info.flags};
+    VkExternalImageFormatProperties exported = {VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES, nullptr, {}};
+    VkImageFormatProperties2        answer = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2, &exported, {}};
+    if (format_properties_(physical_, &asked, &answer) != VK_SUCCESS) return false;
+    const VkImageFormatProperties &limits = answer.imageFormatProperties;
+    return info.extent.width <= limits.maxExtent.width && info.extent.height <= limits.maxExtent.height &&
+           info.mipLevels <= limits.maxMipLevels && info.arrayLayers <= limits.maxArrayLayers &&
+           (limits.sampleCounts & info.samples) != 0u &&
+           (exported.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) != 0u;
+}
+
+/* A device-local type first: the images are drawn into and read by the GPU,
+ * never mapped. */
+uint32_t VulkanDeviceTable::memory_type(uint32_t allowed) const
+{
+    AV_SCOPE("VulkanDeviceTable::memory_type");
+    for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++)
+        if ((allowed & (1u << type)) != 0u &&
+            (memory_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0u)
+            return type;
+    for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++)
+        if ((allowed & (1u << type)) != 0u) return type;
+    return VK_MAX_MEMORY_TYPES;
+}
+
+bool VulkanDeviceTable::create_image(const VkImageCreateInfo &info, VkImage &image) const
+{
+    AV_SCOPE("VulkanDeviceTable::create_image");
+    image = VK_NULL_HANDLE;
+    if (!loaded()) return false;
+    if (create_image_(device_, &info, nullptr, &image) == VK_SUCCESS) return true;
+    image = VK_NULL_HANDLE;
+    return false;
+}
+
+void VulkanDeviceTable::destroy_image(VkImage image) const
+{
+    AV_SCOPE("VulkanDeviceTable::destroy_image");
+    if (loaded() && image != VK_NULL_HANDLE) destroy_image_(device_, image, nullptr);
+}
+
+VkMemoryRequirements VulkanDeviceTable::requirements(VkImage image) const
+{
+    AV_SCOPE("VulkanDeviceTable::requirements");
+    VkMemoryRequirements needs = {};
+    if (loaded()) requirements_(device_, image, &needs);
+    return needs;
+}
+
+bool VulkanDeviceTable::bind_dedicated(VkImage image, const void *chain, VkDeviceSize size, uint32_t type,
+                                       VkDeviceMemory &memory) const
+{
+    AV_SCOPE("VulkanDeviceTable::bind_dedicated");
+    memory = VK_NULL_HANDLE;
+    if (!loaded() || type == VK_MAX_MEMORY_TYPES) return false;
+    const VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, chain, image,
+                                                     VK_NULL_HANDLE};
+    const VkMemoryAllocateInfo          allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &dedicated, size, type};
+    if (allocate_(device_, &allocation, nullptr, &memory) != VK_SUCCESS) {
+        memory = VK_NULL_HANDLE;
+        return false;
+    }
+    return bind_(device_, image, memory, 0u) == VK_SUCCESS;
+}
+
+void VulkanDeviceTable::free_memory(VkDeviceMemory memory) const
+{
+    AV_SCOPE("VulkanDeviceTable::free_memory");
+    if (loaded() && memory != VK_NULL_HANDLE) free_(device_, memory, nullptr);
+}
+
+bool VulkanDeviceTable::memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagBits type, int &fd) const
+{
+    AV_SCOPE("VulkanDeviceTable::memory_fd");
+    fd = -1;
+    if (!loaded() || memory == VK_NULL_HANDLE) return false;
+    const VkMemoryGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, memory, type};
+    if (memory_fd_(device_, &asked, &fd) == VK_SUCCESS) return true;
+    fd = -1;
+    return false;
+}
+
+VkSubresourceLayout VulkanDeviceTable::row_layout(VkImage image) const
+{
+    AV_SCOPE("VulkanDeviceTable::row_layout");
+    const VkImageSubresource first = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u};
+    VkSubresourceLayout      laid = {};
+    if (loaded() && layout_ != nullptr) layout_(device_, image, &first, &laid);
+    return laid;
+}
+
+bool VulkanDeviceTable::create_semaphore(const void *chain, VkSemaphore &semaphore) const
+{
+    AV_SCOPE("VulkanDeviceTable::create_semaphore");
+    semaphore = VK_NULL_HANDLE;
+    if (!loaded()) return false;
+    const VkSemaphoreCreateInfo created = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, chain, 0u};
+    if (create_semaphore_(device_, &created, nullptr, &semaphore) == VK_SUCCESS) return true;
+    semaphore = VK_NULL_HANDLE;
+    return false;
+}
+
+void VulkanDeviceTable::destroy_semaphore(VkSemaphore semaphore) const
+{
+    AV_SCOPE("VulkanDeviceTable::destroy_semaphore");
+    if (loaded() && semaphore != VK_NULL_HANDLE) destroy_semaphore_(device_, semaphore, nullptr);
+}
+
+bool VulkanDeviceTable::import_semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits type,
+                                            int fd) const
+{
+    AV_SCOPE("VulkanDeviceTable::import_semaphore_fd");
+    if (!loaded()) return false;
+    const VkImportSemaphoreFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR, nullptr, semaphore,
+                                                 0u, type, fd};
+    return import_semaphore_(device_, &imported) == VK_SUCCESS;
+}
+
+bool VulkanDeviceTable::semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits type,
+                                     int &fd) const
+{
+    AV_SCOPE("VulkanDeviceTable::semaphore_fd");
+    fd = -1;
+    if (!loaded()) return false;
+    const VkSemaphoreGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR, nullptr, semaphore, type};
+    if (semaphore_fd_(device_, &asked, &fd) == VK_SUCCESS) return true;
+    fd = -1;
+    return false;
+}
+
+bool VulkanDeviceTable::wait_semaphore(VkSemaphore semaphore, uint64_t value, uint64_t nanoseconds) const
+{
+    AV_SCOPE("VulkanDeviceTable::wait_semaphore");
+    if (!loaded()) return false;
+    const VkSemaphoreWaitInfo wait = {VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, nullptr, 0u, 1u, &semaphore, &value};
+    return wait_semaphores_(device_, &wait, nanoseconds) == VK_SUCCESS;
+}
+
+bool VulkanDeviceTable::create_command_pool(uint32_t family, VkCommandPool &pool) const
+{
+    AV_SCOPE("VulkanDeviceTable::create_command_pool");
+    pool = VK_NULL_HANDLE;
+    if (!loaded()) return false;
+    const VkCommandPoolCreateInfo created = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, nullptr,
+                                             VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, family};
+    if (create_pool_(device_, &created, nullptr, &pool) == VK_SUCCESS) return true;
+    pool = VK_NULL_HANDLE;
+    return false;
+}
+
+void VulkanDeviceTable::destroy_command_pool(VkCommandPool pool) const
+{
+    AV_SCOPE("VulkanDeviceTable::destroy_command_pool");
+    if (loaded() && pool != VK_NULL_HANDLE) destroy_pool_(device_, pool, nullptr);
+}
+
+bool VulkanDeviceTable::allocate_command_buffers(VkCommandPool pool, uint32_t count, VkCommandBuffer *buffers) const
+{
+    AV_SCOPE("VulkanDeviceTable::allocate_command_buffers");
+    if (!loaded()) return false;
+    const VkCommandBufferAllocateInfo allocation = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr, pool,
+                                                    VK_COMMAND_BUFFER_LEVEL_PRIMARY, count};
+    return allocate_buffers_(device_, &allocation, buffers) == VK_SUCCESS;
+}
+
+bool VulkanDeviceTable::begin(VkCommandBuffer buffer) const
+{
+    AV_SCOPE("VulkanDeviceTable::begin");
+    const VkCommandBufferBeginInfo begun = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr,
+                                            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, nullptr};
+    return loaded() && begin_(buffer, &begun) == VK_SUCCESS;
+}
+
+bool VulkanDeviceTable::end(VkCommandBuffer buffer) const
+{
+    AV_SCOPE("VulkanDeviceTable::end");
+    return loaded() && end_(buffer) == VK_SUCCESS;
+}
+
+void VulkanDeviceTable::reset(VkCommandBuffer buffer) const
+{
+    AV_SCOPE("VulkanDeviceTable::reset");
+    if (loaded()) reset_(buffer, 0u);
+}
+
+void VulkanDeviceTable::barrier(VkCommandBuffer buffer, VkPipelineStageFlags from, VkPipelineStageFlags to,
+                                uint32_t count, const VkImageMemoryBarrier *barriers) const
+{
+    AV_SCOPE("VulkanDeviceTable::barrier");
+    if (loaded()) barrier_(buffer, from, to, 0u, 0u, nullptr, 0u, nullptr, count, barriers);
+}
+
+void VulkanDeviceTable::copy_image(VkCommandBuffer buffer, VkImage source, VkImage destination,
+                                   const VkImageCopy &region) const
+{
+    AV_SCOPE("VulkanDeviceTable::copy_image");
+    if (loaded())
+        copy_image_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
+}
+
+bool VulkanDeviceTable::submit(VkQueue queue, const VkSubmitInfo &submitted) const
+{
+    AV_SCOPE("VulkanDeviceTable::submit");
+    return loaded() && submit_(queue, 1u, &submitted, VK_NULL_HANDLE) == VK_SUCCESS;
+}
+
+void VulkanDeviceTable::queue_idle(VkQueue queue) const
+{
+    AV_SCOPE("VulkanDeviceTable::queue_idle");
+    if (loaded()) static_cast<void>(queue_idle_(queue));
+}
+
+}  // namespace av

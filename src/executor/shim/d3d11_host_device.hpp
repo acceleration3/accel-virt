@@ -45,6 +45,7 @@ class D3dRuntime;
 class HostShares;
 class StagedFrame;
 class StateWriter;
+class CompositorDevice;
 class D3d12HostDevice;
 class Vkd3dImageExport;
 
@@ -135,6 +136,14 @@ public:
     /* The GPU's Direct3D 12 device, whose surfaces this one makes views of
      * (open_shared); null for none. */
     void               pair(D3d12HostDevice *device12);
+    /* The GPU's compositing context, whose images the shared textures of
+     * other APIs' pictures are made over (CompositorDevice); null for none. */
+    void               use_compositor(CompositorDevice *compositor);
+    CompositorDevice  *compositor() const;
+    /* Under the lock: a shared texture described as `desc` over the
+     * compositor's dma-buf `fd` (ExportableImages::adopt), with a reference
+     * the caller owns; the fd is taken whatever happens. */
+    ID3D11Texture2D   *adopt_exportable(int fd, const D3D11_TEXTURE2D_DESC1 &desc);
     /* Under the lock: a shared texture described as `desc`, made over memory
      * OpenGL and Vulkan can open (ExportableImages::make), with a reference
      * the caller owns; null for one only DXVK's own allocation can hold. */
@@ -174,6 +183,7 @@ private:
 
     ID3D11Device5          *device_;
     D3d12HostDevice        *device12_;
+    CompositorDevice *compositor_;
     ID3D11DeviceContext4   *context_;
     ID3DDeviceContextState *active_;
     uint32_t                feature_level_;

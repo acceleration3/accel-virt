@@ -58,15 +58,15 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     created.tiling = VK_IMAGE_TILING_LINEAR;
     created.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     created.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (!vulkan_.create_image(created, image.image_)) return false;
-    const VkMemoryRequirements needs = vulkan_.requirements(image.image_);
-    const uint32_t             type = vulkan_.memory_type(needs.memoryTypeBits);
+    if (!vulkan_.table().create_image(created, image.image_)) return false;
+    const VkMemoryRequirements needs = vulkan_.table().requirements(image.image_);
+    const uint32_t             type = vulkan_.table().memory_type(needs.memoryTypeBits);
     if (type == VK_MAX_MEMORY_TYPES) return false;
     const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
                                                  VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    if (!vulkan_.bind_memory(image.image_, &exported, needs.size, type, image.memory_)) return false;
-    if (!vulkan_.memory_fd(image.memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, image.fd_)) return false;
-    const VkSubresourceLayout laid = vulkan_.row_layout(image.image_);
+    if (!vulkan_.table().bind_dedicated(image.image_, &exported, needs.size, type, image.memory_)) return false;
+    if (!vulkan_.table().memory_fd(image.memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, image.fd_)) return false;
+    const VkSubresourceLayout laid = vulkan_.table().row_layout(image.image_);
     image.stride_ = static_cast<uint32_t>(laid.rowPitch);
     image.offset_ = static_cast<uint32_t>(laid.offset);
     D3D11_TEXTURE2D_DESC1 described = {};
@@ -147,8 +147,8 @@ void HostImageExport::drop(Image &image)
     if (image.done_ != nullptr) image.done_->Release();
     if (image.texture_ != nullptr) image.texture_->Release();
     if (image.fd_ >= 0) close(image.fd_);
-    vulkan_.destroy_image(image.image_);
-    vulkan_.free_memory(image.memory_);
+    vulkan_.table().destroy_image(image.image_);
+    vulkan_.table().free_memory(image.memory_);
     image = Image{VK_NULL_HANDLE, VK_NULL_HANDLE, nullptr, nullptr, -1, 0u, 0u};
 }
 

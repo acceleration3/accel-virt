@@ -56,6 +56,11 @@ public:
      * does not support, or one DXVK will not make or wrap: DXVK then makes the
      * texture itself. */
     ID3D11Texture2D *make(const D3D11_TEXTURE2D_DESC1 &desc);
+    /* A texture described as `desc` over the dma-buf `fd` - an image the
+     * compositor made as ExportableImageInfo describes it (CompositorDevice) -
+     * with a reference the caller owns. The fd is taken whatever happens:
+     * kept by the texture's memory, or closed. */
+    ID3D11Texture2D *adopt(int fd, const D3D11_TEXTURE2D_DESC1 &desc);
     /* A dma-buf of `texture`'s memory, which the caller owns; false for a
      * texture not made here. */
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);

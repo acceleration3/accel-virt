@@ -17,7 +17,7 @@
 namespace av {
 
 D3d12Presentation::D3d12Presentation()
-    : device12_(nullptr), device11_(nullptr), shares_(nullptr), fence_(nullptr), waited_(VK_NULL_HANDLE), value_(0u)
+    : device12_(nullptr), device11_(nullptr), shares_(nullptr), fence_(nullptr), waited_(), value_(0u)
 {
     AV_SCOPE("D3d12Presentation::D3d12Presentation");
 }
@@ -74,22 +74,21 @@ bool D3d12Presentation::present(ID3D12CommandQueue *queue)
 void D3d12Presentation::release()
 {
     AV_SCOPE("D3d12Presentation::release");
-    if (waited_ != VK_NULL_HANDLE) {
+    if (waited_.made()) {
         device11_->lock(nullptr);
         device11_->vulkan().idle();
-        device11_->vulkan().destroy_semaphore(waited_);
+        waited_.release();
         device11_->unlock();
     }
     if (fence_ != nullptr) fence_->Release();
     fence_ = nullptr;
-    waited_ = VK_NULL_HANDLE;
     value_ = 0u;
 }
 
 bool D3d12Presentation::connect()
 {
     AV_SCOPE("D3d12Presentation::connect");
-    if (waited_ != VK_NULL_HANDLE) return true;
+    if (waited_.made()) return true;
     if (device12_ == nullptr || device11_ == nullptr || !device11_->vulkan().connected()) return false;
     ID3D12Fence *made = nullptr;
     if (FAILED(device12_->device()->CreateFence(0u, D3D12_FENCE_FLAG_SHARED, __uuidof(ID3D12Fence),
@@ -97,7 +96,6 @@ bool D3d12Presentation::connect()
         return false;
     int fd = -1;
     if (!device12_->export_fence(made, fd) || !device11_->vulkan().import_timeline(fd, waited_)) {
-        if (fd >= 0) close(fd);
         made->Release();
         StdioLog sink(stderr);
         DriverLog(sink, "virtio-gpu-av: d3d12: ").write("no timeline shared with DXVK; presents cannot be shown");

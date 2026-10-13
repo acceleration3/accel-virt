@@ -57,7 +57,7 @@ public:
     {
         VkApplicationInfo application = {};
         application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        application.apiVersion = VK_API_VERSION_1_3;
+        application.apiVersion = (1u << 22u) | (3u << 12u);   /* VK_API_VERSION_1_3, whose macro casts as C does */
         VkInstanceCreateInfo instance = {};
         instance.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instance.pApplicationInfo = &application;

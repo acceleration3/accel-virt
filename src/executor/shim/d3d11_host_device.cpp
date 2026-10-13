@@ -17,7 +17,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+    : device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -475,6 +475,24 @@ void D3d11HostDevice::pair(D3d12HostDevice *device12)
 {
     AV_SCOPE("D3d11HostDevice::pair");
     device12_ = device12;
+}
+
+void D3d11HostDevice::use_compositor(CompositorDevice *compositor)
+{
+    AV_SCOPE("D3d11HostDevice::use_compositor");
+    compositor_ = compositor;
+}
+
+CompositorDevice *D3d11HostDevice::compositor() const
+{
+    AV_SCOPE("D3d11HostDevice::compositor");
+    return compositor_;
+}
+
+ID3D11Texture2D *D3d11HostDevice::adopt_exportable(int fd, const D3D11_TEXTURE2D_DESC1 &desc)
+{
+    AV_SCOPE("D3d11HostDevice::adopt_exportable");
+    return images_.adopt(fd, desc);
 }
 
 /* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a

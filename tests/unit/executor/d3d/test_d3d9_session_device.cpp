@@ -8,6 +8,7 @@
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/shim/compositor_device.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -560,4 +561,44 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
     CHECK_EQ(wire.refused(), 0u);
     backend.shut_down();
     shares->release(domain, 0u);
+}
+
+/* A GPU with no compositing context flips on the CPU: the frame still
+ * reaches the texture shared under the key, a flip or two behind. */
+TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
+{
+    av::LoaderHostApis   apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d9HostDevice  *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::CompositorDevice *const compositor = device11->compositor();
+    device11->use_compositor(nullptr);
+    av::HostShares *const shares = apis.shares(0u);
+    constexpr std::uint64_t key = 0x9170u;
+    constexpr std::uint32_t domain = 1u;
+    {
+        av::SharedSurfaces surfaces;
+        av::D3dBackend     backend;
+        av::SessionShares  session;
+        session.bind(*shares, domain, backend);
+        CHECK(backend.initialize(session, device11, nullptr, &surfaces, device9));
+        av::D3dLoopback wire(backend);
+        std::uint32_t   hresult = 1u;
+        CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
+        CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
+        CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
+        CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, blue, 1.0f, 0u));
+        std::uint32_t shown[size * size] = {};
+        bool          arrived = false;
+        for (std::uint32_t flip = 0u; flip < 4u && !arrived; flip++) {
+            CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 0u));
+            CHECK(av_d3d9_Finish9(wire, &hresult));
+            arrived = device11->read_image(domain, key, shown, size * 4u, size, size) &&
+                      (shown[size * size / 2u] & 0x00ffffffu) == (blue & 0x00ffffffu);
+        }
+        CHECK(arrived);
+        backend.shut_down();
+    }
+    shares->release(domain, 0u);
+    device11->use_compositor(compositor);
 }

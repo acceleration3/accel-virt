@@ -12,6 +12,7 @@
 
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu_set.hpp"
+#include "executor/shim/compositor_device.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
@@ -83,6 +84,9 @@ private:
      * first batch would cost it dxgkrnl's timeout. */
     D3dRuntime      d3d_runtime_;
     D3d11HostDevice d3d11_devices_[HostGpuSet::max_gpus];
+    /* Each GPU's compositing context, opened beside its Direct3D 11 device
+     * and closed after it. */
+    CompositorDevice compositors_[HostGpuSet::max_gpus];
     D3d12HostDevice d3d12_devices_[HostGpuSet::max_gpus];
     D3d9HostDevice  d3d9_devices_[HostGpuSet::max_gpus];
     SharedSurfaces  surfaces_[HostGpuSet::max_gpus];

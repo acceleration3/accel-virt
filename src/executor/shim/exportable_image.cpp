@@ -26,8 +26,8 @@ VkDeviceMemory ExportableImage::memory() const
 void ExportableImage::free(const DxvkVulkanDevice &vulkan)
 {
     AV_SCOPE("ExportableImage::free");
-    vulkan.destroy_image(image_);
-    vulkan.free_memory(memory_);
+    vulkan.table().destroy_image(image_);
+    vulkan.table().free_memory(memory_);
     image_ = VK_NULL_HANDLE;
     memory_ = VK_NULL_HANDLE;
 }

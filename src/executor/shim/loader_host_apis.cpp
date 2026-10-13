@@ -94,6 +94,7 @@ void LoaderHostApis::enumerate()
         for (uint32_t i = 0u; i < found; i++)
             if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
+                if (compositors_[i].open(uuids_[i].raw())) d3d11_devices_[i].use_compositor(&compositors_[i]);
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
                 if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i].raw())) d3d11_devices_[i].pair(&d3d12_devices_[i]);
@@ -142,6 +143,8 @@ void LoaderHostApis::close()
         d3d12_devices_[i].close();
         d3d9_devices_[i].close();
         d3d11_devices_[i].close();
+        d3d11_devices_[i].use_compositor(nullptr);
+        compositors_[i].close();
         opencl_devices_[i].forget();
     }
     if (instance_ != nullptr) vkDestroyInstance(static_cast<VkInstance>(instance_), nullptr);
