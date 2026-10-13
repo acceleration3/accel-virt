@@ -1,11 +1,12 @@
 /* DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, as
  * DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3 receives it, with the
  * plane and per-context records its pointers lead to. A DDI record: the flags
- * are their Values, and a plane stops before its attributes - nothing after
- * the private data is read, and the planes come as an array of pointers, so no
- * stride depends on it; src/km/ddi_record_layout.cpp proves each offset. */
+ * are their Values; src/km/ddi_record_layout.cpp proves each offset and the
+ * plane's size. */
 #ifndef AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_WITH_MULTI_PLANE_OVERLAY3_RECORD_HPP
 #define AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_WITH_MULTI_PLANE_OVERLAY3_RECORD_HPP
+
+#include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
 
 #include <stdint.h>
 
@@ -20,7 +21,7 @@ struct DxgkPrimaryContextDataRecord {
     int64_t  SegmentAddress;
 };
 
-/* DXGK_MULTIPLANE_OVERLAY_PLANE3, up to its attributes. */
+/* DXGK_MULTIPLANE_OVERLAY_PLANE3. */
 struct DxgkMultiplaneOverlayPlane3Record {
     uint32_t                       LayerIndex;
     uint32_t                       LayerIndexPadding;
@@ -33,10 +34,12 @@ struct DxgkMultiplaneOverlayPlane3Record {
     uint32_t                       DriverPrivateDataSize;
     uint32_t                       DriverPrivateDataSizePadding;
     void                          *pDriverPrivateData;
+    DxgkMultiplaneOverlayAttributes3Record PlaneAttributes;
 };
 
-/* DXGK_PLANE_SPECIFIC_INPUT_FLAGS.Enabled. */
+/* DXGK_PLANE_SPECIFIC_INPUT_FLAGS.Enabled and FlipImmediate. */
 constexpr uint32_t plane_input_enabled = 0x1u;
+constexpr uint32_t plane_input_flip_immediate = 0x2u;
 
 struct DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record {
     uint32_t                            VidPnSourceId;

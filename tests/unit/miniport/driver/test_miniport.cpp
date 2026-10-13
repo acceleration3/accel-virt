@@ -73,7 +73,8 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiSystemDisplayWrite,  DdiSlot::DxgkDdiCancelCommand,
     DdiSlot::DxgkDdiGetChildContainerId, DdiSlot::DxgkDdiPowerRuntimeControlRequest,
     DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay, DdiSlot::DxgkDdiNotifySurpriseRemoval,
-    DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3,
+    DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3, DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3,
+    DdiSlot::DxgkDdiGetMultiPlaneOverlayCaps, DdiSlot::DxgkDdiGetPostCompositionCaps,
     DdiSlot::DxgkDdiGetNodeMetadata,     DdiSlot::DxgkDdiSetPowerPState,
     DdiSlot::DxgkDdiControlInterrupt2,   DdiSlot::DxgkDdiCalibrateGpuClock,
     DdiSlot::DxgkDdiSubmitCommandVirtual, DdiSlot::DxgkDdiSetRootPageTable,
@@ -124,15 +125,13 @@ TEST(miniport, fills_exactly_the_slots_this_feature_implements)
       exact = exact && ((miniport.ddi_table().routine(DdiSlot{index}) != nullptr) == is_implemented(index));
   CHECK(exact); }
 
-/* FR-006: dxgkrnl asks whether an overlay configuration is supported before it
- * flips one, so leaving those slots empty is what refuses multi-plane overlay.
- * The flip DDIs it does fill (MPO1 and MPO3) show the base plane only
- * (test_adapter). */
-TEST(miniport, offers_no_multi_plane_overlay_or_gamma_slot)
+/* Overlay planes are the MPO3 generation's alone - its flip, check and caps
+ * DDIs (test_adapter) - so the older generations' checks and flip stay empty,
+ * as do PostMultiPlaneOverlayPresent, which no build calls, and gamma. */
+TEST(miniport, offers_only_the_mpo3_overlay_slots_and_no_gamma_slot)
 { MockPlatform platform; Miniport miniport(platform);
   const DdiSlot overlays[] = {
       DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport, DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport2,
-      DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3, DdiSlot::DxgkDdiGetMultiPlaneOverlayCaps,
       DdiSlot::DxgkDdiPostMultiPlaneOverlayPresent,
       DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2, DdiSlot::DxgkDdiSetTargetGamma};
   for (const DdiSlot slot : overlays) CHECK(miniport.ddi_table().routine(slot) == nullptr); }

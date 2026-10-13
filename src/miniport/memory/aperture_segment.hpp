@@ -49,7 +49,12 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t flags = 0x15u;   /* Aperture | CpuVisible | CacheCoherent */
+    /* Aperture | CpuVisible | CacheCoherent | DirectFlip. DirectFlip because
+     * dxgkrnl keeps DirectFlip and overlay planes only while such segments
+     * total 200 MB (VidMmUseDirectFlip, VIDMM_PHYSICAL_ADAPTER::Initialize),
+     * and this segment, the size of system memory, is where primaries and the
+     * swap chains flipped to them live. */
+    static constexpr uint32_t flags = 0x415u;
 
     Platform &platform_;
     uint64_t  size_;

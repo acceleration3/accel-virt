@@ -148,6 +148,12 @@ struct AdapterProbe {
     /* What a source shows after a flip. */
     std::uint64_t scanout(std::uint32_t source) { return adapter.sources_.scanout_address(source); }
     void         *primary(std::uint32_t source) { return adapter.sources_.primary(source); }
+    OverlayPlane  plane(std::uint32_t source, std::uint32_t layer)
+    {
+        OverlayPlane planes[OverlayPlane::max_planes];
+        adapter.sources_.planes(source, planes);
+        return planes[layer];
+    }
     Adapter &adapter;
 };
 
@@ -1628,13 +1634,13 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   request.pPlanes = nullptr;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), invalid_parameter); }
 
-/* An MPO3 flip shows its enabled layer-0 plane, through the first context's
- * view of it, and the vsync after it names that plane's PresentId in a
- * CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 - the only report that retires an MPO3
- * flip. A plane turned off, one in another segment, or no layer 0 at all shows
- * nothing and still succeeds: dxgkrnl bugchecks on anything but success, busy
- * or retry. */
-TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, shows_layer_0_and_reports_its_present_id)
+/* An MPO3 flip records every plane it names at its layer, through the first
+ * context's view of it; the base plane is the primary. The vsync after it
+ * names each layer's PresentId in a CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 - the
+ * only report that retires an MPO3 flip. A plane turned off, or one in a
+ * segment no primary lives in, shows nothing and still succeeds: dxgkrnl
+ * bugchecks on anything but success, busy or retry. */
+TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, records_every_plane_and_reports_each_present_id)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
@@ -1655,6 +1661,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, shows_layer_0_a
   planes[0].InputFlags = av::plane_input_enabled;
   planes[0].ContextCount = 1u;
   planes[0].ppContextData = overlay_views;
+  planes[0].PlaneAttributes.DstRect = {100, 50, 420, 290};
   planes[1].LayerIndex = 0u;
   planes[1].PresentId = 41u;
   planes[1].InputFlags = av::plane_input_enabled;
@@ -1669,32 +1676,37 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, shows_layer_0_a
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(AdapterProbe(fixture.adapter()).scanout(0u), 0x6000000000ull);
   CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary);
+  CHECK(AdapterProbe(fixture.adapter()).plane(0u, 1u).allocation() == &overlay);
+  CHECK_EQ(AdapterProbe(fixture.adapter()).plane(0u, 1u).destination().right, 420);
   fixture.blank();
   const av::DxgkargcbNotifyInterruptDataRecord shown = fixture.dxgkrnl().interrupt(0u);
   CHECK_EQ(shown.InterruptType, 10);
   CHECK_EQ(shown.Argument1, 1u);   /* physical adapter mask */
-  CHECK_EQ(shown.Argument2, 1u);   /* one layer */
-  const auto *const layer = reinterpret_cast<const av::DxgkMultiplaneOverlayVsyncInfo2Record *>(
+  CHECK_EQ(shown.Argument2, 2u);   /* two layers */
+  const auto *const layers = reinterpret_cast<const av::DxgkMultiplaneOverlayVsyncInfo2Record *>(
       static_cast<std::uintptr_t>(shown.UnionRemainder[0]) |
       (static_cast<std::uintptr_t>(shown.UnionRemainder[1]) << 32u));
-  CHECK(layer != nullptr);
-  if (layer != nullptr) {
-      CHECK_EQ(layer->LayerIndex, 0u);
-      CHECK_EQ(layer->PresentId, 41u);
+  CHECK(layers != nullptr);
+  if (layers != nullptr) {
+      CHECK_EQ(layers[0].LayerIndex, 0u);
+      CHECK_EQ(layers[0].PresentId, 41u);
+      CHECK_EQ(layers[1].LayerIndex, 1u);
+      CHECK_EQ(layers[1].PresentId, 77u);
   }
-  planes[1].InputFlags = 0u;   /* layer 0 turned off */
+  planes[1].InputFlags = 0u;   /* layer 0 turned off; the overlay is not named */
   planes[1].PresentId = 42u;
+  av::DxgkMultiplaneOverlayPlane3Record *base_only[] = {&planes[1]};
+  request.PlaneCount = 1u;
+  request.ppPlanes = base_only;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
   CHECK_EQ(AdapterProbe(fixture.adapter()).scanout(0u), 0u);
   CHECK(AdapterProbe(fixture.adapter()).primary(0u) == nullptr);
+  CHECK(AdapterProbe(fixture.adapter()).plane(0u, 1u).allocation() == &overlay);
   fixture.blank();
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).InterruptType, 10);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument2, 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument2, 2u);
   planes[1].InputFlags = av::plane_input_enabled;
   base_view.SegmentId = 2u;   /* a segment no primary lives in */
-  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
-  CHECK(AdapterProbe(fixture.adapter()).primary(0u) == nullptr);
-  request.PlaneCount = 1u;   /* the overlay alone: no layer 0 */
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
   CHECK(AdapterProbe(fixture.adapter()).primary(0u) == nullptr);
   request.ppPlanes = nullptr;

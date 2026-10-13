@@ -67,10 +67,14 @@ public:
      * plane, whose allocation the source then shows as a primary; null when
      * there is none, and the source shows nothing. */
     [[nodiscard]] Status set_multiplane_scanout(uint32_t source, const DxgkMultiplaneOverlayPlaneRecord *base);
-    /* Device IRQL at most: an MPO3 flip of the base plane. The plane's
-     * segment address and allocation, both 0 when the flip turns it off, and
-     * the PresentId the vsync must name to retire the flip. */
-    [[nodiscard]] Status set_presented_scanout(uint32_t source, int64_t address, void *primary, uint64_t present_id);
+    /* Device IRQL at most: an MPO3 flip of `count` planes, each replacing the
+     * plane at its layer; a layer it does not name keeps what it showed. The
+     * base plane (layer 0) is the source's primary. A layer past
+     * OverlayPlane::max_planes is refused and nothing changes. */
+    [[nodiscard]] Status present_planes(uint32_t source, const OverlayPlane *planes, uint32_t count);
+    /* Dispatch at most: the planes `source` shows now, max_planes of them by
+     * layer; an empty array for a source not the adapter's. */
+    void                 planes(uint32_t source, OverlayPlane *planes);
     /* Device IRQL at most. */
     Flip                 flip(uint32_t source);
     /* Device IRQL at most: the number of the source's newest flip, 1 onwards
@@ -84,8 +88,8 @@ public:
      * what knows where its pages are; null when the source shows none.
      * Dispatch at most: the DPC asks before it carries the frame. */
     void                *primary(uint32_t source);
-    /* DestroyAllocation: a source showing that allocation shows nothing, so
-     * the DPC never reads a handle that has been freed. */
+    /* DestroyAllocation: a source or plane showing that allocation shows
+     * nothing, so the DPC never reads a handle that has been freed. */
     void                 forget_primary(void *primary);
     [[nodiscard]] Status set_visible(uint32_t source, bool visible);
     /* Dispatch at most: the DPC asks before carrying a frame. */
@@ -123,8 +127,8 @@ private:
     /* The base plane's DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES, written before the
      * flip kind that makes them read. */
     uint32_t           base_attributes_[max_sources][multiplane_overlay_attribute_words];
-    /* The base plane's PresentId, likewise, for a presented_plane flip. */
-    uint64_t           present_ids_[max_sources];
+    /* The planes of a presented_plane flip, likewise. */
+    OverlayPlane       planes_[max_sources][OverlayPlane::max_planes];
 
     friend struct DisplaySourcesProbe;
 };

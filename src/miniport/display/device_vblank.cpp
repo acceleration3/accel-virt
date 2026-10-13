@@ -14,7 +14,7 @@ namespace av {
 
 DeviceVblank::DeviceVblank(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), sources_(sources), notification_(platform, dxgkrnl), page_(platform),
-      phase_(), layer_(), presented_layer_(), reporting_(false), suspended_(false), suspended_reporting_(false), sequence_(0u),
+      phase_(), layer_(), presented_layers_(), reporting_(false), suspended_(false), suspended_reporting_(false), sequence_(0u),
       blanks_(0u), missed_(0u), reported_(0u), enables_(0u), window_start_(0u)
       {
           AV_SCOPE("DeviceVblank::DeviceVblank");
@@ -148,8 +148,7 @@ Status DeviceVblank::report(const FlipView &shown)
         shown.layer(layer_);
         return notification_.report_multiplane_vsync(target, &layer_, 1u);
     case FlipView::Kind::presented_plane:
-        shown.layer(presented_layer_);
-        return notification_.report_presented_vsync(target, &presented_layer_, 1u);
+        return notification_.report_presented_vsync(target, presented_layers_, shown.layers(presented_layers_));
     case FlipView::Kind::address: break;
     }
     return notification_.report_vsync(target, shown.address());

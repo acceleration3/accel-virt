@@ -389,10 +389,25 @@ VOID D3d11Device::set_text_filter_size(UINT, UINT)
     AV_SCOPE("D3d11Device::set_text_filter_size");
 }
 
-VOID D3d11Device::check_direct_flip_support(D3D10DDI_HRESOURCE, D3D10DDI_HRESOURCE, UINT, BOOL *supported)
+/* DWM asks before it flips an application's buffer (`candidate`) in place of
+ * its own primary (`primary`): the host shows any surface it holds by its key,
+ * so the two need only match - the same size and format, both allocated and
+ * keyed - for the scanout to take one where it took the other. An immediate
+ * flip is no different: one completes when the kernel's flip returns. */
+VOID D3d11Device::check_direct_flip_support(D3D10DDI_HRESOURCE primary, D3D10DDI_HRESOURCE candidate, UINT,
+                                            BOOL *supported)
 {
     AV_SCOPE("D3d11Device::check_direct_flip_support");
-    if (supported != nullptr) *supported = FALSE;
+    if (supported == nullptr) return;
+    *supported = FALSE;
+    if (primary.pDrvPrivate == nullptr || candidate.pDrvPrivate == nullptr) return;
+    const ResourceRecord &shown = record(primary);
+    const ResourceRecord &flipped = record(candidate);
+    const bool held = shown.allocation != 0u && flipped.allocation != 0u && shown.shared_key != 0u &&
+                      flipped.shared_key != 0u;
+    *supported = held && shown.width == flipped.width && shown.height == flipped.height && shown.format == flipped.format
+                     ? TRUE
+                     : FALSE;
 }
 
 VOID D3d11Device::set_marker()

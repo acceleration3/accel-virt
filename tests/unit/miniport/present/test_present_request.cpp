@@ -27,6 +27,7 @@ constexpr std::uint32_t blt = 0x1u;
 constexpr std::uint32_t color_fill = 0x2u;
 constexpr std::uint32_t flip = 0x4u;
 constexpr std::uint32_t flip_with_no_wait = 0x8u;
+constexpr std::uint32_t flip_with_multiplane_overlay = 0x1000u;
 constexpr std::uint8_t  poison = 0xEEu;
 
 std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
@@ -144,8 +145,11 @@ TEST(present_request_present, a_colour_fill_patches_only_the_destination)
   CHECK_EQ(present.patch(0u).PatchOffset, PresentCommand::destination_address_offset);
   CHECK(present.patches_untouched_from(1u)); }
 
+/* An MPO present's flip, once the adapter claims overlay planes, is a flip
+ * like any other here. */
 TEST(present_request_present, a_flip_patches_only_the_source)
-{ const std::uint32_t flips[] = {flip, flip | flip_with_no_wait};
+{ const std::uint32_t flips[] = {flip, flip | flip_with_no_wait, flip | flip_with_multiplane_overlay,
+                                 flip | flip_with_no_wait | flip_with_multiplane_overlay};
   for (std::uint32_t flags : flips) {
       Present present(flags);
       CHECK_EQ(present.run(), 0u);
@@ -184,7 +188,8 @@ TEST(present_request_present, a_buffer_without_room_for_progress_writes_nothing)
 
 TEST(present_request_present, flags_must_name_exactly_one_supported_operation)
 { const std::uint32_t refused[] = {0u, blt | color_fill, blt | flip, blt | 0x10u, blt | flip_with_no_wait,
-                                   flip | 0x80u, color_fill | 0x2000u};
+                                   flip | 0x80u, color_fill | 0x2000u, blt | flip_with_multiplane_overlay,
+                                   flip_with_multiplane_overlay};
   for (std::uint32_t flags : refused) {
       Present present(flags);
       CHECK_EQ(present.run(), invalid_parameter);

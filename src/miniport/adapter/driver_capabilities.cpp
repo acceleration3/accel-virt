@@ -8,6 +8,7 @@
 #include "miniport/ddi/dxgk_wddm_device_caps_record.hpp"
 #include "miniport/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "miniport/display/hardware_cursor.hpp"
+#include "miniport/display/overlay_plane.hpp"
 #include "miniport/driver/adapter_info_query.hpp"
 #include "core/trace/function_scope.hpp"
 
@@ -34,6 +35,13 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
     caps.SupportPerEngineTDR = 1u;
+    /* Overlay planes, which dxgkrnl takes only beside DirectFlip and from one
+     * to ten of them (DXGADAPTER::Initialize); it then clears both again unless
+     * the DirectFlip segments hold 200 MB (VidMmUseDirectFlip), which the
+     * aperture does (ApertureSegment). The host composes the planes. */
+    caps.SupportDirectFlip = 1u;
+    caps.SupportMultiPlaneOverlay = 1u;
+    caps.MaxOverlayPlanes = OverlayPlane::max_planes;
     caps.MaxPointerWidth = HardwareCursor::max_side;
     caps.MaxPointerHeight = HardwareCursor::max_side;
     caps.PointerCaps = pointer_caps;

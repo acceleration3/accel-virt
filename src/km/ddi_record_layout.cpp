@@ -93,6 +93,9 @@
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay3_record.hpp"
+#include "miniport/ddi/dxgkarg_check_multiplane_overlay_support3_record.hpp"
+#include "miniport/ddi/dxgkarg_multiplane_overlay_caps_records.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_record.hpp"
 #include "miniport/ddi/dxgkarg_doorbell_records.hpp"
@@ -726,7 +729,74 @@ AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, DriverPrivateDataSize, DXGK_MU
                DriverPrivateDataSize);
 AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, pDriverPrivateData, DXGK_MULTIPLANE_OVERLAY_PLANE3,
                pDriverPrivateData);
-static_assert(sizeof(av::DxgkMultiplaneOverlayPlane3Record) <= offsetof(DXGK_MULTIPLANE_OVERLAY_PLANE3, PlaneAttributes));
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, PlaneAttributes, DXGK_MULTIPLANE_OVERLAY_PLANE3, PlaneAttributes);
+AV_SAME_SIZE(DxgkMultiplaneOverlayPlane3Record, DXGK_MULTIPLANE_OVERLAY_PLANE3);
+
+AV_SAME_SIZE(DxgkMultiplaneOverlayAttributes3Record, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, Flags, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, Flags);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, SrcRect, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, SrcRect);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, DstRect, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, DstRect);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, ClipRect, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, ClipRect);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, Rotation, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, Rotation);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, Blend, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, Blend);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, ColorSpaceType, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3,
+               ColorSpaceType);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, StretchQuality, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3,
+               StretchQuality);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, SDRWhiteLevel, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3,
+               SDRWhiteLevel);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, DirtyRectCnt, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3,
+               DirtyRectCnt);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayAttributes3Record, pDirtyRects, DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3, pDirtyRects);
+static_assert(D3DDDI_ROTATION_IDENTITY == av::rotation_identity);
+
+AV_SAME_SIZE(DxgkMultiplaneOverlayPlaneWithSource2Record, DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneWithSource2Record, hAllocation, DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2,
+               hAllocation);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneWithSource2Record, VidPnSourceId, DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2,
+               VidPnSourceId);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneWithSource2Record, LayerIndex, DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2,
+               LayerIndex);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneWithSource2Record, PlaneAttributes,
+               DXGK_MULTIPLANE_OVERLAY_PLANE_WITH_SOURCE2, PlaneAttributes);
+AV_SAME_SIZE(DxgkMultiplaneOverlayPostCompositionWithSourceRecord, DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPostCompositionWithSourceRecord, VidPnSourceId,
+               DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE, VidPnSourceId);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPostCompositionWithSourceRecord, Flags,
+               DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE, PostComposition.Flags);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPostCompositionWithSourceRecord, SrcRect,
+               DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE, PostComposition.SrcRect);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPostCompositionWithSourceRecord, DstRect,
+               DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE, PostComposition.DstRect);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPostCompositionWithSourceRecord, Rotation,
+               DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION_WITH_SOURCE, PostComposition.Rotation);
+AV_SAME_SIZE(DxgkargCheckMultiPlaneOverlaySupport3Record, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3);
+AV_SAME_OFFSET(DxgkargCheckMultiPlaneOverlaySupport3Record, PlaneCount, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3,
+               PlaneCount);
+AV_SAME_OFFSET(DxgkargCheckMultiPlaneOverlaySupport3Record, ppPlanes, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3, ppPlanes);
+AV_SAME_OFFSET(DxgkargCheckMultiPlaneOverlaySupport3Record, PostCompositionCount,
+               DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3, PostCompositionCount);
+AV_SAME_OFFSET(DxgkargCheckMultiPlaneOverlaySupport3Record, ppPostComposition, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3,
+               ppPostComposition);
+AV_SAME_OFFSET(DxgkargCheckMultiPlaneOverlaySupport3Record, Supported, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3,
+               Supported);
+AV_SAME_OFFSET(DxgkargCheckMultiPlaneOverlaySupport3Record, ReturnInfo, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3,
+               ReturnInfo);
+
+AV_SAME_SIZE(DxgkargGetMultiPlaneOverlayCapsRecord, DXGKARG_GETMULTIPLANEOVERLAYCAPS);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, VidPnSourceId, DXGKARG_GETMULTIPLANEOVERLAYCAPS, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, MaxPlanes, DXGKARG_GETMULTIPLANEOVERLAYCAPS, MaxPlanes);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, MaxRGBPlanes, DXGKARG_GETMULTIPLANEOVERLAYCAPS, MaxRGBPlanes);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, MaxYUVPlanes, DXGKARG_GETMULTIPLANEOVERLAYCAPS, MaxYUVPlanes);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, OverlayCaps, DXGKARG_GETMULTIPLANEOVERLAYCAPS, OverlayCaps);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, MaxStretchFactor, DXGKARG_GETMULTIPLANEOVERLAYCAPS,
+               MaxStretchFactor);
+AV_SAME_OFFSET(DxgkargGetMultiPlaneOverlayCapsRecord, MaxShrinkFactor, DXGKARG_GETMULTIPLANEOVERLAYCAPS,
+               MaxShrinkFactor);
+AV_SAME_SIZE(DxgkargGetPostCompositionCapsRecord, DXGKARG_GETPOSTCOMPOSITIONCAPS);
+AV_SAME_OFFSET(DxgkargGetPostCompositionCapsRecord, VidPnSourceId, DXGKARG_GETPOSTCOMPOSITIONCAPS, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargGetPostCompositionCapsRecord, MaxStretchFactor, DXGKARG_GETPOSTCOMPOSITIONCAPS, MaxStretchFactor);
+AV_SAME_OFFSET(DxgkargGetPostCompositionCapsRecord, MaxShrinkFactor, DXGKARG_GETPOSTCOMPOSITIONCAPS, MaxShrinkFactor);
 
 AV_SAME_SIZE(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record,
              DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3);

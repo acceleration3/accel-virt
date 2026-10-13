@@ -53,7 +53,7 @@ TEST(aperture_segment_describe, is_guest_system_memory_as_an_aperture)
   CHECK_STATUS(segment.initialize(static_cast<std::int64_t>(8u * gib)), Status::ok);
   DxgkSegmentDescriptor4Record descriptor = {};
   segment.describe(descriptor);
-  CHECK_EQ(descriptor.Flags, 0x15u);   /* Aperture | CpuVisible | CacheCoherent */
+  CHECK_EQ(descriptor.Flags, 0x415u);   /* Aperture | CpuVisible | CacheCoherent | DirectFlip */
   CHECK(descriptor.BaseAddress == 0xC0000000);
   CHECK(descriptor.Size == 8u * gib);
   CHECK(descriptor.CommitLimit == 8u * gib);

@@ -34,6 +34,7 @@ constexpr std::uint32_t ddi_buffer = 0x400u;
 constexpr std::uint32_t ddi_logic_op = 0x2000u;
 constexpr std::uint32_t ddi_uav_reads = 0x20000u;
 constexpr std::uint32_t ddi_display = 0x200000u;
+constexpr std::uint32_t ddi_multiplane_overlay = 0x8000u;
 
 /* DXGI_FORMAT numbers. */
 constexpr std::uint32_t rgba32_float = 2u;
@@ -97,12 +98,27 @@ TEST(dxgi_format_table, the_hosts_bits_become_the_ddis_bits)
   table.settle();
   CHECK_EQ(table.format_support(rgba8_unorm),
            ddi_sample | ddi_render_target | ddi_blendable | ddi_multisample_render_target | ddi_multisample_load |
-               ddi_display);
+               ddi_display | ddi_multiplane_overlay);
   CHECK_EQ(table.format_support(rgba32_float), ddi_buffer | ddi_sample | ddi_uav_reads | ddi_logic_op);
   /* Nothing recorded, nothing claimed; and no format is 0 or past the table. */
   CHECK_EQ(table.format_support(1u), 0u);
   CHECK_EQ(table.format_support(0u), 0u);
   CHECK_EQ(table.format_support(DxgiFormatTable::format_count), 0u); }
+
+/* An overlay plane is composed on the host from a format the scanout shows:
+ * the three 32-bit RGB layouts, and only while the host displays them. */
+TEST(dxgi_format_table, an_overlay_plane_takes_the_displayed_32_bit_rgb_formats)
+{ DxgiFormatTable table;
+  constexpr std::uint32_t bgra8_unorm = 87u, bgrx8_unorm = 88u, bgra8_srgb = 91u;
+  table.record(bgra8_unorm, api_sample | api_render_target | api_display, 0u);
+  table.record(bgrx8_unorm, api_sample | api_render_target, 0u);   /* not displayed */
+  table.record(bgra8_srgb, api_sample | api_render_target | api_display, 0u);
+  table.record(rgba32_float, api_sample | api_display, 0u);
+  table.settle();
+  CHECK((table.format_support(bgra8_unorm) & ddi_multiplane_overlay) != 0u);
+  CHECK_EQ(table.format_support(bgrx8_unorm) & ddi_multiplane_overlay, 0u);
+  CHECK_EQ(table.format_support(bgra8_srgb) & ddi_multiplane_overlay, 0u);
+  CHECK_EQ(table.format_support(rgba32_float) & ddi_multiplane_overlay, 0u); }
 
 /* Whether the host tiles a format is its own bit, which only a driver that
  * carries tiled resources adds - Direct3D 11's never does - and no other
@@ -187,7 +203,7 @@ TEST(dxgi_format_table, a_member_with_no_count_takes_nothing_from_its_siblings)
   CHECK_EQ(table.quality_levels(rgba8_typeless, 4u), 3u);
   CHECK_EQ(table.format_support(rgba8_unorm),
            ddi_sample | ddi_render_target | ddi_blendable | ddi_multisample_render_target | ddi_multisample_load |
-               ddi_display); }
+               ddi_display | ddi_multiplane_overlay); }
 
 /* An Intel GPU renders R32G32B32_FLOAT multisampled, and neither its typeless
  * parent nor its UINT sibling - which cannot even load multisampled. The

@@ -149,7 +149,7 @@ TEST(memory_segments_report, describes_the_aperture_and_nothing_past_it)
 
   DxgkSegmentDescriptor4Record aperture = {};
   std::memcpy(&aperture, descriptors.data(), sizeof aperture);
-  CHECK_EQ(aperture.Flags, 0x15u);              /* Aperture | CpuVisible | CacheCoherent */
+  CHECK_EQ(aperture.Flags, 0x415u);             /* Aperture | CpuVisible | CacheCoherent | DirectFlip */
   CHECK(aperture.BaseAddress == ApertureSegment::base_address);
   CHECK_EQ(aperture.Size, 4u * gib);
   for (std::size_t byte = vidmm_stride; byte < 2u * vidmm_stride; byte++)
@@ -186,7 +186,7 @@ TEST(memory_segments_report, describes_the_local_segment_after_the_aperture)
 
       DxgkSegmentDescriptor4Record aperture = {};
       std::memcpy(&aperture, descriptors.data(), sizeof aperture);
-      CHECK_EQ(aperture.Flags, 0x15u);
+      CHECK_EQ(aperture.Flags, 0x415u);
       CHECK(aperture.Size == 4u * gib);
       DxgkSegmentDescriptor4Record local = {};
       std::memcpy(&local, descriptors.data() + stride, sizeof local);

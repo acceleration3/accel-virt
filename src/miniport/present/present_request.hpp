@@ -36,6 +36,10 @@ private:
         flag_color_fill = 0x2u,
         flag_flip = 0x4u,
         flag_flip_with_no_wait = 0x8u,
+        /* The flip of an MPO present, once the adapter claims overlay planes
+         * (DXGCONTEXT::PresentMultiPlaneOverlay3): carried out by the MPO3
+         * DDI like any flip here. */
+        flag_flip_with_multiplane_overlay = 0x1000u,
     };
     enum : uint32_t { source_index = 1u, destination_index = 2u };   /* DXGK_PRESENT_*_INDEX */
     static constexpr uint32_t insufficient_dma_buffer = 0xC01E0001u;   /* STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER */

@@ -26,6 +26,12 @@ constexpr uint32_t ddi_shader_gather = 0x4000u;
 constexpr uint32_t ddi_tiled = 0x10000u;
 constexpr uint32_t ddi_uav_reads = 0x20000u;
 constexpr uint32_t ddi_display = 0x200000u;
+/* D3D11_1DDI_FORMAT_SUPPORT_MULTIPLANE_OVERLAY: DXGI's CheckOverlaySupport asks
+ * it of a format before it says an overlay plane takes it. */
+constexpr uint32_t ddi_multiplane_overlay = 0x8000u;
+/* What the host composes an overlay plane from: the 32-bit RGB layouts avgpu
+ * scans out (OverlaySupport), B8G8R8A8, B8G8R8X8 and R8G8B8A8, unsigned. */
+constexpr uint32_t overlay_formats[] = {87u, 88u, 28u};
 constexpr Carry    carries[] = {
     {0x200u, false, ddi_shader_sample},
     {0x4000u, false, ddi_render_target},
@@ -252,6 +258,10 @@ uint32_t DxgiFormatTable::format_support(uint32_t format) const
      * loads keeps loading while its family multisamples. */
     if (!multisamples(format)) support &= ~ddi_multisample_render_target;
     if (!multisamples(format) && !family_multisamples(format)) support &= ~ddi_multisample_load;
+    /* A plane is a displayed surface, so a format the host cannot display is
+     * none, whatever the list says. */
+    for (const uint32_t overlay : overlay_formats)
+        if (format == overlay && (support & ddi_display) != 0u) support |= ddi_multiplane_overlay;
     return support;
 }
 

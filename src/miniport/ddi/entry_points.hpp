@@ -61,6 +61,8 @@
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay3_record.hpp"
+#include "miniport/ddi/dxgkarg_check_multiplane_overlay_support3_record.hpp"
+#include "miniport/ddi/dxgkarg_multiplane_overlay_caps_records.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
@@ -162,6 +164,9 @@ int32_t AvDdiPowerRuntimeControlRequest(void *context, const void *control_code,
                                         void *output, size_t output_size, size_t *returned);
 int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request);
 int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(void *context, av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request);
+int32_t AvDdiCheckMultiPlaneOverlaySupport3(void *context, av::DxgkargCheckMultiPlaneOverlaySupport3Record *request);
+int32_t AvDdiGetMultiPlaneOverlayCaps(void *context, av::DxgkargGetMultiPlaneOverlayCapsRecord *request);
+int32_t AvDdiGetPostCompositionCaps(void *context, av::DxgkargGetPostCompositionCapsRecord *request);
 int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type);
 int32_t AvDdiGetNodeMetadata(void *context, uint32_t node_and_adapter, av::DxgkNodeMetadataRecord *metadata);
 int32_t AvDdiSetPowerPState(void *context, uint32_t component, uint32_t pstate);

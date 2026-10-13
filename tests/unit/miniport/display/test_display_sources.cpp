@@ -1,6 +1,8 @@
 #include "miniport/ddi/dxgk_multiplane_overlay_plane_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
+#include "miniport/display/overlay_plane.hpp"
 #include "miniport/display/display_mode.hpp"
 #include "miniport/display/display_sources.hpp"
 #include "core/support/status.hpp"
@@ -242,6 +244,29 @@ TEST(display_sources_report, writes_each_source_s_format_mode_scanout_and_visibi
                 static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&primary)));
   CHECK(std::strcmp(writer.dump(), expected) == 0); }
 
+/* A source's planes follow it in the report: each layer a flip named, with
+ * its PresentId, where it is shown and whether it blends. */
+TEST(display_sources_report, writes_each_flipped_plane_after_its_source)
+{ MockPlatform platform; DisplaySources sources(platform);
+  int overlay = 0;
+  av::DxgkMultiplaneOverlayAttributes3Record attributes = {};
+  attributes.DstRect = {160, 120, 640, 440};
+  attributes.Blend = av::overlay_blend_alpha;
+  const av::OverlayPlane planes[] = {av::OverlayPlane(0u, 41u), av::OverlayPlane(1u, 5u, &overlay, 0x8000ll, attributes)};
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.present_planes(0u, planes, 2u), Status::ok);
+  platform.set_irql(Irql::passive);
+  char bytes[768];
+  av::StateWriter writer(bytes, sizeof bytes);
+  sources.report(writer);
+  char expected[160];
+  std::snprintf(expected, sizeof expected,
+                "display_sources/0/source/0/plane/1 present_id=5 shown=true allocation=0x%016llX left=160 top=120"
+                " right=640 bottom=440 blended=true",
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&overlay)));
+  CHECK(std::strstr(writer.dump(), "display_sources/0/source/0/plane/0 present_id=41 shown=false") != nullptr);
+  CHECK(std::strstr(writer.dump(), expected) != nullptr); }
+
 /* Every flip is a numbered frame, the number the device's display clock shows
  * it as: counted from 1 per source, and the last remembered_flips kept as they
  * were made, so a vsync can name the one the device latched. One no longer
@@ -307,29 +332,45 @@ TEST(display_sources_frames, the_count_wraps_past_zero_which_is_no_frame)
   CHECK_EQ(sources.shown(0u, 0xFFFFFFFFu).address(), 0x1000u);
   CHECK_EQ(sources.shown(0u, 1u).address(), 0x2000u); }
 
-/* An MPO3 flip shows its plane as a primary and is remembered with its
- * PresentId, both for the newest flip and for a numbered one a blank latched,
- * so the vsync names the id of the flip on screen. A turned-off plane shows
- * nothing and keeps its id. */
-TEST(display_sources_set_presented_scanout, remembers_the_plane_and_its_present_id)
+/* An MPO3 flip replaces only the layers it names; the base plane is the
+ * primary. Each flip is remembered whole, so a blank that latched an older one
+ * still names its PresentIds. A plane whose allocation is destroyed shows
+ * nothing and keeps its PresentId; a layer past the planes is refused. */
+TEST(display_sources_present_planes, replaces_the_layers_named_and_remembers_each_flip)
 { MockPlatform platform; DisplaySources sources(platform);
-  std::uint32_t allocation = 0u;
+  int base = 0, overlay = 0;
+  av::DxgkMultiplaneOverlayAttributes3Record attributes = {};
+  attributes.DstRect = {10, 20, 110, 220};
   platform.set_irql(Irql::isr);
-  CHECK_STATUS(sources.set_presented_scanout(0u, 0x4000ll, &allocation, 41u), Status::ok);   /* frame 1 */
+  const av::OverlayPlane first[] = {av::OverlayPlane(0u, 41u, &base, 0x4000ll, attributes),
+                                    av::OverlayPlane(1u, 5u, &overlay, 0x8000ll, attributes)};
+  CHECK_STATUS(sources.present_planes(0u, first, 2u), Status::ok);   /* frame 1 */
   CHECK(sources.flip(0u) == DisplaySources::Flip::presented_plane);
   CHECK_EQ(sources.scanout_address(0u), 0x4000u);
-  CHECK_STATUS(sources.set_presented_scanout(0u, 0, nullptr, 42u), Status::ok);   /* frame 2: turned off */
-  CHECK_EQ(sources.scanout_address(0u), 0u);
+  const av::OverlayPlane second[] = {av::OverlayPlane(1u, 6u)};      /* frame 2: the overlay off */
+  CHECK_STATUS(sources.present_planes(0u, second, 1u), Status::ok);
   platform.set_irql(Irql::dispatch);
+  CHECK(sources.primary(0u) == &base);
+  av::OverlayPlane now[av::OverlayPlane::max_planes];
+  sources.planes(0u, now);
+  CHECK(now[0].shown());
+  CHECK(!now[1].shown());
+  CHECK_EQ(now[1].present_id(), 6u);
+  av::DxgkMultiplaneOverlayVsyncInfo2Record layers[av::OverlayPlane::max_planes] = {};
+  CHECK_EQ(sources.shown(0u, 1u).layers(layers), 2u);
+  CHECK_EQ(layers[1].PresentId, 5u);
+  CHECK(sources.shown(0u, 1u).plane(1u).allocation() == &overlay);
+  CHECK_EQ(sources.shown(0u, 1u).plane(1u).destination().bottom, 220);
+  CHECK_EQ(sources.shown(0u, 0u).layers(layers), 2u);   /* the source as it is now */
+  CHECK_EQ(layers[1].PresentId, 6u);
+  platform.set_irql(Irql::passive);
+  sources.forget_primary(&base);
+  sources.planes(0u, now);
+  CHECK(!now[0].shown());
+  CHECK_EQ(now[0].present_id(), 41u);
   CHECK(sources.primary(0u) == nullptr);
-  av::DxgkMultiplaneOverlayVsyncInfo2Record layer = {};
-  const av::FlipView first = sources.shown(0u, 1u);
-  CHECK(first.kind() == DisplaySources::Flip::presented_plane);
-  CHECK_EQ(first.address(), 0x4000u);
-  first.layer(layer);
-  CHECK_EQ(layer.PresentId, 41u);
-  sources.shown(0u, 0u).layer(layer);   /* the source as it is now */
-  CHECK_EQ(layer.PresentId, 42u);
   platform.set_irql(Irql::isr);
-  CHECK_STATUS(sources.set_presented_scanout(1u, 0x4000ll, &allocation, 43u), Status::invalid_parameter);
+  const av::OverlayPlane past[] = {av::OverlayPlane(av::OverlayPlane::max_planes, 9u)};
+  CHECK_STATUS(sources.present_planes(0u, past, 1u), Status::invalid_parameter);
+  CHECK_STATUS(sources.present_planes(1u, first, 1u), Status::invalid_parameter);
   platform.set_irql(Irql::passive); }

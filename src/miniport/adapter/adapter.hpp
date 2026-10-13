@@ -11,6 +11,7 @@
 #include "miniport/display/display_mode_list.hpp"
 #include "miniport/display/display_scanout.hpp"
 #include "miniport/display/display_sources.hpp"
+#include "miniport/display/overlay_support.hpp"
 #include "miniport/display/edid.hpp"
 #include "miniport/display/hardware_cursor.hpp"
 #include "miniport/display/device_vblank.hpp"
@@ -101,6 +102,9 @@ struct DxgkargSetPointerShapeRecord;
 struct DxgkargSetVidPnSourceAddressRecord;
 struct DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord;
 struct DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record;
+struct DxgkargCheckMultiPlaneOverlaySupport3Record;
+struct DxgkargGetMultiPlaneOverlayCapsRecord;
+struct DxgkargGetPostCompositionCapsRecord;
 struct DxgkargSetVidPnSourceVisibilityRecord;
 struct DxgkargQueryCurrentFenceRecord;
 struct DxgkargQueryVidPnHwCapabilityRecord;
@@ -238,6 +242,9 @@ public:
                                           void *output, size_t output_size, size_t *returned);
     int32_t set_vidpn_source_address_with_multi_plane_overlay(const DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request);
     int32_t set_vidpn_source_address_with_multi_plane_overlay3(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request);
+    int32_t check_multi_plane_overlay_support3(DxgkargCheckMultiPlaneOverlaySupport3Record *request);
+    int32_t get_multi_plane_overlay_caps(DxgkargGetMultiPlaneOverlayCapsRecord *request);
+    int32_t get_post_composition_caps(DxgkargGetPostCompositionCapsRecord *request);
     /* One 3D node named 3DNode00, as basicrender.sys names it, with a GPU MMU. */
     int32_t get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata);
     int32_t set_power_pstate(uint32_t component, uint32_t pstate);
@@ -489,6 +496,7 @@ private:
     DisplayModeList                modes_;
     Edid                           edid_;
     DisplaySources                 sources_;
+    OverlaySupport                 overlays_;
     /* Before the allocation table, which mints into it, and before the device
      * table, which opens from it (feature 053). */
     SharedObjectTable              shared_;

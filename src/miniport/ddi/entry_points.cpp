@@ -230,6 +230,15 @@ int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const av:
 int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(void *context, av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request)
 { return static_cast<av::Adapter *>(context)->set_vidpn_source_address_with_multi_plane_overlay3(request); }
 
+int32_t AvDdiCheckMultiPlaneOverlaySupport3(void *context, av::DxgkargCheckMultiPlaneOverlaySupport3Record *request)
+{ return static_cast<av::Adapter *>(context)->check_multi_plane_overlay_support3(request); }
+
+int32_t AvDdiGetMultiPlaneOverlayCaps(void *context, av::DxgkargGetMultiPlaneOverlayCapsRecord *request)
+{ return static_cast<av::Adapter *>(context)->get_multi_plane_overlay_caps(request); }
+
+int32_t AvDdiGetPostCompositionCaps(void *context, av::DxgkargGetPostCompositionCapsRecord *request)
+{ return static_cast<av::Adapter *>(context)->get_post_composition_caps(request); }
+
 int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type)
 { return static_cast<av::Adapter *>(context)->notify_surprise_removal(removal_type); }
 

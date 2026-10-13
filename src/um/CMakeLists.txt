@@ -335,6 +335,15 @@ foreach(probe d3d9 d3d11 d3d12)
     ${USER32_IMPORT})
 endforeach()
 
+# avoverlayprobe.exe: the overlay proof on the guest's own d3d11.dll and
+# dxgi.dll - the runtime DWM composes with - so it runs from a directory with
+# no Direct3D layer beside it.
+file(GLOB AVOVERLAYPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/overlay/*.cpp)
+add_executable(avoverlayprobe ${AVOVERLAYPROBE_SOURCES})
+add_dependencies(avoverlayprobe avd3dprobe_imports avglprobe_imports)
+target_link_options(avoverlayprobe PRIVATE /ENTRY:avoverlayprobe_entry)
+target_link_libraries(avoverlayprobe PRIVATE avguest ${AVTEST_IMPORTS} ${AVD3DPROBE_IMPORTS} ${USER32_IMPORT})
+
 # A D3D11 sample application run on the guest's desktop: the D3D11 runtime
 # and our user-mode driver, not a layer beside it.
 add_executable(avd3d11sample ${CMAKE_CURRENT_SOURCE_DIR}/sample/avd3d11sample.cpp)

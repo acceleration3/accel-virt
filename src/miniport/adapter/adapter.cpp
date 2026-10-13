@@ -70,6 +70,8 @@
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay3_record.hpp"
+#include "miniport/ddi/dxgkarg_check_multiplane_overlay_support3_record.hpp"
+#include "miniport/ddi/dxgkarg_multiplane_overlay_caps_records.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
@@ -129,7 +131,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), mapped_pixels_(platform), copier_(), presents_(), present_epochs_(0u), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
       segment_(platform), host_visible_(platform), memory_(platform, segment_), window_(platform),
-      display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
+      display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform), overlays_(platform, sources_),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
@@ -1930,11 +1932,14 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const Dxgkarg
  * (adapter[0xc01], DxgkQueryAdapterInfoImpl), and that answer is what keeps
  * DWM's DisplayCore path off its legacy present, which is E_NOTIMPL
  * (COverlayContext::LegacyPresentRequired, dwmcore.dll); dxgmms2 then flips
- * every primary through it. dxgkrnl takes only success, busy or retry from
- * it, so a base plane this adapter cannot show is shown as nothing rather
- * than refused. Only layer 0 is scanned out: dxgkrnl reports one plane for an
- * adapter that claims no overlays. The vsync that follows names the plane's
- * PresentId, the only report that retires an MPO3 flip. */
+ * every primary and overlay plane through it. Each plane named replaces the
+ * one at its layer: dxgmms2 sends a layer only when it changes
+ * (VidSchiSetupMmIoFlipMultiPlaneOverlay3), a turned-off one included.
+ * dxgkrnl takes only success, busy or retry from it, so a plane this adapter
+ * cannot show - CheckMultiPlaneOverlaySupport3 refused it, so dxgkrnl should
+ * never send one - is shown as nothing rather than refused. The vsync that
+ * follows names every layer's PresentId, the only report that retires an MPO3
+ * flip. An immediate flip completes when this returns, which it does. */
 int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay3(
     DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request)
 {
@@ -1942,22 +1947,49 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay3(
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address_with_multi_plane_overlay3");
     if (request == nullptr || (request->PlaneCount != 0u && request->ppPlanes == nullptr))
         return NtStatus(Status::invalid_parameter).value();
-    const DxgkMultiplaneOverlayPlane3Record *base = nullptr;
-    for (uint32_t index = 0u; index < request->PlaneCount; index++) {
-        const DxgkMultiplaneOverlayPlane3Record *plane = request->ppPlanes[index];
-        if (plane != nullptr && plane->LayerIndex == 0u) base = plane;
+    OverlayPlane planes[OverlayPlane::max_planes];
+    uint32_t     count = 0u;
+    for (uint32_t index = 0u; index < request->PlaneCount && count < OverlayPlane::max_planes; index++) {
+        const DxgkMultiplaneOverlayPlane3Record *const plane = request->ppPlanes[index];
+        if (plane == nullptr || plane->LayerIndex >= OverlayPlane::max_planes) continue;
+        const DxgkPrimaryContextDataRecord *shown = nullptr;
+        if ((plane->InputFlags & plane_input_enabled) != 0u && plane->ContextCount != 0u &&
+            plane->ppContextData != nullptr)
+            shown = plane->ppContextData[0];
+        if (shown != nullptr && (shown->hAllocation == nullptr || (shown->SegmentId != ApertureSegment::segment_id &&
+                                                                   shown->SegmentId != system_memory_driver_segment)))
+            shown = nullptr;
+        if (shown != nullptr && plane->LayerIndex == 0u)
+            log_scanout(request->VidPnSourceId, shown->SegmentId, shown->SegmentAddress);
+        planes[count++] = shown != nullptr ? OverlayPlane(plane->LayerIndex, plane->PresentId, shown->hAllocation,
+                                                          shown->SegmentAddress, plane->PlaneAttributes)
+                                           : OverlayPlane(plane->LayerIndex, plane->PresentId);
     }
-    const DxgkPrimaryContextDataRecord *shown = nullptr;
-    if (base != nullptr && (base->InputFlags & plane_input_enabled) != 0u && base->ContextCount != 0u &&
-        base->ppContextData != nullptr)
-        shown = base->ppContextData[0];
-    if (shown != nullptr && (shown->hAllocation == nullptr || (shown->SegmentId != ApertureSegment::segment_id &&
-                                                               shown->SegmentId != system_memory_driver_segment)))
-        shown = nullptr;
-    if (shown != nullptr) log_scanout(request->VidPnSourceId, shown->SegmentId, shown->SegmentAddress);
-    return flipped(sources_.set_presented_scanout(request->VidPnSourceId, shown != nullptr ? shown->SegmentAddress : 0,
-                                                  shown != nullptr ? shown->hAllocation : nullptr,
-                                                  base != nullptr ? base->PresentId : 0u));
+    return flipped(sources_.present_planes(request->VidPnSourceId, planes, count));
+}
+
+int32_t Adapter::check_multi_plane_overlay_support3(DxgkargCheckMultiPlaneOverlaySupport3Record *request)
+{
+    AV_SCOPE("Adapter::check_multi_plane_overlay_support3");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::check_multi_plane_overlay_support3");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(overlays_.check(*request)).value();
+}
+
+int32_t Adapter::get_multi_plane_overlay_caps(DxgkargGetMultiPlaneOverlayCapsRecord *request)
+{
+    AV_SCOPE("Adapter::get_multi_plane_overlay_caps");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_multi_plane_overlay_caps");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(overlays_.caps(*request)).value();
+}
+
+int32_t Adapter::get_post_composition_caps(DxgkargGetPostCompositionCapsRecord *request)
+{
+    AV_SCOPE("Adapter::get_post_composition_caps");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_post_composition_caps");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(overlays_.post_composition_caps(*request)).value();
 }
 
 int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata)

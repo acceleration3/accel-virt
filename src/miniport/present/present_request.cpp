@@ -28,6 +28,8 @@ Status PresentRequest::operation(PresentOperation &operation) const
         return Status::ok;
     case flag_flip:
     case flag_flip | flag_flip_with_no_wait:
+    case flag_flip | flag_flip_with_multiplane_overlay:
+    case flag_flip | flag_flip_with_no_wait | flag_flip_with_multiplane_overlay:
         operation = PresentOperation::flip;
         return Status::ok;
     default:
