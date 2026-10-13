@@ -74,6 +74,16 @@ public:
      * knows_gpu_progress() says which. */
     uint64_t gpu_completed() const;
     bool     knows_gpu_progress() const;
+    /* The fence of the newest batch published; 0 before the first. The batch
+     * the transport publishes next takes the one after it. */
+    uint64_t published_fence() const;
+    /* Returns once the host GPU has finished the batch of `fence`, which must
+     * be published: invalid_parameter for one that is not. ok at once for 0
+     * or a fence already finished. A driver with no fence page is waited on
+     * for the whole context, which the kernel signals only once the GPU has
+     * run it. A wait that fails, or progress that never arrives, faults the
+     * context: invalid_state, as on one already faulted. */
+    [[nodiscard]] Status await_gpu(uint64_t fence);
     /* How this transport's submissions went (feature 049): through the
      * doorbell, and through the kernel. */
     uint64_t             submissions_through_doorbell() const;

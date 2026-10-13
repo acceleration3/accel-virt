@@ -600,6 +600,44 @@ TEST(kmt_transport, the_fence_page_says_which_batches_the_gpu_finished)
   CHECK(!transport.knows_gpu_progress());
   CHECK_EQ(transport.gpu_completed(), 0u); }
 
+/* A wait for the GPU returns once the fence page shows the batch finished,
+ * asks nothing of the kernel for one it already shows, refuses a fence not
+ * yet published, and loses the context when the wait fails. */
+TEST(kmt_transport, a_wait_for_the_gpu_returns_once_the_page_shows_the_batch)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_EQ(transport.published_fence(), 0u);
+  CHECK_STATUS(transport.await_gpu(0u), Status::ok);
+  CHECK_STATUS(transport.await_gpu(1u), Status::invalid_parameter);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  CHECK_EQ(transport.published_fence(), 1u);
+  const std::uint32_t waits = fixture.kmt().calls(MockKmt::Call::wait_for_context);
+  CHECK_STATUS(transport.await_gpu(1u), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), waits + 1u);
+  CHECK(transport.gpu_completed() >= 1u);
+  CHECK_STATUS(transport.await_gpu(1u), Status::ok);   /* shown: nothing asked */
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), waits + 1u);
+  /* The head arriving late is waited for, as the room is. */
+  WireWriter late = transport.request_writer();
+  late.write_u32(2u);
+  CHECK(transport.send_async(0x30001u, late) == TransportResult::ok);
+  fixture.kmt().consume_late_at(1u);
+  CHECK_STATUS(transport.await_gpu(2u), Status::ok);
+  CHECK(!transport.faulted());
+  WireWriter lost = transport.request_writer();
+  lost.write_u32(3u);
+  CHECK(transport.send_async(0x30001u, lost) == TransportResult::ok);
+  fixture.kmt().fail_first(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+  CHECK_STATUS(transport.await_gpu(3u), Status::invalid_state);
+  CHECK(transport.faulted());
+  CHECK_STATUS(transport.await_gpu(1u), Status::invalid_state); }
+
 /* A driver from before the fence page refuses version 2 of the views escape:
  * asked again with version 1, the context works as before and says it knows
  * nothing of the GPU's progress. */
@@ -620,7 +658,15 @@ TEST(kmt_transport, a_driver_with_no_fence_page_is_asked_again_and_reports_no_pr
   std::uint32_t answered = 0u;
   fixture.kmt().answer_waits(nullptr, 0u);
   CHECK_STATUS(transport.nop(answered), Status::ok);
-  CHECK_EQ(transport.gpu_completed(), 0u); }
+  CHECK_EQ(transport.gpu_completed(), 0u);
+  /* Its GPU wait is the context's own, which the kernel ends only once the
+   * GPU has run what was sent. */
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  const std::uint32_t waits = fixture.kmt().calls(MockKmt::Call::wait_for_context);
+  CHECK_STATUS(transport.await_gpu(transport.published_fence()), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), waits + 1u); }
 
 /* A submission the device refuses fails the send. */
 TEST(kmt_transport, a_refused_submission_fails_the_send)

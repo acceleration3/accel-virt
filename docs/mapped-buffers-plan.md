@@ -70,8 +70,9 @@ and a thin map policy per API on top of it.
 | Pointing the host's buffer at a slice | **Per host backend** | Direct3D 11 and Direct3D 9 both run on DXVK and share one path. OpenGL cannot change a buffer's storage and needs a name indirection of its own. |
 | Direct3D 12, Vulkan, OpenCL | Use the chunks and slices, **not** the renaming or retirement | There the application reuses memory under its own fences; a driver retiring it behind the application's back would be wrong. |
 
-`BufferSlices` starts in `src/um/d3d/`, where Direct3D 11 and Direct3D 9 both
-live (avumd), so it has two users from the start. It moves to
+`BufferSlices` starts in `src/icd/d3d/`, the portable core of avumd, where
+Direct3D 11 and Direct3D 9 both draw from (`src/um/d3d/` is the Windows shim,
+which has no unit tests), so it has two users from the start. It moves to
 `src/icd/common/` when OpenGL, a separate binary, takes it up: the point at
 which it has users in two drivers (CLAUDE.md, "Keep code near its owner").
 
@@ -82,8 +83,11 @@ which it has users in two drivers (CLAUDE.md, "Keep code near its owner").
 A slice allocator over host-window chunks (docs/host-window.md), shared by
 every buffer a session maps for writing:
 
-- **Memory.** Chunks opened with `HostWindowRecord`, mapped write-back in the
-  process. Where the window cannot hold one - no window, no room, a 32-bit
+- **Memory.** A span of the session's blob arena, past what it lends the
+  upload ring, as Direct3D 12's heaps are (`D3d12HeapArena`): the host already
+  imports the arena once, as one region, so a slice is an offset into memory
+  both sides map, and nothing more is opened. The arena is a host-window
+  chunk, mapped write-back in the process. Where the window cannot hold one - no window, no room, a 32-bit
   process past 4 GiB - the same open answers with guest RAM the driver owns,
   which the host imports the same way. Nothing in this design changes with
   the backing.

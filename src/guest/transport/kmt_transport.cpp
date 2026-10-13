@@ -190,6 +190,25 @@ bool KmtTransport::knows_gpu_progress() const
     return fence_page_ != nullptr;
 }
 
+uint64_t KmtTransport::published_fence() const
+{
+    AV_SCOPE("KmtTransport::published_fence");
+    return newest_fence_;
+}
+
+Status KmtTransport::await_gpu(uint64_t fence)
+{
+    AV_SCOPE("KmtTransport::await_gpu");
+    if (faulted_) return Status::invalid_state;
+    if (fence > newest_fence_) return Status::invalid_parameter;
+    if (fence == 0u || (fence_page_ != nullptr && gpu_completed() >= fence)) return Status::ok;
+    const bool waited = wait_for_host(fence) == Status::ok;
+    if (waited && fence_page_ == nullptr) return Status::ok;
+    if (waited && arrives_eventually([this, fence] { return gpu_completed() >= fence; })) return Status::ok;
+    faulted_ = true;
+    return Status::invalid_state;
+}
+
 Status KmtTransport::wake_on_raise(uint64_t handle)
 {
     AV_SCOPE("KmtTransport::wake_on_raise");
