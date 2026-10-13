@@ -31,7 +31,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), fence_page_(nullptr), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -138,26 +138,56 @@ Status KmtTransport::initialize(const GlContextOptions &options)
 /* A view the driver answered past what this process can address - a 32-bit
  * one, above 4 GiB - is no answer it gives, and is refused rather than cut
  * down to some other address. */
+/* A driver from before the fence page refuses a version-2 request as it
+ * refuses any record it does not know, and is asked again with version 1. */
 Status KmtTransport::adopt_views()
 {
     AV_SCOPE("KmtTransport::adopt_views");
-    uint8_t                  bytes[ContextViewsRecord::encoded_size] = {};
-    const ContextViewsRecord request;
-    static_cast<void>(request.encode(bytes, sizeof bytes));   /* the buffer is the encoded size */
-    const Status escaped =
-        connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, bytes, sizeof bytes);
-    if (escaped != Status::ok) return escaped;
-    ContextViewsRecord views = request;
-    const Status       answered = views.accept_answer(bytes, sizeof bytes);
-    if (answered != Status::ok) return answered;
+    ContextViewsRecord views;
+    Status             asked = ask_views(views);
+    if (asked == Status::invalid_parameter) {
+        views = ContextViewsRecord(ContextViewsRecord::without_fence);
+        asked = ask_views(views);
+    }
+    if (asked != Status::ok) return asked;
     const auto ring = static_cast<uintptr_t>(views.ring());
     const auto reply = static_cast<uintptr_t>(views.reply());
+    const auto fence = static_cast<uintptr_t>(views.fence());
     if constexpr (sizeof(uintptr_t) < sizeof(uint64_t))
-        if (uint64_t{ring} != views.ring() || uint64_t{reply} != views.reply()) return Status::malformed;
+        if (uint64_t{ring} != views.ring() || uint64_t{reply} != views.reply() || uint64_t{fence} != views.fence())
+            return Status::malformed;
     const Status ring_bound = ring_.initialize(reinterpret_cast<uint8_t *>(ring), ring_order_);
     if (ring_bound != Status::ok) return ring_bound;
     reply_ = ReplyReader(reinterpret_cast<uint8_t *>(reply), reply_bytes_);
+    fence_page_ = reinterpret_cast<const uint8_t *>(fence);
     return Status::ok;
+}
+
+Status KmtTransport::ask_views(ContextViewsRecord &views)
+{
+    AV_SCOPE("KmtTransport::ask_views");
+    uint8_t bytes[ContextViewsRecord::encoded_size] = {};
+    static_cast<void>(views.encode(bytes, sizeof bytes));   /* the buffer is the encoded size */
+    const Status escaped =
+        connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, bytes, sizeof bytes);
+    if (escaped != Status::ok) return escaped;
+    return views.accept_answer(bytes, sizeof bytes);
+}
+
+/* The field is one aligned u64 the device stores whole, so a load of it alone
+ * is never torn, while a decode of the page could mix two of its writes. */
+uint64_t KmtTransport::gpu_completed() const
+{
+    AV_SCOPE("KmtTransport::gpu_completed");
+    constexpr size_t completed_fence_at = 8u;
+    if (fence_page_ == nullptr) return 0u;
+    return __atomic_load_n(reinterpret_cast<const uint64_t *>(fence_page_ + completed_fence_at), __ATOMIC_ACQUIRE);
+}
+
+bool KmtTransport::knows_gpu_progress() const
+{
+    AV_SCOPE("KmtTransport::knows_gpu_progress");
+    return fence_page_ != nullptr;
 }
 
 Status KmtTransport::wake_on_raise(uint64_t handle)
@@ -250,6 +280,7 @@ void KmtTransport::teardown()
      * down could never be initialized again. */
     ring_ = TransportRing();
     reply_ = ReplyReader();
+    fence_page_ = nullptr;
     fences_ = TransportFence();
     faulted_ = false;
     /* A gate is its device's, which a transport torn down outlives no longer. */

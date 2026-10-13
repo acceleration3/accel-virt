@@ -34,6 +34,8 @@
 
 namespace av {
 
+class ContextViewsRecord;
+
 class GuestConnection;
 class PublishGate;
 struct KmtTransportProbe;
@@ -65,6 +67,13 @@ public:
     /* A device-side failure (a refused submission, a faulted wait, a bad reply)
      * loses the context: every later send fails until it is torn down. */
     bool                 faulted() const;
+    /* The highest fence whose batch the host GPU has finished, read from the
+     * context's fence page (docs/protocol.md, "Fence page"): memory reused
+     * after a batch is free once this passes the batch's fence. 0 before any,
+     * and always 0 from a driver that maps no fence page into the process -
+     * knows_gpu_progress() says which. */
+    uint64_t gpu_completed() const;
+    bool     knows_gpu_progress() const;
     /* How this transport's submissions went (feature 049): through the
      * doorbell, and through the kernel. */
     uint64_t             submissions_through_doorbell() const;
@@ -157,6 +166,8 @@ private:
                                           uint64_t &address);
     /* The ring and reply slot where the driver mapped them for this context. */
     [[nodiscard]] Status adopt_views();
+    /* One views escape of `views`' version, its answer accepted into it. */
+    [[nodiscard]] Status ask_views(ContextViewsRecord &views);
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,
                                           uint64_t &fence);
     /* Waits for everything sent so far, and retires its fences. */
@@ -198,6 +209,8 @@ private:
     GuestDoorbell    doorbell_;
     SubmissionPath   path_;
     ReplyReader      reply_;
+    /* The fence page, read-only; null from a driver that maps none. */
+    const uint8_t   *fence_page_;
     TransportFence   fences_;
     /* Where each outstanding fence's batch ends in the ring. */
     uint64_t         fence_ends_[TransportFence::max_outstanding];

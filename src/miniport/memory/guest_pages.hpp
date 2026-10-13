@@ -37,6 +37,9 @@ public:
      * invalid_state unless held and not yet mapped; the platform's refusal,
      * mapping nothing, otherwise. PASSIVE. */
     [[nodiscard]] Status map_into_process();
+    /* The same, but read-only to the process: it can see the pages and not
+     * change what the driver reads in them. PASSIVE. */
+    [[nodiscard]] Status map_read_only_into_process();
     /* The process's view gone and the pages kept. PASSIVE. */
     void                 unmap_from_process();
     /* The process's view gone, then the pages. PASSIVE. */

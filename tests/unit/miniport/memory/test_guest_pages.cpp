@@ -83,6 +83,25 @@ TEST(guest_pages, a_second_allocation_or_mapping_is_refused)
   CHECK_EQ(platform.process_mappings(), 1u);
   CHECK(pages.invariants_hold()); }
 
+/* A read-only view is the same pages, refused where a writable one is, and
+ * counted read-only; one view at a time either way. */
+TEST(guest_pages, a_read_only_view_is_the_same_pages_and_one_view_at_a_time)
+{ MockPlatform platform;
+  GuestPages pages(platform);
+  CHECK_STATUS(pages.map_read_only_into_process(), Status::invalid_state);
+  CHECK_STATUS(pages.allocate(page), Status::ok);
+  CHECK_STATUS(pages.map_read_only_into_process(), Status::ok);
+  CHECK(platform.maps_into_process(pages.view(), pages.pages().frame(0u), page));
+  CHECK_EQ(platform.read_only_process_mappings(), 1u);
+  CHECK_STATUS(pages.map_read_only_into_process(), Status::invalid_state);
+  CHECK_STATUS(pages.map_into_process(), Status::invalid_state);
+  CHECK_EQ(platform.process_mappings(), 1u);
+  pages.unmap_from_process();
+  CHECK_EQ(platform.process_mappings(), 0u);
+  CHECK_STATUS(pages.map_into_process(), Status::ok);
+  CHECK_EQ(platform.read_only_process_mappings(), 0u);
+  CHECK(pages.invariants_hold()); }
+
 /* Neither missing pages nor missing room for their frames leaves anything
  * held, or anything behind for the platform to count. */
 TEST(guest_pages, a_failed_allocation_holds_nothing)

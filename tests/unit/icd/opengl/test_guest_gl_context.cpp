@@ -291,15 +291,18 @@ TEST(guest_gl_context, staging_that_cannot_be_had_is_no_memory_with_nothing_held
 /* Each D3DKMT step of the transport's setup refused in turn: the options are
  * the driver's to refuse, and nothing is left. */
 TEST(guest_gl_context, a_driver_refusal_of_the_transport_is_invalid_parameter_with_nothing_held)
-{ struct Step { MockKmt::Call call; std::uint32_t nth; };
+{ /* `count` refusals from the `nth` on: the views escape is asked again in
+   * its older version, so refusing it takes both. */
+  struct Step { MockKmt::Call call; std::uint32_t nth; std::uint32_t count; };
   const Step steps[] = {
-      {MockKmt::Call::create_allocation, 1u}, {MockKmt::Call::create_allocation, 2u},
-      {MockKmt::Call::create_context_virtual, 1u}, {MockKmt::Call::escape, 1u},
+      {MockKmt::Call::create_allocation, 1u, 1u}, {MockKmt::Call::create_allocation, 2u, 1u},
+      {MockKmt::Call::create_context_virtual, 1u, 1u}, {MockKmt::Call::escape, 1u, 2u},
   };
   for (const Step &step : steps) {
       GlContextRig rig;
       Context context(rig);
-      rig.kmt().fail_at(step.call, step.nth, MockKmt::invalid_parameter);
+      if (step.count == 1u) rig.kmt().fail_at(step.call, step.nth, MockKmt::invalid_parameter);
+      else rig.kmt().fail_first(step.call, step.count, MockKmt::invalid_parameter);
       CHECK_STATUS(context->make(), Status::invalid_parameter);
       CHECK(context->state() == State::created);
       CHECK(context->invariants_hold());

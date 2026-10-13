@@ -383,9 +383,12 @@ TEST(av_context_table_bind, sets_the_host_context_up_on_memory_the_driver_owns)
   /* The doorbell's fence queue got the first message past the sources. */
   CHECK_EQ(fixture.mapped().common().queue(2u).vector, 3u);
   /* The driver maps the ring header and the fence page for itself, and the
-   * ring and reply slot into the process, and nothing else. */
+   * ring, the reply slot and - read-only - the fence page into the process,
+   * and nothing else. */
   CHECK_EQ(fixture.platform().mapped_frames(), 2u);
-  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  CHECK_EQ(fixture.platform().process_mappings(), 3u);
+  CHECK_EQ(fixture.platform().read_only_process_mappings(), 1u);
+  CHECK(fixture.platform().maps_into_process(fixture.memory().fence_view(), pages.fence().frame(0u), page));
   CHECK(fixture.platform().maps_into_process(fixture.memory().ring_view(), pages.ring().frame(0u), 2u * page));
   CHECK(fixture.platform().maps_into_process(fixture.memory().reply_view(), pages.reply().frame(0u), page));
   CHECK(fixture.platform().logged_line("av context on doorbell 0 message 3 status 0x00000000"));
@@ -397,7 +400,7 @@ TEST(av_context_table_bind, sets_the_host_context_up_on_memory_the_driver_owns)
 
 /* The process asks where its ring and reply slot are, and is told the views
  * the driver made of them; a context not live has none. */
-TEST(av_context_table_views, answers_the_process_where_its_ring_and_reply_slot_are)
+TEST(av_context_table_views, answers_the_process_where_its_ring_reply_slot_and_fence_page_are)
 { Fixture fixture;
   Host host(fixture.mapped());
   av::ContextViewsRecord answer;
@@ -407,6 +410,12 @@ TEST(av_context_table_views, answers_the_process_where_its_ring_and_reply_slot_a
   CHECK_STATUS(fixture.table().views(&first_context, answer), Status::ok);
   CHECK_EQ(answer.ring(), fixture.memory().ring_view());
   CHECK_EQ(answer.reply(), fixture.memory().reply_view());
+  CHECK_EQ(answer.fence(), fixture.memory().fence_view());
+  /* A version-1 request is told no fence page. */
+  av::ContextViewsRecord older(av::ContextViewsRecord::without_fence);
+  CHECK_STATUS(fixture.table().views(&first_context, older), Status::ok);
+  CHECK_EQ(older.ring(), fixture.memory().ring_view());
+  CHECK_EQ(older.fence(), 0u);
   /* What the process writes through its ring is the ring the device reads. */
   at(answer.ring())[av::RingHeader::encoded_size] = 0x5Au;
   CHECK_EQ(fixture.ring_memory()[av::RingHeader::encoded_size], 0x5Au);
@@ -959,7 +968,7 @@ constexpr std::uint64_t window_base = 0x4000000000ull;
 constexpr std::uint64_t window_pages = 16u;
 /* What a bound context itself holds: its ring and reply slot in the process,
  * and its ring, fence page and reply slot as pages. */
-constexpr std::uint32_t context_views = 2u;
+constexpr std::uint32_t context_views = 3u;   /* the ring, the reply slot and the fence page */
 constexpr std::uint32_t context_blocks = 3u;
 constexpr std::uint32_t blob_mem_guest = 1u;     /* VIRTIO_GPU_BLOB_MEM_GUEST */
 constexpr std::uint32_t blob_mem_host3d = 2u;    /* VIRTIO_GPU_BLOB_MEM_HOST3D */

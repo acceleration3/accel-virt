@@ -235,7 +235,7 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK(open.address() != 0u);
   CHECK_EQ(rig.device().device().blobs(), 4u);
   CHECK(rig.device().host().placed_at(0u) != nullptr);
-  CHECK_EQ(rig.platform().process_mappings(), 3u);   /* and the context's ring and reply slot */
+  CHECK_EQ(rig.platform().process_mappings(), 4u);   /* and the context's ring, reply slot and fence page */
   /* The process's view is the host's memory: what it writes, the host reads. */
   auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
   view[0] = 0x5Au;
@@ -248,7 +248,7 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
   CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK(rig.device().host().placed_at(0u) == nullptr);
-  CHECK_EQ(rig.platform().process_mappings(), 2u);
+  CHECK_EQ(rig.platform().process_mappings(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
 
@@ -302,7 +302,7 @@ TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_guest_ram_through_th
   CHECK(rig.device().host().placed_at(0u) == nullptr);   /* nothing of the window */
   CHECK_EQ(rig.device().device().blobs(), 4u);
   CHECK(rig.device().host().live_guest_mappings() > mapped);
-  CHECK_EQ(rig.platform().process_mappings(), 3u);
+  CHECK_EQ(rig.platform().process_mappings(), 4u);
   auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
   view[chunk_bytes - 1u] = 0x5Au;
   CHECK_EQ(view[chunk_bytes - 1u], 0x5Au);
@@ -315,7 +315,7 @@ TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_guest_ram_through_th
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
   CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK_EQ(rig.device().host().live_guest_mappings(), mapped);
-  CHECK_EQ(rig.platform().process_mappings(), 2u);
+  CHECK_EQ(rig.platform().process_mappings(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
   transport.teardown();

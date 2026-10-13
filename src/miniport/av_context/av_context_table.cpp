@@ -290,7 +290,7 @@ Status AvContextTable::views(void *context, ContextViewsRecord &record)
     const uint32_t slot = slot_of(context);
     if (slot == no_slot || !live_[slot]) return Status::invalid_parameter;
     const ContextMemory &memory = memories_[slot].object();
-    record = record.answered(memory.ring_view(), memory.reply_view());
+    record = record.answered(memory.ring_view(), memory.reply_view(), memory.fence_view());
     return Status::ok;
 }
 

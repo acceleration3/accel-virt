@@ -35,9 +35,11 @@ public:
      * does not allow; invalid_state once holding; no_memory, holding nothing,
      * when the platform has no memory or cannot map a view. */
     [[nodiscard]] Status allocate(uint8_t order, uint32_t reply_bytes);
-    /* The ring and the reply slot mapped into the calling process.
-     * invalid_state unless allocated and not yet mapped; the platform's
-     * refusal otherwise, with neither mapped. */
+    /* The ring and the reply slot mapped into the calling process, and the
+     * fence page read-only: the miniport trusts what the device writes there,
+     * so the process may read GPU progress but never forge it. invalid_state
+     * unless allocated and not yet mapped; the platform's refusal otherwise,
+     * with none mapped. */
     [[nodiscard]] Status map_into_process();
     /* Every view gone, then the pages. */
     void                 release();
@@ -47,10 +49,11 @@ public:
 
     bool         allocated() const;
     uint8_t      order() const;
-    /* The process's addresses of the ring and of the reply slot; 0 unless
-     * mapped. */
+    /* The process's addresses of the ring, the reply slot and the fence page;
+     * 0 unless mapped. */
     uint64_t     ring_view() const;
     uint64_t     reply_view() const;
+    uint64_t     fence_view() const;
     /* Empty unless allocated; valid until released or abandoned. */
     ContextPages pages() const;
 

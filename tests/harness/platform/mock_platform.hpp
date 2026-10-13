@@ -70,6 +70,10 @@ public:
      * address space, so what a process writes there the device reads. Counted
      * with map_to_process for fail_process_map_at. */
     Status        map_pages_to_process(void *pages, std::uint64_t &view, void *&mapping) override;
+    /* As map_pages_to_process, the view marked read-only for
+     * read_only_process_mappings; the modelled process is trusted to keep to
+     * it. */
+    Status        map_pages_to_process_read_only(void *pages, std::uint64_t &view, void *&mapping) override;
     void          unmap_from_process(void *mapping) override;
     void     zero(void *dst, std::size_t bytes) override;
     void     copy(void *dst, const void *src, std::size_t bytes) override;
@@ -209,6 +213,8 @@ public:
     void          fail_frame_map_at(std::uint32_t nth);
     /* Process views still mapped. */
     std::uint32_t process_mappings() const;
+    /* Of process_mappings, those made read-only. */
+    std::uint32_t read_only_process_mappings() const;
     /* Whether a live process view at `view` maps `bytes` of `physical`. */
     bool          maps_into_process(std::uint64_t view, std::uint64_t physical, std::uint64_t bytes) const;
     /* Makes the Nth map_to_process from now (1-based) answer no_memory; 0
@@ -291,7 +297,9 @@ private:
         std::uint64_t bytes;
         std::uint64_t view;
         bool          live;
+        bool          read_only;
     };
+    Status map_owned_to_process(void *pages, bool read_only, std::uint64_t &view, void *&mapping);
 
     struct PageFrames {
         const std::uint64_t *frames;

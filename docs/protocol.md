@@ -696,8 +696,12 @@ Freeing the name ends the context first: the process is done with it.
 A context's ring, fence page and reply slot are pages the miniport allocates
 when it makes the context (`MmAllocatePagesForMdlEx`, cached), publishes to the
 device as `GUEST` blobs, and maps into the calling process write-back: the ring
-(its header, then its data area) and the reply slot, not the fence page, which
-only the miniport reads. They are the driver's rather than allocations of the
+(its header, then its data area) and the reply slot writable, and the fence
+page read-only. The miniport trusts what the device writes on the fence page,
+so the process may read the GPU's progress there but not change it: the view
+is mapped from a section handle opened only for reading, which Windows will
+not let the process make writable; a copy-on-write view it asks for instead
+is a private copy, and changes nothing the driver reads. They are the driver's rather than allocations of the
 process's because VidMm evicts a suspended process's allocations - a UWP app in
 the background - and maps them back at other pages when it resumes. A device
 that had imported the old pages would go on reading the ring and writing
@@ -716,21 +720,32 @@ that is refused and the context with it.
 ### Context views record (user mode -> guest driver, escape)
 
 The private data of one `D3DKMTEscape` whose `hContext` names a live av
-context: how the process learns where the miniport mapped its context's ring
-and reply slot. The miniport decodes it at `PASSIVE`, treats every byte as
-hostile, and writes its answer back into the same bytes. 32 bytes.
+context: how the process learns where the miniport mapped its context's ring,
+reply slot and, from version 2, fence page. The miniport decodes it at
+`PASSIVE`, treats every byte as hostile, and writes its answer back into the
+same bytes. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
 | 0 | u32 | magic | `AVV` = `0x00565641` |
-| 4 | u16 | version | 1 |
+| 4 | u16 | version | 1 or 2; the answer is of the version asked |
 | 6 | u16 | reserved | 0 |
 | 8 | u64 | ring | 0 in; the ring's address in the process out |
 | 16 | u64 | reply | 0 in; the reply slot's address in the process out |
-| 24 | u64 | reserved | 0 |
+| 24 | u64 | fence | version 2: 0 in; the fence page's read-only address in the process out. Version 1: reserved, 0 in and out |
 
-An answer has both addresses non-zero and different; a process takes nothing
-else as one. An escape whose data is no record the miniport knows answers
+An answer has every address of its version non-zero and no two the same; a
+process takes nothing else as one. A process asks with version 2 and, refused
+with `STATUS_INVALID_PARAMETER` as a driver from before it refuses any record
+it does not know, asks again with version 1; it then knows nothing of the
+GPU's progress but what its waits tell it.
+
+The fence page's `completed_fence` is how far the host GPU has got: the device
+completes a batch's fence only once the GPU has finished what the batch
+recorded (for Direct3D 11, `D3d11BatchProgress`), so memory a batch reads may
+be reused once `completed_fence` passes the batch's fence. The process reads
+that one aligned u64 by itself: the device rewrites the whole page, and a
+decode of all of it could mix two writes. An escape whose data is no record the miniport knows answers
 `STATUS_NOT_SUPPORTED`; every refusal of this one - a wrong length, version or
 reserved field, addresses already filled in, no context named or one that is
 not a live av context - is `STATUS_INVALID_PARAMETER` and writes nothing back.

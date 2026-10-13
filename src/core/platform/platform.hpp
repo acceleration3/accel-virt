@@ -84,6 +84,10 @@ public:
      * into the calling process as map_to_process maps device memory, with the
      * same answers. */
     [[nodiscard]] virtual Status map_pages_to_process(void *pages, uint64_t &view, void *&mapping) = 0;
+    /* The same, but the process may only read the pages: a write faults, and
+     * a view it changes to copy-on-write takes a private copy, so nothing it
+     * does reaches the pages the driver and the device share. */
+    [[nodiscard]] virtual Status map_pages_to_process_read_only(void *pages, uint64_t &view, void *&mapping) = 0;
     /* The mapping gone from the process it was made in, whichever process
      * calls - or nothing more than the bookkeeping when that process has
      * exited, which took its mappings with it. Passive only. */

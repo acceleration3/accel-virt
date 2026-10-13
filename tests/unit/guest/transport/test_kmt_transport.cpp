@@ -483,7 +483,17 @@ TEST(kmt_transport, a_failure_at_each_setup_step_leaves_it_unestablished)
   refuse_setup(MockKmt::Call::wait_for_fence, 1u);      /* the name's residency */
   refuse_setup(MockKmt::Call::map_gpu_virtual_address, 1u);
   refuse_setup(MockKmt::Call::create_context_virtual, 1u);
-  refuse_setup(MockKmt::Call::escape, 1u); }            /* where the ring and reply slot are */
+  /* Where the ring, reply slot and fence page are: both versions refused. */
+  MockKmt kmt;
+  kmt.add_adapter(av_gpu, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  kmt.fail_first(MockKmt::Call::escape, 2u, MockKmt::invalid_parameter);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK(transport.initialize() != Status::ok);
+  CHECK(!transport.established());
+  CHECK(transport.invariants_hold()); }
 
 /* The last residency wait a setup makes is the DMA buffer's mapping wait; a
  * device that never reaches it fails the setup. Counting the waits keeps this
@@ -540,17 +550,20 @@ TEST(kmt_transport, a_torn_down_transport_initializes_again)
   CHECK_EQ(fixture.kmt().open_objects(), 3u);   /* the adapter, device and paging queue */
   CHECK_EQ(fixture.kmt().misuses(), 0u); }
 
-/* Views no driver could have answered - an address missing, or the ring and
- * reply slot at one place - set nothing up, and leave nothing open. */
+/* Views no driver could have answered - an address missing, or two at one
+ * place - set nothing up, and leave nothing open. */
 TEST(kmt_transport, views_the_driver_could_not_have_answered_are_refused)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  const std::uint64_t answers[][2] = {{0u, 0x2000u}, {0x1000u, 0u}, {0x1000u, 0x1000u}};
+  const std::uint64_t answers[][3] = {{0u, 0x2000u, 0x3000u},     {0x1000u, 0u, 0x3000u},
+                                      {0x1000u, 0x1000u, 0x3000u}, {0x1000u, 0x2000u, 0u},
+                                      {0x1000u, 0x2000u, 0x1000u}};
   for (const auto &views : answers) {
       std::uint8_t answer[av::ContextViewsRecord::encoded_size] = {};
-      CHECK_STATUS(av::ContextViewsRecord().answered(views[0], views[1]).encode(answer, sizeof answer), Status::ok);
+      CHECK_STATUS(av::ContextViewsRecord().answered(views[0], views[1], views[2]).encode(answer, sizeof answer),
+                   Status::ok);
       kmt.answer_next_escape(answer, sizeof answer);
       std::uint8_t transport_staging[staging_bytes] = {};
       KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging,
@@ -559,6 +572,55 @@ TEST(kmt_transport, views_the_driver_could_not_have_answered_are_refused)
       CHECK(!transport.established());
       CHECK_EQ(kmt.open_objects(), 3u);
   } }
+
+/* The fence page the driver maps read-only says how far the host GPU has
+ * got: nothing before a batch, and a batch's fence once the device has
+ * finished it. */
+TEST(kmt_transport, the_fence_page_says_which_batches_the_gpu_finished)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.knows_gpu_progress());
+  CHECK_EQ(transport.gpu_completed(), 0u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  CHECK_EQ(transport.gpu_completed(), 0u);   /* sent, not yet run */
+  /* An answered call waits for the device, which then has run both. */
+  std::uint32_t answered = 0u;
+  fixture.kmt().answer_waits(nullptr, 0u);
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  CHECK_EQ(transport.gpu_completed(), 2u);
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  CHECK_EQ(transport.gpu_completed(), 3u);
+  transport.teardown();
+  CHECK(!transport.knows_gpu_progress());
+  CHECK_EQ(transport.gpu_completed(), 0u); }
+
+/* A driver from before the fence page refuses version 2 of the views escape:
+ * asked again with version 1, the context works as before and says it knows
+ * nothing of the GPU's progress. */
+TEST(kmt_transport, a_driver_with_no_fence_page_is_asked_again_and_reports_no_progress)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint32_t escapes = fixture.kmt().calls(MockKmt::Call::escape);
+  transport.teardown();
+  /* The same setup against the older driver asks one more time. */
+  fixture.kmt().answer_views_up_to(av::ContextViewsRecord::without_fence);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::escape), escapes * 2u + 1u);
+  CHECK(!transport.knows_gpu_progress());
+  std::uint32_t answered = 0u;
+  fixture.kmt().answer_waits(nullptr, 0u);
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  CHECK_EQ(transport.gpu_completed(), 0u); }
 
 /* A submission the device refuses fails the send. */
 TEST(kmt_transport, a_refused_submission_fails_the_send)
@@ -769,7 +831,7 @@ TEST(kmt_transport, teardown_leaves_the_connection_as_it_found_it)
   CHECK_EQ(fixture.kmt().misuses(), 0u);
   /* The adapter, the device and the queue. */
   CHECK_EQ(fixture.kmt().open_objects(), 3u);
-  fixture.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
+  fixture.kmt().fail_first(MockKmt::Call::escape, 2u, MockKmt::invalid_parameter);
   CHECK(transport.initialize() != Status::ok);
   CHECK(transport.invariants_hold());
   CHECK_EQ(fixture.kmt().misuses(), 0u);

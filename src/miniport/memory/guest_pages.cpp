@@ -50,6 +50,15 @@ Status GuestPages::map_into_process()
     return platform_.map_pages_to_process(record_, view_, mapping_);
 }
 
+Status GuestPages::map_read_only_into_process()
+{
+    AV_SCOPE("GuestPages::map_read_only_into_process");
+    platform_.require_irql_at_most(Irql::passive, "GuestPages::map_read_only_into_process");
+    InvariantScope<GuestPages> guard(platform_, *this, "map_read_only_into_process");
+    if (record_ == nullptr || mapping_ != nullptr) return Status::invalid_state;
+    return platform_.map_pages_to_process_read_only(record_, view_, mapping_);
+}
+
 void GuestPages::unmap_from_process()
 {
     AV_SCOPE("GuestPages::unmap_from_process");

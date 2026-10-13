@@ -35,6 +35,7 @@ public:
     void     unmap_pages(uint8_t *view, void *mapping) override;
     Status   map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping) override;
     Status   map_pages_to_process(void *pages, uint64_t &view, void *&mapping) override;
+    Status   map_pages_to_process_read_only(void *pages, uint64_t &view, void *&mapping) override;
     void     unmap_from_process(void *mapping) override;
     void     zero(void *dst, size_t bytes) override;
     void     copy(void *dst, const void *src, size_t bytes) override;
@@ -81,6 +82,12 @@ public:
     Status   write_driver_u64(void *physical_device_object, const char *name, uint64_t value) override;
 
 private:
+    /* A view of the pages section behind `pages` in the calling process, of
+     * the access the section handle is opened with and the protection the
+     * view is mapped with. */
+    Status map_section_to_process(void *pages, ACCESS_MASK access, ULONG protection, uint64_t &view,
+                                  void *&mapping);
+
     /* The longest registry value name core writes, NUL included. */
     static constexpr size_t value_name_chars = 64u;
 

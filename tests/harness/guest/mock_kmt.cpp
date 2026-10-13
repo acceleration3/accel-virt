@@ -9,6 +9,7 @@
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -919,6 +920,9 @@ void MockKmt::consume(const Object &context) const
         header.decode(ring, RingHeader::encoded_size) != Status::ok)
         return;
     static_cast<void>(RingHeader(header.order(), header.tail(), submitted.end()).encode(ring, RingHeader::encoded_size));
+    if (context.reply_memory != nullptr)
+        static_cast<void>(FencePage(submitted.fence_id(), submitted.fence_id()).encode(fence_memory(context),
+                                                                                      FencePage::encoded_size));
 }
 
 /* Time passes only at a vertical blank: the clock is what the scenario
@@ -997,11 +1001,13 @@ Status MockKmt::context_views(std::uint32_t context, std::uint8_t *data, std::ui
 {
     const Object *const on = find(Kind::context, context);
     ContextViewsRecord  record;
-    if (on == nullptr || on->ring_memory == nullptr || record.decode(data, size) != Status::ok)
+    if (on == nullptr || on->ring_memory == nullptr || record.decode(data, size) != Status::ok ||
+        record.version() > newest_views_)
         return refuse(invalid_parameter);
     static_cast<void>(record
                           .answered(reinterpret_cast<std::uintptr_t>(on->ring_memory),
-                                    reinterpret_cast<std::uintptr_t>(on->reply_memory))
+                                    reinterpret_cast<std::uintptr_t>(on->reply_memory),
+                                    reinterpret_cast<std::uintptr_t>(fence_memory(*on)))
                           .encode(data, size));
     return succeed();
 }
@@ -1012,23 +1018,25 @@ void MockKmt::map_context_memory(Object &context, std::uint8_t order, std::uint3
                                      ~(page_bytes - 1u);
     const std::uint64_t slot_bytes = (std::uint64_t{reply_bytes} + page_bytes - 1u) & ~(page_bytes - 1u);
     void *const ring = mmap(nullptr, ring_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    void *const reply = mmap(nullptr, slot_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *const reply =
+        mmap(nullptr, slot_bytes + page_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (ring == MAP_FAILED || reply == MAP_FAILED) {
         if (ring != MAP_FAILED) munmap(ring, ring_bytes);
-        if (reply != MAP_FAILED) munmap(reply, slot_bytes);
+        if (reply != MAP_FAILED) munmap(reply, slot_bytes + page_bytes);
         return;
     }
     context.ring_memory = static_cast<std::uint8_t *>(ring);
     context.ring_bytes = ring_bytes;
     context.reply_memory = static_cast<std::uint8_t *>(reply);
     context.reply_bytes = slot_bytes;
+    static_cast<void>(FencePage(0u, 0u).encode(fence_memory(context), FencePage::encoded_size));
     static_cast<void>(RingHeader(order, 0u, 0u).encode(context.ring_memory, RingHeader::encoded_size));
 }
 
 void MockKmt::unmap_context_memory(Object &context)
 {
     if (context.ring_memory != nullptr) munmap(context.ring_memory, context.ring_bytes);
-    if (context.reply_memory != nullptr) munmap(context.reply_memory, context.reply_bytes);
+    if (context.reply_memory != nullptr) munmap(context.reply_memory, context.reply_bytes + page_bytes);
     context.ring_memory = nullptr;
     context.ring_bytes = 0u;
     context.reply_memory = nullptr;
@@ -1346,6 +1354,19 @@ void MockKmt::zero_at(Call call, std::uint32_t nth) { zero_countdown_[static_cas
 void MockKmt::withhold_answer_at(std::uint32_t nth) { withheld_countdown_ = nth; }
 
 void MockKmt::consume_late_at(std::uint32_t nth) { late_countdown_ = nth; }
+
+void MockKmt::answer_views_up_to(std::uint16_t version) { newest_views_ = version; }
+
+std::uint8_t *MockKmt::fence_memory(const Object &context) const
+{
+    return context.reply_memory != nullptr ? context.reply_memory + context.reply_bytes : nullptr;
+}
+
+const std::uint8_t *MockKmt::fence_page_of(std::uint32_t context)
+{
+    const Object *const on = find(Kind::context, context);
+    return on != nullptr ? fence_memory(*on) : nullptr;
+}
 
 bool MockKmt::withheld()
 {

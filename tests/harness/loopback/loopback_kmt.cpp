@@ -337,7 +337,8 @@ Status LoopbackKmt::context_views(std::uint32_t context, std::uint8_t *data, std
     if (found == nullptr || record.decode(data, size) != Status::ok) return Status::invalid_parameter;
     static_cast<void>(record
                           .answered(reinterpret_cast<std::uintptr_t>(found->ring.view),
-                                    reinterpret_cast<std::uintptr_t>(found->reply.view))
+                                    reinterpret_cast<std::uintptr_t>(found->reply.view),
+                                    reinterpret_cast<std::uintptr_t>(found->fence.view))
                           .encode(data, size));
     return Status::ok;
 }

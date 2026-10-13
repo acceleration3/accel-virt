@@ -22,6 +22,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "proto/escape/context_views_record.hpp"
 
 #include <cstdint>
 
@@ -371,6 +372,11 @@ public:
      * head where it was, and the head moves at the next clock read: how the
      * device looks when its fence is seen before the head it published. */
     void          consume_late_at(std::uint32_t nth);
+    /* From now on a context views escape newer than `version` is refused with
+     * STATUS_INVALID_PARAMETER, as a driver from before it refuses it. */
+    void          answer_views_up_to(std::uint16_t version);
+    /* The context's fence page as the driver maps it, null for none. */
+    const std::uint8_t *fence_page_of(std::uint32_t context);
     /* The Nth wait for a context from now (1-based) runs `play(context)` before
      * any answer is written: how a test plays work the host does between a
      * submission and its wait, such as a GPU copy between two locked views. */
@@ -506,6 +512,10 @@ private:
         /* A context's ring and reply slot, as the driver maps them. */
         std::uint8_t *ring_memory = nullptr;
         std::uint64_t ring_bytes = 0u;
+        /* The fence page is the page mapped right after the reply slot, so
+         * that every object of this mock does not grow by a pointer for it:
+         * completed_fence is the last submission's fence once a wait has
+         * consumed it, as the device writes it. */
         std::uint8_t *reply_memory = nullptr;
         std::uint64_t reply_bytes = 0u;
     };
@@ -541,6 +551,8 @@ private:
     void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
     void          journal(const Object &context);
     void          consume(const Object &context) const;
+    /* The context's fence page, past its reply slot; null with no memory. */
+    std::uint8_t *fence_memory(const Object &context) const;
     bool          played();
     Status        context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size);
     Status        wake_event(const std::uint8_t *data, std::uint32_t size);
@@ -666,6 +678,7 @@ private:
     std::uint32_t queued_taken_;
     std::uint32_t withheld_countdown_;
     std::uint32_t late_countdown_ = 0u;
+    std::uint16_t newest_views_ = ContextViewsRecord::with_fence;
     mutable const Object *late_context_ = nullptr;
     /* Feature 049: whether the OS gives this adapter hardware queues, and the
      * doorbells it handed out. */

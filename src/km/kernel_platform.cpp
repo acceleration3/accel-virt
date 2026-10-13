@@ -227,6 +227,22 @@ Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_
 Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_pages_to_process");
+    return map_section_to_process(pages, SECTION_MAP_READ | SECTION_MAP_WRITE, PAGE_READWRITE, view, mapping);
+}
+
+/* The handle can map only for reading, so the process cannot make the view
+ * writable: measured in a Windows 11 guest, VirtualProtect to PAGE_READWRITE
+ * on such a view fails with ERROR_INVALID_PARAMETER. */
+Status KernelPlatform::map_pages_to_process_read_only(void *pages, uint64_t &view, void *&mapping)
+{
+    AV_SCOPE("KernelPlatform::map_pages_to_process_read_only");
+    return map_section_to_process(pages, SECTION_MAP_READ, PAGE_READONLY, view, mapping);
+}
+
+Status KernelPlatform::map_section_to_process(void *pages, ACCESS_MASK access, ULONG protection, uint64_t &view,
+                                              void *&mapping)
+{
+    AV_SCOPE("KernelPlatform::map_section_to_process");
     view = 0u;
     mapping = nullptr;
     auto *const               mdl = static_cast<PMDL>(pages);
@@ -236,15 +252,15 @@ Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&
     if (record == nullptr) return Status::no_memory;
     ScopeExit free_record([this, record] { ExFreePoolWithTag(record, pool_tag_); });
     HANDLE    handle = nullptr;
-    if (!NT_SUCCESS(ObOpenObjectByPointer(block->section, OBJ_KERNEL_HANDLE, nullptr,
-                                          SECTION_MAP_READ | SECTION_MAP_WRITE, nullptr, KernelMode, &handle)))
+    if (!NT_SUCCESS(ObOpenObjectByPointer(block->section, OBJ_KERNEL_HANDLE, nullptr, access, nullptr, KernelMode,
+                                          &handle)))
         return Status::no_memory;
     const bool      narrow = IoIs32bitProcess(nullptr) != FALSE;
     const ULONG_PTR zero_bits = narrow ? static_cast<ULONG_PTR>(wow64_address_limit - 1u) : 0u;
     PVOID           user = nullptr;
     SIZE_T          user_bytes = 0u;
     const NTSTATUS  mapped = ZwMapViewOfSection(handle, ZwCurrentProcess(), &user, zero_bits, 0u, nullptr,
-                                                &user_bytes, ViewUnmap, 0u, PAGE_READWRITE);
+                                                &user_bytes, ViewUnmap, 0u, protection);
     ZwClose(handle);
     if (!NT_SUCCESS(mapped)) return Status::no_memory;
     if (narrow && reinterpret_cast<uint64_t>(user) + user_bytes > wow64_address_limit) {

@@ -4834,7 +4834,7 @@ TEST(adapter_av_context, an_aperture_unmap_ends_no_context)
   const std::uint32_t requests = fixture.context_requests();
   CHECK_EQ(process.ring().unmap(), success);
   CHECK_EQ(fixture.context_requests(), requests);
-  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  CHECK_EQ(fixture.platform().process_mappings(), 3u);
   CHECK_EQ(fixture.platform().owned_page_blocks(), 3u);
   CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
   CHECK_EQ(fixture.function().doorbells().rings(0u), 1u);
@@ -5290,7 +5290,8 @@ TEST(adapter_escape, a_context_s_views_are_answered_in_the_private_data)
   AvProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
-  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  CHECK_EQ(fixture.platform().process_mappings(), 3u);
+  CHECK_EQ(fixture.platform().read_only_process_mappings(), 1u);   /* the fence page */
   std::uint8_t data[av::ContextViewsRecord::encoded_size] = {};
   CHECK_STATUS(av::ContextViewsRecord().encode(data, sizeof data), av::Status::ok);
   DxgkargEscapeRecord escape = {};
@@ -5307,6 +5308,23 @@ TEST(adapter_escape, a_context_s_views_are_answered_in_the_private_data)
   CHECK_EQ(header.capacity(), std::uint64_t{1} << 12u);
   auto *const reply = reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(views.reply()));
   reply[reply_bytes - 1u] = 0x42u;   /* the process may write the whole slot */
+  /* The fence page is the one the device writes: set up, nothing completed. */
+  av::FencePage page;
+  CHECK_STATUS(page.decode(reinterpret_cast<const std::uint8_t *>(static_cast<std::uintptr_t>(views.fence())),
+                           av::FencePage::encoded_size),
+               av::Status::ok);
+  CHECK_EQ(page.completed_fence(), 0u);
+  /* A version-1 request is answered as a driver before the fence page did. */
+  std::uint8_t first[av::ContextViewsRecord::encoded_size] = {};
+  const av::ContextViewsRecord older(av::ContextViewsRecord::without_fence);
+  CHECK_STATUS(older.encode(first, sizeof first), av::Status::ok);
+  DxgkargEscapeRecord ask_first = escape;
+  ask_first.pPrivateDriverData = first;
+  CHECK_EQ(nt(fixture.adapter().escape(&ask_first)), success);
+  av::ContextViewsRecord first_views(av::ContextViewsRecord::without_fence);
+  CHECK_STATUS(first_views.accept_answer(first, sizeof first), av::Status::ok);
+  CHECK_EQ(first_views.ring(), views.ring());
+  CHECK_EQ(first_views.fence(), 0u);
 
   /* The same bytes again are an answer, not a request. */
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
@@ -5432,7 +5450,7 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   av::HostWindowRecord closed = close;
   CHECK_STATUS(closed.accept_answer(data, sizeof data), av::Status::ok);
   CHECK_EQ(fixture.blob_unmaps(), 1u);
-  CHECK_EQ(fixture.platform().process_mappings(), 2u);   /* the context's ring and reply slot */
+  CHECK_EQ(fixture.platform().process_mappings(), 3u);   /* the context's ring, reply slot and fence page */
   CHECK_EQ(window_escape(fixture, context.hContext, close, data), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
@@ -5457,7 +5475,7 @@ TEST(adapter_escape, a_chunk_with_no_window_is_guest_ram)
   CHECK_EQ(answer.resource_id(), first_chunk_resource);
   CHECK_EQ(answer.bytes(), 0x2000u);
   CHECK_EQ(bare.blob_maps(), 0u);
-  CHECK_EQ(bare.platform().process_mappings(), 3u);
+  CHECK_EQ(bare.platform().process_mappings(), 4u);
   reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(answer.address()))[0x1FFFu] = 0x42u;
   CHECK(bare.platform().page_block(block) != nullptr);
   CHECK_EQ(bare.platform().page_block(block)[0x1FFFu], 0x42u);
@@ -5478,7 +5496,7 @@ TEST(adapter_escape, a_chunk_with_no_window_is_guest_ram)
   const av::HostWindowRecord close(WindowOperation::close, 0u, answer.resource_id());
   CHECK_EQ(window_escape(bare, context.hContext, close, data), success);
   CHECK_EQ(bare.context_requests(), requests + 1u);   /* the blob's unref */
-  CHECK_EQ(bare.platform().process_mappings(), 2u);
+  CHECK_EQ(bare.platform().process_mappings(), 3u);
   CHECK(bare.platform().page_block(block) == nullptr);
   CHECK_EQ(window_escape(bare, context.hContext, close, data), invalid_parameter);
   CHECK_EQ(nt(bare.adapter().destroy_context(context.hContext)), success);
@@ -5499,7 +5517,7 @@ TEST(adapter_escape, a_chunk_the_device_will_back_nowhere_is_not_supported)
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
   CHECK_EQ(window_escape(refusing, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
            not_supported);
-  CHECK_EQ(refusing.platform().process_mappings(), 2u);
+  CHECK_EQ(refusing.platform().process_mappings(), 3u);
   CHECK_EQ(refusing.platform().owned_page_blocks(), 3u);   /* the context's own */
   CHECK_EQ(nt(refusing.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(refusing.adapter().destroy_device(process.device())), success); }
@@ -5525,7 +5543,7 @@ TEST(adapter_escape, destroying_a_context_closes_its_window_chunks)
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
   CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
            success);
-  CHECK_EQ(fixture.platform().process_mappings(), 3u);
+  CHECK_EQ(fixture.platform().process_mappings(), 4u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(fixture.platform().process_mappings(), 0u);
   CHECK_EQ(fixture.blob_unmaps(), 1u);

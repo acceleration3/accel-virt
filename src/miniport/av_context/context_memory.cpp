@@ -62,9 +62,16 @@ Status ContextMemory::map_into_process()
     if (!ring_.held() || ring_.view() != 0u) return Status::invalid_state;
     const Status ring = ring_.map_into_process();
     if (ring != Status::ok) return ring;
+    ScopeExit    unmap_all([this] {
+        reply_.unmap_from_process();
+        ring_.unmap_from_process();
+    });
     const Status reply = reply_.map_into_process();
-    if (reply != Status::ok) ring_.unmap_from_process();
-    return reply;
+    if (reply != Status::ok) return reply;
+    const Status fence = fence_.map_read_only_into_process();
+    if (fence != Status::ok) return fence;
+    unmap_all.dismiss();
+    return Status::ok;
 }
 
 void ContextMemory::unmap_kernel_views()
@@ -131,6 +138,12 @@ uint64_t ContextMemory::reply_view() const
     return reply_.view();
 }
 
+uint64_t ContextMemory::fence_view() const
+{
+    AV_SCOPE("ContextMemory::fence_view");
+    return fence_.view();
+}
+
 ContextPages ContextMemory::pages() const
 {
     AV_SCOPE("ContextMemory::pages");
@@ -139,7 +152,8 @@ ContextPages ContextMemory::pages() const
 }
 
 /* The three blocks, both kernel views and the order are held together or not
- * at all, and the process sees the ring and reply slot both or neither. */
+ * at all, and the process sees the ring, reply slot and fence page all or
+ * none. */
 bool ContextMemory::invariants_hold() const
 {
     AV_SCOPE("ContextMemory::invariants_hold");
@@ -147,8 +161,7 @@ bool ContextMemory::invariants_hold() const
     const bool held = ring_.held();
     if (fence_.held() != held || reply_.held() != held || (order_ != 0u) != held) return false;
     if ((ring_header_ != nullptr) != held || (fence_view_ != nullptr) != held) return false;
-    if (fence_.view() != 0u) return false;
-    return (ring_.view() != 0u) == (reply_.view() != 0u);
+    return (ring_.view() != 0u) == (reply_.view() != 0u) && (ring_.view() != 0u) == (fence_.view() != 0u);
 }
 
 }  // namespace av

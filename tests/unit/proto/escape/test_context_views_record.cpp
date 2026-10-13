@@ -1,5 +1,6 @@
 /* The escape record a process sends to learn where the driver mapped its av
- * context's ring and reply slot (docs/protocol.md, "Context memory"). The
+ * context's ring, reply slot and - from version 2 - fence page
+ * (docs/protocol.md, "Context memory"). The
  * kernel decodes it from memory the process wrote, so every field is judged as
  * hostile input, and the kernel's answer is encoded back into the same 32
  * bytes. */
@@ -18,6 +19,7 @@ namespace {
 
 constexpr std::uint64_t ring = 0x00007FF000010000ull;
 constexpr std::uint64_t reply = 0x00007FF000200000ull;
+constexpr std::uint64_t fence = 0x00007FF000300000ull;
 
 class Bytes {
 public:
@@ -35,52 +37,77 @@ private:
 }  // namespace
 
 /* A request carries only its magic and version; everything else is the
- * kernel's to write. */
+ * kernel's to write. The default is the newest version. */
 TEST(context_views_record, a_request_round_trips_and_names_no_address)
 { Bytes bytes{ContextViewsRecord()};
   CHECK_STATUS(bytes.status(), Status::ok);
-  const std::uint8_t expected[8] = {'A', 'V', 'V', 0, 1u, 0u, 0u, 0u};
+  const std::uint8_t expected[8] = {'A', 'V', 'V', 0, 2u, 0u, 0u, 0u};
   CHECK(std::memcmp(bytes.data(), expected, sizeof expected) == 0);
   for (std::size_t at = 8u; at < ContextViewsRecord::encoded_size; at++) CHECK_EQ(bytes.data()[at], 0u);
-  ContextViewsRecord decoded;
+  ContextViewsRecord decoded{ContextViewsRecord::without_fence};
   CHECK_STATUS(decoded.decode(bytes.data(), ContextViewsRecord::encoded_size), Status::ok);
+  CHECK_EQ(decoded.version(), ContextViewsRecord::with_fence);
   CHECK_EQ(decoded.ring(), 0u);
-  CHECK_EQ(decoded.reply(), 0u); }
+  CHECK_EQ(decoded.reply(), 0u);
+  CHECK_EQ(decoded.fence(), 0u);
+  /* A version-1 request is what a driver before the fence page knows. */
+  Bytes first{ContextViewsRecord(ContextViewsRecord::without_fence)};
+  CHECK_EQ(first.data()[4], 1u);
+  CHECK_STATUS(decoded.decode(first.data(), ContextViewsRecord::encoded_size), Status::ok);
+  CHECK_EQ(decoded.version(), ContextViewsRecord::without_fence); }
 
 /* The answer lands where the contract puts it, and is no request: a process
  * cannot pre-fill the addresses. */
-TEST(context_views_record, an_answer_carries_both_addresses_and_is_no_request)
-{ Bytes bytes(ContextViewsRecord().answered(ring, reply));
-  std::uint64_t at_ring = 0u, at_reply = 0u;
+TEST(context_views_record, an_answer_carries_every_address_and_is_no_request)
+{ Bytes bytes(ContextViewsRecord().answered(ring, reply, fence));
+  std::uint64_t at_ring = 0u, at_reply = 0u, at_fence = 0u;
   std::memcpy(&at_ring, bytes.data() + 8u, sizeof at_ring);
   std::memcpy(&at_reply, bytes.data() + 16u, sizeof at_reply);
+  std::memcpy(&at_fence, bytes.data() + 24u, sizeof at_fence);
   CHECK_EQ(at_ring, ring);
   CHECK_EQ(at_reply, reply);
+  CHECK_EQ(at_fence, fence);
   ContextViewsRecord decoded;
   CHECK_STATUS(decoded.decode(bytes.data(), ContextViewsRecord::encoded_size), Status::malformed);
-  Bytes half(ContextViewsRecord().answered(0u, reply));
-  CHECK_STATUS(decoded.decode(half.data(), ContextViewsRecord::encoded_size), Status::malformed); }
+  Bytes half(ContextViewsRecord().answered(0u, reply, 0u));
+  CHECK_STATUS(decoded.decode(half.data(), ContextViewsRecord::encoded_size), Status::malformed);
+  Bytes fence_only(ContextViewsRecord().answered(0u, 0u, fence));
+  CHECK_STATUS(decoded.decode(fence_only.data(), ContextViewsRecord::encoded_size), Status::malformed); }
+
+/* A version-1 answer has no fence: the field stays reserved even when the
+ * kernel is handed one. */
+TEST(context_views_record, a_version_1_answer_carries_no_fence)
+{ const ContextViewsRecord request(ContextViewsRecord::without_fence);
+  Bytes bytes(request.answered(ring, reply, fence));
+  for (std::size_t at = 24u; at < ContextViewsRecord::encoded_size; at++) CHECK_EQ(bytes.data()[at], 0u);
+  ContextViewsRecord accepted(ContextViewsRecord::without_fence);
+  CHECK_STATUS(accepted.accept_answer(bytes.data(), ContextViewsRecord::encoded_size), Status::ok);
+  CHECK_EQ(accepted.ring(), ring);
+  CHECK_EQ(accepted.fence(), 0u); }
 
 TEST(context_views_record, every_field_is_judged)
-{ struct Case { const char *what; std::size_t at; std::uint8_t width; std::uint64_t value; };
+{ struct Case { const char *what; std::uint16_t version; std::size_t at; std::uint8_t width; std::uint64_t value; };
   const Case cases[] = {
-      {"magic", 0u, 4u, 0x00575641u},   /* AVW, the window's */
-      {"version 0", 4u, 2u, 0u},
-      {"version 2", 4u, 2u, 2u},
-      {"reserved half", 6u, 2u, 1u},
-      {"ring already", 8u, 8u, ring},
-      {"reply already", 16u, 8u, reply},
-      {"reserved tail", 24u, 8u, 1u},
-      {"reserved tail high bit", 24u, 8u, 0x8000000000000000ull},
+      {"magic", 2u, 0u, 4u, 0x00575641u},   /* AVW, the window's */
+      {"version 0", 2u, 4u, 2u, 0u},
+      {"version 3", 2u, 4u, 2u, 3u},
+      {"reserved half", 2u, 6u, 2u, 1u},
+      {"ring already", 2u, 8u, 8u, ring},
+      {"reply already", 2u, 16u, 8u, reply},
+      {"fence already", 2u, 24u, 8u, fence},
+      {"fence high bit", 2u, 24u, 8u, 0x8000000000000000ull},
+      {"version 1 reserved tail", 1u, 24u, 8u, 1u},
+      {"version 1 reserved tail high bit", 1u, 24u, 8u, 0x8000000000000000ull},
   };
   for (const Case &one : cases) {
-      Bytes bytes{ContextViewsRecord()};
+      Bytes bytes{ContextViewsRecord(one.version)};
       bytes.put(one.at, one.width, one.value);
-      ContextViewsRecord decoded = ContextViewsRecord().answered(1u, 2u);
+      ContextViewsRecord decoded = ContextViewsRecord().answered(1u, 2u, 3u);
       CHECK_STATUS(decoded.decode(bytes.data(), ContextViewsRecord::encoded_size), Status::malformed);
       /* A refusal leaves the record as it was. */
       CHECK_EQ(decoded.ring(), 1u);
       CHECK_EQ(decoded.reply(), 2u);
+      CHECK_EQ(decoded.fence(), 3u);
   } }
 
 TEST(context_views_record, a_short_or_long_buffer_is_refused_and_encode_refuses_one)
@@ -96,8 +123,8 @@ TEST(context_views_record, a_short_or_long_buffer_is_refused_and_encode_refuses_
   std::uint8_t small[ContextViewsRecord::encoded_size - 1u] = {};
   CHECK(ContextViewsRecord().encode(small, sizeof small) != Status::ok); }
 
-/* One bit of a request flipped anywhere is either still the request itself or
- * refused: a request has no field a bit can move and stay one. */
+/* One bit of a request flipped anywhere is refused: no single flip turns
+ * version 2 into 1, and any other flip fills an address or a reserved byte. */
 TEST(context_views_record, a_byte_flip_sweep_of_a_request_is_always_refused)
 { for (std::size_t byte = 0u; byte < ContextViewsRecord::encoded_size; byte++)
       for (unsigned bit = 0u; bit < 8u; bit++) {
@@ -110,36 +137,49 @@ TEST(context_views_record, a_byte_flip_sweep_of_a_request_is_always_refused)
 /* The process reads the kernel's answer back from the bytes it sent. */
 TEST(context_views_record, accept_answer_takes_the_addresses_the_kernel_wrote)
 { ContextViewsRecord request;
-  Bytes bytes(request.answered(ring, reply));
+  Bytes bytes(request.answered(ring, reply, fence));
   CHECK_STATUS(request.accept_answer(bytes.data(), ContextViewsRecord::encoded_size), Status::ok);
   CHECK_EQ(request.ring(), ring);
   CHECK_EQ(request.reply(), reply);
-  /* Any two distinct addresses, the lowest and highest included. */
+  CHECK_EQ(request.fence(), fence);
+  /* Any three distinct addresses, the lowest and highest included. */
   ContextViewsRecord edges;
-  Bytes extremes(edges.answered(1u, UINT64_MAX));
+  Bytes extremes(edges.answered(1u, UINT64_MAX, 2u));
   CHECK_STATUS(edges.accept_answer(extremes.data(), ContextViewsRecord::encoded_size), Status::ok);
   CHECK_EQ(edges.reply(), UINT64_MAX); }
 
-/* No driver answers with an address missing, or with the ring and reply slot
- * at one place; refused, and the record left as it was. */
+/* No driver answers with an address missing, two at one place, or in another
+ * version than it was asked; refused, and the record left as it was. */
 TEST(context_views_record, accept_answer_refuses_what_no_driver_answers)
-{ struct Case { const char *what; std::uint64_t ring; std::uint64_t reply; std::size_t at; std::uint64_t value; };
+{ struct Case { const char *what; std::uint64_t ring; std::uint64_t reply; std::uint64_t fence; };
   const Case cases[] = {
-      {"no ring", 0u, reply, 0u, 0u},
-      {"no reply", ring, 0u, 0u, 0u},
-      {"one place for both", ring, ring, 0u, 0u},
-      {"no answer at all", 0u, 0u, 0u, 0u},
-      {"reserved tail", ring, reply, 24u, 1u},
+      {"no ring", 0u, reply, fence},
+      {"no reply", ring, 0u, fence},
+      {"no fence", ring, reply, 0u},
+      {"one place for ring and reply", ring, ring, fence},
+      {"fence on the ring", ring, reply, ring},
+      {"fence on the reply", ring, reply, reply},
+      {"no answer at all", 0u, 0u, 0u},
   };
   for (const Case &one : cases) {
       ContextViewsRecord request;
-      Bytes              bytes(request.answered(one.ring, one.reply));
-      if (one.at != 0u) bytes.put(one.at, 8u, one.value);
+      Bytes              bytes(request.answered(one.ring, one.reply, one.fence));
       CHECK_STATUS(request.accept_answer(bytes.data(), ContextViewsRecord::encoded_size), Status::malformed);
       CHECK_EQ(request.ring(), 0u);
       CHECK_EQ(request.reply(), 0u);
+      CHECK_EQ(request.fence(), 0u);
   }
   ContextViewsRecord request;
-  Bytes              wrong(request.answered(ring, reply));
+  Bytes              wrong(request.answered(ring, reply, fence));
   wrong.put(0u, 4u, 0x00575641u);
-  CHECK_STATUS(request.accept_answer(wrong.data(), ContextViewsRecord::encoded_size), Status::malformed); }
+  CHECK_STATUS(request.accept_answer(wrong.data(), ContextViewsRecord::encoded_size), Status::malformed);
+  /* A version-1 answer to a version-2 request, and the other way round. */
+  Bytes older(ContextViewsRecord(ContextViewsRecord::without_fence).answered(ring, reply, 0u));
+  CHECK_STATUS(request.accept_answer(older.data(), ContextViewsRecord::encoded_size), Status::malformed);
+  ContextViewsRecord first(ContextViewsRecord::without_fence);
+  Bytes newer(ContextViewsRecord().answered(ring, reply, fence));
+  CHECK_STATUS(first.accept_answer(newer.data(), ContextViewsRecord::encoded_size), Status::malformed);
+  /* A version-1 answer with the reserved field filled in. */
+  Bytes filled(ContextViewsRecord(ContextViewsRecord::without_fence).answered(ring, reply, 0u));
+  filled.put(24u, 8u, 1u);
+  CHECK_STATUS(first.accept_answer(filled.data(), ContextViewsRecord::encoded_size), Status::malformed); }

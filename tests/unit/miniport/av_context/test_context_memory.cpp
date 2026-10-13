@@ -145,7 +145,7 @@ TEST(context_memory_allocate, every_step_that_fails_leaves_nothing_held)
   } }
 
 /* The process sees the ring and the reply slot, the same memory the device is
- * handed; the fence page it never sees. */
+ * handed, and the fence page read-only: GPU progress it may read, never forge. */
 TEST(context_memory_map, the_process_sees_the_ring_and_reply_the_device_is_handed)
 { MockPlatform platform;
   ContextMemory memory(platform);
@@ -153,11 +153,13 @@ TEST(context_memory_map, the_process_sees_the_ring_and_reply_the_device_is_hande
   CHECK_STATUS(memory.allocate(12u, 8192u), Status::ok);
   CHECK_STATUS(memory.map_into_process(), Status::ok);
   CHECK(memory.invariants_hold());
-  CHECK(memory.ring_view() != 0u && memory.reply_view() != 0u);
-  CHECK_EQ(platform.process_mappings(), 2u);
+  CHECK(memory.ring_view() != 0u && memory.reply_view() != 0u && memory.fence_view() != 0u);
+  CHECK_EQ(platform.process_mappings(), 3u);
+  CHECK_EQ(platform.read_only_process_mappings(), 1u);
   const ContextPages pages = memory.pages();
   CHECK(platform.maps_into_process(memory.ring_view(), pages.ring().frame(0u), 2u * page));
   CHECK(platform.maps_into_process(memory.reply_view(), pages.reply().frame(0u), 2u * page));
+  CHECK(platform.maps_into_process(memory.fence_view(), pages.fence().frame(0u), page));
   RingHeader header;
   CHECK_STATUS(header.decode(at(memory.ring_view()), RingHeader::encoded_size), Status::ok);
   CHECK_EQ(header.order(), 12u);
@@ -166,8 +168,9 @@ TEST(context_memory_map, the_process_sees_the_ring_and_reply_the_device_is_hande
   CHECK_EQ(second[5], 0x77u);
   platform.unmap_frame(second);
   CHECK_STATUS(memory.map_into_process(), Status::invalid_state);
-  CHECK_EQ(platform.process_mappings(), 2u);
+  CHECK_EQ(platform.process_mappings(), 3u);
   memory.release();
+  CHECK_EQ(memory.fence_view(), 0u);
   CHECK_EQ(platform.process_mappings(), 0u);
   CHECK_EQ(platform.owned_page_blocks(), 0u); }
 

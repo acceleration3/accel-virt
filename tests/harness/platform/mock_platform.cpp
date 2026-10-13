@@ -435,7 +435,7 @@ Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes,
     for (ProcessView &slot : process_views_) {
         if (slot.live) continue;
         const std::uint64_t address = backed != nullptr ? reinterpret_cast<std::uintptr_t>(backed) : next_process_view_;
-        slot = ProcessView{physical, bytes, address, true};
+        slot = ProcessView{physical, bytes, address, true, false};
         if (backed == nullptr) next_process_view_ += (bytes + 0xFFFu) & ~std::uint64_t{0xFFFu};
         view = slot.view;
         mapping = &slot;
@@ -446,6 +446,16 @@ Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes,
 }
 
 Status MockPlatform::map_pages_to_process(void *pages, std::uint64_t &view, void *&mapping)
+{
+    return map_owned_to_process(pages, false, view, mapping);
+}
+
+Status MockPlatform::map_pages_to_process_read_only(void *pages, std::uint64_t &view, void *&mapping)
+{
+    return map_owned_to_process(pages, true, view, mapping);
+}
+
+Status MockPlatform::map_owned_to_process(void *pages, bool read_only, std::uint64_t &view, void *&mapping)
 {
     view = 0u;
     mapping = nullptr;
@@ -460,7 +470,8 @@ Status MockPlatform::map_pages_to_process(void *pages, std::uint64_t &view, void
     if (process_fail_at_ != 0u && process_map_sequence_ == process_fail_at_) return Status::no_memory;
     for (ProcessView &slot : process_views_) {
         if (slot.live) continue;
-        slot = ProcessView{owned->physical, owned->bytes, reinterpret_cast<std::uintptr_t>(owned->block), true};
+        slot = ProcessView{owned->physical, owned->bytes, reinterpret_cast<std::uintptr_t>(owned->block), true,
+                           read_only};
         view = slot.view;
         mapping = &slot;
         return Status::ok;
@@ -485,6 +496,13 @@ std::uint32_t MockPlatform::process_mappings() const
 {
     std::uint32_t live = 0u;
     for (const ProcessView &slot : process_views_) live += slot.live ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockPlatform::read_only_process_mappings() const
+{
+    std::uint32_t live = 0u;
+    for (const ProcessView &slot : process_views_) live += slot.live && slot.read_only ? 1u : 0u;
     return live;
 }
 
