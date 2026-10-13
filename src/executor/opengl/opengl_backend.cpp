@@ -56,10 +56,22 @@ uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
     return static_cast<OpenGlBackend *>(user)->guest_bytes(offset, bytes);
 }
 
+bool pack_blob(void *user, uint64_t offset, uint64_t bytes, void **packed)
+{
+    AV_SCOPE("pack_blob");
+    return packed != nullptr && static_cast<OpenGlBackend *>(user)->pack(offset, bytes, *packed);
+}
+
+void unpack_blob(void *user)
+{
+    AV_SCOPE("unpack_blob");
+    static_cast<OpenGlBackend *>(user)->unpack();
+}
+
 }  // namespace
 
 OpenGlBackend::OpenGlBackend()
-    : context_(), gl_(), import_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
+    : context_(), gl_(), import_(), pack_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
       lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
@@ -83,6 +95,8 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
     gl_.av_forget_sync = forget_sync;
     gl_.av_sync_user = this;
     gl_.av_blob = blob_at;
+    gl_.av_pack_blob = pack_blob;
+    gl_.av_unpack_blob = unpack_blob;
     gl_.av_blob_user = this;
     gl_.av_fixed_function = granted_fixed_function();
     import_.configure(context_);
@@ -113,6 +127,8 @@ void OpenGlBackend::shut_down()
      * the context is still open: after the close there is nothing left to
      * delete it with, and a sync of a context sharing objects with another
      * would outlive this one. */
+    pack_.release(gl_, import_);
+    pack_.abandon();
     import_.give_back();
     void *fence = nullptr;
     while (fences_.take_any(fence))
@@ -214,17 +230,34 @@ bool OpenGlBackend::lost() const
  * bulk-data commands read and write in place. GL imports no host pointer on
  * both host drivers, so the pointer is not a GL object - it is the region
  * (research.md §5). Its address names it on the wire, which no other import of
- * this context can share while it is held. */
+ * this context can share while it is held. One handed over as a dma-buf is
+ * mapped here, and is also what a pixel transfer packs into on the GPU
+ * (GlPackBuffer). */
 bool OpenGlBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    return region_.adopt_pointer(blob);
+    if (!region_.adopt_pointer_or_buffer(blob)) return false;
+    pack_.adopt(blob.descriptor(), blob.size());
+    return true;
+}
+
+bool OpenGlBackend::pack(uint64_t offset, uint64_t bytes, void *&packed)
+{
+    AV_SCOPE("OpenGlBackend::pack");
+    return pack_.bind(gl_, import_, offset, bytes, packed);
+}
+
+void OpenGlBackend::unpack()
+{
+    AV_SCOPE("OpenGlBackend::unpack");
+    pack_.unbind(gl_);
 }
 
 void OpenGlBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::abandon");
     region_.abandon(blob);
+    pack_.abandon();
 }
 
 bool     OpenGlBackend::bind_fence(uint64_t token, void *fence)

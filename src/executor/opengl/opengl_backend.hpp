@@ -16,6 +16,7 @@
 #include "executor/opengl/sync_tokens.hpp"
 #include "device/host/stdio_log.hpp"
 #include "executor/shim/gl_context.hpp"
+#include "executor/opengl/gl_pack_buffer.hpp"
 #include "executor/shim/gl_host_import.hpp"
 #include "proto/generated/opengl/gl_real_dispatch.h"
 
@@ -84,6 +85,11 @@ public:
     void               forget_fence(uint64_t token);
     /* The bytes of the imported region its bulk-data commands name. */
     uint8_t           *guest_bytes(uint64_t offset, uint64_t bytes) const;
+    /* A pixel transfer into the region packed into it by the GPU
+     * (GlPackBuffer): the offset it names instead of a pointer, and once made,
+     * the write finished. */
+    [[nodiscard]] bool pack(uint64_t offset, uint64_t bytes, void *&packed);
+    void               unpack();
 
     uint32_t resolved() const;
     uint64_t ran() const;
@@ -102,6 +108,7 @@ private:
     GlContext   context_;
     glproto::RealGl gl_;
     GlHostImport    import_;
+    GlPackBuffer    pack_;
     SyncTokens  fences_;
     GuestRegion region_;
     GlErrorTally errors_;

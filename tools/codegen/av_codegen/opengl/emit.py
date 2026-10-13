@@ -881,6 +881,9 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append(f"    size_t {name}_bytes = 0;")
         out.append(f"    bool {name}_is_offset = false;")
         out.append(f"    bool {name}_via_blob = false;")
+        packs = p.type.base == "void"   # a pixel transfer a pack buffer answers
+        if packs:
+            out.append(f"    uint64_t {name}_at = 0;")
         out.append("    {")
         out.append("        uint8_t av_present = 0;")
         out.append("        if (!av_r.read_pod(av_present)) return false;")
@@ -905,6 +908,8 @@ def _decode_param(p: Param, out: list[str]) -> None:
                    "av_gl.av_blob_user, av_at, av_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
         out.append(f"            {name}_bytes = static_cast<size_t>(av_bytes);")
+        if packs:
+            out.append(f"            {name}_at = av_at;")
         out.append(f"            {name}_via_blob = true;")
         out.append("        } else if (av_present != 0) {")
         out.append("            uint64_t av_bytes = 0;")
@@ -1843,17 +1848,28 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         # glGetQueryObjectuiv wants GLuint*, and it is carried the same
         # way because the question — is this an address or an offset
         # into a bound buffer — is the same one.
+        # A pixel transfer (a void* pixel parameter, which a pack buffer
+        # bound answers) into the region is the pack buffer's where the
+        # server has one: the GPU writes the guest's memory itself.
+        packed = [p for p in cmd.params if p.role is Role.PIXELS_OUT and p.type.base == "void"]
         call_args = ", ".join(
             (f"static_cast<{p.type.cpp()}>({p.name})"
              if p.role is Role.PIXELS_OUT and p.type.base != "void"
-             else p.name)
+             else (f"({p.name}_packs ? {p.name}_packed : {p.name})" if p in packed else p.name))
             for p in cmd.params)
         c.append(f"    if (av_gl.{cmd.name} == nullptr) return false;")
+        for p in packed:
+            c.append(f"    void* {p.name}_packed = nullptr;")
+            c.append(f"    const bool {p.name}_packs = {p.name}_via_blob && av_gl.av_pack_blob != nullptr &&")
+            c.append("        av_gl.av_unpack_blob != nullptr &&")
+            c.append(f"        av_gl.av_pack_blob(av_gl.av_blob_user, {p.name}_at, {p.name}_bytes, &{p.name}_packed);")
         kind = _ret_kind(cmd)
         if kind == "void":
             c.append(f"    av_gl.{cmd.name}({call_args});")
         else:
             c.append(f"    const auto av_ret = av_gl.{cmd.name}({call_args});")
+        for p in packed:
+            c.append(f"    if ({p.name}_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);")
         if cmd.mints_handle:
             # The guest already answered with the token; all that is
             # owed here is the note of which fence it meant.
@@ -1935,6 +1951,16 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    uint8_t* (*av_blob)(void*, uint64_t, uint64_t)"
            " = nullptr;",
            "    void* av_blob_user = nullptr;",
+           "",
+           "    // A pixel transfer into the region, made a pack buffer's: the",
+           "    // GPU writes the guest's memory itself rather than the driver",
+           "    // copying a read-back into a pointer. av_pack_blob binds a",
+           "    // GL_PIXEL_PACK_BUFFER over the region and answers the offset",
+           "    // the call takes instead of the pointer - false where there is",
+           "    // none, and the pointer is used - and av_unpack_blob unbinds it",
+           "    // once the call is made and waits for the write.",
+           "    bool (*av_pack_blob)(void*, uint64_t, uint64_t, void**) = nullptr;",
+           "    void (*av_unpack_blob)(void*) = nullptr;",
            "",
            "    // A guest mints a sync token; the host binds it to whatever",
            "    // glFenceSync made and looks it up again by the token. Fields",

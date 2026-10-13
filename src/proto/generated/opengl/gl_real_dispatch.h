@@ -25,6 +25,16 @@ struct RealGl {
     uint8_t* (*av_blob)(void*, uint64_t, uint64_t) = nullptr;
     void* av_blob_user = nullptr;
 
+    // A pixel transfer into the region, made a pack buffer's: the
+    // GPU writes the guest's memory itself rather than the driver
+    // copying a read-back into a pointer. av_pack_blob binds a
+    // GL_PIXEL_PACK_BUFFER over the region and answers the offset
+    // the call takes instead of the pointer - false where there is
+    // none, and the pointer is used - and av_unpack_blob unbinds it
+    // once the call is made and waits for the write.
+    bool (*av_pack_blob)(void*, uint64_t, uint64_t, void**) = nullptr;
+    void (*av_unpack_blob)(void*) = nullptr;
+
     // A guest mints a sync token; the host binds it to whatever
     // glFenceSync made and looks it up again by the token. Fields
     // rather than free functions for the reason av_blob is one:

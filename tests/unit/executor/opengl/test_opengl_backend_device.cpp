@@ -18,6 +18,11 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/udmabuf.h>
+#include <fcntl.h>
 #include <cstdio>
 #include <cstring>
 #include <EGL/egl.h>
@@ -49,6 +54,8 @@ struct OpenGlBackendProbe {
         CHECK(backend.context_.make_current());
         return backend.gl_;
     }
+    /* Whether a pixel read has had a pack buffer made over the region. */
+    static bool packs(OpenGlBackend &backend) { return backend.pack_.packing(); }
 };
 
 }  // namespace av
@@ -334,6 +341,83 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
       CHECK_EQ(region[page + pixels], 0u);
       backend.abandon(blob);
       backend.shut_down();
+  } }
+
+/* A region handed over as a dma-buf - guest RAM's memfd, through udmabuf, as
+ * the device hands one over - is mapped as the region and is what a pixel
+ * read packs into: the GPU writes the guest's memory (GlPackBuffer), and the
+ * bytes land where a pointer read would have put them. A host with no
+ * udmabuf judges nothing. */
+TEST(opengl_backend_device, a_pixel_read_into_a_dma_buf_region_is_written_by_the_gpu)
+{ Displays displays;
+  for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      const int memfd = memfd_create("guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+      CHECK(memfd >= 0 && ftruncate(memfd, sizeof region) == 0 && fcntl(memfd, F_ADD_SEALS, F_SEAL_SHRINK) == 0);
+      const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+      udmabuf_create request = {};
+      request.memfd = static_cast<std::uint32_t>(memfd);
+      request.flags = UDMABUF_FLAGS_CLOEXEC;
+      request.size = sizeof region;
+      const int dmabuf = device >= 0 ? ioctl(device, UDMABUF_CREATE, &request) : -1;
+      if (device >= 0) close(device);
+      auto *const guest = static_cast<std::uint8_t *>(
+          mmap(nullptr, sizeof region, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0));
+      if (dmabuf < 0 || guest == MAP_FAILED) {
+          std::fprintf(stderr, "no udmabuf here: nothing judged\n");
+          if (dmabuf >= 0) close(dmabuf);
+          close(memfd);
+          return;
+      }
+      std::memset(guest, 0, sizeof region);
+      OpenGlBackend backend;
+      CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
+      AvBlobHandle handle = {};
+      handle.kind = AV_BLOB_DMA_BUF;
+      handle.pointer = nullptr;
+      handle.fd = dmabuf;   /* the region's from here */
+      handle.size = sizeof region;
+      av::ImportedBlob blob;
+      CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+      CHECK(backend.adopt(blob));
+      {
+          const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+          unsigned texture = 0u;
+          unsigned framebuffer = 0u;
+          gl.glGenTextures(1, &texture);
+          gl.glBindTexture(gl_texture_2d, texture);
+          gl.glTexParameteri(gl_texture_2d, gl_texture_min_filter, static_cast<int>(gl_nearest));
+          gl.glTexImage2D(gl_texture_2d, 0, static_cast<int>(gl_rgba8), 4, 4, 0, gl_rgba, gl_unsigned_byte, nullptr);
+          gl.glGenFramebuffers(1, &framebuffer);
+          gl.glBindFramebuffer(gl_framebuffer, framebuffer);
+          gl.glFramebufferTexture2D(gl_framebuffer, gl_color_attachment0, gl_texture_2d, texture, 0);
+          gl.glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+          gl.glClear(gl_color_buffer_bit);
+      }
+      constexpr std::uint64_t pixels = 4u * 4u * 4u;
+      std::uint8_t frame[64];
+      av::WireWriter read(frame, sizeof frame);
+      const std::uint64_t arguments[] = {0u, 0u, 4u, 4u, gl_rgba, gl_unsigned_byte};
+      for (const std::uint64_t value : arguments) read.write_varint(value);
+      read.write_pod<std::uint8_t>(blob_mode);
+      read.write_varint<std::uint64_t>(pixels);
+      read.write_varint<std::uint64_t>(page);
+      std::uint8_t   block[4096];
+      av::WireArena  arena(block, sizeof block);
+      std::uint8_t   reply[64] = {};
+      av::WireReader payload(frame, read.offset());
+      av::WireWriter answer(reply, sizeof reply);
+      CHECK(backend.run(av::glproto::kCmd_glReadPixels, payload, answer, arena));
+      CHECK(OpenGlBackendProbe::packs(backend));
+      CHECK_EQ(guest[page], 255u);
+      CHECK_EQ(guest[page + 1u], 0u);
+      CHECK_EQ(guest[page + 2u], 255u);
+      CHECK_EQ(guest[page + pixels - 1u], 255u);
+      CHECK_EQ(guest[0], 0u);
+      CHECK_EQ(guest[page + pixels], 0u);
+      backend.abandon(blob);
+      backend.shut_down();
+      munmap(guest, sizeof region);
+      close(memfd);
   } }
 
 /* Feature 053: a descriptor of this process's own making imported as a memory

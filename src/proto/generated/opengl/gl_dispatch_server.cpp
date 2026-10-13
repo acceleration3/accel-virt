@@ -7093,6 +7093,7 @@ static bool decode_glGetCompressedTexImage(const RealGl& av_gl, ::av::WireReader
     size_t img_bytes = 0;
     bool img_is_offset = false;
     bool img_via_blob = false;
+    uint64_t img_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -7110,6 +7111,7 @@ static bool decode_glGetCompressedTexImage(const RealGl& av_gl, ::av::WireReader
             img = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (img == nullptr) return false;
             img_bytes = static_cast<size_t>(av_bytes);
+            img_at = av_at;
             img_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -7131,7 +7133,12 @@ static bool decode_glGetCompressedTexImage(const RealGl& av_gl, ::av::WireReader
         return false;
     }
     if (av_gl.glGetCompressedTexImage == nullptr) return false;
-    av_gl.glGetCompressedTexImage(target, level, img);
+    void* img_packed = nullptr;
+    const bool img_packs = img_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, img_at, img_bytes, &img_packed);
+    av_gl.glGetCompressedTexImage(target, level, (img_packs ? img_packed : img));
+    if (img_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (img != nullptr && !img_is_offset && !img_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(img_bytes));
         if (img_bytes != 0) av_reply.write(img, img_bytes);
@@ -7157,6 +7164,7 @@ static bool decode_glGetCompressedTextureImage(const RealGl& av_gl, ::av::WireRe
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -7174,6 +7182,7 @@ static bool decode_glGetCompressedTextureImage(const RealGl& av_gl, ::av::WireRe
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -7195,7 +7204,12 @@ static bool decode_glGetCompressedTextureImage(const RealGl& av_gl, ::av::WireRe
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetCompressedTextureImage == nullptr) return false;
-    av_gl.glGetCompressedTextureImage(texture, level, bufSize, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetCompressedTextureImage(texture, level, bufSize, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -7239,6 +7253,7 @@ static bool decode_glGetCompressedTextureSubImage(const RealGl& av_gl, ::av::Wir
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -7256,6 +7271,7 @@ static bool decode_glGetCompressedTextureSubImage(const RealGl& av_gl, ::av::Wir
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -7277,7 +7293,12 @@ static bool decode_glGetCompressedTextureSubImage(const RealGl& av_gl, ::av::Wir
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetCompressedTextureSubImage == nullptr) return false;
-    av_gl.glGetCompressedTextureSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, bufSize, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetCompressedTextureSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, bufSize, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -10494,6 +10515,7 @@ static bool decode_glGetTexImage(const RealGl& av_gl, ::av::WireReader& av_r, ::
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -10511,6 +10533,7 @@ static bool decode_glGetTexImage(const RealGl& av_gl, ::av::WireReader& av_r, ::
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -10539,7 +10562,12 @@ static bool decode_glGetTexImage(const RealGl& av_gl, ::av::WireReader& av_r, ::
             av_needed > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetTexImage == nullptr) return false;
-    av_gl.glGetTexImage(target, level, format, type, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetTexImage(target, level, format, type, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -10841,6 +10869,7 @@ static bool decode_glGetTextureImage(const RealGl& av_gl, ::av::WireReader& av_r
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -10858,6 +10887,7 @@ static bool decode_glGetTextureImage(const RealGl& av_gl, ::av::WireReader& av_r
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -10879,7 +10909,12 @@ static bool decode_glGetTextureImage(const RealGl& av_gl, ::av::WireReader& av_r
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetTextureImage == nullptr) return false;
-    av_gl.glGetTextureImage(texture, level, format, type, bufSize, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetTextureImage(texture, level, format, type, bufSize, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -11199,6 +11234,7 @@ static bool decode_glGetTextureSubImage(const RealGl& av_gl, ::av::WireReader& a
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -11216,6 +11252,7 @@ static bool decode_glGetTextureSubImage(const RealGl& av_gl, ::av::WireReader& a
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -11237,7 +11274,12 @@ static bool decode_glGetTextureSubImage(const RealGl& av_gl, ::av::WireReader& a
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetTextureSubImage == nullptr) return false;
-    av_gl.glGetTextureSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, bufSize, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetTextureSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, bufSize, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -12298,6 +12340,7 @@ static bool decode_glGetnCompressedTexImage(const RealGl& av_gl, ::av::WireReade
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -12315,6 +12358,7 @@ static bool decode_glGetnCompressedTexImage(const RealGl& av_gl, ::av::WireReade
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -12336,7 +12380,12 @@ static bool decode_glGetnCompressedTexImage(const RealGl& av_gl, ::av::WireReade
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetnCompressedTexImage == nullptr) return false;
-    av_gl.glGetnCompressedTexImage(target, lod, bufSize, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetnCompressedTexImage(target, lod, bufSize, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -12368,6 +12417,7 @@ static bool decode_glGetnTexImage(const RealGl& av_gl, ::av::WireReader& av_r, :
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -12385,6 +12435,7 @@ static bool decode_glGetnTexImage(const RealGl& av_gl, ::av::WireReader& av_r, :
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -12406,7 +12457,12 @@ static bool decode_glGetnTexImage(const RealGl& av_gl, ::av::WireReader& av_r, :
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glGetnTexImage == nullptr) return false;
-    av_gl.glGetnTexImage(target, level, format, type, bufSize, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetnTexImage(target, level, format, type, bufSize, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -16730,6 +16786,7 @@ static bool decode_glReadPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::a
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -16747,6 +16804,7 @@ static bool decode_glReadPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -16770,7 +16828,12 @@ static bool decode_glReadPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             av_needed > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (av_gl.glReadPixels == nullptr) return false;
-    av_gl.glReadPixels(x, y, width, height, format, type, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glReadPixels(x, y, width, height, format, type, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -16808,6 +16871,7 @@ static bool decode_glReadnPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::
     size_t data_bytes = 0;
     bool data_is_offset = false;
     bool data_via_blob = false;
+    uint64_t data_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -16825,6 +16889,7 @@ static bool decode_glReadnPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::
             data = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (data == nullptr) return false;
             data_bytes = static_cast<size_t>(av_bytes);
+            data_at = av_at;
             data_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -16846,7 +16911,12 @@ static bool decode_glReadnPixels(const RealGl& av_gl, ::av::WireReader& av_r, ::
         if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(data_bytes)) return false;
     }
     if (av_gl.glReadnPixels == nullptr) return false;
-    av_gl.glReadnPixels(x, y, width, height, format, type, bufSize, data);
+    void* data_packed = nullptr;
+    const bool data_packs = data_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, data_at, data_bytes, &data_packed);
+    av_gl.glReadnPixels(x, y, width, height, format, type, bufSize, (data_packs ? data_packed : data));
+    if (data_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (data != nullptr && !data_is_offset && !data_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) av_reply.write(data, data_bytes);
@@ -39007,6 +39077,7 @@ static bool decode_glGetTextureImageEXT(const RealGl& av_gl, ::av::WireReader& a
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -39024,6 +39095,7 @@ static bool decode_glGetTextureImageEXT(const RealGl& av_gl, ::av::WireReader& a
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -39045,7 +39117,12 @@ static bool decode_glGetTextureImageEXT(const RealGl& av_gl, ::av::WireReader& a
         return false;
     }
     if (av_gl.glGetTextureImageEXT == nullptr) return false;
-    av_gl.glGetTextureImageEXT(texture, target, level, format, type, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetTextureImageEXT(texture, target, level, format, type, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -40633,6 +40710,7 @@ static bool decode_glGetMultiTexImageEXT(const RealGl& av_gl, ::av::WireReader& 
     size_t pixels_bytes = 0;
     bool pixels_is_offset = false;
     bool pixels_via_blob = false;
+    uint64_t pixels_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -40650,6 +40728,7 @@ static bool decode_glGetMultiTexImageEXT(const RealGl& av_gl, ::av::WireReader& 
             pixels = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (pixels == nullptr) return false;
             pixels_bytes = static_cast<size_t>(av_bytes);
+            pixels_at = av_at;
             pixels_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -40671,7 +40750,12 @@ static bool decode_glGetMultiTexImageEXT(const RealGl& av_gl, ::av::WireReader& 
         return false;
     }
     if (av_gl.glGetMultiTexImageEXT == nullptr) return false;
-    av_gl.glGetMultiTexImageEXT(texunit, target, level, format, type, pixels);
+    void* pixels_packed = nullptr;
+    const bool pixels_packs = pixels_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, pixels_at, pixels_bytes, &pixels_packed);
+    av_gl.glGetMultiTexImageEXT(texunit, target, level, format, type, (pixels_packs ? pixels_packed : pixels));
+    if (pixels_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(pixels_bytes));
         if (pixels_bytes != 0) av_reply.write(pixels, pixels_bytes);
@@ -41751,6 +41835,7 @@ static bool decode_glGetCompressedTextureImageEXT(const RealGl& av_gl, ::av::Wir
     size_t img_bytes = 0;
     bool img_is_offset = false;
     bool img_via_blob = false;
+    uint64_t img_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -41768,6 +41853,7 @@ static bool decode_glGetCompressedTextureImageEXT(const RealGl& av_gl, ::av::Wir
             img = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (img == nullptr) return false;
             img_bytes = static_cast<size_t>(av_bytes);
+            img_at = av_at;
             img_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -41789,7 +41875,12 @@ static bool decode_glGetCompressedTextureImageEXT(const RealGl& av_gl, ::av::Wir
         return false;
     }
     if (av_gl.glGetCompressedTextureImageEXT == nullptr) return false;
-    av_gl.glGetCompressedTextureImageEXT(texture, target, lod, img);
+    void* img_packed = nullptr;
+    const bool img_packs = img_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, img_at, img_bytes, &img_packed);
+    av_gl.glGetCompressedTextureImageEXT(texture, target, lod, (img_packs ? img_packed : img));
+    if (img_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (img != nullptr && !img_is_offset && !img_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(img_bytes));
         if (img_bytes != 0) av_reply.write(img, img_bytes);
@@ -42220,6 +42311,7 @@ static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& av_gl, ::av::Wi
     size_t img_bytes = 0;
     bool img_is_offset = false;
     bool img_via_blob = false;
+    uint64_t img_at = 0;
     {
         uint8_t av_present = 0;
         if (!av_r.read_pod(av_present)) return false;
@@ -42237,6 +42329,7 @@ static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& av_gl, ::av::Wi
             img = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);
             if (img == nullptr) return false;
             img_bytes = static_cast<size_t>(av_bytes);
+            img_at = av_at;
             img_via_blob = true;
         } else if (av_present != 0) {
             uint64_t av_bytes = 0;
@@ -42258,7 +42351,12 @@ static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& av_gl, ::av::Wi
         return false;
     }
     if (av_gl.glGetCompressedMultiTexImageEXT == nullptr) return false;
-    av_gl.glGetCompressedMultiTexImageEXT(texunit, target, lod, img);
+    void* img_packed = nullptr;
+    const bool img_packs = img_via_blob && av_gl.av_pack_blob != nullptr &&
+        av_gl.av_unpack_blob != nullptr &&
+        av_gl.av_pack_blob(av_gl.av_blob_user, img_at, img_bytes, &img_packed);
+    av_gl.glGetCompressedMultiTexImageEXT(texunit, target, lod, (img_packs ? img_packed : img));
+    if (img_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);
     if (img != nullptr && !img_is_offset && !img_via_blob) {
         av_reply.write_varint(static_cast<uint64_t>(img_bytes));
         if (img_bytes != 0) av_reply.write(img, img_bytes);
