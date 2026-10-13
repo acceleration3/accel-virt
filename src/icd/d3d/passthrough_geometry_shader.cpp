@@ -27,7 +27,7 @@ constexpr uint32_t type_output = 2u << 12u;
 constexpr uint32_t one_index = 1u << 20u;
 constexpr uint32_t two_indices = 2u << 20u;
 
-uint32_t opcode(uint32_t code, uint32_t length) { return code | (length << 24u); }
+constexpr uint32_t opcode(uint32_t code, uint32_t length) { return code | (length << 24u); }
 
 }  // namespace
 
