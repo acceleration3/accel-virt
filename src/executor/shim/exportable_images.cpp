@@ -90,7 +90,10 @@ ID3D11Texture2D *ExportableImages::make(const D3D11_TEXTURE2D_DESC1 &desc)
     AV_SCOPE("ExportableImages::make");
     const ExportableImageInfo described(desc.Width, desc.Height, desc.MipLevels, desc.ArraySize,
                                         desc.SampleDesc.Count, static_cast<uint32_t>(desc.Format), desc.BindFlags);
-    if (!described.supported() || !vulkan_.connected()) return nullptr;
+    /* A GPU that cannot draw into a linear image of the format leaves the
+     * texture to DXVK, with memory nothing else opens: its pictures then
+     * cross as pixels. */
+    if (!described.supported() || !vulkan_.connected() || !vulkan_.supports(described.info())) return nullptr;
     collect();
     VkImage made = VK_NULL_HANDLE;
     if (!vulkan_.create_image(described.info(), made)) return nullptr;
@@ -115,10 +118,9 @@ bool ExportableImages::export_memory(ID3D11Texture2D *texture, int &fd)
     return image != nullptr && vulkan_.memory_fd(image->memory(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
 }
 
-/* The row layout is asked of the driver for an image of optimal tiling, which
- * the Vulkan specification leaves undefined and RADV answers with the pitch
- * and offset it laid the image out at - what an importer reading the layout
- * the driver kept with the memory checks its own against. */
+/* The image is linear (ExportableImageInfo), so its row layout is the
+ * driver's to report and the importer's to follow, under the linear
+ * modifier. */
 bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &image)
 {
     AV_SCOPE("ExportableImages::export_image");
@@ -138,7 +140,7 @@ bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &i
     image.stride = static_cast<uint32_t>(laid.rowPitch);
     image.offset = static_cast<uint32_t>(laid.offset);
     image.fourcc = fourcc;
-    image.modifier = AV_EXPORT_MODIFIER_IMPLICIT;
+    image.modifier = 0u; /* DRM_FORMAT_MOD_LINEAR */
     return true;
 }
 

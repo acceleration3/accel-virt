@@ -29,7 +29,7 @@ TEST(exportable_image_info, a_shared_colour_texture_is_an_exportable_image_mutab
   CHECK_EQ(info.format, VK_FORMAT_R8G8B8A8_UNORM);
   CHECK_EQ(info.extent.width, 640u);
   CHECK_EQ(info.extent.height, 360u);
-  CHECK_EQ(info.tiling, VK_IMAGE_TILING_OPTIMAL);
+  CHECK_EQ(info.tiling, VK_IMAGE_TILING_LINEAR);
   CHECK_EQ(info.flags, static_cast<VkImageCreateFlags>(VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT));
   const VkImageUsageFlags drawn = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;

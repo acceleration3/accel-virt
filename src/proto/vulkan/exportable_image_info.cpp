@@ -57,7 +57,13 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     info_.mipLevels = 1u;
     info_.arrayLayers = 1u;
     info_.samples = VK_SAMPLE_COUNT_1_BIT;
-    info_.tiling = VK_IMAGE_TILING_OPTIMAL;
+    /* Linear: the memory goes to processes outside QEMU (a window mirror's
+     * import, docs/external-export.md), and only a linear layout is one every
+     * driver reads the same with no modifier to agree on. An optimal image's
+     * tiling travels with its memory on some kernels' buffers (amdgpu) and on
+     * others not at all (i915, Xe), where the importer read it as linear and
+     * showed it scrambled. */
+    info_.tiling = VK_IMAGE_TILING_LINEAR;
     /* Drawn and sampled whatever the binds say: another API opening the
      * memory draws into it, and a superset of what DXVK asks is an image DXVK
      * can wrap. */

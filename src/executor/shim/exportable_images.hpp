@@ -62,8 +62,7 @@ public:
     /* The same dma-buf, described for a process outside QEMU to import with
      * no copy (docs/external-export.md): the image's size, the DRM format of
      * its pixels, and where its rows are as the driver laid them out. The
-     * layout is the driver's own, kept with the memory - it was bound
-     * dedicated - so the modifier is AV_EXPORT_MODIFIER_IMPLICIT. False for a
+     * image is linear, so the modifier is DRM_FORMAT_MOD_LINEAR. False for a
      * texture not made here, or one in a format no DRM format names. */
     [[nodiscard]] bool export_image(ID3D11Texture2D *texture, AvExportedImage &image);
     /* The images whose textures have gone, freed once DXVK's GPU work is. */

@@ -1,7 +1,8 @@
 /* The Vulkan image a Direct3D 11 texture is made as when another API must open
  * its memory (InteropTextures::make): at least what DXVK would make for the
- * texture's description, over memory exported as a dma-buf - and the image the
- * Vulkan ICD makes over that memory once it has opened it (ChainedImage). One
+ * texture's description, over memory exported as a dma-buf, laid out linear -
+ * and the image the Vulkan ICD makes over that memory once it has opened it
+ * (ChainedImage). One
  * description for both sides, because a driver lays an image out from its
  * description, and two that differ are two layouts of one memory.
  *

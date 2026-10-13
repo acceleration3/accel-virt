@@ -32,6 +32,11 @@ public:
     bool               connected() const;
     void               release();
 
+    /* Whether the GPU makes an image as `info` describes - its format, type,
+     * tiling, usage and flags, its view formats, and its extent - over memory
+     * it can export as a dma-buf. A description it does not is one
+     * vkCreateImage may not be given. */
+    [[nodiscard]] bool   supports(const VkImageCreateInfo &info) const;
     [[nodiscard]] bool   create_image(const VkImageCreateInfo &info, VkImage &image) const;
     void                 destroy_image(VkImage image) const;
     VkMemoryRequirements requirements(VkImage image) const;

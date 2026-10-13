@@ -78,6 +78,38 @@ void DxvkVulkanDevice::release()
     memory_fd_ = nullptr;
 }
 
+bool DxvkVulkanDevice::supports(const VkImageCreateInfo &info) const
+{
+    AV_SCOPE("DxvkVulkanDevice::supports");
+    if (physical_ == VK_NULL_HANDLE) return false;
+    VkPhysicalDeviceExternalImageFormatInfo external = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
+                                                        nullptr, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    /* The view formats are part of what is asked: a mutable image is
+     * supported only as the formats it is viewed in are. */
+    VkImageFormatListCreateInfo views = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, nullptr};
+    for (auto *next = static_cast<const VkBaseInStructure *>(info.pNext); next != nullptr; next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) continue;
+        views = *reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
+        views.pNext = nullptr;
+        external.pNext = &views;
+    }
+    const VkPhysicalDeviceImageFormatInfo2 asked = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+                                                    &external,
+                                                    info.format,
+                                                    info.imageType,
+                                                    info.tiling,
+                                                    info.usage,
+                                                    info.flags};
+    VkExternalImageFormatProperties exported = {VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES, nullptr, {}};
+    VkImageFormatProperties2        answer = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2, &exported, {}};
+    if (vkGetPhysicalDeviceImageFormatProperties2(physical_, &asked, &answer) != VK_SUCCESS) return false;
+    const VkImageFormatProperties &limits = answer.imageFormatProperties;
+    return info.extent.width <= limits.maxExtent.width && info.extent.height <= limits.maxExtent.height &&
+           info.mipLevels <= limits.maxMipLevels && info.arrayLayers <= limits.maxArrayLayers &&
+           (limits.sampleCounts & info.samples) != 0u &&
+           (exported.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) != 0u;
+}
+
 bool DxvkVulkanDevice::create_image(const VkImageCreateInfo &info, VkImage &image) const
 {
     AV_SCOPE("DxvkVulkanDevice::create_image");
