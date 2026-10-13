@@ -62,8 +62,6 @@ public:
      * other than X8R8G8B8 and A8R8G8B8, or with nothing bound; failed where
      * either device refused. */
     [[nodiscard]] Status flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint64_t key);
-    /* Whether `key`'s flips cross on the GPU. */
-    bool                 on_gpu(uint64_t key) const;
     /* Every texture, image and staging surface let go; the registry keeps
      * what it published until the guest releases the key. */
     void release();

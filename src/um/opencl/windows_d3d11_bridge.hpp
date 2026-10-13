@@ -16,6 +16,7 @@
 /* d3d10_1.h before anything that includes d3d10.h, as it requires. */
 #include <d3d10_1.h>
 #include <d3d11.h>
+#include <dxgi1_2.h>
 
 #include <stdint.h>
 
@@ -31,6 +32,10 @@ public:
     void   let_go(void *object) override;
     cl_int read(void *device, void *resource, uint32_t subresource, clicd::D3d11Rows &rows) override;
     cl_int write(void *device, void *resource, uint32_t subresource, clicd::D3d11Rows &rows) override;
+    void  *twin(void *device, void *resource, uint32_t subresource, uint64_t &handle) override;
+    void   close_handle(uint64_t handle) override;
+    cl_int to_twin(void *device, void *resource, uint32_t subresource, void *twin) override;
+    cl_int from_twin(void *device, void *twin, void *resource, uint32_t subresource) override;
 
 private:
     /* `object` as an ID3D11Device or ID3D11Resource, with a reference the
@@ -47,6 +52,12 @@ private:
                                 UINT cpu_access);
     ID3D11Resource *staging_texture(ID3D11Device &device, ID3D11Resource &resource, uint32_t subresource,
                                     UINT cpu_access);
+    /* An NT handle to `texture`, shared for reading and writing; 0 when it
+     * will not give one. */
+    uint64_t           shared_handle(ID3D11Texture2D &texture);
+    /* Every command on `context` before this, run: a texel of `twin` read
+     * through a staging texture, whose map waits for them. */
+    cl_int             drain(ID3D11Device &device, ID3D11DeviceContext &context, ID3D11Resource &twin);
     /* The device's multithread section, or null for a device that has none. */
     ID3D10Multithread *section_of(ID3D11Device &device);
     void               enter(ID3D10Multithread *section);
@@ -59,6 +70,7 @@ private:
     IID device_iid_;
     IID resource_iid_;
     IID multithread_iid_;
+    IID dxgi_resource_iid_;
 };
 
 }  // namespace av

@@ -697,7 +697,10 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
     /* One over a Direct3D 11 resource lets go of the resource, which the
      * extension's reference is the cl_mem's: whether or not the device can
      * still be told, since the resource is this process's either way. */
+    void *twin = nullptr;
     if (last && kind == ClObject::Kind::mem && context != nullptr) {
+        const D3d11Object *const shared = context->d3d11().find(object);
+        twin = shared != nullptr ? shared->twin() : nullptr;
         void *resource = nullptr;
         if (context->d3d11().forget(object, resource)) d3d11_.let_go(resource);
     }
@@ -738,6 +741,9 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
             }
         }
     }
+    /* A twin goes after the image over it: the host's open of its memory is
+     * given back first. */
+    if (twin != nullptr) d3d11_.let_go(twin);
     /* The context goes when the last thing holding it does - the
      * application, or the last object made on it - which may be this release
      * of a kernel as well as of the context. */
@@ -1711,8 +1717,9 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
         return asked.give(laid, values * sizeof(cl_context_properties));
     }
     /* Whether a resource made to be shared would be faster to share: not
-     * here, where every object is copied (docs/d3d11-sharing.md). Asked only
-     * of a context made from Direct3D 11. */
+     * here, where a texture crosses through a twin whether or not it was made
+     * to be shared (docs/d3d11-sharing.md). Asked only of a context made from
+     * Direct3D 11. */
     case d3d11_prefer_shared: {
         if (held->context()->d3d11().device() == nullptr) return CL_INVALID_VALUE;
         const cl_bool no = CL_FALSE;

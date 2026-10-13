@@ -514,6 +514,12 @@ private:
      * cannot be kept. */
     cl_mem           d3d11_object(cl_mem made, GuestClContext &owner, void *resource, uint32_t subresource,
                                   const D3d11Resource &described, cl_mem_flags flags, cl_int *error);
+    /* An image over a shared twin of `subresource` of `resource`, opened in
+     * `context` (docs/d3d11-sharing.md, stage 2), with the twin in `twin`;
+     * null, and no twin, when the device will not share one or the host
+     * cannot open it as an image - which leaves the object to stage 1. */
+    cl_mem           d3d11_twin(cl_context context, GuestClContext &owner, void *resource, uint32_t subresource,
+                                const D3d11Resource &described, void *&twin);
     /* The queue an acquire or release names, its context made from Direct3D 11
      * and still able to send, and its wait list waited for. */
     cl_int           d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_event *events, ClObject *&held,

@@ -96,6 +96,13 @@ public:
      * release of `cl_khr_external_memory` are judged by, since those two name
      * external objects and nothing else. */
     bool   answered(uint64_t made) const;
+    /* A handle this driver made itself - a Direct3D 11 twin's
+     * (docs/d3d11-sharing.md, stage 2) - opened as `open` opens the one a list
+     * names, and then forgotten: the device's open holds the object, and the
+     * handle is nobody else's. Whether the forget closed it is in `closed`;
+     * a handle the process never adopted is left for its maker to close. */
+    cl_int open_own(ClientTransport &wire, uint32_t device, uint64_t handle, uint64_t size, uint64_t &made,
+                    bool &closed);
 
     /* The object behind `made` released on the device and the row dropped.
      * False for a `cl_mem` this table never answered - an ordinary buffer,
@@ -120,8 +127,12 @@ private:
      * all. */
     bool                names_handle(const ClPropertyList &list, uint64_t &handle, bool &taken) const;
 
-    LogSink           &log_;
-    icd::OpenedObjects opened_;
+    /* An open's status as OpenCL answers it. */
+    cl_int              answer(Status opened) const;
+
+    LogSink            &log_;
+    icd::SharedHandles &handles_;
+    icd::OpenedObjects  opened_;
 };
 
 }  // namespace av::clicd

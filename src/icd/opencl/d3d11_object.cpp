@@ -7,7 +7,7 @@ namespace av::clicd {
 D3d11Object::D3d11Object(const void *mem, void *resource, uint32_t subresource, const D3d11Resource &described,
                          cl_mem_flags flags)
     : mem_(mem), resource_(resource), subresource_(subresource), described_(described), flags_(flags),
-      acquired_(false)
+      acquired_(false), twin_(nullptr)
 {
     AV_SCOPE("D3d11Object::D3d11Object");
 }
@@ -90,6 +90,18 @@ void D3d11Object::release()
 {
     AV_SCOPE("D3d11Object::release");
     acquired_ = false;
+}
+
+void *D3d11Object::twin() const
+{
+    AV_SCOPE("D3d11Object::twin");
+    return twin_;
+}
+
+void D3d11Object::pair(void *twin)
+{
+    AV_SCOPE("D3d11Object::pair");
+    twin_ = twin;
 }
 
 }  // namespace av::clicd

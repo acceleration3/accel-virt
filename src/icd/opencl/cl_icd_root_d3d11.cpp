@@ -11,6 +11,7 @@
 #include "icd/opencl/d3d11_bridge.hpp"
 #include "icd/opencl/d3d11_object.hpp"
 #include "icd/opencl/dxgi_image_format.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 
 namespace av::clicd {
 
@@ -102,6 +103,21 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
         report_d3d11_error(error, CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
         return nullptr;
     }
+    void        *twin = nullptr;
+    const cl_mem twinned = kind == D3d11Resource::Kind::texture2d
+                               ? d3d11_twin(context, *owner, resource, subresource, described, twin)
+                               : nullptr;
+    if (twinned != nullptr) {
+        const cl_mem kept = d3d11_object(twinned, *owner, resource, subresource, described, flags, error);
+        if (kept == nullptr) {
+            d3d11_.let_go(twin);
+            return nullptr;
+        }
+        lock_.acquire();
+        owner->d3d11().find(kept)->pair(twin);
+        lock_.release();
+        return kept;
+    }
     const cl_image_format format = mapped.format();
     cl_image_desc         desc = {};
     desc.image_type = kind == D3d11Resource::Kind::texture3d ? CL_MEM_OBJECT_IMAGE3D : CL_MEM_OBJECT_IMAGE2D;
@@ -115,6 +131,40 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
         return nullptr;
     }
     return d3d11_object(made, *owner, resource, subresource, described, flags, error);
+}
+
+/* The size the open names is the one avumd published the twin as: its tight
+ * rows, whole pages (KernelSurface). */
+cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *resource, uint32_t subresource,
+                             const D3d11Resource &described, void *&twin)
+{
+    AV_SCOPE("ClIcdRoot::d3d11_twin");
+    twin = nullptr;
+    uint64_t    handle = 0u;
+    void *const made = d3d11_.twin(owner.d3d11().device(), resource, subresource, handle);
+    if (made == nullptr) return nullptr;
+    ClObject *const        held = judged(context, ClObject::Kind::context);
+    ClientTransport *const wire = held != nullptr ? wire_of(*held) : nullptr;
+    const DxgiFormatLayout layout(described.format());
+    const uint64_t         bytes =
+        uint64_t{described.width_of(subresource)} * layout.element_bytes() * described.height_of(subresource);
+    uint64_t     opened = 0u;
+    bool         closed = false;
+    const cl_int taken = wire != nullptr ? owner.external().open_own(*wire, owner.guest_device(), handle, bytes,
+                                                                     opened, closed)
+                                         : CL_OUT_OF_RESOURCES;
+    if (!closed) d3d11_.close_handle(handle);
+    ClObject *object = nullptr;
+    if (taken == CL_SUCCESS && objects_.make(ClObject::Kind::mem, opened, &owner, held, object) != Status::ok) {
+        static_cast<void>(owner.external().give_back(*wire, opened));
+        object = nullptr;
+    }
+    if (object == nullptr) {
+        d3d11_.let_go(made);
+        return nullptr;
+    }
+    twin = made;
+    return static_cast<cl_mem>(static_cast<void *>(object));
 }
 
 cl_int ClIcdRoot::d3d11_resource(cl_context context, cl_mem_flags flags, void *resource, uint32_t subresource,
@@ -235,6 +285,12 @@ cl_int ClIcdRoot::d3d11_copy_in(cl_command_queue queue, GuestClContext &context,
         lock_.release();
         /* OpenCL only writes this one, and is never shown its bytes. */
         if (!object->reads_resource()) continue;
+        if (object->twin() != nullptr) {
+            const cl_int moved =
+                d3d11_.to_twin(context.d3d11().device(), object->resource(), object->subresource(), object->twin());
+            if (moved != CL_SUCCESS) return moved;
+            continue;
+        }
         ClD3d11Upload rows(*this, queue, objects[index], *object);
         const cl_int  copied = d3d11_.read(context.d3d11().device(), object->resource(), object->subresource(), rows);
         if (copied != CL_SUCCESS) return copied;
@@ -252,6 +308,12 @@ cl_int ClIcdRoot::d3d11_copy_out(cl_command_queue queue, GuestClContext &context
         lock_.release();
         /* OpenCL only read this one, and changed nothing to copy back. */
         if (!object->writes_resource()) continue;
+        if (object->twin() != nullptr) {
+            const cl_int moved = d3d11_.from_twin(context.d3d11().device(), object->twin(), object->resource(),
+                                                  object->subresource());
+            if (moved != CL_SUCCESS) return moved;
+            continue;
+        }
         ClD3d11Download rows(*this, queue, objects[index], *object);
         const cl_int copied = d3d11_.write(context.d3d11().device(), object->resource(), object->subresource(), rows);
         if (copied != CL_SUCCESS) return copied;

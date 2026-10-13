@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
@@ -20,7 +21,7 @@ static_assert(ClExternalMemory::handle_properties[3] == CL_EXTERNAL_MEMORY_HANDL
 static_assert(ClExternalMemory::handle_properties[4] == CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR);
 
 ClExternalMemory::ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, LogSink &log)
-    : log_(log), opened_(handles, memory, log, "avcl: ")
+    : log_(log), handles_(handles), opened_(handles, memory, log, "avcl: ")
 {
     AV_SCOPE("ClExternalMemory::ClExternalMemory");
 }
@@ -67,7 +68,23 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
         log_.write("avcl: an external memory handle type this driver does not take, or two at once");
         return CL_INVALID_PROPERTY;
     }
-    const Status opened = opened_.open(wire, device, named, SharedObjectKind::memory, size, made);
+    return answer(opened_.open(wire, device, named, SharedObjectKind::memory, size, made));
+}
+
+cl_int ClExternalMemory::open_own(ClientTransport &wire, uint32_t device, uint64_t handle, uint64_t size,
+                                  uint64_t &made, bool &closed)
+{
+    AV_SCOPE("ClExternalMemory::open_own");
+    const cl_int answered = answer(opened_.open(wire, device, handle, SharedObjectKind::memory, size, made));
+    uint64_t     object_id = 0u;
+    closed = handles_.resolve(handle, object_id);
+    if (closed) handles_.forget(handle);
+    return answered;
+}
+
+cl_int ClExternalMemory::answer(Status opened) const
+{
+    AV_SCOPE("ClExternalMemory::answer");
     if (opened == Status::no_memory) return CL_OUT_OF_HOST_MEMORY;
     if (opened == Status::invalid_state) return CL_OUT_OF_RESOURCES;
     return opened == Status::ok ? CL_SUCCESS : CL_INVALID_VALUE;

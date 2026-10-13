@@ -80,14 +80,6 @@ Status D3d9FlipShares::flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source,
     return flipped;
 }
 
-bool D3d9FlipShares::on_gpu(uint64_t key) const
-{
-    AV_SCOPE("D3d9FlipShares::on_gpu");
-    for (const Primary &held : primaries_)
-        if (held.key_ == key && held.texture_ != nullptr) return held.lane_ != nullptr;
-    return false;
-}
-
 /* The copy goes on the Direct3D 9 device's queue behind the frame; Direct3D
  * 11's queue waits for it before anything it runs after - DWM's composition,
  * the scanout's export - reads the texture. */

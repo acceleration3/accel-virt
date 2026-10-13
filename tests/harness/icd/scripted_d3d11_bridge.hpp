@@ -32,6 +32,9 @@ public:
                        std::size_t size, std::size_t row_pitch, std::size_t slice_pitch);
     /* The next read or write answers CL_OUT_OF_RESOURCES and maps nothing. */
     void refuse_next();
+    /* The next twin made is `twin`, with `handle` to it; none is made
+     * otherwise, as a device that shares nothing. */
+    void offer_twin(void *twin, std::uint64_t handle);
 
     bool   device(void *object) override;
     bool   describe(void *object, void *device, clicd::D3d11Resource &described) override;
@@ -39,6 +42,10 @@ public:
     void   let_go(void *object) override;
     cl_int read(void *device, void *resource, std::uint32_t subresource, clicd::D3d11Rows &rows) override;
     cl_int write(void *device, void *resource, std::uint32_t subresource, clicd::D3d11Rows &rows) override;
+    void  *twin(void *device, void *resource, std::uint32_t subresource, std::uint64_t &handle) override;
+    void   close_handle(std::uint64_t handle) override;
+    cl_int to_twin(void *device, void *resource, std::uint32_t subresource, void *twin) override;
+    cl_int from_twin(void *device, void *twin, void *resource, std::uint32_t subresource) override;
 
     /* References held to `object` and not let go of. */
     std::int32_t  references(const void *object) const;
@@ -46,6 +53,10 @@ public:
     std::uint32_t writes() const;
     /* The subresource the last read or write named. */
     std::uint32_t subresource() const;
+    /* Handles closed, and copies into and out of a twin. */
+    std::uint32_t closed() const;
+    std::uint32_t to_twins() const;
+    std::uint32_t from_twins() const;
 
 private:
     struct Resource {
@@ -72,6 +83,11 @@ private:
     std::uint32_t writes_;
     std::uint32_t subresource_;
     bool          refuse_;
+    void         *twin_;
+    std::uint64_t twin_handle_;
+    std::uint32_t closed_;
+    std::uint32_t to_twins_;
+    std::uint32_t from_twins_;
 };
 
 }  // namespace av

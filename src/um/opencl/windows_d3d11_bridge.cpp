@@ -10,7 +10,7 @@ using clicd::D3d11Resource;
 
 WindowsD3d11Bridge::WindowsD3d11Bridge()
     : device_iid_(__uuidof(ID3D11Device)), resource_iid_(__uuidof(ID3D11Resource)),
-      multithread_iid_(__uuidof(ID3D10Multithread))
+      multithread_iid_(__uuidof(ID3D10Multithread)), dxgi_resource_iid_(__uuidof(IDXGIResource1))
 {
     AV_SCOPE("WindowsD3d11Bridge::WindowsD3d11Bridge");
 }
@@ -148,6 +148,130 @@ bool WindowsD3d11Bridge::made_on(ID3D11Resource &resource, ID3D11Device &device)
     const bool same = owner == &device;
     if (owner != nullptr) owner->Release();
     return same;
+}
+
+/* One mip, one slice, shared by NT handle: avumd makes such a texture over
+ * memory the host exports and publishes it under its key, which is what an
+ * open of the handle names. */
+void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresource, uint64_t &handle)
+{
+    AV_SCOPE("WindowsD3d11Bridge::twin");
+    handle = 0u;
+    ID3D11Device *const   owner = as_device(device);
+    ID3D11Resource *const source = as_resource(resource);
+    ID3D11Texture2D      *made = nullptr;
+    const D3d11Resource   described = source != nullptr ? description(*source) : D3d11Resource();
+    if (owner != nullptr && described.kind() == D3d11Resource::Kind::texture2d && !described.multisampled()) {
+        D3D11_TEXTURE2D_DESC shaped = {};
+        shaped.Width = described.width_of(subresource);
+        shaped.Height = described.height_of(subresource);
+        shaped.MipLevels = 1u;
+        shaped.ArraySize = 1u;
+        shaped.Format = static_cast<DXGI_FORMAT>(described.format());
+        shaped.SampleDesc.Count = 1u;
+        shaped.Usage = D3D11_USAGE_DEFAULT;
+        shaped.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        shaped.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+        if (FAILED(owner->CreateTexture2D(&shaped, nullptr, &made))) made = nullptr;
+    }
+    if (made != nullptr) handle = shared_handle(*made);
+    if (made != nullptr && handle == 0u) {
+        made->Release();
+        made = nullptr;
+    }
+    if (source != nullptr) source->Release();
+    if (owner != nullptr) owner->Release();
+    return made;
+}
+
+void WindowsD3d11Bridge::close_handle(uint64_t handle)
+{
+    AV_SCOPE("WindowsD3d11Bridge::close_handle");
+    if (handle != 0u) CloseHandle(reinterpret_cast<HANDLE>(handle));
+}
+
+cl_int WindowsD3d11Bridge::to_twin(void *device, void *resource, uint32_t subresource, void *twin)
+{
+    AV_SCOPE("WindowsD3d11Bridge::to_twin");
+    ID3D11Device *const   owner = as_device(device);
+    ID3D11Resource *const source = as_resource(resource);
+    ID3D11Resource *const target = as_resource(twin);
+    cl_int                result = CL_OUT_OF_RESOURCES;
+    if (owner != nullptr && source != nullptr && target != nullptr) {
+        ID3D11DeviceContext *context = nullptr;
+        owner->GetImmediateContext(&context);
+        ID3D10Multithread *const section = section_of(*owner);
+        enter(section);
+        context->CopySubresourceRegion(target, 0u, 0u, 0u, 0u, source, subresource, nullptr);
+        result = drain(*owner, *context, *target);
+        leave(section);
+        if (section != nullptr) section->Release();
+        context->Release();
+    }
+    if (target != nullptr) target->Release();
+    if (source != nullptr) source->Release();
+    if (owner != nullptr) owner->Release();
+    return result;
+}
+
+cl_int WindowsD3d11Bridge::from_twin(void *device, void *twin, void *resource, uint32_t subresource)
+{
+    AV_SCOPE("WindowsD3d11Bridge::from_twin");
+    ID3D11Device *const   owner = as_device(device);
+    ID3D11Resource *const source = as_resource(twin);
+    ID3D11Resource *const target = as_resource(resource);
+    cl_int                result = CL_OUT_OF_RESOURCES;
+    if (owner != nullptr && source != nullptr && target != nullptr) {
+        ID3D11DeviceContext *context = nullptr;
+        owner->GetImmediateContext(&context);
+        ID3D10Multithread *const section = section_of(*owner);
+        enter(section);
+        context->CopySubresourceRegion(target, subresource, 0u, 0u, 0u, source, 0u, nullptr);
+        leave(section);
+        if (section != nullptr) section->Release();
+        context->Release();
+        result = CL_SUCCESS;
+    }
+    if (target != nullptr) target->Release();
+    if (source != nullptr) source->Release();
+    if (owner != nullptr) owner->Release();
+    return result;
+}
+
+uint64_t WindowsD3d11Bridge::shared_handle(ID3D11Texture2D &texture)
+{
+    AV_SCOPE("WindowsD3d11Bridge::shared_handle");
+    IDXGIResource1 *shared = nullptr;
+    if (FAILED(texture.QueryInterface(dxgi_resource_iid_, reinterpret_cast<void **>(&shared)))) return 0u;
+    HANDLE     handle = nullptr;
+    const bool given = SUCCEEDED(shared->CreateSharedHandle(
+        nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &handle));
+    shared->Release();
+    return given ? reinterpret_cast<uint64_t>(handle) : 0u;
+}
+
+/* A map of staging waits for the copy into it, which waits for every command
+ * before: a wait the device blocks in, where an event query is polled. */
+cl_int WindowsD3d11Bridge::drain(ID3D11Device &device, ID3D11DeviceContext &context, ID3D11Resource &twin)
+{
+    AV_SCOPE("WindowsD3d11Bridge::drain");
+    D3D11_TEXTURE2D_DESC probed = {};
+    static_cast<ID3D11Texture2D &>(twin).GetDesc(&probed);
+    probed.Width = 1u;
+    probed.Height = 1u;
+    probed.Usage = D3D11_USAGE_STAGING;
+    probed.BindFlags = 0u;
+    probed.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    probed.MiscFlags = 0u;
+    ID3D11Texture2D *probe = nullptr;
+    if (FAILED(device.CreateTexture2D(&probed, nullptr, &probe))) return CL_OUT_OF_RESOURCES;
+    const D3D11_BOX texel = {0u, 0u, 0u, 1u, 1u, 1u};
+    context.CopySubresourceRegion(probe, 0u, 0u, 0u, 0u, &twin, 0u, &texel);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    const bool               waited = SUCCEEDED(context.Map(probe, 0u, D3D11_MAP_READ, 0u, &mapped));
+    if (waited) context.Unmap(probe, 0u);
+    probe->Release();
+    return waited ? CL_SUCCESS : CL_OUT_OF_RESOURCES;
 }
 
 /* The resource is the interface its dimension says, which its own GetType

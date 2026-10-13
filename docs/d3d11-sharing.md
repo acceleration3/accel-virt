@@ -96,21 +96,39 @@ requires. The context holds a reference to its device for its life.
 
 ## Stage 2: on the host GPU, where the host can export
 
-For a 2D texture in a format `ExportableImageInfo` accepts, the copies need not
-leave the GPU:
+Built. For a 2D texture, the copies never leave the GPU:
 
-1. avcl makes a twin on the application's device: one mip, one slice,
-   `D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE`. The
-   executor makes its memory exportable (`ExportableImages::make`).
-2. avcl learns its shared id as `DxgiWindowChains::identify` does
-   (`CreateSharedHandle`, then `open_shared_object`), and opens it in the CL
-   context viewed as a 2D image. The open carries the image's GL internal
-   format, width and height (a new executor ABI parameter). The OpenCL backend
-   makes a GL texture over the imported memory in its vehicle context
-   (`glTextureStorageMem2DEXT`), then the CL image with
-   `clCreateFromGLTexture`, acquired once and held, as buffers are today.
-3. Acquire: `CopySubresourceRegion(twin, resource)`, flushed, and waited for
-   with a Direct3D 11 event query before anything is enqueued. Release: the
-   queue drained, then `CopySubresourceRegion(resource, twin)`.
+1. **The twin.** avcl makes a twin on the application's device
+   (`D3d11Bridge::twin`): the subresource's size and format, one mip, one
+   slice, `D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE`.
+   avumd makes it over memory the host exports (`ExportableImages`) and
+   publishes it under the key the miniport minted, as the size of its tight
+   rows in whole pages (`D3d11Device::publish_shared`).
+2. **The image.** Publishing, the executor describes what the memory is as an
+   image: width, height, DXGI format and the row pitch of the linear image
+   (`SharedImageShape`, `D3dBackend::describe_shared_image`). The kind on the
+   wire stays memory and no ABI changed; the shape is the publisher's, never
+   the guest's. avcl opens the twin's NT handle in the context
+   (`ClExternalMemory::open_own`, which closes the handle once adopted), and
+   the OpenCL backend makes a 2D image over the buffer it imports, at that
+   pitch and in the order the bytes are (`OpenClBackend::image_over`,
+   `DxgiClFormat`: BGRA as `CL_BGRA`). The application's `cl_mem` is that
+   image.
+3. **Acquire and release.** Acquire copies the subresource into the twin
+   (`CopySubresourceRegion`) and waits for it with a map of one texel of
+   the twin through a staging texture. The device blocks in that map, so
+   nothing polls. Release drains the queue, then copies the twin back on the
+   immediate context. An object made read-only or write-only skips the
+   direction its side never reads, as in stage 1.
+
+A twin the device will not make, or whose handle the host cannot open as an
+image, leaves the object to stage 1. That covers a format with no exportable
+or OpenCL equivalent, sRGB, and a host without `cl_khr_image2d_from_buffer`.
+The application sees the same object either way. The twin is let go after
+the image over it, when the `cl_mem`'s last reference goes.
+
+Tested on the host by
+`d3d_cl_interop_device.a_shared_texture_opened_by_opencl_is_the_image_direct3d_wrote`,
+and in avcl by the `cl_d3d11_sharing` twin tests.
 
 Stage 1 stays the path for everything stage 2 does not cover.

@@ -39,6 +39,11 @@ public:
     bool                 reads_resource() const;
     /* Whether a release copies it back: not for one OpenCL only reads. */
     bool                 writes_resource() const;
+    /* The shared texture the cl_mem is an image over, which acquire and
+     * release copy through on the GPU (docs/d3d11-sharing.md, stage 2); null
+     * for an object whose bytes cross through guest memory. */
+    void                *twin() const;
+    void                 pair(void *twin);
     bool                 acquired() const;
     void                 acquire();
     void                 release();
@@ -50,6 +55,7 @@ private:
     D3d11Resource described_;
     cl_mem_flags  flags_;
     bool          acquired_;
+    void         *twin_;
 };
 
 }  // namespace av::clicd

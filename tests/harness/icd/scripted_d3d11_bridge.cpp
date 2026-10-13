@@ -8,7 +8,8 @@ namespace av {
 
 ScriptedD3d11Bridge::ScriptedD3d11Bridge()
     : device_(nullptr), resources_{}, count_(0u), held_{}, references_{}, staging_{}, reads_(0u), writes_(0u),
-      subresource_(0u), refuse_(false)
+      subresource_(0u), refuse_(false), twin_(nullptr), twin_handle_(0u), closed_(0u), to_twins_(0u),
+      from_twins_(0u)
 {
 }
 
@@ -92,6 +93,46 @@ std::uint32_t ScriptedD3d11Bridge::reads() const { return reads_; }
 std::uint32_t ScriptedD3d11Bridge::writes() const { return writes_; }
 
 std::uint32_t ScriptedD3d11Bridge::subresource() const { return subresource_; }
+
+void ScriptedD3d11Bridge::offer_twin(void *twin, std::uint64_t handle)
+{
+    twin_ = twin;
+    twin_handle_ = handle;
+}
+
+void *ScriptedD3d11Bridge::twin(void *, void *, std::uint32_t, std::uint64_t &handle)
+{
+    void *const made = twin_;
+    handle = twin_handle_;
+    twin_ = nullptr;
+    twin_handle_ = 0u;
+    if (made != nullptr) hold(made);
+    return made;
+}
+
+void ScriptedD3d11Bridge::close_handle(std::uint64_t) { closed_++; }
+
+cl_int ScriptedD3d11Bridge::to_twin(void *, void *, std::uint32_t subresource, void *)
+{
+    subresource_ = subresource;
+    if (refused()) return CL_OUT_OF_RESOURCES;
+    to_twins_++;
+    return CL_SUCCESS;
+}
+
+cl_int ScriptedD3d11Bridge::from_twin(void *, void *, void *, std::uint32_t subresource)
+{
+    subresource_ = subresource;
+    if (refused()) return CL_OUT_OF_RESOURCES;
+    from_twins_++;
+    return CL_SUCCESS;
+}
+
+std::uint32_t ScriptedD3d11Bridge::closed() const { return closed_; }
+
+std::uint32_t ScriptedD3d11Bridge::to_twins() const { return to_twins_; }
+
+std::uint32_t ScriptedD3d11Bridge::from_twins() const { return from_twins_; }
 
 ScriptedD3d11Bridge::Resource *ScriptedD3d11Bridge::named(const void *object)
 {

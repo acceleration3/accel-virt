@@ -14,6 +14,12 @@
 #include "icd/opencl/d3d11_resource.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/surface_layout.hpp"
 #include "proto/submission/command_header.hpp"
 
 #include <cstddef>
@@ -162,6 +168,29 @@ bool carries(const av::MockKmt &kmt, std::uint32_t index, const std::uint8_t *by
     for (std::size_t at = av::CommandHeader::encoded_size; at + count <= av::MockKmt::journal_bytes; ++at)
         if (std::memcmp(frame + at, bytes, count) == 0) return true;
     return false;
+}
+
+/* An NT handle another guest device minted over memory it shares: what
+ * avumd hands back for a texture made shared, which is the twin here. */
+std::uint64_t shared_handle(ClIcdRig &rig)
+{
+    std::uint32_t adapter = 0u;
+    std::uint32_t found = 0u;
+    CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), av::Status::ok);
+    std::uint32_t elsewhere = 0u;
+    CHECK_STATUS(rig.kmt().create_device(adapter, elsewhere), av::Status::ok);
+    const av::AllocationDescriptor carrier(av::AllocationKind::client, true, av::SurfaceLayout(), 4096u,
+                                           av::ScanoutTarget());
+    std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+    CHECK_STATUS(carrier.encode(bytes, av::AllocationDescriptor::encoded_size), av::Status::ok);
+    const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4096u);
+    CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size, av::SharedObjectRecord::encoded_size),
+                 av::Status::ok);
+    std::uint32_t allocation = 0u;
+    CHECK_STATUS(rig.kmt().create_shared_allocation(elsewhere, bytes, sizeof bytes, allocation), av::Status::ok);
+    std::uint64_t named = 0u;
+    CHECK_STATUS(rig.kmt().share_object(elsewhere, allocation, named), av::Status::ok);
+    return named;
 }
 
 }  // namespace
@@ -711,3 +740,99 @@ TEST(cl_d3d11_sharing, a_refused_device_query_is_logged_with_its_number)
   CHECK_EQ(rig.root().noted_query(direct, 0x4039u, CL_INVALID_VALUE), CL_INVALID_VALUE);
   CHECK_EQ(rig.log().lines(), before + 2u);
   CHECK(std::strcmp(rig.log().line(before + 1u), "avcl: clGetDeviceInfo 0x4039 answered -30") == 0); }
+
+/* Stage 2 (docs/d3d11-sharing.md): a 2D texture the device shares a twin of is
+ * an image over the twin's memory, opened by its handle - nothing created on
+ * the host - and acquire and release copy between the texture and the twin on
+ * Direct3D's GPU, with no bytes through guest memory. The handle the driver
+ * made is closed once opened; the twin goes with the cl_mem, after it. */
+TEST(cl_d3d11_sharing, a_texture_the_device_shares_a_twin_of_is_an_image_over_the_twin)
+{ ClIcdRig rig;
+  Shared   shared(rig);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  int twin = 0;
+  rig.d3d11().offer_twin(&twin, shared_handle(rig));
+  rig.host().shared_object(0u, host_image);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int              error = CL_INVALID_VALUE;
+  const cl_mem        image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(image != nullptr);
+  if (image == nullptr) return;
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::CommandHeader::open_shared_object_id);
+  /* Closed by the table that adopted it, not by the bridge. */
+  CHECK_EQ(rig.d3d11().closed(), 0u);
+  CHECK_EQ(rig.d3d11().references(&twin), 1);
+  CHECK_EQ(rig.d3d11().references(shared.texture()), 1);
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(shared.acquire(1u, &image), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().to_twins(), 1u);
+  CHECK_EQ(rig.d3d11().reads(), 0u);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(shared.release(1u, &image), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().from_twins(), 1u);
+  CHECK_EQ(rig.d3d11().writes(), 0u);
+
+  rig.host().shared_object(0u, 0u);
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(before), av::CommandHeader::release_shared_object_id);
+  CHECK_EQ(rig.d3d11().references(&twin), 0);
+  CHECK_EQ(rig.d3d11().references(shared.texture()), 0);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A twin whose handle the guest kernel will not open, or whose copy Direct3D
+ * refuses, changes nothing the application sees: the object is made the
+ * stage-1 way, the twin let go and its handle closed by the bridge. */
+TEST(cl_d3d11_sharing, a_twin_that_cannot_be_opened_leaves_the_object_to_cross_through_memory)
+{ ClIcdRig rig;
+  Shared   shared(rig);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  int twin = 0;
+  rig.d3d11().offer_twin(&twin, 0x7777u);
+  rig.host().cl_handle(host_image, CL_SUCCESS);
+  cl_int       error = CL_INVALID_VALUE;
+  const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(image != nullptr);
+  CHECK_EQ(rig.d3d11().closed(), 1u);
+  CHECK_EQ(rig.d3d11().references(&twin), 0);
+  shared.element_is(4u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(shared.acquire(1u, &image), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().reads(), 1u);
+  CHECK_EQ(rig.d3d11().to_twins(), 0u);
+  CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A copy into or out of the twin Direct3D refuses is the acquire's or the
+ * release's error, and leaves the object where it was. */
+TEST(cl_d3d11_sharing, a_twin_copy_direct3d_refuses_is_the_call_s_error)
+{ ClIcdRig rig;
+  Shared   shared(rig);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  int twin = 0;
+  rig.d3d11().offer_twin(&twin, shared_handle(rig));
+  rig.host().shared_object(0u, host_image);
+  cl_int       error = CL_INVALID_VALUE;
+  const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
+  CHECK(image != nullptr);
+  if (image == nullptr) return;
+  rig.d3d11().refuse_next();
+  CHECK_EQ(shared.acquire(1u, &image), CL_OUT_OF_RESOURCES);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(shared.acquire(1u, &image), CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.d3d11().refuse_next();
+  CHECK_EQ(shared.release(1u, &image), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.d3d11().from_twins(), 0u);
+  rig.host().shared_object(0u, 0u);
+  CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().references(&twin), 0);
+  CHECK(rig.root().invariants_hold()); }
