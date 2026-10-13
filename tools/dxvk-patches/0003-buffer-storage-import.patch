@@ -1,0 +1,201 @@
+From: accel-virt
+Subject: [PATCH] d3d11: a buffer an embedder points at storage it imported
+
+ID3D11VkExtContext2::BindBufferStorage renames a D3D11 buffer to a VkBuffer
+range the embedder imported, recorded on the context as a discard renames it,
+so commands recorded before read the old storage and those after the new.
+accel-virt points a guest buffer the CPU writes at the guest memory the guest
+writes it in, so the GPU reads what the guest wrote when the draw runs.
+DxvkBuffer::importStorage makes the storage as the importing constructor does.
+---
+diff --git a/src/d3d11/d3d11_buffer.h b/src/d3d11/d3d11_buffer.h
+index 853d261f..52309c35 100644
+--- a/src/d3d11/d3d11_buffer.h
++++ b/src/d3d11/d3d11_buffer.h
+@@ -129,6 +129,17 @@ namespace dxvk {
+       return allocation;
+     }
+ 
++    /**
++     * \brief Storage an embedder imported, for the buffer to be renamed to
++     *
++     * The rename itself is the context's to record, as for DiscardSlice.
++     */
++    Rc<DxvkResourceAllocation> ImportSlice(const DxvkBufferImportInfo& importInfo) {
++      auto allocation = m_buffer->importStorage(importInfo);
++      m_mapPtr = allocation->mapPtr();
++      return allocation;
++    }
++
+     void* GetMapPtr() const {
+       return m_mapPtr;
+     }
+diff --git a/src/d3d11/d3d11_context.cpp b/src/d3d11/d3d11_context.cpp
+index 487bcf58..a02a7021 100644
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -94,7 +94,8 @@ namespace dxvk {
+     }
+ 
+     if (riid == __uuidof(ID3D11VkExtContext)
+-     || riid == __uuidof(ID3D11VkExtContext1)) {
++     || riid == __uuidof(ID3D11VkExtContext1)
++     || riid == __uuidof(ID3D11VkExtContext2)) {
+       *ppvObject = ref(&m_contextExt);
+       return S_OK;
+     }
+diff --git a/src/d3d11/d3d11_context_ext.cpp b/src/d3d11/d3d11_context_ext.cpp
+index b2526adb..0c1a658e 100644
+--- a/src/d3d11/d3d11_context_ext.cpp
++++ b/src/d3d11/d3d11_context_ext.cpp
+@@ -229,6 +229,39 @@ namespace dxvk {
+   }
+ 
+ 
++  template<typename ContextType>
++  HRESULT STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::BindBufferStorage(
++          ID3D11Buffer*           pBuffer,
++          VkBuffer                Storage,
++          VkDeviceSize            Offset,
++          VkDeviceSize            Length,
++          void*                   pMapPtr) {
++    D3D10DeviceLock lock = m_ctx->LockContext();
++
++    if (!pBuffer || !Storage)
++      return E_INVALIDARG;
++
++    auto buffer = static_cast<D3D11Buffer*>(pBuffer);
++
++    if (Length < buffer->Desc()->ByteWidth)
++      return E_INVALIDARG;
++
++    DxvkBufferImportInfo importInfo;
++    importInfo.buffer = Storage;
++    importInfo.offset = Offset;
++    importInfo.mapPtr = pMapPtr;
++
++    m_ctx->EmitCs([
++      cBuffer     = buffer->GetBuffer(),
++      cAllocation = buffer->ImportSlice(importInfo)
++    ] (DxvkContext* ctx) mutable {
++      ctx->invalidateBuffer(cBuffer, std::move(cAllocation));
++    });
++
++    return S_OK;
++  }
++
++
+   template class D3D11DeviceContextExt<D3D11DeferredContext>;
+   template class D3D11DeviceContextExt<D3D11ImmediateContext>;
+ 
+diff --git a/src/d3d11/d3d11_context_ext.h b/src/d3d11/d3d11_context_ext.h
+index 6b95dcf9..4d4371c9 100644
+--- a/src/d3d11/d3d11_context_ext.h
++++ b/src/d3d11/d3d11_context_ext.h
+@@ -8,7 +8,7 @@ namespace dxvk {
+   class D3D11ImmediateContext;
+ 
+   template<typename ContextType>
+-  class D3D11DeviceContextExt : public ID3D11VkExtContext1 {
++  class D3D11DeviceContextExt : public ID3D11VkExtContext2 {
+     
+   public:
+     
+@@ -71,6 +71,13 @@ namespace dxvk {
+             void* const*            pWriteResources,
+             uint32_t                NumWriteResources);
+ 
++    HRESULT STDMETHODCALLTYPE BindBufferStorage(
++            ID3D11Buffer*           pBuffer,
++            VkBuffer                Storage,
++            VkDeviceSize            Offset,
++            VkDeviceSize            Length,
++            void*                   pMapPtr);
++
+   private:
+     
+     ContextType* m_ctx;
+diff --git a/src/d3d11/d3d11_interfaces.h b/src/d3d11/d3d11_interfaces.h
+index 41730528..8a4c56fc 100644
+--- a/src/d3d11/d3d11_interfaces.h
++++ b/src/d3d11/d3d11_interfaces.h
+@@ -165,6 +165,25 @@ ID3D11VkExtContext1 : public ID3D11VkExtContext {
+ };
+ 
+ 
++/**
++ * \brief Extended extended extended D3D11 context
++ *
++ * Lets an embedder point a buffer at memory it imported itself, recorded in
++ * order with the context's other commands, as a discard would rename it:
++ * commands recorded before read the old storage, those after the new.
++ */
++MIDL_INTERFACE("4f0b8a51-7d1e-4c8a-9b0e-6a2c3f5d8e17")
++ID3D11VkExtContext2 : public ID3D11VkExtContext1 {
++
++  virtual HRESULT STDMETHODCALLTYPE BindBufferStorage(
++          ID3D11Buffer*           pBuffer,
++          VkBuffer                Storage,
++          VkDeviceSize            Offset,
++          VkDeviceSize            Length,
++          void*                   pMapPtr) = 0;
++};
++
++
+ /**
+  * \brief Frame reports used for Reflex interop
+  */
+@@ -229,5 +248,6 @@ __CRT_UUID_DECL(ID3D11VkExtDevice,         0x8a6e3c42,0xf74c,0x45b7,0x82,0x65,0x
+ __CRT_UUID_DECL(ID3D11VkExtDevice1,        0xcfcf64ef,0x9586,0x46d0,0xbc,0xa4,0x97,0xcf,0x2c,0xa6,0x1b,0x06);
+ __CRT_UUID_DECL(ID3D11VkExtContext,        0xfd0bca13,0x5cb6,0x4c3a,0x98,0x7e,0x47,0x50,0xde,0x2c,0xa7,0x91);
+ __CRT_UUID_DECL(ID3D11VkExtContext1,       0x874b09b2,0xae0b,0x41d8,0x84,0x76,0x5f,0x3b,0x7a,0x0e,0x87,0x9d);
++__CRT_UUID_DECL(ID3D11VkExtContext2,       0x4f0b8a51,0x7d1e,0x4c8a,0x9b,0x0e,0x6a,0x2c,0x3f,0x5d,0x8e,0x17);
+ __CRT_UUID_DECL(ID3DLowLatencyDevice,      0xf3112584,0x41f9,0x348d,0xa5,0x9b,0x00,0xb7,0xe1,0xd2,0x85,0xd6);
+ #endif
+diff --git a/src/dxvk/dxvk_buffer.cpp b/src/dxvk/dxvk_buffer.cpp
+index 907b318e..9894b1ea 100644
+--- a/src/dxvk/dxvk_buffer.cpp
++++ b/src/dxvk/dxvk_buffer.cpp
+@@ -68,6 +68,20 @@ namespace dxvk {
+   }
+ 
+ 
++  Rc<DxvkResourceAllocation> DxvkBuffer::importStorage(const DxvkBufferImportInfo& importInfo) {
++    DxvkAllocationInfo allocationInfo = { };
++    allocationInfo.resourceCookie = cookie();
++
++    VkBufferCreateInfo info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
++    info.flags = m_info.flags;
++    info.usage = m_info.usage;
++    info.size = m_info.size;
++    m_sharingMode.fill(info);
++
++    return m_allocator->importBufferResource(info, allocationInfo, importInfo);
++  }
++
++
+   bool DxvkBuffer::canRelocate() const {
+     return !m_bufferInfo.mapPtr && !m_stableAddress
+         && !(m_info.flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT);
+diff --git a/src/dxvk/dxvk_buffer.h b/src/dxvk/dxvk_buffer.h
+index 003fb74c..df865d69 100644
+--- a/src/dxvk/dxvk_buffer.h
++++ b/src/dxvk/dxvk_buffer.h
+@@ -268,6 +268,17 @@ namespace dxvk {
+       return allocateStorage(nullptr);
+     }
+ 
++    /**
++     * \brief Storage over a buffer an embedder imported
++     *
++     * As the importing constructor makes its storage, but for a buffer that
++     * already exists, to be assigned with invalidateBuffer. Storage with a
++     * host mapping is never relocated (canRelocate).
++     * \param [in] importInfo The imported buffer, offset and mapping
++     * \returns The new backing resource
++     */
++    Rc<DxvkResourceAllocation> importStorage(const DxvkBufferImportInfo& importInfo);
++
+     /**
+      * \brief Allocates new buffer slice with cache
+      *

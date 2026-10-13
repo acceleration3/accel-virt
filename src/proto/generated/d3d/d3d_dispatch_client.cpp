@@ -683,6 +683,27 @@ bool av_d3d_PresentPoint(::av::ClientTransport& t, uint32_t resource, uint32_t s
     return t.send_async(kCmd_PresentPoint, b) == ::av::TransportResult::ok;
 }
 
+bool av_d3d_QueryBufferSlices11(::av::ClientTransport& t, uint32_t* supported) {
+    AV_SCOPE("av_d3d_QueryBufferSlices11");
+    ::av::WireWriter b = t.request_writer();
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_QueryBufferSlices11, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (supported != nullptr) *supported = value; }
+    return r.remaining() == 0u;
+}
+
+bool av_d3d_BindBufferSlice(::av::ClientTransport& t, uint32_t resource, uint64_t offset, uint64_t bytes) {
+    AV_SCOPE("av_d3d_BindBufferSlice");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod<uint64_t>(offset);
+    b.write_pod<uint64_t>(bytes);
+    return t.send_async(kCmd_BindBufferSlice, b) == ::av::TransportResult::ok;
+}
+
 bool av_d3d_BeginQuery(::av::ClientTransport& t, uint32_t query) {
     AV_SCOPE("av_d3d_BeginQuery");
     ::av::WireWriter b = t.request_writer();

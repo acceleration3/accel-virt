@@ -75,20 +75,20 @@ TEST(buffer_slices, small_slices_come_from_their_class_and_come_back)
   rig.slices().take(base, base + 16u * page);
   BufferSlices::Slice first = {}, second = {}, again = {};
   CHECK_STATUS(rig.slices().take_slice(100u, first), Status::ok);
-  CHECK_EQ(first.bytes, 256u);
-  CHECK_EQ(first.offset, base);
+  CHECK_EQ(first.bytes_, 256u);
+  CHECK_EQ(first.offset_, base);
   CHECK_STATUS(rig.slices().take_slice(256u, second), Status::ok);
-  CHECK_EQ(second.offset, base + 256u);
+  CHECK_EQ(second.offset_, base + 256u);
   BufferSlices::Slice wider = {};
   CHECK_STATUS(rig.slices().take_slice(257u, wider), Status::ok);
-  CHECK_EQ(wider.bytes, 512u);
-  CHECK_EQ(wider.offset % 512u, 0u);
-  CHECK(wider.offset + wider.bytes <= base + 16u * page);
+  CHECK_EQ(wider.bytes_, 512u);
+  CHECK_EQ(wider.offset_ % 512u, 0u);
+  CHECK(wider.offset_ + wider.bytes_ <= base + 16u * page);
   const std::uint32_t free = rig.slices().free_in_class(256u);
   rig.slices().give_back(first);
   CHECK_EQ(rig.slices().free_in_class(256u), free + 1u);
   CHECK_STATUS(rig.slices().take_slice(1u, again), Status::ok);
-  CHECK_EQ(again.offset, first.offset);
+  CHECK_EQ(again.offset_, first.offset_);
   CHECK_EQ(rig.timeline().waits(), 0u);
   CHECK(rig.slices().invariants_hold()); }
 
@@ -103,18 +103,18 @@ TEST(buffer_slices, a_retired_slice_waits_for_the_gpu_to_finish_its_batch)
   CHECK_EQ(rig.slices().retired(), 1u);
   BufferSlices::Slice next = {};
   CHECK_STATUS(rig.slices().take_slice(64u * kib, next), Status::ok);
-  CHECK(next.offset != old.offset);
+  CHECK(next.offset_ != old.offset_);
   rig.slices().give_back(next);
   rig.timeline().send();                    /* batch 1 out, not finished */
   BufferSlices::Slice still = {};
   CHECK_STATUS(rig.slices().take_slice(64u * kib, still), Status::ok);
-  CHECK(still.offset != old.offset);
+  CHECK(still.offset_ != old.offset_);
   CHECK_EQ(rig.slices().retired(), 1u);
   rig.timeline().finish(1u);
   BufferSlices::Slice back = {};
   CHECK_STATUS(rig.slices().take_slice(64u * kib, back), Status::ok);
   CHECK_EQ(rig.slices().retired(), 0u);
-  CHECK_EQ(back.offset, old.offset);
+  CHECK_EQ(back.offset_, old.offset_);
   CHECK_EQ(rig.timeline().waits(), 0u);
   CHECK(rig.slices().invariants_hold()); }
 
@@ -127,15 +127,15 @@ TEST(buffer_slices, a_large_slice_is_whole_pages_and_goes_back_whole)
   CHECK_EQ(rig.slices().end(), base + 4u * page);
   BufferSlices::Slice large = {}, rest = {}, again = {};
   CHECK_STATUS(rig.slices().take_slice(64u * kib + 1u, large), Status::ok);
-  CHECK_EQ(large.offset, base + page);
-  CHECK_EQ(large.bytes, 2u * page);
+  CHECK_EQ(large.offset_, base + page);
+  CHECK_EQ(large.bytes_, 2u * page);
   CHECK_STATUS(rig.slices().take_slice(page + 1u, rest), Status::no_space);   /* two pages: one left */
   CHECK_STATUS(rig.slices().take_slice(64u * kib, rest), Status::no_space);    /* a small class's block: no room */
-  CHECK_EQ(rest.bytes, 0u);
+  CHECK_EQ(rest.bytes_, 0u);
   rig.slices().retire(large);
   rig.timeline().finish(1u);
   CHECK_STATUS(rig.slices().take_slice(2u * page, again), Status::ok);
-  CHECK_EQ(again.offset, large.offset);
+  CHECK_EQ(again.offset_, large.offset_);
   CHECK(rig.slices().invariants_hold()); }
 
 /* An arena with no room waits for the oldest retired slice - sending the
@@ -152,7 +152,7 @@ TEST(buffer_slices, a_full_arena_waits_for_the_oldest_retired_slice)
   rig.slices().retire(first);
   CHECK_STATUS(rig.slices().take_slice(2u * page, third), Status::ok);
   CHECK_EQ(rig.timeline().waits(), 1u);
-  CHECK_EQ(third.offset, first.offset);
+  CHECK_EQ(third.offset_, first.offset_);
   CHECK(rig.timeline().completed() >= 1u);
   CHECK(rig.timeline().recording() > 1u);   /* the batch was sent to be waited for */
   CHECK(rig.slices().invariants_hold()); }
@@ -170,7 +170,7 @@ TEST(buffer_slices, a_class_at_its_bound_waits_for_its_own_slices)
   CHECK_EQ(rig.timeline().waits(), 0u);
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::ok);
   CHECK_EQ(rig.timeline().waits(), 1u);
-  CHECK_EQ(slice.offset, base);
+  CHECK_EQ(slice.offset_, base);
   CHECK(rig.slices().invariants_hold()); }
 
 /* A queue of retired slices that is full waits for its oldest before it
@@ -211,7 +211,7 @@ TEST(buffer_slices, no_bytes_or_more_than_the_arena_is_refused)
 { Rig rig;
   BufferSlices::Slice slice = {7u, 7u};
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);   /* no arena */
-  CHECK_EQ(slice.bytes, 0u);
+  CHECK_EQ(slice.bytes_, 0u);
   rig.slices().take(base, base + 2u * page);
   CHECK_STATUS(rig.slices().take_slice(0u, slice), Status::invalid_parameter);
   CHECK_STATUS(rig.slices().take_slice(2u * page + 1u, slice), Status::invalid_parameter);

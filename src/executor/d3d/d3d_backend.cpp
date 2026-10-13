@@ -7,6 +7,7 @@
 #include <sched.h>
 #include <stdio.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -76,7 +77,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(), progress11_(),
+    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(), progress11_(), region_storage_(), region_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -115,6 +116,7 @@ void D3dBackend::shut_down()
         published_.unbind();
         constants_.close();
         objects_.clear();
+        release_region_storage();
         progress11_.release();
         device11_->unlock();
     }
@@ -236,6 +238,11 @@ void D3dBackend::abandon(ImportedBlob &blob)
     AV_SCOPE("D3dBackend::abandon");
     if (blob.object() == 0u) return;
     published_.unbind();
+    if (device11_ != nullptr && region_storage_.made()) {
+        device11_->lock(nullptr);
+        release_region_storage();
+        device11_->unlock();
+    }
     region_.abandon(blob);
 }
 
@@ -1673,6 +1680,54 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     __builtin_memcpy(static_cast<uint8_t *>(mapped.pData) + offset, data, bytes);
     context->Unmap(resource, 0u);
     return true;
+}
+
+/* A host that answers 1 draws a buffer bound to a slice from the region in
+ * place; 0 leaves the guest copying what it writes, as before. */
+bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
+{
+    AV_SCOPE("D3dBackend::on_QueryBufferSlices11");
+    supported = ready() && region_to_draw() ? 1u : 0u;
+    return true;
+}
+
+/* A buffer bound to a slice is the guest's memory from then on: whatever the
+ * constant ring kept of it goes back to its own storage first, so that what
+ * the guest bound last is what draws read. */
+bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t offset, uint64_t bytes)
+{
+    AV_SCOPE("D3dBackend::on_BindBufferSlice");
+    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
+    if (!ready() || found == nullptr || !region_storage_.made()) return false;
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    found->GetType(&dimension);
+    uint8_t *const host = region_.at(offset, bytes);
+    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER || host == nullptr) return false;
+    auto *const buffer = static_cast<ID3D11Buffer *>(found);
+    constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
+    return device11_->bind_storage(buffer, region_storage_, offset, bytes, host);
+}
+
+bool D3dBackend::region_to_draw()
+{
+    AV_SCOPE("D3dBackend::region_to_draw");
+    if (region_storage_.made()) return true;
+    if (region_storage_refused_ || region_.descriptor() < 0 || !device11_->slices()) return false;
+    const int descriptor = dup(region_.descriptor());
+    if (descriptor >= 0 && device11_->import_to_draw(descriptor, region_.length(), region_storage_)) return true;
+    region_storage_refused_ = true;
+    lines_.write("the session's region could not be imported to draw from: mapped buffers are copied");
+    return false;
+}
+
+/* DXVK may still have recorded draws that read the region, or the GPU be
+ * running them: they finish before the buffer they read goes. */
+void D3dBackend::release_region_storage()
+{
+    AV_SCOPE("D3dBackend::release_region_storage");
+    if (region_storage_.made()) device11_->vulkan().idle();
+    region_storage_.release();
+    region_storage_refused_ = false;
 }
 
 /* What a read back waits for, without the device's lock: every session on the

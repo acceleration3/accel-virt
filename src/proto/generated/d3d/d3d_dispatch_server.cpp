@@ -1148,6 +1148,34 @@ static bool decode_PresentPoint(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     return true;
 }
 
+static bool decode_QueryBufferSlices11(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:QueryBufferSlices11");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t supported{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_QueryBufferSlices11(supported)) return false;
+    reply.write_pod(supported);
+    return true;
+}
+
+static bool decode_BindBufferSlice(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:BindBufferSlice");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    uint64_t offset{};
+    if (!r.read_pod(offset)) return false;
+    uint64_t bytes{};
+    if (!r.read_pod(bytes)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_BindBufferSlice(resource, offset, bytes)) return false;
+    return true;
+}
+
 static bool decode_BeginQuery(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d:BeginQuery");
     (void)s;
@@ -1282,6 +1310,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_UpdateSubresource:
         case kCmd_ReadSubresource:
         case kCmd_PresentPoint:
+        case kCmd_QueryBufferSlices11:
+        case kCmd_BindBufferSlice:
         case kCmd_BeginQuery:
         case kCmd_EndQuery:
         case kCmd_BindQueryResults:
@@ -1357,6 +1387,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_UpdateSubresource: return decode_UpdateSubresource(s, r, reply, arena);
         case kCmd_ReadSubresource: return decode_ReadSubresource(s, r, reply, arena);
         case kCmd_PresentPoint: return decode_PresentPoint(s, r, reply, arena);
+        case kCmd_QueryBufferSlices11: return decode_QueryBufferSlices11(s, r, reply, arena);
+        case kCmd_BindBufferSlice: return decode_BindBufferSlice(s, r, reply, arena);
         case kCmd_BeginQuery: return decode_BeginQuery(s, r, reply, arena);
         case kCmd_EndQuery: return decode_EndQuery(s, r, reply, arena);
         case kCmd_BindQueryResults: return decode_BindQueryResults(s, r, reply, arena);

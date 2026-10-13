@@ -47,11 +47,11 @@ Status BufferSlices::take_slice(uint64_t bytes, Slice &slice)
 void BufferSlices::retire(const Slice &slice)
 {
     AV_SCOPE("BufferSlices::retire");
-    if (slice.bytes == 0u) return;
+    if (slice.bytes_ == 0u) return;
     const icd::ThreadLockHold release(lock_);
     reclaim();
     if (retired_count_ == max_retired && !wait_oldest()) return;   /* a lost session's memory is not reused */
-    retired_[(retired_first_ + retired_count_) % max_retired] = Retired{slice.offset, slice.bytes,
+    retired_[(retired_first_ + retired_count_) % max_retired] = Retired{slice.offset_, slice.bytes_,
                                                                         timeline_.recording()};
     retired_count_++;
 }
@@ -59,9 +59,9 @@ void BufferSlices::retire(const Slice &slice)
 void BufferSlices::give_back(const Slice &slice)
 {
     AV_SCOPE("BufferSlices::give_back");
-    if (slice.bytes == 0u) return;
+    if (slice.bytes_ == 0u) return;
     const icd::ThreadLockHold release(lock_);
-    free_slice(slice.offset, slice.bytes);
+    free_slice(slice.offset_, slice.bytes_);
 }
 
 uint32_t BufferSlices::retired() const
@@ -144,8 +144,8 @@ void BufferSlices::reclaim()
     AV_SCOPE("BufferSlices::reclaim");
     if (retired_count_ == 0u) return;
     const uint64_t done = timeline_.completed();
-    while (retired_count_ != 0u && retired_[retired_first_].tag <= done) {
-        free_slice(retired_[retired_first_].offset, retired_[retired_first_].bytes);
+    while (retired_count_ != 0u && retired_[retired_first_].tag_ <= done) {
+        free_slice(retired_[retired_first_].offset_, retired_[retired_first_].bytes_);
         retired_first_ = (retired_first_ + 1u) % max_retired;
         retired_count_--;
     }
@@ -167,7 +167,7 @@ bool BufferSlices::wait_oldest()
 {
     AV_SCOPE("BufferSlices::wait_oldest");
     if (retired_count_ == 0u) return false;
-    if (!timeline_.wait(retired_[retired_first_].tag)) {
+    if (!timeline_.wait(retired_[retired_first_].tag_)) {
         lost_ = true;
         return false;
     }
@@ -187,8 +187,8 @@ bool BufferSlices::invariants_hold() const
                 return false;
     }
     for (uint32_t index = 1u; index < retired_count_; index++)
-        if (retired_[(retired_first_ + index) % max_retired].tag <
-            retired_[(retired_first_ + index - 1u) % max_retired].tag)
+        if (retired_[(retired_first_ + index) % max_retired].tag_ <
+            retired_[(retired_first_ + index - 1u) % max_retired].tag_)
             return false;
     return true;
 }

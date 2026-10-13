@@ -38,10 +38,13 @@ struct ID3D11Texture2D;
 struct ID3D11Fence;
 struct ID3D12Resource;
 struct IUnknown;
+struct ID3D11Buffer;
+struct ID3D11VkExtContext2;
 
 namespace av {
 
 class FrameTarget;
+class VulkanBuffer;
 
 class D3dRuntime;
 class HostShares;
@@ -163,6 +166,18 @@ public:
      * over, which the caller owns; false for any other texture. */
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
     /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
+    /* Whether a buffer can be drawn from guest memory in place: DXVK renames
+     * buffers to storage imported here (tools/dxvk-patches/0003) and offers
+     * Vulkan interop to import it with. */
+    bool               slices() const;
+    /* `bytes` of the dma-buf `fd` imported on DXVK's device, to draw from;
+     * the fd is the buffer's whatever happens. */
+    [[nodiscard]] bool import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer);
+    /* `buffer` from now on is `bytes` at `offset` of `storage`, which the CPU
+     * reaches at `host`: recorded on the immediate context, so what was
+     * recorded before reads its storage before. Under the device's lock. */
+    [[nodiscard]] bool bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset,
+                                    uint64_t bytes, void *host);
     DxvkVulkanDevice  &vulkan();
 
     ID3D11Device5        *device() const;
@@ -207,6 +222,7 @@ private:
     D3d11Capabilities       capabilities_;
     HostShares             *shares_;
     DxvkVulkanDevice        vulkan_;
+    ID3D11VkExtContext2    *slices_;   /* held; null where DXVK lacks it */
     HostImageExport         exports_;
     PlaneComposer           composer_;
     ExportableImages        images_;

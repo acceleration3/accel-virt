@@ -21,11 +21,17 @@ public:
     /* `size` bytes of the dma-buf `fd`, imported to be copied into. The fd is
      * this one's whatever happens: closed where the import does not take it. */
     [[nodiscard]] bool import_dma_buf(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
+    /* The same, imported for a D3D11 buffer of DXVK's to be drawn from in
+     * place (D3d11HostDevice::bind_storage): every use a buffer has, and the
+     * device address DXVK takes of every buffer. */
+    [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
     void               release();
     bool               made() const;
     VkBuffer           buffer() const;
 
 private:
+    [[nodiscard]] bool import(const VulkanDeviceTable &table, int fd, VkDeviceSize size, VkBufferUsageFlags usage);
+
     const VulkanDeviceTable *table_;
     VkBuffer                 buffer_;
     VkDeviceMemory           memory_;

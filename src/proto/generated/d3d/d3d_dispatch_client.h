@@ -113,6 +113,16 @@ namespace av::d3dproto {
 // that was not shared, or one that is not a 2D texture of four-byte pixels stages nothing, and the present that
 // names the point is refused.
 [[nodiscard]] bool av_d3d_PresentPoint(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t point);
+// Whether a buffer can be pointed at a slice of the session's region (BindBufferSlice): 1 when the host's
+// Direct3D 11 can draw from that memory in place, 0 when it cannot - the region is no dma-buf, or the host's DXVK
+// cannot rename a buffer to storage it imported - and the guest then copies what it writes, as before
+// (docs/mapped-buffers-plan.md).
+[[nodiscard]] bool av_d3d_QueryBufferSlices11(::av::ClientTransport& t, uint32_t* supported);
+// The buffer from now on is `bytes` at `offset` of the session's region, which the guest writes and the host
+// GPU reads in place: commands before this one read the buffer's storage before it, commands after it this slice
+// (docs/mapped-buffers-plan.md, 3.2). `bytes` covers at least the buffer; a slice outside the region, a resource that
+// is no buffer, or a host QueryBufferSlices11 answered 0 for, is refused.
+[[nodiscard]] bool av_d3d_BindBufferSlice(::av::ClientTransport& t, uint32_t resource, uint64_t offset, uint64_t bytes);
 [[nodiscard]] bool av_d3d_BeginQuery(::av::ClientTransport& t, uint32_t query);
 [[nodiscard]] bool av_d3d_EndQuery(::av::ClientTransport& t, uint32_t query);
 // The host writes each query's result, once DXVK has it, into slot (query % slots) of `slots` 128-byte slots at arena offset `offset`: the data from byte 16, its size at 8, and last the count of that query's ends at 0 - so GetData reads memory instead of asking.

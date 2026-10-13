@@ -38,8 +38,8 @@ class BufferSlices {
 public:
     /* A slice of the arena; no bytes for none. */
     struct Slice {
-        uint64_t offset;
-        uint64_t bytes;
+        uint64_t offset_;
+        uint64_t bytes_;
     };
 
     /* What a constant buffer's window is aligned to, and so every slice. */
@@ -88,9 +88,9 @@ public:
 
 private:
     struct Retired {
-        uint64_t offset;
-        uint64_t bytes;
-        uint64_t tag;
+        uint64_t offset_;
+        uint64_t bytes_;
+        uint64_t tag_;
     };
 
     static constexpr uint32_t no_class = ~0u;

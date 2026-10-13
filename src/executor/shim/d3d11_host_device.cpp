@@ -1,6 +1,9 @@
 #include "executor/shim/d3d11_host_device.hpp"
 
 #include "executor/shim/vulkan_buffer.hpp"
+#include "executor/shim/dxvk_interop.hpp"
+
+#include <unistd.h>
 
 #include "executor/d3d/frame_target.hpp"
 
@@ -21,7 +24,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+    : device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -67,6 +70,10 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostS
      * exported, and a Direct3D 12 swap chain has nothing to be shown by. */
     if (!vulkan_.connect(device_))
         lines_.write("DXVK offers no Vulkan interop with fd export; Direct3D 12 swap chains cannot be shown");
+    if (FAILED(context_->QueryInterface(__uuidof(ID3D11VkExtContext2), reinterpret_cast<void **>(&slices_)))) {
+        slices_ = nullptr;
+        lines_.write("DXVK cannot rename a buffer to imported storage: mapped buffers are copied to the host");
+    }
     return true;
 }
 
@@ -80,6 +87,8 @@ void D3d11HostDevice::close()
     retire_locked();
     if (context_ != nullptr) frames_.clear();
     images_.release();
+    if (slices_ != nullptr) slices_->Release();
+    slices_ = nullptr;
     vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
     staging_ = nullptr;
@@ -600,6 +609,30 @@ void D3d11HostDevice::report(StateWriter &writer) const
 {
     AV_SCOPE("D3d11HostDevice::report");
     images_.report(writer);
+}
+
+bool D3d11HostDevice::slices() const
+{
+    AV_SCOPE("D3d11HostDevice::slices");
+    return slices_ != nullptr && vulkan_.connected();
+}
+
+bool D3d11HostDevice::import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer)
+{
+    AV_SCOPE("D3d11HostDevice::import_to_draw");
+    if (!slices()) {
+        if (fd >= 0) ::close(fd);
+        return false;
+    }
+    return buffer.import_dma_buf_to_draw(vulkan_.table(), fd, bytes);
+}
+
+bool D3d11HostDevice::bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset, uint64_t bytes,
+                                   void *host)
+{
+    AV_SCOPE("D3d11HostDevice::bind_storage");
+    if (slices_ == nullptr || buffer == nullptr || !storage.made()) return false;
+    return SUCCEEDED(slices_->BindBufferStorage(buffer, storage.buffer(), offset, bytes, host));
 }
 
 }  // namespace av
