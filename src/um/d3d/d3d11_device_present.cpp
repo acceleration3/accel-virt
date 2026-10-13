@@ -48,6 +48,7 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     if (resource.shared_key == 0u)
         log_.write("avumd: the miniport minted no identity for a presented resource; nothing can open it");
     resource.allocation = allocation;
+    resource.allocation_owned = 1u;
     resource.allocation_pitch = surface.pitch();
     /* A blt present names this allocation in a DMA buffer, which dxgkrnl
      * refuses - and puts the device in error for - unless it was asked to be
@@ -316,6 +317,7 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         ResourceRecord &to = record(args->pResources[index]);
         const ResourceRecord &from = index + 1u < args->Resources ? record(args->pResources[index + 1u]) : first;
         to.allocation = from.allocation;
+        to.allocation_owned = from.allocation_owned;
         to.allocation_pitch = from.allocation_pitch;
         to.shared_key = from.shared_key;
         to.presents = from.presents;

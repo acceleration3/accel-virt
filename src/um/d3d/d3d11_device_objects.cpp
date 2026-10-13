@@ -265,7 +265,11 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     maps_.forget(resource.id);
     destroy_object(resource.id);
     if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
-    if (resource.shared_key == 0u) kernel_.deallocate(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
+    /* Keyed or not: a presented, scanned-out or shared resource's allocation
+     * was this device's to make and is its to give back. Kept, every swap
+     * chain DWM remade leaked its primaries. An opened one is its maker's. */
+    if (resource.allocation_owned != 0u)
+        kernel_.deallocate(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
     resource = ResourceRecord{};
 }
 

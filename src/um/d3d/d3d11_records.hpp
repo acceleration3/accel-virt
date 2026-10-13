@@ -41,6 +41,9 @@ struct ResourceRecord {
     uint32_t vidpn_source;
     uint32_t allocation;   /* D3DKMT_HANDLE, 0 for none */
     uint32_t allocation_pitch;
+    /* This device made the allocation (D3d11Device::allocate), so destroying
+     * the resource gives it back; an opened one is its maker's. */
+    uint32_t allocation_owned;
     uint32_t refreshed; /* the frame a guest surface was last refreshed in (refresh_bound_guest_surfaces) */
     uint32_t shadow_watched; /* the shadow is WatchedShadows' write-watched region */
     uint64_t shared_key;
