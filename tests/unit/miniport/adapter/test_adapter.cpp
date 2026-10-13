@@ -1128,8 +1128,9 @@ TEST(adapter_enum_vidpn_cofunc_modality, offers_the_modes_on_the_path)
   vidpn.add_path(0u, 0u);
   const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
-  /* The five standard modes that fit the 1280x800 display the device reports. */
-  CHECK_EQ(vidpn.source_modes(0u).modes(), 5u);
+  /* The five standard modes that fit the 1280x800 display the device reports,
+   * each in both formats a primary is made in. */
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 5u * av::DisplayMode::source_format_count);
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(nullptr)), invalid_parameter); }
 
 TEST(adapter_enum_vidpn_cofunc_modality, before_start_dxgkrnl_cannot_be_reached)
@@ -4205,7 +4206,7 @@ TEST(adapter_start_device, offers_the_modes_the_device_s_display_holds)
   vidpn.add_path(0u, 0u);
   const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
-  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u);   /* 640x480, 800x600, 1024x768 */
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u * av::DisplayMode::source_format_count);   /* 640x480, 800x600, 1024x768 */
   CHECK_EQ(commit(fixture, 1280u, 800u), invalid_source_mode); }
 
 /* A host that resizes the display raises a configuration change; the next DDI
@@ -4246,7 +4247,7 @@ TEST(adapter_start_device, keeps_its_modes_when_the_device_says_nothing_useful)
       vidpn.add_path(0u, 0u);
       const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
       CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
-      CHECK_EQ(vidpn.source_modes(0u).modes(), av::DisplayModeList::standard_count);
+      CHECK_EQ(vidpn.source_modes(0u).modes(), av::DisplayModeList::standard_count * av::DisplayMode::source_format_count);
   } }
 
 /* A device that went away cannot be asked what its displays are, and the
@@ -5804,7 +5805,7 @@ TEST(adapter_start_device, offers_the_hosts_own_modes_whatever_their_size)
   vidpn.add_path(0u, 0u);
   const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
-  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u);
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u * av::DisplayMode::source_format_count);
   /* Any of them can be committed, however small; a standard mode the host did
    * not offer, or one left out, cannot. */
   CHECK_EQ(commit(fixture, 100u, 100u), success);
