@@ -334,7 +334,10 @@ bool KmtTransport::make_room_for_blobs(size_t bytes)
     while (blobs_.room() < bytes && fences_.outstanding() != 0u && !faulted_) {
         const uint64_t oldest = fences_.oldest();
         const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
-        if (ring_.head() < end && (wait_for_host(oldest) != Status::ok || ring_.head() < end)) {
+        /* The fence can signal before the head the device published after
+         * the batch is seen here, as drain knows. */
+        if (ring_.head() < end && (wait_for_host(oldest) != Status::ok ||
+                                   !arrives_eventually([this, end] { return ring_.head() >= end; }))) {
             faulted_ = true;
             return false;
         }

@@ -367,6 +367,10 @@ public:
      * DMA_FAULTED, which bugchecks the guest. The driver knows the context
      * lost from then on, and refuses a bind or unbind on it. */
     void          withhold_answer_at(std::uint32_t nth);
+    /* The Nth wait for a context from now (1-based) succeeds with the ring's
+     * head where it was, and the head moves at the next clock read: how the
+     * device looks when its fence is seen before the head it published. */
+    void          consume_late_at(std::uint32_t nth);
     /* The Nth wait for a context from now (1-based) runs `play(context)` before
      * any answer is written: how a test plays work the host does between a
      * submission and its wait, such as a GPU copy between two locked views. */
@@ -536,7 +540,7 @@ private:
     void          take_doorbell_store(const Object &context);
     void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
     void          journal(const Object &context);
-    void          consume(const Object &context);
+    void          consume(const Object &context) const;
     bool          played();
     Status        context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size);
     Status        wake_event(const std::uint8_t *data, std::uint32_t size);
@@ -661,6 +665,8 @@ private:
     std::uint32_t queued_count_;
     std::uint32_t queued_taken_;
     std::uint32_t withheld_countdown_;
+    std::uint32_t late_countdown_ = 0u;
+    mutable const Object *late_context_ = nullptr;
     /* Feature 049: whether the OS gives this adapter hardware queues, and the
      * doorbells it handed out. */
     bool          hardware_scheduling_;

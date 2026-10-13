@@ -823,7 +823,8 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     take_doorbell_store(*object);
     if (withheld()) object->lost = true;
     else write_answer(*object);
-    consume(*object);
+    if (late_countdown_ != 0u && --late_countdown_ == 0u) late_context_ = object;
+    else consume(*object);
     return succeed();
 }
 
@@ -909,7 +910,7 @@ void MockKmt::journal(const Object &context)
 
 /* Everything submitted is finished once the context is: the head moves to the
  * last submission's end, freeing the ring for the next. */
-void MockKmt::consume(const Object &context)
+void MockKmt::consume(const Object &context) const
 {
     SubmissionDescriptor submitted;
     RingHeader           header;
@@ -1215,6 +1216,10 @@ std::uint32_t       MockKmt::last_escape_size() const { return escape_size_; }
 std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
 {
     frequency = frequency_;
+    if (late_context_ != nullptr) {
+        consume(*late_context_);
+        late_context_ = nullptr;
+    }
     /* Told before the answer moves, so that what a reader does is seen by the
      * read that told it rather than by the one after. */
     if (clock_reader_ != nullptr) clock_reader_->clock_read();
@@ -1339,6 +1344,8 @@ void MockKmt::zero_next(Call call) { zeroing_[static_cast<unsigned>(call)] = tru
 void MockKmt::zero_at(Call call, std::uint32_t nth) { zero_countdown_[static_cast<unsigned>(call)] = nth; }
 
 void MockKmt::withhold_answer_at(std::uint32_t nth) { withheld_countdown_ = nth; }
+
+void MockKmt::consume_late_at(std::uint32_t nth) { late_countdown_ = nth; }
 
 bool MockKmt::withheld()
 {

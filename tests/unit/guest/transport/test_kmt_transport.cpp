@@ -403,6 +403,28 @@ TEST(kmt_transport, room_for_a_lease_waits_for_the_oldest_batches_alone)
   CHECK(!transport.faulted());
   CHECK(transport.invariants_hold()); }
 
+/* The fence of the oldest batch can be seen before the head the device
+ * published after it: the room is waited for until the head arrives, and the
+ * context is not lost. Subnautica's uploads faulted the transport on it. */
+TEST(kmt_transport, room_waited_for_while_the_head_lags_the_fence_comes_back)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint8_t room[32] = {};
+  transport.blobs().lend(room, sizeof room);
+  CHECK(transport.blobs().take(32u).taken());
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  fixture.kmt().consume_late_at(1u);
+  CHECK(transport.make_room_for_blobs(8u));
+  CHECK(!transport.faulted());
+  CHECK_EQ(transport.blobs().room(), 32u);
+  CHECK(transport.invariants_hold()); }
+
 /* A host that stops while the room is waited for loses the context. */
 TEST(kmt_transport, room_waited_for_from_a_host_that_stopped_faults_the_context)
 { Fixture fixture;
