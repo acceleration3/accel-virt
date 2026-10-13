@@ -9,6 +9,7 @@
 #include "device/context/local_context_plane.hpp"
 #include "device/isolation/renderer_context_plane.hpp"
 #include "device/display/display_clock.hpp"
+#include "device/display/head_planes.hpp"
 #include "device/display/display_heads.hpp"
 #include "device/display/display_modes.hpp"
 #include "device/export/export_service.hpp"
@@ -68,6 +69,10 @@ public:
      * display surface's `pixels`. False before realize or for a key nothing
      * is published under. */
     bool                 export_image(uint64_t key, AvExportedImage &image);
+    /* Main loop: what head `head` shows - its planes composed where it has
+     * more than a base plane filling it (HeadPlanes::composed), else the image
+     * under `key`, as export_image gives it. */
+    bool                 export_head(uint32_t head, uint64_t key, AvExportedImage &image);
     bool                 read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     /* Main loop. SCANOUT_IMAGE's frame `frame` of `head`, published under
      * `key`: true when the display clock shows it at the head's next blank;
@@ -127,6 +132,7 @@ private:
     FenceInterrupts    interrupts_;
     /* After the interrupts they raise, so they stop before those go. */
     DisplayClock       clock_;
+    HeadPlanes         planes_;
     PresentEngine      presents_;
     DriverStatus       status_;
     /* Where the contexts run: here, or in the renderer realize started. */

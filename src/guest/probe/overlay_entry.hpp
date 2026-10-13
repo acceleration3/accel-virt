@@ -21,9 +21,9 @@ public:
     virtual int32_t create_device() = 0;
     /* IDXGIOutput2::SupportsOverlays. */
     virtual int32_t supports_overlays(bool &supported) = 0;
-    /* IDXGIOutput3::CheckOverlaySupport for B8G8R8A8_UNORM: the
+    /* IDXGIOutput3::CheckOverlaySupport for the DXGI format `format`: the
      * DXGI_OVERLAY_SUPPORT_FLAG bits. */
-    virtual int32_t overlay_support(uint32_t &flags) = 0;
+    virtual int32_t overlay_support(uint32_t format, uint32_t &flags) = 0;
     /* A borderless topmost window at `x`, `y` of `width` by `height` and a
      * flip-model swap chain of that size on it; 0 for both extents covers the
      * output. Replaces any window and swap chain made before. */

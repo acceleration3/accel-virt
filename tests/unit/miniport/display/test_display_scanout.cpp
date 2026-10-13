@@ -20,6 +20,12 @@
 #include "harness/platform/violation.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/guest_page_list.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/virtio_gpu/scanout_plane_request.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
+#include "miniport/display/overlay_plane.hpp"
 
 #include <cstdint>
 
@@ -307,6 +313,57 @@ TEST(display_scanout_refresh, carries_a_visible_source_to_the_host)
   CHECK_EQ(u32(control.request(0u), 24u), ScanoutResource::first_resource_id);
   CHECK_EQ(control.request_type(2u), set_scanout);
   CHECK_EQ(control.request_type(4u), flush);
+  CHECK(fixture.scanout().invariants_hold()); }
+
+/* A device that composes planes is told each layer before the frame that
+ * shows it: the base plane and an overlay hanging off the head's corner, cut
+ * to the head with its source cut in proportion, and the two layers no flip
+ * named turned off. A refresh with nothing changed tells the device nothing
+ * new about the planes. */
+TEST(display_scanout_refresh, carries_each_changed_plane_before_the_frame)
+{ Fixture fixture;
+  const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
+  fixture.scanout().offer(av::CapsetInfo(
+      av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor), 1u, 64u, 12u, 24u,
+      av::CapsetInfo::feature_scanout_planes,
+      av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's")));
+  CHECK(fixture.scanout().carries_planes());
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  fixture.live(0u, mode, 0x51u);
+  Allocation *const overlay = fixture.map_primary(mode, 0x77u);
+  av::DxgkMultiplaneOverlayAttributes3Record whole = {};
+  whole.SrcRect = {0, 0, 1280, 800};
+  whole.DstRect = {0, 0, 1280, 800};
+  av::DxgkMultiplaneOverlayAttributes3Record corner = {};
+  corner.SrcRect = {0, 0, 500, 300};
+  corner.DstRect = {1000, 600, 1500, 900};
+  const av::OverlayPlane planes[] = {
+      av::OverlayPlane(0u, 1u, fixture.sources().primary(0u), ApertureSegment::base_address, whole),
+      av::OverlayPlane(1u, 1u, overlay, ApertureSegment::base_address, corner)};
+  CHECK_STATUS(fixture.sources().present_planes(0u, planes, 2u), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 1u);   /* the configure's create */
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+  const std::uint32_t sent = control.respond_all(ok_nodata);
+  CHECK(sent > 4u);
+  for (std::uint32_t layer = 0u; layer < av::OverlayPlane::max_planes; layer++) {
+      CHECK_EQ(control.request_type(1u + layer), av::ScanoutPlaneRequest::type);
+      av::WireReader          reader(control.request(1u + layer), av::ScanoutPlaneRequest::encoded_size);
+      av::ScanoutPlaneRequest plane;
+      CHECK_STATUS(plane.decode(reader), Status::ok);
+      CHECK_EQ(plane.layer(), layer);
+      CHECK_EQ(plane.shown(), layer < 2u);
+      CHECK_EQ(plane.head_width(), 1280u);
+      if (layer != 1u) continue;
+      CHECK_EQ(plane.key(), 0x77u);
+      CHECK_EQ(plane.destination()[2], 1280);
+      CHECK_EQ(plane.destination()[3], 800);
+      CHECK_EQ(plane.source()[2], 280);
+      CHECK_EQ(plane.source()[3], 200);
+  }
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+  const std::uint32_t again = control.respond_all(ok_nodata);
+  for (std::uint32_t index = 0u; index < again; index++)
+      CHECK(control.request_type(1u + sent + index) != av::ScanoutPlaneRequest::type);
   CHECK(fixture.scanout().invariants_hold()); }
 
 /* A source dxgkrnl has hidden is not carried: the host was already told to

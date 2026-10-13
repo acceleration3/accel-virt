@@ -1453,6 +1453,11 @@ static void av_close_export(void *opaque, int descriptor)
     close(descriptor);
 }
 
+static int av_duplicate_export(void *opaque, int descriptor)
+{
+    return fcntl(descriptor, F_DUPFD_CLOEXEC, 0);
+}
+
 void virtio_gpu_av_host_init(VirtIOGPUAv *r)
 {
     r->host = (AvHostOps) {
@@ -1524,6 +1529,7 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .send_export = av_send_export,
         .shutdown_export = av_shutdown_export,
         .close_export = av_close_export,
+        .duplicate_export = av_duplicate_export,
     };
     virtio_gpu_av_renderer_ops(&r->host);
     av_read_gpus(r);

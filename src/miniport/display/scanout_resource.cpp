@@ -41,6 +41,18 @@ bool ScanoutResource::posts_frames() const
     return key_ != 0u && scanning_out_;
 }
 
+uint32_t ScanoutResource::width() const
+{
+    AV_SCOPE("ScanoutResource::width");
+    return width_;
+}
+
+uint32_t ScanoutResource::height() const
+{
+    AV_SCOPE("ScanoutResource::height");
+    return height_;
+}
+
 bool ScanoutResource::scanning_out() const
 {
     AV_SCOPE("ScanoutResource::scanning_out");

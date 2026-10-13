@@ -360,3 +360,13 @@ TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 4u), 0u);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_multisample_render_target, 0u); }
+
+/* Video an overlay plane shows - NV12 and YUY2, which the host converts - is
+ * told it wherever the host has the format at all. */
+TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
+{ DxgiFormatTable table;
+  constexpr std::uint32_t nv12 = 103u, yuy2 = 107u;
+  table.record(nv12, api_sample, 0u);
+  table.settle();
+  CHECK((table.format_support(nv12) & ddi_multiplane_overlay) != 0u);
+  CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u); }

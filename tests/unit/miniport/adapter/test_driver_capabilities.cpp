@@ -73,16 +73,21 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
   expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
   expected.SupportPerEngineTDR = 1u;
+  expected.SupportDirectFlip = 1u;
+  expected.SupportMultiPlaneOverlay = 1u;
+  expected.MaxOverlayPlanes = 4u;
   expected.HighestAcceptableAddress = -1;
   expected.MaxPointerWidth = 64u;
   expected.MaxPointerHeight = 64u;
   expected.PointerCaps = 0x7u;   /* Monochrome | Color | MaskedColor */
   CHECK(std::memcmp(&caps, &expected, sizeof caps) == 0); }
 
-/* FR-006 named out loud: rotation, gamma and overlay planes are the three the
- * display path would otherwise silently ignore, so each field that would claim
- * one is asserted zero by name rather than only by the block comparison above. */
-TEST(driver_capabilities_report_driver_caps, claims_no_rotation_gamma_or_overlay)
+/* FR-006 named out loud: rotation and gamma are what the display path would
+ * otherwise silently ignore, so each field that would claim one is asserted
+ * zero by name. Overlay planes it does have - four, beside DirectFlip, which
+ * dxgkrnl insists on (OverlaySupport) - but none flipped immediately, no
+ * scaled cursor and no queue of overlay flips. */
+TEST(driver_capabilities_report_driver_caps, claims_no_rotation_or_gamma_and_four_overlay_planes)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
@@ -90,11 +95,12 @@ TEST(driver_capabilities_report_driver_caps, claims_no_rotation_gamma_or_overlay
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK_EQ(caps.SupportSmoothRotation, 0u);
   CHECK_EQ(caps.GammaRampCaps, 0u);
-  CHECK_EQ(caps.SupportMultiPlaneOverlay, 0u);
+  CHECK_EQ(caps.SupportMultiPlaneOverlay, 1u);
+  CHECK_EQ(caps.SupportDirectFlip, 1u);
   CHECK_EQ(caps.SupportMultiPlaneOverlayImmediateFlip, 0u);
   CHECK_EQ(caps.CursorScaledWithMultiPlaneOverlayPlane0, 0u);
   CHECK_EQ(caps.MaxOverlays, 0u);
-  CHECK_EQ(caps.MaxOverlayPlanes, 0u);
+  CHECK_EQ(caps.MaxOverlayPlanes, 4u);
   CHECK_EQ(caps.MaxQueuedMultiPlaneOverlayFlipVSync, 0u); }
 
 TEST(driver_capabilities_report_driver_caps, a_short_output_is_invalid)

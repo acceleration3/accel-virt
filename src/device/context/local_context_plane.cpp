@@ -143,6 +143,19 @@ bool LocalContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedIm
     return library_.export_image(key, image);
 }
 
+bool LocalContextPlane::composes() const
+{
+    AV_SCOPE("LocalContextPlane::composes");
+    return library_.composes();
+}
+
+bool LocalContextPlane::compose_planes(const uint8_t *, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                                       uint32_t height, AvExportedImage &image)
+{
+    AV_SCOPE("LocalContextPlane::compose_planes");
+    return library_.compose_planes(planes, count, width, height, image);
+}
+
 bool LocalContextPlane::read_image(const uint8_t *, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                                    uint32_t height)
 {

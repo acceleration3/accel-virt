@@ -5,6 +5,7 @@
 #define AV_DISPLAY_SCANOUT_HPP
 
 #include "miniport/display/display_sources.hpp"
+#include "miniport/display/plane_scanout.hpp"
 #include "miniport/display/scanout_blob_source.hpp"
 #include "miniport/display/scanout_resource.hpp"
 #include "core/platform/platform.hpp"
@@ -36,6 +37,9 @@ public:
     /* Whether the blob backing was chosen, which is what a report says and a
      * test asks. */
     bool                 scans_out_blobs() const;
+    /* Whether the device composes overlay planes, which the capset said: the
+     * planes are then carried before each frame (PlaneScanout). */
+    bool                 carries_planes() const;
 
     /* The resource `source` needs for the mode just committed. PASSIVE. */
     [[nodiscard]] Status configure(uint32_t source, const DisplayMode &mode);
@@ -73,6 +77,8 @@ private:
      * is backed one way or the other, never both. */
     ScanoutBlobSource blobs_[DisplaySources::max_sources];
     bool              blob_scanout_;
+    PlaneScanout      planes_;
+    bool              planes_offered_;
 
     friend struct DisplayScanoutProbe;
 };

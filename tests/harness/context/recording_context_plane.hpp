@@ -38,6 +38,32 @@ public:
     void          interrupts_changed(bool connected) override { connected_ = connected; changes_++; }
     void          renderer_lost() override { losses_++; }
     bool export_image(const std::uint8_t *, std::uint64_t, AvExportedImage &) override { return false; }
+    RecordingContextPlane() = default;
+    RecordingContextPlane(const RecordingContextPlane &) = delete;
+    RecordingContextPlane &operator=(const RecordingContextPlane &) = delete;
+    /* The image composed into, which the plane owns, is closed. */
+    ~RecordingContextPlane();
+
+    /* Planes composed as the test scripts them (compose_as): into one image
+     * the plane keeps, as the executor keeps its scanout image - a memfd it
+     * closes itself - described as `image` says. */
+    bool composes() const override { return composes_; }
+    bool compose_planes(const std::uint8_t *, const AvScanoutPlane *planes, std::uint32_t count, std::uint32_t width,
+                        std::uint32_t height, AvExportedImage &image) override
+    {
+        composed_count_ = count;
+        composed_width_ = width;
+        composed_height_ = height;
+        if (!composes_ || count == 0u || planes == nullptr) return false;
+        if (composed_fd_ < 0) composed_fd_ = fresh_memfd();
+        image = composed_image_;
+        image.fd = composed_fd_;
+        return true;
+    }
+    void          compose_as(const AvExportedImage &image) { composes_ = true; composed_image_ = image; }
+    std::uint32_t composed_count() const { return composed_count_; }
+    std::uint32_t composed_width() const { return composed_width_; }
+    int           composed_fd() const { return composed_fd_; }
     bool read_image(const std::uint8_t *, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t) override
     { return false; }
     /* One frame served as `frame` from the test's own pixels, as an executor
@@ -128,6 +154,12 @@ private:
         return exports_ && surface >= exported_surface_ && surface - exported_surface_ < exported_count_;
     }
 
+    bool            composes_ = false;
+    AvExportedImage composed_image_ = {};
+    int             composed_fd_ = -1;
+    std::uint32_t   composed_count_ = 0u;
+    std::uint32_t   composed_width_ = 0u;
+    std::uint32_t   composed_height_ = 0u;
     bool            exports_ = false;
     bool            exported_fd_ = true;
     bool            synced_fd_ = true;

@@ -1,5 +1,7 @@
 #include "device/export/exported_gpu.hpp"
 
+#include "device/display/head_planes.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "device/context/context_plane.hpp"
 #include "device/host/host.hpp"
@@ -8,16 +10,18 @@
 
 namespace av {
 
-ExportedGpu::ExportedGpu(Host &host) : host_(host), contexts_(nullptr), gpu_uuid_(nullptr), greeting_()
+ExportedGpu::ExportedGpu(Host &host) : host_(host), contexts_(nullptr), heads_(nullptr), gpu_uuid_(nullptr), greeting_()
 {
     AV_SCOPE("ExportedGpu::ExportedGpu");
 }
 
-void ExportedGpu::attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting)
+void ExportedGpu::attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting,
+                         HeadPlanes &heads)
 {
     AV_SCOPE("ExportedGpu::attach");
     host_.require_main_loop("ExportedGpu::attach");
     contexts_ = &contexts;
+    heads_ = &heads;
     gpu_uuid_ = gpu_uuid;
     greeting_ = greeting;
 }
@@ -68,6 +72,30 @@ ExportAnswer ExportedGpu::sync(const ExportRequest &request, int &descriptor) co
     ExportAnswer answer(request, Status::ok);
     answer.count(writes);
     descriptor = fence;
+    return answer;
+}
+
+/* The executor keeps the image it composed into, so what goes out is a
+ * descriptor of the export path's own for it. */
+ExportAnswer ExportedGpu::export_head(const ExportRequest &request, int &descriptor) const
+{
+    AV_SCOPE("ExportedGpu::export_head");
+    descriptor = -1;
+    if (contexts_ == nullptr || heads_ == nullptr || !contexts_->composes())
+        return ExportAnswer(request, Status::invalid_state);
+    AvScanoutPlane planes[HeadPlanes::layers] = {};
+    uint32_t       width = 0u;
+    uint32_t       height = 0u;
+    const uint32_t count = heads_->planes(request.head(), planes, width, height);
+    AvExportedImage image = {-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    if (count == 0u || !contexts_->compose_planes(gpu_uuid_, planes, count, width, height, image))
+        return ExportAnswer(request, Status::not_found);
+    const ExportedLayout layout(image.width, image.height, image.fourcc, image.stride, image.offset, image.modifier);
+    const int owned = image.fd >= 0 && layout.describes_a_picture() ? host_.duplicate_export(image.fd) : -1;
+    if (owned < 0) return ExportAnswer(request, Status::not_found);
+    ExportAnswer answer(request, Status::ok);
+    answer.describe(layout);
+    descriptor = owned;
     return answer;
 }
 

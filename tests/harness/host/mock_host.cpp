@@ -1898,6 +1898,11 @@ void MockHost::shutdown_export(int connection)
     ::shutdown(connection, SHUT_RDWR);
 }
 
+int MockHost::duplicate_export(int descriptor)
+{
+    return ::fcntl(descriptor, F_DUPFD_CLOEXEC, 0);
+}
+
 void MockHost::close_export(int descriptor)
 {
     {

@@ -1,5 +1,7 @@
 #include "miniport/display/display_scanout.hpp"
 
+#include "miniport/virtio/virtio_gpu_device.hpp"
+
 #include "core/support/text_buffer.hpp"
 
 #include "miniport/display/display_mode.hpp"
@@ -28,7 +30,7 @@ DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStor
              ScanoutBlobSource(platform, budget, device, 1u),
              ScanoutBlobSource(platform, budget, device, 2u),
              ScanoutBlobSource(platform, budget, device, 3u)},
-      blob_scanout_(false)
+      blob_scanout_(false), planes_(device), planes_offered_(false)
       {
           AV_SCOPE("DisplayScanout::DisplayScanout");
       }
@@ -41,6 +43,13 @@ void DisplayScanout::offer(const CapsetInfo &capset)
     AV_SCOPE("DisplayScanout::offer");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::offer");
     blob_scanout_ = capset.has_feature(CapsetInfo::feature_dmabuf_scanout);
+    planes_offered_ = capset.has_feature(CapsetInfo::feature_scanout_planes);
+}
+
+bool DisplayScanout::carries_planes() const
+{
+    AV_SCOPE("DisplayScanout::carries_planes");
+    return planes_offered_;
 }
 
 bool DisplayScanout::scans_out_blobs() const
@@ -127,7 +136,17 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due
             if (primary != nullptr && (key == 0u || !resources_[source].scanning_out()))
                 pages = primary->pages_at(address, resources_[source].page_count());
         }
-        carried = resources_[source].refresh(address, pages, presented, key, frame);
+        /* The planes first, so the frame that follows is composed with them. A
+         * source flipped some other way shows its base image alone. */
+        if (planes_offered_ && resources_[source].width() != 0u) {
+            OverlayPlane planes[OverlayPlane::max_planes];
+            if (sources.flip(source) == DisplaySources::Flip::presented_plane) sources.planes(source, planes);
+            const Status planed =
+                planes_.carry(source, planes, resources_[source].width(), resources_[source].height());
+            if (planed != Status::ok) carried = planed;
+        }
+        const Status refreshed = resources_[source].refresh(address, pages, presented, key, frame);
+        if (refreshed != Status::ok) carried = refreshed;
     }
     return carried;
 }
@@ -161,6 +180,7 @@ void DisplayScanout::forget_device()
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::forget_device");
     for (ScanoutResource &resource : resources_) resource.forget_device();
     for (ScanoutBlobSource &blob : blobs_) blob.forget_device();
+    planes_.forget_device();
 }
 
 bool DisplayScanout::invariants_hold() const

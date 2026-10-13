@@ -842,6 +842,14 @@ void PosixRendererHost::shutdown_export(int)
     AV_SCOPE("PosixRendererHost::shutdown_export");
 }
 
+/* The renderer exports nothing (its plane composes no heads), so it has no
+ * descriptor to duplicate. */
+int PosixRendererHost::duplicate_export(int)
+{
+    AV_SCOPE("PosixRendererHost::duplicate_export");
+    return -1;
+}
+
 void PosixRendererHost::close_export(int)
 {
     AV_SCOPE("PosixRendererHost::close_export");

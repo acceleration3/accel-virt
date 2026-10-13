@@ -3,6 +3,7 @@
  * consumers outside QEMU it was exported to, and is answered; a malformed one
  * is refused and tells nobody, and every other type is left to the rest of
  * the device. */
+#include "device/display/head_planes.hpp"
 #include "device/control/control_request.hpp"
 #include "device/control/shared_commands.hpp"
 #include "device/display/display_clock.hpp"
@@ -42,7 +43,7 @@ public:
         : interrupts_(host_), clock_(host_, interrupts_, &unshown, nullptr), exports_(host_, clock_),
           commands_(host_, plane_, exports_, gpu)
     {
-        exports_.attach(plane_, gpu, av::ExportGreeting(gpu));
+        exports_.attach(plane_, gpu, av::ExportGreeting(gpu), heads_);
     }
 
     /* The response type, or 0 when the core left the request to the rest. */
@@ -58,6 +59,7 @@ public:
 
 private:
     MockHost                  host_;
+    av::HeadPlanes            heads_{host_};
     av::RecordingContextPlane plane_;
     av::FenceInterrupts       interrupts_;
     av::DisplayClock          clock_;

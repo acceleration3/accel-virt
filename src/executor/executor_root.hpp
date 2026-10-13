@@ -64,6 +64,10 @@ public:
     void     close_domain(uint32_t domain);
     /* The image shared as `id` in `domain`, copied into an exportable image. */
     bool     export_image(uint32_t domain, uint64_t id, AvExportedImage &image);
+    /* A display head's planes composed into one exported image
+     * (D3d11HostDevice::compose_planes). */
+    bool     compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                            uint32_t height, AvExportedImage &image);
     /* The guest let go of `id` everywhere, or of every id for 0 - a reset:
      * HostShares::release, and the frames staged of it. Main loop. */
     void     release_shared(uint32_t domain, uint64_t id);

@@ -8,7 +8,7 @@
 
 namespace av {
 
-OverlayProbeProgram::OverlayProbeProgram() : kmt_(), report_("avoverlayprobe"), dxgi_()
+OverlayProbeProgram::OverlayProbeProgram(uint32_t hold) : kmt_(), report_("avoverlayprobe"), dxgi_(), hold_(hold)
 {
     AV_SCOPE("OverlayProbeProgram::OverlayProbeProgram");
 }
@@ -17,7 +17,7 @@ uint32_t OverlayProbeProgram::run()
 {
     AV_SCOPE("OverlayProbeProgram::run");
     ScenarioSteps steps(kmt_, report_, "overlay");
-    { OverlayWork work(dxgi_);
+    { OverlayWork work(dxgi_, hold_);
       work.run(steps); }
     report_.finish();
     DWORD written = 0u;

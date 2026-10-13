@@ -128,7 +128,14 @@ Hresult DxgiBaseTable::overlay_color_space(DxgiDdiArgCheckMultiplaneOverlayColor
     const Hresult refused =
         usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnCheckMultiplaneOverlayColorSpaceSupport");
     if (refused != hr_ok) return refused;
-    args->Supported = 0;
+    /* What avgpu's planes show (OverlaySupport): the scanout's RGB formats in
+     * the desktop's colour space, and NV12 and YUY2 video in a BT.601 or
+     * BT.709 YCbCr space, which the host converts. */
+    constexpr uint32_t srgb = 0u, first_ycbcr = 5u, last_ycbcr = 9u;
+    const bool video = args->Format == 103u || args->Format == 107u;
+    const bool rgb = args->Format == 87u || args->Format == 88u || args->Format == 28u;
+    const bool ycbcr = args->ColorSpace >= first_ycbcr && args->ColorSpace <= last_ycbcr;
+    args->Supported = (rgb && args->ColorSpace == srgb) || (video && ycbcr) ? 1 : 0;
     return hr_ok;
 }
 

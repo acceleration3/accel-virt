@@ -361,7 +361,7 @@ TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered
     CHECK_EQ(image.width, across);
     CHECK_EQ(image.height, down);
     CHECK_EQ(image.fourcc, drm_argb8888);
-    CHECK_EQ(image.modifier, std::uint64_t{AV_EXPORT_MODIFIER_IMPLICIT});
+    CHECK_EQ(image.modifier, std::uint64_t{0u});   /* DRM_FORMAT_MOD_LINEAR */
     CHECK(image.stride >= across * 4u);
     CHECK(lseek(image.fd, 0, SEEK_END) >= static_cast<off_t>(std::uint64_t{image.stride} * down));
     close(image.fd);

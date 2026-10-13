@@ -3,11 +3,13 @@
  * export nothing; what the executor exports is passed on with its descriptor
  * only when it describes a picture and came with one, and a descriptor with
  * no picture is closed rather than handed to a process outside QEMU. */
+#include "device/display/head_planes.hpp"
 #include "device/export/exported_gpu.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "proto/export/export_request.hpp"
+#include "proto/virtio_gpu/scanout_plane_request.hpp"
 
 #include <cstdint>
 #include <sys/stat.h>
@@ -34,7 +36,7 @@ ExportRequest asked(ExportOperation operation)
 }  // namespace
 
 TEST(exported_gpu, exports_nothing_before_realize_or_where_the_contexts_export_nothing)
-{ av::MockHost host;
+{ av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
   ExportedGpu exported(host);
   int descriptor = 7;
@@ -45,18 +47,18 @@ TEST(exported_gpu, exports_nothing_before_realize_or_where_the_contexts_export_n
   descriptor = 7;
   CHECK_STATUS(exported.sync(asked(ExportOperation::sync), descriptor).status(), Status::invalid_state);
   CHECK_EQ(descriptor, -1);
-  exported.attach(plane, gpu, ExportGreeting(gpu));
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
   CHECK_STATUS(exported.greet(asked(ExportOperation::hello)).status(), Status::invalid_state);
   CHECK_STATUS(exported.export_surface(asked(ExportOperation::export_surface), descriptor).status(),
                Status::invalid_state);
   CHECK_EQ(plane.exports_asked(), 0u); }
 
 TEST(exported_gpu, hello_names_the_gpu_it_was_attached_with)
-{ av::MockHost host;
+{ av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu, 0u, 3u, 0u, 0u));
+  exported.attach(plane, gpu, ExportGreeting(gpu, 0u, 3u, 0u, 0u), heads);
   const ExportAnswer answer = exported.greet(asked(ExportOperation::hello));
   CHECK_STATUS(answer.status(), Status::ok);
   CHECK_EQ(answer.tag(), 5u);
@@ -66,11 +68,11 @@ TEST(exported_gpu, hello_names_the_gpu_it_was_attached_with)
 
 /* The executor's own answer, asked by the GPU's UUID, with its descriptor. */
 TEST(exported_gpu, an_exported_surface_is_answered_with_its_layout_and_its_dma_buf)
-{ av::MockHost host;
+{ av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 0u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu));
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
   int descriptor = -1;
   const ExportAnswer answer = exported.export_surface(asked(ExportOperation::export_surface), descriptor);
   CHECK_STATUS(answer.status(), Status::ok);
@@ -92,13 +94,13 @@ TEST(exported_gpu, an_exported_surface_is_answered_with_its_layout_and_its_dma_b
  * it, is not believed: its descriptor is closed here. One that answers no
  * descriptor at all has nothing to close. */
 TEST(exported_gpu, an_export_with_no_picture_or_no_dma_buf_is_refused_and_its_descriptor_closed)
-{ av::MockHost host;
+{ av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
   AvExportedImage narrow = picture;
   narrow.stride = 639u;
   plane.export_as(surface, narrow, 0u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu));
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
   int descriptor = 9;
   CHECK_STATUS(exported.export_surface(asked(ExportOperation::export_surface), descriptor).status(), Status::not_found);
   CHECK_EQ(descriptor, -1);
@@ -116,11 +118,11 @@ TEST(exported_gpu, an_export_with_no_picture_or_no_dma_buf_is_refused_and_its_de
   CHECK_EQ(host.exports_closed(), 2u); }
 
 TEST(exported_gpu, a_sync_is_answered_with_the_writes_and_a_sync_file_or_refused_without_one)
-{ av::MockHost host;
+{ av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
   plane.export_as(surface, picture, 12u);
   ExportedGpu exported(host);
-  exported.attach(plane, gpu, ExportGreeting(gpu));
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
   int descriptor = -1;
   const ExportAnswer answer = exported.sync(asked(ExportOperation::sync), descriptor);
   CHECK_STATUS(answer.status(), Status::ok);
@@ -136,3 +138,32 @@ TEST(exported_gpu, a_sync_is_answered_with_the_writes_and_a_sync_file_or_refused
   CHECK_EQ(bare.writes(), 0u);
   CHECK_EQ(descriptor, -1);
   CHECK_EQ(plane.syncs_asked(), 3u); }
+
+/* A head is composed now from the planes the device keeps for it, and goes out
+ * as a descriptor of the export path's own - the executor keeps the image it
+ * composed into - beside the layout; a head with no plane, or contexts that
+ * compose none, is answered without one. */
+TEST(exported_gpu, a_head_goes_out_composed_beside_a_descriptor_of_its_own)
+{ av::MockHost host; av::HeadPlanes heads(host);
+  CHECK_STATUS(heads.initialize(), Status::ok);
+  av::RecordingContextPlane plane;
+  ExportedGpu exported(host);
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
+  int descriptor = 7;
+  const ExportRequest head(ExportOperation::head, 3u, 5u);   /* head 2 */
+  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::invalid_state);
+  CHECK_EQ(descriptor, -1);
+  plane.compose_as(picture);
+  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::not_found);   /* no plane yet */
+  const std::int32_t whole[4] = {0, 0, 640, 480};
+  CHECK_STATUS(heads.set(av::ScanoutPlaneRequest(2u, 1u, av::ScanoutPlaneRequest::flag_shown, 0x77u, whole, whole,
+                                                 640u, 480u)),
+               Status::ok);
+  const ExportAnswer answer = exported.export_head(head, descriptor);
+  CHECK_STATUS(answer.status(), Status::ok);
+  CHECK_EQ(answer.layout().width(), 640u);
+  CHECK_EQ(plane.composed_count(), 1u);
+  CHECK_EQ(plane.composed_width(), 640u);
+  CHECK(descriptor >= 0);
+  CHECK(descriptor != plane.composed_fd());   /* Host::duplicate_export's, not the executor's */
+  host.close_export(descriptor); }

@@ -32,6 +32,9 @@ constexpr uint32_t ddi_multiplane_overlay = 0x8000u;
 /* What the host composes an overlay plane from: the 32-bit RGB layouts avgpu
  * scans out (OverlaySupport), B8G8R8A8, B8G8R8X8 and R8G8B8A8, unsigned. */
 constexpr uint32_t overlay_formats[] = {87u, 88u, 28u};
+/* And video the host converts as it composes: NV12 and YUY2, wherever the
+ * host has them at all. */
+constexpr uint32_t overlay_video_formats[] = {103u, 107u};
 constexpr Carry    carries[] = {
     {0x200u, false, ddi_shader_sample},
     {0x4000u, false, ddi_render_target},
@@ -262,6 +265,8 @@ uint32_t DxgiFormatTable::format_support(uint32_t format) const
      * none, whatever the list says. */
     for (const uint32_t overlay : overlay_formats)
         if (format == overlay && (support & ddi_display) != 0u) support |= ddi_multiplane_overlay;
+    for (const uint32_t video : overlay_video_formats)
+        if (format == video && support != 0u) support |= ddi_multiplane_overlay;
     return support;
 }
 

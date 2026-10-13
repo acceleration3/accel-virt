@@ -14,7 +14,8 @@ namespace av {
 
 class OverlayProbeProgram {
 public:
-    OverlayProbeProgram();
+    /* `hold` presents more of the partial window (OverlayWork). */
+    explicit OverlayProbeProgram(uint32_t hold);
     OverlayProbeProgram(const OverlayProbeProgram &) = delete;
     OverlayProbeProgram &operator=(const OverlayProbeProgram &) = delete;
 
@@ -25,6 +26,7 @@ private:
     GdiKmt              kmt_;
     GuestReport         report_;
     WindowsOverlayEntry dxgi_;
+    uint32_t            hold_;
 };
 
 }  // namespace av

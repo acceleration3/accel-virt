@@ -130,6 +130,7 @@ public:
     Status   send_export(int connection, const std::uint8_t *bytes, std::size_t length, int descriptor) override;
     void     shutdown_export(int connection) override;
     void     close_export(int descriptor) override;
+    int      duplicate_export(int descriptor) override;
 
     /* The plane a head was told to show, field for field as it crossed the
      * boundary, so a test asserts the picture rather than that something was

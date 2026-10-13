@@ -8,6 +8,7 @@
 #include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/virtio_gpu/display_timing_request.hpp"
+#include "proto/virtio_gpu/scanout_plane_request.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 
 namespace av {
@@ -197,6 +198,15 @@ Status AvRequestWriter::display_timing(uint32_t head, uint32_t refresh_millihz)
     writer.write_u32(head);
     writer.write_u32(refresh_millihz);
     return Status::ok;
+}
+
+Status AvRequestWriter::scanout_plane(const ScanoutPlaneRequest &plane)
+{
+    AV_SCOPE("AvRequestWriter::scanout_plane");
+    length_ = ScanoutPlaneRequest::encoded_size <= capacity_ ? ScanoutPlaneRequest::encoded_size : 0u;
+    if (length_ == 0u) return Status::too_large;
+    WireWriter writer(bytes_, capacity_);
+    return plane.encode(writer);
 }
 
 Status AvRequestWriter::setup(uint32_t context_id, const ContextSetup &setup)

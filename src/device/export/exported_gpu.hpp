@@ -16,6 +16,7 @@
 namespace av {
 
 class ContextPlane;
+class HeadPlanes;
 class ExportRequest;
 class Host;
 
@@ -27,7 +28,8 @@ public:
 
     /* Main loop, at realize, before any connection is served: `gpu_uuid`
      * outlives this. */
-    void         attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting);
+    void         attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting,
+                        HeadPlanes &heads);
     ExportAnswer greet(const ExportRequest &request) const;
     /* The answers to an export and a sync, with the dma-buf or the sync_file
      * that goes beside an ok one in `descriptor`, the caller's; -1 with any
@@ -35,12 +37,18 @@ public:
      * the executor does not export. */
     ExportAnswer export_surface(const ExportRequest &request, int &descriptor) const;
     ExportAnswer sync(const ExportRequest &request, int &descriptor) const;
+    /* The answer to a head request: the head's planes composed now into one
+     * image (HeadPlanes, ContextPlane::compose_planes), with its dma-buf in
+     * `descriptor`, the caller's. not_found for a head with no plane, or one
+     * the executor cannot compose. */
+    ExportAnswer export_head(const ExportRequest &request, int &descriptor) const;
 
 private:
     bool exports() const;
 
     Host          &host_;
     ContextPlane  *contexts_;
+    HeadPlanes    *heads_;
     const uint8_t *gpu_uuid_;
     ExportGreeting greeting_;
 };

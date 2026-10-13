@@ -24,6 +24,7 @@
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/exportable_images.hpp"
 #include "executor/shim/host_image_export.hpp"
+#include "executor/shim/plane_composer.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -107,6 +108,10 @@ public:
                                   uint32_t height);
     /* The image shared as `id` as a dma-buf (HostImageExport). */
     [[nodiscard]] bool export_image(uint32_t domain, uint64_t id, AvExportedImage &image);
+    /* A head's `count` planes composed (PlaneComposer) and handed over as
+     * export_image hands an image over. */
+    [[nodiscard]] bool compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                                      uint32_t height, AvExportedImage &image);
     /* The surface shared as `surface` as its own memory, a dma-buf the caller
      * owns, for a process outside QEMU (ExportableImages::export_image).
      * False for a surface nothing shares, or one made over memory no other
@@ -176,6 +181,7 @@ private:
     HostShares             *shares_;
     DxvkVulkanDevice        vulkan_;
     HostImageExport         exports_;
+    PlaneComposer           composer_;
     ExportableImages        images_;
     D3d11FramePool          frames_;
     /* The staging texture images are read through, kept while the size and

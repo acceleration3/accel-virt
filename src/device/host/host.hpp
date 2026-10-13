@@ -256,6 +256,9 @@ public:
     /* A descriptor the export path owns closed: a connection, a dma-buf or a
      * sync_file. */
     virtual void                 close_export(int descriptor) = 0;
+    /* One of the export path's own for a descriptor the executor keeps; -1
+     * when there is none to make. */
+    virtual int                  duplicate_export(int descriptor) = 0;
 
 protected:
     Host() = default;

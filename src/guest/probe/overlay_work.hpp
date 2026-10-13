@@ -23,6 +23,9 @@ public:
      * - and DXGI_FRAME_PRESENTATION_MODE_OVERLAY. */
     static constexpr uint32_t support_direct = 0x1u;
     static constexpr uint32_t support_scaling = 0x2u;
+    /* DXGI_FORMAT_B8G8R8A8_UNORM, the desktop's, and DXGI_FORMAT_NV12, video's. */
+    static constexpr uint32_t format_bgra = 87u;
+    static constexpr uint32_t format_nv12 = 103u;
     static constexpr uint32_t mode_overlay = 1u;
     /* Presents before the mode is asked: DWM promotes a swap chain after it has
      * presented steadily for a while, a couple of seconds at sixty a second. */
@@ -39,7 +42,9 @@ public:
     static constexpr int32_t  disjoint = static_cast<int32_t>(0x887A000Bu);
     static constexpr uint32_t disjoint_retries = 30u;
 
-    explicit OverlayWork(OverlayEntry &dxgi);
+    /* `hold` more presents of the partial window once it is judged, so a
+     * check from outside the guest finds it on screen. */
+    OverlayWork(OverlayEntry &dxgi, uint32_t hold = 0u);
     ~OverlayWork();
     OverlayWork(const OverlayWork &) = delete;
     OverlayWork &operator=(const OverlayWork &) = delete;
@@ -54,9 +59,11 @@ public:
 private:
     /* A swap chain at the rectangle, presented `presents` times, and the mode
      * it was then shown in judged as an overlay under `step`. */
-    void promote(ScenarioSteps &steps, const char *step, int32_t x, int32_t y, uint32_t width, uint32_t height);
+    void promote(ScenarioSteps &steps, const char *step, int32_t x, int32_t y, uint32_t width, uint32_t height,
+                 uint32_t hold);
 
     OverlayEntry &dxgi_;
+    uint32_t      hold_;
     bool          made_;
     uint32_t      mode_;
 };

@@ -222,6 +222,15 @@ uint32_t export_image(void *, uint32_t domain, uint64_t key, AvExportedImage *im
     return image != nullptr && library.root().export_image(domain, key, *image) ? AV_EXECUTED : AV_UNKNOWN;
 }
 
+uint32_t compose_planes(void *, uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                        uint32_t height, AvExportedImage *image)
+{
+    AV_SCOPE("compose_planes");
+    return image != nullptr && library.root().compose_planes(domain, planes, count, width, height, *image)
+               ? AV_EXECUTED
+               : AV_UNKNOWN;
+}
+
 uint32_t map_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms, AvFrameView *view)
 {
     AV_SCOPE("map_frame");
@@ -306,7 +315,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               map_frame,
                               unmap_frame,
                               export_surface,
-                              sync_surface};
+                              sync_surface,
+                              compose_planes};
 
 }  // namespace
 

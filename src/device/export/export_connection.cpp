@@ -100,6 +100,8 @@ ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descri
         return ExportAnswer(request, clock_.align(request.refresh_millihz(), request.blank()) == Status::ok
                                          ? Status::ok
                                          : Status::invalid_state);
+    /* A head is nothing this consumer holds: a new picture each time. */
+    case ExportOperation::head: return gpu_.export_head(request, descriptor);
     default: break;
     }
     const bool held = holds(surface);

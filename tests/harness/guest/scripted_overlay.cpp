@@ -44,8 +44,12 @@ std::int32_t ScriptedOverlay::supports_overlays(bool &supported)
     return refusal(Call::supports_overlays);
 }
 
-std::int32_t ScriptedOverlay::overlay_support(std::uint32_t &flags)
+std::uint32_t ScriptedOverlay::asked_format(std::uint32_t nth) const { return nth < 4u ? formats_[nth] : 0u; }
+
+std::int32_t ScriptedOverlay::overlay_support(std::uint32_t format, std::uint32_t &flags)
 {
+    const std::uint32_t asked = calls(Call::overlay_support);
+    if (asked < 4u) formats_[asked] = format;
     flags = support_;
     return refusal(Call::overlay_support);
 }

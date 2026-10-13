@@ -39,6 +39,10 @@ public:
      * progress (docs/protocol.md, "Fence page"), so the driver can wake a
      * process waiting for one rather than have it ask. */
     static constexpr uint64_t feature_raises = 64u;
+    /* The device composes a head's overlay planes (SCANOUT_PLANE, docs/
+     * protocol.md "Scanout planes"), so the guest may offer Windows more than
+     * the one plane it shows. */
+    static constexpr uint64_t feature_scanout_planes = 128u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,

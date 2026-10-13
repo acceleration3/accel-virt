@@ -292,7 +292,7 @@ static void virtio_gpu_av_scanout_image(VirtIOGPU *g, VirtIOGPUAv *r, struct vir
              * copy and waits for it on this same main loop. */
             if (r->host.display_takes_dmabuf(r->host.opaque, head) &&
                 !av_device_post_frame(r->core, head, le32_to_cpu(request.frame), le64_to_cpu(request.key)) &&
-                !(av_device_export_image(r->core, le64_to_cpu(request.key), &exported) &&
+                !(av_device_export_head(r->core, head, le64_to_cpu(request.key), &exported) &&
                   virtio_gpu_av_show_image(r, head, &exported))) {
                 answer = VIRTIO_GPU_RESP_ERR_UNSPEC;
             }

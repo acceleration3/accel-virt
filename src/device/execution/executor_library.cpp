@@ -178,6 +178,20 @@ void ExecutorLibrary::release_shared(uint64_t object_id) const
     if (domain_ != 0u) ops_->release_shared(ops_->opaque, domain_, object_id);
 }
 
+bool ExecutorLibrary::composes() const
+{
+    AV_SCOPE("ExecutorLibrary::composes");
+    return ops_ != nullptr && ops_->compose_planes != nullptr;
+}
+
+bool ExecutorLibrary::compose_planes(const AvScanoutPlane *planes, uint32_t count, uint32_t width, uint32_t height,
+                                     AvExportedImage &image) const
+{
+    AV_SCOPE("ExecutorLibrary::compose_planes");
+    return domain_ != 0u && composes() &&
+           ops_->compose_planes(ops_->opaque, domain_, planes, count, width, height, &image) == AV_EXECUTED;
+}
+
 bool ExecutorLibrary::export_image(uint64_t key, AvExportedImage &image) const
 {
     AV_SCOPE("ExecutorLibrary::export_image");

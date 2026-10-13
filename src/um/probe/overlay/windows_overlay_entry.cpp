@@ -70,11 +70,11 @@ int32_t WindowsOverlayEntry::supports_overlays(bool &supported)
     return S_OK;
 }
 
-int32_t WindowsOverlayEntry::overlay_support(uint32_t &flags)
+int32_t WindowsOverlayEntry::overlay_support(uint32_t format, uint32_t &flags)
 {
     AV_SCOPE("WindowsOverlayEntry::overlay_support");
     UINT support = 0u;
-    const HRESULT asked = output_->CheckOverlaySupport(DXGI_FORMAT_B8G8R8A8_UNORM, device_, &support);
+    const HRESULT asked = output_->CheckOverlaySupport(static_cast<DXGI_FORMAT>(format), device_, &support);
     flags = support;
     return asked;
 }

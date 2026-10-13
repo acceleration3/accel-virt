@@ -47,6 +47,9 @@ public:
     void renderer_lost() override;
 
     bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) override;
+    bool composes() const override;
+    bool compose_planes(const uint8_t *gpu_uuid, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                        uint32_t height, AvExportedImage &image) override;
     bool read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                     uint32_t height) override;
     bool reads_frames() const override;

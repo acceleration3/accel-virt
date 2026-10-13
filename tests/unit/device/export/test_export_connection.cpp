@@ -3,6 +3,7 @@
  * and is told of being what it exported, and its end - leaving, an answer it
  * would not take, or the device closing it - noticed on both sides. */
 #include "device/display/display_clock.hpp"
+#include "device/display/head_planes.hpp"
 #include "device/export/export_connection.hpp"
 #include "device/export/exported_gpu.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -48,7 +49,7 @@ public:
           connection_(host_, gpu_, clock_)
     {
         plane_.export_as(first, picture, 3u, 2u * ExportConnection::first_room + 2u);
-        gpu_.attach(plane_, gpu, ExportGreeting(gpu));
+        gpu_.attach(plane_, gpu, ExportGreeting(gpu), heads_);
     }
 
     av::MockHost      &host() { return host_; }
@@ -80,6 +81,7 @@ public:
 
 private:
     av::MockHost              host_;
+    av::HeadPlanes            heads_{host_};
     av::RecordingContextPlane plane_;
     av::ExportedGpu           gpu_;
     av::FenceInterrupts       interrupts_;

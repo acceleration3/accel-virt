@@ -46,6 +46,8 @@ public:
     bool              blended() const;
     /* Whether it is filtered when scaled, rather than sampled at the nearest. */
     bool              filtered() const;
+    /* D3DDDI_COLOR_SPACE_TYPE: how its values are colours. */
+    uint32_t          colour_space() const;
 
 private:
     uint32_t   layer_;
@@ -58,6 +60,7 @@ private:
     uint32_t   flips_;
     bool       blended_;
     bool       filtered_;
+    uint32_t   colour_space_;
 };
 
 }  // namespace av

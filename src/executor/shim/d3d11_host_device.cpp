@@ -17,7 +17,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), exports_(vulkan_), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+    : device_(nullptr), device12_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -69,6 +69,7 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostS
 void D3d11HostDevice::close()
 {
     AV_SCOPE("D3d11HostDevice::close");
+    composer_.release();
     exports_.release();
     /* Every share of this GPU holds this device's textures: they go first. */
     if (shares_ != nullptr) shares_->clear();
@@ -116,6 +117,41 @@ bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage
     uint32_t               slot = 0u;
     const bool             staged = texture != nullptr && exports_.stage(device_, context_, texture, slot);
     if (texture != nullptr) texture->Release();
+    unlock();
+    if (!staged) return false;
+    PollBudget polls(poll_nanoseconds, most_polls);
+    while (polls.next()) {
+        lock(nullptr);
+        const bool done = exports_.copied(context_, slot);
+        unlock();
+        if (done) break;
+    }
+    exports_.describe(slot, image);
+    return true;
+}
+
+/* Composed and queued under the lock, waited for outside it, as export_image
+ * is. Every plane's image must be there: a frame missing one is not shown. */
+bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                                     uint32_t height, AvExportedImage &image)
+{
+    AV_SCOPE("D3d11HostDevice::compose_planes");
+    constexpr uint32_t poll_nanoseconds = 50000u;
+    constexpr uint32_t most_polls = 400u;   /* 20 ms */
+    if (device_ == nullptr || count > PlaneComposer::max_planes || (count != 0u && planes == nullptr)) return false;
+    lock(nullptr);
+    ID3D11Texture2D *textures[PlaneComposer::max_planes] = {};
+    bool             found = true;
+    for (uint32_t index = 0u; index < count; index++) {
+        textures[index] = shared_texture(domain, planes[index].key);
+        found = found && textures[index] != nullptr;
+    }
+    ID3D11Texture2D *const composed =
+        found ? composer_.compose(device_, context_, planes, textures, count, width, height) : nullptr;
+    for (ID3D11Texture2D *texture : textures)
+        if (texture != nullptr) texture->Release();
+    uint32_t   slot = 0u;
+    const bool staged = composed != nullptr && exports_.stage(device_, context_, composed, slot);
     unlock();
     if (!staged) return false;
     PollBudget polls(poll_nanoseconds, most_polls);

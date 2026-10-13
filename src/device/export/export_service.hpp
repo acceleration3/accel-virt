@@ -18,6 +18,7 @@
 namespace av {
 
 class ContextPlane;
+class HeadPlanes;
 class DisplayClock;
 class ExportGreeting;
 class Host;
@@ -35,7 +36,8 @@ public:
 
     /* Main loop, at realize: where surfaces come from, and what hello
      * answers. */
-    void                 attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting);
+    void                 attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting,
+                         HeadPlanes &heads);
     /* Main loop. `connection`, which the glue accepted, served - and the
      * service's from now on - or refused, leaving it the glue's to close:
      * invalid_parameter for another user's process, no_space while

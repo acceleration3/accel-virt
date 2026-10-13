@@ -7,6 +7,11 @@
 namespace av {
 
 /* A page, so a test that reads the descriptor's size reads something. */
+RecordingContextPlane::~RecordingContextPlane()
+{
+    if (composed_fd_ >= 0) ::close(composed_fd_);
+}
+
 int RecordingContextPlane::fresh_memfd() const
 {
     const int fd = ::memfd_create("recorded-surface", MFD_CLOEXEC);

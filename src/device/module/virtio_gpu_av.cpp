@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/control/display_clock_commands.hpp"
+#include "device/control/scanout_plane_commands.hpp"
 #include "device/control/display_mode_commands.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
@@ -29,7 +30,7 @@ constexpr uint64_t guest_probe_address = 0x100000u;
 VirtioGpuAv::VirtioGpuAv(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
       heads_(host, blobs_), display_modes_(host), interrupts_(host),
-      clock_(host, interrupts_, &AvDisplayFramesShow, this), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
+      clock_(host, interrupts_, &AvDisplayFramesShow, this), planes_(host), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
       remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host, clock_)
       {
           AV_SCOPE("VirtioGpuAv::VirtioGpuAv");
@@ -88,7 +89,8 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
      * setup against the narrowed one before the renderer sees it. */
     /* Snapshots are read where the contexts run: in this process only. */
     const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine | CapsetInfo::feature_raises |
-                              (contexts_->reads_frames() ? CapsetInfo::feature_present_from_image : 0u);
+                              (contexts_->reads_frames() ? CapsetInfo::feature_present_from_image : 0u) |
+                              (contexts_->composes() ? CapsetInfo::feature_scanout_planes : 0u);
     if (isolated) {
         capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, features);
         const Status started = contexts_->start(capset_.info().gpu().uuid(), capset_.info());
@@ -110,8 +112,10 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         contexts_->import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
         capset_.withdraw_guest_import();
     attach_exports();
-    if (clock_.initialize() == Status::no_memory || presents_.initialize() == Status::no_memory) {
-        message.append("virtio-gpu-av: the host has no mutex or event for the display clock or the present engine");
+    if (clock_.initialize() == Status::no_memory || presents_.initialize() == Status::no_memory ||
+        planes_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-av: the host has no mutex or event for the display clock, the present engine or"
+                       " the scanout planes");
         host_.log(message.text());
         return Status::no_memory;
     }
@@ -126,7 +130,7 @@ void VirtioGpuAv::attach_exports()
     const uint8_t *const uuid = capset_.info().gpu().uuid();
     PciAddress           address;
     const bool           on_pci = host_.gpu_pci_address(binding_.index(), address) == Status::ok;
-    exports_.attach(*contexts_, uuid, on_pci ? address.greeting(uuid) : ExportGreeting(uuid));
+    exports_.attach(*contexts_, uuid, on_pci ? address.greeting(uuid) : ExportGreeting(uuid), planes_);
 }
 
 /* After the GPU is bound, so the recording's header names the GPU it recorded
@@ -149,6 +153,7 @@ void VirtioGpuAv::reset()
     AV_SCOPE("VirtioGpuAv::reset");
     host_.require_main_loop("VirtioGpuAv::reset");
     clock_.detach();
+    planes_.clear();
     presents_.detach();
     contexts_->destroy_all();
     /* The guest's shared-object ids start again, so what the executor still
@@ -207,6 +212,7 @@ bool VirtioGpuAv::control(void *request, uint32_t type)
            PresentCommands(host_).answer(control, type) ||
            DisplayModeCommands(host_, display_modes_).answer(control, type) ||
            DisplayClockCommands(host_, clock_).answer(control, type) ||
+           ScanoutPlaneCommands(host_, planes_).answer(control, type) ||
            PresentEngineCommands(host_, presents_, snapshots).answer(control, type);
 }
 
@@ -304,6 +310,18 @@ bool VirtioGpuAv::export_image(uint64_t key, AvExportedImage &image)
     return contexts_->export_image(capset_.info().gpu().uuid(), key, image);
 }
 
+bool VirtioGpuAv::export_head(uint32_t head, uint64_t key, AvExportedImage &image)
+{
+    AV_SCOPE("VirtioGpuAv::export_head");
+    if (!realized()) return false;
+    if (!planes_.composed(head)) return key != 0u && export_image(key, image);
+    AvScanoutPlane planes[HeadPlanes::layers] = {};
+    uint32_t       width = 0u;
+    uint32_t       height = 0u;
+    const uint32_t count = planes_.planes(head, planes, width, height);
+    return contexts_->compose_planes(capset_.info().gpu().uuid(), planes, count, width, height, image);
+}
+
 bool VirtioGpuAv::post_frame(uint32_t head, uint32_t frame, uint64_t key)
 {
     AV_SCOPE("VirtioGpuAv::post_frame");
@@ -323,7 +341,7 @@ void VirtioGpuAv::show_latched_frames()
     for (uint32_t head = 0u; head < DisplayClock::heads; head++) {
         uint64_t         key = 0u;
         AvExportedImage image = {};
-        if (!clock_.take_unshown(head, key) || !export_image(key, image)) continue;
+        if (!clock_.take_unshown(head, key) || !export_head(head, key, image)) continue;
         static_cast<void>(host_.show_image(head, image));
     }
 }

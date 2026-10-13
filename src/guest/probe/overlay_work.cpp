@@ -7,7 +7,7 @@
 
 namespace av {
 
-OverlayWork::OverlayWork(OverlayEntry &dxgi) : dxgi_(dxgi), made_(false), mode_(0u)
+OverlayWork::OverlayWork(OverlayEntry &dxgi, uint32_t hold) : dxgi_(dxgi), hold_(hold), made_(false), mode_(0u)
 {
     AV_SCOPE("OverlayWork::OverlayWork");
 }
@@ -30,16 +30,22 @@ void OverlayWork::run(ScenarioSteps &steps)
      * DWM promotes an RGB swap chain without them, so the steps go on. */
     steps.check_measured("overlays", supported ? Status::ok : Status::not_supported, supported ? 1u : 0u);
     uint32_t flags = 0u;
-    if (steps.check_result("check_overlay_support", dxgi_.overlay_support(flags)) != Status::ok) return;
+    if (steps.check_result("check_overlay_support", dxgi_.overlay_support(format_bgra, flags)) != Status::ok) return;
     steps.check_measured("overlay_support",
                          (flags & (support_direct | support_scaling)) != 0u ? Status::ok : Status::not_supported,
                          flags);
-    promote(steps, "overlay_plane", window_x, window_y, window_width, window_height);
-    promote(steps, "direct_flip", 0, 0, 0u, 0u);
+    uint32_t video = 0u;
+    if (steps.check_result("check_video_overlay_support", dxgi_.overlay_support(format_nv12, video)) != Status::ok)
+        return;
+    steps.check_measured("video_overlay_support",
+                         (video & (support_direct | support_scaling)) != 0u ? Status::ok : Status::not_supported,
+                         video);
+    promote(steps, "overlay_plane", window_x, window_y, window_width, window_height, hold_);
+    promote(steps, "direct_flip", 0, 0, 0u, 0u, 0u);
 }
 
 void OverlayWork::promote(ScenarioSteps &steps, const char *step, int32_t x, int32_t y, uint32_t width,
-                          uint32_t height)
+                          uint32_t height, uint32_t hold)
 {
     AV_SCOPE("OverlayWork::promote");
     if (steps.check_result(step, dxgi_.create_swap_chain(x, y, width, height)) != Status::ok) return;
@@ -60,6 +66,8 @@ void OverlayWork::promote(ScenarioSteps &steps, const char *step, int32_t x, int
     if (steps.check_result("frame_statistics", asked) != Status::ok) return;
     mode_ = mode;
     steps.check_measured(step, mode == mode_overlay ? Status::ok : Status::not_supported, mode);
+    for (uint32_t frame = 0u; frame < hold; frame++)
+        if (dxgi_.present(colour) < 0) return;
 }
 
 uint32_t OverlayWork::mode() const

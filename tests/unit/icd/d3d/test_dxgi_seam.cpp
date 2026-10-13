@@ -279,7 +279,21 @@ TEST(dxgi_seam, the_overlay_slots_answer_no_planes_and_no_groups)
   space.hDevice = device.block();
   space.Supported = 1;
   CHECK_EQ(device.call(Slot::overlay_color_space, &space), hr_ok);
-  CHECK_EQ(space.Supported, 0); }
+  CHECK_EQ(space.Supported, 0);
+  /* What avgpu's planes show: the scanout's RGB in the desktop's space, and
+   * NV12 or YUY2 video in a BT.601 or BT.709 YCbCr space. */
+  struct Case {
+      std::uint32_t format, colour_space;
+      std::int32_t  supported;
+  };
+  const Case cases[] = {{87u, 0u, 1}, {28u, 0u, 1}, {87u, 8u, 0}, {103u, 8u, 1}, {107u, 5u, 1},
+                        {103u, 0u, 0}, {103u, 12u, 0}, {2u, 0u, 0}};
+  for (const Case &item : cases) {
+      space.Format = item.format;
+      space.ColorSpace = item.colour_space;
+      CHECK_EQ(device.call(Slot::overlay_color_space, &space), hr_ok);
+      CHECK_EQ(space.Supported, item.supported);
+  } }
 
 TEST(dxgi_seam, the_present_duration_slot_answers_no_custom_duration)
 { Device device;

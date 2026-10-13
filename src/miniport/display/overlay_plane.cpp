@@ -14,14 +14,14 @@ constexpr uint32_t stretch_quality_bilinear = 1u;
 
 OverlayPlane::OverlayPlane()
     : layer_(0u), present_id_(0u), allocation_(nullptr), address_(0), source_{}, destination_{}, clip_{}, flips_(0u),
-      blended_(false), filtered_(false)
+      blended_(false), filtered_(false), colour_space_(0u)
 {
     AV_SCOPE("OverlayPlane::OverlayPlane");
 }
 
 OverlayPlane::OverlayPlane(uint32_t layer, uint64_t present_id)
     : layer_(layer), present_id_(present_id), allocation_(nullptr), address_(0), source_{}, destination_{}, clip_{},
-      flips_(0u), blended_(false), filtered_(false)
+      flips_(0u), blended_(false), filtered_(false), colour_space_(0u)
 {
     AV_SCOPE("OverlayPlane::OverlayPlane");
 }
@@ -31,7 +31,8 @@ OverlayPlane::OverlayPlane(uint32_t layer, uint64_t present_id, void *allocation
     : layer_(layer), present_id_(present_id), allocation_(allocation), address_(address), source_(attributes.SrcRect),
       destination_(attributes.DstRect), clip_(attributes.ClipRect),
       flips_(attributes.Flags & (overlay_vertical_flip | overlay_horizontal_flip)),
-      blended_((attributes.Blend & overlay_blend_alpha) != 0u), filtered_(attributes.StretchQuality >= stretch_quality_bilinear)
+      blended_((attributes.Blend & overlay_blend_alpha) != 0u),
+      filtered_(attributes.StretchQuality >= stretch_quality_bilinear), colour_space_(attributes.ColorSpaceType)
 {
     AV_SCOPE("OverlayPlane::OverlayPlane");
 }
@@ -106,6 +107,12 @@ bool OverlayPlane::filtered() const
 {
     AV_SCOPE("OverlayPlane::filtered");
     return filtered_;
+}
+
+uint32_t OverlayPlane::colour_space() const
+{
+    AV_SCOPE("OverlayPlane::colour_space");
+    return colour_space_;
 }
 
 }  // namespace av

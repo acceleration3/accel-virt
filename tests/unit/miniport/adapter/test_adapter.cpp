@@ -85,6 +85,8 @@
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay3_record.hpp"
+#include "miniport/ddi/dxgkarg_check_multiplane_overlay_support3_record.hpp"
+#include "miniport/ddi/dxgkarg_multiplane_overlay_caps_records.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_record.hpp"
@@ -1712,6 +1714,37 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, records_every_p
   request.ppPlanes = nullptr;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(nullptr)), invalid_parameter); }
+
+/* The overlay DDIs answer through OverlaySupport for the adapter's sources: a
+ * device whose capset offers no scanout planes is one plane a source, and an
+ * empty configuration is always one it shows. */
+TEST(adapter_overlay_ddis, answer_caps_post_composition_and_checks_for_the_adapter_s_sources)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargGetMultiPlaneOverlayCapsRecord caps = {};
+  CHECK_EQ(nt(fixture.adapter().get_multi_plane_overlay_caps(&caps)), success);
+  CHECK_EQ(caps.MaxPlanes, 1u);
+  caps.VidPnSourceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().get_multi_plane_overlay_caps(&caps)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().get_multi_plane_overlay_caps(nullptr)), invalid_parameter);
+  av::DxgkargGetPostCompositionCapsRecord post = {};
+  CHECK_EQ(nt(fixture.adapter().get_post_composition_caps(&post)), success);
+  CHECK_EQ(post.MaxStretchFactor, 0x3F800000u);
+  CHECK_EQ(nt(fixture.adapter().get_post_composition_caps(nullptr)), invalid_parameter);
+  av::DxgkargCheckMultiPlaneOverlaySupport3Record check = {};
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 1);
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(nullptr)), invalid_parameter);
+  /* A refusal says which plane and why, in the driver's log: a second layer
+   * on a device that composes none. */
+  av::DxgkMultiplaneOverlayPlaneWithSource2Record second = {};
+  second.LayerIndex = 1u;
+  av::DxgkMultiplaneOverlayPlaneWithSource2Record *planes[] = {&second};
+  check.PlaneCount = 1u;
+  check.ppPlanes = planes;
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 0);
+  CHECK(fixture.platform().logged_line("overlay refused, plane 0 of 1 layer 1")); }
 
 TEST(adapter_set_vidpn_source_visibility, records_it_for_the_source)
 { Fixture fixture;

@@ -43,3 +43,15 @@ TEST(present_format, every_dxgi_variant_scans_out_as_its_family)
   CHECK_EQ(PresentFormat(92u).ddi(), ddi_x8r8g8b8);
   CHECK_EQ(PresentFormat(23u).ddi(), ddi_a2b10g10r10);
   CHECK_EQ(PresentFormat(dxgi_r8g8b8a8_unorm).ddi(), ddi_a8b8g8r8); }
+
+/* Video a plane shows is named to the miniport by its fourcc - NV12 and YUY2
+ * - which it reads to tell video from RGB (OverlaySupport), and comes back. */
+TEST(present_format, video_is_named_by_its_fourcc_both_ways)
+{ constexpr std::uint32_t ddi_nv12 = 0x3231564Eu, ddi_yuy2 = 0x32595559u;
+  CHECK_EQ(PresentFormat(103u).ddi(), ddi_nv12);
+  CHECK_EQ(PresentFormat(107u).ddi(), ddi_yuy2);
+  PresentFormat format(0u);
+  CHECK(format.take_ddi(ddi_nv12));
+  CHECK_EQ(format.dxgi(), 103u);
+  CHECK(format.take_ddi(ddi_yuy2));
+  CHECK_EQ(format.dxgi(), 107u); }

@@ -1228,6 +1228,45 @@ treats it as hostile (any value is a divisor or none). The guest never trusts
 the device either: a wrong magic, version or head count is a page it ignores,
 and a sequence that goes backwards is a blank it does not report.
 
+## Scanout planes (guest -> device)
+
+A device that offers `feature_scanout_planes` (capset bit 7, 128) composes a
+head's overlay planes, as a display controller layers them at scanout: avgpu
+then offers Windows four planes a source instead of one (`OverlaySupport`), and
+carries the planes each flip left before the frame that shows them.
+
+`SCANOUT_PLANE` (`0x02F8`, 88 bytes) is one layer of one head:
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | type `0x02F8` |
+| 24 | 4 | head | the scanout the plane is on |
+| 28 | 4 | layer | 0 to 3, 0 the bottom |
+| 32 | 4 | flags | bit 0 shown, bit 1 filtered (scaled with a filter, not the nearest pixel) |
+| 36 | 4 | reserved | 0 |
+| 40 | 8 | key | the host image the plane shows (§3.1 of d3d-desktop.md); 0 for a plane not shown |
+| 48 | 16 | source | i32 left, top, right, bottom in the image |
+| 64 | 16 | destination | i32 left, top, right, bottom on the head |
+| 80 | 4 | head width | the head's size, which the device composes at |
+| 84 | 4 | head height | |
+
+The guest folds the plane's clip and the head's edges into both rectangles
+before it sends them, cutting the source in the same proportion, so the device
+draws exactly the source into exactly the destination. A plane with nothing
+left on the head is sent not shown. The guest sends a layer only when what it
+shows changed, and every layer of a source flipped any way but the MPO3 DDI is
+sent not shown. A shown plane with no key, an empty or inverted rectangle or a
+source left of or above its image is refused, as is a layer past 3, a head of
+no size or one wider or taller than 16384.
+
+The device keeps each head's layers. A head that shows nothing but its base
+plane filling it is shown as before planes, from `SCANOUT_IMAGE`'s key; any
+other is composed: the head's planes, by layer, drawn on the host GPU into one
+image of the head's size, black where no plane is (`PlaneComposer`, through
+the executor's `compose_planes`), at the blank that latches the frame
+`SCANOUT_IMAGE` posts after them. The export socket's head request
+(external-export.md §4) hands the same composition to a consumer.
+
 ## Present engine (guest -> device, device -> guest)
 
 A present's pixels - dxgkrnl's own blts and fills, and an application's

@@ -112,7 +112,8 @@ uint32_t ExportAnswer::reason() const
 uint32_t ExportAnswer::descriptors() const
 {
     AV_SCOPE("ExportAnswer::descriptors");
-    const bool hands_over = operation_ == ExportOperation::export_surface || operation_ == ExportOperation::sync;
+    const bool hands_over = operation_ == ExportOperation::export_surface || operation_ == ExportOperation::sync ||
+                            operation_ == ExportOperation::head;
     return hands_over && status_ == Status::ok ? 1u : 0u;
 }
 
@@ -156,6 +157,7 @@ bool ExportAnswer::fields_valid() const
         return surface_ == 0u && layout_.empty() && writes_ == 0u &&
                (status_ == Status::ok ? greeting_.valid() : greeting_.empty());
     case ExportOperation::export_surface:
+    case ExportOperation::head:
         return surface_ != 0u && greeting_.empty() && writes_ == 0u &&
                (status_ == Status::ok ? layout_.describes_a_picture() : layout_.empty());
     case ExportOperation::sync:
@@ -191,6 +193,7 @@ Status ExportAnswer::encode(uint8_t *bytes, size_t capacity) const
         writer.write_zeros(8u);
         break;
     case ExportOperation::export_surface:
+    case ExportOperation::head:
         writer.write_u32(layout_.width());
         writer.write_u32(layout_.height());
         writer.write_u32(layout_.fourcc());
@@ -242,7 +245,8 @@ Status ExportAnswer::decode(const uint8_t *bytes, size_t length, uint32_t descri
         /* Without the flag the address fields must be 0; the greeting built
          * without them cannot say otherwise, so they are kept as reserved. */
         if ((flags & on_pci_flag) == 0u) reserved |= domain | bus | device | function;
-    } else if (candidate.operation_ == ExportOperation::export_surface) {
+    } else if (candidate.operation_ == ExportOperation::export_surface ||
+               candidate.operation_ == ExportOperation::head) {
         const uint32_t width = reader.read_u32();
         const uint32_t height = reader.read_u32();
         const uint32_t fourcc = reader.read_u32();

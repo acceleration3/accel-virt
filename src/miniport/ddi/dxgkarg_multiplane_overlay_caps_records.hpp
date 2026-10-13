@@ -31,6 +31,7 @@ struct DxgkargGetPostCompositionCapsRecord {
 constexpr uint32_t overlay_caps_vertical_flip = 0x4u;
 constexpr uint32_t overlay_caps_horizontal_flip = 0x8u;
 constexpr uint32_t overlay_caps_stretch_rgb = 0x10u;
+constexpr uint32_t overlay_caps_stretch_yuv = 0x20u;
 constexpr uint32_t overlay_caps_bilinear_filter = 0x40u;
 constexpr uint32_t overlay_caps_shared = 0x100u;
 

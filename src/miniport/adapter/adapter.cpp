@@ -228,6 +228,7 @@ void Adapter::remember_device()
         host_visible_.offer(capset);
         memory_.offer_local(capset);
         scanout_.offer(capset);
+        overlays_.offer(capset);
         /* A window this driver cannot place chunks in is logged, never a
          * failed start: every chunk then falls back to guest RAM. */
         if (host_visible_.offered())
@@ -1973,7 +1974,52 @@ int32_t Adapter::check_multi_plane_overlay_support3(DxgkargCheckMultiPlaneOverla
     AV_SCOPE("Adapter::check_multi_plane_overlay_support3");
     platform_.require_irql_at_most(Irql::passive, "Adapter::check_multi_plane_overlay_support3");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(overlays_.check(*request)).value();
+    const Status checked = overlays_.check(*request);
+    if (checked == Status::ok && request->Supported == 0) log_refused_overlay(*request);
+    return NtStatus(checked).value();
+}
+
+/* A configuration refused is a window DWM composes instead of promoting, and
+ * nothing else says why: the plane that failed, what it is and where. */
+void Adapter::log_refused_overlay(const DxgkargCheckMultiPlaneOverlaySupport3Record &request)
+{
+    AV_SCOPE("Adapter::log_refused_overlay");
+    if (!budget_.allows()) return;
+    const uint32_t failing = request.ReturnInfo & check_failing_plane_mask;
+    char           bytes[224];
+    TextBuffer     message(bytes, sizeof bytes);
+    message.append("avgpu: overlay refused, plane ");
+    message.append_decimal(failing);
+    message.append(" of ");
+    message.append_decimal(request.PlaneCount);
+    const DxgkMultiplaneOverlayPlaneWithSource2Record *const plane =
+        failing < request.PlaneCount ? request.ppPlanes[failing] : nullptr;
+    if (plane != nullptr) {
+        const auto *const allocation = static_cast<const Allocation *>(plane->hAllocation);
+        const DxgkMultiplaneOverlayAttributes3Record &shown = plane->PlaneAttributes;
+        message.append(" layer ");
+        message.append_decimal(plane->LayerIndex);
+        message.append(" format 0x");
+        message.append_hex(allocation != nullptr ? allocation->descriptor().layout().format() : 0u, 8u);
+        message.append(allocation != nullptr && allocation->host_key() != 0u ? " keyed" : " unkeyed");
+        message.append(" space ");
+        message.append_decimal(shown.ColorSpaceType);
+        message.append(" rotation ");
+        message.append_decimal(shown.Rotation);
+        message.append(" flags 0x");
+        message.append_hex(shown.Flags, 2u);
+        message.append(" src ");
+        message.append_decimal(static_cast<uint32_t>(shown.SrcRect.right - shown.SrcRect.left));
+        message.append("x");
+        message.append_decimal(static_cast<uint32_t>(shown.SrcRect.bottom - shown.SrcRect.top));
+        message.append(" dst ");
+        message.append_decimal(static_cast<uint32_t>(shown.DstRect.right - shown.DstRect.left));
+        message.append("x");
+        message.append_decimal(static_cast<uint32_t>(shown.DstRect.bottom - shown.DstRect.top));
+    } else if (request.PostCompositionCount != 0u) {
+        message.append(" (the post-composition)");
+    }
+    platform_.log(message.text());
 }
 
 int32_t Adapter::get_multi_plane_overlay_caps(DxgkargGetMultiPlaneOverlayCapsRecord *request)

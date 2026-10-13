@@ -15,6 +15,7 @@ namespace av {
 
 class ContextSetup;
 class GuestPageList;
+class ScanoutPlaneRequest;
 class WireWriter;
 
 class AvRequestWriter {
@@ -62,6 +63,8 @@ public:
     [[nodiscard]] Status present_engine(uint64_t address);
     /* DISPLAY_TIMING: head `head` blanks at `refresh_millihz` (DisplayTimingRequest). */
     [[nodiscard]] Status display_timing(uint32_t head, uint32_t refresh_millihz);
+    /* SCANOUT_PLANE: one overlay plane of a head (ScanoutPlaneRequest). */
+    [[nodiscard]] Status scanout_plane(const ScanoutPlaneRequest &plane);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
     /* Bytes of the last request written; zero after one that did not fit. */
     size_t               length() const;

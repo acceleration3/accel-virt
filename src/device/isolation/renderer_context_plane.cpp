@@ -434,6 +434,19 @@ void RendererContextPlane::drop_images()
     }
 }
 
+bool RendererContextPlane::composes() const
+{
+    AV_SCOPE("RendererContextPlane::composes");
+    return false;
+}
+
+bool RendererContextPlane::compose_planes(const uint8_t *, const AvScanoutPlane *, uint32_t, uint32_t, uint32_t,
+                                          AvExportedImage &)
+{
+    AV_SCOPE("RendererContextPlane::compose_planes");
+    return false;
+}
+
 bool RendererContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("RendererContextPlane::export_image");

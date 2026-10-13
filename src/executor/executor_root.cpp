@@ -76,6 +76,15 @@ bool ExecutorRoot::export_image(uint32_t domain, uint64_t id, AvExportedImage &i
     return device != nullptr && device->export_image(domain, id, image);
 }
 
+bool ExecutorRoot::compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                                  uint32_t height, AvExportedImage &image)
+{
+    AV_SCOPE("ExecutorRoot::compose_planes");
+    const HostGpu *const   gpu = gpu_of(domain);
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->compose_planes(domain, planes, count, width, height, image);
+}
+
 void ExecutorRoot::release_shared(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("ExecutorRoot::release_shared");

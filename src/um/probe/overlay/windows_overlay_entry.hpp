@@ -20,7 +20,7 @@ public:
 
     int32_t create_device() override;
     int32_t supports_overlays(bool &supported) override;
-    int32_t overlay_support(uint32_t &flags) override;
+    int32_t overlay_support(uint32_t format, uint32_t &flags) override;
     int32_t create_swap_chain(int32_t x, int32_t y, uint32_t width, uint32_t height) override;
     int32_t present(const uint8_t *colour) override;
     int32_t composition(uint32_t &mode) override;

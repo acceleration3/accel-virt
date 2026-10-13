@@ -66,10 +66,10 @@ answers for the surfaces the guest shared.
 ## 3. Messages
 
 Little-endian, fixed size, one datagram each; each starts with a magic and a
-version. This document is version **1.1**. A device reads any minor of major 1
+version. This document is version **1.2**. A device reads any minor of major 1
 as this layout and answers a request of another major `not_supported`. A
-consumer should do the same with answers. Version 1.1 added timing (§4);
-a 1.0 device answers it as a request it cannot read.
+consumer should do the same with answers. Version 1.1 added timing (§4),
+and 1.2 head (§4); an older device answers each as a request it cannot read.
 
 ### 3.1 Request (consumer -> device), 32 bytes
 
@@ -77,10 +77,10 @@ a 1.0 device answers it as a request it cannot read.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXQ` = `0x51585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 1 |
-| 8 | u32 | operation | 1 hello, 2 export, 3 sync, 4 release, 5 timing |
+| 6 | u16 | minor | 2 |
+| 8 | u32 | operation | 1 hello, 2 export, 3 sync, 4 release, 5 timing, 6 head |
 | 12 | u32 | reserved / refresh | 0; for timing, the consumer's display's refresh in millihertz, 1000 to 1000000 |
-| 16 | u64 | surface / blank | the guest's shared id (§5); 0 for hello. For timing, a moment on the host's `CLOCK_MONOTONIC`, in ns and not 0, that the guest's display is to blank in phase with |
+| 16 | u64 | surface / blank | the guest's shared id (§5); 0 for hello; for head, the head plus one, 1 to 16. For timing, a moment on the host's `CLOCK_MONOTONIC`, in ns and not 0, that the guest's display is to blank in phase with |
 | 24 | u64 | tag | the consumer's own; the answer carries it back |
 
 A consumer sends no descriptors; any that come are closed. A request may be
@@ -105,20 +105,28 @@ Bodies of an answer with status ok:
 | Operation | Body | Beside it |
 |---|---|---|
 | hello | 16 bytes GPU UUID (`VkPhysicalDeviceIDProperties::deviceUUID`), u32 PCI domain, u8 bus, u8 device, u8 function, u8 flags (bit 0: on PCI; otherwise the address is 0), 8 bytes reserved | nothing |
-| export | u32 width, u32 height, u32 DRM fourcc, u32 stride (bytes), u32 offset (bytes), u32 reserved, u64 DRM format modifier | the dma-buf |
+| export, head | u32 width, u32 height, u32 DRM fourcc, u32 stride (bytes), u32 offset (bytes), u32 reserved, u64 DRM format modifier | the dma-buf |
 | sync | u64 copies run, 24 bytes zero | the sync_file |
 | release | zero | nothing |
 | timing | zero | nothing |
 | revoked (event) | u32 reason (1 the guest released the surface, 2 the device was reset), 28 bytes zero | nothing |
 
-A descriptor travels with `SCM_RIGHTS`, exactly one beside an ok export or
-sync and none otherwise. It is the consumer's to close.
+A descriptor travels with `SCM_RIGHTS`, exactly one beside an ok export, sync
+or head and none otherwise. It is the consumer's to close.
 
 `src/proto/export/` holds both encoders and decoders (`ExportRequest`,
 `ExportAnswer`), with every rule above, a hostile sweep each and
 `tests/fuzz/fuzz_export_messages.cpp`.
 
 ## 4. What each operation does
+
+- **head** composes what the head shows now - its overlay planes (protocol.md,
+  "Scanout planes") drawn by layer into one image of the head's size - and
+  answers it as a linear B8G8R8A8 dma-buf (modifier `DRM_FORMAT_MOD_LINEAR`)
+  the consumer may map. Each request composes again into the same image, so a
+  consumer reads one before it asks for the next; nothing is held, and nothing
+  is revoked. `not_found` for a head with no plane, `unavailable` where the
+  device composes none (`renderer=`, or an executor without `compose_planes`).
 
 - **hello** names the GPU the surfaces are on, so the consumer imports on the
   same one: match the UUID against `VkPhysicalDeviceIDProperties::deviceUUID`,
@@ -256,18 +264,19 @@ the miniport tells the device, and the consumer is told (§4).
 
 ## 6. The host side: importing
 
-The dma-buf is the texture's own memory, laid out as the driver laid out the
-image, and the driver keeps that layout with the memory: the image was bound
-to memory of its own (dedicated), and RADV writes its layout into the
-buffer's metadata. So the modifier is `DRM_FORMAT_MOD_INVALID`
-(`0x00FFFFFFFFFFFFFF`): implicit, and readable only on the same GPU (§4,
-hello).
+The dma-buf is the texture's own memory, bound to memory of its own
+(dedicated) and laid out linear: an implicit layout is one only some drivers
+keep with the memory - RADV writes it into the buffer's metadata, Intel's i915
+and Xe do not, and an importer there read the picture scrambled - so the image
+is made with `VK_IMAGE_TILING_LINEAR` where the GPU can export it so
+(`ExportableImages`), and the modifier is `DRM_FORMAT_MOD_LINEAR` (0). It is
+still imported on the same GPU (§4, hello).
 
 - **EGL** (Qt's OpenGL, Mesa radeonsi): `eglCreateImageKHR(display,
   EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, { EGL_WIDTH, w, EGL_HEIGHT, h,
   EGL_LINUX_DRM_FOURCC_EXT, fourcc, EGL_DMA_BUF_PLANE0_FD_EXT, fd,
   EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset, EGL_DMA_BUF_PLANE0_PITCH_EXT, stride,
-  EGL_NONE })` - with no modifier attributes, which is what implicit is - then
+  EGL_NONE })` - with no modifier attributes, which a linear buffer needs none of - then
   `glEGLImageTargetTexture2DOES`. The display must be the GPU hello named
   (`EGL_EXT_platform_device` / `EGL_EXT_device_drm`).
 - **Vulkan** (same GPU): make the image exactly as `ExportableImageInfo`
@@ -301,10 +310,8 @@ imports the export with EGL at 256x128, at 1003x701 (a pitch of 4096 bytes -
 the driver's, not the width's) and at 2560x1440, and finds every texel where
 Direct3D put it.
 
-What the implicit layout gives up: a consumer on another GPU (this machine's
-integrated one), or on a driver that keeps no layout with the memory, cannot
-read it. A linear copy per frame on the host would serve those, at the cost
-above; nothing here makes one yet.
+What the linear layout gives up is the GPU's own tiling, which composition
+reads faster; what it gains is a picture every driver reads the same.
 
 ## 8. Where it lives
 

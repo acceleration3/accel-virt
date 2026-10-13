@@ -274,6 +274,9 @@ typedef struct AvHostOps {
     /* Closes a descriptor the export path owns: a connection, or a dma-buf or
      * a sync_file the executor handed over. */
     void (*close_export)(void *opaque, int descriptor);
+    /* A descriptor of the export path's own for one the executor keeps -
+     * a scanout's dma-buf - so a send can close it; -1 when none is left. */
+    int (*duplicate_export)(void *opaque, int descriptor);
 } AvHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from
@@ -318,6 +321,11 @@ int av_device_control(AvDevice *device, void *request, uint32_t type);
 /* The image published under `key` as a dma-buf the executor owns (see
  * AvExportedImage); 1 when there is one. Main loop. */
 int av_device_export_image(AvDevice *device, uint64_t key, AvExportedImage *image);
+/* What head `head` shows as a dma-buf the executor owns: its overlay planes
+ * composed where the guest gave it more than a base plane filling it
+ * (SCANOUT_PLANE), else the image published under `key`. 1 when there is one.
+ * Main loop. */
+int av_device_export_head(AvDevice *device, uint32_t head, uint64_t key, AvExportedImage *image);
 int av_device_read_image(AvDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                           uint32_t height);
 /* SCANOUT_IMAGE's frame `frame` of head `head`, the image published under

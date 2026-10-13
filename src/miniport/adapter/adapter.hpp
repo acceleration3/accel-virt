@@ -459,6 +459,7 @@ private:
     /* The flip's answer to dxgkrnl, and the DPC that carries it asked for. */
     int32_t              flipped(Status set);
     void                 log_scanout(uint32_t source, uint32_t segment, int64_t address);
+    void                 log_refused_overlay(const DxgkargCheckMultiPlaneOverlaySupport3Record &request);
     /* A step whose answer is only meaningful next to the handle it was given -
      * DxgkDdiCreateDevice receives the runtime's handle and answers with the
      * driver's, and a guest that ends up with neither needs both in the log. */

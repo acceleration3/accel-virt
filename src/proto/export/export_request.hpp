@@ -19,7 +19,9 @@ public:
     static constexpr size_t   encoded_size = 32u;
     static constexpr uint32_t magic = 0x51585641u;   /* "AVXQ" */
     static constexpr uint16_t major = 1u;
-    static constexpr uint16_t minor = 1u;
+    static constexpr uint16_t minor = 2u;
+    /* The heads a head request may name, the display clock's. */
+    static constexpr uint64_t most_heads = 16u;
 
     ExportRequest();
     ExportRequest(ExportOperation operation, uint64_t surface, uint64_t tag);
@@ -28,8 +30,11 @@ public:
     ExportRequest(uint32_t refresh_millihz, uint64_t blank, uint64_t tag);
 
     ExportOperation operation() const;
-    /* The guest's shared id; 0 for hello and timing, which name none. */
+    /* The guest's shared id; 0 for hello and timing, which name none. A head
+     * request names head N as N + 1. */
     uint64_t        surface() const;
+    /* A head request's head. */
+    uint32_t        head() const;
     uint64_t        tag() const;
     /* A timing request's; 0 in any other. */
     uint32_t        refresh_millihz() const;

@@ -219,6 +219,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     };
     table_.shutdown_export = [](void *opaque, int connection) { host_of(opaque).shutdown_export(connection); };
     table_.close_export = [](void *opaque, int descriptor) { host_of(opaque).close_export(descriptor); };
+    table_.duplicate_export = [](void *opaque, int descriptor) { return host_of(opaque).duplicate_export(descriptor); };
 }
 
 const AvHostOps &MockHostOps::table() const

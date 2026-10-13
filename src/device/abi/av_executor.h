@@ -32,7 +32,7 @@ extern "C" {
  * rather than one to serve. 16 made the library the one place a shared object
  * is known (HostShares): the device names a guest device's objects by a
  * domain it opens, and the library publishes, opens and releases them. */
-#define AV_EXECUTOR_ABI_VERSION 16u
+#define AV_EXECUTOR_ABI_VERSION 17u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -129,6 +129,26 @@ typedef struct AvExportedImage {
     uint32_t reserved;
     uint64_t modifier;
 } AvExportedImage;
+
+/* One plane of a display head's frame (docs/protocol.md, "Scanout planes"):
+ * the image the guest shared as `key`, its `source` rectangle shown in
+ * `destination` on the head - both left, top, right, bottom, the clip already
+ * applied - and layered by `layer`, 0 the bottom. `flags` are AV_PLANE_*. */
+typedef struct AvScanoutPlane {
+    uint64_t key;
+    int32_t  source[4];
+    int32_t  destination[4];
+    uint32_t layer;
+    uint32_t flags;
+} AvScanoutPlane;
+
+/* Scaled with a filter rather than to the nearest pixel. */
+#define AV_PLANE_FILTERED 0x1u
+/* A YCbCr image converted to RGB as it is drawn: by the BT.709 matrix rather
+ * than BT.601's, and from full-range values rather than studio ones. */
+#define AV_PLANE_YCBCR 0x2u
+#define AV_PLANE_BT709 0x4u
+#define AV_PLANE_FULL_RANGE 0x8u
 
 /* DRM_FORMAT_MOD_INVALID: an exported surface's layout is the one its driver
  * keeps with the memory itself, which an importer on the same GPU reads from
@@ -278,14 +298,21 @@ typedef struct AvExecutorOps {
      * memory, a dma-buf a process outside QEMU imports with no copy
      * (docs/external-export.md): AV_EXECUTED with `image` filled, its fd the
      * caller's to close and `slot` 0, or AV_UNKNOWN for a surface nothing
-     * shares, or one whose memory no other API can open. `modifier` is
-     * AV_EXPORT_MODIFIER_IMPLICIT. Any thread. */
+     * shares, or one whose memory no other API can open. `modifier` is 0,
+     * DRM_FORMAT_MOD_LINEAR (docs/external-export.md §6). Any thread. */
     uint32_t (*export_surface)(void *opaque, uint32_t domain, uint64_t surface, AvExportedImage *image);
     /* How many copies into `surface` the host has run since it was shared, in
      * *writes, and in *fd a sync_file, the caller's, that signals once the GPU
      * has finished every one of them: AV_EXECUTED, or AV_UNKNOWN for a
      * surface nothing shares or a GPU that makes no sync_file. Any thread. */
     uint32_t (*sync_surface)(void *opaque, uint32_t domain, uint64_t surface, uint64_t *writes, int *fd);
+    /* `count` planes, by layer, composed on the GPU into one `width` by
+     * `height` image - black where no plane is - and handed over as
+     * export_image hands one over: AV_EXECUTED, or AV_UNKNOWN where a key is
+     * shared by nothing or the host cannot compose. Null in an executor that
+     * cannot compose, which a device then never offers. Main loop. */
+    uint32_t (*compose_planes)(void *opaque, uint32_t domain, const AvScanoutPlane *planes, uint32_t count,
+                               uint32_t width, uint32_t height, AvExportedImage *image);
 } AvExecutorOps;
 
 typedef const AvExecutorOps *(*AvExecutorOpsFunction)(void);

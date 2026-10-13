@@ -37,6 +37,12 @@ uint64_t ExportRequest::surface() const
     return surface_;
 }
 
+uint32_t ExportRequest::head() const
+{
+    AV_SCOPE("ExportRequest::head");
+    return operation_ == ExportOperation::head ? static_cast<uint32_t>(surface_ - 1u) : 0u;
+}
+
 uint64_t ExportRequest::tag() const
 {
     AV_SCOPE("ExportRequest::tag");
@@ -80,6 +86,7 @@ bool ExportRequest::fields_valid() const
     case ExportOperation::export_surface:
     case ExportOperation::sync:
     case ExportOperation::release: return surface_ != 0u && refresh_millihz_ == 0u;
+    case ExportOperation::head: return surface_ != 0u && surface_ <= most_heads && refresh_millihz_ == 0u;
     case ExportOperation::timing:
         return blank_ != 0u && refresh_millihz_ >= VblankRecord::least_millihz &&
                refresh_millihz_ <= VblankRecord::most_millihz;

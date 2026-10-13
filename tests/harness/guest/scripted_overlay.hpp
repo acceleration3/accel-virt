@@ -31,7 +31,9 @@ public:
 
     std::int32_t create_device() override;
     std::int32_t supports_overlays(bool &supported) override;
-    std::int32_t overlay_support(std::uint32_t &flags) override;
+    std::int32_t overlay_support(std::uint32_t format, std::uint32_t &flags) override;
+    /* The formats overlay support was asked of, in order. */
+    std::uint32_t asked_format(std::uint32_t nth) const;
     std::int32_t create_swap_chain(std::int32_t x, std::int32_t y, std::uint32_t width, std::uint32_t height) override;
     std::int32_t present(const std::uint8_t *colour) override;
     std::int32_t composition(std::uint32_t &mode) override;
@@ -49,6 +51,7 @@ private:
     bool          live_;
     std::int32_t  x_;
     std::uint32_t width_;
+    std::uint32_t formats_[4] = {};
 };
 
 }  // namespace av

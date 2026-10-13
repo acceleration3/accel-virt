@@ -867,6 +867,12 @@ TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
   host.shutdown_export(ends[0]);
   CHECK_STATUS(host.receive_export(ends[0], got, sizeof got, length), Status::not_found);
   CHECK_EQ(length, 0u);
+  /* Host::duplicate_export: a descriptor of the export path's own, which a
+   * send may close while the executor keeps the one it duplicated. */
+  const int copied = host.duplicate_export(ends[1]);
+  CHECK(copied >= 0 && copied != ends[1]);
+  ::close(copied);
+  CHECK_EQ(host.duplicate_export(-1), -1);
   host.close_export(ends[0]);
   CHECK_EQ(mock.exports_closed(), 1u);
   CHECK(!mock.descriptor_open(ends[0]));
@@ -876,7 +882,9 @@ TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
   older.send_export = nullptr;
   older.shutdown_export = nullptr;
   older.close_export = nullptr;
+  older.duplicate_export = nullptr;
   TableHost before(older);
+  CHECK_EQ(before.duplicate_export(ends[1]), -1);   /* a QEMU with no duplicate makes none */
   length = 5u;
   CHECK_STATUS(before.receive_export(ends[1], got, sizeof got, length), Status::not_found);
   CHECK_EQ(length, 0u);

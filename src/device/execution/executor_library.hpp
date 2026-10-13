@@ -73,6 +73,11 @@ public:
     /* The image shared as `key`, read into `pixels` or exported; false
      * without a domain or for a key the library does not know. */
     bool export_image(uint64_t key, AvExportedImage &image) const;
+    /* Whether the executor composes a head's planes, and its planes composed
+     * (AvExecutorOps::compose_planes). */
+    bool composes() const;
+    bool compose_planes(const AvScanoutPlane *planes, uint32_t count, uint32_t width, uint32_t height,
+                        AvExportedImage &image) const;
     bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height) const;
     /* A present's staged frame, mapped and let go. Any thread. */
     bool map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) const;

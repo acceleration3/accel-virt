@@ -67,6 +67,9 @@ public:
      * what keeps the DPC from looking them up every idle frame. */
     bool                 needs_pages(uint64_t address) const;
     bool                 scanning_out() const;
+    /* The committed mode's size; 0 before one. */
+    uint32_t             width() const;
+    uint32_t             height() const;
     /* The last refresh showed a host image by key. */
     bool                 keyed() const;
     /* Pages of the frame the committed mode needs. Dispatch at most: it is

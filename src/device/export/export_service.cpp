@@ -19,10 +19,11 @@ ExportService::~ExportService()
     for (ObjectStorage<ExportConnection> &storage : connections_) storage.destroy();
 }
 
-void ExportService::attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting)
+void ExportService::attach(ContextPlane &contexts, const uint8_t *gpu_uuid, const ExportGreeting &greeting,
+                           HeadPlanes &heads)
 {
     AV_SCOPE("ExportService::attach");
-    gpu_.attach(contexts, gpu_uuid, greeting);
+    gpu_.attach(contexts, gpu_uuid, greeting, heads);
 }
 
 /* The consumers that have gone are reaped first, so a full service still

@@ -1,6 +1,7 @@
-/* The overlay proof over a scripted DXGI: every step in order, a swap chain on
- * part of the screen and one on all of it each judged by whether DWM showed it
- * in an overlay plane, a refusal at each call kept as the HRESULT it is, a
+/* The overlay proof over a scripted DXGI - an OverlayEntry whose
+ * supports_overlays, overlay support and composition modes the test sets:
+ * every step in order, a swap chain on part of the screen and one on all of it
+ * each judged by whether DWM showed it in an overlay plane, a refusal at each call kept as the HRESULT it is, a
  * composed swap chain failed with its mode on the line, and the device released
  * whatever happened. */
 #include "guest/probe/overlay_work.hpp"
@@ -25,7 +26,7 @@ namespace {
 
 class OverlayRig {
 public:
-    OverlayRig() : report_("avoverlayprobe"), steps_(kmt_, report_, "overlay") {}
+    explicit OverlayRig(std::uint32_t hold = 0u) : report_("avoverlayprobe"), steps_(kmt_, report_, "overlay"), hold_(hold) {}
     OverlayRig(const OverlayRig &) = delete;
     OverlayRig &operator=(const OverlayRig &) = delete;
 
@@ -33,7 +34,7 @@ public:
 
     const char *run()
     {
-        { OverlayWork work(dxgi_);
+        { OverlayWork work(dxgi_, hold_);
           CHECK(work.invariants_hold());
           work.run(steps_);
           CHECK(work.invariants_hold());
@@ -49,6 +50,7 @@ private:
     GuestReport     report_;
     ScenarioSteps   steps_;
     ScriptedOverlay dxgi_;
+    std::uint32_t   hold_;
     std::uint32_t   mode_ = 0u;
 };
 
@@ -61,6 +63,9 @@ TEST(overlay_work, proves_both_swap_chains_shown_in_overlay_planes)
   const char *const report = rig.run();
   CHECK_EQ(rig.failed(), 0u);
   CHECK(says(report, "overlays"));
+  CHECK(says(report, "video_overlay_support"));
+  CHECK_EQ(rig.dxgi().asked_format(0u), OverlayWork::format_bgra);
+  CHECK_EQ(rig.dxgi().asked_format(1u), OverlayWork::format_nv12);
   CHECK(says(report, "overlay_plane"));
   CHECK(says(report, "direct_flip"));
   CHECK_EQ(rig.dxgi().calls(Call::create_swap_chain), 2u);
@@ -87,7 +92,7 @@ TEST(overlay_work, goes_on_when_the_output_has_no_video_overlays)
   rig.dxgi().answer(false, 1u, 1u);
   rig.run();
   CHECK_EQ(rig.failed(), 1u);
-  CHECK_EQ(rig.dxgi().calls(Call::overlay_support), 1u);
+  CHECK_EQ(rig.dxgi().calls(Call::overlay_support), 2u);
   CHECK_EQ(rig.dxgi().calls(Call::create_swap_chain), 2u);
   CHECK(!rig.dxgi().live()); }
 
@@ -125,5 +130,13 @@ TEST(overlay_work, takes_direct_or_scaling_overlay_support)
       OverlayRig rig;
       rig.dxgi().answer(true, flags, OverlayWork::mode_overlay);
       rig.run();
-      CHECK_EQ(rig.failed(), flags == 0u ? 1u : 0u);
+      CHECK_EQ(rig.failed(), flags == 0u ? 2u : 0u);   /* the desktop's and video's */
   } }
+
+/* A hold keeps the partial window presenting after it is judged, for a check
+ * from outside the guest, and the full-screen one after it is not held. */
+TEST(overlay_work, holds_the_partial_window_when_asked)
+{ OverlayRig rig(40u);
+  rig.run();
+  CHECK_EQ(rig.failed(), 0u);
+  CHECK_EQ(rig.dxgi().calls(Call::present), 2u * OverlayWork::presents + 40u); }

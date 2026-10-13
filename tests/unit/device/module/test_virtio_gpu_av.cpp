@@ -15,6 +15,7 @@
 #include "harness/export/fake_export_consumer.hpp"
 #include "harness/display/display_heads_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/virtio_gpu/scanout_plane_request.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/loopback_renderer_peer.hpp"
@@ -1181,3 +1182,42 @@ TEST(virtio_gpu_av_export, serves_the_bound_gpu_s_surfaces_and_revokes_them_at_a
   CHECK_EQ(answer.reason(), 2u);
   CHECK(device.invariants_hold()); }
 
+
+namespace {
+
+std::uint32_t compose_two(void *, std::uint32_t, const AvScanoutPlane *planes, std::uint32_t count,
+                          std::uint32_t width, std::uint32_t height, AvExportedImage *image)
+{
+    if (count != 2u || planes[1].key != 0x77u || width != 1280u || height != 800u) return AV_UNKNOWN;
+    *image = AvExportedImage{13, 0u, width, height, width * 4u, 0u, 0x34325241u, 0u, 0u};
+    return AV_EXECUTED;
+}
+
+}  // namespace
+
+/* VirtioGpuAv::export_head: a head that shows only its base plane filling it
+ * is the image under the key, as before planes; one with an overlay plane
+ * (SCANOUT_PLANE) is its planes composed by the executor. */
+TEST(virtio_gpu_av_export_head, composes_a_head_only_when_it_shows_more_than_its_base)
+{ ClockedDevice rig;
+  rig.executor.editable().compose_planes = compose_two;
+  AvExportedImage image = {};
+  CHECK(rig.device.export_head(0u, 0x51u, image));
+  CHECK_EQ(image.fd, 12);   /* export_image's */
+  const auto send = [&](std::uint32_t layer, std::uint64_t key, std::uint32_t right) {
+      GpuRequestBuilder request(av::ScanoutPlaneRequest::type);
+      request.u32(0u).u32(layer).u32(av::ScanoutPlaneRequest::flag_shown).u32(0u).u64(key);
+      request.u32(0u).u32(0u).u32(right).u32(800u);
+      request.u32(0u).u32(0u).u32(right).u32(800u);
+      request.u32(1280u).u32(800u);
+      MockRequest mock(request.bytes(), request.size());
+      return rig.device.control(&mock, av::ScanoutPlaneRequest::type) ? mock.response_type() : 0u;
+  };
+  CHECK_EQ(send(0u, 0x51u, 1280u), 0x1100u);
+  CHECK(rig.device.export_head(0u, 0x51u, image));
+  CHECK_EQ(image.fd, 12);   /* a base filling the head is still the key's image */
+  CHECK_EQ(send(1u, 0x77u, 640u), 0x1100u);
+  CHECK(rig.device.export_head(0u, 0x51u, image));
+  CHECK_EQ(image.fd, 13);   /* composed */
+  rig.device.reset();
+  CHECK(rig.device.export_head(0u, 0x51u, image)); }

@@ -64,6 +64,13 @@ public:
 
     /* After every Direct3D stream has run what it published. */
     virtual bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) = 0;
+    /* Whether a head's planes can be composed here, and `count` of them
+     * composed into one `width` by `height` image handed over as export_image
+     * hands one over (AvExecutorOps::compose_planes). Any thread: an export
+     * connection asks too. */
+    virtual bool composes() const = 0;
+    virtual bool compose_planes(const uint8_t *gpu_uuid, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
+                                uint32_t height, AvExportedImage &image) = 0;
     virtual bool read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                             uint32_t height) = 0;
     /* Any thread: whether a present snapshot a Direct3D session took can be

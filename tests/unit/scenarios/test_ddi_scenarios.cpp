@@ -1817,8 +1817,10 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
 TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
-  CHECK(table.routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3) == nullptr);
-  CHECK(table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) == nullptr);
+  /* The MPO3 generation is overlay planes' (OverlaySupport); its post-present
+   * DDI is one no build calls. */
+  CHECK(table.routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3) != nullptr);
+  CHECK(table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) != nullptr);
   CHECK(table.routine(DdiSlot::DxgkDdiPostMultiPlaneOverlayPresent) == nullptr);
   CHECK(table.routine(DdiSlot::DxgkDdiValidateUpdateAllocationProperty) == nullptr);
   Device device(driver, 0u);
@@ -1852,8 +1854,7 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
       DdiSlot::DxgkDdiSetTimingsFromVidPn, DdiSlot::DxgkDdiSetTargetGamma, DdiSlot::DxgkDdiSetTargetContentType,
       DdiSlot::DxgkDdiSetTargetAnalogCopyProtection, DdiSlot::DxgkDdiSetTargetAdjustedColorimetry,
       DdiSlot::DxgkDdiDisplayDetectControl, DdiSlot::DxgkDdiQueryConnectionChange,
-      DdiSlot::DxgkDdiExchangePreStartInfo, DdiSlot::DxgkDdiGetMultiPlaneOverlayCaps,
-      DdiSlot::DxgkDdiGetPostCompositionCaps,
+      DdiSlot::DxgkDdiExchangePreStartInfo,
   };
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);

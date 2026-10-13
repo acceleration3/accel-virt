@@ -599,6 +599,12 @@ void TableHost::shutdown_export(int connection)
     if (ops_.shutdown_export != nullptr) ops_.shutdown_export(ops_.opaque, connection);
 }
 
+int TableHost::duplicate_export(int descriptor)
+{
+    AV_SCOPE("TableHost::duplicate_export");
+    return ops_.duplicate_export != nullptr ? ops_.duplicate_export(ops_.opaque, descriptor) : -1;
+}
+
 void TableHost::close_export(int descriptor)
 {
     AV_SCOPE("TableHost::close_export");

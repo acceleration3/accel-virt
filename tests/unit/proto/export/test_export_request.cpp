@@ -32,7 +32,7 @@ TEST(export_request, encodes_at_the_documented_offsets_and_decodes_back)
   const ExportRequest sent(ExportOperation::sync, 0x1122334455667788ull, 0xA5A5000000000001ull);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   const std::uint8_t expected[ExportRequest::encoded_size] = {
-      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA5, 0xA5};
   CHECK(std::memcmp(bytes, expected, sizeof bytes) == 0);
   ExportRequest read;
@@ -43,9 +43,9 @@ TEST(export_request, encodes_at_the_documented_offsets_and_decodes_back)
   std::uint8_t small[ExportRequest::encoded_size - 1u] = {};
   CHECK_STATUS(sent.encode(small, sizeof small), Status::too_large); }
 
-/* Hello and timing name no surface; the other three name one. A timing
- * built as a surface request has no refresh and no moment, and is no
- * timing. */
+/* Hello and timing name no surface; export, sync and release name one, and
+ * head names a head, 1 to 16 for heads 0 to 15. A timing built as a surface
+ * request has no refresh and no moment, and is no timing. */
 TEST(export_request, each_operation_names_a_surface_or_none_as_it_must)
 { struct Case {
       ExportOperation operation;
@@ -63,7 +63,10 @@ TEST(export_request, each_operation_names_a_surface_or_none_as_it_must)
                         {ExportOperation::revoked, 9u, Status::malformed},
                         {ExportOperation::unreadable, 0u, Status::malformed},
                         {ExportOperation::timing, 9u, Status::malformed},
-                        {static_cast<ExportOperation>(6u), 9u, Status::malformed}};
+                        {ExportOperation::head, 9u, Status::ok},
+                        {ExportOperation::head, 0u, Status::malformed},
+                        {ExportOperation::head, ExportRequest::most_heads + 1u, Status::malformed},
+                        {static_cast<ExportOperation>(7u), 9u, Status::malformed}};
   for (const Case &item : cases) {
       std::uint8_t bytes[ExportRequest::encoded_size] = {};
       CHECK_STATUS(ExportRequest(item.operation, item.surface, 7u).encode(bytes, sizeof bytes), Status::ok);
@@ -84,7 +87,7 @@ TEST(export_request, a_timing_carries_its_refresh_and_a_blank_at_the_documented_
   CHECK_EQ(sent.surface(), 0u);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   const std::uint8_t expected[ExportRequest::encoded_size] = {
-      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x80, 0x32, 0x02, 0x00,
+      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x02, 0x00, 0x05, 0x00, 0x00, 0x00, 0x80, 0x32, 0x02, 0x00,
       0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   CHECK(std::memcmp(bytes, expected, sizeof bytes) == 0);
   ExportRequest read;
@@ -165,3 +168,14 @@ TEST(export_request_decode, survives_the_hostile_sweep)
    * surface. With the untouched request, 146 acceptances. */
   const std::uint32_t acceptable = 16u + 64u + 64u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
+
+/* A head request names head N as N + 1, and only a head request has one. */
+TEST(export_request, a_head_request_names_its_head_less_one)
+{ std::uint8_t bytes[ExportRequest::encoded_size] = {};
+  CHECK_STATUS(ExportRequest(ExportOperation::head, 1u, 7u).encode(bytes, sizeof bytes), Status::ok);
+  ExportRequest read;
+  CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::ok);
+  CHECK(read.operation() == ExportOperation::head);
+  CHECK_EQ(read.head(), 0u);
+  CHECK_EQ(ExportRequest(ExportOperation::head, 16u, 7u).head(), 15u);
+  CHECK_EQ(ExportRequest(ExportOperation::sync, 16u, 7u).head(), 0u); }

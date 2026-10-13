@@ -367,7 +367,8 @@ TEST(export_answer_decode, survives_the_hostile_sweep)
    * that zero it; the stride's that keep it at least 1003 wide: 4096 has
    * one bit, whose flip is 0, so 31; the width's that keep it at most
    * 4096 and not 0: of 1003's 32, the 20 above bit 11 fail, 12 pass; and
-   * the operation's bit 0 makes export a sync, whose body is not empty: 0.
-   * With the untouched answer, 348. */
-  const std::uint32_t acceptable = 16u + 64u + 64u + 32u + 32u + 64u + 32u + 31u + 12u + 1u;
+   * the operation's bit 0 makes export a sync, whose body is not empty: 0;
+   * its bit 2 makes it a head, whose answer is laid out as an export's: 1.
+   * With the untouched answer, 349. */
+  const std::uint32_t acceptable = 16u + 64u + 64u + 32u + 32u + 64u + 32u + 31u + 12u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
