@@ -25,10 +25,11 @@ void OverlayWork::run(ScenarioSteps &steps)
     made_ = true;
     bool supported = false;
     if (steps.check_result("supports_overlays", dxgi_.supports_overlays(supported)) != Status::ok) return;
-    /* What DXGI calls overlays is the video kind - YUV planes it can stretch
-     * beside RGB ones (CDXGIOutput::GetMultiplaneOverlayCaps, dxgi.dll) - and
-     * DWM promotes an RGB swap chain without them, so the steps go on. */
-    steps.check_measured("overlays", supported ? Status::ok : Status::not_supported, supported ? 1u : 0u);
+    /* Reported, not judged: DXGI answers it from a flag only DWM's classic
+     * path sets (CDXGIOutput::SetHudSupported, dxgi.dll), so on DisplayCore it
+     * is FALSE while DWM promotes swap chains to planes - which the steps
+     * below judge. */
+    steps.check_measured("overlays", Status::ok, supported ? 1u : 0u);
     uint32_t flags = 0u;
     if (steps.check_result("check_overlay_support", dxgi_.overlay_support(format_bgra, flags)) != Status::ok) return;
     steps.check_measured("overlay_support",

@@ -85,13 +85,15 @@ TEST(overlay_work, fails_a_composed_swap_chain_and_goes_on)
   CHECK_EQ(rig.mode(), 0u);
   CHECK(!rig.dxgi().live()); }
 
-/* An output without video overlays may still put an RGB swap chain in a
- * plane, so the swap chains are still tried. */
-TEST(overlay_work, goes_on_when_the_output_has_no_video_overlays)
+/* SupportsOverlays FALSE is what DXGI answers on DWM's DisplayCore path
+ * while DWM promotes swap chains: it is reported, the swap chains are still
+ * tried, and nothing fails for it. */
+TEST(overlay_work, reports_supports_overlays_without_failing_for_it)
 { OverlayRig rig;
   rig.dxgi().answer(false, 1u, 1u);
-  rig.run();
-  CHECK_EQ(rig.failed(), 1u);
+  const char *const report = rig.run();
+  CHECK_EQ(rig.failed(), 0u);
+  CHECK(says(report, "ok overlay.overlays 0"));
   CHECK_EQ(rig.dxgi().calls(Call::overlay_support), 2u);
   CHECK_EQ(rig.dxgi().calls(Call::create_swap_chain), 2u);
   CHECK(!rig.dxgi().live()); }
