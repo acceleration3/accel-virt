@@ -23,7 +23,12 @@ namespace {
 
 constexpr std::uint64_t kib = 1024u;
 constexpr std::uint64_t page = BufferSlices::large_alignment;
-constexpr std::uint64_t base = std::uint64_t{32} << 20u;   /* past what the arena lends */
+constexpr std::uint64_t base = page;   /* past what the arena lends */
+/* Where slices begin: past the bookkeeping at the span's head. */
+constexpr std::uint64_t start = base + BufferSlices::metadata_bytes;
+constexpr std::uint64_t arena_bytes = start + 1024u * page;
+/* The session's arena, as the process maps it. */
+alignas(4096) std::uint8_t arena[arena_bytes];
 
 /* A session as the GPU runs it: batches are recorded one after another, and a
  * wait sends the one being recorded if it must, then finishes it. */
@@ -57,6 +62,8 @@ class Rig {
 public:
     Rig() : lock_(trace_, 'S'), slices_(timeline_, lock_) {}
     BufferSlices &slices() { return slices_; }
+    /* Slices in `pages` of the arena past the bookkeeping. */
+    void          take(std::uint64_t pages) { slices_.take(arena, base, start + pages * page); }
     FakeTimeline &timeline() { return timeline_; }
 
 private:
@@ -72,18 +79,18 @@ private:
  * back is the next of its class handed out. */
 TEST(buffer_slices, small_slices_come_from_their_class_and_come_back)
 { Rig rig;
-  rig.slices().take(base, base + 16u * page);
+  rig.take(16u);
   BufferSlices::Slice first = {}, second = {}, again = {};
   CHECK_STATUS(rig.slices().take_slice(100u, first), Status::ok);
   CHECK_EQ(first.bytes_, 256u);
-  CHECK_EQ(first.offset_, base);
+  CHECK_EQ(first.offset_, start);
   CHECK_STATUS(rig.slices().take_slice(256u, second), Status::ok);
-  CHECK_EQ(second.offset_, base + 256u);
+  CHECK_EQ(second.offset_, start + 256u);
   BufferSlices::Slice wider = {};
   CHECK_STATUS(rig.slices().take_slice(257u, wider), Status::ok);
   CHECK_EQ(wider.bytes_, 512u);
   CHECK_EQ(wider.offset_ % 512u, 0u);
-  CHECK(wider.offset_ + wider.bytes_ <= base + 16u * page);
+  CHECK(wider.offset_ + wider.bytes_ <= start + 16u * page);
   const std::uint32_t free = rig.slices().free_in_class(256u);
   rig.slices().give_back(first);
   CHECK_EQ(rig.slices().free_in_class(256u), free + 1u);
@@ -96,7 +103,7 @@ TEST(buffer_slices, small_slices_come_from_their_class_and_come_back)
  * recorded when it was retired: not when that batch is merely sent. */
 TEST(buffer_slices, a_retired_slice_waits_for_the_gpu_to_finish_its_batch)
 { Rig rig;
-  rig.slices().take(base, base + 16u * page);
+  rig.take(16u);
   BufferSlices::Slice old = {};
   CHECK_STATUS(rig.slices().take_slice(64u * kib, old), Status::ok);
   rig.slices().retire(old);                 /* tagged with batch 1 */
@@ -122,12 +129,12 @@ TEST(buffer_slices, a_retired_slice_waits_for_the_gpu_to_finish_its_batch)
  * whole, where the next one that fits takes it. */
 TEST(buffer_slices, a_large_slice_is_whole_pages_and_goes_back_whole)
 { Rig rig;
-  rig.slices().take(base + 1u, base + 4u * page + 100u);   /* rounded inward */
-  CHECK_EQ(rig.slices().begin(), base + page);
-  CHECK_EQ(rig.slices().end(), base + 4u * page);
+  rig.slices().take(arena, base - 1u, start + 3u * page + 100u);   /* rounded inward */
+  CHECK_EQ(rig.slices().begin(), start);
+  CHECK_EQ(rig.slices().end(), start + 3u * page);
   BufferSlices::Slice large = {}, rest = {}, again = {};
   CHECK_STATUS(rig.slices().take_slice(64u * kib + 1u, large), Status::ok);
-  CHECK_EQ(large.offset_, base + page);
+  CHECK_EQ(large.offset_, start);
   CHECK_EQ(large.bytes_, 2u * page);
   CHECK_STATUS(rig.slices().take_slice(page + 1u, rest), Status::no_space);   /* two pages: one left */
   CHECK_STATUS(rig.slices().take_slice(64u * kib, rest), Status::no_space);    /* a small class's block: no room */
@@ -143,7 +150,7 @@ TEST(buffer_slices, a_large_slice_is_whole_pages_and_goes_back_whole)
  * nothing retired there is nothing to wait for. */
 TEST(buffer_slices, a_full_arena_waits_for_the_oldest_retired_slice)
 { Rig rig;
-  rig.slices().take(base, base + 4u * page);
+  rig.take(4u);
   BufferSlices::Slice first = {}, second = {}, third = {};
   CHECK_STATUS(rig.slices().take_slice(2u * page, first), Status::ok);
   CHECK_STATUS(rig.slices().take_slice(2u * page, second), Status::ok);
@@ -161,7 +168,7 @@ TEST(buffer_slices, a_full_arena_waits_for_the_oldest_retired_slice)
  * for its own to come back, even with the arena free. */
 TEST(buffer_slices, a_class_at_its_bound_waits_for_its_own_slices)
 { Rig rig;
-  rig.slices().take(base, base + 1024u * page);
+  rig.take(1024u);
   BufferSlices::Slice slice = {};
   for (std::uint32_t index = 0u; index < BufferSlices::max_per_class; index++) {
       CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::ok);
@@ -170,7 +177,7 @@ TEST(buffer_slices, a_class_at_its_bound_waits_for_its_own_slices)
   CHECK_EQ(rig.timeline().waits(), 0u);
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::ok);
   CHECK_EQ(rig.timeline().waits(), 1u);
-  CHECK_EQ(slice.offset_, base);
+  CHECK_EQ(slice.offset_, start);
   CHECK(rig.slices().invariants_hold()); }
 
 /* A queue of retired slices that is full waits for its oldest before it
@@ -178,7 +185,7 @@ TEST(buffer_slices, a_class_at_its_bound_waits_for_its_own_slices)
  * fill it, half each. */
 TEST(buffer_slices, a_full_retired_queue_waits_for_its_oldest)
 { Rig rig;
-  rig.slices().take(base, base + 1024u * page);
+  rig.take(1024u);
   BufferSlices::Slice slice = {};
   for (std::uint32_t index = 0u; index < BufferSlices::max_retired; index++) {
       CHECK_STATUS(rig.slices().take_slice(index % 2u == 0u ? 256u : 512u, slice), Status::ok);
@@ -197,14 +204,14 @@ TEST(buffer_slices, a_full_retired_queue_waits_for_its_oldest)
  * wait, and nothing at all once lost; take() starts afresh. */
 TEST(buffer_slices, a_lost_session_hands_out_nothing_more)
 { Rig rig;
-  rig.slices().take(base, base + 2u * page);
+  rig.take(2u);
   BufferSlices::Slice slice = {};
   CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::ok);
   rig.slices().retire(slice);
   rig.timeline().lose();
   CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::invalid_state);
   CHECK_STATUS(rig.slices().take_slice(page + 1u, slice), Status::invalid_state);
-  rig.slices().take(base, base + 2u * page);
+  rig.take(2u);
   CHECK_EQ(rig.slices().retired(), 0u);
   CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::ok); }
 
@@ -213,11 +220,29 @@ TEST(buffer_slices, no_bytes_or_more_than_the_arena_is_refused)
   BufferSlices::Slice slice = {7u, 7u};
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);   /* no arena */
   CHECK_EQ(slice.bytes_, 0u);
-  rig.slices().take(base, base + 2u * page);
+  rig.take(2u);
   CHECK_STATUS(rig.slices().take_slice(0u, slice), Status::invalid_parameter);
   CHECK_STATUS(rig.slices().take_slice(2u * page + 1u, slice), Status::invalid_parameter);
   CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::ok);
   rig.slices().retire(BufferSlices::Slice{0u, 0u});   /* none: nothing */
   rig.slices().give_back(BufferSlices::Slice{0u, 0u});
   CHECK_EQ(rig.slices().retired(), 0u);
+  CHECK(rig.slices().invariants_hold()); }
+
+/* The bookkeeping takes the span's head and is never handed out; a span with
+ * no room past it, or no view of the arena, holds no slices. */
+TEST(buffer_slices, a_span_too_small_for_its_bookkeeping_holds_none)
+{ Rig rig;
+  BufferSlices::Slice slice = {};
+  rig.slices().take(arena, base, start);
+  CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);
+  rig.slices().take(nullptr, base, start + page);
+  CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);
+  rig.slices().retire(BufferSlices::Slice{start, 256u});   /* nothing to retire into */
+  CHECK_EQ(rig.slices().retired(), 0u);
+  CHECK(rig.slices().invariants_hold());
+  rig.slices().take(arena, base, start + 2u * page);
+  CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::no_space);       /* a block is four pages */
+  CHECK_STATUS(rig.slices().take_slice(page + 1u, slice), Status::ok);      /* two pages, large */
+  CHECK_EQ(slice.offset_, start);
   CHECK(rig.slices().invariants_hold()); }

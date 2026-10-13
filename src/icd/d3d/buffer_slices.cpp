@@ -8,17 +8,25 @@
 namespace av::d3d {
 
 BufferSlices::BufferSlices(GpuTimeline &timeline, icd::ThreadLock &lock)
-    : timeline_(timeline), lock_(lock), ranges_(large_alignment), free_{}, free_count_{}, carved_{}, retired_{},
+    : timeline_(timeline), lock_(lock), ranges_(large_alignment), free_{}, free_count_{}, carved_{}, retired_(nullptr),
       retired_first_(0u), retired_count_(0u), lost_(false)
 {
     AV_SCOPE("BufferSlices::BufferSlices");
 }
 
-void BufferSlices::take(uint64_t begin, uint64_t end)
+void BufferSlices::take(uint8_t *view, uint64_t begin, uint64_t end)
 {
     AV_SCOPE("BufferSlices::take");
     const icd::ThreadLockHold release(lock_);
-    ranges_.reset(begin, end);
+    const uint64_t head = (begin + large_alignment - 1u) & ~(large_alignment - 1u);
+    const bool     room = view != nullptr && end > head && end - head > metadata_bytes;
+    ranges_.reset(room ? head + metadata_bytes : 0u, room ? end : 0u);
+    uint8_t *const books = room ? view + head : nullptr;
+    for (uint32_t which = 0u; which < small_classes; which++)
+        free_[which] = room ? reinterpret_cast<uint64_t *>(books + uint64_t{which} * max_per_class * sizeof(uint64_t))
+                            : nullptr;
+    retired_ = room ? reinterpret_cast<Retired *>(books + uint64_t{small_classes} * max_per_class * sizeof(uint64_t))
+                    : nullptr;
     for (uint32_t which = 0u; which < small_classes; which++) {
         free_count_[which] = 0u;
         carved_[which] = 0u;
@@ -32,7 +40,7 @@ Status BufferSlices::take_slice(uint64_t bytes, Slice &slice)
 {
     AV_SCOPE("BufferSlices::take_slice");
     slice = Slice{0u, 0u};
-    if (bytes == 0u || bytes > ranges_.end() - ranges_.begin()) return Status::invalid_parameter;
+    if (bytes == 0u || retired_ == nullptr || bytes > ranges_.end() - ranges_.begin()) return Status::invalid_parameter;
     const icd::ThreadLockHold release(lock_);
     if (lost_) return Status::invalid_state;
     reclaim();
@@ -47,7 +55,7 @@ Status BufferSlices::take_slice(uint64_t bytes, Slice &slice)
 void BufferSlices::retire(const Slice &slice)
 {
     AV_SCOPE("BufferSlices::retire");
-    if (slice.bytes_ == 0u) return;
+    if (slice.bytes_ == 0u || retired_ == nullptr) return;
     const icd::ThreadLockHold release(lock_);
     reclaim();
     if (retired_count_ == max_retired && !wait_oldest()) return;   /* a lost session's memory is not reused */
@@ -59,7 +67,7 @@ void BufferSlices::retire(const Slice &slice)
 void BufferSlices::give_back(const Slice &slice)
 {
     AV_SCOPE("BufferSlices::give_back");
-    if (slice.bytes_ == 0u) return;
+    if (slice.bytes_ == 0u || retired_ == nullptr) return;
     const icd::ThreadLockHold release(lock_);
     free_slice(slice.offset_, slice.bytes_);
 }
@@ -179,6 +187,7 @@ bool BufferSlices::invariants_hold() const
 {
     AV_SCOPE("BufferSlices::invariants_hold");
     if (!ranges_.invariants_hold() || retired_count_ > max_retired || retired_first_ >= max_retired) return false;
+    if (retired_ == nullptr) return retired_count_ == 0u && ranges_.end() == 0u;
     for (uint32_t which = 0u; which < small_classes; which++) {
         if (carved_[which] > max_per_class || free_count_[which] > carved_[which]) return false;
         for (uint32_t index = 0u; index < free_count_[which]; index++)

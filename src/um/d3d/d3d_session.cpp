@@ -80,7 +80,7 @@ HRESULT D3dSession::open(uint32_t adapter)
     if (slices && query_results_.offset() > lent_bytes) {
         static_cast<void>(timeline_.construct(stream_.object(), channel_.transport(), lock_));
         static_cast<void>(slices_.construct(timeline_.object(), slices_lock_));
-        slices_.object().take(lent_bytes, query_results_.offset());
+        slices_.object().take(channel_.arena_view(), lent_bytes, query_results_.offset());
     }
     return S_OK;
 }

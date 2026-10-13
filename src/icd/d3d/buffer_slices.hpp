@@ -14,6 +14,11 @@
  * (RangeTable) and given back whole. Retired slices wait in order of their
  * tags, which never decrease, so the oldest is the first to come back.
  *
+ * Its bookkeeping - each class's free stack and the retired queue, some
+ * 2 MiB - is the first part of the span it is given, which no buffer is ever
+ * bound to: kept in the object, every session avumd can hold carried it in
+ * the DLL's image, 48 MiB of it.
+ *
  * Every device of the session takes slices, from whichever thread the
  * application maps on, so every call is made under the lock this is given.
  * A call that must wait for the GPU waits holding it: a caller must not hold
@@ -56,15 +61,18 @@ public:
      * behind: fewer than that in flight would stall it every frame. */
     static constexpr uint32_t max_per_class = 16384u;
     static constexpr uint32_t max_retired = 32768u;
-    static constexpr uint32_t max_ranges = 4096u;
+    /* Large slices and small classes' blocks: 1536 fill 96 MiB at the least. */
+    static constexpr uint32_t max_ranges = 1024u;
 
     BufferSlices(GpuTimeline &timeline, icd::ThreadLock &lock);
     BufferSlices(const BufferSlices &) = delete;
     BufferSlices &operator=(const BufferSlices &) = delete;
 
-    /* Takes slices from [begin, end) of the arena from now on, forgetting
-     * every slice before; both rounded inward to large_alignment. */
-    void                 take(uint64_t begin, uint64_t end);
+    /* Takes slices from [begin, end) of the arena at `view` from now on,
+     * forgetting every slice before; both rounded inward to large_alignment,
+     * and the first metadata_bytes kept for the bookkeeping. A span too
+     * small for that, or no view, holds no slices. */
+    void                 take(uint8_t *view, uint64_t begin, uint64_t end);
     /* A slice of at least `bytes`, waiting for retired ones to come back when
      * the arena has no room. invalid_parameter for no bytes; no_space when
      * none fits even with every retired slice back; invalid_state when the
@@ -97,6 +105,14 @@ private:
 
     static constexpr uint32_t no_class = ~0u;
 
+public:
+    /* The bookkeeping at the start of the span, in whole pages. */
+    static constexpr uint64_t metadata_bytes =
+        (uint64_t{small_classes} * max_per_class * sizeof(uint64_t) + uint64_t{max_retired} * sizeof(Retired) +
+         large_alignment - 1u) / large_alignment * large_alignment;
+
+private:
+
     /* The small class of `bytes`, or no_class for a large slice. */
     uint32_t           class_of(uint64_t bytes) const;
     uint64_t           class_bytes(uint32_t which) const;
@@ -114,10 +130,11 @@ private:
     GpuTimeline                  &timeline_;
     icd::ThreadLock              &lock_;
     icd::RangeTable<max_ranges>   ranges_;
-    uint64_t                      free_[small_classes][max_per_class];
+    /* Each class's free stack, and the retired queue, in the span's head. */
+    uint64_t                     *free_[small_classes];
     uint32_t                      free_count_[small_classes];
     uint32_t                      carved_[small_classes];
-    Retired                       retired_[max_retired];
+    Retired                      *retired_;
     uint32_t                      retired_first_;
     uint32_t                      retired_count_;
     bool                          lost_;
