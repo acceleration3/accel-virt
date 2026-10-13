@@ -13,7 +13,7 @@ namespace av {
 VidPnSupportCheck::VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplayModeList &modes,
                                      const DisplaySources &sources, DxgkargIsSupportedVidPnRecord &request)
     : platform_(platform), modes_(modes), sources_(sources), request_(request), vidpn_(platform, dxgkrnl, request.hDesiredVidPn), paths_(0u),
-      supported_(true)
+      supported_(true), refusal_(nullptr), refused_mode_{}
       {
           AV_SCOPE("VidPnSupportCheck::VidPnSupportCheck");
       }
@@ -42,12 +42,29 @@ Status VidPnSupportCheck::visit(const D3dkmdtVidPnPresentPathRecord &path)
     AV_SCOPE("VidPnSupportCheck::visit");
     platform_.require_irql_at_most(Irql::passive, "VidPnSupportCheck::visit");
     paths_++;
-    supported_ = paths_ <= max_paths && path.VidPnSourceId < sources_.count() &&
-                 path.VidPnTargetId < sources_.count() && PathTransformation(path).supportable();
+    refusal_ = paths_ > max_paths                                   ? "paths"
+               : path.VidPnSourceId >= sources_.count() ||
+                         path.VidPnTargetId >= sources_.count()      ? "path ends"
+               : !PathTransformation(path).supportable()             ? "transformation"
+                                                                     : nullptr;
+    supported_ = refusal_ == nullptr;
     if (!supported_) return Status::not_supported;
     const Status offered = offers_pinned_source(path.VidPnSourceId);
     supported_ = offered != Status::not_supported;
+    if (!supported_) refusal_ = "source mode";
     return offered;
+}
+
+const char *VidPnSupportCheck::refusal() const
+{
+    AV_SCOPE("VidPnSupportCheck::refusal");
+    return refusal_;
+}
+
+const D3dkmdtVidPnSourceModeRecord &VidPnSupportCheck::refused_mode() const
+{
+    AV_SCOPE("VidPnSupportCheck::refused_mode");
+    return refused_mode_;
 }
 
 /* CommitVidPn refuses a source mode the adapter does not offer, but by then DMM
@@ -63,7 +80,9 @@ Status VidPnSupportCheck::offers_pinned_source(uint32_t source)
     if (status == Status::ok) status = set.copy_pinned(pinned);
     if (status == Status::not_found) return Status::ok;
     if (status != Status::ok) return status;
-    return modes_.find(pinned) != nullptr ? Status::ok : Status::not_supported;
+    if (modes_.find(pinned) != nullptr) return Status::ok;
+    refused_mode_ = pinned;
+    return Status::not_supported;
 }
 
 }  // namespace av

@@ -31,11 +31,13 @@ D3d9Session::~D3d9Session()
     shut_down();
 }
 
-void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces)
+void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d11HostDevice *device11,
+                             SessionShares *shares)
 {
     AV_SCOPE("D3d9Session::initialize");
     host_ = host != nullptr && host->opened() ? host : nullptr;
     surfaces_ = surfaces;
+    flips_.bind(device11, shares);
 }
 
 /* Objects first: each holds a reference to the device that made it. Only
@@ -43,6 +45,7 @@ void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces)
 void D3d9Session::shut_down()
 {
     AV_SCOPE("D3d9Session::shut_down");
+    flips_.release();
     objects_.remove_kinds(D3dObjectKind::surface9, D3dObjectKind::query9);
     for (IDirect3DDevice9 *device = devices_.remove_any(); device != nullptr; device = devices_.remove_any())
         device->Release();

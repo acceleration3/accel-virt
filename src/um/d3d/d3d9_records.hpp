@@ -49,8 +49,13 @@ struct D3d9Resource {
     D3d9Subresource     *subresources;
     /* The runtime's handle, which an allocation for the resource names. */
     HANDLE               runtime;
-    /* The kernel allocation a present names, made at its first present. */
+    /* The kernel allocation a present names, made at its first present -
+     * or, for a fullscreen primary, as the resource is made, since the
+     * runtime hands it to dxgkrnl before anything is presented. */
     D3DKMT_HANDLE        allocation;
+    /* The runtime resource that allocation was made under: `runtime` for a
+     * primary's, null for one made at a present. */
+    HANDLE               allocation_resource;
     uint32_t             allocation_pitch;
     uint64_t             shared_key;
     /* Each present of the resource, counted from 1 (PresentPointRecord). */

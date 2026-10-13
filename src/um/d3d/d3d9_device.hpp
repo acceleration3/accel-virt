@@ -69,6 +69,10 @@ public:
     HRESULT initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVICE &create);
     d3d::UmdAdapter &adapter() const;
     /* One runtime call at a time (d3d::DeviceCall). */
+    /* A runtime call that failed: its name and HRESULT, the first few of
+     * them whether or not the device traces. A lock or query still drawing
+     * is the GPU being busy, not a failure. */
+    void note_failure(const char *call, uint32_t hresult);
     void lock_calls();
     void unlock_calls();
 
@@ -212,6 +216,9 @@ private:
      * pixels read back into it for a present the kernel copies from pages. */
     HRESULT make_context();
     HRESULT allocate(D3d9Resource &resource);
+    HRESULT allocate_primary(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
+    HRESULT show_primary(D3d9Resource &primary, uint32_t index);
+    HRESULT publish_presented(D3d9Resource &resource, uint32_t index);
     HRESULT publish(D3d9Resource &resource, uint32_t index);
     HRESULT follow_host();
 
@@ -256,6 +263,7 @@ private:
     uint8_t                             *readback_;
     size_t                               readback_bytes_;
     uint32_t                             traced_;
+    uint32_t                             failures_;
     /* While tracing: when the call in progress began, and the time the
      * device's calls took since the last present, and how many. */
     uint64_t                             call_began_;

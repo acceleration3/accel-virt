@@ -19,6 +19,11 @@ public:
     DeviceCall &operator=(const DeviceCall &) = delete;
 
     Device &device() const;
+    /* `result`, a failure first noted by the device under the slot's name.
+     * The device is locked before the call is made: the temporary is made
+     * before the arguments the call is one of. */
+    template <typename Result>
+    Result noted(const char *call, Result result) const;
 
 private:
     Device &device_;
@@ -43,6 +48,15 @@ Device &DeviceCall<Device>::device() const
 {
     AV_SCOPE("DeviceCall::device");
     return device_;
+}
+
+template <typename Device>
+template <typename Result>
+Result DeviceCall<Device>::noted(const char *call, Result result) const
+{
+    AV_SCOPE("DeviceCall::noted");
+    if (result < 0) device_.note_failure(call, static_cast<uint32_t>(result));
+    return result;
 }
 
 }  // namespace av::d3d

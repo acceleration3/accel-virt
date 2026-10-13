@@ -5,6 +5,7 @@
  * DXVK's d3d9 is loaded from AV_D3D_PATH, or build-d3d/lib in this checkout
  * (tools/build_d3d_runtime.sh). A host without it returns without judging, as
  * the other device tests do. */
+#include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
@@ -502,3 +503,51 @@ TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
     CHECK_EQ(wire.refused(), 0u);
 }
 
+
+/* A fullscreen primary's flip (point 0) is kept where DWM opens the primary
+ * and the scanout exports it: a Direct3D 11 texture shared under its key,
+ * holding what the Direct3D 9 device drew before each flip. A surface of
+ * another format, or a flip of no key, shares nothing. */
+TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_drawn)
+{
+    av::LoaderHostApis   apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d9HostDevice  *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::HostShares *const shares = apis.shares(0u);
+    constexpr std::uint64_t key = 0x9160u, other_key = 0x9161u;
+    constexpr std::uint32_t domain = 1u, format_r5g6b5 = 23u;
+    av::SharedSurfaces surfaces;
+    av::D3dBackend     backend;
+    av::SessionShares  session;
+    session.bind(*shares, domain, backend);
+    CHECK(backend.initialize(session, device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend);
+    std::uint32_t   hresult = 1u;
+    CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
+    CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, red, 1.0f, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 0u));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+
+    std::uint32_t shown[size * size] = {};
+    CHECK(device11->read_image(domain, key, shown, size * 4u, size, size));
+    CHECK_EQ(shown[0] & 0x00ffffffu, red & 0x00ffffffu);
+    CHECK_EQ(shown[size * size - 1u] & 0x00ffffffu, red & 0x00ffffffu);
+
+    /* The next flip is written over the same texture. */
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, blue, 1.0f, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 0u));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK(device11->read_image(domain, key, shown, size * 4u, size, size));
+    CHECK_EQ(shown[size * size / 2u] & 0x00ffffffu, blue & 0x00ffffffu);
+
+    CHECK(av_d3d9_CreateSurface9(wire, other_target, kind_render_target, size, size, format_r5g6b5, 0u, 0u, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, other_target, 0u, other_key, 0u));
+    CHECK(av_d3d9_Finish9(wire, &hresult));
+    CHECK(!device11->read_image(domain, other_key, shown, size * 4u, size, size));
+    CHECK_EQ(wire.refused(), 0u);
+    backend.shut_down();
+    shares->release(domain, 0u);
+}

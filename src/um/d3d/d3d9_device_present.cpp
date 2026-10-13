@@ -14,6 +14,7 @@
 #include "icd/d3d/kernel_surface.hpp"
 #include "icd/d3d/pitched_rows.hpp"
 #include "icd/d3d/present_format.hpp"
+#include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
 
 #include <string.h>
@@ -70,6 +71,75 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
     return S_OK;
 }
 
+/* A fullscreen primary: an allocation dxgkrnl scans out at the resource's
+ * VidPn source, made under the runtime's resource as the resource is - the
+ * runtime asks the kernel about the shared primary before its first present,
+ * and a resource with no allocation is a null handle there (E_INVALIDARG). */
+HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
+{
+    AV_SCOPE("D3d9Device::allocate_primary");
+    const D3d9Subresource &top = resource.subresources[0];
+    d3d::PresentFormat presented(0u);
+    if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
+    d3d::KernelSurface surface(top.width, top.height, presented.dxgi(),
+                               ScanoutTarget(create.VidPnSourceId, create.RefreshRate.Numerator,
+                                             create.RefreshRate.Denominator));
+    if (surface.make() != Status::ok) return E_INVALIDARG;
+    D3DKMT_HANDLE allocation = 0u;
+    const HRESULT made = kernel_.allocate(surface, create.hResource, allocation);
+    if (FAILED(made)) {
+        LogLine(lines_).text("the kernel refused a Direct3D 9 primary's allocation ").hex(static_cast<uint32_t>(made), 8u).write();
+        return made;
+    }
+    resource.allocation = allocation;
+    resource.allocation_resource = create.hResource;
+    resource.allocation_pitch = surface.pitch();
+    resource.shared_key = surface.key();
+    const HRESULT resident = paging_.object().make_resident(allocation);
+    if (FAILED(resident)) log_.write("avumd: the kernel would not keep a Direct3D 9 primary resident");
+    /* DWM may open the key as soon as the kernel hands it the handle: the
+     * host keeps something under it from the start. */
+    return resource.shared_key != 0u ? show_primary(resource, 0u) : S_OK;
+}
+
+/* A keyed primary's pixels go to the host's texture under its key (point 0,
+ * D3d9FlipShares), where DWM and the scanout read it - never through its
+ * pages, which nothing reads once it is keyed. */
+HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
+{
+    AV_SCOPE("D3d9Device::show_primary");
+    uint32_t id = 0u, subresource = 0u;
+    if (!surface_of(primary, index, id, subresource)) return E_INVALIDARG;
+    if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, primary.shared_key, 0u) ||
+        wire().flush() != Status::ok)
+        return lost(__func__);
+    return follow_host();
+}
+
+/* The pixels a present hands the kernel: a keyed primary's on the host,
+ * anything else's read back into its pages. */
+HRESULT D3d9Device::publish_presented(D3d9Resource &resource, uint32_t index)
+{
+    AV_SCOPE("D3d9Device::publish_presented");
+    if (resource.allocation_resource != nullptr && resource.shared_key != 0u) return show_primary(resource, index);
+    return publish(resource, index);
+}
+
+/* Fullscreen: the primary dxgkrnl scans out from now on, with the host's
+ * pixels in it. */
+HRESULT D3d9Device::set_display_mode(const D3DDDIARG_SETDISPLAYMODE *args)
+{
+    AV_SCOPE("D3d9Device::set_display_mode");
+    D3d9Resource *const primary = resource(args->hResource);
+    if (primary == nullptr || args->SubResourceIndex >= primary->count || primary->allocation == 0u)
+        return E_INVALIDARG;
+    const HRESULT published = publish_presented(*primary, args->SubResourceIndex);
+    if (FAILED(published)) return published;
+    D3DDDICB_SETDISPLAYMODE mode = {};
+    mode.hPrimaryAllocation = primary->allocation;
+    return kernel_.set_display_mode(mode);
+}
+
 /* The host's pixels, row by row into the allocation's pitch. */
 HRESULT D3d9Device::publish(D3d9Resource &resource, uint32_t index)
 {
@@ -118,7 +188,7 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     /* Read back, not staged on the host (PresentPoint9): d3d9.dll's PresentCB
      * builds the kernel's present itself and drops the private driver data a
      * point rides in, so the miniport would blt pages nothing wrote. */
-    const HRESULT published = publish(*source, args->SrcSubResourceIndex);
+    const HRESULT published = publish_presented(*source, args->SrcSubResourceIndex);
     if (FAILED(published)) {
         lines_.once("a Direct3D 9 present whose buffer could not be read back");
         return published;

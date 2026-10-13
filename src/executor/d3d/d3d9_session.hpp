@@ -24,6 +24,7 @@
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
+#include "executor/d3d/d3d9_flip_shares.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
 #include "device/host/stdio_log.hpp"
@@ -39,6 +40,8 @@ namespace av {
 
 class D3d9HostDevice;
 class SharedSurfaces;
+class SessionShares;
+class D3d11HostDevice;
 class GuestRegion;
 class WireArena;
 class WireReader;
@@ -68,8 +71,10 @@ public:
      * is a GPU with none, on which every device create fails. */
     /* `surfaces` is where a present point's frame is kept for the present
      * engine; null where the device has none, and a present point stages
-     * nothing. */
-    void initialize(D3d9HostDevice *host, SharedSurfaces *surfaces);
+     * nothing. `device11` and `shares` are where a fullscreen primary's flips
+     * are kept under its key (D3d9FlipShares); null shares none. */
+    void initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d11HostDevice *device11,
+                    SessionShares *shares);
     /* Every device and object let go. */
     void shut_down();
 
@@ -191,6 +196,7 @@ private:
     GuestRegion    &region_;
     D3d9HostDevice *host_;
     SharedSurfaces *surfaces_;
+    D3d9FlipShares  flips_;
     D3dObjectTable &objects_;
     GuestDevices<IDirect3DDevice9, max_devices> devices_;
     /* QEMU's stderr, where the host log is read when a guest's command fails. */

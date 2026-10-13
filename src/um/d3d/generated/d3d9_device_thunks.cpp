@@ -2,7 +2,7 @@
 
 /* The ABI boundary C requires: the runtime calls each slot with the device
  * handle CreateDevice handed back and nothing else, so each thunk is one line
- * into the device that handle is. */
+ * into the device that handle is, and a call that fails says so. */
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/umd_binding.hpp"
 #include "icd/d3d/umd_root.hpp"
@@ -16,310 +16,411 @@ namespace av::d3d9 {
 namespace {
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetRenderState(HANDLE device, const D3DDDIARG_RENDERSTATE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_render_state(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetRenderState", called.set_render_state(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_UpdateWInfo(HANDLE device, const D3DDDIARG_WINFO * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().update_w_info(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("UpdateWInfo", called.update_w_info(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ValidateDevice(HANDLE device, D3DDDIARG_VALIDATETEXTURESTAGESTATE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().validate_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("ValidateDevice", called.validate_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetTextureStageState(HANDLE device, const D3DDDIARG_TEXTURESTAGESTATE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_texture_stage_state(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetTextureStageState", called.set_texture_stage_state(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetTexture(HANDLE device, UINT a1, HANDLE a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_texture(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetTexture", called.set_texture(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShader(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetPixelShader", called.set_pixel_shader(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShaderConst(HANDLE device, const D3DDDIARG_SETPIXELSHADERCONST * a1, const FLOAT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader_const(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetPixelShaderConst", called.set_pixel_shader_const(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetStreamSourceUm(HANDLE device, const D3DDDIARG_SETSTREAMSOURCEUM * a1, const void * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_stream_source_um(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetStreamSourceUm", called.set_stream_source_um(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetIndices(HANDLE device, const D3DDDIARG_SETINDICES * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_indices(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetIndices", called.set_indices(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetIndicesUm(HANDLE device, UINT a1, const void * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_indices_um(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetIndicesUm", called.set_indices_um(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawPrimitive(HANDLE device, const D3DDDIARG_DRAWPRIMITIVE * a1, const UINT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_primitive(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DrawPrimitive", called.draw_primitive(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawIndexedPrimitive(HANDLE device, const D3DDDIARG_DRAWINDEXEDPRIMITIVE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_indexed_primitive(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DrawIndexedPrimitive", called.draw_indexed_primitive(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawRectPatch(HANDLE device, const D3DDDIARG_DRAWRECTPATCH * a1, const D3DDDIRECTPATCH_INFO * a2, const FLOAT * a3)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_rect_patch(a1, a2, a3); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DrawRectPatch", called.draw_rect_patch(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawTriPatch(HANDLE device, const D3DDDIARG_DRAWTRIPATCH * a1, const D3DDDITRIPATCH_INFO * a2, const FLOAT * a3)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_tri_patch(a1, a2, a3); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DrawTriPatch", called.draw_tri_patch(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawPrimitive2(HANDLE device, const D3DDDIARG_DRAWPRIMITIVE2 * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_primitive2(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DrawPrimitive2", called.draw_primitive2(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DrawIndexedPrimitive2(HANDLE device, const D3DDDIARG_DRAWINDEXEDPRIMITIVE2 * a1, UINT a2, const void * a3, const UINT * a4)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().draw_indexed_primitive2(a1, a2, a3, a4); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DrawIndexedPrimitive2", called.draw_indexed_primitive2(a1, a2, a3, a4)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VolBlt(HANDLE device, const D3DDDIARG_VOLUMEBLT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().vol_blt(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("VolBlt", called.vol_blt(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_BufBlt(HANDLE device, const D3DDDIARG_BUFFERBLT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().buf_blt(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("BufBlt", called.buf_blt(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_TexBlt(HANDLE device, const D3DDDIARG_TEXBLT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().tex_blt(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("TexBlt", called.tex_blt(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_StateSet(HANDLE device, D3DDDIARG_STATESET * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().state_set(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("StateSet", called.state_set(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPriority(HANDLE device, const D3DDDIARG_SETPRIORITY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_priority(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetPriority", called.set_priority(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Clear(HANDLE device, const D3DDDIARG_CLEAR * a1, UINT a2, const RECT * a3)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().clear(a1, a2, a3); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Clear", called.clear(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_UpdatePalette(HANDLE device, const D3DDDIARG_UPDATEPALETTE * a1, const PALETTEENTRY * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().update_palette(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("UpdatePalette", called.update_palette(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPalette(HANDLE device, const D3DDDIARG_SETPALETTE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_palette(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetPalette", called.set_palette(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderConst(HANDLE device, const D3DDDIARG_SETVERTEXSHADERCONST * a1, const void * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_const(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetVertexShaderConst", called.set_vertex_shader_const(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_MultiplyTransform(HANDLE device, const D3DDDIARG_MULTIPLYTRANSFORM * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().multiply_transform(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("MultiplyTransform", called.multiply_transform(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetTransform(HANDLE device, const D3DDDIARG_SETTRANSFORM * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_transform(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetTransform", called.set_transform(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetViewport(HANDLE device, const D3DDDIARG_VIEWPORTINFO * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_viewport(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetViewport", called.set_viewport(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetZRange(HANDLE device, const D3DDDIARG_ZRANGE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_z_range(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetZRange", called.set_z_range(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetMaterial(HANDLE device, const D3DDDIARG_SETMATERIAL * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_material(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetMaterial", called.set_material(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetLight(HANDLE device, const D3DDDIARG_SETLIGHT * a1, const D3DDDI_LIGHT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_light(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetLight", called.set_light(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateLight(HANDLE device, const D3DDDIARG_CREATELIGHT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_light(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateLight", called.create_light(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyLight(HANDLE device, const D3DDDIARG_DESTROYLIGHT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_light(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyLight", called.destroy_light(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetClipPlane(HANDLE device, const D3DDDIARG_SETCLIPPLANE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_clip_plane(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetClipPlane", called.set_clip_plane(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GetInfo(HANDLE device, UINT a1, void * a2, UINT a3)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().get_info(a1, a2, a3); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("GetInfo", called.get_info(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Lock(HANDLE device, D3DDDIARG_LOCK * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().lock(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Lock", called.lock(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Unlock(HANDLE device, const D3DDDIARG_UNLOCK * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().unlock(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Unlock", called.unlock(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateResource(HANDLE device, D3DDDIARG_CREATERESOURCE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_resource(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateResource", called.create_resource(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyResource(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_resource(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyResource", called.destroy_resource(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetDisplayMode(HANDLE device, const D3DDDIARG_SETDISPLAYMODE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_display_mode(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetDisplayMode", called.set_display_mode(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Present(HANDLE device, const D3DDDIARG_PRESENT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().present(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Present", called.present(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Flush(HANDLE device)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().flush(); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Flush", called.flush()); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateVertexShaderFunc(HANDLE device, D3DDDIARG_CREATEVERTEXSHADERFUNC * a1, const UINT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_vertex_shader_func(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateVertexShaderFunc", called.create_vertex_shader_func(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DeleteVertexShaderFunc(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().delete_vertex_shader_func(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DeleteVertexShaderFunc", called.delete_vertex_shader_func(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderFunc(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_func(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetVertexShaderFunc", called.set_vertex_shader_func(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateVertexShaderDecl(HANDLE device, D3DDDIARG_CREATEVERTEXSHADERDECL * a1, const D3DDDIVERTEXELEMENT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_vertex_shader_decl(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateVertexShaderDecl", called.create_vertex_shader_decl(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DeleteVertexShaderDecl(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().delete_vertex_shader_decl(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DeleteVertexShaderDecl", called.delete_vertex_shader_decl(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderDecl(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_decl(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetVertexShaderDecl", called.set_vertex_shader_decl(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderConstI(HANDLE device, const D3DDDIARG_SETVERTEXSHADERCONSTI * a1, const INT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_const_i(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetVertexShaderConstI", called.set_vertex_shader_const_i(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVertexShaderConstB(HANDLE device, const D3DDDIARG_SETVERTEXSHADERCONSTB * a1, const BOOL * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_vertex_shader_const_b(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetVertexShaderConstB", called.set_vertex_shader_const_b(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetScissorRect(HANDLE device, const RECT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_scissor_rect(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetScissorRect", called.set_scissor_rect(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetStreamSource(HANDLE device, const D3DDDIARG_SETSTREAMSOURCE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_stream_source(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetStreamSource", called.set_stream_source(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetStreamSourceFreq(HANDLE device, const D3DDDIARG_SETSTREAMSOURCEFREQ * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_stream_source_freq(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetStreamSourceFreq", called.set_stream_source_freq(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetConvolutionKernelMono(HANDLE device, const D3DDDIARG_SETCONVOLUTIONKERNELMONO * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_convolution_kernel_mono(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetConvolutionKernelMono", called.set_convolution_kernel_mono(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ComposeRects(HANDLE device, const D3DDDIARG_COMPOSERECTS * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().compose_rects(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("ComposeRects", called.compose_rects(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Blt(HANDLE device, const D3DDDIARG_BLT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().blt(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Blt", called.blt(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ColorFill(HANDLE device, const D3DDDIARG_COLORFILL * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().color_fill(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("ColorFill", called.color_fill(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DepthFill(HANDLE device, const D3DDDIARG_DEPTHFILL * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().depth_fill(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DepthFill", called.depth_fill(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateQuery(HANDLE device, D3DDDIARG_CREATEQUERY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_query(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateQuery", called.create_query(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyQuery(HANDLE device, const HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_query(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyQuery", called.destroy_query(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_IssueQuery(HANDLE device, const D3DDDIARG_ISSUEQUERY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().issue_query(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("IssueQuery", called.issue_query(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GetQueryData(HANDLE device, const D3DDDIARG_GETQUERYDATA * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().get_query_data(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("GetQueryData", called.get_query_data(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetRenderTarget(HANDLE device, const D3DDDIARG_SETRENDERTARGET * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_render_target(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetRenderTarget", called.set_render_target(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetDepthStencil(HANDLE device, const D3DDDIARG_SETDEPTHSTENCIL * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_depth_stencil(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetDepthStencil", called.set_depth_stencil(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GenerateMipSubLevels(HANDLE device, const D3DDDIARG_GENERATEMIPSUBLEVELS * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().generate_mip_sub_levels(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("GenerateMipSubLevels", called.generate_mip_sub_levels(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShaderConstI(HANDLE device, const D3DDDIARG_SETPIXELSHADERCONSTI * a1, const INT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader_const_i(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetPixelShaderConstI", called.set_pixel_shader_const_i(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetPixelShaderConstB(HANDLE device, const D3DDDIARG_SETPIXELSHADERCONSTB * a1, const BOOL * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_pixel_shader_const_b(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetPixelShaderConstB", called.set_pixel_shader_const_b(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreatePixelShader(HANDLE device, D3DDDIARG_CREATEPIXELSHADER * a1, const UINT * a2)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_pixel_shader(a1, a2); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreatePixelShader", called.create_pixel_shader(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DeletePixelShader(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().delete_pixel_shader(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DeletePixelShader", called.delete_pixel_shader(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateDecodeDevice(HANDLE device, D3DDDIARG_CREATEDECODEDEVICE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_decode_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateDecodeDevice", called.create_decode_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyDecodeDevice(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_decode_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyDecodeDevice", called.destroy_decode_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetDecodeRenderTarget(HANDLE device, const D3DDDIARG_SETDECODERENDERTARGET * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_decode_render_target(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetDecodeRenderTarget", called.set_decode_render_target(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeBeginFrame(HANDLE device, D3DDDIARG_DECODEBEGINFRAME * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_begin_frame(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DecodeBeginFrame", called.decode_begin_frame(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeEndFrame(HANDLE device, D3DDDIARG_DECODEENDFRAME * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_end_frame(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DecodeEndFrame", called.decode_end_frame(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeExecute(HANDLE device, const D3DDDIARG_DECODEEXECUTE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_execute(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DecodeExecute", called.decode_execute(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DecodeExtensionExecute(HANDLE device, const D3DDDIARG_DECODEEXTENSIONEXECUTE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().decode_extension_execute(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DecodeExtensionExecute", called.decode_extension_execute(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateVideoProcessDevice(HANDLE device, D3DDDIARG_CREATEVIDEOPROCESSDEVICE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_video_process_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateVideoProcessDevice", called.create_video_process_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyVideoProcessDevice(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_video_process_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyVideoProcessDevice", called.destroy_video_process_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VideoProcessBeginFrame(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().video_process_begin_frame(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("VideoProcessBeginFrame", called.video_process_begin_frame(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VideoProcessEndFrame(HANDLE device, D3DDDIARG_VIDEOPROCESSENDFRAME * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().video_process_end_frame(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("VideoProcessEndFrame", called.video_process_end_frame(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetVideoProcessRenderTarget(HANDLE device, const D3DDDIARG_SETVIDEOPROCESSRENDERTARGET * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_video_process_render_target(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetVideoProcessRenderTarget", called.set_video_process_render_target(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_VideoProcessBlt(HANDLE device, const D3DDDIARG_VIDEOPROCESSBLT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().video_process_blt(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("VideoProcessBlt", called.video_process_blt(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateExtensionDevice(HANDLE device, D3DDDIARG_CREATEEXTENSIONDEVICE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_extension_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateExtensionDevice", called.create_extension_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyExtensionDevice(HANDLE device, HANDLE a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_extension_device(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyExtensionDevice", called.destroy_extension_device(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ExtensionExecute(HANDLE device, const D3DDDIARG_EXTENSIONEXECUTE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().extension_execute(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("ExtensionExecute", called.extension_execute(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CreateOverlay(HANDLE device, D3DDDIARG_CREATEOVERLAY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().create_overlay(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CreateOverlay", called.create_overlay(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_UpdateOverlay(HANDLE device, const D3DDDIARG_UPDATEOVERLAY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().update_overlay(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("UpdateOverlay", called.update_overlay(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_FlipOverlay(HANDLE device, const D3DDDIARG_FLIPOVERLAY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().flip_overlay(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("FlipOverlay", called.flip_overlay(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_GetOverlayColorControls(HANDLE device, D3DDDIARG_GETOVERLAYCOLORCONTROLS * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().get_overlay_color_controls(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("GetOverlayColorControls", called.get_overlay_color_controls(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_SetOverlayColorControls(HANDLE device, const D3DDDIARG_SETOVERLAYCOLORCONTROLS * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().set_overlay_color_controls(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("SetOverlayColorControls", called.set_overlay_color_controls(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyOverlay(HANDLE device, const D3DDDIARG_DESTROYOVERLAY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().destroy_overlay(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("DestroyOverlay", called.destroy_overlay(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_DestroyDevice(HANDLE device)
 { return d3d::umd_binding.root().destroy_device9(device); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_QueryResourceResidency(HANDLE device, const D3DDDIARG_QUERYRESOURCERESIDENCY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().query_resource_residency(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("QueryResourceResidency", called.query_resource_residency(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_OpenResource(HANDLE device, D3DDDIARG_OPENRESOURCE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().open_resource(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("OpenResource", called.open_resource(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ResolveSharedResource(HANDLE device, const D3DDDIARG_RESOLVESHAREDRESOURCE * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().resolve_shared_resource(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("ResolveSharedResource", called.resolve_shared_resource(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_Discard(HANDLE device, const D3DDDIARG_DISCARD * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().discard(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("Discard", called.discard(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_OfferResources(HANDLE device, const D3DDDIARG_OFFERRESOURCES * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().offer_resources(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("OfferResources", called.offer_resources(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_ReclaimResources(HANDLE device, const D3DDDIARG_RECLAIMRESOURCES * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().reclaim_resources(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("ReclaimResources", called.reclaim_resources(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CheckDirectFlipSupport(HANDLE device, D3DDDIARG_CHECKDIRECTFLIPSUPPORT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().check_direct_flip_support(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CheckDirectFlipSupport", called.check_direct_flip_support(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CheckMultiPlaneOverlaySupport(HANDLE device, D3DDDIARG_CHECKMULTIPLANEOVERLAYSUPPORT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().check_multi_plane_overlay_support(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CheckMultiPlaneOverlaySupport", called.check_multi_plane_overlay_support(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_PresentMultiPlaneOverlay(HANDLE device, const D3DDDIARG_PRESENTMULTIPLANEOVERLAY * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().present_multi_plane_overlay(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("PresentMultiPlaneOverlay", called.present_multi_plane_overlay(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d9_CheckPresentDurationSupport(HANDLE device, D3DDDIARG_CHECKPRESENTDURATIONSUPPORT * a1)
-{ return d3d::DeviceCall<D3d9Device>(*static_cast<D3d9Device *>(device)).device().check_present_duration_support(a1); }
+{ D3d9Device &called = *static_cast<D3d9Device *>(device);
+  return d3d::DeviceCall<D3d9Device>(called).noted("CheckPresentDurationSupport", called.check_present_duration_support(a1)); }
 
 }  // namespace
 

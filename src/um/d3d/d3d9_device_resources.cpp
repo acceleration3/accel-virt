@@ -96,7 +96,8 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
     if (args->Flags.RenderTarget || args->Flags.ZBuffer || args->Flags.Primary)
         trace("resource", args->Flags.Value, static_cast<uint32_t>(args->Format), made->subresources[0].width,
               made->subresources[0].height);
-    const HRESULT host = args->Pool == D3DDDIPOOL_SYSTEMMEM ? S_OK : create_host_object(*made, *args);
+    HRESULT host = args->Pool == D3DDDIPOOL_SYSTEMMEM ? S_OK : create_host_object(*made, *args);
+    if (SUCCEEDED(host) && args->Flags.Primary) host = allocate_primary(*made, *args);
     if (FAILED(host)) {
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
@@ -198,7 +199,7 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     }
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
-    kernel_.deallocate(resource.allocation, nullptr);
+    kernel_.deallocate(resource.allocation, resource.allocation_resource);
 }
 
 /* Another process's resource opens through the host's object, which nothing

@@ -1136,8 +1136,27 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
     AV_SCOPE("Adapter::is_supported_vidpn");
     platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, modes_, sources_, *request).decide().value();
+    VidPnSupportCheck check(platform_, dxgkrnl_, modes_, sources_, *request);
+    const int32_t     decided = check.decide().value();
     log_status("avgpu: IsSupportedVidPn", decided);
+    if (check.refusal() != nullptr && budget_.allows()) {
+        /* A refused VidPn is a mode change that fails with nothing else to
+         * say why: a fullscreen game's E_INVALIDARG. */
+        const D3dkmdtVidPnSourceModeRecord &mode = check.refused_mode();
+        char       bytes[160];
+        TextBuffer message(bytes, sizeof bytes);
+        message.append("avgpu: IsSupportedVidPn refused: ");
+        message.append(check.refusal());
+        if (mode.PrimSurfSizeCx != 0u) {
+            message.append(" ");
+            message.append_decimal(mode.PrimSurfSizeCx);
+            message.append("x");
+            message.append_decimal(mode.PrimSurfSizeCy);
+            message.append(" format ");
+            message.append_decimal(static_cast<uint32_t>(mode.PixelFormat));
+        }
+        platform_.log(message.text());
+    }
     return decided;
 }
 

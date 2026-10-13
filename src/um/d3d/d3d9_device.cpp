@@ -24,6 +24,9 @@ constexpr uint32_t stage_vertex = 0u;
 /* What a lost device's line is logged once under. */
 /* Calls the trace logs, and what says it is off. */
 constexpr uint32_t trace_most = 20000u;
+/* Failed calls are said whether or not the device traces, but only the
+ * first few: an application that retries one forever says it once. */
+constexpr uint32_t failures_most = 32u;
 constexpr uint32_t trace_none = ~0u;
 constexpr uint32_t stage_pixel = 1u;
 constexpr uint32_t components = 4u;
@@ -62,7 +65,7 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &l
       callbacks_{}, kernel_(), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
-      readback_(nullptr), readback_bytes_(0u), traced_(trace_none),
+      readback_(nullptr), readback_bytes_(0u), traced_(trace_none), failures_(0u),
       call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
@@ -173,6 +176,17 @@ void D3d9Device::trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uin
     line.text("d3d9 ").text(call);
     const uint32_t numbers[4] = {a, b, c, d};
     for (const uint32_t number : numbers) line.text(" ").number(number);
+    line.write();
+}
+
+void D3d9Device::note_failure(const char *call, uint32_t hresult)
+{
+    AV_SCOPE("D3d9Device::note_failure");
+    constexpr uint32_t still_drawing = 0x8876021Cu;   /* D3DERR_WASSTILLDRAWING */
+    if (hresult == still_drawing || failures_ >= failures_most) return;
+    failures_++;
+    LogLine line(lines_);
+    line.text("d3d9 ").text(call).text(" failed ").hex(hresult, 8u);
     line.write();
 }
 
@@ -849,12 +863,6 @@ HRESULT D3d9Device::compose_rects(const D3DDDIARG_COMPOSERECTS *)
 {
     AV_SCOPE("D3d9Device::compose_rects");
     not_implemented("ComposeRects, which no cap offers, was called");
-    return S_OK;
-}
-
-HRESULT D3d9Device::set_display_mode(const D3DDDIARG_SETDISPLAYMODE *)
-{
-    AV_SCOPE("D3d9Device::set_display_mode");
     return S_OK;
 }
 

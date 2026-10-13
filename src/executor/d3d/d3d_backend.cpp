@@ -90,7 +90,7 @@ bool D3dBackend::initialize(SessionShares &shares, D3d11HostDevice *device11, D3
     surfaces_ = surfaces;
     shares_ = &shares;
     d3d12_.initialize(device12, device11, surfaces, &shares);
-    d3d9_.initialize(device9, surfaces);
+    d3d9_.initialize(device9, surfaces, device11, &shares);
     lost_ = false;
     return true;
 }

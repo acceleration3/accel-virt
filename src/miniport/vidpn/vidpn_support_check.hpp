@@ -8,6 +8,7 @@
 #include "core/platform/platform.hpp"
 #include "core/support/nt_status.hpp"
 #include "miniport/vidpn/path_visitor.hpp"
+#include "miniport/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
 #include "miniport/vidpn/vidpn.hpp"
 
 #include <stdint.h>
@@ -27,6 +28,11 @@ public:
     /* Success whether or not the VidPn is supported; IsVidPnSupported says. */
     NtStatus decide();
     [[nodiscard]] Status visit(const D3dkmdtVidPnPresentPathRecord &path) override;
+    /* Why decide() found the VidPn unsupported - "paths", "path ends",
+     * "transformation" or "source mode" - or null when it did not. */
+    const char *refusal() const;
+    /* The pinned source mode a "source mode" refusal turned down. */
+    const D3dkmdtVidPnSourceModeRecord &refused_mode() const;
 
 private:
     static constexpr uint32_t max_paths = 1u;
@@ -41,6 +47,8 @@ private:
     VidPn                          vidpn_;
     uint32_t                       paths_;
     bool                           supported_;
+    const char                    *refusal_;
+    D3dkmdtVidPnSourceModeRecord   refused_mode_;
 };
 
 }  // namespace av

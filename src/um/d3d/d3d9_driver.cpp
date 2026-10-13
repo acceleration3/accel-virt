@@ -54,7 +54,15 @@ d3d::Hresult D3d9Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt
     const uint32_t slot = slot_of(kmt_adapter);
     if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
     /* D3DDDIARG_GETCAPS is D3D10_2DDIARG_GETCAPS's shape (umd_record_layout.cpp). */
-    return static_cast<d3d::Hresult>(adapters_.caps(slot).answer(*reinterpret_cast<const D3DDDIARG_GETCAPS *>(&args)));
+    const auto &asked = *reinterpret_cast<const D3DDDIARG_GETCAPS *>(&args);
+    const HRESULT answered = adapters_.caps(slot).answer(asked);
+    if (FAILED(answered)) {
+        LogLine line(lines_);
+        line.text("d3d9 caps type ").number(static_cast<uint32_t>(asked.Type)).text(" of ").number(asked.DataSize);
+        line.text(" bytes refused ").hex(static_cast<uint32_t>(answered), 8u);
+        line.write();
+    }
+    return static_cast<d3d::Hresult>(answered);
 }
 
 /* The device's handle is the device: d3d9.dll sizes no block for it. */
@@ -69,6 +77,10 @@ d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t 
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
+        LogLine line(lines_);
+        line.text("d3d9 device refused ").hex(static_cast<uint32_t>(opened), 8u).text(" flags ");
+        line.hex(arguments.Flags.Value, 8u);
+        line.write();
         static_cast<void>(devices_.destroy(device));
         return static_cast<d3d::Hresult>(opened);
     }

@@ -430,6 +430,13 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
     IDirect3DSurface9 *const source = surface(surface_id, subresource);
     if (source == nullptr) return false;
     ScopeExit             release([source] { source->Release(); });
+    /* Point 0 is a flip of a fullscreen primary: what it shows is kept under
+     * its key, where DWM and the scanout open it. */
+    if (point == 0u && key != 0u) {
+        const Status shown = flips_.flip(device(), source, key);
+        if (shown != Status::ok && shown != Status::not_supported) lines_.note_hex("a primary's flip was not shared, key", key, 16u);
+        return true;
+    }
     const SurfacePoint    frame(key, point);
     if (surfaces_ == nullptr || host_ == nullptr || !frame.names()) return true;
     D3DSURFACE_DESC desc = {};

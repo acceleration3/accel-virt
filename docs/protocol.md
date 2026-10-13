@@ -1357,6 +1357,13 @@ goes wrong, as in the present copy. A device offers image sources only where
 it reads the frames itself: one whose contexts run in a renderer process does
 not set bit 5.
 
+A Direct3D 9 fullscreen primary is flipped, not presented as a blt: its
+driver sends `PresentPoint9` (`0x210a`) with point 0 as the primary is made
+and before every flip, and the host copies the surface into a Direct3D 11
+texture it shares under the primary's key, where DWM opens the primary and the
+scanout exports it like any other keyed surface. Direct3D 9's host device is
+not Direct3D 11's, so the copy goes through the CPU.
+
 ### The page, 4 KiB, little-endian
 
 | Offset | Size | Writer | Field | |

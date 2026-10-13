@@ -10,6 +10,7 @@
 #include "harness/vidpn/vidpn_fixture.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::D3dkmdtVidPnSourceModeRecord;
 using av::DisplayMode;
@@ -179,3 +180,36 @@ TEST(vidpn_support_check, is_passive_only)
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.platform().unclaimed_violations(), 1u);
   CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* A refusal says why, for the adapter's log: a mode change it turns down
+ * fails in the application with nothing else to go on. */
+TEST(vidpn_support_check, a_refusal_names_its_reason_and_the_source_mode_it_turned_down)
+{ const DisplayModeList    modes;
+  const auto refusal_of = [&](VidPnFixture &fixture, D3dkmdtVidPnSourceModeRecord &refused) {
+      const av::DisplaySources      sources(fixture.platform());
+      DxgkargIsSupportedVidPnRecord request = {};
+      request.hDesiredVidPn = fixture.handle();
+      VidPnSupportCheck check(fixture.platform(), fixture.dxgkrnl(), modes, sources, request);
+      CHECK_EQ(check.decide().value(), 0);
+      refused = check.refused_mode();
+      return check.refusal();
+  };
+  D3dkmdtVidPnSourceModeRecord refused = {};
+  VidPnFixture offered;
+  offered.vidpn().add_path(0u, 0u);
+  CHECK(refusal_of(offered, refused) == nullptr);
+  VidPnFixture two;
+  two.vidpn().add_path(0u, 0u);
+  two.vidpn().add_path(0u, 0u);
+  CHECK(std::strcmp(refusal_of(two, refused), "paths") == 0);
+  VidPnFixture elsewhere;
+  elsewhere.vidpn().add_path(1u, 0u);
+  CHECK(std::strcmp(refusal_of(elsewhere, refused), "path ends") == 0);
+  D3dkmdtVidPnSourceModeRecord unoffered = {};
+  DisplayMode(1000u, 700u).describe(unoffered, DisplayMode::source_formats[0]);
+  VidPnFixture odd;
+  odd.vidpn().add_path(0u, 0u);
+  odd.vidpn().source_modes(0u).seed(unoffered, true);
+  CHECK(std::strcmp(refusal_of(odd, refused), "source mode") == 0);
+  CHECK_EQ(refused.PrimSurfSizeCx, 1000u);
+  CHECK_EQ(refused.PixelFormat, DisplayMode::source_formats[0]); }
