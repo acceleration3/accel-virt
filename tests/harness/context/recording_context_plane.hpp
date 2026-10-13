@@ -5,6 +5,7 @@
 #define AV_RECORDING_CONTEXT_PLANE_HPP
 
 #include "device/context/context_plane.hpp"
+#include "device/present/frame_destination.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
@@ -83,6 +84,27 @@ public:
         snapshot_mapped_ = false;
         unmaps_++;
     }
+    /* Written by the GPU only once the test says the host can (write_frames):
+     * then the served frame is written into the destination and let go, and
+     * what the destination was is kept for the test to judge. */
+    bool write_frame(const std::uint8_t *, const SurfacePoint &frame, std::uint32_t,
+                     const FrameDestination &destination) override
+    {
+        write_tries_++;
+        if (!writes_frames_ || !frame.names() || !(frame == frame_) || destination.fd() < 0) return false;
+        frame_ = SurfacePoint();
+        written_bytes_ = destination.bytes();
+        written_pitch_ = destination.pitch();
+        written_count_ = destination.count();
+        if (destination.count() != 0u) written_region_ = destination.regions()[0];
+        return true;
+    }
+    void          write_frames() { writes_frames_ = true; }
+    std::uint32_t write_tries() const { return write_tries_; }
+    std::uint64_t written_bytes() const { return written_bytes_; }
+    std::uint32_t written_pitch() const { return written_pitch_; }
+    std::uint32_t written_count() const { return written_count_; }
+    const AvFrameRegion &written_region() const { return written_region_; }
     void serve_frame(const SurfacePoint &frame, const AvFrameView &view)
     {
         frame_ = frame;
@@ -173,6 +195,12 @@ private:
     SurfacePoint    frame_;
     AvFrameView snapshot_ = {};
     bool            snapshot_mapped_ = false;
+    bool            writes_frames_ = false;
+    std::uint32_t   write_tries_ = 0u;
+    std::uint64_t   written_bytes_ = 0u;
+    std::uint32_t   written_pitch_ = 0u;
+    std::uint32_t   written_count_ = 0u;
+    AvFrameRegion   written_region_ = {};
     bool            served_ = false;
     std::uint32_t   unmaps_ = 0u;
     std::uint32_t created_[capacity] = {};

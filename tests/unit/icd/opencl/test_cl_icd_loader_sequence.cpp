@@ -73,9 +73,10 @@ TEST(cl_icd_loader_sequence, the_enumeration_answers_the_count_and_then_the_plat
 TEST(cl_icd_loader_sequence, the_extensions_are_answered_before_any_device_exists)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
-  /* An empty list, because nothing is reported that nothing proves - and the
+  /* Only what every device of the platform carries, which DaVinci Resolve
+   * reads before it asks which device a DXGI adapter is (cf5e9ca8) - and the
    * loader reads it either way while it is still deciding. */
-  CHECK_EQ(std::strlen(rig.loader().extensions()), 0u);
+  CHECK(std::strstr(rig.loader().extensions(), "cl_khr_d3d11_sharing") != nullptr);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
 TEST(cl_icd_loader_sequence, the_suffix_is_the_one_query_that_may_not_fail)

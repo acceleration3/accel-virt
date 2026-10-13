@@ -445,6 +445,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
+                              nullptr,
                               nullptr};
 
 }  // namespace

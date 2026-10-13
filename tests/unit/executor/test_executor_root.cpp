@@ -15,6 +15,7 @@
 #include "harness/executor/host_gpu_probe.hpp"
 #include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
+#include "executor/d3d/frame_target.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
@@ -244,6 +245,10 @@ TEST(executor_root, frames_are_read_only_in_an_open_domain)
   CHECK(!root.map_frame(on_intel, av::SurfacePoint(3u, 1u), 0u, view));   /* nothing staged */
   root.unmap_frame(on_intel + 100u, av::SurfacePoint(3u, 1u));
   root.unmap_frame(on_intel, av::SurfacePoint(3u, 1u));
+  const AvFrameRegion   region = {0u, 0u, 0u, 0u, 1u, 1u};
+  const av::FrameTarget target(5, 4096u, 64u, &region, 1u);
+  CHECK(!root.write_frame(on_intel + 100u, av::SurfacePoint(3u, 1u), 0u, target));
+  CHECK(!root.write_frame(on_intel, av::SurfacePoint(3u, 1u), 0u, target));   /* nothing staged */
   CHECK(root.invariants_hold()); }
 
 /* The host is asked once. Asking twice would mean the capset and the answer

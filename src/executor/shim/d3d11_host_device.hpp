@@ -41,6 +41,8 @@ struct IUnknown;
 
 namespace av {
 
+class FrameTarget;
+
 class D3dRuntime;
 class HostShares;
 class StagedFrame;
@@ -128,6 +130,12 @@ public:
      * (D3d11FramePool::stage); null when no frame is free. */
     StagedFrame       *stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                                    uint32_t format);
+    /* `texture`, a `width` by `height` frame the pool staged, written by the
+     * GPU into `target` and finished (DxvkVulkanDevice::write): false where a
+     * region lies outside either, or Vulkan cannot have the image or the
+     * memory. Takes the lock to queue the write, and waits without it. */
+    [[nodiscard]] bool write_frame(ID3D11Texture2D *texture, uint32_t width, uint32_t height,
+                                   const FrameTarget &target);
     /* The COM references of shares HostShares freed given back, under the
      * lock, which this takes; and the images whose textures went with them
      * freed. After anything that may free a share: a guest's release, a

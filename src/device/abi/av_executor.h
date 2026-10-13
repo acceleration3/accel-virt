@@ -32,7 +32,7 @@ extern "C" {
  * rather than one to serve. 16 made the library the one place a shared object
  * is known (HostShares): the device names a guest device's objects by a
  * domain it opens, and the library publishes, opens and releases them. */
-#define AV_EXECUTOR_ABI_VERSION 17u
+#define AV_EXECUTOR_ABI_VERSION 18u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -165,6 +165,18 @@ typedef struct AvFrameView {
     uint32_t height;
     uint32_t reserved;
 } AvFrameView;
+
+/* One rectangle of a staged frame written into a surface (write_frame):
+ * `width` by `height` pixels from (`source_x`, `source_y`) of the frame to
+ * (`destination_x`, `destination_y`) of the surface. */
+typedef struct AvFrameRegion {
+    uint32_t source_x;
+    uint32_t source_y;
+    uint32_t destination_x;
+    uint32_t destination_y;
+    uint32_t width;
+    uint32_t height;
+} AvFrameRegion;
 
 typedef struct AvExecutorOps {
     uint32_t abi_version;
@@ -313,6 +325,16 @@ typedef struct AvExecutorOps {
      * cannot compose, which a device then never offers. Main loop. */
     uint32_t (*compose_planes)(void *opaque, uint32_t domain, const AvScanoutPlane *planes, uint32_t count,
                                uint32_t width, uint32_t height, AvExportedImage *image);
+    /* The frame `point` of `surface` written by the GPU into the surface
+     * `fd` is, `bytes` long and `pitch` bytes a row - a dma-buf over guest
+     * pages, the caller's to close - region by region, and finished: no CPU
+     * reads or writes a pixel. AV_EXECUTED, the frame then let go as
+     * unmap_frame lets it go; AV_UNKNOWN where the frame is not there within
+     * `wait_ms`, a region lies outside the frame or the surface, or its API
+     * cannot write a buffer - the frame is still there for map_frame. Null in
+     * an executor that writes none. Any thread. */
+    uint32_t (*write_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms,
+                            int fd, uint64_t bytes, uint32_t pitch, const AvFrameRegion *regions, uint32_t count);
 } AvExecutorOps;
 
 typedef const AvExecutorOps *(*AvExecutorOpsFunction)(void);

@@ -130,7 +130,7 @@ TEST(cofunc_modality_visit, a_pinned_target_mode_leaves_its_set)
   enumeration.vidpn().target_modes(0u).seed(pinned, true);
   CHECK_EQ(enumeration.run(), 0u);
   CHECK_EQ(enumeration.vidpn().target_modes(0u).modes(), 1u);
-  CHECK_EQ(enumeration.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count); }
+  CHECK_EQ(enumeration.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count * 2u); }
 
 TEST(cofunc_modality_visit, the_pivot_mode_set_is_left_alone)
 { Enumeration source_pivot;
@@ -141,13 +141,13 @@ TEST(cofunc_modality_visit, the_pivot_mode_set_is_left_alone)
   Enumeration target_pivot;
   target_pivot.request().EnumPivotType = pivot_target;
   CHECK_EQ(target_pivot.run(), 0u);
-  CHECK_EQ(target_pivot.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count);
+  CHECK_EQ(target_pivot.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count * 2u);
   CHECK_EQ(target_pivot.vidpn().target_modes(0u).modes(), 0u);
   Enumeration other_ids;
   other_ids.request().EnumPivotType = pivot_source;
   other_ids.request().EnumPivotVidPnSourceId = 1u;
   CHECK_EQ(other_ids.run(), 0u);
-  CHECK_EQ(other_ids.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count);
+  CHECK_EQ(other_ids.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count * 2u);
   other_ids.request().EnumPivotType = pivot_target;
   other_ids.request().EnumPivotVidPnTargetId = 1u;
   CHECK_EQ(other_ids.run(), 0u);

@@ -110,7 +110,8 @@ TEST(chained_image, a_blue_first_frame_opens_a_blue_first_top_down_slot_made_as_
   const ScriptedVulkanDevice::Described made = rig.host().described(chained.slot());
   CHECK_EQ(made.format, VK_FORMAT_B8G8R8A8_UNORM);
   CHECK_EQ(made.flags, VkImageCreateFlags{VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT});
-  CHECK_EQ(made.tiling, VK_IMAGE_TILING_OPTIMAL);
+  /* Linear, as every image shared over exportable memory is (8cd3cfc4). */
+  CHECK_EQ(made.tiling, VK_IMAGE_TILING_LINEAR);
   CHECK_EQ(made.external, VkExternalMemoryHandleTypeFlags{VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT});
   CHECK_EQ(made.view_formats, 2u);
   CHECK((made.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0u);

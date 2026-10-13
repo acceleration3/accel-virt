@@ -28,6 +28,8 @@
 
 namespace av {
 
+class FrameTarget;
+
 class SurfacePoint;
 
 class HostApis;
@@ -76,6 +78,10 @@ public:
      * (SharedSurfaces). Any thread. */
     bool     map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(uint32_t domain, const SurfacePoint &frame);
+    /* `frame` written by the GPU into `target` and let go
+     * (SharedSurfaces::write); false where it is not, and it is still there
+     * for map_frame. */
+    bool     write_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, const FrameTarget &target);
     /* The surface shared as `surface` in `domain` as its own memory, for a
      * process outside QEMU (D3d11HostDevice::export_surface), and the copies
      * into it the host has run with a sync_file for them

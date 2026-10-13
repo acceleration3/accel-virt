@@ -1,4 +1,5 @@
 #include "device/context/local_context_plane.hpp"
+#include "device/present/frame_destination.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_point.hpp"
@@ -174,6 +175,13 @@ bool LocalContextPlane::map_frame(const uint8_t *, const SurfacePoint &frame, ui
 {
     AV_SCOPE("LocalContextPlane::map_frame");
     return library_.map_frame(frame, wait_ms, view);
+}
+
+bool LocalContextPlane::write_frame(const uint8_t *, const SurfacePoint &frame, uint32_t wait_ms,
+                                    const FrameDestination &destination)
+{
+    AV_SCOPE("LocalContextPlane::write_frame");
+    return library_.write_frame(frame, wait_ms, destination);
 }
 
 void LocalContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &frame)

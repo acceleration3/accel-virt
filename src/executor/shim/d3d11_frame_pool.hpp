@@ -1,9 +1,11 @@
 /* The frames Direct3D 11 stages for the present engine
  * (docs/shared-surfaces.md, "Readers"): a blt-model present's buffer copied on
- * the GPU into a staging texture, in the order of the commands that drew it,
- * which the engine then maps. The textures are kept and reused - a free one of
- * the frame's shape first - and a frame is the pool's again once
- * SharedSurfaces gives it back.
+ * the GPU into a texture of the pool's, in the order of the commands that drew
+ * it, which the GPU then writes into the window's own pages (write_frame,
+ * docs/compositor.md). Where it cannot, the engine maps it: copied into a
+ * staging texture first, made the first time a frame of that shape is read.
+ * The textures are kept and reused - a free one of the frame's shape first -
+ * and a frame is the pool's again once SharedSurfaces gives it back.
  *
  * Staging is a session's command, made under the device's lock. A frame is
  * read and given back from the present engine's thread, and takes the lock
@@ -60,11 +62,18 @@ private:
         /* Under the device's lock: the texture let go. */
         void    drop();
         Reading read(AvFrameView &view) override;
+        bool    write(const FrameTarget &target) override;
         void    release() override;
 
     private:
+        /* Under the device's lock: the staging texture made if it is not, and
+         * the frame copied into it. */
+        bool    copy_to_staging();
+
         D3d11HostDevice *device_;
+        ID3D11Texture2D *held_;
         ID3D11Texture2D *texture_;
+        bool             staged_;
         uint32_t         width_;
         uint32_t         height_;
         uint32_t         format_;

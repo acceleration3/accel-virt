@@ -12,6 +12,7 @@
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "executor/d3d/frame_target.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "harness/executor/d3d_loopback.hpp"
@@ -22,7 +23,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <initializer_list>
+#include <linux/udmabuf.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace {
 
@@ -479,6 +485,105 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     CHECK(!surfaces.map(av::SurfacePoint(key, 3u), 0u, view));
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK_EQ(hresult, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(surfaces.invariants_hold());
+}
+
+/* Guest RAM as QEMU makes it - a memfd that cannot shrink, mapped shared -
+ * and a dma-buf of it from udmabuf, as the device makes one of a window's
+ * pages. */
+class GuestPages {
+public:
+    static constexpr std::uint64_t bytes = 64u * 1024u;
+    static constexpr std::uint32_t untouched = 0x11111111u;
+
+    GuestPages() : memfd_(-1), dmabuf_(-1), pixels_(nullptr)
+    {
+        memfd_ = memfd_create("guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+        if (memfd_ < 0 || ftruncate(memfd_, bytes) != 0 || fcntl(memfd_, F_ADD_SEALS, F_SEAL_SHRINK) != 0) return;
+        void *const mapped = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memfd_, 0);
+        if (mapped == MAP_FAILED) return;
+        pixels_ = static_cast<std::uint32_t *>(mapped);
+        for (std::uint64_t at = 0u; at < bytes / 4u; at++) pixels_[at] = untouched;
+        const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+        if (device < 0) return;
+        udmabuf_create request = {};
+        request.memfd = static_cast<std::uint32_t>(memfd_);
+        request.flags = UDMABUF_FLAGS_CLOEXEC;
+        request.size = bytes;
+        dmabuf_ = ioctl(device, UDMABUF_CREATE, &request);
+        close(device);
+    }
+    ~GuestPages()
+    {
+        if (pixels_ != nullptr) munmap(pixels_, bytes);
+        if (dmabuf_ >= 0) close(dmabuf_);
+        if (memfd_ >= 0) close(memfd_);
+    }
+    bool          made() const { return dmabuf_ >= 0 && pixels_ != nullptr; }
+    int           dmabuf() const { return dmabuf_; }
+    std::uint32_t pixel(std::uint32_t index) const { return pixels_[index]; }
+
+private:
+    int            memfd_;
+    int            dmabuf_;
+    std::uint32_t *pixels_;
+};
+
+/* A staged frame is written by the GPU straight into guest pages
+ * (StagedFrame::write) - a single-sample target's and a multisampled one's,
+ * resolved - and let go once written; nothing outside the region changes. */
+TEST(d3d9_session_device, a_staged_frame_is_written_by_the_gpu_into_guest_pages)
+{
+    av::LoaderHostApis   apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d9HostDevice  *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    GuestPages pages;
+    if (!pages.made()) {
+        std::fprintf(stderr, "no udmabuf here: nothing judged\n");
+        return;
+    }
+    constexpr std::uint64_t key = 0x9160u;
+    av::SharedSurfaces      surfaces;
+    av::D3dBackend          backend;
+    av::SessionShares       unshared;
+    CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend);
+    std::uint32_t   hresult = 1u;
+    CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
+    CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, red, 1.0f, 0u));
+    const Rect right = {static_cast<std::int32_t>(size / 2u), 0, static_cast<std::int32_t>(size),
+                        static_cast<std::int32_t>(size)};
+    CHECK(av_d3d9_Clear9(wire, 1u, &right, clear_target, blue, 1.0f, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 1u));
+
+    /* Row size/2 of the frame, whole, into row 1 of a surface 128 pixels wide. */
+    constexpr std::uint32_t pitch = 512u;
+    const AvFrameRegion     row = {0u, size / 2u, 0u, 1u, size, 1u};
+    CHECK(surfaces.write(av::SurfacePoint(key, 1u), 1000u,
+                         av::FrameTarget(pages.dmabuf(), GuestPages::bytes, pitch, &row, 1u)));
+    CHECK_EQ(pages.pixel(pitch / 4u), red);
+    CHECK_EQ(pages.pixel(pitch / 4u + size - 1u), blue);
+    CHECK_EQ(pages.pixel(pitch / 4u + size), GuestPages::untouched);
+    CHECK_EQ(pages.pixel(0u), GuestPages::untouched);
+    AvFrameView view = {};
+    CHECK(!surfaces.map(av::SurfacePoint(key, 1u), 0u, view));   /* written and let go */
+
+    constexpr std::uint32_t four_samples = 4u;
+    constexpr std::uint32_t sampled = 78u;
+    CHECK(av_d3d9_CreateSurface9(wire, sampled, kind_render_target, size, size, format_a8r8g8b8, four_samples, 0u,
+                                 0u));
+    CHECK(av_d3d9_SetRenderTarget9(wire, 0u, sampled, 0u));
+    CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, blue, 1.0f, 0u));
+    CHECK(av_d3d9_PresentPoint9(wire, sampled, 0u, key, 2u));
+    const AvFrameRegion corner = {0u, 0u, 0u, 3u, 1u, 1u};
+    CHECK(surfaces.write(av::SurfacePoint(key, 2u), 1000u,
+                         av::FrameTarget(pages.dmabuf(), GuestPages::bytes, pitch, &corner, 1u)));
+    CHECK_EQ(pages.pixel(3u * pitch / 4u), blue);
+    CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK_EQ(wire.refused(), 0u);
     CHECK(surfaces.invariants_hold());
 }

@@ -26,6 +26,7 @@
 
 namespace av {
 
+class FrameTarget;
 class StagedFrame;
 
 class SharedSurfaces {
@@ -63,6 +64,11 @@ public:
     [[nodiscard]] bool map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     /* `frame` let go, mapped or not: its staging goes back to its pool. */
     void               unmap(const SurfacePoint &frame);
+    /* `frame` written by its API into `target` (StagedFrame::write) and let
+     * go, once its writer has staged it, within `wait_ms`: false where it
+     * never is, is being read, or its API cannot write it - which leaves it
+     * kept, for map. Any thread. */
+    [[nodiscard]] bool write(const SurfacePoint &frame, uint32_t wait_ms, const FrameTarget &target);
     /* The guest let go of `surface` everywhere; 0 for every surface, as a
      * device reset does. Its frames not being read go back. */
     void               release(uint64_t surface);
@@ -98,6 +104,9 @@ private:
     Slot    *room(StagedFrame *&evicted);
     /* One look for `frame`, taking and giving back the lock itself. */
     Look     look(const SurfacePoint &frame, AvFrameView &view);
+    /* The kept frame marked being read, or null with `found` saying whether
+     * to wait for it or not. */
+    StagedFrame *claim(const SurfacePoint &frame, Look &found);
     /* Under the lock: whether `surface`'s writer has passed `point`, points
      * counting on past 2^32 as their difference does. */
     bool     passed(const Surface &surface, uint32_t point) const;

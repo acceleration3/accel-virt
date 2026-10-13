@@ -4,7 +4,9 @@
 #include "device/control/control_request.hpp"
 #include "device/present/region_mover.hpp"
 #include "device/host/host.hpp"
+#include "device/memory/blob_dma_buf.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/present/frame_destination.hpp"
 #include "device/present/present_frames.hpp"
 #include "core/support/scope_exit.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -16,7 +18,7 @@ static_assert(QueuedPresentRequest::max_entries <= GuestPageMapping::max_entries
 static_assert(QueuedPresentRequest::entry_size == GuestPageMapping::entry_size, "one memory entry, one layout");
 
 QueuedPresent::QueuedPresent(Host &host)
-    : source_(host), destination_(host), present_(), regions_(), refusals_after_(0u)
+    : host_(host), source_(host), destination_(host), present_(), regions_(), refusals_after_(0u)
 {
     AV_SCOPE("QueuedPresent::QueuedPresent");
 }
@@ -77,6 +79,7 @@ Status QueuedPresent::move_regions(RegionMover &mover)
 Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move_snapshot");
+    if (write_snapshot(snapshots)) return Status::ok;
     AvFrameView view = {};
     if (!snapshots.map(present_.image(), view)) return Status::not_found;
     ScopeExit       unmap([this, &snapshots] { snapshots.unmap(present_.image()); });
@@ -90,6 +93,22 @@ Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
                                     copy.destination_pitch());
     RegionMover mover(source, destination_.window(), shape);
     return move_regions(mover);
+}
+
+/* The destination's pages as one dma-buf the GPU writes in place: no CPU reads
+ * or writes a pixel of the frame (docs/compositor.md). Swapping red and blue
+ * is a CPU's job, and so is any write the host turns down. */
+bool QueuedPresent::write_snapshot(const PresentFrames &snapshots)
+{
+    AV_SCOPE("QueuedPresent::write_snapshot");
+    const PresentCopyRequest &copy = present_.copy();
+    if (copy.swaps_red_and_blue()) return false;
+    BlobDmaBuf pages(host_);
+    if (pages.make(destination_.window(), 0u, destination_.window().length()) != Status::ok) return false;
+    FrameDestination destination(pages.handle(), pages.length(), copy.destination_pitch());
+    for (uint32_t index = 0u; index < copy.regions(); index++)
+        if (!destination.add(regions_[index])) return false;
+    return snapshots.write(present_.image(), destination);
 }
 
 void QueuedPresent::release()

@@ -1,4 +1,5 @@
 #include "device/isolation/renderer_context_plane.hpp"
+#include "device/present/frame_destination.hpp"
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -513,6 +514,13 @@ bool RendererContextPlane::map_frame(const uint8_t *, const SurfacePoint &, uint
 void RendererContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &)
 {
     AV_SCOPE("RendererContextPlane::unmap_frame");
+}
+
+/* The renderer reads no frames here, so it writes none either. */
+bool RendererContextPlane::write_frame(const uint8_t *, const SurfacePoint &, uint32_t, const FrameDestination &)
+{
+    AV_SCOPE("RendererContextPlane::write_frame");
+    return false;
 }
 
 /* The surfaces live in the renderer's process, whose descriptors nothing here

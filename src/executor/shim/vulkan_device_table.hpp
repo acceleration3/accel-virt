@@ -47,6 +47,14 @@ public:
     /* The first row of a linear image's only subresource. */
     VkSubresourceLayout  row_layout(VkImage image) const;
 
+    [[nodiscard]] bool create_buffer(const VkBufferCreateInfo &info, VkBuffer &buffer) const;
+    void               destroy_buffer(VkBuffer buffer) const;
+    VkMemoryRequirements buffer_requirements(VkBuffer buffer) const;
+    /* The memory types a dma-buf `fd` may be imported as; 0 for none. */
+    uint32_t           dma_buf_types(int fd) const;
+    /* Memory for `buffer` alone, as bind_dedicated makes it for an image. */
+    [[nodiscard]] bool bind_buffer(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
+                                   VkDeviceMemory &memory) const;
     [[nodiscard]] bool create_semaphore(const void *chain, VkSemaphore &semaphore) const;
     void               destroy_semaphore(VkSemaphore semaphore) const;
     [[nodiscard]] bool import_semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits type,
@@ -66,6 +74,14 @@ public:
                                uint32_t count, const VkImageMemoryBarrier *barriers) const;
     void               copy_image(VkCommandBuffer buffer, VkImage source, VkImage destination,
                                   const VkImageCopy &region) const;
+    void               copy_buffer(VkCommandBuffer buffer, VkBuffer source, VkBuffer destination, uint32_t count,
+                                   const VkBufferCopy *regions) const;
+    /* Every write recorded before this, readable by transfers after it. */
+    void               to_transfer(VkCommandBuffer buffer) const;
+    /* Every transfer write recorded before this, available to the host. */
+    void               to_host(VkCommandBuffer buffer) const;
+    void               copy_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination, uint32_t count,
+                                      const VkBufferImageCopy *regions) const;
     [[nodiscard]] bool submit(VkQueue queue, const VkSubmitInfo &submit) const;
     void               queue_idle(VkQueue queue) const;
 
@@ -82,6 +98,13 @@ private:
     PFN_vkBindImageMemory            bind_;
     PFN_vkGetImageSubresourceLayout  layout_;
     PFN_vkGetMemoryFdKHR             memory_fd_;
+    PFN_vkCreateBuffer               create_buffer_;
+    PFN_vkDestroyBuffer              destroy_buffer_;
+    PFN_vkGetBufferMemoryRequirements buffer_requirements_;
+    PFN_vkBindBufferMemory           bind_buffer_;
+    PFN_vkGetMemoryFdPropertiesKHR   fd_properties_;
+    PFN_vkCmdCopyImageToBuffer       copy_to_buffer_;
+    PFN_vkCmdCopyBuffer              copy_buffer_;
     PFN_vkCreateSemaphore            create_semaphore_;
     PFN_vkDestroySemaphore           destroy_semaphore_;
     PFN_vkImportSemaphoreFdKHR       import_semaphore_;

@@ -1,5 +1,7 @@
 #include "device/execution/executor_library.hpp"
 
+#include "device/present/frame_destination.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_point.hpp"
 
@@ -209,6 +211,16 @@ bool ExecutorLibrary::map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvF
     AV_SCOPE("ExecutorLibrary::map_frame");
     return domain_ != 0u &&
            ops_->map_frame(ops_->opaque, domain_, frame.surface(), frame.point(), wait_ms, &view) == AV_EXECUTED;
+}
+
+bool ExecutorLibrary::write_frame(const SurfacePoint &frame, uint32_t wait_ms,
+                                  const FrameDestination &destination) const
+{
+    AV_SCOPE("ExecutorLibrary::write_frame");
+    return domain_ != 0u && ops_->write_frame != nullptr &&
+           ops_->write_frame(ops_->opaque, domain_, frame.surface(), frame.point(), wait_ms, destination.fd(),
+                             destination.bytes(), destination.pitch(), destination.regions(),
+                             destination.count()) == AV_EXECUTED;
 }
 
 void ExecutorLibrary::unmap_frame(const SurfacePoint &frame) const

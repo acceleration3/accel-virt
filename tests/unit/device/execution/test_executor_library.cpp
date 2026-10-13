@@ -5,6 +5,8 @@
 #include "device/abi/av_executor.h"
 #include "device/execution/executor_library.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
+#include "device/present/frame_destination.hpp"
+#include "proto/dma/present_region.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/surface_point.hpp"
@@ -323,6 +325,36 @@ TEST(executor_library_frames, are_mapped_and_unmapped_in_the_device_s_domain)
   CHECK(!library.map_frame(SurfacePoint(0x51u, 4u), 0u, view));
   library.unmap_frame(SurfacePoint(0x51u, 3u));
   CHECK_EQ(ops.frame_unmaps(), 1u); }
+
+/* A frame written into guest pages goes to the library in the device's
+ * domain with the destination as it is; a library with no write_frame, or no
+ * domain, writes nothing, and the frame is still there to map. */
+TEST(executor_library_frames, are_written_in_the_device_s_domain_where_the_library_can)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  std::uint8_t pixels[16] = {};
+  ops.serve_frame(0x52u, 2u, AvFrameView{pixels, 8u, 2u, 2u, 0u});
+  av::FrameDestination destination(5, 8192u, 256u);
+  CHECK(destination.add(av::PresentRegion(0u, 0u, 0u, 0u, 2u, 2u)));
+  CHECK(!library.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));   /* no domain */
+  CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
+  CHECK(library.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));
+  CHECK_EQ(ops.frame_writes(), 1u);
+  CHECK_EQ(ops.written_pitch(), 256u);
+  CHECK_EQ(ops.written_count(), 1u);
+  CHECK_EQ(ops.last_domain(), library.domain());
+  CHECK(!library.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));   /* written and let go */
+
+  MockExecutorOps without(AV_EXECUTOR_SUB_API_D3D);
+  without.editable().write_frame = nullptr;
+  ExecutorLibrary older;
+  CHECK_STATUS(older.accept(&without.table()), Status::ok);
+  CHECK_STATUS(older.open_domain(some_gpu), Status::ok);
+  without.serve_frame(0x52u, 2u, AvFrameView{pixels, 8u, 2u, 2u, 0u});
+  CHECK(!older.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));
+  AvFrameView view = {};
+  CHECK(older.map_frame(SurfacePoint(0x52u, 2u), 0u, view)); }
 
 /* What a library hands over is believed only as far as AV_EXECUTED. */
 TEST(executor_library_surfaces, are_exported_and_synced_in_the_device_s_domain)

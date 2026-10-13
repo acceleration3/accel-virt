@@ -15,6 +15,7 @@
 #include "executor/shim/dxvk_queues.hpp"
 #include "executor/shim/queue_work.hpp"
 #include "executor/shim/vulkan_device_table.hpp"
+#include "executor/shim/vulkan_timeline.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan.h>
@@ -25,7 +26,8 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
-class VulkanTimeline;
+class FrameTarget;
+class VulkanBuffer;
 
 class DxvkVulkanDevice {
 public:
@@ -58,6 +60,15 @@ public:
      * the Direct3D 11 device's lock: it flushes the immediate context. False
      * where the device exports no sync_file. */
     [[nodiscard]] bool sync_file(int &fd);
+    /* `texture`'s pixels written into `target` region by region, behind
+     * everything Direct3D recorded: false where its image or the target's
+     * memory cannot be had. `buffer` holds that memory until the write is
+     * finished; `value` is what it signals. Under the device's lock. */
+    [[nodiscard]] bool write(ID3D11Texture2D *texture, const FrameTarget &target, VulkanBuffer &buffer,
+                             uint64_t &value);
+    /* Whether the write `value` names finished within `nanoseconds`. Any
+     * thread; no lock. */
+    [[nodiscard]] bool written(uint64_t value, uint64_t nanoseconds) const;
 
 private:
     IDXGIVkInteropDevice1 *interop_;   /* held */
@@ -73,6 +84,8 @@ private:
     /* A signal submitted and never exported leaves the semaphore signalled,
      * which no batch may signal again: from then on there are no more. */
     bool                   sync_spent_;
+    VulkanTimeline         written_;
+    uint64_t               writes_;
 };
 
 }  // namespace av

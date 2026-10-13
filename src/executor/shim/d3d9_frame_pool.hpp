@@ -1,13 +1,13 @@
 /* The frames Direct3D 9 stages for the present engine (docs/shared-surfaces.md,
  * "Readers"): a blt-model present's render target copied on the GPU into a
- * system-memory surface (GetRenderTargetData), with an event query after the
- * copy, which the engine maps once the query says the GPU is done. The
- * surfaces are kept and reused - a free one of the frame's device and shape
- * first - and a frame is the pool's again once SharedSurfaces gives it back.
- *
- * A multisampled target is resolved first (StretchRect into a single-sample
- * render target the frame keeps): GetRenderTargetData copies an image to
- * memory, which only a single-sample image may be.
+ * single-sample render target the frame keeps (StretchRect, which resolves a
+ * multisampled one too), which the GPU then writes into the window's own pages
+ * through the device's Vulkan (write_frame, docs/compositor.md). Where it
+ * cannot, the engine maps it: copied into a system-memory surface first
+ * (GetRenderTargetData), with an event query after the copy, which the engine
+ * maps once the query says the GPU is done. The surfaces are kept and reused -
+ * a free one of the frame's device and shape first - and a frame is the
+ * pool's again once SharedSurfaces gives it back.
  *
  * DXVK's LockRect waits for the GPU whatever its flags say, so the query is
  * what keeps the engine's read from blocking. A Direct3D 9 device is a guest
@@ -20,6 +20,8 @@
 #include "executor/d3d/frame_claim.hpp"
 #include "executor/d3d/frame_pool.hpp"
 #include "executor/d3d/staged_frame.hpp"
+#include "executor/shim/d3d9_vulkan_lane.hpp"
+#include "executor/shim/vulkan_timeline.hpp"
 
 #include <stdint.h>
 
@@ -66,14 +68,25 @@ private:
         bool    make(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format, bool multisampled);
         void    drop();
         Reading read(AvFrameView &view) override;
+        bool    write(const FrameTarget &target) override;
         void    release() override;
 
     private:
+        /* The copy into system memory queued, behind the one into held_. */
+        bool    copy_to_memory();
+        /* The lane and its timeline, made the first time a frame is written. */
+        bool    lane_ready();
+
         IDirect3DDevice9  *device_;
         IDirect3DSurface9 *surface_;
-        /* A multisampled source's resolve; null for a single-sample one. */
-        IDirect3DSurface9 *resolved_;
+        /* The frame on the GPU, single-sample whatever the source was. */
+        IDirect3DSurface9 *held_;
         IDirect3DQuery9   *copied_;
+        bool               multisampled_;
+        bool               staged_;
+        D3d9VulkanLane     lane_;
+        VulkanTimeline     written_;
+        uint64_t           writes_;
         uint32_t           width_;
         uint32_t           height_;
         uint32_t           format_;

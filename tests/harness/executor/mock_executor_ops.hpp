@@ -123,6 +123,11 @@ public:
     /* map_frame answers `view` for `surface` at `point` until it is unmapped. */
     void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
+    /* write_frame writes the served frame - letting it go, as unmap does -
+     * and keeps the pitch and region count it was handed. */
+    std::uint32_t        frame_writes() const;
+    std::uint32_t        written_pitch() const;
+    std::uint32_t        written_count() const;
     /* export_surface answers `image` for `surface`, and sync_surface `writes`
      * and `fence` - neither descriptor looked at here; every other surface is
      * AV_UNKNOWN. */
@@ -216,6 +221,9 @@ private:
     std::uint64_t              last_shared_release_ = 0u;
     std::uint32_t              last_domain_ = 0u;
     std::uint64_t              frame_surface_ = 0u;
+    std::uint32_t              frame_writes_ = 0u;
+    std::uint32_t              written_pitch_ = 0u;
+    std::uint32_t              written_count_ = 0u;
     std::uint32_t              frame_point_ = 0u;
     AvFrameView               frame_ = {};
     std::uint32_t              frame_unmaps_ = 0u;

@@ -1,5 +1,9 @@
 #include "executor/shim/d3d11_host_device.hpp"
 
+#include "executor/shim/vulkan_buffer.hpp"
+
+#include "executor/d3d/frame_target.hpp"
+
 #include <stdio.h>
 
 #include "core/log/log_line.hpp"
@@ -191,6 +195,25 @@ bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint64_t &
     const bool synced = shares_->writes(domain, surface, writes) && vulkan_.sync_file(fd);
     unlock();
     return synced;
+}
+
+/* A write not finished in a second is a GPU that is gone; the queue is drained
+ * before the memory the copy writes is let go. */
+bool D3d11HostDevice::write_frame(ID3D11Texture2D *texture, uint32_t width, uint32_t height,
+                                  const FrameTarget &target)
+{
+    AV_SCOPE("D3d11HostDevice::write_frame");
+    constexpr uint64_t most_wait_nanoseconds = 1000000000u;
+    if (!target.fits(width, height)) return false;
+    VulkanBuffer buffer;
+    uint64_t     value = 0u;
+    lock(nullptr);
+    const bool queued = vulkan_.write(texture, target, buffer, value);
+    unlock();
+    if (!queued) return false;
+    if (vulkan_.written(value, most_wait_nanoseconds)) return true;
+    vulkan_.idle();
+    return false;
 }
 
 StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width,

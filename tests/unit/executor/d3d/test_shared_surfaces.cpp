@@ -3,6 +3,7 @@
  * no blt has asked for is never staged until one asks; a frame is waited for
  * until its writer reaches it, read once, and given back once; what is kept
  * never exceeds its slots, and a frame being read is never taken away. */
+#include "executor/d3d/frame_target.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,9 +21,19 @@ namespace {
  * failure; every read and give-back counted. */
 class FakeFrame final : public StagedFrame {
 public:
-    explicit FakeFrame(std::uint32_t copying = 0u) : copying_(copying), fails_(false), reads_(0u), releases_(0u) {}
+    explicit FakeFrame(std::uint32_t copying = 0u)
+        : copying_(copying), fails_(false), writable_(false), reads_(0u), writes_(0u), releases_(0u)
+    {}
 
     void fail() { fails_ = true; }
+    /* Its API writes a target it fits (a 2x1 frame), as a GPU would. */
+    void let_write() { writable_ = true; }
+    bool write(const av::FrameTarget &target) override
+    {
+        writes_++;
+        return writable_ && target.fits(2u, 1u);
+    }
+    std::uint32_t writes() const { return writes_; }
     Reading read(AvFrameView &view) override
     {
         reads_++;
@@ -43,7 +54,9 @@ public:
 private:
     std::uint32_t copying_;
     bool          fails_;
+    bool          writable_;
     std::uint32_t reads_;
+    std::uint32_t writes_;
     std::uint32_t releases_;
     std::uint8_t  pixels_[8] = {};
 };
@@ -235,4 +248,39 @@ TEST(shared_surfaces, points_compare_across_the_wrap_and_nothing_names_nothing)
   CHECK(!surfaces.presented(SurfacePoint(surface, 0u)));
   CHECK(!surfaces.map(SurfacePoint(), 1000u, view));
   surfaces.unmap(SurfacePoint());
+  CHECK(surfaces.invariants_hold()); }
+
+/* A kept frame its API writes into the target is let go, once; one its API
+ * cannot write, or whose target it does not fit, is kept for a map; a frame
+ * being read, or a point passed with nothing kept, is not written. */
+TEST(shared_surfaces, a_written_frame_is_given_back_and_an_unwritten_one_kept_to_map)
+{ SharedSurfaces surfaces;
+  FakeFrame      frame;
+  const SurfacePoint at(surface, 5u);
+  static_cast<void>(surfaces.presented(at));
+  CHECK(surfaces.keep(at, frame));
+  const AvFrameRegion        region = {0u, 0u, 0u, 0u, 2u, 1u};
+  const av::FrameTarget      target(3, 4096u, 64u, &region, 1u);
+  CHECK(!surfaces.write(at, 0u, target));   /* its API writes nothing */
+  CHECK_EQ(frame.writes(), 1u);
+  CHECK_EQ(frame.releases(), 0u);
+  AvFrameView view = {};
+  CHECK(surfaces.map(at, 0u, view));         /* still there to map */
+  CHECK(!surfaces.write(at, 0u, target));   /* being read */
+  CHECK_EQ(frame.writes(), 1u);
+  surfaces.unmap(at);
+
+  FakeFrame          written;
+  const SurfacePoint next(surface, 6u);
+  static_cast<void>(surfaces.presented(next));
+  CHECK(surfaces.keep(next, written));
+  written.let_write();
+  const AvFrameRegion wide = {0u, 0u, 0u, 0u, 3u, 1u};
+  CHECK(!surfaces.write(next, 0u, av::FrameTarget(3, 4096u, 64u, &wide, 1u)));   /* wider than the frame */
+  CHECK_EQ(written.releases(), 0u);
+  CHECK(surfaces.write(next, 0u, target));
+  CHECK_EQ(written.releases(), 1u);
+  CHECK(!surfaces.write(next, 0u, target));   /* given back: nothing kept now */
+  CHECK(!surfaces.write(SurfacePoint(), 0u, target));
+  CHECK_EQ(written.releases(), 1u);
   CHECK(surfaces.invariants_hold()); }

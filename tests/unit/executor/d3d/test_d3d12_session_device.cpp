@@ -10,6 +10,7 @@
  * (tools/build_d3d_runtime.sh, which applies the host-pointer heap patch this
  * needs). A host without it, or with a vkd3d-proton that cannot import guest
  * memory, returns without judging, as the other device tests do. */
+#include "executor/d3d/frame_target.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "fixtures/d3d12/triangle_ps.hpp"
 #include "fixtures/d3d12/triangle_vs.hpp"
@@ -29,6 +30,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
+#include <linux/udmabuf.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace {
 
@@ -754,6 +760,103 @@ TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_
     CHECK(surfaces.map(av::SurfacePoint(shown_key, 2u), 1000u, view));
     CHECK(frame_everywhere(view, opaque_green));
     surfaces.unmap(av::SurfacePoint(shown_key, 2u));
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(surfaces.invariants_hold());
+    backend.shut_down();
+    surfaces.release(0u);
+    shares->release(1u, shown_key);
+    device11->retire_shares();
+}
+
+/* Guest RAM as QEMU makes it - a memfd that cannot shrink, mapped shared -
+ * and a dma-buf of it from udmabuf, as the device makes one of a window's
+ * pages. */
+class GuestPages {
+public:
+    static constexpr std::uint64_t bytes = 64u * 1024u;
+    static constexpr std::uint32_t untouched = 0x11111111u;
+
+    GuestPages() : memfd_(-1), dmabuf_(-1), pixels_(nullptr)
+    {
+        memfd_ = memfd_create("guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+        if (memfd_ < 0 || ftruncate(memfd_, bytes) != 0 || fcntl(memfd_, F_ADD_SEALS, F_SEAL_SHRINK) != 0) return;
+        void *const mapped = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memfd_, 0);
+        if (mapped == MAP_FAILED) return;
+        pixels_ = static_cast<std::uint32_t *>(mapped);
+        for (std::uint64_t at = 0u; at < bytes / 4u; at++) pixels_[at] = untouched;
+        const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+        if (device < 0) return;
+        udmabuf_create request = {};
+        request.memfd = static_cast<std::uint32_t>(memfd_);
+        request.flags = UDMABUF_FLAGS_CLOEXEC;
+        request.size = bytes;
+        dmabuf_ = ioctl(device, UDMABUF_CREATE, &request);
+        close(device);
+    }
+    ~GuestPages()
+    {
+        if (pixels_ != nullptr) munmap(pixels_, bytes);
+        if (dmabuf_ >= 0) close(dmabuf_);
+        if (memfd_ >= 0) close(memfd_);
+    }
+    bool          made() const { return dmabuf_ >= 0 && pixels_ != nullptr; }
+    int           dmabuf() const { return dmabuf_; }
+    std::uint32_t pixel(std::uint32_t index) const { return pixels_[index]; }
+
+private:
+    int            memfd_;
+    int            dmabuf_;
+    std::uint32_t *pixels_;
+};
+
+/* A staged frame is written by vkd3d's GPU straight into guest pages
+ * (StagedFrame::write) - the present's frame, not the clear after it - and
+ * let go once written; nothing outside the region changes. */
+TEST(d3d12_session_device, a_staged_frame_is_written_by_the_gpu_into_guest_pages)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    if (!host_devices(apis, device11, device12, shares)) return;
+    GuestPages pages;
+    if (!pages.made()) {
+        std::fprintf(stderr, "no udmabuf here: nothing judged\n");
+        return;
+    }
+    av::SharedSurfaces surfaces;
+    av::D3dBackend     backend;
+    av::SessionShares  session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12, &surfaces));
+    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    if (!imports(*device12, wire)) {
+        backend.shut_down();
+        return;
+    }
+    make_shown(wire);
+    present_cleared(wire, Float4{{1.0f, 0.0f, 0.0f, 1.0f}}, 1u);
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    AvFrameView view = {};
+    CHECK(!surfaces.map(av::SurfacePoint(shown_key, 1u), 1000u, view));   /* a blt asks: stage from now on */
+    present_cleared(wire, Float4{{0.0f, 1.0f, 0.0f, 1.0f}}, 2u);
+    draw_cleared(wire, Float4{{0.0f, 0.0f, 1.0f, 1.0f}});
+    /* Rows 3 and 4 of the frame, whole, into rows 1 and 2 of a surface 128
+     * pixels wide. */
+    constexpr std::uint32_t pitch = 512u;
+    const AvFrameRegion     rows = {0u, 3u, 0u, 1u, size, 2u};
+    CHECK(surfaces.write(av::SurfacePoint(shown_key, 2u), 1000u,
+                         av::FrameTarget(pages.dmabuf(), GuestPages::bytes, pitch, &rows, 1u)));
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t row = 1u; row <= 2u; row++)
+        for (std::uint32_t x = 0u; x < size; x++) wrong += pages.pixel(row * pitch / 4u + x) == opaque_green ? 0u : 1u;
+    CHECK_EQ(wrong, 0u);
+    CHECK_EQ(pages.pixel(0u), GuestPages::untouched);
+    CHECK_EQ(pages.pixel(pitch / 4u + size), GuestPages::untouched);
+    CHECK_EQ(pages.pixel(3u * pitch / 4u), GuestPages::untouched);
+    CHECK(!surfaces.map(av::SurfacePoint(shown_key, 2u), 0u, view));   /* written and let go */
     CHECK(av_d3d12_Finish12(wire, &removed));
     CHECK_EQ(removed, 0u);
     CHECK_EQ(wire.refused(), 0u);

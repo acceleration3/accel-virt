@@ -16,6 +16,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
+#include "executor/d3d/frame_target.hpp"
 #include "executor/executor_root.hpp"
 #include "device/shim/host_trace.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -239,6 +240,15 @@ uint32_t map_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, ui
                : AV_UNKNOWN;
 }
 
+uint32_t write_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms, int fd,
+                     uint64_t bytes, uint32_t pitch, const AvFrameRegion *regions, uint32_t count)
+{
+    AV_SCOPE("write_frame");
+    const av::FrameTarget target(fd, bytes, pitch, regions, count);
+    return library.root().write_frame(domain, av::SurfacePoint(surface, point), wait_ms, target) ? AV_EXECUTED
+                                                                                                : AV_UNKNOWN;
+}
+
 void unmap_frame(void *, uint32_t domain, uint64_t surface, uint32_t point)
 {
     AV_SCOPE("unmap_frame");
@@ -316,7 +326,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
-                              compose_planes};
+                              compose_planes,
+                              write_frame};
 
 }  // namespace
 

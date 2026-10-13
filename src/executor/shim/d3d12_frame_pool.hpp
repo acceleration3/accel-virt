@@ -5,7 +5,10 @@
  * once the frame's fence says the copy is done. A blt-model present - Direct3D
  * 9 on 12's, through dxgkrnl's redirected blt - is shown from these. A
  * multisampled one - Direct3D 9 on 12 presents its antialiased back buffer as
- * it is - is resolved into a texture of the frame's own first.
+ * it is - is resolved into a texture of the frame's own first. The engine
+ * has the buffer's rows written by the GPU into the window's own pages, on
+ * vkd3d's Vulkan (write_frame, docs/compositor.md), or maps it where it
+ * cannot.
  *
  * Each frame has its own buffer, allocator, list and fence, so a copy queued
  * on one session's queue never waits for another's. One pool per GPU, beside
@@ -19,6 +22,8 @@
 #include "executor/d3d/frame_claim.hpp"
 #include "executor/d3d/frame_pool.hpp"
 #include "executor/d3d/staged_frame.hpp"
+#include "executor/shim/d3d12_vulkan_lane.hpp"
+#include "executor/shim/vulkan_timeline.hpp"
 
 #include <stdint.h>
 
@@ -75,6 +80,7 @@ private:
                      uint32_t height, bool resolve);
         void    drop();
         Reading read(AvFrameView &view) override;
+        bool    write(const FrameTarget &target) override;
         void    release() override;
 
     private:
@@ -94,6 +100,11 @@ private:
         uint32_t                   row_pitch_;
         uint32_t                   width_;
         uint32_t                   height_;
+        /* The device prepare made the frame on; not held, the pool's own. */
+        ID3D12Device              *device_;
+        D3d12VulkanLane            lane_;
+        VulkanTimeline             written_;
+        uint64_t                   writes_;
         FrameClaim                 claim_;
     };
 

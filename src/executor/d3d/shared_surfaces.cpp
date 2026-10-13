@@ -99,22 +99,10 @@ bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameVie
 SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView &view)
 {
     AV_SCOPE("SharedSurfaces::look");
-    lock();
-    Slot *const kept = slot(frame);
-    if (kept == nullptr) {
-        Surface *const writer = known(frame.surface());
-        const bool passed_by = writer != nullptr && writer->pending_ != frame.point() && passed(*writer, frame.point());
-        if (passed_by) writer->blt_read_ = true;
-        unlock();
-        return passed_by ? Look::refused : Look::wait;
-    }
-    if (kept->reading_) {
-        unlock();
-        return Look::refused;
-    }
-    kept->reading_ = true;
-    StagedFrame &staged = *kept->staged_;
-    unlock();
+    Look               found = Look::wait;
+    StagedFrame *const claimed = claim(frame, found);
+    if (claimed == nullptr) return found;
+    StagedFrame &staged = *claimed;
     const StagedFrame::Reading reading = staged.read(view);
     if (reading == StagedFrame::Reading::mapped) return Look::mapped;
     /* A slot being read is neither evicted nor released, so it is still this. */
@@ -130,6 +118,59 @@ SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView
     unlock();
     if (failed != nullptr) failed->release();
     return failed != nullptr ? Look::refused : Look::wait;
+}
+
+StagedFrame *SharedSurfaces::claim(const SurfacePoint &frame, Look &found)
+{
+    AV_SCOPE("SharedSurfaces::claim");
+    lock();
+    Slot *const kept = slot(frame);
+    if (kept == nullptr) {
+        Surface *const writer = known(frame.surface());
+        const bool passed_by = writer != nullptr && writer->pending_ != frame.point() && passed(*writer, frame.point());
+        if (passed_by) writer->blt_read_ = true;
+        unlock();
+        found = passed_by ? Look::refused : Look::wait;
+        return nullptr;
+    }
+    if (kept->reading_) {
+        unlock();
+        found = Look::refused;
+        return nullptr;
+    }
+    kept->reading_ = true;
+    StagedFrame *const staged = kept->staged_;
+    unlock();
+    found = Look::mapped;
+    return staged;
+}
+
+bool SharedSurfaces::write(const SurfacePoint &frame, uint32_t wait_ms, const FrameTarget &target)
+{
+    AV_SCOPE("SharedSurfaces::write");
+    if (!frame.names()) return false;
+    PollBudget polls(poll_nanoseconds, wait_ms * polls_per_ms + 1u);
+    while (polls.next()) {
+        Look               found = Look::wait;
+        StagedFrame *const staged = claim(frame, found);
+        if (staged == nullptr && found == Look::refused) return false;
+        if (staged == nullptr) continue;
+        const bool written = staged->write(target);
+        /* A slot being read is neither evicted nor released, so it is still this. */
+        lock();
+        Slot *const  kept = slot(frame);
+        StagedFrame *done = nullptr;
+        if (written) {
+            done = kept->staged_;
+            *kept = Slot{};
+        } else {
+            kept->reading_ = false;
+        }
+        unlock();
+        if (done != nullptr) done->release();
+        return written;
+    }
+    return false;
 }
 
 void SharedSurfaces::unmap(const SurfacePoint &frame)

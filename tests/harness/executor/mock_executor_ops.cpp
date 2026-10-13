@@ -177,6 +177,20 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         *view = mock.frame_;
         return AV_EXECUTED;
     };
+    table_.write_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point,
+                            std::uint32_t, int fd, std::uint64_t, std::uint32_t pitch, const AvFrameRegion *regions,
+                            std::uint32_t count) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        mock.last_domain_ = domain;
+        if (fd < 0 || regions == nullptr || surface == 0u || surface != mock.frame_surface_ ||
+            point != mock.frame_point_)
+            return AV_UNKNOWN;
+        mock.frame_surface_ = 0u;
+        mock.frame_writes_++;
+        mock.written_pitch_ = pitch;
+        mock.written_count_ = count;
+        return AV_EXECUTED;
+    };
     table_.unmap_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point) {
         MockExecutorOps &mock = mock_of(opaque);
         mock.last_domain_ = domain;
@@ -454,6 +468,12 @@ void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, co
     frame_point_ = point;
     frame_ = view;
 }
+
+std::uint32_t MockExecutorOps::frame_writes() const { return frame_writes_; }
+
+std::uint32_t MockExecutorOps::written_pitch() const { return written_pitch_; }
+
+std::uint32_t MockExecutorOps::written_count() const { return written_count_; }
 
 std::uint32_t MockExecutorOps::frame_unmaps() const { return frame_unmaps_; }
 

@@ -19,6 +19,7 @@
 #include "proto/wire/wire_reader.hpp"
 
 #include <cstdint>
+#include <cstdio>
 
 using av::ControlRequest;
 using av::GpuRequestBuilder;
@@ -148,4 +149,38 @@ TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_s
   CHECK_STATUS(outside.move(snapshots), Status::invalid_parameter);
   CHECK_EQ(plane.unmaps(), 2u);
   outside.release();
+  CHECK_EQ(host.live_guest_mappings(), 0u); }
+
+/* Where the host's GPU can write the snapshot, the destination's pages go to
+ * it as one dma-buf: nothing is mapped, no pixel is written here, and what the
+ * executor is handed is the surface's pitch, its pages' length and the blt's
+ * regions. A host with no udmabuf moves it as before, and judges nothing. */
+TEST(queued_present, a_snapshot_the_host_writes_into_the_pages_crosses_no_cpu)
+{ MockHost                  host;
+  PresentScene              scene(host);
+  av::RecordingContextPlane plane;
+  constexpr std::uint8_t    gpu[av::PresentFrames::uuid_bytes] = {9};
+  const av::PresentFrames snapshots(plane, gpu);
+  static std::uint32_t      pixels[PresentScene::width];
+  plane.serve_frame(av::SurfacePoint(0x61u, 1u), AvFrameView{reinterpret_cast<const std::uint8_t *>(pixels), sizeof pixels,
+                                              PresentScene::width, 1u, 0u});
+  plane.write_frames();
+  const std::uint32_t before = scene.destination_pixel(3u, 0u);
+  QueuedPresent present(host);
+  CHECK_STATUS(accept(host, present, scene.image(4u, 0x61u), snapshots), Status::ok);
+  CHECK_STATUS(present.move(snapshots), Status::ok);
+  present.release();
+  if (plane.write_tries() == 0u) {
+      std::fprintf(stderr, "no udmabuf on this host: nothing judged\n");
+      return;
+  }
+  CHECK_EQ(plane.write_tries(), 1u);
+  CHECK_EQ(plane.unmaps(), 0u);
+  CHECK_EQ(scene.destination_pixel(3u, 0u), before);
+  CHECK_EQ(plane.written_pitch(), PresentScene::pitch);
+  CHECK_EQ(plane.written_bytes(), 2u * PresentScene::page_bytes);
+  CHECK_EQ(plane.written_count(), 1u);
+  CHECK_EQ(plane.written_region().width, PresentScene::width);
+  CHECK_EQ(plane.written_region().height, 1u);
+  CHECK_EQ(host.live_dmabufs(), 0u);
   CHECK_EQ(host.live_guest_mappings(), 0u); }

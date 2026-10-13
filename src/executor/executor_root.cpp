@@ -113,6 +113,15 @@ bool ExecutorRoot::map_frame(uint32_t domain, const SurfacePoint &frame, uint32_
     return surfaces != nullptr && surfaces->map(frame, wait_ms, view);
 }
 
+bool ExecutorRoot::write_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms,
+                               const FrameTarget &target)
+{
+    AV_SCOPE("ExecutorRoot::write_frame");
+    const HostGpu *const  gpu = gpu_of(domain);
+    SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
+    return surfaces != nullptr && surfaces->write(frame, wait_ms, target);
+}
+
 void ExecutorRoot::unmap_frame(uint32_t domain, const SurfacePoint &frame)
 {
     AV_SCOPE("ExecutorRoot::unmap_frame");

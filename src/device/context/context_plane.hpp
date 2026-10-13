@@ -14,6 +14,8 @@
 
 namespace av {
 
+class FrameDestination;
+
 class SurfacePoint;
 
 class CapsetInfo;
@@ -79,6 +81,11 @@ public:
     virtual bool reads_frames() const = 0;
     virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) = 0;
     virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
+    /* Any thread: the snapshot under `frame` written by the host's GPU into
+     * `destination` and let go (ExecutorLibrary::write_frame); false where it
+     * is not, and it is still there to map. */
+    virtual bool write_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms,
+                             const FrameDestination &destination) = 0;
     /* Any thread: whether a surface the guest shared can be handed to a
      * process outside QEMU here (docs/external-export.md), and the one
      * shared as `surface` exported as its own memory, or the copies into it

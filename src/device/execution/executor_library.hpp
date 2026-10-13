@@ -13,6 +13,8 @@
 
 namespace av {
 
+class FrameDestination;
+
 class SurfacePoint;
 
 class ExecutorLibrary {
@@ -82,6 +84,9 @@ public:
     /* A present's staged frame, mapped and let go. Any thread. */
     bool map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) const;
     void unmap_frame(const SurfacePoint &frame) const;
+    /* write_frame, where the library has it: false where it has none, or
+     * did not execute it. */
+    bool write_frame(const SurfacePoint &frame, uint32_t wait_ms, const FrameDestination &destination) const;
     /* A shared surface handed to a process outside QEMU, and the copies into
      * it with a sync_file for them: false, with nothing handed over, without
      * a domain or for a surface the library does not know. Any thread. */
