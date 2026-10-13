@@ -271,6 +271,102 @@ HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
     return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext);
 }
 
+HRESULT D3d11Device::stage_plane(ResourceRecord &source, uint32_t subresource)
+{
+    AV_SCOPE("D3d11Device::stage_plane");
+    if (source.allocation == 0u) return E_INVALIDARG;
+    if (source.shared_key == 0u) {
+        const HRESULT published = publish(source, subresource);
+        if (FAILED(published) && removed_on_host()) {
+            set_error(D3DDDIERR_DEVICEREMOVED);
+            return DXGI_ERROR_DEVICE_REMOVED;
+        }
+        return published;
+    }
+    if (FAILED(show_flip(source, subresource)) || wire().flush() != Status::ok) {
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return DXGI_ERROR_DEVICE_REMOVED;
+    }
+    return S_OK;
+}
+
+/* Every plane the present names is handed to the kernel in the order it came,
+ * a turned-off one too: the runtime pairs them with the planes it built from
+ * the same call (NDXGI::CDevice::PresentMultiplaneOverlay1CBImpl, d3d11.dll)
+ * and refuses a count that differs. Only an enabled plane is staged. */
+HRESULT D3d11Device::present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
+{
+    AV_SCOPE("D3d11Device::present_multiplane_overlay1");
+    refresh_guest_surfaces();
+    if (args->PresentPlaneCount > DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS ||
+        (args->PresentPlaneCount != 0u && args->pPresentPlanes == nullptr) || dxgi_->pfnPresentMultiplaneOverlay1Cb == nullptr)
+        return E_INVALIDARG;
+    D3DKMT_HANDLE                          allocations[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
+    HANDLE                                 contexts[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
+    DXGIDDI_MULTIPLANE_OVERLAY_PLANE_INFO  planes[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
+    DXGIDDI_MULTIPLANE_OVERLAY_PLANE_INFO *plane_list[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
+    bool                                   flipped = false;
+    for (UINT index = 0u; index < args->PresentPlaneCount; index++) {
+        const DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY1 &plane = args->pPresentPlanes[index];
+        plane_list[index] = &planes[index];
+        contexts[index] = context_;
+        planes[index].ContextCount = 1u;
+        planes[index].pContextList = &contexts[index];
+        planes[index].pAllocationList = &allocations[index];
+        if (!plane.Enabled || plane.hResource == 0u) continue;
+        ResourceRecord &source = record(plane.hResource);
+        const HRESULT staged = stage_plane(source, plane.SubResourceIndex);
+        if (FAILED(staged)) return staged;
+        allocations[index] = source.allocation;
+        flipped = flipped || source.present_model == d3d::SwapChainBuffer::Model::flip;
+    }
+    const HRESULT followed = follow_host();
+    if (FAILED(followed)) return followed;
+    DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY1 present = {};
+    present.pDXGIContext = args->pDXGIContext;
+    present.PresentPlaneCount = args->PresentPlaneCount;
+    present.ppPresentPlanes = plane_list;
+    const HRESULT presented = dxgi_->pfnPresentMultiplaneOverlay1Cb(runtime_.handle, &present);
+    /* As present_to_kernel: what is drawn next waits for DWM to give the
+     * buffer back. */
+    if (SUCCEEDED(presented) && flipped && gate_.constructed()) session_.transport().hold(gate_.object());
+    if (FAILED(presented) && present_refused_.first())
+        LogLine(lines_).text("the kernel refused a multiplane present ").hex(static_cast<uint32_t>(presented), 8u).write();
+    return presented;
+}
+
+HRESULT D3d11Device::present_multiplane_overlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
+{
+    AV_SCOPE("D3d11Device::present_multiplane_overlay");
+    refresh_guest_surfaces();
+    if (args->PresentPlaneCount > DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS ||
+        (args->PresentPlaneCount != 0u && args->pPresentPlanes == nullptr) || dxgi_->pfnPresentMultiplaneOverlayCb == nullptr)
+        return E_INVALIDARG;
+    DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY present = {};
+    present.pDXGIContext = args->pDXGIContext;
+    present.hContext = context_;
+    bool flipped = false;
+    for (UINT index = 0u; index < args->PresentPlaneCount; index++) {
+        const DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY &plane = args->pPresentPlanes[index];
+        DXGIDDI_MULTIPLANE_OVERLAY_ALLOCATION_INFO &info = present.AllocationInfo[index];
+        info.SubResourceIndex = plane.SubResourceIndex;
+        if (!plane.Enabled || plane.hResource == 0u) continue;
+        ResourceRecord &source = record(plane.hResource);
+        const HRESULT staged = stage_plane(source, plane.SubResourceIndex);
+        if (FAILED(staged)) return staged;
+        info.PresentAllocation = source.allocation;
+        flipped = flipped || source.present_model == d3d::SwapChainBuffer::Model::flip;
+    }
+    present.AllocationInfoCount = args->PresentPlaneCount;
+    const HRESULT followed = follow_host();
+    if (FAILED(followed)) return followed;
+    const HRESULT presented = dxgi_->pfnPresentMultiplaneOverlayCb(runtime_.handle, &present);
+    if (SUCCEEDED(presented) && flipped && gate_.constructed()) session_.transport().hold(gate_.object());
+    if (FAILED(presented) && present_refused_.first())
+        LogLine(lines_).text("the kernel refused a multiplane present ").hex(static_cast<uint32_t>(presented), 8u).write();
+    return presented;
+}
+
 HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)
 {
     AV_SCOPE("D3d11Device::blt");

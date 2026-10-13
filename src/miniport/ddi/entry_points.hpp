@@ -60,6 +60,7 @@
 #include "miniport/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
+#include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay3_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
@@ -160,6 +161,7 @@ int32_t AvDdiGetChildContainerId(void *context, uint32_t child, av::DxgkChildCon
 int32_t AvDdiPowerRuntimeControlRequest(void *context, const void *control_code, const void *input, size_t input_size,
                                         void *output, size_t output_size, size_t *returned);
 int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request);
+int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(void *context, av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request);
 int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type);
 int32_t AvDdiGetNodeMetadata(void *context, uint32_t node_and_adapter, av::DxgkNodeMetadataRecord *metadata);
 int32_t AvDdiSetPowerPState(void *context, uint32_t component, uint32_t pstate);

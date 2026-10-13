@@ -13,6 +13,7 @@
 #define AV_DEVICE_VBLANK_HPP
 
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
 #include "miniport/display/clock_page_view.hpp"
 #include "miniport/display/vblank_phase.hpp"
 #include "miniport/driver/interrupt_notification.hpp"
@@ -95,6 +96,8 @@ private:
     /* The layer a multiplane vsync reports, kept here because dxgkrnl reads
      * it through the interrupt's pointer. */
     DxgkMultiplaneOverlayVsyncInfoRecord layer_;
+    /* Likewise the layer a vsync of an MPO3 flip reports. */
+    DxgkMultiplaneOverlayVsyncInfo2Record presented_layer_;
     bool                  reporting_;
     bool                  suspended_;
     /* What reporting_ was when power went away, to put back on the way up. */

@@ -18,6 +18,12 @@ extern "C" HRESULT APIENTRY avumd_dxgi11_Present(DXGI_DDI_ARG_PRESENT *args)
 extern "C" HRESULT APIENTRY avumd_dxgi11_Present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
 { return d3d::DeviceCall<D3d11Device>(DeviceHandle(reinterpret_cast<void *>(args->hDevice)).device()).device().present1(args); }
 
+extern "C" HRESULT APIENTRY avumd_dxgi11_PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
+{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(reinterpret_cast<void *>(args->hDevice)).device()).device().present_multiplane_overlay(args); }
+
+extern "C" HRESULT APIENTRY avumd_dxgi11_PresentMultiplaneOverlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
+{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(reinterpret_cast<void *>(args->hDevice)).device()).device().present_multiplane_overlay1(args); }
+
 extern "C" HRESULT APIENTRY avumd_dxgi11_Blt(DXGI_DDI_ARG_BLT *args)
 { return d3d::DeviceCall<D3d11Device>(DeviceHandle(reinterpret_cast<void *>(args->hDevice)).device()).device().blt(args); }
 
@@ -43,6 +49,8 @@ void fill_dxgi_funcs(DXGI1_6_1_DDI_BASE_FUNCTIONS &table)
     AV_SCOPE("fill_dxgi_funcs");
     table.pfnPresent = &avumd_dxgi11_Present;
     table.pfnPresent1 = &avumd_dxgi11_Present1;
+    table.pfnPresentMultiplaneOverlay = &avumd_dxgi11_PresentMultiplaneOverlay;
+    table.pfnPresentMultiplaneOverlay1 = &avumd_dxgi11_PresentMultiplaneOverlay1;
     table.pfnBlt = &avumd_dxgi11_Blt;
     table.pfnBlt1 = &avumd_dxgi11_Blt1;
     table.pfnRotateResourceIdentities = &avumd_dxgi11_RotateResourceIdentities;

@@ -84,6 +84,23 @@ Status InterruptNotification::report_multiplane_vsync(uint32_t target, const Dxg
     return report();
 }
 
+/* CrtcVsyncWithMultiPlaneOverlay2 lays its union out as the first one does. */
+Status InterruptNotification::report_presented_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfo2Record *layers,
+                                                     uint32_t count)
+{
+    AV_SCOPE("InterruptNotification::report_presented_vsync");
+    platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_presented_vsync");
+    data_ = DxgkargcbNotifyInterruptDataRecord{};
+    data_.InterruptType = crtc_vsync_with_multiplane_overlay2;
+    data_.FenceId = target;
+    data_.Argument1 = physical_adapter_mask;
+    data_.Argument2 = layers != nullptr ? count : 0u;
+    const auto address = reinterpret_cast<uintptr_t>(layers);
+    data_.UnionRemainder[0] = static_cast<uint32_t>(address);
+    data_.UnionRemainder[1] = static_cast<uint32_t>(static_cast<uint64_t>(address) >> 32u);
+    return report();
+}
+
 uint8_t InterruptNotification::notify()
 {
     AV_SCOPE("InterruptNotification::notify");

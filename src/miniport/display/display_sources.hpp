@@ -67,6 +67,10 @@ public:
      * plane, whose allocation the source then shows as a primary; null when
      * there is none, and the source shows nothing. */
     [[nodiscard]] Status set_multiplane_scanout(uint32_t source, const DxgkMultiplaneOverlayPlaneRecord *base);
+    /* Device IRQL at most: an MPO3 flip of the base plane. The plane's
+     * segment address and allocation, both 0 when the flip turns it off, and
+     * the PresentId the vsync must name to retire the flip. */
+    [[nodiscard]] Status set_presented_scanout(uint32_t source, int64_t address, void *primary, uint64_t present_id);
     /* Device IRQL at most. */
     Flip                 flip(uint32_t source);
     /* Device IRQL at most: the number of the source's newest flip, 1 onwards
@@ -119,6 +123,8 @@ private:
     /* The base plane's DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES, written before the
      * flip kind that makes them read. */
     uint32_t           base_attributes_[max_sources][multiplane_overlay_attribute_words];
+    /* The base plane's PresentId, likewise, for a presented_plane flip. */
+    uint64_t           present_ids_[max_sources];
 
     friend struct DisplaySourcesProbe;
 };

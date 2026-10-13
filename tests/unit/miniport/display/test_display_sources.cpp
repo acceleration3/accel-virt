@@ -1,5 +1,6 @@
 #include "miniport/ddi/dxgk_multiplane_overlay_plane_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
 #include "miniport/display/display_mode.hpp"
 #include "miniport/display/display_sources.hpp"
 #include "core/support/status.hpp"
@@ -305,3 +306,30 @@ TEST(display_sources_frames, the_count_wraps_past_zero_which_is_no_frame)
   CHECK_EQ(sources.frame(0u), 1u);
   CHECK_EQ(sources.shown(0u, 0xFFFFFFFFu).address(), 0x1000u);
   CHECK_EQ(sources.shown(0u, 1u).address(), 0x2000u); }
+
+/* An MPO3 flip shows its plane as a primary and is remembered with its
+ * PresentId, both for the newest flip and for a numbered one a blank latched,
+ * so the vsync names the id of the flip on screen. A turned-off plane shows
+ * nothing and keeps its id. */
+TEST(display_sources_set_presented_scanout, remembers_the_plane_and_its_present_id)
+{ MockPlatform platform; DisplaySources sources(platform);
+  std::uint32_t allocation = 0u;
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.set_presented_scanout(0u, 0x4000ll, &allocation, 41u), Status::ok);   /* frame 1 */
+  CHECK(sources.flip(0u) == DisplaySources::Flip::presented_plane);
+  CHECK_EQ(sources.scanout_address(0u), 0x4000u);
+  CHECK_STATUS(sources.set_presented_scanout(0u, 0, nullptr, 42u), Status::ok);   /* frame 2: turned off */
+  CHECK_EQ(sources.scanout_address(0u), 0u);
+  platform.set_irql(Irql::dispatch);
+  CHECK(sources.primary(0u) == nullptr);
+  av::DxgkMultiplaneOverlayVsyncInfo2Record layer = {};
+  const av::FlipView first = sources.shown(0u, 1u);
+  CHECK(first.kind() == DisplaySources::Flip::presented_plane);
+  CHECK_EQ(first.address(), 0x4000u);
+  first.layer(layer);
+  CHECK_EQ(layer.PresentId, 41u);
+  sources.shown(0u, 0u).layer(layer);   /* the source as it is now */
+  CHECK_EQ(layer.PresentId, 42u);
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.set_presented_scanout(1u, 0x4000ll, &allocation, 43u), Status::invalid_parameter);
+  platform.set_irql(Irql::passive); }

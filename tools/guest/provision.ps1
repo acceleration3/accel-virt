@@ -476,12 +476,10 @@ switch ($Stage) {
         }
         # DWM drives a display through DisplayCore rather than a DXGI swap
         # chain for every WDDM 3.2 driver not AMD's (udwm.dll,
-        # CDWMDisplay::IsDDisplayCompatible), and DisplayCore presents only by
-        # multiplane flips, which this driver does not make: its plain present
-        # is E_NOTIMPL. So an Intel or NVIDIA host's guest rebuilt its swap
-        # chain every frame, and DWM fail-fast the moment anything captured
-        # the screen. DWM's own switch keeps it on the swap chain, as on AMD.
-        SetDword 'HKLM:\SOFTWARE\Microsoft\Windows\Dwm' DisableDDisplay 1
+        # CDWMDisplay::IsDDisplayCompatible). The driver now makes the MPO3
+        # flips DisplayCore presents with, so the switch earlier packages set
+        # to keep DWM off it (DisableDDisplay) is taken away again.
+        Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Dwm' -Name DisableDDisplay -ErrorAction SilentlyContinue
         pnputil /add-driver "$Package\avgpu.inf" /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
         if (-not (StoreMatchesPackage)) { exit 1 }

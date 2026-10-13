@@ -344,3 +344,46 @@ calls `VidSchiCheckHeadTimeout`). **Not established:** what that timeout escalat
   `present_info[0x13464]` is clear.
 - 0x119/0xE in `VidSchiProcessIsrVSync` when a reported layer index is at or above the adapter's plane count
   (`>= VIDSCH_GLOBAL+0x98`, in the type-10 path), and for other malformed cookies.
+
+---
+
+## 6. DWM's DisplayCore path and the MPO3 DDI
+
+Build 26100.9444 (udwm, dwmcore, ddisplay, d3d11, dxgkrnl, dxgmms2, all with their PDBs).
+
+**Which path DWM takes.** `CDWMDisplay::IsDDisplayCompatible` (udwm.dll) drives a display through
+DisplayCore (ddisplay.dll) instead of a DXGI swap chain when the driver is WDDM 3.2 or later and its vendor is
+not AMD (or is AMD with a driver major version of 32 or more). `HKLM\SOFTWARE\Microsoft\Windows\Dwm
+DisableDDisplay=1` turns that off. avgpu reports the host GPU's vendor, so an Intel or NVIDIA host gets
+DisplayCore and an AMD one does not.
+
+**Why DisplayCore failed on avgpu.** `CDDisplaySwapChain::Present`, the legacy present, is
+`mov eax, E_NOTIMPL; ret`. `COverlayContext::LegacyPresentRequired` (dwmcore.dll @1801d741c) asks for it when the
+overlay context has no planes and anything forces composition (a Windows.Graphics.Capture session does), unless
+the driver version is at least 2200 and bit 0x40000 of the overlay caps is set. DWM then fail-fasts in
+`COverlayContext::Present`.
+
+**Where bit 0x40000 comes from.** `CDDisplaySwapChain::GetMultiplaneOverlayCaps` sets it from
+`IsComplexScanoutSubFeatureSupported(2)` on the DisplayCore device. `CDDisplayDevice::IsComplexScanoutSubFeatureSupported`
+answers features 0 to 3 when `CDDisplayAdapterInfo::SupportsMpo3Ddi()` is true. That is `SAdapterDesc+0x20`,
+which `SAdapterDesc::SAdapterDesc` fills from `D3DKMTQueryAdapterInfo(KMTQAITYPE_MPO3DDI_SUPPORT = 43)`.
+
+**What dxgkrnl answers.** `DxgkQueryAdapterInfoImpl` answers type 43 with `adapter[0xc01]`, which
+`DXGADAPTER::ReadConfig` sets when `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3` is registered and the
+driver is WDDM 2.2 or later (section 1). `SupportMultiPlaneOverlay`, `MaxOverlayPlanes` and the caps and check
+DDIs are not needed. Without `SupportMultiPlaneOverlay`, dxgkrnl reports one plane.
+
+**What the driver must then do.**
+- dxgmms2 flips every primary through the MPO3 DDI, DWM's swap chain too. The DDI accepts only success, busy and
+  retry.
+- A flip made through it retires only on `CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2` (10).
+  `VidSchiIsExpectedVSyncCookie` compares, for each layer of the flip, the PresentId the flip gave it with the one
+  the vsync reports for that layer. A stored PresentId of 0 matches anything.
+- DisplayCore presents through `IDXGIDeviceInternal3::PresentMultiplaneOverlay` (d3d11.dll,
+  `NDXGI::CDevice::PresentMultiplaneOverlay`). That calls the UMD's `pfnPresentMultiplaneOverlay1` from DXGI
+  DDI 4 when the UMD fills it, `pfnPresentMultiplaneOverlay` otherwise.
+- The UMD answers through `pfnPresentMultiplaneOverlay1Cb`, one `DXGIDDI_MULTIPLANE_OVERLAY_PLANE_INFO` per plane,
+  disabled ones included. `PresentMultiplaneOverlay1CBImpl` refuses a count that differs from the planes it built
+  and reads every entry.
+- A driver that ships its own display UMD (`GetDisplayUmdFilename`) is presented through `DisplayUmdDevice`
+  instead. avgpu does not ship one.

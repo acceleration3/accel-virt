@@ -100,6 +100,7 @@ struct DxgkargSetPointerPositionRecord;
 struct DxgkargSetPointerShapeRecord;
 struct DxgkargSetVidPnSourceAddressRecord;
 struct DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord;
+struct DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record;
 struct DxgkargSetVidPnSourceVisibilityRecord;
 struct DxgkargQueryCurrentFenceRecord;
 struct DxgkargQueryVidPnHwCapabilityRecord;
@@ -236,6 +237,7 @@ public:
     int32_t power_runtime_control_request(const void *control_code, const void *input, size_t input_size,
                                           void *output, size_t output_size, size_t *returned);
     int32_t set_vidpn_source_address_with_multi_plane_overlay(const DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request);
+    int32_t set_vidpn_source_address_with_multi_plane_overlay3(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request);
     /* One 3D node named 3DNode00, as basicrender.sys names it, with a GPU MMU. */
     int32_t get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata);
     int32_t set_power_pstate(uint32_t component, uint32_t pstate);

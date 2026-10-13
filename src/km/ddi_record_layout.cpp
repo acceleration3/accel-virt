@@ -89,8 +89,10 @@
 #include "miniport/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_plane_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
+#include "miniport/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay3_record.hpp"
 #include "miniport/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "miniport/ddi/dxgkarg_submit_command_record.hpp"
 #include "miniport/ddi/dxgkarg_doorbell_records.hpp"
@@ -705,6 +707,62 @@ AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, pPlanes,
                DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, pPlanes);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, Duration,
                DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, Duration);
+
+AV_SAME_SIZE(DxgkPrimaryContextDataRecord, DXGK_PRIMARYCONTEXTDATA);
+AV_SAME_OFFSET(DxgkPrimaryContextDataRecord, hContext, DXGK_PRIMARYCONTEXTDATA, hContext);
+AV_SAME_OFFSET(DxgkPrimaryContextDataRecord, hAllocation, DXGK_PRIMARYCONTEXTDATA, hAllocation);
+AV_SAME_OFFSET(DxgkPrimaryContextDataRecord, SegmentId, DXGK_PRIMARYCONTEXTDATA, SegmentId);
+AV_SAME_OFFSET(DxgkPrimaryContextDataRecord, SegmentAddress, DXGK_PRIMARYCONTEXTDATA, SegmentAddress);
+
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, LayerIndex, DXGK_MULTIPLANE_OVERLAY_PLANE3, LayerIndex);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, PresentId, DXGK_MULTIPLANE_OVERLAY_PLANE3, PresentId);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, InputFlags, DXGK_MULTIPLANE_OVERLAY_PLANE3, InputFlags);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, OutputFlags, DXGK_MULTIPLANE_OVERLAY_PLANE3, OutputFlags);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, MaxImmediateFlipLine, DXGK_MULTIPLANE_OVERLAY_PLANE3,
+               MaxImmediateFlipLine);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, ContextCount, DXGK_MULTIPLANE_OVERLAY_PLANE3, ContextCount);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, ppContextData, DXGK_MULTIPLANE_OVERLAY_PLANE3, ppContextData);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, DriverPrivateDataSize, DXGK_MULTIPLANE_OVERLAY_PLANE3,
+               DriverPrivateDataSize);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlane3Record, pDriverPrivateData, DXGK_MULTIPLANE_OVERLAY_PLANE3,
+               pDriverPrivateData);
+static_assert(sizeof(av::DxgkMultiplaneOverlayPlane3Record) <= offsetof(DXGK_MULTIPLANE_OVERLAY_PLANE3, PlaneAttributes));
+
+AV_SAME_SIZE(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record,
+             DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, VidPnSourceId,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, InputFlags,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, InputFlags);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, OutputFlags,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, OutputFlags);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, PlaneCount,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, PlaneCount);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, ppPlanes,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, ppPlanes);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, pPostComposition,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, pPostComposition);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, Duration,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, Duration);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, pHDRMetaData,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, pHDRMetaData);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record, TargetFlipTime,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3, TargetFlipTime);
+
+AV_SAME_SIZE(DxgkMultiplaneOverlayVsyncInfo2Record, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfo2Record, LayerIndex, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2, LayerIndex);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfo2Record, PresentId, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2, PresentId);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfo2Record, Flags, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2, Flags);
+/* CrtcVsyncWithMultiPlaneOverlay2 lays the union out as the first one does. */
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay2.VidPnTargetId) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId));
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay2.PhysicalAdapterMask) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument1));
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay2.MultiPlaneOverlayVsyncInfoCount) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument2));
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, UnionRemainder));
+static_assert(DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 == 10);
 
 AV_SAME_SIZE(DxgkargSetVidPnSourceAddressRecord, DXGKARG_SETVIDPNSOURCEADDRESS);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, VidPnSourceId, DXGKARG_SETVIDPNSOURCEADDRESS, VidPnSourceId);

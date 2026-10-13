@@ -17,6 +17,7 @@ namespace av {
 
 class DxgkrnlInterface;
 struct DxgkMultiplaneOverlayVsyncInfoRecord;
+struct DxgkMultiplaneOverlayVsyncInfo2Record;
 
 class InterruptNotification {
 public:
@@ -35,6 +36,10 @@ public:
      * every plane disabled. */
     [[nodiscard]] Status report_multiplane_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfoRecord *layers,
                                                  uint32_t count);
+    /* CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2: the layers an MPO3 flip showed,
+     * each named by its PresentId; the same lifetime rule. */
+    [[nodiscard]] Status report_presented_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfo2Record *layers,
+                                                uint32_t count);
     /* The synchronized routine: runs at device IRQL. */
     uint8_t              notify();
 
@@ -47,6 +52,7 @@ private:
         dma_preempted = 2,
         crtc_vsync = 3,
         crtc_vsync_with_multiplane_overlay = 7,
+        crtc_vsync_with_multiplane_overlay2 = 10,
         monitored_fence_signaled = 11
     };
     /* One adapter, not linked: physical adapter 0. */

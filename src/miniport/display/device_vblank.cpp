@@ -14,7 +14,7 @@ namespace av {
 
 DeviceVblank::DeviceVblank(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), sources_(sources), notification_(platform, dxgkrnl), page_(platform),
-      phase_(), layer_(), reporting_(false), suspended_(false), suspended_reporting_(false), sequence_(0u),
+      phase_(), layer_(), presented_layer_(), reporting_(false), suspended_(false), suspended_reporting_(false), sequence_(0u),
       blanks_(0u), missed_(0u), reported_(0u), enables_(0u), window_start_(0u)
       {
           AV_SCOPE("DeviceVblank::DeviceVblank");
@@ -137,7 +137,8 @@ void DeviceVblank::tick(uint64_t now, bool latching)
 
 /* A multiplane flip is retired only by a multiplane vsync, and one that
  * disabled every plane only by one with no layers; an address flip only by a
- * plain vsync naming it. */
+ * plain vsync naming it; an MPO3 flip only by a multiplane vsync naming the
+ * PresentId each of its layers was given. */
 Status DeviceVblank::report(const FlipView &shown)
 {
     AV_SCOPE("DeviceVblank::report");
@@ -146,6 +147,9 @@ Status DeviceVblank::report(const FlipView &shown)
     case FlipView::Kind::base_plane:
         shown.layer(layer_);
         return notification_.report_multiplane_vsync(target, &layer_, 1u);
+    case FlipView::Kind::presented_plane:
+        shown.layer(presented_layer_);
+        return notification_.report_presented_vsync(target, &presented_layer_, 1u);
     case FlipView::Kind::address: break;
     }
     return notification_.report_vsync(target, shown.address());

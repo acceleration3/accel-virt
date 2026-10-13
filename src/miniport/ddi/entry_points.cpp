@@ -227,6 +227,9 @@ int32_t AvDdiPowerRuntimeControlRequest(void *context, const void *control_code,
 int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request)
 { return static_cast<av::Adapter *>(context)->set_vidpn_source_address_with_multi_plane_overlay(request); }
 
+int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(void *context, av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request)
+{ return static_cast<av::Adapter *>(context)->set_vidpn_source_address_with_multi_plane_overlay3(request); }
+
 int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type)
 { return static_cast<av::Adapter *>(context)->notify_surprise_removal(removal_type); }
 

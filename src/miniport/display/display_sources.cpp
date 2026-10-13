@@ -10,7 +10,8 @@ namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), count_(1u), private_formats_{}, committed_{}, vsync_enabled_(false),
-      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, frames_{}, numbered_frames_{}, numbered_flips_{}, base_attributes_{}
+      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, frames_{}, numbered_frames_{}, numbered_flips_{}, base_attributes_{},
+      present_ids_{}
 {
     AV_SCOPE("DisplaySources::DisplaySources");
 }
@@ -109,6 +110,19 @@ Status DisplaySources::set_multiplane_scanout(uint32_t source, const DxgkMultipl
     return Status::ok;
 }
 
+Status DisplaySources::set_presented_scanout(uint32_t source, int64_t address, void *primary, uint64_t present_id)
+{
+    AV_SCOPE("DisplaySources::set_presented_scanout");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::set_presented_scanout");
+    if (source >= count_) return Status::invalid_parameter;
+    platform_.store_atomic(present_ids_[source], present_id);
+    platform_.store_atomic(primaries_[source], reinterpret_cast<uintptr_t>(primary));
+    platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(address));
+    platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::presented_plane));
+    number(source, FlipView(static_cast<uint64_t>(address), present_id));
+    return Status::ok;
+}
+
 DisplaySources::Flip DisplaySources::flip(uint32_t source)
 {
     AV_SCOPE("DisplaySources::flip");
@@ -147,6 +161,8 @@ FlipView DisplaySources::shown(uint32_t source, uint32_t frame)
         if (platform_.load_atomic(numbered_frames_[source][slot]) == frame) return copy;
     }
     const Flip kind = static_cast<Flip>(platform_.load_atomic(flips_[source]));
+    if (kind == Flip::presented_plane)
+        return FlipView(platform_.load_atomic(scanout_addresses_[source]), platform_.load_atomic(present_ids_[source]));
     return FlipView(kind, platform_.load_atomic(scanout_addresses_[source]),
                     kind == Flip::base_plane ? base_attributes_[source] : nullptr);
 }

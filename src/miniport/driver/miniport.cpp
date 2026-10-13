@@ -90,6 +90,8 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiPowerRuntimeControlRequest, reinterpret_cast<DdiRoutine>(&AvDdiPowerRuntimeControlRequest)},
         {DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay,
          reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay)},
+        {DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3,
+         reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay3)},
         {DdiSlot::DxgkDdiNotifySurpriseRemoval, reinterpret_cast<DdiRoutine>(&AvDdiNotifySurpriseRemoval)},
         {DdiSlot::DxgkDdiGetNodeMetadata, reinterpret_cast<DdiRoutine>(&AvDdiGetNodeMetadata)},
         {DdiSlot::DxgkDdiSetPowerPState, reinterpret_cast<DdiRoutine>(&AvDdiSetPowerPState)},

@@ -81,6 +81,10 @@ public:
     /* DXGI's slots, over the table the root already published. */
     HRESULT present(DXGI_DDI_ARG_PRESENT *args);
     HRESULT present1(DXGI1_6_1_DDI_ARG_PRESENT *args);
+    /* DWM's DisplayCore presents its planes here, which dxgkrnl then flips
+     * through the MPO3 DDI: the older entry for runtimes below DXGI DDI 4. */
+    HRESULT present_multiplane_overlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args);
+    HRESULT present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args);
     HRESULT blt(DXGI_DDI_ARG_BLT *args);
     HRESULT blt1(DXGI_DDI_ARG_BLT1 *args);
     HRESULT rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args);
@@ -189,6 +193,10 @@ private:
     void refresh_guest_surface(ResourceRecord &resource);
     void forget_guest_surface(const ResourceRecord &resource);
     HRESULT show_flip(const ResourceRecord &source, uint32_t subresource);
+    /* What a multiplane present shows of `source` is the host's frame of it as
+     * it is now: in its pages for one no host texture is shared from, under
+     * its key otherwise, with the batch that drew it on its way. */
+    HRESULT stage_plane(ResourceRecord &source, uint32_t subresource);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                             void *dxgi_context);
     HRESULT present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,

@@ -73,6 +73,7 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiSystemDisplayWrite,  DdiSlot::DxgkDdiCancelCommand,
     DdiSlot::DxgkDdiGetChildContainerId, DdiSlot::DxgkDdiPowerRuntimeControlRequest,
     DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay, DdiSlot::DxgkDdiNotifySurpriseRemoval,
+    DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3,
     DdiSlot::DxgkDdiGetNodeMetadata,     DdiSlot::DxgkDdiSetPowerPState,
     DdiSlot::DxgkDdiControlInterrupt2,   DdiSlot::DxgkDdiCalibrateGpuClock,
     DdiSlot::DxgkDdiSubmitCommandVirtual, DdiSlot::DxgkDdiSetRootPageTable,
@@ -124,16 +125,16 @@ TEST(miniport, fills_exactly_the_slots_this_feature_implements)
   CHECK(exact); }
 
 /* FR-006: dxgkrnl asks whether an overlay configuration is supported before it
- * flips one, so leaving those slots empty is what refuses multi-plane overlay;
- * the one MPO slot the table does fill answers not_supported (test_adapter). */
+ * flips one, so leaving those slots empty is what refuses multi-plane overlay.
+ * The flip DDIs it does fill (MPO1 and MPO3) show the base plane only
+ * (test_adapter). */
 TEST(miniport, offers_no_multi_plane_overlay_or_gamma_slot)
 { MockPlatform platform; Miniport miniport(platform);
   const DdiSlot overlays[] = {
       DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport, DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport2,
       DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3, DdiSlot::DxgkDdiGetMultiPlaneOverlayCaps,
       DdiSlot::DxgkDdiPostMultiPlaneOverlayPresent,
-      DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2,
-      DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3, DdiSlot::DxgkDdiSetTargetGamma};
+      DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2, DdiSlot::DxgkDdiSetTargetGamma};
   for (const DdiSlot slot : overlays) CHECK(miniport.ddi_table().routine(slot) == nullptr); }
 
 TEST(miniport, its_table_passes_dxgkrnl_registration)
