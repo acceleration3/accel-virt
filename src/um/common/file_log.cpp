@@ -12,9 +12,10 @@ constexpr wchar_t directory[] = L"C:\\ProgramData\\av";
 constexpr wchar_t prefix[] = L"C:\\ProgramData\\av\\";
 constexpr wchar_t suffix[] = L".log";
 constexpr size_t stem_chars = 32u;
-/* The prefix, the stem, a dash, ten digits of a DWORD, the suffix and the NUL. */
+/* The prefix, the stem, a dash, ten digits of a DWORD, a dash and ten of a
+ * tick where the first name cannot be opened, the suffix and the NUL. */
 constexpr size_t path_chars =
-    sizeof prefix / sizeof prefix[0] + stem_chars + 1u + 10u + sizeof suffix / sizeof suffix[0];
+    sizeof prefix / sizeof prefix[0] + stem_chars + 1u + 10u + 1u + 10u + sizeof suffix / sizeof suffix[0];
 constexpr size_t line_bytes = 256u;
 
 }  // namespace
@@ -46,6 +47,21 @@ void FileLog::open()
     for (const wchar_t *text = suffix; *text != L'\0'; text++) path[length++] = *text;
 
     static_cast<void>(CreateDirectoryW(directory, nullptr));
+    file_ = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file_ != INVALID_HANDLE_VALUE) return;
+    /* A process id is reused across boots, and the file an earlier process of
+     * another account left - DWM's, say - may not be this one's to append to:
+     * the log is not lost for that, it goes beside it, named for this boot's
+     * moment as well. */
+    length -= sizeof suffix / sizeof suffix[0] - 1u;
+    path[length++] = L'-';
+    count = 0u;
+    for (ULONGLONG tick = GetTickCount64(); count == 0u || (tick != 0u && count < 10u); tick /= 10u)
+        digits[count++] = static_cast<wchar_t>(L'0' + tick % 10u);
+    while (count != 0u) path[length++] = digits[--count];
+    for (const wchar_t *text = suffix; *text != L'\0'; text++) path[length++] = *text;
+    path[length] = L'\0';
     file_ = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
                         FILE_ATTRIBUTE_NORMAL, nullptr);
 }
