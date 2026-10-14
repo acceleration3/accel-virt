@@ -56,6 +56,12 @@ tar -xzf "$assimp" -C "$staging"
 for patch in "$PATCHES"/*.patch; do
     patch -d "$staging/Vulkan-Samples-$SAMPLES_COMMIT" -p1 --quiet --forward --no-backup-if-mismatch < "$patch"
 done
+# The samples load each shader's SPIR-V, shipped beside its GLSL, so a shader
+# a patch fixes is compiled again over it.
+for shader in $(sed -n 's#^+++ b/\(data/shaders/.*\.\(vert\|frag\|geom\|tesc\|tese\|comp\)\)$#\1#p' "$PATCHES"/*.patch); do
+    glslangValidator -V --quiet -o "$staging/Vulkan-Samples-$SAMPLES_COMMIT/$shader.spv" \
+        "$staging/Vulkan-Samples-$SAMPLES_COMMIT/$shader"
+done
 rm -rf "$TREE/Vulkan-Samples" "$TREE/assimp"
 mv "$staging/Vulkan-Samples-$SAMPLES_COMMIT" "$TREE/Vulkan-Samples"
 mv "$staging/assimp-$ASSIMP_VERSION" "$TREE/assimp"

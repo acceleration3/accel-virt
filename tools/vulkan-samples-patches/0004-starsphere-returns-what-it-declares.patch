@@ -1,0 +1,28 @@
+The multithreading sample's star sphere returns a vec3 from two functions
+declared float - hash33 and starField - which today's glslang refuses and the
+2016 glslang that made the shipped starsphere.frag.spv compiled into invalid
+SPIR-V (spirv-val: "OpReturnValue Value's type does not match OpFunction's
+return type"). NVIDIA's compiler (580.178.04) dereferences null on that module
+in vkCreateGraphicsPipelines: the sample segfaulted natively, and took QEMU
+down with it in the guest. Both now return what they are declared to; the
+values are the ones the old module computed, since the vec3 was the scalar
+three times over and only its first component was ever taken.
+
+fetch_vulkan_samples.sh compiles the SPIR-V of every shader a patch touches
+again, since the samples load the .spv and not the GLSL.
+
+--- a/data/shaders/multithreading/starsphere.frag
++++ b/data/shaders/multithreading/starsphere.frag
+@@ -15,10 +15,10 @@
+ {
+ 	p3 = fract(p3 * HASHSCALE3);
+     p3 += dot(p3, p3.yxz+19.19);
+-    return fract(vec3((p3.x + p3.y)*p3.z + (p3.x+p3.z)*p3.y + (p3.y+p3.z)*p3.x));
++    return fract((p3.x + p3.y)*p3.z + (p3.x+p3.z)*p3.y + (p3.y+p3.z)*p3.x);
+ }
+ 
+-float starField(vec3 pos)
++vec3 starField(vec3 pos)
+ {
+ 	vec3 color = vec3(0.0);
+     float threshhold = (1.0 - STARFREQUENCY);
