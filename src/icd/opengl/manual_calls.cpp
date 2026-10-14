@@ -461,7 +461,7 @@ void ManualCalls::flush()
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     glproto::av_glFlush(*context->wire());
-    context->flush();
+    context->end_frame();
 }
 
 /* GL_WAIT_FAILED (0x911D) with nothing to wait on. */

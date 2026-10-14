@@ -613,6 +613,58 @@ TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
   CHECK(mark.waitable());
   CHECK(mark.fence() != 0u); }
 
+namespace {
+
+/* One frame as an application ends it: a call, then glFlush. */
+std::uint64_t end_a_frame(GuestGlContext &context)
+{
+    av::glproto::av_glFlush(*context.wire());
+    context.end_frame();
+    return av::glicd::GuestGlContextProbe::channel(context).transport().published_fence();
+}
+
+}  // namespace
+
+/* An application goes on past the end of a frame only once the host has
+ * finished the frame FramesInFlight::depth before it - not the one just
+ * before, which the host may still be running - and asks the kernel nothing
+ * to learn it. */
+TEST(guest_gl_context, a_frame_ends_once_the_host_finished_the_one_two_before_it)
+{ GlContextRig rig;
+  Context      context(rig);
+  rig.host().gl_make(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  const std::uint32_t ring = av::glicd::GuestGlContextProbe::channel(*context).transport().context();
+  const std::uint32_t waits = rig.kmt().calls(av::MockKmt::Call::wait_for_context);
+  const std::uint64_t first = end_a_frame(*context);
+  const std::uint64_t second = end_a_frame(*context);
+  CHECK(second > first);
+  rig.kmt().complete_on_page(ring, first);
+  end_a_frame(*context);
+  CHECK(context->state() == State::made);
+  rig.kmt().complete_on_page(ring, second);
+  end_a_frame(*context);
+  CHECK(context->state() == State::made);
+  CHECK(context->wire() != nullptr);
+  CHECK_EQ(rig.kmt().calls(av::MockKmt::Call::wait_for_context), waits); }
+
+/* A host that never finishes a frame, and has gone quiet, loses the context
+ * at the frame that waits for it, and says so. */
+TEST(guest_gl_context, a_frame_the_host_never_finishes_loses_the_context)
+{ GlContextRig rig;
+  Context      context(rig);
+  rig.host().gl_make(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  end_a_frame(*context);
+  end_a_frame(*context);
+  CHECK(context->wire() != nullptr);
+  end_a_frame(*context);
+  CHECK(context->wire() == nullptr);
+  CHECK(context->state() == State::lost);
+  CHECK_EQ(rig.log().holding("never finished an earlier frame"), 1u);
+  /* A lost context ends no frame and waits for nothing. */
+  context->end_frame(); }
+
 /* Feature 053: the context owns the memory objects and semaphores it imported,
  * because a GL name belongs to the context that made it. */
 TEST(guest_gl_context, externals_is_the_contexts_own_and_starts_holding_nothing)
