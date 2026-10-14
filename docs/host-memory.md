@@ -72,8 +72,13 @@ same pages are an aliasing the SDM leaves undefined, and on a GPU that does not
 snoop they read stale data.
 
 - On AMD, KVM always honours the guest's PAT.
-- On Intel, QEMU disables `KVM_X86_QUIRK_IGNORE_GUEST_PAT` itself on CPUs that
-  self-snoop (`target/i386/kvm/kvm.c`). Both Intel hosts measured do.
+- On Intel, KVM ignores the guest's PAT unless QEMU disables
+  `KVM_X86_QUIRK_IGNORE_GUEST_PAT` (`target/i386/kvm/kvm.c`), which KVM allows
+  only on CPUs that self-snoop; both Intel hosts measured do. QEMU 11.1 leaves
+  its `honor-guest-pat` at `off`, so `qemu-build.patch` makes it `auto`.
+  Without it a guest's write-combined view is write-back: on Meteor Lake its
+  writes stay in the CPU's caches while the GPU reads, or writes, the memory
+  underneath.
 
 ### One allocation per request
 
