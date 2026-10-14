@@ -1,0 +1,18 @@
+The text overlay allocates its font image STB_FONT_WIDTH * STB_NUM_CHARS
+bytes (57344) instead of what vkGetImageMemoryRequirements answered. A 256x170
+R8 image with optimal tiling needs 49152 bytes on the RX 9070 XT and 65536 on
+the Radeon 610M, where RADV's vkBindImageMemory refuses the smaller memory with
+VK_ERROR_UNKNOWN ("Device memory object too small for the image"), and every
+sample that shows the overlay fails in init, natively and in the guest alike.
+
+--- a/base/vulkantextoverlay.hpp
++++ b/base/vulkantextoverlay.hpp
+@@ -209,7 +209,7 @@
+ 		VK_CHECK_RESULT(vkCreateImage(device, &imageInfo, nullptr, &image));
+ 
+ 		vkGetImageMemoryRequirements(device, image, &memReqs);
+-		allocInfo.allocationSize = STB_FONT_WIDTH * STB_NUM_CHARS;
++		allocInfo.allocationSize = memReqs.size;
+ 		allocInfo.memoryTypeIndex = getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+ 		VK_CHECK_RESULT(vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory));
+ 		VK_CHECK_RESULT(vkBindImageMemory(device, image, imageMemory, 0));
