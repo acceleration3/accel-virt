@@ -39,11 +39,13 @@
 // create records the options it was asked for (feature 050). With
 // AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan.
 //
-// import_blob records a host pointer the device hands it (feature 045),
-// imported_handle answers blob_id | 0x4000000000000000 for one it holds, and
-// release_blob forgets it - so qtest can judge the device's side of
-// IMPORT_BLOB, reading and writing the guest's pages through the pointer,
-// without a GPU.
+// allocate_memory answers a memfd of the size asked, cached, standing in for
+// host GPU memory (docs/host-memory.md); import_blob records the memory the
+// key names, imported_handle answers blob_id | 0x4000000000000000 for one it
+// holds, and release_blob forgets it - so qtest can judge the device's side
+// of host blobs and IMPORT_BLOB, reading and writing what the guest sees
+// through the window, without a GPU. peek's "memory type" is the request the
+// memory was allocated for.
 //
 // Domains are counted and nothing else: a device's domain is the one the last
 // open_domain answered.
@@ -83,6 +85,22 @@ constexpr std::uint32_t options_asked = 0x30007u;
 constexpr std::uint64_t handle_bit = 0x4000000000000000u;
 constexpr std::uint64_t page = 4096u;
 constexpr std::size_t   max_imports = 16u;
+constexpr std::size_t   max_memories = 256u;
+
+/* Memory allocate_memory made: a memfd mapped here, kept under its domain
+ * and key until free_memory. */
+struct Memory {
+    std::uint32_t domain;
+    std::uint64_t key;
+    std::uint32_t request;
+    int           fd;
+    std::uint8_t *pointer;
+    std::uint64_t size;
+    bool          live;
+};
+
+Memory          memories[max_memories];
+pthread_mutex_t memories_lock = PTHREAD_MUTEX_INITIALIZER;
 
 struct Import {
     std::uint64_t  blob_id;
@@ -287,21 +305,56 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     return AV_EXECUTED;
 }
 
-/* Copy at the boundary: the capset the echo executor's device describes stays
- * what it was before the library imported anything. IMPORT_BLOB does not ask. */
-std::uint32_t import_kinds(void *, std::uint32_t, const std::uint8_t *) { return 0u; }
+std::uint32_t allocate_memory(void *, std::uint32_t domain, std::uint64_t key, std::uint64_t size,
+                              std::uint32_t request, AvHostMemory *memory)
+{
+    if (memory == nullptr || size == 0u || size % page != 0u) return 1u;
+    const int fd = memfd_create("av-echo-memory", MFD_CLOEXEC);
+    if (fd < 0) return 1u;
+    void *const mapped =
+        ftruncate(fd, static_cast<off_t>(size)) == 0 ? mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
+                                                     : MAP_FAILED;
+    pthread_mutex_lock(&memories_lock);
+    Memory *slot = nullptr;
+    for (Memory &held : memories)
+        if (!held.live && slot == nullptr) slot = &held;
+    if (slot != nullptr && mapped != MAP_FAILED)
+        *slot = Memory{domain, key, request, fd, static_cast<std::uint8_t *>(mapped), size, true};
+    pthread_mutex_unlock(&memories_lock);
+    if (slot == nullptr || mapped == MAP_FAILED) {
+        if (mapped != MAP_FAILED) munmap(mapped, size);
+        close(fd);
+        return 1u;
+    }
+    memory->fd = dup(fd);
+    memory->caching = AV_MEMORY_WRITE_BACK;
+    memory->size = size;
+    return 0u;
+}
 
-/* A host pointer of whole pages and nothing else: a dma-buf's fd would be the
- * callee's to close, and nothing here would use it. */
-std::uint32_t import_blob(void *, AvExecutor *handle, std::uint64_t blob_id, const AvBlobHandle *blob)
+/* The memory stays mapped for an import that may still read it; a test's
+ * library lives as long as the process. */
+void free_memory(void *, std::uint32_t domain, std::uint64_t key)
+{
+    pthread_mutex_lock(&memories_lock);
+    for (Memory &held : memories)
+        if (held.live && held.domain == domain && held.key == key) held.live = false;
+    pthread_mutex_unlock(&memories_lock);
+}
+
+std::uint32_t import_blob(void *, AvExecutor *handle, std::uint64_t blob_id, std::uint64_t memory_key)
 {
     Executor *const executor = executor_of(handle);
-    if (blob == nullptr || blob->kind != AV_BLOB_HOST_POINTER || blob->pointer == nullptr || blob->size == 0u ||
-        blob->size % page != 0u)
-        return AV_UNDECODABLE;
+    pthread_mutex_lock(&memories_lock);
+    const Memory *found = nullptr;
+    for (const Memory &held : memories)
+        if (held.live && held.domain == executor->options.domain && held.key == memory_key) found = &held;
+    const Memory memory = found != nullptr ? *found : Memory{};
+    pthread_mutex_unlock(&memories_lock);
+    if (found == nullptr) return AV_UNDECODABLE;
     for (Import &import : executor->imports) {
         if (import.live) continue;
-        import = Import{blob_id, static_cast<std::uint8_t *>(blob->pointer), blob->size, blob->reserved, true};
+        import = Import{blob_id, memory.pointer, memory.size, memory.request, true};
         return AV_EXECUTED;
     }
     return AV_UNDECODABLE;
@@ -422,9 +475,10 @@ std::uint32_t sync_surface(void *, std::uint32_t, std::uint64_t surface, std::ui
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
-                              import_kinds,
                               open_domain,
                               close_domain,
+                              allocate_memory,
+                              free_memory,
                               create,
                               destroy,
                               execute,
@@ -445,7 +499,6 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
-                              nullptr,
                               nullptr};
 
 }  // namespace
