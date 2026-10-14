@@ -64,8 +64,8 @@ public:
      * address no live view overlaps and nothing may touch. Recorded until
      * unmapped, and a view left mapped fails the test. Misaligned or empty
      * ranges are frame misuse. */
-    Status        map_to_process(std::uint64_t physical, std::uint64_t bytes, std::uint64_t &view,
-                                 void *&mapping) override;
+    Status        map_to_process(std::uint64_t physical, std::uint64_t bytes, PageCaching caching,
+                                 std::uint64_t &view, void *&mapping) override;
     /* The block itself is the view: the modelled process and the test share one
      * address space, so what a process writes there the device reads. Counted
      * with map_to_process for fail_process_map_at. */
@@ -215,6 +215,8 @@ public:
     std::uint32_t process_mappings() const;
     /* Of process_mappings, those made read-only. */
     std::uint32_t read_only_process_mappings() const;
+    /* Of process_mappings, those of device memory made write-combined. */
+    std::uint32_t write_combined_process_mappings() const;
     /* Whether a live process view at `view` maps `bytes` of `physical`. */
     bool          maps_into_process(std::uint64_t view, std::uint64_t physical, std::uint64_t bytes) const;
     /* Makes the Nth map_to_process from now (1-based) answer no_memory; 0
@@ -298,6 +300,7 @@ private:
         std::uint64_t view;
         bool          live;
         bool          read_only;
+        PageCaching   caching;
     };
     Status map_owned_to_process(void *pages, bool read_only, std::uint64_t &view, void *&mapping);
 

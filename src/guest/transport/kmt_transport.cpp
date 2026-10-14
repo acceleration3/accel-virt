@@ -401,18 +401,50 @@ bool KmtTransport::make_room_for_blobs(size_t bytes)
  * of `fence` is alive, just behind. A wait that times out while the device's
  * head moved is waited again; only one in which the device took nothing at
  * all gives up. */
+/* A wait that times out is a hang only when nothing has moved for longer than
+ * a host GPU may legitimately run one job. The head moves as a batch ends and
+ * the device's heartbeat as it decodes, but one command can block in the host
+ * driver until the GPU drains: a batch of a few hundred compute dispatches ran
+ * past the kernel's ten-second wait on an integrated GPU (a Radeon 610M, an
+ * Iris Xe), and the context was lost although the host was still running it.
+ * The host kernel resets a GPU that is truly hung (amdgpu lets a compute job
+ * run 60 s), and the reset reaches here as a fault, which ends the wait at
+ * once; silence is given up on only after outlasting that. */
 Status KmtTransport::wait_for_host(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::wait_for_host");
+    uint32_t silent = 0u;
     for (;;) {
         const uint64_t head = ring_.head();
+        const uint64_t heartbeat = device_heartbeat();
         const Status   waited = doorbell_.queue() != 0u
                                     ? connection_.kmt().wait_for_hw_queue(connection_.device(),
                                                                           doorbell_.progress_fence(), fence)
                                     : connection_.kmt().wait_for_context(connection_.device(), context_);
-        if (waited == Status::ok || connection_.kmt().last_code() != wait_timed_out || ring_.head() == head)
+        if (waited == Status::ok || connection_.kmt().last_code() != wait_timed_out || device_faulted())
             return waited;
+        silent = ring_.head() == head && device_heartbeat() == heartbeat ? silent + 1u : 0u;
+        if (silent == silent_waits) return waited;
     }
+}
+
+/* Each field is one aligned word the device stores whole, as gpu_completed's. */
+uint64_t KmtTransport::device_heartbeat() const
+{
+    AV_SCOPE("KmtTransport::device_heartbeat");
+    constexpr size_t progress_at = 16u;
+    if (fence_page_ == nullptr) return 0u;
+    return __atomic_load_n(reinterpret_cast<const uint64_t *>(fence_page_ + progress_at), __ATOMIC_ACQUIRE);
+}
+
+bool KmtTransport::device_faulted() const
+{
+    AV_SCOPE("KmtTransport::device_faulted");
+    constexpr size_t   flags_at = 4u;
+    constexpr uint32_t faulted_flag = 1u;
+    if (fence_page_ == nullptr) return false;
+    return (__atomic_load_n(reinterpret_cast<const uint32_t *>(fence_page_ + flags_at), __ATOMIC_ACQUIRE) &
+            faulted_flag) != 0u;
 }
 
 /* Every fence whose batch the device has moved its head past is done: the

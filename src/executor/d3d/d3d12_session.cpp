@@ -380,15 +380,9 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
                 .write();
             return false;
         }
-        const bool shared = region_.descriptor() >= 0;
-        const bool made = shared ? arena_heaps_.add(*device_, region_, heap, arena_offset, size)
-                                 : objects_.keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
+        const bool made = arena_heaps_.add(*device_, region_, heap, arena_offset, size);
         if (!made)
-            LogLine(lines_)
-                .text("the host did not import the arena of ")
-                .number(region_.length())
-                .text(shared ? " bytes as a dma-buf" : " bytes as host memory")
-                .write();
+            LogLine(lines_).text("the host did not import the arena of ").number(region_.length()).text(" bytes").write();
         return made;
     }
     D3D12_HEAP_DESC desc = {};

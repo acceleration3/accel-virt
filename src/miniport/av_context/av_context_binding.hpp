@@ -11,7 +11,6 @@
 #include "core/platform/platform.hpp"
 #include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
-#include "proto/context/context_resources.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
@@ -30,11 +29,11 @@ struct AvContextBindingProbe;
 
 class AvContextBinding {
 public:
-    /* The ring, fence and reply blobs, in that order, then the host-visible
-     * chunks a process binds (feature 045), per slot. */
-    static constexpr uint32_t transport_resources   = ContextResources::transport_resources;
-    static constexpr uint32_t chunk_slots           = ContextResources::chunk_slots;
-    static constexpr uint32_t resources_per_context = ContextResources::per_context;
+    /* The ring, fence and reply blobs, in that order (docs/protocol.md,
+     * Context setup). A process's chunks take host blob ids of their own
+     * (HostBlobId). */
+    static constexpr uint32_t transport_resources   = 3u;
+    static constexpr uint32_t resources_per_context = transport_resources;
     /* Above the cursor's, every scanout's and host-visible memory's resource
      * ids, so a context's blob never takes one another subsystem uses. */
     static constexpr uint32_t first_resource_id = 0x00100000u;
@@ -85,17 +84,6 @@ public:
     bool                 forget_progress(const uint64_t *progress);
     /* DISPATCH, from the DPC. Reads the fence page and advances what completed. */
     [[nodiscard]] Status serve();
-
-    /* The resource of the context's chunk slot `index`, below chunk_slots. */
-    uint32_t             chunk_resource(uint32_t index) const;
-    /* PASSIVE. A GUEST blob of `resource_id` over `pages`. ok when the device
-     * made it, not_supported when it refused, malformed for an answer no device
-     * sends. The request buffer is the owner's; it serializes. */
-    [[nodiscard]] Status publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages);
-    /* PASSIVE. Drops the blob: ok once the device let go of it,
-     * not_supported when it refused - an import still holds it - malformed
-     * for an answer no device sends, and the exchange's failure otherwise. */
-    [[nodiscard]] Status release_chunk(VirtioGpuDevice &device, uint32_t resource_id);
 
     GuestContext::State state() const;
     bool                established() const;

@@ -1,5 +1,5 @@
-/* One host GPU, as the executor library sees it: what it is called, what it can
- * run, and what it can be handed without a copy. */
+/* One host GPU, as the executor library sees it: what it is called and what it
+ * can run. */
 #ifndef AV_HOST_GPU_HPP
 #define AV_HOST_GPU_HPP
 
@@ -29,9 +29,6 @@ public:
 
     bool     matches(const uint8_t *uuid) const;
     uint32_t sub_apis() const;
-    /* The AV_BLOB_* kinds `sub_api` imports here; zero for a sub-API this GPU
-     * does not serve, and zero for one that serves it only by copying. */
-    uint32_t import_kinds(uint32_t sub_api) const;
     /* Where this GPU sat in the host's enumeration, which is what a backend
      * needs to open it again. */
     uint32_t index() const;
@@ -44,17 +41,8 @@ public:
 private:
     friend struct HostGpuProbe;
 
-    /* Vulkan, OpenGL, OpenCL: the three bits the ABI defines, and the only
-     * sub-APIs a context can name. */
-    static constexpr uint32_t sub_api_count = 4u;
-
-    /* The slot `sub_api`'s kinds live in, or sub_api_count for a value that is
-     * not one of the three bits. */
-    uint32_t slot_of(uint32_t sub_api) const;
-
     DeviceUuid uuid_;
     uint32_t sub_apis_;
-    uint32_t kinds_[sub_api_count];
     uint32_t index_;
     bool     known_;
 };

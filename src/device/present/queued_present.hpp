@@ -56,11 +56,7 @@ private:
     /* The regions through `mover`, in order. */
     [[nodiscard]] Status move_regions(RegionMover &mover);
     [[nodiscard]] Status move_snapshot(const PresentFrames &snapshots);
-    /* The snapshot written by the host's GPU straight into the destination's
-     * pages: false where it cannot be, and the CPU moves it instead. */
-    bool                 write_snapshot(const PresentFrames &snapshots);
 
-    Host                &host_;
     GuestPageMapping     source_;
     GuestPageMapping     destination_;
     QueuedPresentRequest present_;

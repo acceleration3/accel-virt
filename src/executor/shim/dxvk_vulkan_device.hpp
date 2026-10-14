@@ -26,7 +26,6 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
-class FrameTarget;
 class VulkanBuffer;
 
 class DxvkVulkanDevice {
@@ -60,16 +59,6 @@ public:
      * the Direct3D 11 device's lock: it flushes the immediate context. False
      * where the device exports no sync_file. */
     [[nodiscard]] bool sync_file(int &fd);
-    /* `texture`'s pixels written into `target` region by region, behind
-     * everything Direct3D recorded: false where its image or the target's
-     * memory cannot be had. `buffer` holds that memory until the write is
-     * finished; `value` is what it signals. Under the device's lock. */
-    [[nodiscard]] bool write(ID3D11Texture2D *texture, const FrameTarget &target, VulkanBuffer &buffer,
-                             uint64_t &value);
-    /* Whether the write `value` names finished within `nanoseconds`. Any
-     * thread; no lock. */
-    [[nodiscard]] bool written(uint64_t value, uint64_t nanoseconds) const;
-
 private:
     IDXGIVkInteropDevice1 *interop_;   /* held */
     VulkanDeviceTable      table_;

@@ -43,7 +43,6 @@ struct ID3D11VkExtContext2;
 
 namespace av {
 
-class FrameTarget;
 class VulkanBuffer;
 
 class D3dRuntime;
@@ -133,12 +132,6 @@ public:
      * (D3d11FramePool::stage); null when no frame is free. */
     StagedFrame       *stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                                    uint32_t format);
-    /* `texture`, a `width` by `height` frame the pool staged, written by the
-     * GPU into `target` and finished (DxvkVulkanDevice::write): false where a
-     * region lies outside either, or Vulkan cannot have the image or the
-     * memory. Takes the lock to queue the write, and waits without it. */
-    [[nodiscard]] bool write_frame(ID3D11Texture2D *texture, uint32_t width, uint32_t height,
-                                   const FrameTarget &target);
     /* The COM references of shares HostShares freed given back, under the
      * lock, which this takes; and the images whose textures went with them
      * freed. After anything that may free a share: a guest's release, a
@@ -170,9 +163,9 @@ public:
      * buffers to storage imported here (tools/dxvk-patches/0003) and offers
      * Vulkan interop to import it with. */
     bool               slices() const;
-    /* `bytes` of host memory at `host` imported on DXVK's device, to draw
-     * from (VulkanBuffer::import_host_pointer_to_draw). */
-    [[nodiscard]] bool import_to_draw(void *host, uint64_t bytes, VulkanBuffer &buffer);
+    /* `bytes` of the dma-buf `fd`, which is the call's, imported on DXVK's
+     * device to draw from (VulkanBuffer::import_dma_buf_to_draw). */
+    [[nodiscard]] bool import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer);
     /* `buffer` from now on is `bytes` at `offset` of `storage`, which the CPU
      * reaches at `host`: recorded on the immediate context, so what was
      * recorded before reads its storage before. Under the device's lock. */

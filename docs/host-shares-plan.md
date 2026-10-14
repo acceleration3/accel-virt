@@ -151,7 +151,7 @@ for interop).**
 3. That calls `ContextExecutor::export_object`, which goes through the ABI to
    `ExecutorRoot::export_object`, then `ContextSession`, then the backend's
    `export_object`:
-   - Vulkan: `VulkanHostImport::export_memory` (DMA_BUF) or
+   - Vulkan: `VulkanMemoryImport::export_memory` (DMA_BUF) or
      `export_semaphore` (OPAQUE_FD).
    - D3D: `D3d11HostDevice::export_memory`, which calls
      `InteropTextures::export_memory`.
@@ -168,7 +168,7 @@ for interop).**
    duplicates the fd. Per backend:
    - GL: `GlHostImport::import_memory` or `import_semaphore`, then
      `GlSharedObjects::remember`.
-   - Vulkan: `VulkanHostImport::import_shared_memory` or
+   - Vulkan: `VulkanMemoryImport::import_shared_memory` or
      `import_shared_semaphore`, then `HandleRegistry`.
    - CL: `GlHostImport`, `GlSharedBuffer::make` and `clCreateFromGLBuffer`,
      then `ClSharedObjects::remember`.

@@ -27,6 +27,7 @@ public:
         err_invalid_parameter = 0x1205u,
     };
     static constexpr uint32_t map_cache_cached = 1u;   /* VIRTIO_GPU_MAP_CACHE_CACHED */
+    static constexpr uint32_t map_cache_wc = 3u;       /* VIRTIO_GPU_MAP_CACHE_WC */
     static constexpr size_t   max_length = 24u + CapsetInfo::encoded_size > DisplayModeSet::max_encoded_size
                                                ? 24u + CapsetInfo::encoded_size
                                                : DisplayModeSet::max_encoded_size;

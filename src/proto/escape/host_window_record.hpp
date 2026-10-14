@@ -1,5 +1,6 @@
 /* The escape record a process sends to take a chunk of its device's host
- * window, or to give one back (docs/host-window.md).
+ * window - host GPU memory of the kind it names - or to give one back
+ * (docs/host-memory.md).
  *
  * The kernel decodes it from memory the process wrote, so every field is
  * judged; it then writes its answer - the resource the chunk became, its size
@@ -10,6 +11,7 @@
 #define AV_HOST_WINDOW_RECORD_HPP
 
 #include "core/support/status.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,12 +28,14 @@ public:
     enum class Operation : uint16_t { open = 1u, close = 2u };
 
     HostWindowRecord();
-    /* An open names the bytes wanted; a close names the resource. */
-    HostWindowRecord(Operation operation, uint64_t bytes, uint32_t resource_id);
+    /* An open names the bytes and the memory wanted; a close names the
+     * resource and no memory. */
+    HostWindowRecord(Operation operation, uint64_t bytes, uint32_t resource_id, HostMemoryRequest memory);
 
     bool     opens() const;
     uint32_t resource_id() const;
     uint64_t bytes() const;
+    HostMemoryRequest memory() const;
     uint64_t address() const;
     /* This open with the kernel's answer filled in. */
     HostWindowRecord answered(uint32_t resource_id, uint64_t bytes, uint64_t address) const;
@@ -46,7 +50,7 @@ public:
     [[nodiscard]] Status accept_answer(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint16_t version = 1u;
+    static constexpr uint16_t version = 2u;
 
     bool is_request() const;
     /* Every field from the bytes, judging only what no record may carry. */
@@ -54,6 +58,7 @@ private:
 
     uint16_t operation_;
     uint32_t resource_id_;
+    uint32_t memory_;
     uint64_t bytes_;
     uint64_t address_;
 };

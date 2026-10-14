@@ -9,14 +9,14 @@ ImportTable::ImportTable() : blobs_{}, count_(0u)
     AV_SCOPE("ImportTable::ImportTable");
 }
 
-Status ImportTable::take(uint64_t blob_id, const AvBlobHandle &handle, ImportedBlob *&taken)
+Status ImportTable::take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&taken)
 {
     AV_SCOPE("ImportTable::take");
     taken = nullptr;
     if (find(blob_id) != nullptr) return Status::conflict;
     for (uint32_t slot = 0u; slot < max_imports; slot++) {
         if (blobs_[slot].live()) continue;
-        const Status status = blobs_[slot].take(blob_id, handle);
+        const Status status = blobs_[slot].take(blob_id, memory);
         if (status != Status::ok) return status;
         count_++;
         taken = &blobs_[slot];

@@ -18,18 +18,14 @@ public:
 
     enum : uint32_t {
         imported = 0u,
-        /* A reserved field, an offset or size that is not whole pages, no size,
-         * or a range past 2^64. */
+        /* No resource, or a reserved field that is not zero. */
         refused_request = 1u,
-        /* Not a guest blob in one of the context's chunk slots. */
+        /* Not a host blob opened for this context. */
         unknown_resource = 2u,
-        outside_blob = 3u,
-        /* The host cannot make one range of the blob's pages. */
-        unmappable_pages = 4u,
-        /* No executor, a library that cannot name an import, or a refusal. */
-        executor_refused = 5u,
+        /* No executor, or one whose API will not take the memory. */
+        executor_refused = 3u,
         /* Every import the context may hold, or no host memory to hold them in. */
-        no_room = 6u,
+        no_room = 4u,
     };
 
     BlobImportAnswer();

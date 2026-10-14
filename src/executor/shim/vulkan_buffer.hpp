@@ -21,14 +21,11 @@ public:
     /* `size` bytes of the dma-buf `fd`, imported to be copied into. The fd is
      * this one's whatever happens: closed where the import does not take it. */
     [[nodiscard]] bool import_dma_buf(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
-    /* `size` bytes of host memory at `pointer`, imported for a D3D11 buffer
+    /* The dma-buf `fd` - memory of the GPU's memory source - as a buffer
      * of DXVK's to be drawn from in place (D3d11HostDevice::bind_storage):
      * every use a buffer has, and the device address DXVK takes of every
-     * buffer. By host pointer rather than dma-buf because an Intel GPU reads
-     * an imported dma-buf without snooping the CPU's caches - stale bytes in
-     * 199 copies of 200, measured - and imported host memory coherently.
-     * `pointer` and `size` are whole pages. */
-    [[nodiscard]] bool import_host_pointer_to_draw(const VulkanDeviceTable &table, void *pointer, VkDeviceSize size);
+     * buffer. Owns `fd` as import_dma_buf does. */
+    [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
     void               release();
     bool               made() const;
     VkBuffer           buffer() const;

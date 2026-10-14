@@ -3,7 +3,6 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/dxvk_interop.hpp"
-#include "executor/d3d/frame_target.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 #include "executor/shim/vulkan_timeline.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
@@ -122,46 +121,6 @@ bool DxvkVulkanDevice::sync_file(int &fd)
     if (table_.semaphore_fd(sync_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, fd)) return true;
     sync_spent_ = true;
     return false;
-}
-
-/* A same-layout transition makes DXVK run what it deferred on the image - a
- * clear, the copy that staged it - before the image is handed out. The
- * target's fd is the caller's: the import takes a copy of it. */
-bool DxvkVulkanDevice::write(ID3D11Texture2D *texture, const FrameTarget &target, VulkanBuffer &buffer,
-                             uint64_t &value)
-{
-    AV_SCOPE("DxvkVulkanDevice::write");
-    value = 0u;
-    if (!connected() || texture == nullptr || target.count() > PresentCopyRequest::max_regions) return false;
-    if (!written_.made() && !written_.make_exportable(table_)) return false;
-    IDXGIVkInteropSurface *surface = nullptr;
-    if (FAILED(texture->QueryInterface(__uuidof(IDXGIVkInteropSurface), reinterpret_cast<void **>(&surface))))
-        return false;
-    VkImage           image = VK_NULL_HANDLE;
-    VkImageLayout     layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkImageCreateInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    const bool        described = SUCCEEDED(surface->GetVulkanImageInfo(&image, &layout, &info));
-    const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
-    if (described) interop_->TransitionSurfaceLayout(surface, &whole, layout, layout);
-    surface->Release();
-    if (!described || !buffer.import_dma_buf(table_, dup(target.fd()), target.bytes())) return false;
-    VkBufferImageCopy regions[PresentCopyRequest::max_regions];
-    for (uint32_t index = 0u; index < target.count(); index++) regions[index] = target.copy(index);
-    const uint64_t next = writes_ + 1u;
-    if (!work_.write(image, layout, buffer.buffer(), target.count(), regions, written_, next)) {
-        buffer.release();
-        return false;
-    }
-    writes_ = next;
-    value = next;
-    return true;
-}
-
-bool DxvkVulkanDevice::written(uint64_t value, uint64_t nanoseconds) const
-{
-    AV_SCOPE("DxvkVulkanDevice::written");
-    return written_.wait(value, nanoseconds);
 }
 
 }  // namespace av

@@ -25,8 +25,8 @@ public:
     GlPackBuffer(const GlPackBuffer &) = delete;
     GlPackBuffer &operator=(const GlPackBuffer &) = delete;
 
-    /* The region, `size` bytes, as the dma-buf `fd` - copied, the caller's
-     * kept; -1 for a region that is no dma-buf. */
+    /* The region, `size` bytes, as the dma-buf `fd`, which is this buffer's
+     * from now on; -1 for a region that is no dma-buf. */
     void adopt(int fd, uint64_t size);
     /* The region gone: the buffer is let go the next time the context is
      * current here. */

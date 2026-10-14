@@ -33,7 +33,7 @@ void GlPackBuffer::adopt(int fd, uint64_t size)
 {
     AV_SCOPE("GlPackBuffer::adopt");
     abandon();
-    fd_ = fd >= 0 ? dup(fd) : -1;
+    fd_ = fd;
     size_ = fd_ >= 0 ? size : 0u;
     refused_ = false;
 }

@@ -1,12 +1,9 @@
-/* What this device may offer the guest, decided once at realize by running the
- * feasibility probes on the host GPU it is bound to. Constitution VI: a capset
- * bit is what a probe proved on this host, never what the driver would like to
- * be true. */
+/* What this device may offer the guest, decided at realize from what the
+ * host it runs on has. Constitution VI: a capset bit is what this host
+ * actually has, never what the driver would like to be true. */
 #ifndef AV_HOST_FEASIBILITY_HPP
 #define AV_HOST_FEASIBILITY_HPP
 
-#include "device/feasibility/guest_import_probe.hpp"
-#include "device/feasibility/host_memory_probe.hpp"
 #include "device/feasibility/interrupt_stress_probe.hpp"
 
 #include <stdint.h>
@@ -21,23 +18,17 @@ public:
     HostFeasibility(const HostFeasibility &) = delete;
     HostFeasibility &operator=(const HostFeasibility &) = delete;
 
-    /* Main loop. `guest_probe_address` is where the import probe's window
-     * starts. A second call changes nothing. */
-    void     decide(uint64_t guest_probe_address);
-    /* The capset's feature mask: one bit per path this host actually has. */
+    /* The capset's feature mask: one bit per path this host actually has. A
+     * hostmem window is the only place host memory reaches the guest
+     * (docs/host-memory.md). */
     uint64_t features() const;
     /* The one the fence path reports its injections into; interrupts are a path
      * with no alternative, so they set no bit - a failure here is a defect. */
     InterruptStressProbe &interrupts();
 
 private:
-    void log(const char *probe, const ProbeResult &result);
-
     Host                &host_;
-    HostMemoryProbe      memory_;
-    GuestImportProbe     import_;
     InterruptStressProbe interrupts_;
-    bool                 decided_;
 };
 
 }  // namespace av

@@ -12,6 +12,7 @@
 #include "device/context/local_context_plane.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/renderer/renderer_host_blobs.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/renderer/exported_image_message.hpp"
@@ -60,7 +61,12 @@ private:
                                uint8_t *answer, size_t capacity, size_t &answer_length);
     [[nodiscard]] Status region(const uint8_t *body, uint32_t length, const int *descriptors, uint32_t count);
     [[nodiscard]] Status guest_blob(const uint8_t *body, uint32_t length, uint32_t count);
-    [[nodiscard]] Status host_blob(const uint8_t *body, uint32_t length, const int *descriptors, uint32_t count);
+    /* Host memory for a host blob, answered with its dma-buf. */
+    [[nodiscard]] Status allocate_memory(const RendererMessageHeader &header, const uint8_t *body, uint32_t count,
+                                         uint8_t *answer, size_t capacity, size_t &answer_length,
+                                         int &answer_descriptor);
+    [[nodiscard]] Status free_memory(const uint8_t *body, uint32_t length, uint32_t count);
+    void                 close_answered_memory();
     [[nodiscard]] Status shared_released(const uint8_t *body, uint32_t length, uint32_t count);
     [[nodiscard]] Status blob_retired(const uint8_t *body, uint32_t length, uint32_t count);
     [[nodiscard]] Status context(RendererMessageHeader::Kind kind, const uint8_t *body, uint32_t length,
@@ -84,10 +90,14 @@ private:
     DoorbellOffers    &doorbells_;
     WireRecorder       recorder_;
     BlobTable          blobs_;
+    RendererHostBlobs  owners_;
     FenceInterrupts    interrupts_;
     LocalContextPlane  plane_;
     CapsetInfo         capset_;
     bool               ready_;
+    /* The dma-buf of the memory last answered, sent with that answer and
+     * closed as the next message arrives. */
+    int                answered_memory_;
     /* What was last sent for each exported image slot: a descriptor and the
      * layout the display imported it with. */
     AvExportedImage   sent_[image_slots];

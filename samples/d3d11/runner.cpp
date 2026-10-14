@@ -56,7 +56,12 @@ void finish(Gpu &gpu)
     if (FAILED(gpu.device->CreateQuery(&desc, &done))) return;
     gpu.context->End(done);
     BOOL finished = FALSE;
-    while (gpu.context->GetData(done, &finished, sizeof finished, 0) == S_FALSE) {
+    // One flush, then polls that do not flush: every flushing GetData submits
+    // a command buffer of its own, and on an Intel host that turned a wait of
+    // milliseconds into a minute of submissions per sample.
+    UINT flags = 0;
+    while (gpu.context->GetData(done, &finished, sizeof finished, flags) == S_FALSE) {
+        flags = D3D11_ASYNC_GETDATA_DONOTFLUSH;
     }
     done->Release();
 }

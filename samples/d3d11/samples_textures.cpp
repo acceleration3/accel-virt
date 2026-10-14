@@ -1787,9 +1787,12 @@ public:
         text_.add(line, 5, 85);
         text_.draw(gpu);
         const double waiting = seconds();
-        for (int i = 0; i < 2; i++)
-            while (c->GetData(queries_[i], &passed_[i], sizeof passed_[i], 0) == S_FALSE) {
+        for (int i = 0; i < 2; i++) {
+            UINT flags = 0;   // one flush, then polls that do not flush (runner.cpp's finish)
+            while (c->GetData(queries_[i], &passed_[i], sizeof passed_[i], flags) == S_FALSE) {
+                flags = D3D11_ASYNC_GETDATA_DONOTFLUSH;
             }
+        }
         const double done = seconds();
         // What the round trip costs, the same on every machine: the last End
         // to its result, and the part of that spent waiting in GetData.

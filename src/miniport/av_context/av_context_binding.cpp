@@ -110,40 +110,6 @@ void AvContextBinding::run_sequence(VirtioGpuDevice &device)
     }
 }
 
-uint32_t AvContextBinding::chunk_resource(uint32_t index) const
-{
-    AV_SCOPE("AvContextBinding::chunk_resource");
-    return ContextResources(first_resource_id_).chunk(index);
-}
-
-Status AvContextBinding::publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages)
-{
-    AV_SCOPE("AvContextBinding::publish_chunk");
-    AvRequestWriter writer(request_, capacity_);
-    const Status     written = writer.guest_blob_pages(resource_id, pages);
-    if (written != Status::ok) return written;
-    uint32_t     answered = 0u;
-    const Status asked = device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered);
-    if (asked != Status::ok) return asked;
-    GpuResponseReader answer;
-    if (answer.decode(answer_, answered) != Status::ok) return Status::malformed;
-    return answer.type() == GpuResponse::ok_nodata ? Status::ok : Status::not_supported;
-}
-
-Status AvContextBinding::release_chunk(VirtioGpuDevice &device, uint32_t resource_id)
-{
-    AV_SCOPE("AvContextBinding::release_chunk");
-    AvRequestWriter writer(request_, capacity_);
-    const Status     written = writer.unref(resource_id);
-    if (written != Status::ok) return written;
-    uint32_t     answered = 0u;
-    const Status asked = device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered);
-    if (asked != Status::ok) return asked;
-    GpuResponseReader answer;
-    if (answer.decode(answer_, answered) != Status::ok) return Status::malformed;
-    return answer.type() == GpuResponse::ok_nodata ? Status::ok : Status::not_supported;
-}
-
 GuestContext::State AvContextBinding::state() const
 {
     AV_SCOPE("AvContextBinding::state");

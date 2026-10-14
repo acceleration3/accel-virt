@@ -68,7 +68,6 @@ private:
         bool    make(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format, bool multisampled);
         void    drop();
         Reading read(AvFrameView &view) override;
-        bool    write(const FrameTarget &target) override;
         void    release() override;
 
     private:

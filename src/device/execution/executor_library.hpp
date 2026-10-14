@@ -13,7 +13,6 @@
 
 namespace av {
 
-class FrameDestination;
 
 class SurfacePoint;
 
@@ -28,9 +27,6 @@ public:
     bool                 available() const;
     /* The sub-APIs the library offers that the protocol knows; 0 without one. */
     uint32_t             sub_apis() const;
-    /* Which AV_BLOB_* kinds `api` imports on the GPU `gpu_uuid` names, or 0.
-     * Asked on the main loop while the capset is being described. */
-    uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const;
 
     /* Main loop, as the device realizes: this device's domain, on the GPU
      * `gpu_uuid` names. ok without a library, which shares nothing;
@@ -40,6 +36,11 @@ public:
     /* Main loop: the domain closed, and every object shared in it with it. */
     void                 close_domain();
     uint32_t             domain() const;
+    /* Main loop. Host memory in this device's domain, under `key`
+     * (AvExecutorOps::allocate_memory): no_memory without a library or a
+     * domain, or when it allocated nothing. */
+    [[nodiscard]] Status allocate_memory(uint64_t key, uint64_t size, uint32_t request, AvHostMemory &memory) const;
+    void                 free_memory(uint64_t key) const;
 
     /* An executor in this device's domain, made with `options` and sharing
      * `share`'s objects (null: none); null without a library or a domain,
@@ -54,7 +55,7 @@ public:
     /* Gives `executor` something to call when a host API finishes work on a
      * thread of its own, or takes it back with a null. */
     void        set_signal(AvExecutor *executor, void (*signal)(void *context), void *context) const;
-    uint32_t    import_blob(AvExecutor *executor, uint64_t blob_id, const AvBlobHandle &handle) const;
+    uint32_t    import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key) const;
     void        release_blob(AvExecutor *executor, uint64_t blob_id) const;
     uint64_t    imported_handle(AvExecutor *executor, uint64_t blob_id) const;
 
@@ -84,9 +85,6 @@ public:
     /* A present's staged frame, mapped and let go. Any thread. */
     bool map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) const;
     void unmap_frame(const SurfacePoint &frame) const;
-    /* write_frame, where the library has it: false where it has none, or
-     * did not execute it. */
-    bool write_frame(const SurfacePoint &frame, uint32_t wait_ms, const FrameDestination &destination) const;
     /* A shared surface handed to a process outside QEMU, and the copies into
      * it with a sync_file for them: false, with nothing handed over, without
      * a domain or for a surface the library does not know. Any thread. */
@@ -98,10 +96,6 @@ public:
     static constexpr uint32_t known_sub_apis = 15u;
 
 private:
-    /* AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF: a kind this device does not
-     * know is a kind it cannot build a handle for, so it is not offered. */
-    static constexpr uint32_t known_handle_kinds = 3u;
-
     /* Whether every operation of the version is there. */
     bool complete(const AvExecutorOps &ops) const;
 

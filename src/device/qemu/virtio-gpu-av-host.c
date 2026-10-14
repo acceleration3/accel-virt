@@ -3,7 +3,8 @@
  * The AvHostOps table: the device core's Host contract, implemented with
  * QEMU's threads (qemu_thread_create blocks the signals a worker must not take),
  * events, mutexes and bottom halves, guest memory through the device's DMA
- * address space, memfd blocks placed over the hostmem reservation, the control
+ * address space, the executor's dma-bufs placed over the hostmem reservation
+ * (docs/host-memory.md), the control
  * queue, doorbell pages as ioeventfds on the worker's eventfd, and the host GPU
  * catalog read from the Vulkan loader, and the export socket's listener and
  * connections (docs/external-export.md). Translation only.
@@ -16,8 +17,6 @@
 #include "qemu/thread.h"
 #include "qemu/aio.h"
 #include "qemu/iov.h"
-#include "qemu/memfd.h"
-#include <linux/udmabuf.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -37,14 +36,6 @@
 #include "hw/virtio/virtio-gpu-av.h"
 
 #include <vulkan/vulkan.h>
-
-typedef struct VirtIOGPUAvBlock {
-    int fd;
-    void *pointer;
-    uint64_t size;
-    /* Set for a block that came from the host GPU (feature 039). */
-    VkDeviceMemory gpu_memory;
-} VirtIOGPUAvBlock;
 
 typedef struct VirtIOGPUAvThread {
     QemuThread thread;
@@ -274,105 +265,9 @@ static int av_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
                 (off_t)(qemu_ram_get_fd_offset(block) + offset)) == MAP_FAILED;
 }
 
-/* One dma-buf over `count` memfd ranges, in order: *fd on success, nonzero
- * where the kernel has no udmabuf or refuses a range (a memfd not sealed
- * against shrinking, or one sealed against writing). */
-static int av_udmabuf_create(const struct udmabuf_create_item *items, uint32_t count, int *fd)
-{
-    g_autofree uint8_t *request = NULL;
-    struct udmabuf_create_list list;
-    int device, made;
-
-    device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-    if (device < 0) {
-        return 1;
-    }
-    memset(&list, 0, sizeof(list));
-    list.flags = UDMABUF_FLAGS_CLOEXEC;
-    list.count = count;
-    /* The items follow the header, which is what the ioctl reads. */
-    request = g_malloc0(sizeof(list) + sizeof(items[0]) * count);
-    memcpy(request, &list, sizeof(list));
-    memcpy(request + sizeof(list), items, sizeof(items[0]) * count);
-    made = ioctl(device, UDMABUF_CREATE_LIST, request);
-    close(device);
-    if (made < 0) {
-        return 1;
-    }
-    *fd = made;
-    return 0;
-}
-
-/* One dma-buf over the guest's own pages, through udmabuf. A host GPU that
- * refuses a userptr whose pages are file-backed - and guest RAM is a memfd -
- * takes this instead. Nonzero where the kernel has no udmabuf or the RAM has
- * no fd, and the caller imports a host pointer as before. */
-static int av_dmabuf_over_guest(void *opaque, void *const *runs, const uint64_t *sizes,
-                                 uint32_t count, int *fd)
-{
-    g_autofree struct udmabuf_create_item *items = NULL;
-    uint32_t index;
-
-    if (!runs || !sizes || count == 0) {
-        return 1;
-    }
-    items = g_new0(struct udmabuf_create_item, count);
-    RCU_READ_LOCK_GUARD();
-    for (index = 0; index < count; index++) {
-        ram_addr_t offset;
-        RAMBlock *block;
-        int ram_fd;
-
-        block = qemu_ram_block_from_host(runs[index], false, &offset);
-        if (!block || (ram_fd = qemu_ram_get_fd(block)) < 0 ||
-            offset + sizes[index] > qemu_ram_get_used_length(block)) {
-            return 1;
-        }
-        items[index].memfd = (uint32_t)ram_fd;
-        items[index].offset = qemu_ram_get_fd_offset(block) + offset;
-        items[index].size = sizes[index];
-    }
-    return av_udmabuf_create(items, count, fd);
-}
-
-static void av_close_dmabuf(void *opaque, int fd)
-{
-    if (fd >= 0) {
-        close(fd);
-    }
-}
-
 static void av_release_range(void *opaque, void *base, uint64_t size)
 {
     munmap(base, size);
-}
-
-static void *av_create_host_memory(void *opaque, uint64_t size, void **pointer)
-{
-    VirtIOGPUAvBlock *block = g_new0(VirtIOGPUAvBlock, 1);
-    Error *error = NULL;
-
-    block->size = size;
-    /* Sealed against growing and shrinking, which is what lets udmabuf wrap
-     * it (docs/host-window.md); never against writing, which udmabuf refuses. */
-    block->pointer = qemu_memfd_alloc("virtio-gpu-av-blob", size, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL,
-                                      &block->fd, &error);
-    if (!block->pointer) {
-        /* The guest asked for it; the core answers out of memory rather than log each one. */
-        error_free(error);
-        g_free(block);
-        return NULL;
-    }
-    *pointer = block->pointer;
-    return block;
-}
-
-static void av_destroy_host_memory(void *opaque, void *memory)
-{
-    VirtIOGPUAvBlock *block = memory;
-
-    qemu_memfd_free(block->pointer, block->size, block->fd);
-    g_free(block);
 }
 
 static uint64_t av_hostmem_size(void *opaque)
@@ -383,14 +278,17 @@ static uint64_t av_hostmem_size(void *opaque)
 }
 
 /* Replacing the pages under a mapped RAM region is how virtio-gpu-gl places
- * virgl's blobs; KVM follows through its MMU notifiers. */
-static int av_place_in_hostmem(void *opaque, void *memory, uint64_t offset)
+ * virgl's blobs; KVM follows through its MMU notifiers. The mapping holds the
+ * dma-buf for as long as it is there, so the caller may close its descriptor. */
+static int av_place_in_hostmem(void *opaque, int fd, uint64_t size, uint64_t offset)
 {
     VirtIOGPUAv *r = opaque;
-    VirtIOGPUAvBlock *block = memory;
 
-    return mmap((char *)r->hostmem_mmap + offset, block->size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
-                block->fd, 0) == MAP_FAILED;
+    if (!r->hostmem_mmap || fd < 0 || offset + size > VIRTIO_GPU_BASE(r)->conf.hostmem) {
+        return 1;
+    }
+    return mmap((char *)r->hostmem_mmap + offset, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) ==
+           MAP_FAILED;
 }
 
 static void av_remove_from_hostmem(void *opaque, uint64_t offset, uint64_t size)
@@ -403,284 +301,16 @@ static void av_remove_from_hostmem(void *opaque, uint64_t offset, uint64_t size)
     }
 }
 
-/* A memory type the host can write and the device can read back, preferring one
- * the GPU also calls local (resizable BAR), which is the mapping 042-044 want. */
-static int av_memory_type(VkPhysicalDevice physical, uint32_t allowed, uint32_t *type)
-{
-    VkPhysicalDeviceMemoryProperties memory;
-    const VkMemoryPropertyFlags wanted = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    int found = 0;
-
-    vkGetPhysicalDeviceMemoryProperties(physical, &memory);
-    for (uint32_t i = 0; i < memory.memoryTypeCount; i++) {
-        VkMemoryPropertyFlags flags = memory.memoryTypes[i].propertyFlags;
-
-        if (!(allowed & (1u << i)) || (flags & wanted) != wanted) {
-            continue;
-        }
-        if (!found || (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-            *type = i;
-            found = 1;
-        }
-        if (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-            break;
-        }
-    }
-    return found;
-}
-
-/* The logical device the probes and, from 041 on, the memory paths use. Created
- * when the core says which host GPU this instance runs on; a driver that cannot
- * give us external memory still gets a device, and each probe refuses on its
- * own. */
-/* What the guest reads at `offset`: the hostmem reservation itself, which the
- * placement mapped the block's pages over. */
-static int av_read_hostmem(void *opaque, uint64_t offset, uint8_t *buffer, uint64_t size)
-{
-    VirtIOGPUAv *r = opaque;
-
-    if (!r->hostmem_mmap || offset + size > VIRTIO_GPU_BASE(r)->conf.hostmem) {
-        return 1;
-    }
-    memcpy(buffer, (char *)r->hostmem_mmap + offset, size);
-    return 0;
-}
-
+/* QEMU makes nothing on the GPU itself: every allocation is the executor's
+ * (docs/host-memory.md). The binding only says which GPU the catalog names. */
 static int av_bind_gpu(void *opaque, uint32_t index)
 {
     VirtIOGPUAv *r = opaque;
-    const float priority = 1.0f;
-    const char *extensions[] = { VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-                                 VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME };
-    VkDeviceQueueCreateInfo queue = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueCount = 1,
-        .pQueuePriorities = &priority,
-    };
-    VkDeviceCreateInfo create = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &queue,
-        .enabledExtensionCount = ARRAY_SIZE(extensions),
-        .ppEnabledExtensionNames = extensions,
-    };
-    VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_memory = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT,
-    };
-    VkPhysicalDeviceProperties2 properties = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        .pNext = &host_memory,
-    };
 
     if (index >= r->gpu_count || !r->instance) {
         return 1;
     }
     r->bound = r->physical[index];
-    if (r->gpu) {
-        return 0;
-    }
-    if (vkCreateDevice(r->bound, &create, NULL, &r->gpu) != VK_SUCCESS) {
-        /* Without the external-memory extensions there is still a device to
-         * run on; the probes are what refuse, not the binding. */
-        create.enabledExtensionCount = 0;
-        if (vkCreateDevice(r->bound, &create, NULL, &r->gpu) != VK_SUCCESS) {
-            r->gpu = VK_NULL_HANDLE;
-            return 1;
-        }
-        return 0;
-    }
-    vkGetPhysicalDeviceProperties2(r->bound, &properties);
-    r->import_alignment = host_memory.minImportedHostPointerAlignment;
-    return 0;
-}
-
-/* One attempt at exporting `size` bytes as `handle_type`: the memory, its fd and
- * the CPU mapping of that fd, or nothing with *host_error saying which step the
- * driver refused. */
-static int av_export_handle(VirtIOGPUAv *r, uint64_t size, VkExternalMemoryHandleTypeFlagBits handle_type,
-                             VkDeviceMemory *memory, int *fd, void **mapped, int32_t *host_error)
-{
-    VkExportMemoryAllocateInfo export_info = {
-        .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
-        .handleTypes = handle_type,
-    };
-    VkMemoryAllocateInfo allocate = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = &export_info,
-        .allocationSize = size,
-    };
-    VkMemoryGetFdInfoKHR fd_info = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
-        .handleType = handle_type,
-    };
-    PFN_vkGetMemoryFdKHR get_fd = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(r->gpu, "vkGetMemoryFdKHR");
-    VkResult answered;
-
-    *memory = VK_NULL_HANDLE;
-    *fd = -1;
-    *mapped = NULL;
-    if (!get_fd || !av_memory_type(r->bound, UINT32_MAX, &allocate.memoryTypeIndex)) {
-        return 1;
-    }
-    answered = vkAllocateMemory(r->gpu, &allocate, NULL, memory);
-    if (answered != VK_SUCCESS) {
-        *host_error = answered;
-        return 1;
-    }
-    fd_info.memory = *memory;
-    answered = get_fd(r->gpu, &fd_info, fd);
-    if (answered != VK_SUCCESS) {
-        *host_error = answered;
-        vkFreeMemory(r->gpu, *memory, NULL);
-        *memory = VK_NULL_HANDLE;
-        return 1;
-    }
-    *mapped = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
-    if (*mapped == MAP_FAILED) {
-        /* NVIDIA's proprietary driver exports an opaque fd nothing can mmap;
-         * its dma-buf export is the one a KVM memslot can take. */
-        *host_error = -errno;
-        close(*fd);
-        vkFreeMemory(r->gpu, *memory, NULL);
-        *memory = VK_NULL_HANDLE;
-        *fd = -1;
-        *mapped = NULL;
-        return 1;
-    }
-    return 0;
-}
-
-/* Memory of the host GPU's own, exported as a file descriptor so the hostmem
- * placement can map it into the guest exactly as a memfd block is mapped.
- * Drivers differ in which export a CPU mapping works on, so both are tried. */
-static void *av_export_gpu_memory(void *opaque, uint64_t size, void **pointer, int32_t *host_error)
-{
-    static const VkExternalMemoryHandleTypeFlagBits handle_types[] = {
-        VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
-        VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-    };
-    VirtIOGPUAv *r = opaque;
-    VirtIOGPUAvBlock *block;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    int fd = -1;
-    void *mapped = NULL;
-
-    *pointer = NULL;
-    *host_error = 0;
-    if (!r->gpu) {
-        return NULL;
-    }
-    for (uint32_t i = 0; i < ARRAY_SIZE(handle_types); i++) {
-        if (!av_export_handle(r, size, handle_types[i], &memory, &fd, &mapped, host_error)) {
-            *host_error = 0;
-            break;
-        }
-    }
-    if (!mapped) {
-        return NULL;
-    }
-    block = g_new0(VirtIOGPUAvBlock, 1);
-    block->fd = fd;
-    block->pointer = mapped;
-    block->size = size;
-    block->gpu_memory = memory;
-    *pointer = mapped;
-    return block;
-}
-
-static void av_release_gpu_memory(void *opaque, void *memory)
-{
-    VirtIOGPUAv *r = opaque;
-    VirtIOGPUAvBlock *block = memory;
-
-    munmap(block->pointer, block->size);
-    close(block->fd);
-    vkFreeMemory(r->gpu, block->gpu_memory, NULL);
-    g_free(block);
-}
-
-/* Guest pages the host GPU addresses directly (VK_EXT_external_memory_host):
- * no extension, or a window the driver will not take, answers NULL. */
-static void *av_import_guest_memory(void *opaque, void *pointer, uint64_t size, int32_t *host_error)
-{
-    VirtIOGPUAv *r = opaque;
-    VkMemoryHostPointerPropertiesEXT properties = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT,
-    };
-    VkImportMemoryHostPointerInfoEXT import = {
-        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT,
-        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
-        .pHostPointer = pointer,
-    };
-    VkMemoryAllocateInfo allocate = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = &import,
-        .allocationSize = size,
-    };
-    PFN_vkGetMemoryHostPointerPropertiesEXT host_properties;
-    VirtIOGPUAvBlock *block;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkResult imported;
-    void *mapped = NULL;
-
-    *host_error = 0;
-    if (!r->gpu || !r->import_alignment) {
-        return NULL;
-    }
-    if (((uintptr_t)pointer % r->import_alignment) || (size % r->import_alignment)) {
-        *host_error = -EINVAL;
-        return NULL;
-    }
-    host_properties = (PFN_vkGetMemoryHostPointerPropertiesEXT)
-        vkGetDeviceProcAddr(r->gpu, "vkGetMemoryHostPointerPropertiesEXT");
-    if (!host_properties) {
-        return NULL;
-    }
-    imported = host_properties(r->gpu, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer, &properties);
-    if (imported != VK_SUCCESS) {
-        *host_error = imported;
-        return NULL;
-    }
-    if (!av_memory_type(r->bound, properties.memoryTypeBits, &allocate.memoryTypeIndex)) {
-        return NULL;
-    }
-    imported = vkAllocateMemory(r->gpu, &allocate, NULL, &memory);
-    if (imported != VK_SUCCESS) {
-        *host_error = imported;
-        return NULL;
-    }
-    if (vkMapMemory(r->gpu, memory, 0, size, 0, &mapped) != VK_SUCCESS) {
-        vkFreeMemory(r->gpu, memory, NULL);
-        return NULL;
-    }
-    block = g_new0(VirtIOGPUAvBlock, 1);
-    block->fd = -1;
-    block->pointer = mapped;
-    block->size = size;
-    block->gpu_memory = memory;
-    return block;
-}
-
-static void av_release_guest_memory(void *opaque, void *memory)
-{
-    VirtIOGPUAv *r = opaque;
-    VirtIOGPUAvBlock *block = memory;
-
-    vkUnmapMemory(r->gpu, block->gpu_memory);
-    vkFreeMemory(r->gpu, block->gpu_memory, NULL);
-    g_free(block);
-}
-
-/* What the GPU's own mapping of the imported memory holds, which is the claim a
- * probe checks against the bytes the device wrote into the guest window. */
-static int av_read_imported_memory(void *opaque, void *memory, uint64_t offset, uint8_t *buffer, uint64_t size)
-{
-    VirtIOGPUAvBlock *block = memory;
-
-    if (offset + size > block->size) {
-        return 1;
-    }
-    memcpy(buffer, (char *)block->pointer + offset, size);
     return 0;
 }
 
@@ -754,32 +384,6 @@ static int av_fence_interrupt_descriptor(void *opaque, uint32_t line)
 static int av_show_image(void *opaque, uint32_t head, const AvExportedImage *image)
 {
     return virtio_gpu_av_show_image(opaque, head, image) ? 0 : 1;
-}
-
-static int av_host_memory_descriptor(void *opaque, void *memory)
-{
-    VirtIOGPUAvBlock *block = memory;
-
-    return block->fd >= 0 ? fcntl(block->fd, F_DUPFD_CLOEXEC, 0) : -1;
-}
-
-/* A dma-buf over part of a host blob's memfd, for a host GPU that refuses a
- * user pointer over file-backed pages. A block from the host GPU has no memfd
- * behind it, and udmabuf refuses its descriptor. */
-static int av_dmabuf_over_host_memory(void *opaque, void *memory, uint64_t offset, uint64_t size, int *fd)
-{
-    VirtIOGPUAvBlock *block = memory;
-    struct udmabuf_create_item item;
-
-    if (!block || block->fd < 0 || block->gpu_memory != VK_NULL_HANDLE || size == 0 || offset > block->size ||
-        size > block->size - offset) {
-        return 1;
-    }
-    memset(&item, 0, sizeof(item));
-    item.memfd = (uint32_t)block->fd;
-    item.offset = offset;
-    item.size = size;
-    return av_udmabuf_create(&item, 1, fd);
 }
 
 static void av_close_descriptor(void *opaque, int descriptor)
@@ -888,47 +492,30 @@ static int av_display_takes_dmabuf(void *opaque, uint32_t head)
     return con != NULL && qemu_console_has_gl(con);
 }
 
-static void av_release_scanout(VirtIOGPUAv *r, uint32_t head, QemuConsole *con)
-{
-    if (!r->scanouts[head]) {
-        return;
-    }
-    qemu_console_gl_release_dmabuf(con, r->scanouts[head]);
-    qemu_dmabuf_close(r->scanouts[head]);
-    g_clear_pointer(&r->scanouts[head], qemu_dmabuf_free);
-}
-
-/* The descriptor is duplicated because qemu_dmabuf_close() closes what it was
- * given, and the core goes on owning its own. The console is resized before
- * the scanout because a GL listener blits into the console's DisplaySurface
- * and does nothing when there is none (ui/egl-headless.c, egl_scanout_flush),
- * and the old buffer is released only after the new one is set, because the
- * listener holds an import of it until it is told otherwise - both the order
- * virtio_gpu_update_dmabuf() uses. */
-static int av_show_scanout(void *opaque, uint32_t head, int fd, const AvScanoutFrame *frame)
+/* A display surface straight over the device's mapping of the blob, which
+ * the core keeps mapped while the head shows it: every display backend reads
+ * one, GL or not, and no frame is copied on the way. */
+static int av_show_scanout(void *opaque, uint32_t head, const void *blob, const AvScanoutFrame *frame)
 {
     VirtIOGPUAv *r = opaque;
     QemuConsole *con = av_head_console(r, head);
-    QemuDmaBuf *shown = r->scanouts[head];
-    int32_t duplicate;
+    pixman_format_code_t format;
+    DisplaySurface *surface;
+    uint8_t *pixels;
 
-    if (!con || !frame) {
+    if (!con || !frame || !blob) {
         return 1;
     }
-    duplicate = dup(fd);
-    if (duplicate < 0) {
+    format = qemu_drm_format_to_pixman(frame->fourcc);
+    if (!format) {
         return 1;
     }
-    r->scanouts[head] = qemu_dmabuf_new(frame->width, frame->height, &frame->offset, &frame->stride,
-                                        frame->x, frame->y, frame->backing_width, frame->backing_height,
-                                        frame->fourcc, frame->modifier, &duplicate, 1, false, false);
+    pixels = (uint8_t *)blob + frame->offset + (uint64_t)frame->y * frame->stride +
+             (uint64_t)frame->x * (PIXMAN_FORMAT_BPP(format) / 8);
+    surface = qemu_create_displaysurface_from(frame->width, frame->height, format, frame->stride, pixels);
     VIRTIO_GPU_BASE(r)->enable = 1;
-    qemu_console_gl_scanout_dmabuf(con, r->scanouts[head]);
-    if (shown) {
-        qemu_console_gl_release_dmabuf(con, shown);
-        qemu_dmabuf_close(shown);
-        qemu_dmabuf_free(shown);
-    }
+    dpy_gfx_replace_surface(con, surface);
+    r->scanouts[head] = true;
     return 0;
 }
 
@@ -1010,10 +597,11 @@ void virtio_gpu_av_show_surface(VirtIOGPUAv *r, uint32_t head)
 static void av_update_scanout(void *opaque, uint32_t head, uint32_t x, uint32_t y, uint32_t width,
                                uint32_t height)
 {
-    QemuConsole *con = av_head_console(opaque, head);
+    VirtIOGPUAv *r = opaque;
+    QemuConsole *con = av_head_console(r, head);
 
-    if (con) {
-        qemu_console_gl_update(con, x, y, width, height);
+    if (con && r->scanouts[head]) {
+        dpy_gfx_update(con, x, y, width, height);
     }
 }
 
@@ -1022,9 +610,9 @@ static void av_hide_scanout(void *opaque, uint32_t head)
     VirtIOGPUAv *r = opaque;
     QemuConsole *con = av_head_console(r, head);
 
-    if (con) {
-        qemu_console_gl_scanout_disable(con);
-        av_release_scanout(r, head, con);
+    if (con && r->scanouts[head]) {
+        dpy_gfx_replace_surface(con, NULL);
+        r->scanouts[head] = false;
     }
 }
 
@@ -1269,10 +857,6 @@ static void av_read_gpus(VirtIOGPUAv *r)
 
 void virtio_gpu_av_host_finish(VirtIOGPUAv *r)
 {
-    if (r->gpu) {
-        vkDestroyDevice(r->gpu, NULL);
-        r->gpu = VK_NULL_HANDLE;
-    }
     if (r->instance) {
         vkDestroyInstance(r->instance, NULL);
         r->instance = VK_NULL_HANDLE;
@@ -1485,21 +1069,11 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .reserve_range = av_reserve_range,
         .alias_guest_run = av_alias_guest_run,
         .release_range = av_release_range,
-        .dmabuf_over_guest = av_dmabuf_over_guest,
-        .close_dmabuf = av_close_dmabuf,
-        .create_host_memory = av_create_host_memory,
-        .destroy_host_memory = av_destroy_host_memory,
         .hostmem_size = av_hostmem_size,
         .place_in_hostmem = av_place_in_hostmem,
         .remove_from_hostmem = av_remove_from_hostmem,
         .monotonic_nanoseconds = av_monotonic_nanoseconds,
-        .read_hostmem = av_read_hostmem,
         .bind_gpu = av_bind_gpu,
-        .export_gpu_memory = av_export_gpu_memory,
-        .release_gpu_memory = av_release_gpu_memory,
-        .import_guest_memory = av_import_guest_memory,
-        .release_guest_memory = av_release_guest_memory,
-        .read_imported_memory = av_read_imported_memory,
         .connect_doorbell = av_connect_doorbell,
         .disconnect_doorbell = av_disconnect_doorbell,
         .connect_fence_interrupts = av_connect_fence_interrupts,
@@ -1520,9 +1094,7 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .list_directory = av_list_directory,
         .event_descriptor = av_event_descriptor,
         .fence_interrupt_descriptor = av_fence_interrupt_descriptor,
-        .host_memory_descriptor = av_host_memory_descriptor,
         .close_descriptor = av_close_descriptor,
-        .dmabuf_over_host_memory = av_dmabuf_over_host_memory,
         .wait_event_until = av_wait_event_until,
         .show_image = av_show_image,
         .receive_export = av_receive_export,

@@ -103,16 +103,33 @@ $writer.Close()""")
     local.unlink()
 
 
+HOST_TIMEOUT = 1800
+
+
+def host_run(command, environment=None):
+    """A host half's output, whole or as far as it got. The guest's results are
+    in hand by the time the host renders, so a native run that stops answering
+    is a host with no picture to compare (measured: DXVK's native samples on an
+    Arc host stalled after their seventh sample), not a report that is never
+    written."""
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, env=environment, timeout=HOST_TIMEOUT)
+        return done.stdout + done.stderr
+    except subprocess.TimeoutExpired as expired:
+        parts = [part.decode(errors="replace") if isinstance(part, bytes) else part or ""
+                 for part in (expired.stdout, expired.stderr)]
+        return "".join(parts) + f"\nhost: stopped after {HOST_TIMEOUT} s\n"
+
+
 def run_host(args, out):
     print("host: rendering", flush=True)
     shutil.rmtree(out / "host", ignore_errors=True)
     (out / "host").mkdir(parents=True)
     environment = dict(os.environ, AV_D3D_PATH=str(ROOT / "build-d3d" / "lib"))
-    done = subprocess.run([str(ROOT / "build" / "avd3d11samples_host"), "--out", str(out / "host"),
-                           "--shaders", str(out / "shaders"), "--frames", str(args.frames),
-                           "--warmup", str(args.warmup), "--width", str(args.width), "--height", str(args.height)],
-                          capture_output=True, text=True, env=environment, timeout=1800)
-    (out / "host.log").write_text(done.stdout + done.stderr)
+    (out / "host.log").write_text(host_run([str(ROOT / "build" / "avd3d11samples_host"), "--out", str(out / "host"),
+                                            "--shaders", str(out / "shaders"), "--frames", str(args.frames),
+                                            "--warmup", str(args.warmup), "--width", str(args.width),
+                                            "--height", str(args.height)], environment))
 
 
 def metrics(path):

@@ -1,5 +1,4 @@
 #include "device/isolation/renderer_context_plane.hpp"
-#include "device/present/frame_destination.hpp"
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -12,7 +11,9 @@
 #include "proto/renderer/blob_retired_message.hpp"
 #include "proto/renderer/context_message.hpp"
 #include "proto/renderer/export_image_message.hpp"
-#include "proto/renderer/host_blob_message.hpp"
+#include "proto/renderer/allocate_memory_message.hpp"
+#include "proto/renderer/allocated_memory_message.hpp"
+#include "proto/renderer/free_memory_message.hpp"
 #include "proto/renderer/interrupt_lines_message.hpp"
 #include "proto/renderer/region_message.hpp"
 #include "proto/renderer/shared_released_message.hpp"
@@ -134,14 +135,51 @@ uint32_t RendererContextPlane::sub_apis() const
     return ready_.sub_apis();
 }
 
-uint32_t RendererContextPlane::import_kinds(SubApi api, const uint8_t *) const
+/* The memory is the renderer's library's, and its dma-buf comes back beside
+ * the answer: QEMU maps it into the hostmem region, the renderer keeps the
+ * allocation and who it was made for. */
+Status RendererContextPlane::allocate_memory(uint32_t context, uint64_t key, uint64_t size, uint32_t request,
+                                             AvHostMemory &memory)
 {
-    AV_SCOPE("RendererContextPlane::import_kinds");
-    /* A lane is a sub-API's bit number, as the Ready's sub-API mask counts
-     * them. */
-    for (uint32_t lane = 0u; lane < ReadyMessage::lanes; lane++)
-        if (static_cast<uint32_t>(api) == 1u << lane) return ready_.import_kinds(lane);
-    return 0u;
+    AV_SCOPE("RendererContextPlane::allocate_memory");
+    host_.require_main_loop("RendererContextPlane::allocate_memory");
+    if (!alive_) return Status::no_memory;
+    uint8_t body[AllocateMemoryMessage::encoded_size] = {};
+    if (AllocateMemoryMessage(context, request, key, size).encode(body, sizeof body) != Status::ok)
+        return Status::no_memory;
+    const uint8_t *answer = nullptr;
+    uint32_t       answer_length = 0u;
+    int            received = -1;
+    uint32_t       count = 0u;
+    const Status   status = link_.exchange(RendererMessageHeader::Kind::allocate_memory, body, sizeof body,
+                                           RendererMessageHeader::Kind::allocated_memory, answer, answer_length,
+                                           &received, 1u, count);
+    if (status != Status::ok) {
+        give_up();
+        return Status::no_memory;
+    }
+    AllocatedMemoryMessage allocated;
+    if (allocated.decode(answer, answer_length, count) != Status::ok) {
+        if (count != 0u) host_.close_descriptor(received);
+        give_up();
+        return Status::no_memory;
+    }
+    if (!allocated.allocated()) return Status::no_memory;
+    memory.fd = received;
+    memory.caching = allocated.caching();
+    memory.size = allocated.size();
+    return Status::ok;
+}
+
+void RendererContextPlane::free_memory(uint64_t key)
+{
+    AV_SCOPE("RendererContextPlane::free_memory");
+    if (!alive_) return;
+    uint8_t body[FreeMemoryMessage::encoded_size] = {};
+    static_cast<void>(FreeMemoryMessage(key).encode(body, sizeof body));
+    if (link_.post(RendererMessageHeader::Kind::free_memory, body, FreeMemoryMessage::encoded_size, nullptr, 0u) !=
+        Status::ok)
+        give_up();
 }
 
 ObjectStorage<RemoteContext> *RendererContextPlane::slot_of(uint32_t id)
@@ -317,18 +355,8 @@ Status RendererContextPlane::mirror(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::mirror");
     BlobWindow pages;
-    void      *host_memory = nullptr;
-    Status     status = blobs_.backing(id, pages, host_memory);
-    if (status != Status::ok) return Status::invalid_parameter;
-    if (host_memory == nullptr) return mirror_guest(id, pages);
-    int descriptor = host_.host_memory_descriptor(host_memory);
-    if (descriptor < 0) return Status::not_supported;
-    const HostBlobMessage message(id, pages.length());
-    status = message.encode(body_, sizeof body_);
-    if (status == Status::ok)
-        status = link_.post(RendererMessageHeader::Kind::host_blob, body_, HostBlobMessage::encoded_size, &descriptor, 1u);
-    host_.close_descriptor(descriptor);
-    return status;
+    if (blobs_.backing(id, pages) != Status::ok) return Status::invalid_parameter;
+    return mirror_guest(id, pages);
 }
 
 /* Each of the blob's runs is a host pointer into guest RAM; the renderer
@@ -514,13 +542,6 @@ bool RendererContextPlane::map_frame(const uint8_t *, const SurfacePoint &, uint
 void RendererContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &)
 {
     AV_SCOPE("RendererContextPlane::unmap_frame");
-}
-
-/* The renderer reads no frames here, so it writes none either. */
-bool RendererContextPlane::write_frame(const uint8_t *, const SurfacePoint &, uint32_t, const FrameDestination &)
-{
-    AV_SCOPE("RendererContextPlane::write_frame");
-    return false;
 }
 
 /* The surfaces live in the renderer's process, whose descriptors nothing here

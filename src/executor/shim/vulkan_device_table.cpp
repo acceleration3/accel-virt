@@ -8,7 +8,7 @@ namespace av {
 
 VulkanDeviceTable::VulkanDeviceTable()
     : physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), memory_{}, format_properties_(nullptr),
-      create_image_(nullptr), destroy_image_(nullptr), requirements_(nullptr), allocate_(nullptr), free_(nullptr),
+      create_image_(nullptr), destroy_image_(nullptr), requirements_(nullptr), allocate_(nullptr), free_(nullptr), map_(nullptr),
       bind_(nullptr), layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
       import_semaphore_(nullptr), semaphore_fd_(nullptr), wait_semaphores_(nullptr), create_pool_(nullptr),
       destroy_pool_(nullptr), allocate_buffers_(nullptr), begin_(nullptr), end_(nullptr), reset_(nullptr),
@@ -34,6 +34,7 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     requirements_ = reinterpret_cast<PFN_vkGetImageMemoryRequirements>(entry("vkGetImageMemoryRequirements"));
     allocate_ = reinterpret_cast<PFN_vkAllocateMemory>(entry("vkAllocateMemory"));
     free_ = reinterpret_cast<PFN_vkFreeMemory>(entry("vkFreeMemory"));
+    map_ = reinterpret_cast<PFN_vkMapMemory>(entry("vkMapMemory"));
     bind_ = reinterpret_cast<PFN_vkBindImageMemory>(entry("vkBindImageMemory"));
     layout_ = reinterpret_cast<PFN_vkGetImageSubresourceLayout>(entry("vkGetImageSubresourceLayout"));
     memory_fd_ = reinterpret_cast<PFN_vkGetMemoryFdKHR>(entry("vkGetMemoryFdKHR"));
@@ -136,6 +137,41 @@ uint32_t VulkanDeviceTable::memory_type(uint32_t allowed) const
     for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++)
         if ((allowed & (1u << type)) != 0u) return type;
     return VK_MAX_MEMORY_TYPES;
+}
+
+uint32_t VulkanDeviceTable::memory_type_count() const
+{
+    AV_SCOPE("VulkanDeviceTable::memory_type_count");
+    return loaded() ? memory_.memoryTypeCount : 0u;
+}
+
+VkMemoryPropertyFlags VulkanDeviceTable::memory_flags(uint32_t type) const
+{
+    AV_SCOPE("VulkanDeviceTable::memory_flags");
+    return type < memory_.memoryTypeCount ? memory_.memoryTypes[type].propertyFlags : 0u;
+}
+
+bool VulkanDeviceTable::allocate_exportable(VkDeviceSize size, uint32_t type, VkDeviceMemory &memory) const
+{
+    AV_SCOPE("VulkanDeviceTable::allocate_exportable");
+    memory = VK_NULL_HANDLE;
+    if (!loaded()) return false;
+    const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
+                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    const VkMemoryAllocateInfo       info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &exported, size, type};
+    if (allocate_(device_, &info, nullptr, &memory) == VK_SUCCESS) return true;
+    memory = VK_NULL_HANDLE;
+    return false;
+}
+
+bool VulkanDeviceTable::map_memory(VkDeviceMemory memory, void *&pointer) const
+{
+    AV_SCOPE("VulkanDeviceTable::map_memory");
+    pointer = nullptr;
+    if (!loaded() || map_ == nullptr || memory == VK_NULL_HANDLE) return false;
+    if (map_(device_, memory, 0u, VK_WHOLE_SIZE, 0u, &pointer) == VK_SUCCESS) return true;
+    pointer = nullptr;
+    return false;
 }
 
 bool VulkanDeviceTable::create_image(const VkImageCreateInfo &info, VkImage &image) const

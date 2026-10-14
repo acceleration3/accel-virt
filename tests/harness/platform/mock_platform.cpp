@@ -418,8 +418,8 @@ void MockPlatform::fail_frame_map_at(std::uint32_t nth)
     frame_fail_at_ = nth == 0u ? 0u : frame_map_sequence_ + nth;
 }
 
-Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes, std::uint64_t &view,
-                                    void *&mapping)
+Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes, PageCaching caching,
+                                    std::uint64_t &view, void *&mapping)
 {
     view = 0u;
     mapping = nullptr;
@@ -435,7 +435,7 @@ Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes,
     for (ProcessView &slot : process_views_) {
         if (slot.live) continue;
         const std::uint64_t address = backed != nullptr ? reinterpret_cast<std::uintptr_t>(backed) : next_process_view_;
-        slot = ProcessView{physical, bytes, address, true, false};
+        slot = ProcessView{physical, bytes, address, true, false, caching};
         if (backed == nullptr) next_process_view_ += (bytes + 0xFFFu) & ~std::uint64_t{0xFFFu};
         view = slot.view;
         mapping = &slot;
@@ -471,7 +471,7 @@ Status MockPlatform::map_owned_to_process(void *pages, bool read_only, std::uint
     for (ProcessView &slot : process_views_) {
         if (slot.live) continue;
         slot = ProcessView{owned->physical, owned->bytes, reinterpret_cast<std::uintptr_t>(owned->block), true,
-                           read_only};
+                           read_only, PageCaching::write_back};
         view = slot.view;
         mapping = &slot;
         return Status::ok;
@@ -497,6 +497,14 @@ std::uint32_t MockPlatform::process_mappings() const
     std::uint32_t live = 0u;
     for (const ProcessView &slot : process_views_) live += slot.live ? 1u : 0u;
     return live;
+}
+
+std::uint32_t MockPlatform::write_combined_process_mappings() const
+{
+    std::uint32_t count = 0u;
+    for (const ProcessView &slot : process_views_)
+        count += slot.live && slot.caching == PageCaching::write_combined ? 1u : 0u;
+    return count;
 }
 
 std::uint32_t MockPlatform::read_only_process_mappings() const

@@ -38,7 +38,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from d3d11_report import cell, compare, guest_shell, metrics, png, read_frame, verdict, write_summary  # noqa: E402
+from d3d11_report import cell, compare, guest_shell, host_run, metrics, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\av\\samples12"
@@ -175,9 +175,8 @@ def run_host(args, out):
     shutil.rmtree(out / "host", ignore_errors=True)
     (out / "host").mkdir(parents=True)
     environment = dict(os.environ, AV_D3D_PATH=str(args.d3d_runtime))
-    done = subprocess.run([str(HOST_EXE)] + sample_arguments(args, str(out / "host"), str(out / "shaders")),
-                          capture_output=True, text=True, env=environment, timeout=1800)
-    (out / "host.log").write_text(done.stdout + done.stderr)
+    (out / "host.log").write_text(host_run([str(HOST_EXE)] + sample_arguments(args, str(out / "host"),
+                                                                           str(out / "shaders")), environment))
 
 
 def report(args, out):

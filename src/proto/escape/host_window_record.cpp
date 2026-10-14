@@ -6,13 +6,15 @@
 
 namespace av {
 
-HostWindowRecord::HostWindowRecord() : operation_(0u), resource_id_(0u), bytes_(0u), address_(0u)
+HostWindowRecord::HostWindowRecord() : operation_(0u), resource_id_(0u), memory_(0u), bytes_(0u), address_(0u)
 {
     AV_SCOPE("HostWindowRecord::HostWindowRecord");
 }
 
-HostWindowRecord::HostWindowRecord(Operation operation, uint64_t bytes, uint32_t resource_id)
-    : operation_(static_cast<uint16_t>(operation)), resource_id_(resource_id), bytes_(bytes), address_(0u)
+HostWindowRecord::HostWindowRecord(Operation operation, uint64_t bytes, uint32_t resource_id,
+                                   HostMemoryRequest memory)
+    : operation_(static_cast<uint16_t>(operation)), resource_id_(resource_id), memory_(memory.encoded()),
+      bytes_(bytes), address_(0u)
 {
     AV_SCOPE("HostWindowRecord::HostWindowRecord");
 }
@@ -33,6 +35,12 @@ uint64_t HostWindowRecord::bytes() const
 {
     AV_SCOPE("HostWindowRecord::bytes");
     return bytes_;
+}
+
+HostMemoryRequest HostWindowRecord::memory() const
+{
+    AV_SCOPE("HostWindowRecord::memory");
+    return HostMemoryRequest(memory_);
 }
 
 uint64_t HostWindowRecord::address() const
@@ -59,20 +67,22 @@ Status HostWindowRecord::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u16(version);
     writer.write_u16(operation_);
     writer.write_u32(resource_id_);
-    writer.write_u32(0u);
+    writer.write_u32(memory_);
     writer.write_u64(bytes_);
     writer.write_u64(address_);
     return writer.status();
 }
 
-/* An open names the bytes and leaves the answer's fields empty; a close names
- * a resource and nothing else. */
+/* An open names the bytes and the memory and leaves the answer's fields
+ * empty; a close names a resource and nothing else. */
 bool HostWindowRecord::is_request() const
 {
     AV_SCOPE("HostWindowRecord::is_request");
     if (address_ != 0u) return false;
-    if (operation_ == static_cast<uint16_t>(Operation::open)) return bytes_ != 0u && resource_id_ == 0u;
-    return operation_ == static_cast<uint16_t>(Operation::close) && resource_id_ != 0u && bytes_ == 0u;
+    if (operation_ == static_cast<uint16_t>(Operation::open))
+        return bytes_ != 0u && resource_id_ == 0u && memory().valid();
+    return operation_ == static_cast<uint16_t>(Operation::close) && resource_id_ != 0u && bytes_ == 0u &&
+           memory_ == 0u;
 }
 
 Status HostWindowRecord::read(const uint8_t *bytes, size_t length)
@@ -84,7 +94,7 @@ Status HostWindowRecord::read(const uint8_t *bytes, size_t length)
     const uint16_t found_version = reader.read_u16();
     operation_ = reader.read_u16();
     resource_id_ = reader.read_u32();
-    reader.expect_zero(4u);
+    memory_ = reader.read_u32();
     bytes_ = reader.read_u64();
     address_ = reader.read_u64();
     if (reader.status() != Status::ok) return reader.status();
@@ -103,14 +113,14 @@ Status HostWindowRecord::decode(const uint8_t *bytes, size_t length)
 }
 
 /* The kernel owns the resource, the granted size and the address; the
- * operation must be the request's own. */
+ * operation and the memory must be the request's own. */
 Status HostWindowRecord::accept_answer(const uint8_t *bytes, size_t length)
 {
     AV_SCOPE("HostWindowRecord::accept_answer");
     HostWindowRecord answer;
     const Status     read_back = answer.read(bytes, length);
     if (read_back != Status::ok) return read_back;
-    if (!is_request() || answer.operation_ != operation_) return Status::malformed;
+    if (!is_request() || answer.operation_ != operation_ || answer.memory_ != memory_) return Status::malformed;
     const bool answered = opens() ? answer.resource_id_ != 0u && answer.bytes_ >= bytes_ && answer.address_ != 0u
                                   : answer.resource_id_ == resource_id_ && answer.bytes_ == 0u && answer.address_ == 0u;
     if (!answered) return Status::malformed;

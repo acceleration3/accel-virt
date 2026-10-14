@@ -107,16 +107,16 @@ Status AvRequestWriter::guest_blob_pages(uint32_t resource_id, const GuestPageLi
     return writer.status();
 }
 
-Status AvRequestWriter::host_blob(uint32_t resource_id, uint64_t size)
+Status AvRequestWriter::host_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory, uint64_t size)
 {
     AV_SCOPE("AvRequestWriter::host_blob");
     WireWriter writer(bytes_, capacity_);
-    if (!begin(writer, resource_create_blob, 0u, host_blob_size)) return Status::too_large;
+    if (!begin(writer, resource_create_blob, context_id, host_blob_size)) return Status::too_large;
     writer.write_u32(resource_id);
     writer.write_u32(blob_memory_host3d);
     writer.write_u32(blob_flag_mappable);
     writer.write_u32(0u);   /* no memory entries: the memory is the host's */
-    writer.write_u64(0u);
+    writer.write_u64(memory.encoded());
     writer.write_u64(size);
     return Status::ok;
 }

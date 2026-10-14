@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/gpu_clock_hold.hpp"
+#include "executor/host_memory_source.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/session_backend.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -13,7 +14,7 @@
 namespace av {
 
 ContextSession::ContextSession()
-    : backend_(nullptr), clocks_(nullptr), arena_(nullptr, 0u), imports_(), starved_(0u), faulted_(false),
+    : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), arena_(nullptr, 0u), imports_(), starved_(0u), faulted_(false),
       sink_(stderr), lines_(sink_, "virtio-gpu-av: executor: ")
 {
     AV_SCOPE("ContextSession::ContextSession");
@@ -42,10 +43,12 @@ void ContextSession::release()
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) {
         backend_->abandon(*blob);
         (void)imports_.drop(blob->id());
-        blob->give_back();
+        source_->release(*blob->give_back());
     }
     backend_ = nullptr;
     clocks_ = nullptr;
+    source_ = nullptr;
+    domain_ = 0u;
     /* The block goes back to the library, so the slot holds no pointer into
      * memory the next context will be given. */
     arena_.attach(nullptr, 0u);
@@ -91,6 +94,13 @@ void ContextSession::hold_clocks(GpuClockHold &clocks)
     clocks_ = &clocks;
 }
 
+void ContextSession::draw_from(HostMemorySource &source, uint32_t domain)
+{
+    AV_SCOPE("ContextSession::draw_from");
+    source_ = &source;
+    domain_ = domain;
+}
+
 uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &answer)
 {
@@ -126,21 +136,26 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
     return AV_EXECUTED;
 }
 
-uint32_t ContextSession::import_blob(uint64_t blob_id, const AvBlobHandle &handle)
+uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key)
 {
     AV_SCOPE("ContextSession::import_blob");
-    if (backend_ == nullptr || faulted_) return AV_UNDECODABLE;
+    if (backend_ == nullptr || faulted_ || source_ == nullptr) return AV_UNDECODABLE;
+    SourceMemory *const memory = source_->acquire(domain_, memory_key);
+    if (memory == nullptr) {
+        lines_.note("an import of memory the source has not got, key", memory_key);
+        return AV_UNDECODABLE;
+    }
     ImportedBlob *taken = nullptr;
-    if (imports_.take(blob_id, handle, taken) != Status::ok) {
+    if (imports_.take(blob_id, *memory, taken) != Status::ok) {
+        source_->release(*memory);
         lines_.note("a blob the import table would not take, id", blob_id);
         return AV_UNDECODABLE;
     }
     if (!backend_->adopt(*taken)) {
-        /* An API that cannot take this kind is not a fault: the device is told
-         * no and the guest is copied through instead. The slot goes back so a
-         * later handle of a kind it can take still fits. */
+        /* An API that will not take this memory is not a fault: the device is
+         * told no and the guest copies instead. */
         (void)imports_.drop(blob_id);
-        taken->give_back();
+        source_->release(*taken->give_back());
         return AV_UNDECODABLE;
     }
     return AV_EXECUTED;
@@ -158,7 +173,7 @@ void ContextSession::release_blob(uint64_t blob_id)
     ImportedBlob *const blob = imports_.drop(blob_id);
     if (blob == nullptr) return;
     backend_->abandon(*blob);
-    blob->give_back();
+    source_->release(*blob->give_back());
 }
 
 uint64_t ContextSession::imported_handle(uint64_t blob_id)

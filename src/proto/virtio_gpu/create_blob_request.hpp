@@ -1,7 +1,9 @@
 /* The fixed part of a virtio-gpu RESOURCE_CREATE_BLOB request (virtio 1.2
- * 5.7.6.8): the resource, its memory kind and flags, how many memory entries
- * follow, the context object it names, and its size. The entries follow at
- * `fixed_size`, `entry_size` bytes each. */
+ * 5.7.6.8): the context it is made for (the header's ctx_id), the resource,
+ * its memory kind and flags, how many memory entries follow, the context
+ * object it names, and its size. The entries follow at `fixed_size`,
+ * `entry_size` bytes each. A host blob's context object is the
+ * HostMemoryRequest it is made of (docs/host-memory.md). */
 #ifndef AV_CREATE_BLOB_REQUEST_HPP
 #define AV_CREATE_BLOB_REQUEST_HPP
 
@@ -28,6 +30,7 @@ public:
 
     /* From the start of the request; malformed when shorter than fixed_size. */
     [[nodiscard]] Status decode(WireReader &reader);
+    uint32_t             context_id() const;
     uint32_t             resource_id() const;
     uint32_t             memory() const;
     uint32_t             flags() const;
@@ -36,8 +39,10 @@ public:
     uint64_t             size() const;
 
 private:
-    static constexpr size_t header_size = 24u;
+    static constexpr size_t header_before_context = 16u;
+    static constexpr size_t header_after_context = 4u;
 
+    uint32_t context_id_;
     uint32_t resource_id_;
     uint32_t memory_;
     uint32_t flags_;

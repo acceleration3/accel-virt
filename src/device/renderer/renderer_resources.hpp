@@ -19,8 +19,6 @@ public:
     [[nodiscard]] virtual Status map_region(int descriptor, uint64_t size, void *&base) = 0;
     virtual void                 unmap_region(void *base, uint64_t size) = 0;
     virtual void                 close_descriptor(int descriptor) = 0;
-    /* The memfd the next host blob is made over, which the resources close. */
-    virtual void                 offer_host_memory(int descriptor) = 0;
     /* The guest notifiers, one per fence line, -1 for a line with none; the
      * resources close them when they are replaced or dropped. */
     virtual void                 take_interrupt_lines(const int *descriptors, uint32_t count) = 0;

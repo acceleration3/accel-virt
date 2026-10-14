@@ -33,7 +33,8 @@ public:
     void     unmap_frame(uint8_t *view) override;
     uint8_t *map_pages(const GuestPageList &pages, void *&mapping) override;
     void     unmap_pages(uint8_t *view, void *mapping) override;
-    Status   map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping) override;
+    Status   map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching, uint64_t &view,
+                            void *&mapping) override;
     Status   map_pages_to_process(void *pages, uint64_t &view, void *&mapping) override;
     Status   map_pages_to_process_read_only(void *pages, uint64_t &view, void *&mapping) override;
     void     unmap_from_process(void *mapping) override;
@@ -114,7 +115,7 @@ private:
     /* `mdl`, whose pages its caller wrote and marked locked, mapped into the
      * calling process; the mapping owns the MDL from then on, and frees it
      * whatever the answer. */
-    Status map_mdl_to_process(PMDL mdl, uint64_t bytes, uint64_t &view, void *&mapping);
+    Status map_mdl_to_process(PMDL mdl, uint64_t bytes, MEMORY_CACHING_TYPE caching, uint64_t &view, void *&mapping);
 
     /* ZwSetValueKey on the device's driver key, opened for the one write. */
     Status write_driver_value(void *physical_device_object, const char *name, ULONG type, const void *bytes,

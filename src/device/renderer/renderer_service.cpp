@@ -13,7 +13,9 @@
 #include "proto/renderer/context_message.hpp"
 #include "proto/renderer/export_image_message.hpp"
 #include "proto/renderer/hello_message.hpp"
-#include "proto/renderer/host_blob_message.hpp"
+#include "proto/renderer/allocate_memory_message.hpp"
+#include "proto/renderer/allocated_memory_message.hpp"
+#include "proto/renderer/free_memory_message.hpp"
 #include "proto/renderer/interrupt_lines_message.hpp"
 #include "proto/renderer/ready_message.hpp"
 #include "proto/renderer/region_message.hpp"
@@ -34,8 +36,8 @@ constexpr uint64_t largest_entry = 0xFFFFFFFFu;
 RendererService::RendererService(Host &host, RendererResources &resources, GuestMemoryTable &memory,
                                  DoorbellOffers &doorbells)
     : host_(host), resources_(resources), memory_(memory), doorbells_(doorbells), recorder_(host), blobs_(host),
-      interrupts_(host), plane_(host, blobs_, interrupts_, recorder_), capset_(), ready_(false), sent_{}, extents_{},
-      entries_{}
+      owners_(host), interrupts_(host), plane_(host, blobs_, owners_, interrupts_, recorder_), capset_(),
+      ready_(false), answered_memory_(-1), sent_{}, extents_{}, entries_{}
 {
     AV_SCOPE("RendererService::RendererService");
     for (AvExportedImage &sent : sent_) sent.fd = -1;
@@ -45,6 +47,7 @@ RendererService::~RendererService()
 {
     AV_SCOPE("RendererService::~RendererService");
     shut_down();
+    close_answered_memory();
 }
 
 Status RendererService::receive(const uint8_t *datagram, size_t length, const int *descriptors, uint32_t count,
@@ -54,6 +57,8 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     host_.require_main_loop("RendererService::receive");
     answer_length = 0u;
     answer_descriptor = -1;
+    /* The memory answered last time has been sent by now. */
+    close_answered_memory();
     RendererMessageHeader header;
     if (datagram == nullptr || header.decode(datagram, length) != Status::ok) {
         close_all(descriptors, count);
@@ -62,11 +67,11 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     const uint8_t *const body = datagram + RendererMessageHeader::encoded_size;
     const uint32_t       body_length = header.body_length();
     using Kind = RendererMessageHeader::Kind;
-    /* Only region, host_blob, bind_context and interrupt_lines carry
-     * descriptors; any that came with another kind are closed here, whatever
-     * the message turns out to be. */
-    const bool takes_descriptors = header.kind() == Kind::region || header.kind() == Kind::host_blob ||
-                                   header.kind() == Kind::bind_context || header.kind() == Kind::interrupt_lines;
+    /* Only region, bind_context and interrupt_lines carry descriptors; any
+     * that came with another kind are closed here, whatever the message turns
+     * out to be. */
+    const bool takes_descriptors = header.kind() == Kind::region || header.kind() == Kind::bind_context ||
+                                   header.kind() == Kind::interrupt_lines;
     if (!takes_descriptors) close_all(descriptors, count);
     if (header.kind() == Kind::hello) return hello(header, body, count, answer, capacity, answer_length);
     /* Nothing but a hello is taken before the executor is loaded. */
@@ -79,7 +84,9 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     switch (header.kind()) {
     case Kind::region: return region(body, body_length, descriptors, count);
     case Kind::guest_blob: return guest_blob(body, body_length, count);
-    case Kind::host_blob: return host_blob(body, body_length, descriptors, count);
+    case Kind::allocate_memory:
+        return allocate_memory(header, body, count, answer, capacity, answer_length, answer_descriptor);
+    case Kind::free_memory: return free_memory(body, body_length, count);
     case Kind::blob_retired: return blob_retired(body, body_length, count);
     case Kind::shared_released: return shared_released(body, body_length, count);
     case Kind::interrupt_lines: return interrupt_lines(body, body_length, descriptors, count);
@@ -112,17 +119,13 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     const Status loaded = resources_.load_executor(hello.executor_path(), hello.executor_path_length(), ops);
     if (loaded != Status::ok) return loaded;
     if (plane_.accept(ops) != Status::ok || ops == nullptr) return Status::not_supported;
-    if (blobs_.initialize() == Status::no_memory || interrupts_.initialize() == Status::no_memory ||
-        plane_.initialize() == Status::no_memory)
+    if (blobs_.initialize() == Status::no_memory || owners_.initialize() == Status::no_memory ||
+        interrupts_.initialize() == Status::no_memory || plane_.initialize() == Status::no_memory)
         return Status::no_memory;
     /* The device's domain is opened here, where the library runs. */
     static_cast<void>(plane_.start(hello.gpu_uuid(), capset_));
-    uint32_t import_kinds[ReadyMessage::lanes] = {};
-    const uint32_t sub_apis = plane_.sub_apis() & ((1u << ReadyMessage::lanes) - 1u);
-    for (uint32_t lane = 0u; lane < ReadyMessage::lanes; lane++)
-        if ((sub_apis & (1u << lane)) != 0u)
-            import_kinds[lane] = plane_.import_kinds(static_cast<SubApi>(1u << lane), hello.gpu_uuid());
-    const ReadyMessage ready(HelloMessage::protocol_version, ops->abi_version, sub_apis, import_kinds);
+    const uint32_t     sub_apis = plane_.sub_apis() & ((1u << ReadyMessage::lanes) - 1u);
+    const ReadyMessage ready(HelloMessage::protocol_version, ops->abi_version, sub_apis);
     const RendererMessageHeader out(RendererMessageHeader::Kind::ready, ReadyMessage::encoded_size,
                                     header.sequence());
     if (capacity < RendererMessageHeader::encoded_size + ReadyMessage::encoded_size ||
@@ -178,16 +181,59 @@ Status RendererService::guest_blob(const uint8_t *body, uint32_t length, uint32_
     return blobs_.create_guest(message.blob(), message.size(), request, 0u, message.count());
 }
 
-Status RendererService::host_blob(const uint8_t *body, uint32_t length, const int *descriptors, uint32_t count)
+/* The memory is allocated where the contexts that import it run, and its
+ * owner kept beside it; the dma-buf goes back with the answer for QEMU to map
+ * into the BAR, and this copy of it is closed once it has been sent. */
+Status RendererService::allocate_memory(const RendererMessageHeader &header, const uint8_t *body, uint32_t count,
+                                        uint8_t *answer, size_t capacity, size_t &answer_length,
+                                        int &answer_descriptor)
 {
-    AV_SCOPE("RendererService::host_blob");
-    HostBlobMessage message;
-    if (message.decode(body, length, count) != Status::ok) {
-        close_all(descriptors, count);
-        return Status::malformed;
+    AV_SCOPE("RendererService::allocate_memory");
+    AllocateMemoryMessage request;
+    if (request.decode(body, header.body_length(), count) != Status::ok) return Status::malformed;
+    AvHostMemory           memory = {-1, 0u, 0u};
+    AllocatedMemoryMessage allocated;
+    if (plane_.allocate_memory(request.context(), request.key(), request.size(), request.request(), memory) ==
+        Status::ok) {
+        const bool kept = HostBlobId(static_cast<uint32_t>(request.key())).valid() && request.key() <= UINT32_MAX &&
+                          owners_.adopt(static_cast<uint32_t>(request.key()), request.context()) == Status::ok;
+        if (kept && memory.fd >= 0) {
+            allocated = AllocatedMemoryMessage(memory.caching, memory.size);
+            answered_memory_ = memory.fd;
+            answer_descriptor = memory.fd;
+        } else {
+            if (memory.fd >= 0) resources_.close_descriptor(memory.fd);
+            plane_.free_memory(request.key());
+        }
     }
-    resources_.offer_host_memory(descriptors[0]);
-    return blobs_.create_host(message.blob(), message.size());
+    const RendererMessageHeader out(RendererMessageHeader::Kind::allocated_memory,
+                                    AllocatedMemoryMessage::encoded_size, header.sequence());
+    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + AllocatedMemoryMessage::encoded_size ||
+        out.encode(answer, capacity) != Status::ok ||
+        allocated.encode(answer + RendererMessageHeader::encoded_size,
+                         capacity - RendererMessageHeader::encoded_size) != Status::ok) {
+        answer_descriptor = -1;
+        return Status::too_large;
+    }
+    answer_length = RendererMessageHeader::encoded_size + AllocatedMemoryMessage::encoded_size;
+    return Status::ok;
+}
+
+Status RendererService::free_memory(const uint8_t *body, uint32_t length, uint32_t count)
+{
+    AV_SCOPE("RendererService::free_memory");
+    FreeMemoryMessage message;
+    if (message.decode(body, length, count) != Status::ok) return Status::malformed;
+    if (message.key() <= UINT32_MAX) owners_.forget(static_cast<uint32_t>(message.key()));
+    plane_.free_memory(message.key());
+    return Status::ok;
+}
+
+void RendererService::close_answered_memory()
+{
+    AV_SCOPE("RendererService::close_answered_memory");
+    if (answered_memory_ >= 0) resources_.close_descriptor(answered_memory_);
+    answered_memory_ = -1;
 }
 
 Status RendererService::shared_released(const uint8_t *body, uint32_t length, uint32_t count)
@@ -322,6 +368,7 @@ void RendererService::shut_down()
     interrupts_.disconnect();
     resources_.drop_interrupt_lines();
     blobs_.release_all();
+    owners_.forget_all();
     int left = -1;
     while (doorbells_.withdraw(left) == Status::ok) resources_.close_descriptor(left);
 }

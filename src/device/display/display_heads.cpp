@@ -9,7 +9,7 @@ namespace av {
 
 DisplayHeads::DisplayHeads(Host &host, BlobTable &blobs)
     : host_(host), blobs_(blobs), display_(Display::unasked), said_no_display_(false),
-      said_no_descriptor_(false), said_showing_(false)
+      said_showing_(false)
 {
     AV_SCOPE("DisplayHeads::DisplayHeads");
 }
@@ -57,13 +57,9 @@ Status DisplayHeads::show(uint32_t head, uint32_t blob, const ScanoutFramebuffer
     AV_SCOPE("DisplayHeads::show");
     host_.require_main_loop("DisplayHeads::show");
     if (head >= max_heads) return Status::invalid_parameter;
-    if (!takes_dmabuf() || !host_.display_takes_dmabuf(head)) {
-        say_once(said_no_display_, "virtio-gpu-av: this display shows no dma-buf on the head asked for");
-        return Status::not_supported;
-    }
     const Status shown = binding(head).show(blob, framebuffer);
     if (shown == Status::not_supported)
-        say_once(said_no_descriptor_, "virtio-gpu-av: this host makes no dma-buf over a blob's memory");
+        say_once(said_no_display_, "virtio-gpu-av: this display has no head to show a blob on");
     /* The first frame a head shows, once: it is the moment the guest stopped
      * copying, and a run that never reaches it says nothing at all. */
     if (shown == Status::ok)

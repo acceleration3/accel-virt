@@ -1,7 +1,6 @@
 #include "executor/vulkan/importable_types.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/abi/av_executor.h"
 
 namespace av {
 
@@ -12,23 +11,16 @@ constexpr VkMemoryPropertyFlags host_only = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
 
 }  // namespace
 
-ImportableTypes::ImportableTypes() : physical_(0u), mask_(0u), kind_(0u)
+ImportableTypes::ImportableTypes() : physical_(0u), mask_(0u)
 {
     AV_SCOPE("ImportableTypes::ImportableTypes");
 }
 
-void ImportableTypes::learn(uint64_t physical, uint32_t by_dmabuf, uint32_t by_pointer)
+void ImportableTypes::learn(uint64_t physical, uint32_t mappable)
 {
     AV_SCOPE("ImportableTypes::learn");
     physical_ = physical;
-    mask_ = by_dmabuf != 0u ? by_dmabuf : by_pointer;
-    kind_ = by_dmabuf != 0u ? AV_BLOB_DMA_BUF : AV_BLOB_HOST_POINTER;
-}
-
-uint32_t ImportableTypes::kind() const
-{
-    AV_SCOPE("ImportableTypes::kind");
-    return physical_ != 0u ? kind_ : 0u;
+    mask_ = physical != 0u ? mappable : 0u;
 }
 
 bool ImportableTypes::known_for(uint64_t physical) const
@@ -53,8 +45,7 @@ void ImportableTypes::restrict(VkPhysicalDeviceMemoryProperties &properties) con
 bool ImportableTypes::invariants_hold() const
 {
     AV_SCOPE("ImportableTypes::invariants_hold");
-    if (physical_ == 0u) return mask_ == 0u;
-    return kind_ == AV_BLOB_DMA_BUF || kind_ == AV_BLOB_HOST_POINTER;
+    return physical_ != 0u || mask_ == 0u;
 }
 
 }  // namespace av

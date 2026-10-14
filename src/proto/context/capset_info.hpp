@@ -20,11 +20,9 @@ public:
     static constexpr uint32_t capset_id    = 0x72u;
     static constexpr size_t   encoded_size = 128u;
     static constexpr uint64_t feature_host_visible_memory = 1u;
-    /* Feature 039's probes, each set only where its probe passed on this host:
-     * memory the host GPU exports that reaches the guest through the hostmem
-     * region, and guest pages the host GPU addresses directly. */
-    static constexpr uint64_t feature_gpu_exported_memory = 2u;
-    static constexpr uint64_t feature_guest_memory_import = 4u;
+    /* Bits 2 and 4 were feature 039's probes of exporting host GPU memory
+     * and importing guest pages; every host-visible byte is host GPU memory
+     * now (docs/host-memory.md), so neither is a choice. */
     /* The host's display can show a dma-buf, so the guest may scan a blob out
      * instead of transferring it (feature 058). Decided when the guest first
      * reads the capset, not at realize: QEMU registers its display backends

@@ -1,6 +1,7 @@
 #include "executor/d3d/d3d12_arena_heaps.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -29,7 +30,7 @@ bool D3d12ArenaHeaps::add(D3d12HostDevice &device, GuestRegion &region, uint32_t
     AV_SCOPE("D3d12ArenaHeaps::add");
     if (count_ == max_heaps || index_of(id) != none || region.at(base, size) == nullptr) return false;
     if (heap_ == nullptr) {
-        heap_ = device.import_dmabuf_heap(region.at(0u, region.length()), region.descriptor(), region.length());
+        heap_ = device.import_dmabuf_heap(region.at(0u, region.length()), region.memory()->share(), region.length());
         if (heap_ == nullptr) return false;
     }
     ranges_[count_++] = Range{id, base, size};

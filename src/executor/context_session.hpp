@@ -16,11 +16,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct AvBlobHandle;
-
 namespace av {
 
 class GpuClockHold;
+class HostMemorySource;
 class SessionBackend;
 
 class ContextSession {
@@ -51,6 +50,9 @@ public:
     bool                 faulted() const;
     /* The clocks of the GPU this session runs on, told of every batch. */
     void                 hold_clocks(GpuClockHold &clocks);
+    /* What this session imports from: its GPU's memory source, under its
+     * device's domain (docs/host-memory.md). */
+    void                 draw_from(HostMemorySource &source, uint32_t domain);
 
     /* Runs one command and answers one of the ABI's four results. `reply` may
      * be null with a capacity of zero, which is what the device passes for
@@ -66,10 +68,11 @@ public:
     uint32_t execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                      size_t reply_capacity, size_t &answer);
 
-    /* Makes `blob_id` usable by this session's commands. AV_EXECUTED, or
-     * AV_UNDECODABLE for a handle the ABI refuses, an id already imported, a
-     * table that is full, or an API that cannot take this kind. */
-    uint32_t import_blob(uint64_t blob_id, const AvBlobHandle &handle);
+    /* Makes the memory under `memory_key` usable by this session's commands
+     * as the import `blob_id`. AV_EXECUTED, or AV_UNDECODABLE for a key with
+     * no memory, an id already imported, a table that is full, or an API
+     * that will not take the memory. */
+    uint32_t import_blob(uint64_t blob_id, uint64_t memory_key);
     /* Drops one. Nothing for an id that was never imported, because the device
      * may release one whose import failed. */
     void     release_blob(uint64_t blob_id);
@@ -92,6 +95,8 @@ private:
 
     SessionBackend *backend_;
     GpuClockHold   *clocks_;
+    HostMemorySource *source_;
+    uint32_t        domain_;
     WireArena       arena_;
     ImportTable     imports_;
     size_t          starved_;

@@ -99,54 +99,18 @@ public:
     /* Any thread. The reserved range and every alias inside it. */
     virtual void                 release_range(void *base, uint64_t bytes) = 0;
 
-    /* Any thread. One dma-buf over `count` runs of guest RAM, in order: the
-     * guest's own pages, shared with a host GPU without pinning them as a
-     * userptr. not_supported where the host cannot make one - guest RAM with
-     * no file behind it, or no udmabuf - and the caller imports a host
-     * pointer instead.
-     *
-     * The GPU that matters here refuses a userptr whose pages are file-backed,
-     * and guest RAM is a memfd, so this is the only way its pages reach it
-     * (docs/testing.md). */
-    [[nodiscard]] virtual Status dmabuf_over_guest(void *const *runs, const uint64_t *sizes,
-                                                   uint32_t count, int &fd) = 0;
-    virtual void                 close_dmabuf(int fd) = 0;
-
-    /* Main loop. A zeroed host-visible block of `size` bytes, a page multiple:
-     * its handle, or null. `pointer` is the device's own view of it. */
-    virtual void *create_host_memory(uint64_t size, void *&pointer) = 0;
-    virtual void  destroy_host_memory(void *memory) = 0;
-    /* The size of the region host-visible blocks are placed in (the hostmem BAR). */
+    /* The size of the region host blobs are placed in (the hostmem BAR). */
     virtual uint64_t hostmem_size() = 0;
-    /* Main loop. The block becomes visible at `offset` of the hostmem region. */
-    [[nodiscard]] virtual Status place_in_hostmem(void *memory, uint64_t offset) = 0;
+    /* Main loop. The `size` bytes of the dma-buf `fd` - host GPU memory the
+     * executor allocated - visible at `offset` of the hostmem region. The
+     * descriptor stays the caller's. */
+    [[nodiscard]] virtual Status place_in_hostmem(int fd, uint64_t size, uint64_t offset) = 0;
     virtual void                 remove_from_hostmem(uint64_t offset, uint64_t size) = 0;
-    /* Main loop. `size` bytes of the hostmem region at `offset` - what the
-     * guest reads there, not what the placed block holds - so a probe can tell
-     * a mapping that carries the bytes from one that only claims to. */
-    [[nodiscard]] virtual Status read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size) = 0;
 
     /* Main loop, once, when the instance's host GPU is resolved: the glue may
      * now create what it needs on that physical device. not_supported when the
      * host cannot take it, which leaves the device unbound. */
     [[nodiscard]] virtual Status bind_gpu(uint32_t index) = 0;
-
-    /* Main loop. `size` bytes allocated on the bound host GPU and mapped into
-     * this process: its handle - which place_in_hostmem accepts - or null, with
-     * `host_error` carrying the host's own number (a VkResult, an errno, or 0
-     * when it had none to give). `pointer` is the device's view of it. */
-    [[nodiscard]] virtual void *export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error) = 0;
-    virtual void                release_gpu_memory(void *memory) = 0;
-    /* Main loop. The `size` bytes at `pointer`, a direct mapping of guest RAM,
-     * imported by the bound host GPU: its handle, or null with `host_error`,
-     * which is 0 when the host simply cannot import. `pointer` must stay mapped
-     * until the import is released. */
-    [[nodiscard]] virtual void *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) = 0;
-    virtual void                release_guest_memory(void *memory) = 0;
-    /* Main loop. `size` bytes of what the host GPU sees at `offset` of the
-     * import, which is what a probe compares against what the device wrote. */
-    [[nodiscard]] virtual Status read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer,
-                                                      uint64_t size) = 0;
 
     /* Main loop. A 4-byte store at offset 0 of doorbell page `index` signals
      * `event` without the main loop (a KVM ioeventfd) until disconnected; the
@@ -187,10 +151,10 @@ public:
      * is realized, and it is the backend that gives a console its GL context,
      * so a realize-time answer is no on every host. */
     virtual bool   display_takes_dmabuf(uint32_t head) = 0;
-    /* Main loop. Head `head` shows `frame` out of `fd`. The host duplicates
-     * the descriptor; this side goes on owning its own. not_supported when the
-     * host would not take it, having changed nothing. */
-    [[nodiscard]] virtual Status show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) = 0;
+    /* Main loop. Head `head` shows `frame` out of `blob`, the device's
+     * mapping of a pinned guest blob. not_supported when the host would not
+     * take it, having changed nothing. */
+    [[nodiscard]] virtual Status show_scanout(uint32_t head, const uint8_t *blob, const ScanoutFramebuffer &frame) = 0;
     /* Main loop. The rectangle of head `head` that changed. */
     virtual void   update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) = 0;
     /* Main loop. Head `head` shows nothing. Safe on a head showing nothing. */
@@ -217,13 +181,6 @@ public:
     /* Which region holds all `length` bytes at `pointer`, and where. */
     [[nodiscard]] virtual Status locate_guest(const void *pointer, uint64_t length, uint32_t &region,
                                               uint64_t &offset) = 0;
-    /* The memfd behind host memory create_host_memory made. */
-    virtual int                  host_memory_descriptor(void *memory) = 0;
-    /* A dma-buf over `size` bytes at `offset` of host memory create_host_memory
-     * made, through udmabuf: a host GPU that takes no host pointer over
-     * file-backed pages takes this. not_supported where the host has no
-     * udmabuf or the memory is not a sealed memfd. Any thread. */
-    [[nodiscard]] virtual Status dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) = 0;
     virtual void                 close_descriptor(int descriptor) = 0;
     /* The renderer at `path`, started with its socket as descriptor 3; the
      * device is told through av_device_renderer_lost when it dies.

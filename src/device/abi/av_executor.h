@@ -31,9 +31,11 @@ extern "C" {
  * and the guest are built together, and an older table is a build to fix
  * rather than one to serve. 16 made the library the one place a shared object
  * is known (HostShares): the device names a guest device's objects by a
- * domain it opens, and the library publishes, opens and releases them. 19
- * hands a dma-buf with the device's own host mapping of the same memory. */
-#define AV_EXECUTOR_ABI_VERSION 19u
+ * domain it opens, and the library publishes, opens and releases them. 20
+ * made the library the source of every byte the guest CPU and a host GPU
+ * share (docs/host-memory.md): the device asks it for memory and maps what it
+ * answers into the host window, and an import names that memory. */
+#define AV_EXECUTOR_ABI_VERSION 20u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -48,13 +50,11 @@ extern "C" {
 #define AV_UNDECODABLE 2u      /* the payload does not decode */
 #define AV_DEVICE_LOST 3u      /* the host API lost its device: nothing more will run */
 
-/* What a blob is, to whichever host API is about to be handed it. No single
- * identifier is zero-copy everywhere: Vulkan imports a host pointer on every
- * GPU measured, while OpenGL and OpenCL import a dma-buf and only on some, so
- * carrying one kind would concede a whole API on some hosts. A handle carries
- * either, and the device picks from what import_kinds offers. */
-#define AV_BLOB_HOST_POINTER 1u /* `pointer`, page-aligned, stays mapped */
-#define AV_BLOB_DMA_BUF 2u      /* `fd`, owned by the callee once imported */
+/* How the host maps memory allocate_memory answers, which is how the guest
+ * must map it too: one page seen through two cache types reads stale data
+ * (docs/host-memory.md). */
+#define AV_MEMORY_WRITE_BACK 1u
+#define AV_MEMORY_WRITE_COMBINED 2u
 
 /* What kind of thing a shared object is, for share_object and open_object. The
  * two fence kinds are one host semaphore either way; they differ to the guest,
@@ -63,10 +63,8 @@ extern "C" {
 #define AV_SHARED_MONITORED_FENCE 2u
 #define AV_SHARED_NATIVE_FENCE 3u
 
-/* What kind of descriptor a shared object's is, inside the library. Its own
- * vocabulary and not AV_BLOB_*, because a semaphore's descriptor is neither a
- * pointer nor a dma-buf: it is an opaque fd, which only the API that made it
- * understands. Memory may be either, and which one matters - OpenGL and
+/* What kind of descriptor a shared object's is, inside the library. A
+ * semaphore's is an opaque fd, which only the API that made it understands. Memory may be either, and which one matters - OpenGL and
  * OpenCL import only a dma-buf, while Vulkan takes both. */
 #define AV_SHARED_HANDLE_OPAQUE_FD 1u
 #define AV_SHARED_HANDLE_DMA_BUF 2u
@@ -78,25 +76,13 @@ extern "C" {
 #define AV_SHARED_CONFLICT 3u    /* the id is shared otherwise, or already held by this executor */
 #define AV_SHARED_REFUSED 4u     /* the host API will not, or the library has no room */
 
-/* There is deliberately no offset: the device hands over a handle naming
- * exactly the range the guest asked for, because OpenCL's import has no offset
- * property and an offset here would buy a capability flag per API for nothing. */
-typedef struct AvBlobHandle {
-    uint32_t kind;     /* exactly one AV_BLOB_* value */
-    /* The memory type the guest asked the import to be made as (IMPORT_BLOB,
-     * feature 045) - an index into the memory properties of the device the
-     * executor's guest made - whichever kind carries it: a dma-buf is imported
-     * into a type the same way a host pointer is. The name stays so version 2
-     * libraries keep compiling. */
-    uint32_t reserved;
-    /* AV_BLOB_HOST_POINTER: the memory. AV_BLOB_DMA_BUF: the device's own
-     * mapping of the same memory, page-aligned and mapped as long as the
-     * descriptor's memory is, or NULL - what a GPU that reads an imported
-     * dma-buf without snooping the CPU's caches imports instead. */
-    void *pointer;
-    int fd;            /* AV_BLOB_DMA_BUF; -1 otherwise */
-    uint64_t size;     /* bytes, a whole number of host pages */
-} AvBlobHandle;
+/* Host GPU memory the library allocated: a dma-buf the caller owns and maps,
+ * its size in whole host pages, and how it is mapped (AV_MEMORY_*). */
+typedef struct AvHostMemory {
+    int fd;
+    uint32_t caching;
+    uint64_t size;
+} AvHostMemory;
 
 typedef struct AvExecutor AvExecutor;
 
@@ -171,29 +157,11 @@ typedef struct AvFrameView {
     uint32_t reserved;
 } AvFrameView;
 
-/* One rectangle of a staged frame written into a surface (write_frame):
- * `width` by `height` pixels from (`source_x`, `source_y`) of the frame to
- * (`destination_x`, `destination_y`) of the surface. */
-typedef struct AvFrameRegion {
-    uint32_t source_x;
-    uint32_t source_y;
-    uint32_t destination_x;
-    uint32_t destination_y;
-    uint32_t width;
-    uint32_t height;
-} AvFrameRegion;
-
 typedef struct AvExecutorOps {
     uint32_t abi_version;
     void *opaque;
     /* Which sub-APIs create accepts. Main loop. */
     uint32_t (*sub_apis)(void *opaque);
-    /* Which AV_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names, or
-     * 0 for "copy at the boundary". On the table rather than on an executor
-     * because the capset is described during realize, before any context
-     * exists. Main loop. */
-    uint32_t (*import_kinds)(void *opaque, uint32_t sub_api, const uint8_t *gpu_uuid);
-
     /* A domain for one guest device on the GPU whose Vulkan device UUID is
      * `gpu_uuid` (16 bytes): what its contexts are made in and every call
      * below that is not an executor's names. The guest mints its shared ids
@@ -203,6 +171,18 @@ typedef struct AvExecutorOps {
     /* The device is going: every object shared in `domain` is released, as a
      * reset releases them, and the domain names nothing after. Main loop. */
     void (*close_domain)(void *opaque, uint32_t domain);
+
+    /* `size` bytes, whole host pages, of the host memory `request` names (a
+     * HostMemoryRequest's encoding: upload, readback or one Vulkan memory
+     * type) on `domain`'s GPU, kept under `key` until free_memory: 0 with
+     * *memory filled, or nonzero for a request the GPU has no memory for.
+     * The memory outlives free_memory for as long as an import holds it.
+     * Main loop. */
+    uint32_t (*allocate_memory)(void *opaque, uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
+                                AvHostMemory *memory);
+    /* The device lets go of `key`: a no-op for one it never allocated. Main
+     * loop. */
+    void (*free_memory)(void *opaque, uint32_t domain, uint64_t key);
 
     /* An executor for one context of `sub_api` in the domain `options` names,
      * made with `options` and sharing the objects of `share` (NULL: none), an
@@ -249,12 +229,12 @@ typedef struct AvExecutorOps {
      * worker. */
     void (*set_signal)(void *opaque, AvExecutor *executor, void (*signal)(void *context), void *context);
 
-    /* Makes `blob_id` usable by commands on this executor. AV_EXECUTED or
-     * AV_UNDECODABLE. On success the callee owns an AV_BLOB_DMA_BUF handle's
-     * fd and closes it; on failure the caller still owns it. A host pointer is
-     * never owned: the device keeps it mapped until release or destroy
-     * returns. Runs on the context's worker. */
-    uint32_t (*import_blob)(void *opaque, AvExecutor *executor, uint64_t blob_id, const AvBlobHandle *handle);
+    /* Makes the memory allocated under `memory_key` in this executor's domain
+     * usable by its commands, as the import `blob_id`: AV_EXECUTED, or
+     * AV_UNDECODABLE for a key with no memory or memory its API will not
+     * take. The import holds the memory until release_blob or destroy. Runs
+     * on the context's worker. */
+    uint32_t (*import_blob)(void *opaque, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key);
     /* Drops an import. A no-op for an id that was never imported; destroy
      * releases whatever is left. Runs on the context's worker. */
     void (*release_blob)(void *opaque, AvExecutor *executor, uint64_t blob_id);
@@ -330,16 +310,6 @@ typedef struct AvExecutorOps {
      * cannot compose, which a device then never offers. Main loop. */
     uint32_t (*compose_planes)(void *opaque, uint32_t domain, const AvScanoutPlane *planes, uint32_t count,
                                uint32_t width, uint32_t height, AvExportedImage *image);
-    /* The frame `point` of `surface` written by the GPU into the surface
-     * `fd` is, `bytes` long and `pitch` bytes a row - a dma-buf over guest
-     * pages, the caller's to close - region by region, and finished: no CPU
-     * reads or writes a pixel. AV_EXECUTED, the frame then let go as
-     * unmap_frame lets it go; AV_UNKNOWN where the frame is not there within
-     * `wait_ms`, a region lies outside the frame or the surface, or its API
-     * cannot write a buffer - the frame is still there for map_frame. Null in
-     * an executor that writes none. Any thread. */
-    uint32_t (*write_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms,
-                            int fd, uint64_t bytes, uint32_t pitch, const AvFrameRegion *regions, uint32_t count);
 } AvExecutorOps;
 
 typedef const AvExecutorOps *(*AvExecutorOpsFunction)(void);

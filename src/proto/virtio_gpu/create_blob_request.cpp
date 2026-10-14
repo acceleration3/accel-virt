@@ -6,7 +6,7 @@
 namespace av {
 
 CreateBlobRequest::CreateBlobRequest()
-    : resource_id_(0u), memory_(0u), flags_(0u), entries_(0u), blob_id_(0u), size_(0u)
+    : context_id_(0u), resource_id_(0u), memory_(0u), flags_(0u), entries_(0u), blob_id_(0u), size_(0u)
     {
         AV_SCOPE("CreateBlobRequest::CreateBlobRequest");
     }
@@ -15,7 +15,9 @@ Status CreateBlobRequest::decode(WireReader &reader)
 {
     AV_SCOPE("CreateBlobRequest::decode");
     if (reader.remaining() < fixed_size) return Status::malformed;
-    reader.skip(header_size);
+    reader.skip(header_before_context);
+    context_id_ = reader.read_u32();
+    reader.skip(header_after_context);
     resource_id_ = reader.read_u32();
     memory_ = reader.read_u32();
     flags_ = reader.read_u32();
@@ -23,6 +25,12 @@ Status CreateBlobRequest::decode(WireReader &reader)
     blob_id_ = reader.read_u64();
     size_ = reader.read_u64();
     return Status::ok;
+}
+
+uint32_t CreateBlobRequest::context_id() const
+{
+    AV_SCOPE("CreateBlobRequest::context_id");
+    return context_id_;
 }
 
 uint32_t CreateBlobRequest::resource_id() const

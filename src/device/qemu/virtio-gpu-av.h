@@ -74,19 +74,15 @@ struct VirtIOGPUAv {
     uint32_t gpu_count;
     AvGpuProperties gpus[VIRTIO_GPU_AV_MAX_GPUS];
     /* The Vulkan loader, kept from the catalog read at realize: the physical
-     * devices it enumerated, and the logical device on the one this instance
-     * was bound to, which the feasibility probes allocate and import through
-     * (feature 039). A host with no loader leaves every handle null and every
-     * probe refused. */
+     * devices it enumerated and the one this instance was bound to. A host
+     * with no loader leaves every handle null. */
     VkInstance instance;
     VkPhysicalDevice physical[VIRTIO_GPU_AV_MAX_GPUS];
     VkPhysicalDevice bound;
-    VkDevice gpu;
-    /* VK_EXT_external_memory_host's alignment, 0 when the device lacks it. */
-    uint64_t import_alignment;
     AvDevice *core;
-    /* The hostmem BAR's backing: private anonymous memory that blobs are
-     * placed over with MAP_FIXED, as virtio-gpu-gl does for virgl. */
+    /* The hostmem BAR's backing: private anonymous memory that the
+     * executor's dma-bufs are placed over with MAP_FIXED, as virtio-gpu-gl
+     * does for virgl (docs/host-memory.md). */
     MemoryRegion hostmem_background;
     void *hostmem_mmap;
     /* One page per context; a store to a page is an ioeventfd the core
@@ -95,9 +91,8 @@ struct VirtIOGPUAv {
     /* Queue FIRST + n carries doorbell n's fence interrupts on its vector,
      * and queue FIRST + DISPLAY_LINE the display clock's. */
     VirtQueue *fence_queues[AV_DEVICE_INTERRUPT_LINES];
-    /* The dma-buf each head is showing, which QEMU's display holds an import
-     * of until it is told otherwise; NULL for a head showing nothing. */
-    QemuDmaBuf *scanouts[VIRTIO_GPU_MAX_SCANOUTS];
+    /* Whether each head shows a display surface over a guest blob. */
+    bool scanouts[VIRTIO_GPU_MAX_SCANOUTS];
     /* A GL display's view of the executor's exported images, one per head and
      * slot, kept so the display imports each image once rather than a frame;
      * `showing` is the slot on screen, or -1 while the 2D surface is. */

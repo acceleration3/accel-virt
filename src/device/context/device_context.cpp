@@ -23,10 +23,11 @@
 
 namespace av {
 
-DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, const ExecutorLibrary &library,
+DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
+                             const ExecutorLibrary &library,
                              ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id)
     : ordering_(ordering), recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
-      imports_(host, blobs, executor_, recorder, id),
+      imports_(host, owners, executor_, recorder, id),
       executor_(host, library, shares, id), staging_(host),
       batches_(host, executor_, imports_, staging_, fences_, recorder, id),
       ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
@@ -98,7 +99,6 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
      * landing pad the worker drains. Given here, on the main loop, because
      * the executor is made on the worker and has to have it by then. */
     executor_.signals_through(signal_);
-    imports_.configure(setup.ring_resource());
     batches_.prepare(reply);
     status = worker_.connect_doorbell(setup.doorbell());
     if (status != Status::ok) return refused("doorbell", status);

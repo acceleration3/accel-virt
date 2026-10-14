@@ -142,12 +142,6 @@ StagedFrame::Reading D3d11FramePool::Frame::read(AvFrameView &view)
     return Reading::mapped;
 }
 
-bool D3d11FramePool::Frame::write(const FrameTarget &target)
-{
-    AV_SCOPE("D3d11FramePool::Frame::write");
-    return held_ != nullptr && device_->write_frame(held_, width_, height_, target);
-}
-
 void D3d11FramePool::Frame::release()
 {
     AV_SCOPE("D3d11FramePool::Frame::release");

@@ -1,8 +1,11 @@
 /* The virtio-gpu control commands the device core answers instead of the base
  * class: blob creation, mapping and unmapping, and UNREF and CREATE_2D when
- * they name a blob, whose ids share the base class's resource space. What a
- * display head shows is ScanoutCommands'. Every field is checked before memory
- * is mapped or allocated; each answer is one response. Main loop. */
+ * they name a blob, whose ids share the base class's resource space. A GUEST
+ * blob is guest pages the device reads itself; a HOST3D blob is host GPU
+ * memory, made for one context and the only kind that is mapped
+ * (docs/host-memory.md). What a display head shows is ScanoutCommands'. Every
+ * field is checked before memory is mapped or allocated; each answer is one
+ * response. Main loop. */
 #ifndef AV_BLOB_COMMANDS_HPP
 #define AV_BLOB_COMMANDS_HPP
 
@@ -14,6 +17,8 @@ namespace av {
 
 class BlobTable;
 class ContextPlane;
+class CreateBlobRequest;
+class HostBlobTable;
 class ControlRequest;
 class GpuResponse;
 class Host;
@@ -29,9 +34,10 @@ public:
         resource_unmap_blob = 0x0209u,
     };
 
-    /* `contexts` is told of every blob made and let go, for contexts that
-     * keep a copy of the table in another process. */
-    BlobCommands(Host &host, BlobTable &blobs, WireRecorder &recorder, ContextPlane &contexts);
+    /* `contexts` is told of every guest blob made and let go, for contexts
+     * that keep a copy of the table in another process. */
+    BlobCommands(Host &host, BlobTable &blobs, HostBlobTable &host_blobs, WireRecorder &recorder,
+                 ContextPlane &contexts);
     BlobCommands(const BlobCommands &) = delete;
     BlobCommands &operator=(const BlobCommands &) = delete;
 
@@ -40,12 +46,14 @@ public:
 
 private:
     static constexpr uint64_t no_context_object = 0u;
+    /* A host blob's context object is a HostMemoryRequest, 32 bits wide. */
+    static constexpr uint64_t request_mask = 0xFFFFFFFFu;
 
     /* The response for a table status. */
     uint32_t create_answer(Status status) const;
     uint32_t create(ControlRequest &request);
     uint32_t create_guest(ControlRequest &request, uint32_t id, uint32_t entries, uint64_t size);
-    uint32_t create_host(uint32_t id, uint32_t flags, uint32_t entries, uint64_t size);
+    uint32_t create_host(const CreateBlobRequest &create);
     void     map(ControlRequest &request, GpuResponse &response);
     uint32_t unmap(ControlRequest &request);
     /* Whether the request named a blob: a pinned one is refused, not released. */
@@ -55,6 +63,7 @@ private:
 
     Host         &host_;
     BlobTable    &blobs_;
+    HostBlobTable &host_blobs_;
     WireRecorder &recorder_;
     ContextPlane &contexts_;
 };

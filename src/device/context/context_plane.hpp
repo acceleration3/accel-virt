@@ -14,7 +14,6 @@
 
 namespace av {
 
-class FrameDestination;
 
 class SurfacePoint;
 
@@ -35,7 +34,15 @@ public:
      * Whatever went wrong, named for the log. */
     [[nodiscard]] virtual Status start(const uint8_t *gpu_uuid, const CapsetInfo &capset) = 0;
     virtual uint32_t             sub_apis() const = 0;
-    virtual uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const = 0;
+    /* Main loop. `size` bytes of the host memory `request` names, for
+     * context `context`'s process, kept under `key` until free_memory
+     * (docs/host-memory.md): its dma-buf, the caller's, in `memory`.
+     * no_memory when there is none to give. */
+    [[nodiscard]] virtual Status allocate_memory(uint32_t context, uint64_t key, uint64_t size, uint32_t request,
+                                                 AvHostMemory &memory) = 0;
+    /* Main loop. The memory under `key` let go; an import still holding it
+     * keeps it until the import goes. */
+    virtual void                 free_memory(uint64_t key) = 0;
 
     /* invalid_parameter for id 0, conflict for a live id, no_space when full. */
     [[nodiscard]] virtual Status create(uint32_t id) = 0;
@@ -81,11 +88,6 @@ public:
     virtual bool reads_frames() const = 0;
     virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) = 0;
     virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
-    /* Any thread: the snapshot under `frame` written by the host's GPU into
-     * `destination` and let go (ExecutorLibrary::write_frame); false where it
-     * is not, and it is still there to map. */
-    virtual bool write_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms,
-                             const FrameDestination &destination) = 0;
     /* Any thread: whether a surface the guest shared can be handed to a
      * process outside QEMU here (docs/external-export.md), and the one
      * shared as `surface` exported as its own memory, or the copies into it

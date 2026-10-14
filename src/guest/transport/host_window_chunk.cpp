@@ -35,12 +35,12 @@ Status HostWindowChunk::send(uint8_t *record, uint32_t size)
                                     size);
 }
 
-Status HostWindowChunk::open(uint64_t bytes)
+Status HostWindowChunk::open(uint64_t bytes, HostMemoryRequest memory)
 {
     AV_SCOPE("HostWindowChunk::open");
     if (resource_id_ != 0u) return Status::invalid_state;
-    if (bytes == 0u) return Status::invalid_parameter;
-    HostWindowRecord record(HostWindowRecord::Operation::open, bytes, 0u);
+    if (bytes == 0u || !memory.valid()) return Status::invalid_parameter;
+    HostWindowRecord record(HostWindowRecord::Operation::open, bytes, 0u, memory);
     uint8_t          encoded[HostWindowRecord::encoded_size] = {};
     static_cast<void>(record.encode(encoded, sizeof encoded));   /* the buffer is the encoded size */
     const Status escaped = send(encoded, sizeof encoded);
@@ -58,7 +58,7 @@ Status HostWindowChunk::release()
 {
     AV_SCOPE("HostWindowChunk::release");
     if (resource_id_ == 0u) return Status::ok;
-    HostWindowRecord close(HostWindowRecord::Operation::close, 0u, resource_id_);
+    HostWindowRecord close(HostWindowRecord::Operation::close, 0u, resource_id_, HostMemoryRequest());
     resource_id_ = 0u;
     bytes_ = 0u;
     view_ = nullptr;

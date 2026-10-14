@@ -8,7 +8,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/udmabuf.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,12 +35,6 @@ struct RendererThread {
     void       *context;
 };
 
-struct RendererMemory {
-    int      descriptor;
-    void    *pointer;
-    uint64_t size;
-};
-
 void *run_renderer_thread(void *started)
 {
     AV_SCOPE("run_renderer_thread");
@@ -66,22 +59,11 @@ void post(int descriptor)
     }
 }
 
-/* The dma-buf a udmabuf list names, or -1 where the kernel has no udmabuf or
- * refuses an item. */
-int create_udmabuf(void *list)
-{
-    AV_SCOPE("create_udmabuf");
-    const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-    const int made = device >= 0 ? ioctl(device, UDMABUF_CREATE_LIST, list) : -1;
-    if (device >= 0) close(device);
-    return made;
-}
-
 }  // namespace
 
 PosixRendererHost::PosixRendererHost(GuestMemoryTable &memory, DoorbellOffers &doorbells)
     : memory_(memory), doorbells_(doorbells), executor_(), main_loop_{}, main_loop_known_(false), wakeup_(-1),
-      posted_lock_(PTHREAD_MUTEX_INITIALIZER), posted_first_(nullptr), posted_last_(nullptr), offered_memory_(-1),
+      posted_lock_(PTHREAD_MUTEX_INITIALIZER), posted_first_(nullptr), posted_last_(nullptr),
       interrupt_lines_{}, interrupts_connected_(false)
 {
     AV_SCOPE("PosixRendererHost::PosixRendererHost");
@@ -92,7 +74,6 @@ PosixRendererHost::~PosixRendererHost()
 {
     AV_SCOPE("PosixRendererHost::~PosixRendererHost");
     drop_interrupt_lines();
-    close_offered_memory();
     while (posted_first_ != nullptr) {
         Posted *const next = posted_first_->next_;
         free(posted_first_);
@@ -169,20 +150,6 @@ Status PosixRendererHost::load_executor(const char *path, uint32_t length, const
     if (opened != Status::ok) return opened;
     ops = executor_.ops();
     return Status::ok;
-}
-
-void PosixRendererHost::offer_host_memory(int descriptor)
-{
-    AV_SCOPE("PosixRendererHost::offer_host_memory");
-    close_offered_memory();
-    offered_memory_ = descriptor;
-}
-
-void PosixRendererHost::close_offered_memory()
-{
-    AV_SCOPE("PosixRendererHost::close_offered_memory");
-    if (offered_memory_ >= 0) close(offered_memory_);
-    offered_memory_ = -1;
 }
 
 void PosixRendererHost::take_interrupt_lines(const int *descriptors, uint32_t count)
@@ -477,106 +444,13 @@ void PosixRendererHost::release_range(void *base, uint64_t bytes)
     munmap(base, bytes);
 }
 
-/* The items follow the list's header, which is what the ioctl reads. */
-Status PosixRendererHost::dmabuf_over_guest(void *const *runs, const uint64_t *sizes, uint32_t count, int &fd)
-{
-    AV_SCOPE("PosixRendererHost::dmabuf_over_guest");
-    fd = -1;
-    if (runs == nullptr || sizes == nullptr || count == 0u) return Status::invalid_parameter;
-    const size_t   bytes = sizeof(udmabuf_create_list) + sizeof(udmabuf_create_item) * count;
-    uint8_t *const request = static_cast<uint8_t *>(calloc(1u, bytes));
-    if (request == nullptr) return Status::no_memory;
-    udmabuf_create_list *const list = static_cast<udmabuf_create_list *>(static_cast<void *>(request));
-    udmabuf_create_item *const items = static_cast<udmabuf_create_item *>(static_cast<void *>(request + sizeof *list));
-    list->flags = UDMABUF_FLAGS_CLOEXEC;
-    list->count = count;
-    for (uint32_t index = 0u; index < count; index++) {
-        int      descriptor = -1;
-        uint64_t offset = 0u;
-        if (memory_.locate(runs[index], sizes[index], descriptor, offset) != Status::ok) {
-            free(request);
-            return Status::not_supported;
-        }
-        items[index].memfd = static_cast<uint32_t>(descriptor);
-        items[index].offset = offset;
-        items[index].size = sizes[index];
-    }
-    const int made = create_udmabuf(request);
-    free(request);
-    if (made < 0) return Status::not_supported;
-    fd = made;
-    return Status::ok;
-}
-
-void PosixRendererHost::close_dmabuf(int fd)
-{
-    AV_SCOPE("PosixRendererHost::close_dmabuf");
-    if (fd >= 0) close(fd);
-}
-
-/* QEMU made the memfd and placed it in the BAR; this maps the same pages. */
-void *PosixRendererHost::create_host_memory(uint64_t size, void *&pointer)
-{
-    AV_SCOPE("PosixRendererHost::create_host_memory");
-    pointer = nullptr;
-    if (offered_memory_ < 0) return nullptr;
-    RendererMemory *const made = static_cast<RendererMemory *>(calloc(1u, sizeof(RendererMemory)));
-    if (made == nullptr) return nullptr;
-    void *const mapped = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, offered_memory_, 0);
-    if (mapped == MAP_FAILED) {
-        free(made);
-        return nullptr;
-    }
-    made->descriptor = offered_memory_;
-    made->pointer = mapped;
-    made->size = size;
-    offered_memory_ = -1;
-    pointer = mapped;
-    return made;
-}
-
-/* The same memfd QEMU made and sealed, so the renderer makes the dma-buf
- * itself rather than asking QEMU for one per import. */
-Status PosixRendererHost::dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd)
-{
-    AV_SCOPE("PosixRendererHost::dmabuf_over_host_memory");
-    fd = -1;
-    const RendererMemory *const block = static_cast<const RendererMemory *>(memory);
-    if (block == nullptr || size == 0u || offset > block->size || size > block->size - offset)
-        return Status::not_supported;
-    udmabuf_create_list list = {};
-    list.flags = UDMABUF_FLAGS_CLOEXEC;
-    list.count = 1u;
-    udmabuf_create_item item = {};
-    item.memfd = static_cast<uint32_t>(block->descriptor);
-    item.offset = offset;
-    item.size = size;
-    /* The item follows the header, which is what the ioctl reads. */
-    uint8_t request[sizeof list + sizeof item] = {};
-    memcpy(request, &list, sizeof list);
-    memcpy(request + sizeof list, &item, sizeof item);
-    const int made = create_udmabuf(request);
-    if (made < 0) return Status::not_supported;
-    fd = made;
-    return Status::ok;
-}
-
-void PosixRendererHost::destroy_host_memory(void *memory)
-{
-    AV_SCOPE("PosixRendererHost::destroy_host_memory");
-    RendererMemory *const destroyed = static_cast<RendererMemory *>(memory);
-    munmap(destroyed->pointer, destroyed->size);
-    close(destroyed->descriptor);
-    free(destroyed);
-}
-
 uint64_t PosixRendererHost::hostmem_size()
 {
     AV_SCOPE("PosixRendererHost::hostmem_size");
     return 0u;
 }
 
-Status PosixRendererHost::place_in_hostmem(void *, uint64_t)
+Status PosixRendererHost::place_in_hostmem(int, uint64_t, uint64_t)
 {
     AV_SCOPE("PosixRendererHost::place_in_hostmem");
     return Status::not_supported;
@@ -587,46 +461,9 @@ void PosixRendererHost::remove_from_hostmem(uint64_t, uint64_t)
     AV_SCOPE("PosixRendererHost::remove_from_hostmem");
 }
 
-Status PosixRendererHost::read_hostmem(uint64_t, uint8_t *, uint64_t)
-{
-    AV_SCOPE("PosixRendererHost::read_hostmem");
-    return Status::not_supported;
-}
-
 Status PosixRendererHost::bind_gpu(uint32_t)
 {
     AV_SCOPE("PosixRendererHost::bind_gpu");
-    return Status::not_supported;
-}
-
-void *PosixRendererHost::export_gpu_memory(uint64_t, void *&pointer, int32_t &host_error)
-{
-    AV_SCOPE("PosixRendererHost::export_gpu_memory");
-    pointer = nullptr;
-    host_error = 0;
-    return nullptr;
-}
-
-void PosixRendererHost::release_gpu_memory(void *)
-{
-    AV_SCOPE("PosixRendererHost::release_gpu_memory");
-}
-
-void *PosixRendererHost::import_guest_memory(void *, uint64_t, int32_t &host_error)
-{
-    AV_SCOPE("PosixRendererHost::import_guest_memory");
-    host_error = 0;
-    return nullptr;
-}
-
-void PosixRendererHost::release_guest_memory(void *)
-{
-    AV_SCOPE("PosixRendererHost::release_guest_memory");
-}
-
-Status PosixRendererHost::read_imported_memory(void *, uint64_t, uint8_t *, uint64_t)
-{
-    AV_SCOPE("PosixRendererHost::read_imported_memory");
     return Status::not_supported;
 }
 
@@ -739,7 +576,7 @@ bool PosixRendererHost::display_takes_dmabuf(uint32_t)
     return false;
 }
 
-Status PosixRendererHost::show_scanout(uint32_t, int, const ScanoutFramebuffer &)
+Status PosixRendererHost::show_scanout(uint32_t, const uint8_t *, const ScanoutFramebuffer &)
 {
     AV_SCOPE("PosixRendererHost::show_scanout");
     return Status::not_supported;
@@ -790,12 +627,6 @@ Status PosixRendererHost::locate_guest(const void *, uint64_t, uint32_t &, uint6
 {
     AV_SCOPE("PosixRendererHost::locate_guest");
     return Status::not_found;
-}
-
-int PosixRendererHost::host_memory_descriptor(void *)
-{
-    AV_SCOPE("PosixRendererHost::host_memory_descriptor");
-    return -1;
 }
 
 Status PosixRendererHost::start_renderer(const char *)

@@ -25,7 +25,6 @@
 #include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
-#include "proto/resources/guest_page_list.hpp"
 #include "proto/escape/host_window_record.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -36,7 +35,7 @@ AvContextTable::AvContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, Al
                                  HostWindow &window)
     : platform_(platform), dxgkrnl_(dxgkrnl), allocations_(allocations), window_(window),
       lock_(platform, LockRank::av_context_slots),
-      reader_(platform), bindings_(), contexts_{}, names_{}, memories_(), chunks_(), ram_chunks_(platform), orders_{},
+      reader_(platform), bindings_(), contexts_{}, names_{}, memories_(), chunks_(platform), ids_(), held_chunks_{}, orders_{},
       wakes_{}, raised_{}, told_lost_{}, generations_{}, live_{}, request_{}, requests_(platform, LockRank::av_control_requests)
       {
           AV_SCOPE("AvContextTable::AvContextTable");
@@ -224,7 +223,6 @@ void AvContextTable::release(uint32_t slot)
     {
         SpinLockGuard locked(lock_);
         names_[slot] = nullptr;
-        for (ContextChunk &chunk : chunks_[slot]) chunk.clear();
         orders_[slot] = 0u;
         wake = wakes_[slot];
         wakes_[slot] = nullptr;
@@ -242,19 +240,17 @@ void AvContextTable::release(uint32_t slot)
 void AvContextTable::release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go)
 {
     AV_SCOPE("AvContextTable::release_chunks");
-    for (ContextChunk &chunk : chunks_[slot]) {
-        if (!chunk.bound()) continue;
-        if (chunk.in_window()) take_down(chunk, device, host_let_go);
-        else take_down_ram(slot, chunk, device, host_let_go);
-    }
+    for (ContextChunk *chunk = nullptr;
+         (chunk = chunks_.find_if([slot](const ContextChunk &held) { return held.slot() == slot; })) != nullptr;)
+        take_down(*chunk, device, host_let_go);
 }
 
-uint32_t AvContextTable::free_chunk(uint32_t slot) const
+ContextChunk *AvContextTable::find_chunk(uint32_t slot, uint32_t resource_id)
 {
-    AV_SCOPE("AvContextTable::free_chunk");
-    uint32_t index = 0u;
-    while (index < AvContextBinding::chunk_slots && chunks_[slot][index].bound()) index++;
-    return index;
+    AV_SCOPE("AvContextTable::find_chunk");
+    return chunks_.find_if([slot, resource_id](const ContextChunk &held) {
+        return held.slot() == slot && held.resource_id() == resource_id;
+    });
 }
 
 Status AvContextTable::release_shared(uint64_t object_id, VirtioGpuDevice &device)
@@ -323,23 +319,25 @@ Status AvContextTable::wake_on_raise(void *context, uint64_t handle)
     return Status::ok;
 }
 
-/* A window this adapter lacks, one too full for the chunk, a device that will
- * not place a blob there, or a process that cannot be given a view of it within
- * its reach: the chunk is guest RAM instead, which the host imports as it does
- * the window's pages. */
+/* The id first, then the pages: a chunk takes both, and gives both back if
+ * anything after fails. Nothing here falls back to guest RAM - every byte a
+ * process maps is host GPU memory (docs/host-memory.md). */
 Status AvContextTable::open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::open_window");
-    const uint32_t index = free_chunk(slot);
-    if (index == AvContextBinding::chunk_slots) return Status::no_space;
-    if (place_in_window(slot, index, record, device) == Status::ok) return Status::ok;
-    return place_in_ram(slot, index, record, device);
+    if (held_chunks_[slot] == max_chunks_per_context) return Status::no_space;
+    uint32_t resource = 0u;
+    if (ids_.take(resource) != Status::ok) return Status::no_space;
+    const Status placed = place_in_window(slot, resource, record, device);
+    if (placed != Status::ok) ids_.give_back(resource);
+    return placed;
 }
 
 /* Each step is undone in reverse if a later one fails. The pages go back only
  * once the device holds no blob over them: a blob it would not release may
- * still be placed there, and the next chunk must not land on it. */
-Status AvContextTable::place_in_window(uint32_t slot, uint32_t index, HostWindowRecord &record,
+ * still be placed there, and the next chunk must not land on it - the pages
+ * and the id then stay taken for good. */
+Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWindowRecord &record,
                                         VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::place_in_window");
@@ -351,7 +349,6 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t index, HostWindow
     uint32_t       first = 0u;
     const Status   taken = window_.take(pages, first);
     if (taken != Status::ok) return taken;
-    const uint32_t  resource = bindings_[slot].object().chunk_resource(index);
     HostVisibleBlob blob(platform_);
     /* What destroy answers is read back from the blob: still created is a
      * device that did not let go of it. */
@@ -359,72 +356,35 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t index, HostWindow
         if (blob.created()) static_cast<void>(blob.destroy(device));
         if (!blob.created()) window_.give_back(first, pages);
     });
-    uint64_t view = 0u;
-    void    *mapping = nullptr;
-    Status   status = blob.create(device, resource, bytes);
+    uint64_t        view = 0u;
+    void           *mapping = nullptr;
+    const uint32_t  context = bindings_[slot].object().context_id();
+    Status          status = blob.create(device, context, resource, record.memory(), bytes);
     if (status == Status::ok) status = blob.map(device, uint64_t{first} * HostWindow::page_bytes);
-    if (status == Status::ok) status = platform_.map_to_process(window_.physical(first), bytes, view, mapping);
+    if (status == Status::ok)
+        status = platform_.map_to_process(window_.physical(first), bytes, blob.caching(), view, mapping);
+    ContextChunk *chunk = nullptr;
+    if (status == Status::ok && chunks_.create(chunk, slot, resource, first, pages, mapping) != Status::ok) {
+        platform_.unmap_from_process(mapping);
+        status = Status::no_memory;
+    }
     if (status != Status::ok) return status;
     unwind.dismiss();
     {
         SpinLockGuard locked(lock_);
-        chunks_[slot][index].take_window(resource, first, pages, mapping);
+        held_chunks_[slot]++;
     }
     record = record.answered(resource, bytes, view);
     return Status::ok;
 }
 
-/* A device that answered anything but a refusal may have made the blob over
- * the pages, so they are then kept out of use rather than freed. */
-Status AvContextTable::place_in_ram(uint32_t slot, uint32_t index, HostWindowRecord &record,
-                                     VirtioGpuDevice &device)
-{
-    AV_SCOPE("AvContextTable::place_in_ram");
-    const uint64_t page_mask = GuestPageList::page_bytes - 1u;
-    if (record.bytes() > UINT64_MAX - page_mask) return Status::no_space;
-    const uint64_t bytes = (record.bytes() + page_mask) & ~page_mask;
-    GuestPages    *pages = nullptr;
-    if (ram_chunks_.create(pages, platform_) != Status::ok) return Status::no_memory;
-    ScopeExit drop([this, pages] { static_cast<void>(ram_chunks_.destroy(pages)); });
-    Status    status = pages->allocate(bytes);
-    if (status == Status::ok) status = pages->map_into_process();
-    if (status != Status::ok) return status == Status::invalid_parameter ? Status::no_space : Status::no_memory;
-    AvContextBinding &binding = bindings_[slot].object();
-    const uint32_t     resource = binding.chunk_resource(index);
-    status = binding.publish_chunk(device, resource, pages->pages());
-    if (status != Status::ok) {
-        if (status != Status::not_supported) pages->abandon();
-        return status;
-    }
-    drop.dismiss();
-    {
-        SpinLockGuard locked(lock_);
-        chunks_[slot][index].take_ram(resource, *pages);
-    }
-    record = record.answered(resource, bytes, pages->view());
-    return Status::ok;
-}
-
-/* A RAM chunk the device will not let go of - an import still holds it -
- * stays bound, so a process that closes one early cannot have the driver keep
- * page after page out of use; the context's teardown ends the import. */
 Status AvContextTable::close_window(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::close_window");
-    for (ContextChunk &chunk : chunks_[slot]) {
-        if (!chunk.bound() || chunk.resource_id() != resource_id) continue;
-        if (chunk.in_window()) {
-            take_down(chunk, &device, false);
-            return Status::ok;
-        }
-        const Status released = bindings_[slot].object().release_chunk(device, resource_id);
-        if (released != Status::ok) return released;
-        static_cast<void>(ram_chunks_.destroy(chunk.ram()));
-        SpinLockGuard locked(lock_);
-        chunk.clear();
-        return Status::ok;
-    }
-    return Status::invalid_parameter;
+    ContextChunk *const chunk = find_chunk(slot, resource_id);
+    if (chunk == nullptr) return Status::invalid_parameter;
+    take_down(*chunk, &device, false);
+    return Status::ok;
 }
 
 /* The process's view first, so it never reads a page the host no longer
@@ -438,9 +398,14 @@ void AvContextTable::take_down(ContextChunk &chunk, VirtioGpuDevice *device, boo
     platform_.unmap_from_process(chunk.mapping());
     HostVisibleBlob placed(platform_, chunk.resource_id(), uint64_t{chunk.first_page()} * HostWindow::page_bytes);
     const bool      released = device != nullptr ? placed.destroy(*device) == Status::ok : host_let_go;
-    if (released) window_.give_back(chunk.first_page(), chunk.pages());
+    if (released) {
+        window_.give_back(chunk.first_page(), chunk.pages());
+        ids_.give_back(chunk.resource_id());
+    }
+    const uint32_t slot = chunk.slot();
+    static_cast<void>(chunks_.destroy(&chunk));
     SpinLockGuard locked(lock_);
-    chunk.clear();
+    held_chunks_[slot]--;
 }
 
 Status AvContextTable::submit(void *context, const uint8_t *private_data, size_t size, uint64_t &awaited)
@@ -539,22 +504,6 @@ void AvContextTable::abandon_all()
         }
         bindings_[slot].object().abandon();
     }
-}
-
-/* The pages go once the device let go of the blob over them. One that would
- * not, or that could not be asked and may still hold it, has them kept out of
- * use for good. */
-void AvContextTable::take_down_ram(uint32_t slot, ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go)
-{
-    AV_SCOPE("AvContextTable::take_down_ram");
-    GuestPages *const pages = chunk.ram();
-    const bool        released =
-        device != nullptr ? bindings_[slot].object().release_chunk(*device, chunk.resource_id()) == Status::ok
-                          : host_let_go;
-    if (!released) pages->abandon();
-    static_cast<void>(ram_chunks_.destroy(pages));
-    SpinLockGuard locked(lock_);
-    chunk.clear();
 }
 
 void *AvContextTable::user_of(const Allocation *allocation)
@@ -671,19 +620,7 @@ void AvContextTable::report(StateWriter &writer)
             writer.flag("lost", lost(slot));
             writer.flag("wakes", wakes_[slot] != nullptr);
             writer.number("raised", raised_[slot]);
-            for (uint32_t chunk = 0u; chunk < AvContextBinding::chunk_slots; chunk++) {
-                const ContextChunk &held = chunks_[slot][chunk];
-                if (!held.bound()) continue;
-                writer.open("chunk", chunk);
-                writer.number("resource", held.resource_id());
-                if (held.in_window()) {
-                    writer.number("window_page", held.first_page());
-                    writer.number("pages", held.pages());
-                } else {
-                    writer.number("ram_bytes", held.ram()->bytes());
-                }
-                writer.close();
-            }
+            writer.number("chunks", held_chunks_[slot]);
             writer.close();
         }
     }
@@ -703,10 +640,12 @@ bool AvContextTable::invariants_hold() const
             return false;
         if (bound_slot && names_[slot] == nullptr) return false;
         if (memories_[slot].constructed() && !memories_[slot].object().invariants_hold()) return false;
-        for (const ContextChunk &chunk : chunks_[slot])
-            if (!chunk.invariants_hold() || (chunk.bound() && !bound_slot)) return false;
+        uint32_t held = 0u;
+        chunks_.for_each([slot, &held](const ContextChunk &chunk) { held += chunk.slot() == slot ? 1u : 0u; });
+        if (held != held_chunks_[slot] || (held != 0u && !bound_slot)) return false;
     }
-    return true;
+    return chunks_.all_of([](const ContextChunk &chunk) { return chunk.invariants_hold(); }) &&
+           chunks_.live() <= ids_.taken();
 }
 
 }  // namespace av

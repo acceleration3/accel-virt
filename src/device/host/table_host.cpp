@@ -235,46 +235,16 @@ void TableHost::release_range(void *base, uint64_t bytes)
     ops_.release_range(ops_.opaque, base, bytes);
 }
 
-Status TableHost::dmabuf_over_guest(void *const *runs, const uint64_t *sizes, uint32_t count,
-                                    int &fd)
-{
-    AV_SCOPE("TableHost::dmabuf_over_guest");
-    /* A table from before this op has nothing there; the caller imports a
-     * host pointer instead, as it did before the op existed. */
-    if (ops_.dmabuf_over_guest == nullptr) return Status::not_supported;
-    return ops_.dmabuf_over_guest(ops_.opaque, runs, sizes, count, &fd) == 0 ? Status::ok
-                                                                            : Status::not_supported;
-}
-
-void TableHost::close_dmabuf(int fd)
-{
-    AV_SCOPE("TableHost::close_dmabuf");
-    if (ops_.close_dmabuf != nullptr) ops_.close_dmabuf(ops_.opaque, fd);
-}
-
-void *TableHost::create_host_memory(uint64_t size, void *&pointer)
-{
-    AV_SCOPE("TableHost::create_host_memory");
-    pointer = nullptr;
-    return ops_.create_host_memory(ops_.opaque, size, &pointer);
-}
-
-void TableHost::destroy_host_memory(void *memory)
-{
-    AV_SCOPE("TableHost::destroy_host_memory");
-    ops_.destroy_host_memory(ops_.opaque, memory);
-}
-
 uint64_t TableHost::hostmem_size()
 {
     AV_SCOPE("TableHost::hostmem_size");
     return ops_.hostmem_size(ops_.opaque);
 }
 
-Status TableHost::place_in_hostmem(void *memory, uint64_t offset)
+Status TableHost::place_in_hostmem(int fd, uint64_t size, uint64_t offset)
 {
     AV_SCOPE("TableHost::place_in_hostmem");
-    return ops_.place_in_hostmem(ops_.opaque, memory, offset) == 0 ? Status::ok : Status::no_memory;
+    return ops_.place_in_hostmem(ops_.opaque, fd, size, offset) == 0 ? Status::ok : Status::no_memory;
 }
 
 void TableHost::remove_from_hostmem(uint64_t offset, uint64_t size)
@@ -289,50 +259,10 @@ uint64_t TableHost::monotonic_nanoseconds()
     return ops_.monotonic_nanoseconds(ops_.opaque);
 }
 
-Status TableHost::read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size)
-{
-    AV_SCOPE("TableHost::read_hostmem");
-    return ops_.read_hostmem(ops_.opaque, offset, buffer, size) == 0 ? Status::ok : Status::not_supported;
-}
-
 Status TableHost::bind_gpu(uint32_t index)
 {
     AV_SCOPE("TableHost::bind_gpu");
     return ops_.bind_gpu(ops_.opaque, index) == 0 ? Status::ok : Status::not_supported;
-}
-
-void *TableHost::export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error)
-{
-    AV_SCOPE("TableHost::export_gpu_memory");
-    pointer = nullptr;
-    host_error = 0;
-    return ops_.export_gpu_memory(ops_.opaque, size, &pointer, &host_error);
-}
-
-void TableHost::release_gpu_memory(void *memory)
-{
-    AV_SCOPE("TableHost::release_gpu_memory");
-    ops_.release_gpu_memory(ops_.opaque, memory);
-}
-
-void *TableHost::import_guest_memory(void *pointer, uint64_t size, int32_t &host_error)
-{
-    AV_SCOPE("TableHost::import_guest_memory");
-    host_error = 0;
-    return ops_.import_guest_memory(ops_.opaque, pointer, size, &host_error);
-}
-
-void TableHost::release_guest_memory(void *memory)
-{
-    AV_SCOPE("TableHost::release_guest_memory");
-    ops_.release_guest_memory(ops_.opaque, memory);
-}
-
-Status TableHost::read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer, uint64_t size)
-{
-    AV_SCOPE("TableHost::read_imported_memory");
-    return ops_.read_imported_memory(ops_.opaque, memory, offset, buffer, size) == 0 ? Status::ok
-                                                                                     : Status::not_supported;
 }
 
 void TableHost::connect_doorbell(void *event, uint32_t index)
@@ -417,7 +347,7 @@ bool TableHost::display_takes_dmabuf(uint32_t head)
     return ops_.display_takes_dmabuf(ops_.opaque, head) != 0;
 }
 
-Status TableHost::show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame)
+Status TableHost::show_scanout(uint32_t head, const uint8_t *blob, const ScanoutFramebuffer &frame)
 {
     AV_SCOPE("TableHost::show_scanout");
     if (ops_.show_scanout == nullptr) return Status::not_supported;
@@ -432,7 +362,7 @@ Status TableHost::show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &
                                    frame.fourcc(),
                                    0u,
                                    drm_format_mod_linear};
-    return ops_.show_scanout(ops_.opaque, head, fd, &plane) == 0 ? Status::ok : Status::not_supported;
+    return ops_.show_scanout(ops_.opaque, head, blob, &plane) == 0 ? Status::ok : Status::not_supported;
 }
 
 void TableHost::update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
@@ -501,24 +431,6 @@ Status TableHost::locate_guest(const void *pointer, uint64_t length, uint32_t &r
     if (ops_.locate_guest(ops_.opaque, pointer, length, &number, &at) != 0) return Status::not_found;
     region = number;
     offset = at;
-    return Status::ok;
-}
-
-int TableHost::host_memory_descriptor(void *memory)
-{
-    AV_SCOPE("TableHost::host_memory_descriptor");
-    if (ops_.host_memory_descriptor == nullptr) return -1;
-    return ops_.host_memory_descriptor(ops_.opaque, memory);
-}
-
-Status TableHost::dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd)
-{
-    AV_SCOPE("TableHost::dmabuf_over_host_memory");
-    fd = -1;
-    if (ops_.dmabuf_over_host_memory == nullptr) return Status::not_supported;
-    int made = -1;
-    if (ops_.dmabuf_over_host_memory(ops_.opaque, memory, offset, size, &made) != 0) return Status::not_supported;
-    fd = made;
     return Status::ok;
 }
 

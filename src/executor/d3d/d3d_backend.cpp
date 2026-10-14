@@ -11,6 +11,7 @@
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
@@ -123,7 +124,6 @@ void D3dBackend::shut_down()
     static_cast<void>(states_.select(0u));
     device11_ = nullptr;
     shares_ = nullptr;
-    region_.give_back();
 }
 
 bool D3dBackend::knows(uint32_t command_id) const
@@ -230,7 +230,7 @@ bool D3dBackend::lost() const
 bool D3dBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("D3dBackend::adopt");
-    return region_.adopt_pointer_or_buffer(blob);
+    return region_.adopt(blob);
 }
 
 void D3dBackend::abandon(ImportedBlob &blob)
@@ -1709,16 +1709,15 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t offset, uint64_t
     return device11_->bind_storage(buffer, region_storage_, offset, bytes, host);
 }
 
-/* By the region's host pages - the device's own mapping, for a region taken as
- * a dma-buf: an Intel GPU reads imported host memory coherently, and a dma-buf
- * not. */
+/* By the region's dma-buf: its memory is the GPU's own (docs/host-memory.md),
+ * which DXVK's device imports as any device of the same driver does. */
 bool D3dBackend::region_to_draw()
 {
     AV_SCOPE("D3dBackend::region_to_draw");
     if (region_storage_.made()) return true;
-    uint8_t *const host = region_.host_pages();
-    if (region_storage_refused_ || host == nullptr || !device11_->slices()) return false;
-    if (device11_->import_to_draw(host, region_.length(), region_storage_)) return true;
+    const SourceMemory *const memory = region_.memory();
+    if (region_storage_refused_ || memory == nullptr || !device11_->slices()) return false;
+    if (device11_->import_to_draw(memory->share(), region_.length(), region_storage_)) return true;
     region_storage_refused_ = true;
     lines_.write("the session's region could not be imported to draw from: mapped buffers are copied");
     return false;

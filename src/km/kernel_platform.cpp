@@ -205,7 +205,8 @@ void KernelPlatform::unmap_pages(uint8_t *view, void *mapping)
  * is what MDL_PAGES_LOCKED claims. Write-back, because the host maps the same
  * pages write-back and an alias of any other type reads stale data
  * (docs/host-window.md). */
-Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping)
+Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching, uint64_t &view,
+                                      void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_to_process");
     view = 0u;
@@ -217,7 +218,8 @@ Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_
     const PFN_NUMBER  first = static_cast<PFN_NUMBER>(physical >> PAGE_SHIFT);
     for (uint64_t page = 0u; page < bytes >> PAGE_SHIFT; page++) frames[page] = first + page;
     mdl->MdlFlags |= MDL_PAGES_LOCKED;
-    return map_mdl_to_process(mdl, bytes, view, mapping);
+    return map_mdl_to_process(mdl, bytes, caching == PageCaching::write_combined ? MmWriteCombined : MmCached, view,
+                              mapping);
 }
 
 /* A view of the pages' section: the process's own memory, which stays valid
@@ -278,7 +280,8 @@ Status KernelPlatform::map_section_to_process(void *pages, ACCESS_MASK access, U
 
 /* A user-mode mapping the process's address space refuses is raised as an
  * exception, not answered with null. */
-Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, uint64_t &view, void *&mapping)
+Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, MEMORY_CACHING_TYPE caching, uint64_t &view,
+                                          void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_mdl_to_process");
     ScopeExit free_mdl([mdl] { IoFreeMdl(mdl); });
@@ -288,7 +291,7 @@ Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, uint64_t &vi
     ScopeExit free_record([this, record] { ExFreePoolWithTag(record, pool_tag_); });
     PVOID user = nullptr;
     __try {
-        user = MmMapLockedPagesSpecifyCache(mdl, UserMode, MmCached, nullptr, FALSE, NormalPagePriority);
+        user = MmMapLockedPagesSpecifyCache(mdl, UserMode, caching, nullptr, FALSE, NormalPagePriority);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         user = nullptr;
     }

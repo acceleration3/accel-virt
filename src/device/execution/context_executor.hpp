@@ -55,11 +55,11 @@ public:
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
     [[nodiscard]] Status execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                                  size_t reply_capacity, size_t &reply_size);
-    /* Worker. `handle` imported under `blob_id`, with `device_memory` the wire
-     * handle the import became: invalid_state without an executor;
-     * not_supported, leaving nothing imported, for a library that refuses
-     * this one or names it nothing. */
-    [[nodiscard]] Status import(uint64_t blob_id, const AvBlobHandle &handle, uint64_t &device_memory);
+    /* Worker. The memory allocated under `memory_key` imported under
+     * `blob_id`, with `device_memory` the wire handle the import became:
+     * invalid_state without an executor; not_supported, leaving nothing
+     * imported, for a library that refuses it or names it nothing. */
+    [[nodiscard]] Status import(uint64_t blob_id, uint64_t memory_key, uint64_t &device_memory);
     /* Worker. Nothing without an executor: destroying it released every import. */
     void                 release(uint64_t blob_id);
 

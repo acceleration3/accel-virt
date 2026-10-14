@@ -8,26 +8,29 @@
 namespace av {
 
 HostVisibleBlob::HostVisibleBlob(Platform &platform)
-    : platform_(platform), resource_(0u), offset_(0u), mapped_(false), request_{}, answer_{}
-    {
-        AV_SCOPE("HostVisibleBlob::HostVisibleBlob");
-    }
-
-HostVisibleBlob::HostVisibleBlob(Platform &platform, uint32_t resource, uint64_t offset)
-    : platform_(platform), resource_(resource), offset_(offset), mapped_(true), request_{}, answer_{}
+    : platform_(platform), resource_(0u), offset_(0u), mapped_(false), caching_(PageCaching::write_back), request_{},
+      answer_{}
 {
     AV_SCOPE("HostVisibleBlob::HostVisibleBlob");
 }
 
-Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t resource_id, uint64_t bytes)
+HostVisibleBlob::HostVisibleBlob(Platform &platform, uint32_t resource, uint64_t offset)
+    : platform_(platform), resource_(resource), offset_(offset), mapped_(true), caching_(PageCaching::write_back),
+      request_{}, answer_{}
+{
+    AV_SCOPE("HostVisibleBlob::HostVisibleBlob");
+}
+
+Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t context_id, uint32_t resource_id,
+                               HostMemoryRequest memory, uint64_t bytes)
 {
     AV_SCOPE("HostVisibleBlob::create");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::create");
     if (resource_ != 0u) return Status::invalid_state;
-    if (resource_id == 0u || bytes == 0u || (bytes & (page_bytes - 1u)) != 0u)
+    if (context_id == 0u || resource_id == 0u || !memory.valid() || bytes == 0u || (bytes & (page_bytes - 1u)) != 0u)
         return Status::invalid_parameter;
     AvRequestWriter writer(request_, sizeof request_);
-    static_cast<void>(writer.host_blob(resource_id, bytes));
+    static_cast<void>(writer.host_blob(context_id, resource_id, memory, bytes));
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);
     if (status != Status::ok) return status;
@@ -45,9 +48,11 @@ Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);
     if (status != Status::ok) return status;
-    /* The device says how the guest may cache what it just mapped; anything
-     * else is an answer this driver does not know how to hand a process. */
-    if (map_info != map_cache_cached) return Status::malformed;
+    /* The device says how the host maps the memory, which is how the guest
+     * must; anything else is an answer this driver does not know how to hand
+     * a process. */
+    if (map_info != map_cache_cached && map_info != map_cache_wc) return Status::malformed;
+    caching_ = map_info == map_cache_cached ? PageCaching::write_back : PageCaching::write_combined;
     offset_ = offset;
     mapped_ = true;
     return Status::ok;
@@ -126,6 +131,12 @@ uint32_t HostVisibleBlob::resource() const
     AV_SCOPE("HostVisibleBlob::resource");
     return resource_;
 }
+PageCaching HostVisibleBlob::caching() const
+{
+    AV_SCOPE("HostVisibleBlob::caching");
+    return caching_;
+}
+
 uint64_t HostVisibleBlob::offset() const
 {
     AV_SCOPE("HostVisibleBlob::offset");

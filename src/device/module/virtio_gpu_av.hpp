@@ -18,6 +18,7 @@
 #include "device/gpu/gpu_binding.hpp"
 #include "device/gpu/host_pci_identity.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
 #include "device/present/present_engine.hpp"
 #include "device/feasibility/host_feasibility.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -125,6 +126,9 @@ private:
     /* Before the contexts, which unpin blobs, let go of shared objects and
      * stop raising interrupts as they are destroyed. */
     BlobTable          blobs_;
+    /* Before the contexts that ask who owns a host blob; it frees no memory
+     * as it goes, since the library's domain takes every allocation with it. */
+    HostBlobTable      host_blobs_;
     /* After the blobs it pins and before the contexts: a head holds a pin, so
      * every head lets go before the table it pinned from goes. */
     DisplayHeads       heads_;

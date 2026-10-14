@@ -8,8 +8,7 @@
  * GPU, a host with two, and a host whose OpenCL cannot import testable on a
  * machine that is none of those (feature 042).
  *
- * Sub-API and import-kind values are the ABI's own: AV_EXECUTOR_SUB_API_* and
- * AV_BLOB_*. This header names no Vulkan, EGL or OpenCL type, so the classes
+ * Sub-API values are the ABI's own: AV_EXECUTOR_SUB_API_*. This header names no Vulkan, EGL or OpenCL type, so the classes
  * above it compile on a machine with no loader at all; the display and device a
  * context runs on are the shim's classes, declared and never opened here. */
 #ifndef AV_HOST_APIS_HPP
@@ -24,6 +23,7 @@ class D3d12HostDevice;
 class D3d9HostDevice;
 class GlDisplay;
 class OpenClDevice;
+class HostMemorySource;
 class HostShares;
 class SharedSurfaces;
 
@@ -40,11 +40,6 @@ public:
     virtual void     gpu_uuid(uint32_t index, uint8_t *out) = 0;
     /* The AV_EXECUTOR_SUB_API_* bits this GPU can actually run. */
     virtual uint32_t sub_apis(uint32_t index) = 0;
-    /* The AV_BLOB_* kinds `sub_api` can import on this GPU, or zero for "copy
-     * at the boundary". Measured per GPU and per API because the answers
-     * differ: a host pointer into Vulkan works where a dma-buf into OpenCL
-     * does not (feature 042, research). */
-    virtual uint32_t import_kinds(uint32_t index, uint32_t sub_api) = 0;
     /* The minor number of this GPU's DRM render node, or -1 where the driver
      * does not say (VK_EXT_physical_device_drm). */
     virtual int32_t  render_minor(uint32_t index) = 0;
@@ -75,6 +70,10 @@ public:
      * session on it publishes and opens through it. Null for an index nobody
      * has. */
     virtual HostShares         *shares(uint32_t index) = 0;
+    /* The GPU's one source of the memory a guest maps and a host API imports
+     * (docs/host-memory.md). Null for an index nobody has, or a GPU whose
+     * compositing context could not be opened. */
+    virtual HostMemorySource   *memory_source(uint32_t index) = 0;
 
 protected:
     HostApis() = default;

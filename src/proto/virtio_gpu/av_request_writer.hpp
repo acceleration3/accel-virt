@@ -7,6 +7,7 @@
 #define AV_AV_REQUEST_WRITER_HPP
 
 #include "core/support/status.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -41,9 +42,11 @@ public:
      * ring, fence or reply is. The device already decodes many entries; this is
      * the writer catching up, mirroring attach_backing_pages. */
     [[nodiscard]] Status guest_blob_pages(uint32_t resource_id, const GuestPageList &pages);
-    /* Memory of the host's, mappable into the hostmem region: no memory entries,
-     * a page-multiple size, and nothing of the guest behind it. */
-    [[nodiscard]] Status host_blob(uint32_t resource_id, uint64_t size);
+    /* Host GPU memory of the kind `memory` names, for the device's context
+     * `context_id`, mappable into the hostmem region: no memory entries, a
+     * page-multiple size, and nothing of the guest behind it
+     * (docs/host-memory.md). */
+    [[nodiscard]] Status host_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory, uint64_t size);
     /* Where in the hostmem region the device is to place it: the offset is the
      * guest's to choose, and the device refuses one that does not fit
      * (docs/protocol.md). */

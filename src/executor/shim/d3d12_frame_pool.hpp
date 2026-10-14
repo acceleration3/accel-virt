@@ -80,7 +80,6 @@ private:
                      uint32_t height, bool resolve);
         void    drop();
         Reading read(AvFrameView &view) override;
-        bool    write(const FrameTarget &target) override;
         void    release() override;
 
     private:

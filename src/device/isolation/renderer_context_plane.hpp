@@ -51,7 +51,9 @@ public:
     [[nodiscard]] Status initialize() override;
     [[nodiscard]] Status start(const uint8_t *gpu_uuid, const CapsetInfo &capset) override;
     uint32_t             sub_apis() const override;
-    uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const override;
+    [[nodiscard]] Status allocate_memory(uint32_t context, uint64_t key, uint64_t size, uint32_t request,
+                                         AvHostMemory &memory) override;
+    void                 free_memory(uint64_t key) override;
 
     [[nodiscard]] Status create(uint32_t id) override;
     [[nodiscard]] Status destroy(uint32_t id) override;
@@ -79,8 +81,6 @@ public:
     bool reads_frames() const override;
     bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) override;
     void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) override;
-    bool write_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms,
-                     const FrameDestination &destination) override;
     bool exports_surfaces() const override;
     bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image) override;
     bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd) override;

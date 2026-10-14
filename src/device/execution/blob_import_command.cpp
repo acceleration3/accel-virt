@@ -38,17 +38,13 @@ Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produc
     const Status      decoded = request.decode(body_, body_size());
     if (decoded == Status::malformed) return Status::malformed;
     uint64_t     device_memory = 0u;
-    const Status imported = decoded == Status::ok ? imports_.import(request.resource_id(), request.offset(),
-                                                                    request.size(), request.memory_type(),
-                                                                    device_memory)
-                                                  : Status::invalid_parameter;
+    const Status imported =
+        decoded == Status::ok ? imports_.import(request.resource_id(), device_memory) : Status::invalid_parameter;
     uint32_t answer = BlobImportAnswer::executor_refused;
     switch (imported) {
     case Status::ok: answer = BlobImportAnswer::imported; break;
     case Status::invalid_parameter: answer = BlobImportAnswer::refused_request; break;
     case Status::not_found: answer = BlobImportAnswer::unknown_resource; break;
-    case Status::too_large: answer = BlobImportAnswer::outside_blob; break;
-    case Status::no_memory: answer = BlobImportAnswer::unmappable_pages; break;
     case Status::no_space: answer = BlobImportAnswer::no_room; break;
     default: break;
     }

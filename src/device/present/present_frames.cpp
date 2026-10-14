@@ -29,12 +29,6 @@ bool PresentFrames::map(const SurfacePoint &frame, AvFrameView &view) const
     return readable() && plane_->map_frame(gpu_uuid_.raw(), frame, wait_ms, view);
 }
 
-bool PresentFrames::write(const SurfacePoint &frame, const FrameDestination &destination) const
-{
-    AV_SCOPE("PresentFrames::write");
-    return readable() && plane_->write_frame(gpu_uuid_.raw(), frame, wait_ms, destination);
-}
-
 void PresentFrames::unmap(const SurfacePoint &frame) const
 {
     AV_SCOPE("PresentFrames::unmap");

@@ -1,23 +1,17 @@
-/* One display head: the blob it shows, the framebuffer inside that blob, and
- * the dma-buf the host display samples it through.
- *
- * The descriptor covers the whole blob rather than the framebuffer, because a
- * dma-buf is made of whole pages and a framebuffer inside a blob is not
- * page-aligned in general; the framebuffer's offset is the plane's offset
- * instead. The blob is pinned while it is shown, which is what makes the
- * descriptor safe and what makes RESOURCE_UNREF of a blob on screen a
- * refusal rather than a dangling import.
- *
- * There are two descriptor slots because a head changes what it shows without
- * going dark: the new descriptor is made and the new pin taken before the host
- * is told, and the old ones are let go only once it has taken them, so a
- * refused rebind leaves the head showing exactly what it showed. */
+/* One display head: the blob it shows and the framebuffer inside that blob,
+ * shown as a display surface over the device's own mapping of the blob's
+ * pages (BlobTable::view), so every display backend shows it and no frame is
+ * copied on the way. The blob is pinned while it is shown, which is what
+ * keeps that mapping valid and what makes RESOURCE_UNREF of a blob on screen
+ * a refusal rather than a surface over freed pages. A head changes what it
+ * shows without going dark: the new blob is pinned before the host is told,
+ * and the old one let go only once it has taken the new one, so a refused
+ * rebind leaves the head showing exactly what it showed. */
 #ifndef AV_SCANOUT_BINDING_HPP
 #define AV_SCANOUT_BINDING_HPP
 
 #include "core/support/status.hpp"
 #include "device/display/scanout_framebuffer.hpp"
-#include "device/memory/blob_dma_buf.hpp"
 
 #include <stdint.h>
 
@@ -38,7 +32,7 @@ public:
     ScanoutBinding &operator=(const ScanoutBinding &) = delete;
 
     /* Main loop. This head shows `framebuffer` out of blob `blob`. The blob's
-     * answer when it cannot be pinned or its pages cannot become a dma-buf,
+     * answer when it cannot be pinned or its pages mapped as one range,
      * not_supported when the display would not take it; anything but ok leaves
      * the head showing what it showed. */
     [[nodiscard]] Status show(uint32_t blob, const ScanoutFramebuffer &framebuffer);
@@ -61,9 +55,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    BlobDmaBuf       &current();
-    const BlobDmaBuf &current() const;
-    BlobDmaBuf       &spare();
     /* The part of `flushed` the head is showing, in the picture's own
      * coordinates; false when none of it is. */
     bool visible_part(const GpuRect &flushed, uint32_t &x, uint32_t &y, uint32_t &width,
@@ -74,9 +65,6 @@ private:
     uint32_t           head_;
     uint32_t           blob_;
     ScanoutFramebuffer framebuffer_;
-    BlobDmaBuf        first_;
-    BlobDmaBuf        second_;
-    bool               second_is_current_;
     bool               shown_;
     uint64_t           frames_;
 

@@ -1,7 +1,6 @@
 #include "executor/shim/d3d12_frame_pool.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/d3d/frame_target.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 
@@ -255,33 +254,6 @@ void D3d12FramePool::Frame::drop()
     written_.release();
     lane_.release();
     writes_ = 0u;
-}
-
-/* The frame's own copy ran on the session's queue, which the lane's does not
- * wait on: it is waited for here first, as a map would. A write not finished
- * in a second is a GPU that is gone; the queue is drained before the memory it
- * writes is let go. */
-bool D3d12FramePool::Frame::write(const FrameTarget &target)
-{
-    AV_SCOPE("D3d12FramePool::Frame::write");
-    constexpr uint64_t most_wait_nanoseconds = 1000000000u;
-    if (buffer_ == nullptr || device_ == nullptr || !target.fits(width_, height_)) return false;
-    if (!idle() && FAILED(fence_->SetEventOnCompletion(value_, nullptr))) return false;
-    if (!lane_.connected() && !lane_.connect(device_)) return false;
-    if (!written_.made() && !written_.make_exportable(lane_.table())) return false;
-    VkBuffer     source = VK_NULL_HANDLE;
-    uint64_t     origin = 0u;
-    VulkanBuffer pages;
-    if (!lane_.buffer_of(buffer_, source, origin) ||
-        !pages.import_dma_buf(lane_.table(), dup(target.fd()), target.bytes()))
-        return false;
-    const uint64_t value = writes_ + 1u;
-    if (!lane_.work().write_rows(source, origin + offset_, row_pitch_, pages.buffer(), target, written_, value))
-        return false;
-    writes_ = value;
-    if (written_.wait(value, most_wait_nanoseconds)) return true;
-    lane_.work().idle();
-    return false;
 }
 
 StagedFrame::Reading D3d12FramePool::Frame::read(AvFrameView &view)

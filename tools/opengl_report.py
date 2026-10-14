@@ -37,7 +37,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from d3d11_report import compare, guest_shell, metrics, png, read_frame, verdict, write_summary  # noqa: E402
+from d3d11_report import compare, guest_shell, host_run, metrics, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\av\\glsamples"
@@ -140,10 +140,9 @@ def run_host(args, out):
     arguments = sample_arguments(args, out / "host")
     if args.gpu:
         arguments += ["--gpu", args.gpu]
-    done = subprocess.run([str(ROOT / "build" / "avglsamples_host"), *arguments], capture_output=True, text=True,
-                          timeout=1800)
-    (out / "host.log").write_text(done.stdout + done.stderr)
-    print(done.stdout, flush=True)
+    text = host_run([str(ROOT / "build" / "avglsamples_host"), *arguments])
+    (out / "host.log").write_text(text)
+    print(text, flush=True)
 
 
 def renderer(log):

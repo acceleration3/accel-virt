@@ -28,11 +28,10 @@
 
 namespace av {
 
-class FrameTarget;
-
 class SurfacePoint;
 
 class HostApis;
+class HostMemorySource;
 class HostGpu;
 class SessionBackend;
 
@@ -54,16 +53,20 @@ public:
     /* Every sub-API some GPU here can run. Zero is an answer: the device then
      * describes no capset at all rather than one it cannot honour. */
     uint32_t sub_apis() const;
-    /* The AV_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names.
-     * Zero for a GPU nobody has, which is also what a null UUID gets. */
-    uint32_t import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const;
     /* A domain for a guest device on the GPU `gpu_uuid` names: what every
      * other call below and every context of the device names it by. 0 for a
      * GPU nobody has, or no room. Main loop. */
     uint32_t open_domain(const uint8_t *gpu_uuid);
     /* The device is going: every share in `domain` is released, as a reset
-     * releases them, and the domain names nothing more. Main loop. */
+     * releases them, its memory is let go of, and the domain names nothing
+     * more. Main loop. */
     void     close_domain(uint32_t domain);
+    /* Host memory on `domain`'s GPU under `key`, and let go of
+     * (HostMemorySource): no_memory for a domain not open or a GPU with no
+     * source, and the source's answer otherwise. Main loop. */
+    [[nodiscard]] Status allocate_memory(uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
+                                         AvHostMemory &memory);
+    void                 free_memory(uint32_t domain, uint64_t key);
     /* The image shared as `id` in `domain`, copied into an exportable image. */
     bool     export_image(uint32_t domain, uint64_t id, AvExportedImage &image);
     /* A display head's planes composed into one exported image
@@ -78,10 +81,6 @@ public:
      * (SharedSurfaces). Any thread. */
     bool     map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(uint32_t domain, const SurfacePoint &frame);
-    /* `frame` written by the GPU into `target` and let go
-     * (SharedSurfaces::write); false where it is not, and it is still there
-     * for map_frame. */
-    bool     write_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, const FrameTarget &target);
     /* The surface shared as `surface` in `domain` as its own memory, for a
      * process outside QEMU (D3d11HostDevice::export_surface), and the copies
      * into it the host has run with a sync_file for them
@@ -149,6 +148,8 @@ private:
                             const OpenGlBackend *share);
     /* The GPU `domain` is on, or null. */
     const HostGpu *gpu_of(uint32_t domain) const;
+    /* The memory source of the GPU `domain` is on, or null. */
+    HostMemorySource *source_of(uint32_t domain) const;
     /* The slot `session` is in, or max_sessions for one not ours. */
     uint32_t       slot_of(const ContextSession *session) const;
     /* What the ABI calls `answered`. */

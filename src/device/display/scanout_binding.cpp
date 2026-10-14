@@ -5,14 +5,12 @@
 #include "core/trace/state_writer.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_table.hpp"
-#include "device/memory/blob_window.hpp"
 #include "proto/virtio_gpu/gpu_rect.hpp"
 
 namespace av {
 
 ScanoutBinding::ScanoutBinding(Host &host, BlobTable &blobs, uint32_t head)
-    : host_(host), blobs_(blobs), head_(head), blob_(0u), first_(host), second_(host),
-      second_is_current_(false), shown_(false), frames_(0u)
+    : host_(host), blobs_(blobs), head_(head), blob_(0u), shown_(false), frames_(0u)
 {
     AV_SCOPE("ScanoutBinding::ScanoutBinding");
 }
@@ -21,24 +19,6 @@ ScanoutBinding::~ScanoutBinding()
 {
     AV_SCOPE("ScanoutBinding::~ScanoutBinding");
     hide();
-}
-
-BlobDmaBuf &ScanoutBinding::current()
-{
-    AV_SCOPE("ScanoutBinding::current");
-    return second_is_current_ ? second_ : first_;
-}
-
-const BlobDmaBuf &ScanoutBinding::current() const
-{
-    AV_SCOPE("ScanoutBinding::current");
-    return second_is_current_ ? second_ : first_;
-}
-
-BlobDmaBuf &ScanoutBinding::spare()
-{
-    AV_SCOPE("ScanoutBinding::spare");
-    return second_is_current_ ? first_ : second_;
 }
 
 Status ScanoutBinding::show(uint32_t blob, const ScanoutFramebuffer &framebuffer)
@@ -56,22 +36,12 @@ Status ScanoutBinding::show(uint32_t blob, const ScanoutFramebuffer &framebuffer
     ScopeExit  unpin([this, blob, &kept] {
         if (!kept) blobs_.unpin(blob);
     });
-    /* Pinned above, so the window is there; ContextBinding reads its own the
-     * same way. */
-    BlobWindow pages;
-    static_cast<void>(blobs_.window(blob, pages));
-    const Status made = spare().make(pages, 0u, framebuffer.blob_size());
-    if (made != Status::ok) return made;
-    const Status shown = host_.show_scanout(head_, spare().handle(), framebuffer);
-    if (shown != Status::ok) {
-        spare().release();
-        return shown;
-    }
-    if (shown_) {
-        current().release();
-        blobs_.unpin(blob_);
-    }
-    second_is_current_ = !second_is_current_;
+    const uint8_t *base = nullptr;
+    const Status   viewed = blobs_.view(blob, base);
+    if (viewed != Status::ok) return viewed;
+    const Status shown = host_.show_scanout(head_, base, framebuffer);
+    if (shown != Status::ok) return shown;
+    if (shown_) blobs_.unpin(blob_);
     blob_ = blob;
     framebuffer_ = framebuffer;
     shown_ = true;
@@ -86,7 +56,6 @@ void ScanoutBinding::hide()
     host_.require_main_loop("ScanoutBinding::hide");
     if (!shown_) return;
     host_.hide_scanout(head_);
-    current().release();
     blobs_.unpin(blob_);
     framebuffer_.forget();
     blob_ = 0u;
@@ -172,8 +141,7 @@ bool ScanoutBinding::invariants_hold() const
 {
     AV_SCOPE("ScanoutBinding::invariants_hold");
     if (shown_ != framebuffer_.adopted()) return false;
-    if (shown_ != (blob_ != 0u)) return false;
-    return shown_ == current().made();
+    return shown_ == (blob_ != 0u);
 }
 
 }  // namespace av

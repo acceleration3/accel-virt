@@ -62,7 +62,6 @@ private:
         /* Under the device's lock: the texture let go. */
         void    drop();
         Reading read(AvFrameView &view) override;
-        bool    write(const FrameTarget &target) override;
         void    release() override;
 
     private:

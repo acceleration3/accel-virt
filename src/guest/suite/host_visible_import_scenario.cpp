@@ -46,10 +46,7 @@ void HostVisibleImportScenario::run()
     if (link_.open() != Status::ok) return;
     Status built = chain_.make();
     if (built == Status::ok) built = read_memory_types();
-    for (uint32_t side = source; side < sides && built == Status::ok; side++) {
-        built = make_chunk(side);
-        if (built == Status::ok) built = make_buffer(side);
-    }
+    for (uint32_t side = source; side < sides && built == Status::ok; side++) built = make_buffer(side);
     if (built == Status::ok) built = copy();
     const Status released = destroy();
     if (built == Status::ok) static_cast<void>(steps_.check("release", released));
@@ -65,25 +62,14 @@ Status HostVisibleImportScenario::read_memory_types()
     return steps_.check_measured("memory_types", count != 0u ? Status::ok : Status::not_found, count);
 }
 
-Status HostVisibleImportScenario::make_chunk(uint32_t side)
-{
-    AV_SCOPE("HostVisibleImportScenario::make_chunk");
-    const SideSteps &names = side_steps[side];
-    HostWindowChunk &chunk = chunks_[side];
-    const Status     opened = chunk.open(chunk_bytes);
-    if (opened != Status::ok) return steps_.check(names.chunk, opened);
-    return steps_.check_measured(names.chunk, opened, chunk.resource_id());
-}
-
 Status HostVisibleImportScenario::make_buffer(uint32_t side)
 {
     AV_SCOPE("HostVisibleImportScenario::make_buffer");
     const SideSteps                &names = side_steps[side];
     KmtTransport                   &transport = link_.transport();
-    /* No VkExternalMemoryBufferCreateInfo of its own: which host handle the
-     * guest's pages reach the GPU through - a host pointer or a dma-buf - is
-     * the host's to decide, and the device names it on every buffer made on a
-     * device that imports. A guest naming one would name the wrong one. */
+    /* No VkExternalMemoryBufferCreateInfo of its own: the memory is the host
+     * GPU's, imported by dma-buf, and the device names that on every buffer
+     * made on a device that imports (docs/host-memory.md). */
     VkBufferCreateInfo buffer_info = {};
     buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buffer_info.size = copy_bytes;
@@ -104,26 +90,30 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
     return steps_.check_result(names.bind_buffer, bound);
 }
 
-/* Host-visible types the buffer can live in, lowest first, until the host takes
- * one: a type the host cannot import a host pointer into is refused and the
- * next is tried; any other failure ends the search. The type taken is what the
- * step reports; a search that ends without one reports the host's last status. */
+/* The lowest host-visible type the buffer can live in, as a chunk of that
+ * type's memory (docs/host-memory.md), imported whole. The chunk step reports
+ * its resource, the import the type the memory was made as, or the host's
+ * status when it refused. */
 Status HostVisibleImportScenario::import_chunk(uint32_t side)
 {
     AV_SCOPE("HostVisibleImportScenario::import_chunk");
-    const char *const    step = side_steps[side].import;
+    const SideSteps     &names = side_steps[side];
     VkMemoryRequirements requirements = {};
     vkproto::av_vkGetBufferMemoryRequirements(link_.transport(), chain_.device(), buffers_[side], &requirements);
-    Status status = Status::not_found;
-    for (uint32_t type = 0u; type < memory_types_.memoryTypeCount; type++) {
+    uint32_t type = memory_types_.memoryTypeCount;
+    for (uint32_t candidate = memory_types_.memoryTypeCount; candidate-- > 0u;) {
         const bool host_visible =
-            (memory_types_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
-        if ((requirements.memoryTypeBits >> type & 1u) == 0u || !host_visible) continue;
-        status = imports_[side].import(chunks_[side].resource_id(), 0u, copy_bytes, type);
-        if (status == Status::ok) return steps_.check_measured(step, status, type);
-        if (status != Status::invalid_parameter) break;
+            (memory_types_.memoryTypes[candidate].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
+        if ((requirements.memoryTypeBits >> candidate & 1u) != 0u && host_visible) type = candidate;
     }
-    return steps_.check_measured(step, status, imports_[side].host_status());
+    if (type == memory_types_.memoryTypeCount) return steps_.check(names.chunk, Status::not_found);
+    HostWindowChunk &chunk = chunks_[side];
+    const Status     opened = chunk.open(chunk_bytes, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, type));
+    if (opened != Status::ok) return steps_.check(names.chunk, opened);
+    static_cast<void>(steps_.check_measured(names.chunk, opened, chunk.resource_id()));
+    const Status imported = imports_[side].import(chunk.resource_id());
+    if (imported == Status::ok) return steps_.check_measured(names.import, imported, type);
+    return steps_.check_measured(names.import, imported, imports_[side].host_status());
 }
 
 /* The destination is read just before the copy is submitted, so a host that

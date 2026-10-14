@@ -58,7 +58,6 @@ private:
     static constexpr uint32_t sides = 2u;
 
     [[nodiscard]] Status read_memory_types();
-    [[nodiscard]] Status make_chunk(uint32_t side);
     [[nodiscard]] Status make_buffer(uint32_t side);
     [[nodiscard]] Status import_chunk(uint32_t side);
     [[nodiscard]] Status copy();

@@ -58,9 +58,9 @@ typedef struct AvPciIdentity {
     uint8_t revision;
 } AvPciIdentity;
 
-/* One plane of one display head, as QEMU's qemu_dmabuf_new takes it. Every
- * field has already been checked against the blob the descriptor covers, and
- * the fourcc chosen, so the glue decides nothing. */
+/* One plane of one display head, as a display surface over the device's own
+ * mapping of a guest blob. Every field has already been checked against the
+ * blob, and the fourcc chosen, so the glue decides nothing. */
 typedef struct AvScanoutFrame {
     uint32_t width;          /* the picture, in pixels */
     uint32_t height;
@@ -69,7 +69,7 @@ typedef struct AvScanoutFrame {
     uint32_t backing_width;  /* the framebuffer the picture is cut from */
     uint32_t backing_height;
     uint32_t stride;         /* bytes per row, at most INT32_MAX */
-    uint32_t offset;         /* bytes from the start of the descriptor */
+    uint32_t offset;         /* bytes from the start of the blob */
     uint32_t fourcc;         /* a DRM fourcc */
     uint32_t reserved;       /* 0 */
     uint64_t modifier;       /* a DRM format modifier; linear today */
@@ -117,28 +117,15 @@ typedef struct AvHostOps {
     int (*alias_guest_run)(void *opaque, void *run, uint64_t size, void *at);
     /* Any thread. Unmaps the reservation and every alias inside it. */
     void (*release_range)(void *opaque, void *base, uint64_t size);
-    /* A zeroed shareable block of `size` bytes: its handle, or NULL; *pointer is the device's view. */
-    void *(*create_host_memory)(void *opaque, uint64_t size, void **pointer);
-    void (*destroy_host_memory)(void *opaque, void *memory);
     uint64_t (*hostmem_size)(void *opaque);
-    /* Nonzero when the block cannot be placed at `offset` of the hostmem region. */
-    int (*place_in_hostmem)(void *opaque, void *memory, uint64_t offset);
+    /* The `size` bytes of the dma-buf `fd` - host GPU memory the executor
+     * allocated (docs/host-memory.md) - mapped at `offset` of the hostmem
+     * region, where the guest reaches them: nonzero when they cannot be. The
+     * descriptor stays the caller's. */
+    int (*place_in_hostmem)(void *opaque, int fd, uint64_t size, uint64_t offset);
     void (*remove_from_hostmem)(void *opaque, uint64_t offset, uint64_t size);
-    /* What the guest reads at `offset` of the hostmem region; nonzero when the
-     * host cannot say. */
-    int (*read_hostmem)(void *opaque, uint64_t offset, uint8_t *buffer, uint64_t size);
     /* This device runs on host GPU `index`; nonzero when the host cannot. */
     int (*bind_gpu)(void *opaque, uint32_t index);
-    /* `size` bytes on the bound host GPU, mapped into this process: its handle,
-     * or NULL with *host_error set (a VkResult, an errno, or 0). */
-    void *(*export_gpu_memory)(void *opaque, uint64_t size, void **pointer, int32_t *host_error);
-    void (*release_gpu_memory)(void *opaque, void *memory);
-    /* The `size` bytes at `pointer` - a direct guest mapping - imported by the
-     * bound host GPU: its handle, or NULL with *host_error. */
-    void *(*import_guest_memory)(void *opaque, void *pointer, uint64_t size, int32_t *host_error);
-    void (*release_guest_memory)(void *opaque, void *memory);
-    /* What the host GPU sees through the import; nonzero when it cannot say. */
-    int (*read_imported_memory)(void *opaque, void *memory, uint64_t offset, uint8_t *buffer, uint64_t size);
     /* A 4-byte store at offset 0 of doorbell page `index` signals the event
      * (memory_region_add_eventfd); disconnect removes it. */
     void (*connect_doorbell)(void *opaque, void *event, uint32_t index);
@@ -154,17 +141,6 @@ typedef struct AvHostOps {
     void (*respond)(void *opaque, void *request, const uint8_t *bytes, size_t size);
     /* Nonzero when the base virtio-gpu device holds a 2D resource `id`. */
     int (*resource_exists)(void *opaque, uint32_t id);
-    /* Any thread. One dma-buf over `count` runs of guest RAM, in order, so a
-     * host GPU can import the guest's own pages without pinning them as a
-     * userptr: *fd on success, nonzero on failure. A host whose guest RAM has
-     * no file behind it, or that cannot make one, answers nonzero and the
-     * caller imports a host pointer instead.
-     *
-     * Needed because amdgpu refuses a userptr whose pages are file-backed,
-     * and guest RAM is a memfd (docs/testing.md). */
-    int (*dmabuf_over_guest)(void *opaque, void *const *runs, const uint64_t *sizes, uint32_t count,
-                             int *fd);
-    void (*close_dmabuf)(void *opaque, int fd);
     /* The wire recording at `path`, emptied if it was there: its handle, or
      * NULL (feature 065). */
     void *(*create_recording)(void *opaque, const char *path);
@@ -176,7 +152,7 @@ typedef struct AvHostOps {
     void (*close_recording)(void *opaque, void *file);
 
     /* Main loop. Nonzero when display head `head` exists and its console can
-     * show a dma-buf.
+     * show a dma-buf: what an exported image (show_image) needs.
      *
      * Asked once per device, when the guest first reads the capset, never at
      * realize: QEMU registers its display backends in qemu_init_displays()
@@ -184,15 +160,15 @@ typedef struct AvHostOps {
      * backend that gives a console its GL context, so at realize the answer is
      * no on every host. */
     int (*display_takes_dmabuf)(void *opaque, uint32_t head);
-    /* Main loop. Head `head` shows `frame` out of `fd`. The glue duplicates
-     * the descriptor, so the caller goes on owning its own. Nonzero when the
-     * host would not take it, having changed nothing. */
-    int (*show_scanout)(void *opaque, uint32_t head, int fd, const AvScanoutFrame *frame);
+    /* Main loop. Head `head` shows `frame` out of `blob`, the device's
+     * mapping of a guest blob that stays mapped until the head shows
+     * something else or nothing. Nonzero when the host would not take it,
+     * having changed nothing. */
+    int (*show_scanout)(void *opaque, uint32_t head, const void *blob, const AvScanoutFrame *frame);
     /* Main loop. The rectangle of head `head` that changed. */
     void (*update_scanout)(void *opaque, uint32_t head, uint32_t x, uint32_t y, uint32_t width,
                            uint32_t height);
-    /* Main loop. Head `head` shows nothing, and the duplicate show_scanout
-     * took is closed. Safe on a head showing nothing. */
+    /* Main loop. Head `head` shows nothing. Safe on a head showing nothing. */
     void (*hide_scanout)(void *opaque, uint32_t head);
     /* Main loop. Up to `size` bytes of the file at `path` into `buffer`, their
      * count in *length: nonzero when it cannot be read. NULL: the host reads
@@ -217,8 +193,6 @@ typedef struct AvHostOps {
     /* The region holding all `length` bytes at `pointer`, and their offset in
      * the region's file: nonzero when no region does. */
     int (*locate_guest)(void *opaque, const void *pointer, uint64_t length, uint32_t *region, uint64_t *offset);
-    /* The memfd behind a block create_host_memory made; -1 when it has none. */
-    int (*host_memory_descriptor)(void *opaque, void *memory);
     void (*close_descriptor)(void *opaque, int descriptor);
     /* The renderer at `path` started with its socket as descriptor 3; the glue
      * calls av_device_renderer_lost once when it dies or its socket closes.
@@ -235,13 +209,6 @@ typedef struct AvHostOps {
                             uint32_t capacity_descriptors, uint32_t *count, uint32_t timeout_ms);
     /* SIGKILL; the death is reported through av_device_renderer_lost. */
     void (*kill_renderer)(void *opaque);
-
-    /* Any thread. A dma-buf over `size` bytes at `offset` of a block
-     * create_host_memory made, through udmabuf over its sealed memfd, in *fd:
-     * nonzero where the kernel has no udmabuf or the block is no sealed memfd,
-     * and the caller imports the block's own mapping as a host pointer
-     * instead. NULL: the host makes none (docs/host-window.md). */
-    int (*dmabuf_over_host_memory)(void *opaque, void *memory, uint64_t offset, uint64_t size, int *fd);
 
     /* Main loop. The names in the directory at `path`, each ended by '\n', as
      * many whole names as `size` holds, their bytes in *length: nonzero when

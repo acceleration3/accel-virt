@@ -10,13 +10,14 @@
 namespace av {
 
 LoaderHostApis::LoaderHostApis()
-    : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
+    : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
       gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, surfaces_{}, heap_(), share_sink_(stderr),
-      share_lines_(share_sink_, "virtio-gpu-av: shares: "), shares_{},
-      extensions_{}, count_(0u), opened_(false)
+      share_lines_(share_sink_, "virtio-gpu-av: shares: "), shares_{}, count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
     for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, share_lines_));
+    for (uint32_t i = 0u; i < HostGpuSet::max_gpus; i++)
+        static_cast<void>(exporters_[i].construct(compositors_[i]));
 }
 
 LoaderHostApis::~LoaderHostApis()
@@ -24,6 +25,7 @@ LoaderHostApis::~LoaderHostApis()
     AV_SCOPE("LoaderHostApis::~LoaderHostApis");
     close();
     for (ObjectStorage<HostShares> &shares : shares_) shares.destroy();
+    for (ObjectStorage<CompositorMemory> &exporter : exporters_) exporter.destroy();
 }
 
 void LoaderHostApis::open()
@@ -74,18 +76,13 @@ void LoaderHostApis::enumerate()
         uuids_[i] = DeviceUuid(identity.deviceUUID);
         render_minors_[i] = node.hasRender ? static_cast<int32_t>(node.renderMinor) : -1;
         sub_apis_[i] = AV_EXECUTOR_SUB_API_VULKAN;
-        vulkan_kinds_[i] = kinds_of(devices[i]);
-        opencl_kinds_[i] = 0u;
-        if (opencl_devices_[i].find(uuids_[i].raw())) {
-            sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
-            /* A host pointer, on every device that runs OpenCL at all:
-             * CL_MEM_USE_HOST_PTR is core rather than an extension, so a
-             * buffer can always be made over the context's blob arena
-             * (feature 052, T033). A dma-buf is still not offered - that
-             * would be clCreateBufferWithProperties with an fd, which each
-             * platform answers differently. */
-            opencl_kinds_[i] = AV_BLOB_HOST_POINTER;
-        }
+        if (opencl_devices_[i].find(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
+        /* Every GPU's one source of the memory a guest maps
+         * (docs/host-memory.md): its compositing context, which also owns
+         * what the APIs hand each other. Opened now, and allocating nothing
+         * until a guest asks. */
+        if (compositors_[i].open(uuids_[i].raw()))
+            static_cast<void>(sources_[i].construct(exporters_[i].object(), heap_));
         if (gl_displays_[i].open(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENGL;
     }
     /* After the loop: DXVK makes a Vulkan instance of its own, and asking it
@@ -94,7 +91,7 @@ void LoaderHostApis::enumerate()
         for (uint32_t i = 0u; i < found; i++)
             if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
-                if (compositors_[i].open(uuids_[i].raw())) d3d11_devices_[i].use_compositor(&compositors_[i]);
+                if (compositors_[i].opened()) d3d11_devices_[i].use_compositor(&compositors_[i]);
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
                 if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i].raw())) d3d11_devices_[i].pair(&d3d12_devices_[i]);
@@ -103,36 +100,6 @@ void LoaderHostApis::enumerate()
             }
     }
     count_ = found;
-}
-
-uint32_t LoaderHostApis::kinds_of(void *device)
-{
-    AV_SCOPE("LoaderHostApis::kinds_of");
-    auto *const physical = static_cast<VkPhysicalDevice>(device);
-
-    /* Asked in one call, because vkEnumerateDeviceExtensionProperties has no
-     * offset: a second call with a smaller count re-reads the list from the
-     * start rather than continuing it, so anything beyond the first batch
-     * would never be seen. A driver with more extensions than this reports
-     * VK_INCOMPLETE and the ones past the end are not considered - the answer
-     * is then "cannot import", which costs a copy and never a wrong mapping. */
-    uint32_t available = max_extensions;
-    if (vkEnumerateDeviceExtensionProperties(physical, nullptr, &available, extensions_) < 0)
-        return 0u;
-    if (available > max_extensions) available = max_extensions;
-    uint32_t kinds = 0u;
-    for (uint32_t n = 0u; n < available; n++) {
-        if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0)
-            kinds |= AV_BLOB_HOST_POINTER;
-        /* Both are offered where both are there, because which one works is
-         * not a property of the extension list: a driver may advertise the
-         * host-pointer import and still refuse every userptr whose pages are
-         * file-backed, which guest RAM always is. The device tries the
-         * dma-buf first and falls back (docs/testing.md). */
-        if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) == 0)
-            kinds |= AV_BLOB_DMA_BUF;
-    }
-    return kinds;
 }
 
 void LoaderHostApis::close()
@@ -144,6 +111,7 @@ void LoaderHostApis::close()
         d3d9_devices_[i].close();
         d3d11_devices_[i].close();
         d3d11_devices_[i].use_compositor(nullptr);
+        sources_[i].destroy();
         compositors_[i].close();
         opencl_devices_[i].forget();
     }
@@ -178,18 +146,10 @@ uint32_t LoaderHostApis::sub_apis(uint32_t index)
     return index < count_ ? sub_apis_[index] : 0u;
 }
 
-uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
+HostMemorySource *LoaderHostApis::memory_source(uint32_t index)
 {
-    AV_SCOPE("LoaderHostApis::import_kinds");
-    if (index >= count_) return 0u;
-    if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) return vulkan_kinds_[index];
-    if (sub_api == AV_EXECUTOR_SUB_API_OPENCL) return opencl_kinds_[index];
-    /* OpenGL takes a host pointer as its context's region, not as a GL object
-     * (feature 050), so any GPU it runs on takes one. */
-    if (sub_api == AV_EXECUTOR_SUB_API_OPENGL && gl_displays_[index].open()) return AV_BLOB_HOST_POINTER;
-    /* Direct3D takes its blob arena as a region, as OpenGL does. */
-    if (sub_api == AV_EXECUTOR_SUB_API_D3D && d3d11_devices_[index].opened()) return AV_BLOB_HOST_POINTER;
-    return 0u;
+    AV_SCOPE("LoaderHostApis::memory_source");
+    return index < count_ && sources_[index].constructed() ? &sources_[index].object() : nullptr;
 }
 
 const GlDisplay *LoaderHostApis::gl_display(uint32_t index)

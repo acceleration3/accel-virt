@@ -5,7 +5,6 @@
 
 #include <unistd.h>
 
-#include "executor/d3d/frame_target.hpp"
 
 #include <stdio.h>
 
@@ -206,25 +205,6 @@ bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint64_t &
     const bool synced = shares_->writes(domain, surface, writes) && vulkan_.sync_file(fd);
     unlock();
     return synced;
-}
-
-/* A write not finished in a second is a GPU that is gone; the queue is drained
- * before the memory the copy writes is let go. */
-bool D3d11HostDevice::write_frame(ID3D11Texture2D *texture, uint32_t width, uint32_t height,
-                                  const FrameTarget &target)
-{
-    AV_SCOPE("D3d11HostDevice::write_frame");
-    constexpr uint64_t most_wait_nanoseconds = 1000000000u;
-    if (!target.fits(width, height)) return false;
-    VulkanBuffer buffer;
-    uint64_t     value = 0u;
-    lock(nullptr);
-    const bool queued = vulkan_.write(texture, target, buffer, value);
-    unlock();
-    if (!queued) return false;
-    if (vulkan_.written(value, most_wait_nanoseconds)) return true;
-    vulkan_.idle();
-    return false;
 }
 
 StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subresource, uint32_t width,
@@ -617,10 +597,12 @@ bool D3d11HostDevice::slices() const
     return slices_ != nullptr && vulkan_.connected();
 }
 
-bool D3d11HostDevice::import_to_draw(void *host, uint64_t bytes, VulkanBuffer &buffer)
+bool D3d11HostDevice::import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer)
 {
     AV_SCOPE("D3d11HostDevice::import_to_draw");
-    return slices() && buffer.import_host_pointer_to_draw(vulkan_.table(), host, bytes);
+    if (slices()) return buffer.import_dma_buf_to_draw(vulkan_.table(), fd, bytes);
+    if (fd >= 0) ::close(fd);
+    return false;
 }
 
 bool D3d11HostDevice::bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset, uint64_t bytes,

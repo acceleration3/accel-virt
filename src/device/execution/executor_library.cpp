@@ -1,7 +1,5 @@
 #include "device/execution/executor_library.hpp"
 
-#include "device/present/frame_destination.hpp"
-
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_point.hpp"
 
@@ -27,8 +25,8 @@ Status ExecutorLibrary::accept(const AvExecutorOps *ops)
 bool ExecutorLibrary::complete(const AvExecutorOps &ops) const
 {
     AV_SCOPE("ExecutorLibrary::complete");
-    return ops.sub_apis != nullptr && ops.import_kinds != nullptr && ops.open_domain != nullptr &&
-           ops.close_domain != nullptr && ops.create != nullptr && ops.destroy != nullptr && ops.execute != nullptr &&
+    return ops.sub_apis != nullptr && ops.open_domain != nullptr && ops.close_domain != nullptr &&
+           ops.allocate_memory != nullptr && ops.free_memory != nullptr && ops.create != nullptr && ops.destroy != nullptr && ops.execute != nullptr &&
            ops.end_batch != nullptr && ops.poll != nullptr && ops.gpu_progress != nullptr &&
            ops.set_signal != nullptr && ops.import_blob != nullptr && ops.release_blob != nullptr &&
            ops.imported_handle != nullptr && ops.share_object != nullptr && ops.open_object != nullptr &&
@@ -47,13 +45,6 @@ uint32_t ExecutorLibrary::sub_apis() const
 {
     AV_SCOPE("ExecutorLibrary::sub_apis");
     return ops_ != nullptr ? ops_->sub_apis(ops_->opaque) & known_sub_apis : 0u;
-}
-
-uint32_t ExecutorLibrary::import_kinds(SubApi api, const uint8_t *gpu_uuid) const
-{
-    AV_SCOPE("ExecutorLibrary::import_kinds");
-    if (ops_ == nullptr) return 0u;
-    return ops_->import_kinds(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid) & known_handle_kinds;
 }
 
 Status ExecutorLibrary::open_domain(const uint8_t *gpu_uuid)
@@ -77,6 +68,20 @@ uint32_t ExecutorLibrary::domain() const
 {
     AV_SCOPE("ExecutorLibrary::domain");
     return domain_;
+}
+
+Status ExecutorLibrary::allocate_memory(uint64_t key, uint64_t size, uint32_t request, AvHostMemory &memory) const
+{
+    AV_SCOPE("ExecutorLibrary::allocate_memory");
+    if (domain_ == 0u) return Status::no_memory;
+    return ops_->allocate_memory(ops_->opaque, domain_, key, size, request, &memory) == 0u ? Status::ok
+                                                                                           : Status::no_memory;
+}
+
+void ExecutorLibrary::free_memory(uint64_t key) const
+{
+    AV_SCOPE("ExecutorLibrary::free_memory");
+    if (domain_ != 0u) ops_->free_memory(ops_->opaque, domain_, key);
 }
 
 AvExecutor *ExecutorLibrary::create(SubApi api, const AvContextOptions &options, AvExecutor *share) const
@@ -127,10 +132,10 @@ void ExecutorLibrary::set_signal(AvExecutor *executor, void (*signal)(void *cont
     if (executor != nullptr) ops_->set_signal(ops_->opaque, executor, signal, context);
 }
 
-uint32_t ExecutorLibrary::import_blob(AvExecutor *executor, uint64_t blob_id, const AvBlobHandle &handle) const
+uint32_t ExecutorLibrary::import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key) const
 {
     AV_SCOPE("ExecutorLibrary::import_blob");
-    return ops_->import_blob(ops_->opaque, executor, blob_id, &handle);
+    return ops_->import_blob(ops_->opaque, executor, blob_id, memory_key);
 }
 
 void ExecutorLibrary::release_blob(AvExecutor *executor, uint64_t blob_id) const
@@ -211,16 +216,6 @@ bool ExecutorLibrary::map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvF
     AV_SCOPE("ExecutorLibrary::map_frame");
     return domain_ != 0u &&
            ops_->map_frame(ops_->opaque, domain_, frame.surface(), frame.point(), wait_ms, &view) == AV_EXECUTED;
-}
-
-bool ExecutorLibrary::write_frame(const SurfacePoint &frame, uint32_t wait_ms,
-                                  const FrameDestination &destination) const
-{
-    AV_SCOPE("ExecutorLibrary::write_frame");
-    return domain_ != 0u && ops_->write_frame != nullptr &&
-           ops_->write_frame(ops_->opaque, domain_, frame.surface(), frame.point(), wait_ms, destination.fd(),
-                             destination.bytes(), destination.pitch(), destination.regions(),
-                             destination.count()) == AV_EXECUTED;
 }
 
 void ExecutorLibrary::unmap_frame(const SurfacePoint &frame) const

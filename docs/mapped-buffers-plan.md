@@ -112,7 +112,7 @@ every mapped buffer it covers.
 
 The executor imports each chunk once, as a `VkBuffer` on the device the
 session runs on: from a dma-buf over the memfd range, as the D3D12 heap path
-already does, or from the host pointer through `VulkanHostImport`. A
+already does, or from the host pointer through `VulkanMemoryImport`. A
 `BindBufferSlice` then points the API's buffer at that memory:
 
 - **Direct3D 11 and Direct3D 9 (both DXVK).** DXVK already has what is needed:

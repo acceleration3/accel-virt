@@ -1,7 +1,6 @@
 #include "executor/shim/queue_work.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/d3d/frame_target.hpp"
 #include "executor/shim/borrowed_queue.hpp"
 #include "executor/shim/vulkan_device_table.hpp"
 #include "executor/shim/vulkan_timeline.hpp"
@@ -122,78 +121,6 @@ bool QueueWork::copy(VkImage source, VkImageLayout layout, VkImage destination, 
     if (!table_->begin(buffer)) return false;
     record(buffer, source, layout, destination, width, height);
     return send(slot, buffer, signal, value);
-}
-
-bool QueueWork::write(VkImage source, VkImageLayout layout, VkBuffer destination, uint32_t count,
-                      const VkBufferImageCopy *regions, const VulkanTimeline &signal, uint64_t value)
-{
-    AV_SCOPE("QueueWork::write");
-    if (!opened() || source == VK_NULL_HANDLE || destination == VK_NULL_HANDLE || count == 0u || regions == nullptr ||
-        !signal.made())
-        return false;
-    queue_->flush();
-    const uint32_t        slot = next_;
-    const VkCommandBuffer buffer = next_buffer();
-    if (!table_->begin(buffer)) return false;
-    record_write(buffer, source, layout, destination, count, regions);
-    return send(slot, buffer, signal, value);
-}
-
-/* A frame of many rows is copied a batch of rows at a time, in one command
- * buffer. */
-bool QueueWork::write_rows(VkBuffer source, uint64_t origin, uint32_t pitch, VkBuffer destination,
-                           const FrameTarget &target, const VulkanTimeline &signal, uint64_t value)
-{
-    AV_SCOPE("QueueWork::write_rows");
-    constexpr uint32_t batch = 256u;
-    constexpr uint64_t pixel_bytes = 4u;
-    if (!opened() || source == VK_NULL_HANDLE || destination == VK_NULL_HANDLE || target.count() == 0u ||
-        !signal.made())
-        return false;
-    queue_->flush();
-    const uint32_t        slot = next_;
-    const VkCommandBuffer buffer = next_buffer();
-    if (!table_->begin(buffer)) return false;
-    table_->to_transfer(buffer);
-    VkBufferCopy rows[batch];
-    uint32_t     held = 0u;
-    for (uint32_t index = 0u; index < target.count(); index++) {
-        const AvFrameRegion &region = target.region(index);
-        for (uint32_t row = 0u; row < region.height; row++) {
-            rows[held++] = VkBufferCopy{origin + (uint64_t{region.source_y} + row) * pitch +
-                                            uint64_t{region.source_x} * pixel_bytes,
-                                        (uint64_t{region.destination_y} + row) * target.pitch() +
-                                            uint64_t{region.destination_x} * pixel_bytes,
-                                        uint64_t{region.width} * pixel_bytes};
-            if (held == batch) {
-                table_->copy_buffer(buffer, source, destination, held, rows);
-                held = 0u;
-            }
-        }
-    }
-    if (held != 0u) table_->copy_buffer(buffer, source, destination, held, rows);
-    table_->to_host(buffer);
-    return send(slot, buffer, signal, value);
-}
-
-/* The destination is memory the guest reads with its CPU once the signal is
- * reached, so the writes are made available to the host. */
-void QueueWork::record_write(VkCommandBuffer buffer, VkImage source, VkImageLayout layout, VkBuffer destination,
-                             uint32_t count, const VkBufferImageCopy *regions) const
-{
-    AV_SCOPE("QueueWork::record_write");
-    const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
-    const VkImageMemoryBarrier    before = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, VK_ACCESS_MEMORY_WRITE_BIT,
-                                         VK_ACCESS_TRANSFER_READ_BIT, layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, source, whole};
-    table_->barrier(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 1u, &before);
-    table_->copy_to_buffer(buffer, source, destination, count, regions);
-    table_->to_host(buffer);
-    const VkImageMemoryBarrier after = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, VK_ACCESS_TRANSFER_READ_BIT,
-                                        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-                                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, layout, VK_QUEUE_FAMILY_IGNORED,
-                                        VK_QUEUE_FAMILY_IGNORED, source, whole};
-    table_->barrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 1u, &after);
 }
 
 bool QueueWork::send(uint32_t slot, VkCommandBuffer buffer, const VulkanTimeline &signal, uint64_t value)

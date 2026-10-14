@@ -12,7 +12,6 @@
 namespace av {
 
 class BorrowedQueue;
-class FrameTarget;
 class VulkanDeviceTable;
 class VulkanTimeline;
 
@@ -38,17 +37,6 @@ public:
      * done. The source is left in `layout`, the destination GENERAL. */
     [[nodiscard]] bool copy(VkImage source, VkImageLayout layout, VkImage destination, uint32_t width,
                             uint32_t height, const VulkanTimeline &signal, uint64_t value);
-    /* `source`, in `layout`, written into `destination` region by region,
-     * behind everything the runtime recorded; `signal` reaches `value` once it
-     * is done. The source is left in `layout`. */
-    [[nodiscard]] bool write(VkImage source, VkImageLayout layout, VkBuffer destination, uint32_t count,
-                             const VkBufferImageCopy *regions, const VulkanTimeline &signal, uint64_t value);
-    /* The regions of a frame laid out in `source` - its first texel at
-     * `origin`, rows `pitch` bytes apart - copied row by row into
-     * `destination` where `target` puts them, behind everything the runtime
-     * submitted; `signal` reaches `value` once it is done. */
-    [[nodiscard]] bool write_rows(VkBuffer source, uint64_t origin, uint32_t pitch, VkBuffer destination,
-                                  const FrameTarget &target, const VulkanTimeline &signal, uint64_t value);
     /* Everything the runtime submits after this waits for `timeline` to reach
      * `value`. */
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
@@ -60,8 +48,6 @@ private:
     VkCommandBuffer next_buffer();
     void            record(VkCommandBuffer buffer, VkImage source, VkImageLayout layout, VkImage destination,
                            uint32_t width, uint32_t height) const;
-    void            record_write(VkCommandBuffer buffer, VkImage source, VkImageLayout layout, VkBuffer destination,
-                                 uint32_t count, const VkBufferImageCopy *regions) const;
     /* `buffer`, recorded, submitted to signal `value` on `signal`; kept in
      * `slot` until that is reached. */
     [[nodiscard]] bool send(uint32_t slot, VkCommandBuffer buffer, const VulkanTimeline &signal, uint64_t value);

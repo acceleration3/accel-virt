@@ -34,13 +34,6 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
     described_ = true;
 }
 
-void DeviceCapset::withdraw_guest_import()
-{
-    AV_SCOPE("DeviceCapset::withdraw_guest_import");
-    if (!described_) return;
-    info_.withdraw(CapsetInfo::feature_guest_memory_import);
-}
-
 void DeviceCapset::resolve_display(bool takes_dmabuf)
 {
     AV_SCOPE("DeviceCapset::resolve_display");

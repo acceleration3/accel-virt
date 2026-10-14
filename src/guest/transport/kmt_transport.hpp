@@ -43,6 +43,9 @@ struct KmtTransportProbe;
 class KmtTransport final : public ClientTransport {
 public:
     static constexpr uint32_t dma_bytes    = 4096u;
+    /* Kernel waits (ten seconds each, GdiKmt) in a row with nothing moving
+     * before the host is given up on: past amdgpu's 60 s for a compute job. */
+    static constexpr uint32_t silent_waits = 7u;
 
     /* A ring of 2^ring_order data bytes, a reply slot of `reply_bytes` (whole
      * pages), and `staging_bytes` of the caller's memory at `staging`, which
@@ -193,6 +196,12 @@ private:
     void                          spin_once() const;
     template <typename Arrived> bool arrives_eventually(Arrived arrived);
     [[nodiscard]] Status          wait_for_host(uint64_t fence);
+    /* The fence page's heartbeat (docs/protocol.md, "Fence page"): it advances
+     * as the device decodes a batch, so a batch the host GPU is slow to run is
+     * told from one that will never end. 0 without a fence page. */
+    uint64_t                      device_heartbeat() const;
+    /* Whether the fence page says the device faulted this context. */
+    bool                          device_faulted() const;
     bool                          room_within_spin(uint64_t span);
 
     GuestConnection &connection_;

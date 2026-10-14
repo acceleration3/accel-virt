@@ -29,6 +29,7 @@ class ExecutorLibrary;
 class ExecutorShares;
 class FenceInterrupts;
 class ContextSetup;
+class HostBlobOwners;
 class Host;
 class StateWriter;
 class WireRecorder;
@@ -37,7 +38,7 @@ struct DeviceContextProbe;
 
 class DeviceContext {
 public:
-    DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
+    DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
                   const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id);
     ~DeviceContext();
     DeviceContext(const DeviceContext &) = delete;

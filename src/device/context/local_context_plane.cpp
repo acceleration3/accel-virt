@@ -1,13 +1,13 @@
 #include "device/context/local_context_plane.hpp"
-#include "device/present/frame_destination.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_point.hpp"
 
 namespace av {
 
-LocalContextPlane::LocalContextPlane(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, WireRecorder &recorder)
-    : library_(), contexts_(host, blobs, interrupts, library_, recorder)
+LocalContextPlane::LocalContextPlane(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
+                                     WireRecorder &recorder)
+    : library_(), contexts_(host, blobs, owners, interrupts, library_, recorder)
 {
     AV_SCOPE("LocalContextPlane::LocalContextPlane");
 }
@@ -79,10 +79,17 @@ uint32_t LocalContextPlane::sub_apis() const
     return library_.sub_apis();
 }
 
-uint32_t LocalContextPlane::import_kinds(SubApi api, const uint8_t *gpu_uuid) const
+Status LocalContextPlane::allocate_memory(uint32_t, uint64_t key, uint64_t size, uint32_t request,
+                                          AvHostMemory &memory)
 {
-    AV_SCOPE("LocalContextPlane::import_kinds");
-    return library_.import_kinds(api, gpu_uuid);
+    AV_SCOPE("LocalContextPlane::allocate_memory");
+    return library_.allocate_memory(key, size, request, memory);
+}
+
+void LocalContextPlane::free_memory(uint64_t key)
+{
+    AV_SCOPE("LocalContextPlane::free_memory");
+    library_.free_memory(key);
 }
 
 Status LocalContextPlane::create(uint32_t id)
@@ -175,13 +182,6 @@ bool LocalContextPlane::map_frame(const uint8_t *, const SurfacePoint &frame, ui
 {
     AV_SCOPE("LocalContextPlane::map_frame");
     return library_.map_frame(frame, wait_ms, view);
-}
-
-bool LocalContextPlane::write_frame(const uint8_t *, const SurfacePoint &frame, uint32_t wait_ms,
-                                    const FrameDestination &destination)
-{
-    AV_SCOPE("LocalContextPlane::write_frame");
-    return library_.write_frame(frame, wait_ms, destination);
 }
 
 void LocalContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &frame)

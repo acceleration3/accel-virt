@@ -39,9 +39,8 @@ public:
      * first time and remembered. */
     bool                 takes_dmabuf();
     /* Main loop. Head `head` shows `framebuffer` out of blob `blob`.
-     * invalid_parameter for a head past max_heads, not_supported when the
-     * display will not show a dma-buf or has no such head, and the binding's
-     * answer otherwise. */
+     * invalid_parameter for a head past max_heads, and the binding's answer
+     * otherwise: not_supported when the display has no such head. */
     [[nodiscard]] Status show(uint32_t head, uint32_t blob, const ScanoutFramebuffer &framebuffer);
     /* Main loop. Head `head` shows nothing. invalid_parameter past max_heads;
      * ok for a head that was already showing nothing. */
@@ -78,7 +77,6 @@ private:
     BlobTable                       &blobs_;
     Display                          display_;
     bool                             said_no_display_;
-    bool                             said_no_descriptor_;
     bool                             said_showing_;
     ObjectStorage<ScanoutBinding>    heads_[max_heads];
 

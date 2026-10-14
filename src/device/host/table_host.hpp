@@ -40,22 +40,11 @@ public:
     Status   reserve_range(uint64_t bytes, void *&base) override;
     Status   alias_guest_run(void *run, uint64_t bytes, void *at) override;
     void     release_range(void *base, uint64_t bytes) override;
-    Status   dmabuf_over_guest(void *const *runs, const uint64_t *sizes, uint32_t count,
-                               int &fd) override;
-    void     close_dmabuf(int fd) override;
-    void    *create_host_memory(uint64_t size, void *&pointer) override;
-    void     destroy_host_memory(void *memory) override;
     uint64_t hostmem_size() override;
-    Status   place_in_hostmem(void *memory, uint64_t offset) override;
+    Status   place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;
     void     remove_from_hostmem(uint64_t offset, uint64_t size) override;
     uint64_t monotonic_nanoseconds() override;
-    Status   read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size) override;
     Status   bind_gpu(uint32_t index) override;
-    void    *export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error) override;
-    void     release_gpu_memory(void *memory) override;
-    void    *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) override;
-    void     release_guest_memory(void *memory) override;
-    Status   read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer, uint64_t size) override;
     void     connect_doorbell(void *event, uint32_t index) override;
     void     disconnect_doorbell(void *event, uint32_t index) override;
     Status   connect_fence_interrupts() override;
@@ -69,7 +58,7 @@ public:
     Status   truncate_recording(void *file) override;
     void     close_recording(void *file) override;
     bool     display_takes_dmabuf(uint32_t head) override;
-    Status   show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
+    Status   show_scanout(uint32_t head, const uint8_t *blob, const ScanoutFramebuffer &frame) override;
     void     update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
     void     hide_scanout(uint32_t head) override;
     Status   show_image(uint32_t head, const AvExportedImage &image) override;
@@ -78,8 +67,6 @@ public:
     uint32_t guest_region_count() override;
     Status   guest_region(uint32_t index, uint32_t &region, int &descriptor, uint64_t &size) override;
     Status   locate_guest(const void *pointer, uint64_t length, uint32_t &region, uint64_t &offset) override;
-    int      host_memory_descriptor(void *memory) override;
-    Status   dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) override;
     void     close_descriptor(int descriptor) override;
     Status   start_renderer(const char *path) override;
     Status   send_renderer(const uint8_t *bytes, size_t length, const int *descriptors, uint32_t count) override;

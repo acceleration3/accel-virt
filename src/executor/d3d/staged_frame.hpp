@@ -14,7 +14,6 @@
 
 namespace av {
 
-class FrameTarget;
 
 class StagedFrame {
 public:
@@ -27,11 +26,6 @@ public:
      * failed when it never will be. Any thread, never two at once, and never
      * with the lock of SharedSurfaces held: it may take its API's own. */
     virtual Reading read(AvFrameView &view) = 0;
-    /* Written by the GPU into `target` and finished, no CPU touching a pixel
-     * (write_frame): false where this API cannot, or the target is not one
-     * the frame fits, and the frame is still there to read. Any thread, never
-     * with the lock of SharedSurfaces held. */
-    virtual bool    write(const FrameTarget &target) = 0;
     /* Unmapped if it was, and back in its pool for another frame. Any thread,
      * never with the lock of SharedSurfaces held. */
     virtual void    release() = 0;

@@ -145,34 +145,6 @@ StagedFrame *SharedSurfaces::claim(const SurfacePoint &frame, Look &found)
     return staged;
 }
 
-bool SharedSurfaces::write(const SurfacePoint &frame, uint32_t wait_ms, const FrameTarget &target)
-{
-    AV_SCOPE("SharedSurfaces::write");
-    if (!frame.names()) return false;
-    PollBudget polls(poll_nanoseconds, wait_ms * polls_per_ms + 1u);
-    while (polls.next()) {
-        Look               found = Look::wait;
-        StagedFrame *const staged = claim(frame, found);
-        if (staged == nullptr && found == Look::refused) return false;
-        if (staged == nullptr) continue;
-        const bool written = staged->write(target);
-        /* A slot being read is neither evicted nor released, so it is still this. */
-        lock();
-        Slot *const  kept = slot(frame);
-        StagedFrame *done = nullptr;
-        if (written) {
-            done = kept->staged_;
-            *kept = Slot{};
-        } else {
-            kept->reading_ = false;
-        }
-        unlock();
-        if (done != nullptr) done->release();
-        return written;
-    }
-    return false;
-}
-
 void SharedSurfaces::unmap(const SurfacePoint &frame)
 {
     AV_SCOPE("SharedSurfaces::unmap");

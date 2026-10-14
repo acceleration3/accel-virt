@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from d3d11_report import compare, guest_shell, png, read_frame, verdict, write_summary  # noqa: E402
+from d3d11_report import compare, guest_shell, host_run, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\av\\clsamples"
@@ -143,9 +143,9 @@ def run_host(args, out):
                "--warmup", str(args.warmup), "--device", str(args.device)]
     if args.only:
         command += ["--only", args.only]
-    done = subprocess.run(command, capture_output=True, text=True, timeout=1800)
-    (out / "host.log").write_text(done.stdout + done.stderr)
-    print(done.stdout, flush=True)
+    text = host_run(command)
+    (out / "host.log").write_text(text)
+    print(text, flush=True)
 
 
 def metrics(path):

@@ -279,16 +279,11 @@ bool OpenClBackend::lost() const
 bool OpenClBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    /* A host pointer, and one at a time: this is the context's blob arena,
-     * and a second would leave the first unreachable with its buffers
-     * pointing into memory nothing owns.
-     *
-     * A dma-buf is still not adopted. That would be
-     * clCreateBufferWithProperties with an fd, which is a per-platform
-     * question this host answers differently on each of its OpenCL platforms.
-     * CL_MEM_USE_HOST_PTR needs no extension at all, which is why this half
-     * is the one that works everywhere. */
-    return arena_.adopt_pointer(blob);
+    /* One at a time: this is the context's arena, and a second would leave
+     * the first unreachable with its buffers pointing into memory nothing
+     * owns. Its buffers are made over the source's own mapping of it with
+     * CL_MEM_USE_HOST_PTR, which needs no extension on any platform. */
+    return arena_.adopt(blob);
 }
 
 void OpenClBackend::abandon(ImportedBlob &blob)
@@ -424,7 +419,6 @@ void OpenClBackend::shut_down()
      * afterwards may resolve one. */
     svm_.forget_all();
     mapped_.forget_all();
-    arena_.give_back();
     if (queue_ != nullptr) {
         static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(queue_)));
         queue_ = nullptr;

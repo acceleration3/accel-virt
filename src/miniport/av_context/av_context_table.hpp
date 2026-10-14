@@ -16,10 +16,10 @@
 #ifndef AV_AV_CONTEXT_TABLE_HPP
 #define AV_AV_CONTEXT_TABLE_HPP
 
-#include "miniport/memory/guest_pages.hpp"
 #include "core/platform/platform.hpp"
 #include "core/platform/spin_lock.hpp"
 #include "core/platform/wait_mutex.hpp"
+#include "miniport/av_context/chunk_ids.hpp"
 #include "miniport/av_context/context_chunk.hpp"
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/ring_submitter.hpp"
@@ -56,6 +56,9 @@ class AvContextTable {
 public:
     /* One per doorbell page. */
     static constexpr uint32_t max_contexts = RingSubmitter::doorbell_pages;
+    /* Chunks one context may hold at once: a quarter of the device's ids, so
+     * no one process can take them all. */
+    static constexpr uint32_t max_chunks_per_context = HostBlobId::count / 4u;
 
     /* `window` is the device's host window, which window chunks are placed in
      * and which must outlive the table. */
@@ -130,26 +133,23 @@ public:
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();
-    /* DISPATCH. The context `allocation` names, or runs a chunk on, or null:
-     * a context whose name goes, goes with it. */
+    /* DISPATCH. The context `allocation` names, or null: a context whose name
+     * goes, goes with it. */
     void                *user_of(const Allocation *allocation);
-    /* PASSIVE, inside the Escape of the process that asks (docs/host-window.md).
+    /* PASSIVE, inside the Escape of the process that asks (docs/host-memory.md).
      * An open takes the first run of window pages that holds `record`'s bytes
-     * rounded up to pages, makes a host blob of the context's next free chunk
-     * resource, has the device place it there, maps those pages into the
-     * calling process write-back, and answers the resource, the bytes granted
-     * and the address in `record`. Where the window cannot hold the chunk -
-     * there is none, it has no run that long, the device will not make or
-     * place the blob, or the process cannot be given a view within its reach
-     * - the chunk is guest RAM the driver owns instead, published as a GUEST
-     * blob and mapped cached. A close unmaps the process's view, has the
-     * device unmap and release the blob, and only then frees the pages.
-     * invalid_parameter for a context not live or a resource that is none of
-     * its chunks; no_space when every chunk slot is taken or the size cannot
-     * be held at all; no_memory when there is neither memory nor a view; the
-     * device's refusal of the GUEST blob, or of letting a RAM chunk go while
-     * an import holds it, which leaves that chunk bound. Nothing is held on a
-     * failed open. */
+     * rounded up to pages and a free host blob id, has the device make a host
+     * blob of the memory `record` names for the context and place it there,
+     * maps those pages into the calling process with the caching the device
+     * answers, and answers the resource, the bytes granted and the address in
+     * `record`. A close unmaps the process's view, has the device unmap and
+     * release the blob, and only then frees the pages and the id. Nothing
+     * falls back to guest RAM: invalid_parameter for a context not live or a
+     * resource that is none of its chunks; no_space when the context holds
+     * max_chunks_per_context, every id is taken, or the window has no run
+     * that long; not_supported with no window; no_memory when the process
+     * cannot be given a view; the device's refusal otherwise. Nothing is held
+     * on a failed open. */
     [[nodiscard]] Status window_chunk(void *context, HostWindowRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
     /* DISPATCH. Whether the table still holds `context`. Destroying an
@@ -202,22 +202,17 @@ private:
      * `host_let_go` says a device that is not asked holds nothing of the
      * context any more, so its window pages are free again. */
     void                 release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go);
-    /* The index of the slot's first free chunk slot, or chunk_slots. */
-    uint32_t             free_chunk(uint32_t slot) const;
     [[nodiscard]] Status open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
-    /* The chunk as a run of window pages, in chunk slot `index`. */
-    [[nodiscard]] Status place_in_window(uint32_t slot, uint32_t index, HostWindowRecord &record,
+    /* The chunk as a run of window pages under host blob id `resource`. */
+    [[nodiscard]] Status place_in_window(uint32_t slot, uint32_t resource, HostWindowRecord &record,
                                          VirtioGpuDevice &device);
-    /* The chunk as guest RAM the driver owns, in chunk slot `index`. */
-    [[nodiscard]] Status place_in_ram(uint32_t slot, uint32_t index, HostWindowRecord &record,
-                                      VirtioGpuDevice &device);
     [[nodiscard]] Status close_window(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device);
-    /* Takes a window chunk down: the process's view, then the blob on `device`
-     * when there is one to ask, then the pages. */
+    /* Slot `slot`'s chunk of blob `resource_id`, or null. */
+    ContextChunk        *find_chunk(uint32_t slot, uint32_t resource_id);
+    /* Takes a chunk down: the process's view, then the blob on `device` when
+     * there is one to ask, then the pages and the id - kept out of use for
+     * good when the device may still hold the blob placed. */
     void                 take_down(ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go);
-    /* Takes a RAM chunk down: the blob on `device` when there is one to ask,
-     * then the view and the pages. */
-    void                 take_down_ram(uint32_t slot, ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go);
     void                 log_binding(uint32_t slot, uint32_t message, Status status);
 
     Platform                        &platform_;
@@ -231,9 +226,13 @@ private:
     /* The allocation each slot's context is named by. */
     const Allocation                *names_[max_contexts];
     ObjectStorage<ContextMemory>     memories_[max_contexts];
-    ContextChunk                     chunks_[max_contexts][AvContextBinding::chunk_slots];
-    /* The pages of every RAM chunk a slot holds. */
-    ObjectPool<GuestPages>           ram_chunks_;
+    /* Every chunk every context holds, the ids they took, and how many each
+     * slot holds. The pool and the ids change only inside a request
+     * sequence; the counts, which a state dump reads, under the spin lock
+     * too. */
+    ObjectPool<ContextChunk>         chunks_;
+    ChunkIds                         ids_;
+    uint32_t                         held_chunks_[max_contexts];
     uint8_t                          orders_[max_contexts];
     /* The event each slot's process asked to be woken by, or null; the raises
      * its fence page had shown when it was last set; and whether it was set

@@ -16,7 +16,6 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
-#include "executor/d3d/frame_target.hpp"
 #include "executor/executor_root.hpp"
 #include "device/shim/host_trace.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -155,19 +154,25 @@ uint32_t execute(void *, AvExecutor *executor, uint32_t command_id, const uint8_
     return result;
 }
 
-uint32_t import_kinds(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
+uint32_t allocate_memory(void *, uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
+                         AvHostMemory *memory)
 {
-    AV_SCOPE("import_kinds");
-    return library.root().import_kinds(sub_api, gpu_uuid);
+    AV_SCOPE("allocate_memory");
+    if (memory == nullptr) return 1u;
+    return library.root().allocate_memory(domain, key, size, request, *memory) == av::Status::ok ? 0u : 1u;
 }
 
-uint32_t import_blob(void *, AvExecutor *executor, uint64_t blob_id,
-                     const AvBlobHandle *handle)
+void free_memory(void *, uint32_t domain, uint64_t key)
+{
+    AV_SCOPE("free_memory");
+    library.root().free_memory(domain, key);
+}
+
+uint32_t import_blob(void *, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key)
 {
     AV_SCOPE("import_blob");
     av::ContextSession *const session = session_of(executor);
-    if (session == nullptr || handle == nullptr) return AV_UNDECODABLE;
-    return session->import_blob(blob_id, *handle);
+    return session != nullptr ? session->import_blob(blob_id, memory_key) : AV_UNDECODABLE;
 }
 
 void release_blob(void *, AvExecutor *executor, uint64_t blob_id)
@@ -240,15 +245,6 @@ uint32_t map_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, ui
                : AV_UNKNOWN;
 }
 
-uint32_t write_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms, int fd,
-                     uint64_t bytes, uint32_t pitch, const AvFrameRegion *regions, uint32_t count)
-{
-    AV_SCOPE("write_frame");
-    const av::FrameTarget target(fd, bytes, pitch, regions, count);
-    return library.root().write_frame(domain, av::SurfacePoint(surface, point), wait_ms, target) ? AV_EXECUTED
-                                                                                                : AV_UNKNOWN;
-}
-
 void unmap_frame(void *, uint32_t domain, uint64_t surface, uint32_t point)
 {
     AV_SCOPE("unmap_frame");
@@ -303,9 +299,10 @@ void gpu_progress(void *, AvExecutor *executor, uint64_t *marked, uint64_t *reac
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
-                              import_kinds,
                               open_domain,
                               close_domain,
+                              allocate_memory,
+                              free_memory,
                               create,
                               destroy,
                               execute,
@@ -326,8 +323,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
-                              compose_planes,
-                              write_frame};
+                              compose_planes};
 
 }  // namespace
 

@@ -20,7 +20,7 @@ public:
         ready,
         region,
         guest_blob,
-        host_blob,
+        allocate_memory,
         blob_retired,
         create_context,
         bind_context,
@@ -30,7 +30,9 @@ public:
         reply,
         export_image,
         exported_image,
-        shared_released
+        shared_released,
+        allocated_memory,
+        free_memory
     };
 
     static constexpr size_t   encoded_size = 16u;

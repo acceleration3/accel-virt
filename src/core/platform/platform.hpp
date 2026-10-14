@@ -26,6 +26,11 @@ class DdiTable;
  * that buffer's size. The signature is KBUGCHECK_CALLBACK_ROUTINE's. */
 using BugcheckRoutine = void (*)(void *buffer, uint32_t bytes);
 
+/* How a process's view of device memory is cached: as the host maps the
+ * memory behind it, since one page seen through two cache types reads stale
+ * data (docs/host-memory.md). */
+enum class PageCaching : unsigned { write_back = 0, write_combined = 1 };
+
 class Platform : public BlockSource {
 public:
     Platform() = default;
@@ -75,11 +80,11 @@ public:
     /* Of a view map_pages returned, with the mapping it answered. */
     virtual void     unmap_pages(uint8_t *view, void *mapping) = 0;
     /* `bytes` of device memory at physical address `physical` (both
-     * page-aligned) mapped write-back into the calling process: its address
-     * there in `view`, and what unmap_from_process takes in `mapping`.
-     * no_memory when it cannot be mapped. Passive only. */
-    [[nodiscard]] virtual Status map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view,
-                                                void *&mapping) = 0;
+     * page-aligned) mapped into the calling process with `caching`: its
+     * address there in `view`, and what unmap_from_process takes in
+     * `mapping`. no_memory when it cannot be mapped. Passive only. */
+    [[nodiscard]] virtual Status map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching,
+                                                uint64_t &view, void *&mapping) = 0;
     /* Every page of `pages`, a record allocate_pages returned, mapped cached
      * into the calling process as map_to_process maps device memory, with the
      * same answers. */

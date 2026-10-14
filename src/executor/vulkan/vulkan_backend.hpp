@@ -19,7 +19,7 @@
 #include "executor/session_backend.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/shim/physical_device_list.hpp"
-#include "executor/shim/vulkan_host_import.hpp"
+#include "executor/shim/vulkan_memory_import.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
 #include <stdint.h>
@@ -29,6 +29,7 @@ namespace av {
 class SharedImageShape;
 
 class HostGpu;
+class HostMemorySource;
 class ImportedBlob;
 
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
@@ -36,8 +37,9 @@ public:
     VulkanBackend();
 
     /* Binds this context to the GPU the device is bound to, which must outlive
-     * it: the one physical device an enumeration answers. */
-    void initialize(const HostGpu &gpu);
+     * it: the one physical device an enumeration answers, and the memory
+     * source the guest's host-visible memory comes from (null: none). */
+    void initialize(const HostGpu &gpu, HostMemorySource *source);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -213,10 +215,9 @@ private:
      * take the host process down. The device still gets no more than its GPU
      * supports, and an alias does exactly what its core command does. */
     void adopt_host_version(VkInstanceCreateInfo &create);
-    /* Adds VK_KHR_external_memory and VK_EXT_external_memory_host to the
-     * extensions a device is made with, unless the guest named them or its
-     * list has no room. */
-    void enable_host_import(VkDeviceCreateInfo &create);
+    /* Adds the dma-buf import extensions to the ones a device is made with,
+     * unless the guest named them or its list has no room. */
+    void enable_memory_import(VkDeviceCreateInfo &create);
 
     HostTemplateTable templates_;
     HostExportedFds   fds_;
@@ -230,30 +231,14 @@ private:
      * when the table is full, with the fd closed since nothing can name it. */
     VkResult           remembered(VkDevice device, VkResult answered, int *fd);
     /* Whether something made on `device` with the chain at `next` gets
-     * `host_types` added as a structure of type `external`: only on the
-     * device imports go to, made able to import, with types the driver
-     * allows, and a chain that does not already say for itself. */
-    bool backs_with_host(VkDevice device, const void *next, VkStructureType external,
-                         VkExternalMemoryHandleTypeFlags host_types) const;
-    /* Whether the driver imports the blob's pointer into the type it asks
-     * for on the guest's device. */
-    bool importable(const ImportedBlob &blob);
-    /* The blob as device memory of the guest's device, with `memory` what it
-     * became: refused for a type the driver will not import that handle into,
-     * and for a handle it will not take. */
-    [[nodiscard]] bool adopt_dmabuf(const ImportedBlob &blob, uint64_t &memory);
-    [[nodiscard]] bool adopt_pointer(const ImportedBlob &blob, uint64_t &memory);
-    /* Narrows `properties` of `physical` to what imports, learning the mask
-     * the first time `physical` is asked about. */
+     * `types` added as a structure of type `external`: only on the device
+     * imports go to, made able to import, with types the driver allows, and a
+     * chain that does not already say for itself. */
+    bool backs_with_source(VkDevice device, const void *next, VkStructureType external,
+                           VkExternalMemoryHandleTypeFlags types) const;
+    /* Narrows `properties` of `physical` to what the memory source maps,
+     * learning the mask the first time `physical` is asked about. */
     void restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties);
-    /* Measures what `physical` imports, once: the kind and the memory types
-     * it takes that kind into are decided together, because a guest shown the
-     * types of one kind and handed memory of the other would bind neither.
-     * Nothing where it is already known. */
-    void             decide_import(VkPhysicalDevice physical);
-    /* The handle type the decided kind is imported from, which is what a
-     * buffer or an image must be made with to be bound to it. */
-    VkExternalMemoryHandleTypeFlagBits external_type(VkPhysicalDevice physical);
     /* The lowest memory type in `mask` this device has, or max_memory_types
      * when the mask is empty: a shared descriptor carries no type of its own,
      * unlike a blob, whose guest asked for one. */
@@ -273,6 +258,7 @@ private:
      * the guest makes exactly one per context through vkCreateDevice, so this
      * is taken from the command that made it rather than guessed. */
     const HostGpu     *gpu_;
+    HostMemorySource  *source_;
     PhysicalDeviceList listed_;
     /* The names the create being run is made with. One list serves instances
      * and devices: a create is one command, and nothing reads it afterwards. */
@@ -282,11 +268,11 @@ private:
     VkInstance     instance_;
     VkDevice         device_;
     VkPhysicalDevice physical_;
-    /* The device imports go to was made with VK_EXT_external_memory_host. */
-    bool             host_import_;
+    /* The device imports go to was made able to import a dma-buf. */
+    bool             memory_import_;
     HandleRegistry   handles_;
     AdoptedBlobs     adopted_;
-    VulkanHostImport import_;
+    VulkanMemoryImport import_;
     ImportableTypes  importable_;
     /* AV_VK_SUBMIT_TIMING: the GPU's time in and between submissions. */
     VulkanSubmitTiming timing_;

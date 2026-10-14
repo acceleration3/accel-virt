@@ -3,6 +3,7 @@
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/imported_blob.hpp"
 #include "proto/generated/opengl/gl_command_names.h"
@@ -133,7 +134,6 @@ void OpenGlBackend::shut_down()
     void *fence = nullptr;
     while (fences_.take_any(fence))
         if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
-    region_.give_back();
     context_.close();
     gl_ = glproto::RealGl{};
     resolved_ = 0u;
@@ -236,8 +236,8 @@ bool OpenGlBackend::lost() const
 bool OpenGlBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    if (!region_.adopt_pointer_or_buffer(blob)) return false;
-    pack_.adopt(blob.descriptor(), blob.size());
+    if (!region_.adopt(blob)) return false;
+    pack_.adopt(blob.memory().share(), blob.memory().size());
     return true;
 }
 

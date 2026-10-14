@@ -1,7 +1,6 @@
 #include "executor/shim/d3d9_frame_pool.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/d3d/frame_target.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
@@ -148,31 +147,6 @@ bool D3d9FramePool::Frame::lane_ready()
     AV_SCOPE("D3d9FramePool::Frame::lane_ready");
     if (!lane_.connected() && !lane_.connect(device_)) return false;
     return written_.made() || written_.make_exportable(lane_.table());
-}
-
-/* A write not finished in a second is a GPU that is gone: the queue is drained
- * before the memory it writes is let go. */
-bool D3d9FramePool::Frame::write(const FrameTarget &target)
-{
-    AV_SCOPE("D3d9FramePool::Frame::write");
-    constexpr uint64_t most_wait_nanoseconds = 1000000000u;
-    if (held_ == nullptr || target.count() > PresentCopyRequest::max_regions || !target.fits(width_, height_) ||
-        !lane_ready())
-        return false;
-    VkImage       image = VK_NULL_HANDLE;
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    VulkanBuffer  buffer;
-    if (!lane_.surface_image(held_, image, layout) ||
-        !buffer.import_dma_buf(lane_.table(), dup(target.fd()), target.bytes()))
-        return false;
-    VkBufferImageCopy regions[PresentCopyRequest::max_regions];
-    for (uint32_t index = 0u; index < target.count(); index++) regions[index] = target.copy(index);
-    const uint64_t value = writes_ + 1u;
-    if (!lane_.work().write(image, layout, buffer.buffer(), target.count(), regions, written_, value)) return false;
-    writes_ = value;
-    if (written_.wait(value, most_wait_nanoseconds)) return true;
-    lane_.work().idle();
-    return false;
 }
 
 /* The first read copies the frame into memory and flushes it to the GPU; a

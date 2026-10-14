@@ -13,7 +13,6 @@
 
 namespace av {
 
-class FrameDestination;
 
 class SurfacePoint;
 
@@ -35,9 +34,6 @@ public:
      * none comes in time or none can be read here. */
     [[nodiscard]] bool map(const SurfacePoint &frame, AvFrameView &view) const;
     void               unmap(const SurfacePoint &frame) const;
-    /* The snapshot written by the host's GPU into `destination` and let go
-     * (ContextPlane::write_frame); false where it is not. */
-    [[nodiscard]] bool write(const SurfacePoint &frame, const FrameDestination &destination) const;
 
 private:
     ContextPlane *plane_;

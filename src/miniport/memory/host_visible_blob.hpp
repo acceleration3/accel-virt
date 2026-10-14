@@ -1,6 +1,6 @@
-/* One window chunk's memory on the device: a blob of the host's own pages,
- * placed in the hostmem region so the guest can address it through the BAR
- * (docs/host-window.md).
+/* One window chunk's memory on the device: a host blob of host GPU memory,
+ * made for one av context and placed in the hostmem region so the guest can
+ * address it through the BAR (docs/host-memory.md).
  *
  * The device is a parameter and not a member because it is not stable for this
  * object's lifetime: an allocation outlives a power transition, and the
@@ -12,6 +12,7 @@
 
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <stdint.h>
 
@@ -31,12 +32,15 @@ public:
     HostVisibleBlob(const HostVisibleBlob &) = delete;
     HostVisibleBlob &operator=(const HostVisibleBlob &) = delete;
 
-    /* A mappable blob of `bytes` host pages. invalid_parameter for no resource,
-     * no bytes or a size that is not a page multiple; invalid_state if this
-     * already holds one. */
-    [[nodiscard]] Status create(VirtioGpuDevice &device, uint32_t resource_id, uint64_t bytes);
+    /* A mappable blob of `bytes` of the memory `memory` names, for the
+     * device's context `context_id`. invalid_parameter for no context, no
+     * resource, no memory, no bytes or a size that is not a page multiple;
+     * invalid_state if this already holds one. */
+    [[nodiscard]] Status create(VirtioGpuDevice &device, uint32_t context_id, uint32_t resource_id,
+                                HostMemoryRequest memory, uint64_t bytes);
     /* Placed at `offset` of the region. The device's answer is judged: only
-     * OK_MAP_INFO with the caching it promised counts as mapped. */
+     * OK_MAP_INFO with a caching this driver can give a process counts as
+     * mapped, and caching() is then that caching. */
     [[nodiscard]] Status map(VirtioGpuDevice &device, uint64_t offset);
     [[nodiscard]] Status unmap(VirtioGpuDevice &device);
     /* Unmaps first if mapped, then unrefs: the device refuses to release a
@@ -50,6 +54,9 @@ public:
     bool     created() const;
     bool     mapped() const;
     uint32_t resource() const;
+    /* How the device said a view of it must be cached; write-back until
+     * mapped. */
+    PageCaching caching() const;
     /* Where in the region it is mapped; zero when it is not. */
     uint64_t offset() const;
 
@@ -57,6 +64,7 @@ public:
 
 private:
     static constexpr uint32_t map_cache_cached = 1u;   /* VIRTIO_GPU_MAP_CACHE_CACHED */
+    static constexpr uint32_t map_cache_wc = 3u;       /* VIRTIO_GPU_MAP_CACHE_WC */
     /* The largest of the three requests this sends is the 56-byte create, so a
      * writer over `request_` cannot refuse one and its answer is not a branch
      * anybody can take. */
@@ -69,6 +77,7 @@ private:
     uint32_t  resource_;
     uint64_t  offset_;
     bool      mapped_;
+    PageCaching caching_;
     friend struct HostVisibleBlobProbe;
 
     uint8_t   request_[request_bytes];

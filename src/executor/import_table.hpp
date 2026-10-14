@@ -12,26 +12,24 @@
 
 #include <stdint.h>
 
-struct AvBlobHandle;
 
 namespace av {
 
+class SourceMemory;
+
 class ImportTable {
 public:
-    /* The device holds at most a thousand blobs at once; a quarter of that per
-     * context lets four contexts each import a disjoint share of everything it
-     * can hold, without a table sixteen times the size of what anyone uses. */
-    static constexpr uint32_t max_imports = 256u;
+    /* As many as the device lets one context hold (BlobImports). */
+    static constexpr uint32_t max_imports = 4096u;
 
     ImportTable();
     ImportTable(const ImportTable &) = delete;
     ImportTable &operator=(const ImportTable &) = delete;
 
-    /* Records `handle` under `blob_id`. conflict for an id already imported -
-     * a silent teardown is what a hostile guest would drive at the worst
-     * moment - no_space when the table is full, and invalid_parameter for a
-     * handle that breaks the ABI's rules. */
-    [[nodiscard]] Status take(uint64_t blob_id, const AvBlobHandle &handle, ImportedBlob *&taken);
+    /* Records `memory`, held for the import, under `blob_id`. conflict for an
+     * id already imported - a silent teardown is what a hostile guest would
+     * drive at the worst moment - and no_space when the table is full. */
+    [[nodiscard]] Status take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&taken);
     /* The blob `blob_id` names, or null. */
     ImportedBlob        *find(uint64_t blob_id);
     /* Gives one back, or nothing if that id was never imported: release is

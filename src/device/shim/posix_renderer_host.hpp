@@ -44,7 +44,6 @@ public:
     void                 close_descriptor(int descriptor) override;
     /* The memfd the next create_host_memory maps; this host closes it with the
      * memory, or at the next offer if nothing took it. */
-    void                 offer_host_memory(int descriptor) override;
     void                 take_interrupt_lines(const int *descriptors, uint32_t count) override;
     void                 drop_interrupt_lines() override;
     [[nodiscard]] Status load_executor(const char *path, uint32_t length, const AvExecutorOps *&ops) override;
@@ -87,24 +86,12 @@ public:
     [[nodiscard]] Status reserve_range(uint64_t bytes, void *&base) override;
     [[nodiscard]] Status alias_guest_run(void *run, uint64_t bytes, void *at) override;
     void                 release_range(void *base, uint64_t bytes) override;
-    [[nodiscard]] Status dmabuf_over_guest(void *const *runs, const uint64_t *sizes, uint32_t count,
-                                           int &fd) override;
-    void                 close_dmabuf(int fd) override;
 
-    void                *create_host_memory(uint64_t size, void *&pointer) override;
-    void                 destroy_host_memory(void *memory) override;
     uint64_t             hostmem_size() override;
-    [[nodiscard]] Status place_in_hostmem(void *memory, uint64_t offset) override;
+    [[nodiscard]] Status place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;
     void                 remove_from_hostmem(uint64_t offset, uint64_t size) override;
-    [[nodiscard]] Status read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size) override;
 
     [[nodiscard]] Status bind_gpu(uint32_t index) override;
-    [[nodiscard]] void  *export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error) override;
-    void                 release_gpu_memory(void *memory) override;
-    [[nodiscard]] void  *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) override;
-    void                 release_guest_memory(void *memory) override;
-    [[nodiscard]] Status read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer,
-                                              uint64_t size) override;
 
     void connect_doorbell(void *event, uint32_t index) override;
     void disconnect_doorbell(void *event, uint32_t index) override;
@@ -123,7 +110,7 @@ public:
     void                 close_recording(void *file) override;
 
     bool                 display_takes_dmabuf(uint32_t head) override;
-    [[nodiscard]] Status show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
+    [[nodiscard]] Status show_scanout(uint32_t head, const uint8_t *blob, const ScanoutFramebuffer &frame) override;
     [[nodiscard]] Status show_image(uint32_t head, const AvExportedImage &image) override;
     void                 update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width,
                                         uint32_t height) override;
@@ -135,8 +122,6 @@ public:
     [[nodiscard]] Status guest_region(uint32_t index, uint32_t &region, int &descriptor, uint64_t &size) override;
     [[nodiscard]] Status locate_guest(const void *pointer, uint64_t length, uint32_t &region,
                                       uint64_t &offset) override;
-    int                  host_memory_descriptor(void *memory) override;
-    [[nodiscard]] Status dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) override;
     [[nodiscard]] Status start_renderer(const char *path) override;
     [[nodiscard]] Status send_renderer(const uint8_t *bytes, size_t length, const int *descriptors,
                                        uint32_t count) override;
@@ -159,7 +144,6 @@ private:
     };
 
     bool on_main_loop() const;
-    void close_offered_memory();
 
     static constexpr uint32_t path_capacity = 4096u;
 
@@ -172,7 +156,6 @@ private:
     pthread_mutex_t   posted_lock_;
     Posted           *posted_first_;
     Posted           *posted_last_;
-    int               offered_memory_;
     int               interrupt_lines_[max_interrupt_lines];
     bool              interrupts_connected_;
 };

@@ -5,7 +5,6 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "guest/transport/host_window_chunk.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "proto/context/sub_api.hpp"
@@ -122,24 +121,24 @@ TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
     return channel_.transport().send_batch(framed, length, unanswered);
 }
 
-Status Connection::open_chunk(ObjectStorage<HostWindowChunk> &chunk, uint64_t bytes)
+Status Connection::open_memory(ObjectStorage<HostAllocation> &allocation, uint64_t bytes, HostMemoryRequest memory)
 {
-    AV_SCOPE("Connection::open_chunk");
-    if (!opened() || faulted() || chunk.constructed()) return Status::invalid_state;
+    AV_SCOPE("Connection::open_memory");
+    if (!opened() || faulted() || allocation.constructed()) return Status::invalid_state;
     const icd::ThreadLockHold release(lock_);
-    static_cast<void>(chunk.construct(connection_, channel_.transport()));   /* checked empty above */
-    const Status status = chunk.object().open(bytes);
-    if (status != Status::ok) chunk.destroy();
+    static_cast<void>(allocation.construct(connection_, channel_.transport()));   /* checked empty above */
+    const Status status = allocation.object().open(bytes, memory);
+    if (status != Status::ok) allocation.destroy();
     return status;
 }
 
-Status Connection::close_chunk(ObjectStorage<HostWindowChunk> &chunk)
+Status Connection::close_memory(ObjectStorage<HostAllocation> &allocation)
 {
-    AV_SCOPE("Connection::close_chunk");
-    if (!chunk.constructed()) return Status::ok;
+    AV_SCOPE("Connection::close_memory");
+    if (!allocation.constructed()) return Status::ok;
     const icd::ThreadLockHold release(lock_);
-    const Status released = chunk.object().release();
-    chunk.destroy();
+    const Status released = faulted() ? allocation.object().abandon() : allocation.object().close();
+    allocation.destroy();
     return released;
 }
 

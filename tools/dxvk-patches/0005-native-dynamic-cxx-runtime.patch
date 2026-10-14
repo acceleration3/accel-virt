@@ -1,0 +1,28 @@
+From: accel-virt
+Subject: [PATCH] dxvk: link the C++ runtime of the machine the native build runs on
+
+The native build linked libstdc++ and libgcc statically, so the libraries
+carried the builder's own copies. A builder whose distribution compiles
+libstdc++.a for x86-64-v4 (CachyOS) then makes libraries that execute AVX-512
+in std::locale's constructor the moment they are loaded: 1035 such
+instructions, and SIGILL in QEMU on a host without AVX-512 (an Alder Lake
+laptop) when the executor opened libdxvk_dxgi.so. Linked dynamically they use
+the host's libstdc++.so, built for the host's CPU, as vkd3d-proton's native
+build already does.
+---
+diff --git a/meson.build b/meson.build
+index 4964301b..a8712997 100644
+--- a/meson.build
++++ b/meson.build
+@@ -167,11 +167,6 @@ else
+   
+   dxvk_name_prefix = 'dxvk_'
+   dxvk_pkg_prefix = 'dxvk-'
+-
+-  link_args += [
+-    '-static-libgcc',
+-    '-static-libstdc++',
+-  ]
+ endif
+ 
+ dxbc_spirv = subproject('dxbc-spirv')

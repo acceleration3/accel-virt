@@ -4,57 +4,16 @@
 
 namespace av {
 
-ContextChunk::ContextChunk() : ram_(nullptr), mapping_(nullptr), resource_id_(0u), first_page_(0u), pages_(0u)
+ContextChunk::ContextChunk(uint32_t slot, uint32_t resource_id, uint32_t first_page, uint32_t pages, void *mapping)
+    : slot_(slot), resource_id_(resource_id), first_page_(first_page), pages_(pages), mapping_(mapping)
 {
     AV_SCOPE("ContextChunk::ContextChunk");
 }
 
-void ContextChunk::take_ram(uint32_t resource_id, GuestPages &pages)
+uint32_t ContextChunk::slot() const
 {
-    AV_SCOPE("ContextChunk::take_ram");
-    ram_ = &pages;
-    mapping_ = nullptr;
-    resource_id_ = resource_id;
-    first_page_ = 0u;
-    pages_ = 0u;
-}
-
-void ContextChunk::take_window(uint32_t resource_id, uint32_t first, uint32_t pages, void *mapping)
-{
-    AV_SCOPE("ContextChunk::take_window");
-    ram_ = nullptr;
-    mapping_ = mapping;
-    resource_id_ = resource_id;
-    first_page_ = first;
-    pages_ = pages;
-}
-
-void ContextChunk::clear()
-{
-    AV_SCOPE("ContextChunk::clear");
-    ram_ = nullptr;
-    mapping_ = nullptr;
-    resource_id_ = 0u;
-    first_page_ = 0u;
-    pages_ = 0u;
-}
-
-bool ContextChunk::bound() const
-{
-    AV_SCOPE("ContextChunk::bound");
-    return resource_id_ != 0u;
-}
-
-bool ContextChunk::in_window() const
-{
-    AV_SCOPE("ContextChunk::in_window");
-    return mapping_ != nullptr;
-}
-
-GuestPages *ContextChunk::ram() const
-{
-    AV_SCOPE("ContextChunk::ram");
-    return ram_;
+    AV_SCOPE("ContextChunk::slot");
+    return slot_;
 }
 
 uint32_t ContextChunk::resource_id() const
@@ -81,16 +40,10 @@ void *ContextChunk::mapping() const
     return mapping_;
 }
 
-/* A slot holds exactly one kind of chunk when it names a resource, and nothing
- * when it does not; a window chunk is at least a page. */
 bool ContextChunk::invariants_hold() const
 {
     AV_SCOPE("ContextChunk::invariants_hold");
-    const bool guest = ram_ != nullptr;
-    const bool window = mapping_ != nullptr;
-    if (resource_id_ == 0u) return !guest && !window && pages_ == 0u && first_page_ == 0u;
-    if (guest) return !window && pages_ == 0u && first_page_ == 0u;
-    return window && pages_ != 0u;
+    return resource_id_ != 0u && pages_ != 0u && mapping_ != nullptr;
 }
 
 }  // namespace av

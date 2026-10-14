@@ -7,6 +7,8 @@
 #include "device/abi/av_executor.h"
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu.hpp"
+#include "executor/host_memory_source.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "proto/resources/surface_point.hpp"
@@ -46,13 +48,6 @@ uint32_t ExecutorRoot::sub_apis() const
     return apis_ != nullptr ? gpus_.sub_apis() : 0u;
 }
 
-uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const
-{
-    AV_SCOPE("ExecutorRoot::import_kinds");
-    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
-    return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
-}
-
 uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid)
 {
     AV_SCOPE("ExecutorRoot::open_domain");
@@ -64,8 +59,33 @@ void ExecutorRoot::close_domain(uint32_t domain)
 {
     AV_SCOPE("ExecutorRoot::close_domain");
     release_shared(domain, 0u);
+    HostMemorySource *const source = source_of(domain);
+    if (source != nullptr) source->free_domain(domain);
     uint32_t gpu = 0u;
     static_cast<void>(domains_.close(domain, gpu));
+}
+
+HostMemorySource *ExecutorRoot::source_of(uint32_t domain) const
+{
+    AV_SCOPE("ExecutorRoot::source_of");
+    const HostGpu *const gpu = gpu_of(domain);
+    return gpu != nullptr ? apis_->memory_source(gpu->index()) : nullptr;
+}
+
+Status ExecutorRoot::allocate_memory(uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
+                                     AvHostMemory &memory)
+{
+    AV_SCOPE("ExecutorRoot::allocate_memory");
+    HostMemorySource *const source = source_of(domain);
+    if (source == nullptr) return Status::no_memory;
+    return source->allocate(domain, key, size, HostMemoryRequest(request), memory);
+}
+
+void ExecutorRoot::free_memory(uint32_t domain, uint64_t key)
+{
+    AV_SCOPE("ExecutorRoot::free_memory");
+    HostMemorySource *const source = source_of(domain);
+    if (source != nullptr) source->free(domain, key);
 }
 
 bool ExecutorRoot::export_image(uint32_t domain, uint64_t id, AvExportedImage &image)
@@ -111,15 +131,6 @@ bool ExecutorRoot::map_frame(uint32_t domain, const SurfacePoint &frame, uint32_
     const HostGpu *const  gpu = gpu_of(domain);
     SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
     return surfaces != nullptr && surfaces->map(frame, wait_ms, view);
-}
-
-bool ExecutorRoot::write_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms,
-                               const FrameTarget &target)
-{
-    AV_SCOPE("ExecutorRoot::write_frame");
-    const HostGpu *const  gpu = gpu_of(domain);
-    SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
-    return surfaces != nullptr && surfaces->write(frame, wait_ms, target);
 }
 
 void ExecutorRoot::unmap_frame(uint32_t domain, const SurfacePoint &frame)
@@ -188,6 +199,8 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
         }
         apis_of_[slot] = sub_api;
         gpus_of_[slot] = gpu->index();
+        HostMemorySource *const source = apis_->memory_source(gpu->index());
+        if (source != nullptr) sessions_[slot].draw_from(*source, options.domain);
         /* Not OpenCL's: its kernels saturate the GPU between the guest's
          * waits, and the peak state's fixed clock is below what a saturated
          * GPU boosts to - held, the OpenCL samples lost 5 to 10%. */
@@ -238,7 +251,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     case AV_EXECUTOR_SUB_API_D3D:
         return d3d_[slot].initialize(shares_[slot], apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
                                      apis_->surfaces(gpu.index()), apis_->d3d9_device(gpu.index()));
-    default: vulkan_[slot].initialize(gpu); return true;
+    default: vulkan_[slot].initialize(gpu, apis_->memory_source(gpu.index())); return true;
     }
 }
 

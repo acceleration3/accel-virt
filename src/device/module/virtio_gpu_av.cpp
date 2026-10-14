@@ -23,14 +23,10 @@
 
 namespace av {
 
-/* Conventional low RAM: present on every machine before the guest runs, and the
- * import probe puts back what it found there. */
-constexpr uint64_t guest_probe_address = 0x100000u;
-
 VirtioGpuAv::VirtioGpuAv(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
-      heads_(host, blobs_), display_modes_(host), interrupts_(host),
-      clock_(host, interrupts_, &AvDisplayFramesShow, this), planes_(host), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
+      host_blobs_(host), heads_(host, blobs_), display_modes_(host), interrupts_(host),
+      clock_(host, interrupts_, &AvDisplayFramesShow, this), planes_(host), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, host_blobs_, interrupts_, recorder_),
       remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host, clock_)
       {
           AV_SCOPE("VirtioGpuAv::VirtioGpuAv");
@@ -71,6 +67,11 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         host_.log(message.text());
         return Status::no_memory;
     }
+    if (host_blobs_.initialize(*contexts_) == Status::no_memory) {
+        message.append("virtio-gpu-av: the host has no mutex for the host blob table");
+        host_.log(message.text());
+        return Status::no_memory;
+    }
     if (contexts_->initialize() == Status::no_memory) {
         message.append("virtio-gpu-av: the host has no mutex for the contexts' ordering and executors");
         host_.log(message.text());
@@ -79,9 +80,6 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
     const Status status = binding_.bind(host_gpu, message);
     if (status != Status::ok) return status;
     pci_.read(binding_.index());
-    /* What this host can actually do, asked once, on the GPU just bound: a
-     * probe that fails leaves its bit clear and the device starts anyway. */
-    feasibility_.decide(guest_probe_address);
     if (feasibility_.interrupts().initialize() == Status::ok) interrupts_.report_to(feasibility_.interrupts());
     /* A renderer answers what its library offers only once started, and it is
      * started with a capset: one offering every sub-API, which QEMU narrows
@@ -105,12 +103,6 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
     /* In this process the library's domain for the device opens now, on the
      * GPU just described; a renderer opened it as it started. */
     if (!isolated) static_cast<void>(contexts_->start(capset_.info().gpu().uuid(), capset_.info()));
-    /* The probe proved this device can hand a guest blob to a host API; only
-     * the library knows whether the API will take one. Both have to be true
-     * before the guest is told its memory arrives without a copy. */
-    if (capset_.described() &&
-        contexts_->import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
-        capset_.withdraw_guest_import();
     attach_exports();
     if (clock_.initialize() == Status::no_memory || presents_.initialize() == Status::no_memory ||
         planes_.initialize() == Status::no_memory) {
@@ -167,6 +159,7 @@ void VirtioGpuAv::reset()
     /* Before the blobs: a head holds a pin on the blob it shows, so every head
      * lets go before the table it pinned from does. */
     heads_.release_all();
+    host_blobs_.release_all();
     blobs_.release_all();
 }
 
@@ -206,7 +199,7 @@ bool VirtioGpuAv::control(void *request, uint32_t type)
     ControlRequest         control(host_, request);
     const PresentFrames snapshots(*contexts_, capset_.info().gpu().uuid());
     return ContextCommands(host_, *contexts_, capset_).answer(control, type) ||
-           BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
+           BlobCommands(host_, blobs_, host_blobs_, recorder_, *contexts_).answer(control, type) ||
            ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||
            SharedCommands(host_, *contexts_, exports_, capset_.info().gpu().uuid()).answer(control, type) ||
            PresentCommands(host_).answer(control, type) ||
@@ -372,6 +365,7 @@ void VirtioGpuAv::report(StateWriter &writer)
         writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
     }
     heads_.report(writer);
+    host_blobs_.report(writer);
     contexts_->report(writer);
 }
 
@@ -379,7 +373,7 @@ void VirtioGpuAv::report(StateWriter &writer)
 bool VirtioGpuAv::invariants_hold() const
 {
     AV_SCOPE("VirtioGpuAv::invariants_hold");
-    return contexts_->invariants_hold() && blobs_.invariants_hold() &&
+    return contexts_->invariants_hold() && blobs_.invariants_hold() && host_blobs_.invariants_hold() &&
            heads_.invariants_hold() && interrupts_.invariants_hold() && presents_.invariants_hold() &&
            status_.invariants_hold() && exports_.invariants_hold() &&
            (binding_.bound() || (contexts_->live() == 0u && exports_.live() == 0u));

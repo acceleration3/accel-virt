@@ -1,16 +1,14 @@
-/* The room one OpenGL context lends bulk data in (feature 050, research.md §5):
- * a chunk bound to the context's own transport - the device's host window
- * when the kernel has room there, else guest RAM the kernel owns - and imported
- * whole with IMPORT_BLOB, which the host executor takes as the region its bulk-data
- * commands read and write. While it is held, the transport's blobs() lends from
- * the chunk's view, a lease's offset being its distance from the chunk's
- * start - where the host finds it. */
+/* The room a context lends bulk data in (docs/host-memory.md): host memory
+ * the CPU reads and writes on both sides - readback memory, cached - opened
+ * on the context's own transport and imported whole, which the host executor
+ * takes as the region its bulk-data commands read and write. While it is
+ * held, the transport's blobs() lends from its view, a lease's offset being
+ * its distance from the start - where the host finds it. */
 #ifndef AV_KMT_BLOB_ARENA_HPP
 #define AV_KMT_BLOB_ARENA_HPP
 
 #include "core/support/status.hpp"
-#include "guest/transport/host_window_chunk.hpp"
-#include "guest/transport/blob_import.hpp"
+#include "guest/transport/host_allocation.hpp"
 
 #include <stdint.h>
 
@@ -34,11 +32,10 @@ public:
     KmtBlobArena(const KmtBlobArena &) = delete;
     KmtBlobArena &operator=(const KmtBlobArena &) = delete;
 
-    /* A chunk of `bytes` in whole pages and at least default_bytes, opened
-     * and imported, then lent through the transport.
-     * invalid_state when one is held; invalid_parameter, with nothing asked,
-     * past max_bytes; otherwise the failing step's status with nothing left
-     * held (BlobImport's for the import). */
+    /* `bytes` in whole pages and at least default_bytes, opened and
+     * imported, then lent through the transport. invalid_state when one is
+     * held; invalid_parameter, with nothing asked, past max_bytes; otherwise
+     * HostAllocation's refusal with nothing left held. */
     [[nodiscard]] Status open(uint64_t bytes);
     /* Takes the lending back, releases the import, then the chunk, each
      * attempted whatever the one before answered: the first failure, and
@@ -63,10 +60,9 @@ public:
     bool invariants_hold() const;
 
 private:
-    KmtTransport    &transport_;
-    HostWindowChunk        chunk_;
-    BlobImport       import_;
-    uint64_t         bytes_;
+    KmtTransport  &transport_;
+    HostAllocation memory_;
+    uint64_t       bytes_;
 
     friend struct KmtBlobArenaProbe;
 };

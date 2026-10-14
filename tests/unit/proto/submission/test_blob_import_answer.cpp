@@ -49,7 +49,7 @@ TEST(blob_import_answer_encode, a_short_destination_is_too_large_and_untouched)
 
 TEST(blob_import_answer_decode, every_refusal_round_trips_without_a_handle)
 { CHECK_EQ(BlobImportAnswer::refused_request, 1u);
-  CHECK_EQ(BlobImportAnswer::no_room, 6u);
+  CHECK_EQ(BlobImportAnswer::no_room, 4u);
   for (std::uint32_t status = BlobImportAnswer::refused_request; status <= BlobImportAnswer::no_room; status++) {
       std::uint8_t bytes[BlobImportAnswer::encoded_size] = {};
       CHECK_STATUS(BlobImportAnswer(status, 0u).encode(bytes, sizeof bytes), Status::ok);
