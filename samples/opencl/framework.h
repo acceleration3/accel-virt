@@ -96,6 +96,9 @@ public:
     void run(cl_kernel kernel, size_t global_x, size_t local_x = 0);
     void run(cl_kernel kernel, size_t global_x, size_t global_y, size_t local_x, size_t local_y);
     void finish();
+    // What was enqueued goes to the GPU now, as one job: a frame's worth, so
+    // no job runs past the host kernel's timeout on a slow GPU.
+    void flush();
 };
 
 template <typename T> void release_object(T &object, cl_int(CL_API_CALL *release)(T))

@@ -565,7 +565,10 @@ __kernel void draw(__global const float4 *pos, __global const float4 *vel, __glo
     const char *capture(Gpu &gpu, Capture &capture) override
     {
         reset(gpu);
-        for (uint32_t i = 0; i < capture_steps; i++) advance(gpu);
+        for (uint32_t i = 0; i < capture_steps; i++) {
+            advance(gpu);
+            gpu.flush();
+        }
         splats_.clear(gpu);
         gpu.arg(draw_, 0, pos_[current_]);
         gpu.arg(draw_, 1, vel_[current_]);

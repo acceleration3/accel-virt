@@ -259,6 +259,11 @@ void Gpu::run(cl_kernel kernel, size_t global_x, size_t global_y, size_t local_x
           "clEnqueueNDRangeKernel");
 }
 
+void Gpu::flush()
+{
+    if (queue != nullptr) check(cl.Flush(queue), "clFlush");
+}
+
 void Gpu::finish()
 {
     if (queue != nullptr) check(cl.Finish(queue), "clFinish");

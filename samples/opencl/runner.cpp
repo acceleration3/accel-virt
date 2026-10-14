@@ -66,6 +66,7 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     const double warm_from = seconds();
     for (uint32_t i = 0; !gpu.failed && (i < options.warmup || seconds() - warm_from < options.warmup_seconds); i++) {
         sample.step(gpu);
+        gpu.flush();
         if (i % 8u == 7u) gpu.finish();
     }
     gpu.finish();
@@ -76,7 +77,10 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     double       looped = 0.0;
     do {
         const double block = seconds();
-        for (uint32_t i = 0; i < options.frames && !gpu.failed; i++, iterations++) sample.step(gpu);
+        for (uint32_t i = 0; i < options.frames && !gpu.failed; i++, iterations++) {
+            sample.step(gpu);
+            gpu.flush();
+        }
         looped += seconds() - block;
         gpu.finish();
     } while (!gpu.failed && seconds() - timed < options.timed_seconds);

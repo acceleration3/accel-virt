@@ -326,7 +326,10 @@ __kernel void show(__global const uchar *cells, __global uchar4 *rgba) {
     const char *capture(Gpu &gpu, Capture &capture) override
     {
         reset(gpu);
-        for (uint32_t i = 0; i < capture_generations; i++) advance(gpu);
+        for (uint32_t i = 0; i < capture_generations; i++) {
+            advance(gpu);
+            gpu.flush();
+        }
         gpu.arg(show_, 0, cells_[current_]);
         gpu.run(show_, size * size, 256);
         capture_rgba_buffer(gpu, capture, rgba_, size, size);
@@ -414,7 +417,10 @@ __kernel void show(__global const float *field, __global uchar4 *rgba) {
     const char *capture(Gpu &gpu, Capture &capture) override
     {
         reset(gpu);
-        for (uint32_t i = 0; i < capture_steps; i++) advance(gpu);
+        for (uint32_t i = 0; i < capture_steps; i++) {
+            advance(gpu);
+            gpu.flush();
+        }
         gpu.arg(show_, 0, field_[current_]);
         gpu.run(show_, size * size, 256);
         capture_rgba_buffer(gpu, capture, rgba_, size, size);
