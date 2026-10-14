@@ -5,27 +5,31 @@
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
-#include "guest/transport/kmt_blob_arena.hpp"
 #include "um/d3d/d3d12_device_handle.hpp"
 #include "um/d3d/d3d12_tables.hpp"
 
 namespace av::d3d12 {
 
+namespace {
+
+/* Cached host memory bulk data crosses through, and query results; a
+ * CPU-visible heap is a host allocation of its own (docs/host-memory.md). */
+constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
+
+}  // namespace
+
 D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : log_(log), lines_(log, "avumd: "), devices_(memory),
-      adapters_(kmt, memory, log, "the host answers no Direct3D 12 on this adapter", KmtBlobArena::max_bytes,
+      adapters_(kmt, memory, log, "the host answers no Direct3D 12 on this adapter", session_arena_bytes, 0u,
                 d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11, d3dproto::kCmd_Flush11),
-      arena_locks_(), heaps_(), list_table_(nullptr)
+      list_table_(nullptr)
 {
     AV_SCOPE("D3d12Driver::D3d12Driver");
 }
 
-/* The arena as large as a blob arena can be: every upload and readback heap
- * the process makes lives in it. */
 d3d::D3dSession &D3d12Driver::session(uint32_t slot)
 {
     AV_SCOPE("D3d12Driver::session");
-    if (!heaps_[slot].constructed()) static_cast<void>(heaps_[slot].construct(arena_locks_[slot]));
     return adapters_.session(slot);
 }
 
@@ -52,7 +56,7 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     const auto  &arguments = *reinterpret_cast<const D3D12DDIARG_CREATEDEVICE_0109 *>(&create);
     D3d12Device *device = nullptr;
     d3d::D3dSession &joined = session(slot);
-    if (devices_.create(device, joined, heaps_[slot].object(), log_, adapters_.caps(slot), list_table_) != Status::ok)
+    if (devices_.create(device, joined, log_, adapters_.caps(slot), list_table_) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {

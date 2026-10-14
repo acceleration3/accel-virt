@@ -69,8 +69,13 @@ private:
     static constexpr uint32_t host_cached = 8u;
     static constexpr uint64_t page_bytes = 4096u;
 
-    /* The memory type `request` is answered with, or memory_types for none. */
-    uint32_t      choose(HostMemoryRequest request);
+    /* How many preferences a class has, at most. */
+    static constexpr uint32_t most_choices = 3u;
+
+    /* The memory types `request` may be answered with, best first, in
+     * `types`: how many. A class falls back to the next when the GPU has no
+     * room in the first - a VRAM BAR without resizable BAR is 256 MiB. */
+    uint32_t      choices(HostMemoryRequest request, uint32_t (&types)[most_choices]);
     /* The first mappable type whose flags hold all of `wanted` and none of
      * `refused`, or memory_types. */
     uint32_t      first_type(uint32_t wanted, uint32_t refused);

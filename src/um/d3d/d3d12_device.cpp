@@ -5,7 +5,6 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
@@ -23,10 +22,6 @@ constexpr uint32_t list_direct = 0u;
 constexpr uint32_t list_bundle = 1u;
 constexpr uint32_t list_compute = 2u;
 constexpr uint32_t list_copy = 3u;
-/* What of the session's arena is lent to bulk data (pipeline code, root
- * constants too large to cross inline); the rest holds heaps, up to the
- * query result slots the session keeps at its end (QueryResults). */
-constexpr uint64_t lent_bytes = uint64_t{32} << 20u;
 /* Executes between the host's verdicts on what the device was sent. */
 constexpr uint64_t verdict_every = 64u;
 
@@ -45,10 +40,10 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 
 }  // namespace
 
-D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, LogSink &log,
+D3d12Device::D3d12Device(d3d::D3dSession &session, LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), heaps_(heaps), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
+    : session_(session), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, removal_()
 {
     AV_SCOPE("D3d12Device::D3d12Device");
@@ -78,16 +73,6 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
         static_cast<void>(follower_.construct(*create.pKTCallbacks, runtime_.handle, session_.transport()));
     if (core_ != nullptr) static_cast<void>(residency_.construct(*core_, runtime_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
-    /* A session no heap lives in yet lends only its first part, whichever
-     * device of it arrives first: the arena was just opened, or every heap in
-     * it has gone. */
-    uint8_t *const  view = session_.arena_view();
-    const uint64_t  arena = session_.arena_bytes();
-    if (view != nullptr && arena > lent_bytes + d3d11::QueryResults::reserved_bytes && heaps_.placed() == 0u &&
-        session_.blobs().used() == 0u) {
-        session_.blobs().lend(view, static_cast<size_t>(lent_bytes));
-        heaps_.take(lent_bytes, arena - d3d11::QueryResults::reserved_bytes);
-    }
     uint32_t           hresult = 1u;
     d3d12proto::Caps12 host = {};
     if (!d3d12proto::av_d3d12_OpenDevice12(channel_.object(), 0u, &hresult, &host) || hresult != 0u) {

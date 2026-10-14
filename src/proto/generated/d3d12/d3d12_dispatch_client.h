@@ -24,9 +24,10 @@ namespace av::d3d12proto {
 // removed reason: S_OK while it is not removed.
 [[nodiscard]] bool av_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult);
 // A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
-// is the guest's memory at `arena_offset` in the session's blob arena, which must be 64 KiB aligned, and can
-// hold only buffers; any other heap is the host GPU's own and arena_offset is ignored.
-[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset);
+// is the host memory the guest opened for it and imported, named by the handle IMPORT_BLOB answered as `memory`,
+// which must hold `size` bytes, and can hold only buffers (docs/host-memory.md); any other heap is the host GPU's
+// own and memory is ignored.
+[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory);
 // A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
 [[nodiscard]] bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
 // `resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to

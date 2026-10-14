@@ -8,8 +8,9 @@
  * (src/executor/d3d/d3d12_session.hpp). The guest keeps what the runtime
  * must be able to ask without a round trip: the records in the runtime's
  * blocks (d3d12_records.hpp), the GPU virtual addresses it hands out
- * (D3d12AddressSpace), and the pages of upload and readback heaps, which are
- * the session arena's (D3d12HeapArena) and which the host imports.
+ * (D3d12AddressSpace), and the pages of upload and readback heaps, each host
+ * memory of its own the session opens and the host imports
+ * (docs/host-memory.md).
  *
  * D3D12Core signals an application's fences itself, on the kernel context
  * the driver made for the queue, as soon as that context's earlier packets
@@ -47,7 +48,6 @@ class LogSink;
 
 namespace av::d3d {
 class D3dSession;
-class D3d12HeapArena;
 }  // namespace av::d3d
 
 namespace av::d3d12 {
@@ -61,7 +61,7 @@ public:
     static constexpr UINT descriptor_bytes = 32u;
 
     /* `list_table` is the driver's, and is filled after the device is made. */
-    D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, LogSink &log, const D3d12HostCaps &caps,
+    D3d12Device(d3d::D3dSession &session, LogSink &log, const D3d12HostCaps &caps,
                 void *const &list_table);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;
@@ -151,7 +151,6 @@ private:
                       const void *members, d3d12proto::ViewDesc &view) const;
 
     d3d::D3dSession                      &session_;
-    d3d::D3d12HeapArena                  &heaps_;
     LogSink                         &log_;
     KeyedLog                         lines_;
     /* Refusals logged so far; some slots are asked in a loop. */

@@ -77,15 +77,6 @@ const d3d12proto::Caps12 &D3d12HostDevice::caps() const
     return caps_;
 }
 
-ID3D12Heap *D3d12HostDevice::import_heap(void *address, uint64_t size) const
-{
-    AV_SCOPE("D3d12HostDevice::import_heap");
-    if (device_ == nullptr || runtime_ == nullptr) return nullptr;
-    void *heap = nullptr;
-    if (FAILED(runtime_->open_host_heap(device_, address, size, heap))) return nullptr;
-    return static_cast<ID3D12Heap *>(heap);
-}
-
 ID3D12Heap *D3d12HostDevice::import_dmabuf_heap(void *address, int fd, uint64_t size) const
 {
     AV_SCOPE("D3d12HostDevice::import_dmabuf_heap");

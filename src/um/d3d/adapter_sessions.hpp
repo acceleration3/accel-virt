@@ -33,10 +33,13 @@ public:
     static constexpr uint32_t none = max_adapters;
 
     /* `refusal` says the host answered no capabilities for an adapter. A
-     * session opens an arena of `arena_bytes` and selects, finishes and
-     * flushes with the runtime's three commands (D3dCommandStream). */
+     * session opens an arena of `arena_bytes`, a slice store of
+     * `slice_store_bytes` (none for 0) where the host draws in place, and
+     * selects, finishes and flushes with the runtime's three commands
+     * (D3dCommandStream). */
     AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &log, const char *refusal, uint64_t arena_bytes,
-                    uint32_t select_command, uint32_t finish_command, uint32_t flush_command);
+                    uint64_t slice_store_bytes, uint32_t select_command, uint32_t finish_command,
+                    uint32_t flush_command);
     AdapterSessions(const AdapterSessions &) = delete;
     AdapterSessions &operator=(const AdapterSessions &) = delete;
 
@@ -63,6 +66,7 @@ private:
     DriverLog                      lines_;
     const char                    *refusal_;
     uint64_t                       arena_bytes_;
+    uint64_t slice_store_bytes_;
     uint32_t                       select_command_;
     uint32_t                       finish_command_;
     uint32_t                       flush_command_;
@@ -73,9 +77,10 @@ private:
 
 template <typename Caps>
 AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &log, const char *refusal,
-                                       uint64_t arena_bytes, uint32_t select_command, uint32_t finish_command,
-                                       uint32_t flush_command)
+                                       uint64_t arena_bytes, uint64_t slice_store_bytes, uint32_t select_command,
+                                       uint32_t finish_command, uint32_t flush_command)
     : kmt_(kmt), memory_(memory), log_(log), lines_(log, "avumd: "), refusal_(refusal), arena_bytes_(arena_bytes),
+      slice_store_bytes_(slice_store_bytes),
       select_command_(select_command), finish_command_(finish_command), flush_command_(flush_command), caps_(),
       sessions_(), adapters_{}
 {
@@ -130,8 +135,8 @@ d3d::D3dSession &AdapterSessions<Caps>::session(uint32_t slot)
 {
     AV_SCOPE("AdapterSessions::session");
     if (!sessions_[slot].constructed())
-        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, arena_bytes_, select_command_,
-                                                    finish_command_, flush_command_));
+        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, arena_bytes_, slice_store_bytes_,
+                                                    select_command_, finish_command_, flush_command_));
     return sessions_[slot].object();
 }
 

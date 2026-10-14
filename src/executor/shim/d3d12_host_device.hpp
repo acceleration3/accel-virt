@@ -43,11 +43,10 @@ public:
 
     ID3D12Device              *device() const;
     const d3d12proto::Caps12 &caps() const;
-    /* Host memory as a heap buffers can be placed in, with a reference the
-     * caller owns; null where the runtime cannot import (a stock
-     * vkd3d-proton) or refuses these pages. */
-    ID3D12Heap                *import_heap(void *address, uint64_t size) const;
-    /* The same, over the dma-buf `fd` of those pages (the caller keeps it). */
+    /* Host memory of the GPU's memory source, the dma-buf `fd` (the caller
+     * keeps it) mapped here at `address`, as a heap buffers can be placed in,
+     * with a reference the caller owns; null where the runtime cannot import
+     * (a stock vkd3d-proton) or refuses the memory. */
     ID3D12Heap                *import_dmabuf_heap(void *address, int fd, uint64_t size) const;
     /* A root signature from a D3D12_VERSIONED_ROOT_SIGNATURE_DESC, with a
      * reference the caller owns; null when the runtime refuses it. */

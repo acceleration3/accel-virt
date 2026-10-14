@@ -225,9 +225,10 @@ reply = ["u32 hresult"]
 name = "CreateHeap12"
 id = 0x1100
 doc = """A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
-is the guest's memory at `arena_offset` in the session's blob arena, which must be 64 KiB aligned, and can
-hold only buffers; any other heap is the host GPU's own and arena_offset is ignored."""
-params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 arena_offset"]
+is the host memory the guest opened for it and imported, named by the handle IMPORT_BLOB answered as `memory`,
+which must hold `size` bytes, and can hold only buffers (docs/host-memory.md); any other heap is the host GPU's
+own and memory is ignored."""
+params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 memory"]
 
 [[command]]
 name = "CreateCommittedResource12"

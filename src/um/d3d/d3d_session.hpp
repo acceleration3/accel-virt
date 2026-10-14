@@ -1,6 +1,9 @@
 /* The one host session a process's devices of one Direct3D runtime share on an
- * adapter: the Direct3D 11 driver keeps one per adapter, and so does the
- * Direct3D 12 driver, with a larger arena its upload and readback heaps live in.
+ * adapter: the Direct3D 11 driver keeps one per adapter, and so do the
+ * Direct3D 12 and Direct3D 9 drivers. Its arena is cached host memory bulk
+ * data and query results cross through; host memory for an object of its own
+ * - a Direct3D 12 heap, Direct3D 11's slice store - is opened on the session
+ * too (docs/host-memory.md).
  *
  * A session costs an av context - one of the adapter's doorbells - a ring and
  * a blob arena, and the desktop's processes make dozens of devices each: one
@@ -11,6 +14,8 @@
  * from here too, since the host keys a session's objects by them. */
 #ifndef AV_UM_D3D_SESSION_HPP
 #define AV_UM_D3D_SESSION_HPP
+
+#include "proto/resources/host_memory_request.hpp"
 
 #include "core/support/object_storage.hpp"
 #include "um/d3d/query_results.hpp"
@@ -32,6 +37,7 @@ class LogSink;
 
 namespace av {
 class BlockSource;
+class HostAllocation;
 class Kmt;
 }  // namespace av
 
@@ -45,14 +51,16 @@ namespace av::d3d {
 class D3dSession {
 public:
     /* `arena_size` is the blob arena the session opens: bulk data crosses
-     * through it, and the Direct3D 12 driver places its CPU-visible heaps in
-     * what it does not lend. */
+     * through it, and query results and the slice store's bookkeeping take
+     * its end. */
     /* `select_command`, `finish_command` and `flush_command` are what the
      * session's stream selects a device, waits for the host and flushes with
      * (D3dCommandStream::speak_with): Direct3D 11's for 11 and 12, Direct3D
      * 9's for 9. */
-    D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint32_t select_command,
-               uint32_t finish_command, uint32_t flush_command);
+    /* `slice_store_size` is the host upload memory dynamic buffers are drawn
+     * from in place: 0 for a runtime that places none there. */
+    D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint64_t slice_store_size,
+               uint32_t select_command, uint32_t finish_command, uint32_t flush_command);
     ~D3dSession();
     D3dSession(const D3dSession &) = delete;
     D3dSession &operator=(const D3dSession &) = delete;
@@ -85,21 +93,33 @@ public:
      * place (docs/mapped-buffers-plan.md); null when it cannot, and every
      * such buffer is then copied as before. */
     BufferSlices                   *slices();
+    /* The slice store slices are offsets of: the handle the host names it
+     * by, and this process's view; 0 and null without slices. */
+    uint64_t                        slice_memory() const;
+    uint8_t                        *slice_view() const;
+    /* `bytes` of the host memory `memory` names, opened on the session and
+     * kept until close_memory or the session's close, under the session's
+     * lock (HostChannel::open_memory). */
+    [[nodiscard]] Status            open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
+    void                            close_memory(HostAllocation &allocation);
 
 private:
     static constexpr uint8_t  ring_order = 22u;
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
-    /* What the blob arena is lent of a session that places buffers in its
-     * arena: the rest, short of the query results, is theirs. */
+    /* What the blob arena is lent: the rest is the slice store's bookkeeping
+     * and the query results. */
     static constexpr uint64_t lent_bytes = uint64_t{24} << 20u;
 
     HRESULT open(uint32_t adapter);
     void    close();
-    /* Whether the host draws buffers from the arena in place: asked once, of
-     * a Direct3D 11 session with an arena larger than the blob arena's. */
+    /* Whether the host draws buffers in place: asked once, of a Direct3D 11
+     * session whose arena has room for the slices' bookkeeping. */
     bool    host_has_slices();
+    /* The slice store opened and its slices taken, when the host draws in
+     * place. */
+    void    open_slices();
 
     BlockSource                         &memory_;
     LogSink                        &log_;
@@ -110,6 +130,8 @@ private:
     SrwLock                              slices_lock_;
     ObjectStorage<StreamTimeline>        timeline_;
     ObjectStorage<BufferSlices>          slices_;
+    uint64_t                             slice_store_bytes_;
+    HostAllocation                      *slice_store_;
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
     uint8_t                             *batch_;

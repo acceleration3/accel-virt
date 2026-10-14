@@ -21,6 +21,7 @@
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
 #include "executor/guest_region.hpp"
+#include "executor/imported_memories.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
@@ -175,7 +176,7 @@ public:
                             uint64_t &data_size) override;
     bool on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point) override;
     bool on_QueryBufferSlices11(uint32_t &supported) override;
-    bool on_BindBufferSlice(uint32_t resource, uint64_t offset, uint64_t bytes) override;
+    bool on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes) override;
     bool on_BeginQuery(uint32_t query) override;
     bool on_EndQuery(uint32_t query) override;
     bool on_BindQueryResults(uint64_t offset, uint32_t slots) override;
@@ -185,13 +186,14 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The region imported for DXVK to draw from, if it can be: false for a
-     * region that is no dma-buf, or a device that cannot rename a buffer to
-     * it, and for good once an import failed. */
-    bool region_to_draw();
-    /* Every imported region let go of, once the GPU has finished what read
+    /* The slice store `store` imported for DXVK to draw from, if it can be:
+     * false for a device that cannot rename a buffer to it, and for good once
+     * an import failed. A store other than the one held replaces it. Under
+     * the device's lock. */
+    bool slice_storage_for(const SourceMemory &store);
+    /* The slice store's import let go of, once the GPU has finished what read
      * it. Under the device's lock. */
-    void release_region_storage();
+    void release_slice_storage();
     friend struct D3dBackendProbe;
 
     static constexpr uint32_t stage_count = 6u;
@@ -259,6 +261,9 @@ private:
     WireArena              *arena_;
     D3dObjectTable          objects_;
     GuestRegion             region_;
+    /* What the session imported besides its region: Direct3D 12's
+     * CPU-visible heaps. */
+    ImportedMemories        imported_;
     /* Direct3D 12's half of the session, sharing its blob arena. */
     D3d12Session            d3d12_;
     /* Direct3D 9's, sharing it too. */
@@ -267,10 +272,11 @@ private:
     /* How far the host GPU has got with the batches the session recorded. */
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
-    /* The region as DXVK's to draw from, imported on the first ask: what
-     * buffers bound to slices of it read (BindBufferSlice). */
-    VulkanBuffer            region_storage_;
-    bool                    region_storage_refused_;
+    /* The session's slice store as DXVK's to draw from, imported on the
+     * first bind: what buffers bound to slices of it read (BindBufferSlice). */
+    VulkanBuffer            slice_storage_;
+    const SourceMemory     *slice_memory_;
+    bool                    slice_storage_refused_;
     /* The last shared key an open found nothing under: the guest asks again
      * and again for one it was just given, and the host log says so once. */
     uint64_t                missed_key_;

@@ -1,4 +1,6 @@
 #include "executor/d3d/d3d12_session.hpp"
+#include "executor/source_memory.hpp"
+#include "executor/imported_memories.hpp"
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -19,6 +21,8 @@
 #include <stdio.h>
 #include <time.h>
 
+#include <unistd.h>
+
 namespace av {
 
 namespace {
@@ -35,9 +39,6 @@ constexpr uint32_t page_not_available = 1u;
 constexpr uint32_t most_heap_type = 4u;
 constexpr uint32_t most_dimension = 4u;
 constexpr uint32_t buffer_dimension = 1u;
-/* Where guest memory may start a heap: 64 KiB, D3D12's default placement
- * alignment, which is also every host's pointer-import alignment and more. */
-constexpr uint64_t heap_alignment = 64u * 1024u;
 constexpr uint32_t max_texture_dimension = 16384u;
 constexpr uint64_t max_heap_bytes = uint64_t{1} << 34u;
 
@@ -106,8 +107,8 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 
 }  // namespace
 
-D3d12Session::D3d12Session(GuestRegion &region, D3dObjectTable &objects)
-    : region_(region), device_(nullptr), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
+D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects)
+    : region_(region), imported_(imported), device_(nullptr), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -135,7 +136,6 @@ void D3d12Session::shut_down()
     wake_.unbind();
     addresses_.clear();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
-    arena_heaps_.close();
     views_.bind(nullptr);
     pipelines_.bind(nullptr);
     device_ = nullptr;
@@ -331,7 +331,6 @@ bool D3d12Session::on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t 
 bool D3d12Session::on_Destroy12(uint32_t id)
 {
     AV_SCOPE("D3d12Session::on_Destroy12");
-    if (arena_heaps_.remove(id)) return true;
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12 ||
         kind > D3dObjectKind::command_signature12)
@@ -356,34 +355,30 @@ bool D3d12Session::on_Finish12(uint32_t &hresult)
 
 // ---------------------------------------------------------------- memory
 
+/* A CPU-visible heap is host memory the guest opened for it and imported
+ * (docs/host-memory.md), named by that import, which vkd3d-proton opens as a
+ * heap by its dma-buf over the source's own mapping of it. */
 bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
-                                   uint64_t size, uint64_t alignment, uint64_t arena_offset)
+                                   uint64_t size, uint64_t alignment, uint64_t memory)
 {
     AV_SCOPE("D3d12Session::on_CreateHeap12");
     if (device_ == nullptr || properties.type == 0u || properties.type > most_heap_type || size == 0u ||
         size > max_heap_bytes)
         return false;
     if (cpu_visible(properties)) {
-        uint8_t *const pages = region_.at(arena_offset, size);
-        /* Which of these refused is what the host log is read for when a
-         * guest's heap fails: the removal that follows says nothing more. */
-        if (pages == nullptr || arena_offset % heap_alignment != 0u ||
-            reinterpret_cast<uintptr_t>(pages) % heap_alignment != 0u) {
-            LogLine(lines_)
-                .text("a heap of ")
-                .number(size)
-                .text(" bytes at ")
-                .number(arena_offset)
-                .text(" is not inside the arena of ")
-                .number(region_.length())
-                .text(" bytes")
-                .write();
+        const SourceMemory *const backing = imported_.find(memory);
+        if (backing == nullptr || size > backing->size()) {
+            LogLine(lines_).text("a heap of ").number(size).text(" bytes names no memory that holds it").write();
             return false;
         }
-        const bool made = arena_heaps_.add(*device_, region_, heap, arena_offset, size);
-        if (!made)
-            LogLine(lines_).text("the host did not import the arena of ").number(region_.length()).text(" bytes").write();
-        return made;
+        const int          fd = backing->share();
+        ID3D12Heap *const  made = device_->import_dmabuf_heap(backing->pointer(), fd, backing->size());
+        if (fd >= 0) close(fd);
+        if (made == nullptr) {
+            LogLine(lines_).text("the host did not open a heap over ").number(backing->size()).text(" bytes").write();
+            return false;
+        }
+        return objects_.keep(heap, D3dObjectKind::heap12, made);
     }
     D3D12_HEAP_DESC desc = {};
     desc.SizeInBytes = size;
@@ -458,10 +453,6 @@ bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, u
                                              const d3d12proto::ClearValue &clear, uint64_t address)
 {
     AV_SCOPE("D3d12Session::on_CreatePlacedResource12");
-    uint64_t in_arena = 0u;
-    if (device_ != nullptr && resource_holds(desc) &&
-        arena_heaps_.place(heap, offset, desc.dimension == buffer_dimension ? desc.width : 0u, in_arena))
-        return placed(resource, arena_heaps_.heap(), in_arena, desc, state, clear, address);
     ID3D12Heap *const in = objects_.find_as<ID3D12Heap>(heap, D3dObjectKind::heap12);
     if (device_ == nullptr || in == nullptr || !resource_holds(desc)) return false;
     const D3D12_HEAP_DESC heap_desc = in->GetDesc();

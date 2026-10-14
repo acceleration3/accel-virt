@@ -54,24 +54,36 @@ uint32_t HostMemorySource::first_type(uint32_t wanted, uint32_t refused)
 }
 
 /* Upload memory is what the CPU writes and the GPU reads: the GPU's own,
- * through a resizable BAR, where there is one. Readback memory is what a CPU
- * reads, the guest's or the host's, which only cached memory serves at
- * speed. A Vulkan request names its type. */
-uint32_t HostMemorySource::choose(HostMemoryRequest request)
+ * through a resizable BAR, where there is one, else uncached system memory.
+ * Readback memory is what a CPU reads, the guest's or the host's, which only
+ * cached memory serves at speed. A Vulkan request names its type, and has
+ * no other. */
+uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[most_choices])
 {
-    AV_SCOPE("HostMemorySource::choose");
-    uint32_t type = HostMemoryRequest::memory_types;
+    AV_SCOPE("HostMemorySource::choices");
+    uint32_t found[most_choices] = {HostMemoryRequest::memory_types, HostMemoryRequest::memory_types,
+                                    HostMemoryRequest::memory_types};
     switch (request.kind()) {
     case HostMemoryRequest::Kind::vulkan:
-        return (mappable_ & (1u << request.vulkan_type())) != 0u ? request.vulkan_type()
-                                                                 : HostMemoryRequest::memory_types;
-    case HostMemoryRequest::Kind::upload:
-        type = first_type(device_local, host_cached);
-        if (type == HostMemoryRequest::memory_types) type = first_type(0u, host_cached);
+        if ((mappable_ & (1u << request.vulkan_type())) != 0u) found[0] = request.vulkan_type();
         break;
-    case HostMemoryRequest::Kind::readback: type = first_type(host_cached, 0u); break;
+    case HostMemoryRequest::Kind::upload:
+        found[0] = first_type(device_local, host_cached);
+        found[1] = first_type(0u, device_local | host_cached);
+        found[2] = first_type(0u, 0u);
+        break;
+    case HostMemoryRequest::Kind::readback:
+        found[0] = first_type(host_cached, 0u);
+        found[1] = first_type(0u, 0u);
+        break;
     }
-    return type != HostMemoryRequest::memory_types ? type : first_type(0u, 0u);
+    uint32_t count = 0u;
+    for (const uint32_t type : found) {
+        bool seen = type == HostMemoryRequest::memory_types;
+        for (uint32_t earlier = 0u; earlier < count; earlier++) seen = seen || types[earlier] == type;
+        if (!seen) types[count++] = type;
+    }
+    return count;
 }
 
 Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, HostMemoryRequest request,
@@ -83,10 +95,14 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     pthread_mutex_lock(&mutex_);
     ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
     if (find(domain, key) != nullptr) return Status::conflict;
-    const uint32_t type = choose(request);
-    if (type == HostMemoryRequest::memory_types) return Status::invalid_parameter;
+    uint32_t       types[most_choices] = {};
+    const uint32_t count = choices(request, types);
+    if (count == 0u) return Status::invalid_parameter;
     ExportedMemory exported;
-    if (exporter_.allocate(type, size, exported) != Status::ok) return Status::no_memory;
+    uint32_t       type = HostMemoryRequest::memory_types;
+    for (uint32_t choice = 0u; choice < count && type == HostMemoryRequest::memory_types; choice++)
+        if (exporter_.allocate(types[choice], size, exported) == Status::ok) type = types[choice];
+    if (type == HostMemoryRequest::memory_types) return Status::no_memory;
     const int shared = exporter_.share(exported);
     SourceMemory *made = nullptr;
     const uint32_t caching = (exporter_.memory_flags(type) & host_cached) != 0u ? AV_MEMORY_WRITE_BACK

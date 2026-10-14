@@ -1167,12 +1167,14 @@ static bool decode_BindBufferSlice(ServerDispatch& s, ::av::WireReader& r, ::av:
     (void)arena;
     uint32_t resource{};
     if (!r.read_pod(resource)) return false;
+    uint64_t memory{};
+    if (!r.read_pod(memory)) return false;
     uint64_t offset{};
     if (!r.read_pod(offset)) return false;
     uint64_t bytes{};
     if (!r.read_pod(bytes)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_BindBufferSlice(resource, offset, bytes)) return false;
+    if (!s.on_BindBufferSlice(resource, memory, offset, bytes)) return false;
     return true;
 }
 

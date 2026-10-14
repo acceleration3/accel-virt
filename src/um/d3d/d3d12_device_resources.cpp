@@ -5,7 +5,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/d3d/d3d12_heap_arena.hpp"
+#include "guest/transport/host_allocation.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -179,16 +179,20 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     heap.type = heap_type_of(args);
     heap.size = args.ByteSize;
     heap.flags = api_heap_flags(static_cast<uint32_t>(args.Flags));
-    heap.arena_offset = HeapRecord::no_arena;
+    heap.memory = nullptr;
     heap.address = addresses_.reserve(args.ByteSize);
     if (heap.address == 0u) {
         refused("heap address space, bytes", static_cast<uint32_t>(args.ByteSize));
         return E_OUTOFMEMORY;
     }
     if (heap.type != heap_default) {
-        if (heaps_.place(args.ByteSize, heap.arena_offset) != Status::ok) {
-            heap.arena_offset = HeapRecord::no_arena;
-            log_.write("avumd: no room in the session arena for an upload or readback heap");
+        /* Written by the CPU and read by the GPU, or the other way about: the
+         * memory the host gives either is the one native drivers use. */
+        const HostMemoryRequest memory(heap.type == heap_upload ? HostMemoryRequest::Kind::upload
+                                                                : HostMemoryRequest::Kind::readback,
+                                       0u);
+        if (session_.open_memory(args.ByteSize, memory, heap.memory) != Status::ok) {
+            log_.write("avumd: no host memory for an upload or readback heap");
             return E_OUTOFMEMORY;
         }
     } else if (committed) {
@@ -196,9 +200,9 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
          * heap the runtime asked for with it names nothing there. */
         return S_OK;
     }
-    const uint64_t at = heap.arena_offset == HeapRecord::no_arena ? 0u : heap.arena_offset;
+    const uint64_t memory = heap.memory != nullptr ? heap.memory->handle() : 0u;
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.id, properties_of(heap.type), heap.flags,
-                                                 heap.size, args.Alignment, at),
+                                                 heap.size, args.Alignment, memory),
               "CreateHeap12"))
         return E_OUTOFMEMORY;
     heap.made = 1u;
@@ -358,7 +362,7 @@ VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI
     HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
     if (heap.header.magic != HeapRecord::tag) return;
     if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
-    if (heap.arena_offset != HeapRecord::no_arena) static_cast<void>(heaps_.remove(heap.arena_offset));
+    if (heap.memory != nullptr) session_.close_memory(*heap.memory);
     heap = HeapRecord{};
 }
 
@@ -368,9 +372,8 @@ HRESULT D3d12Device::map_heap(D3D12DDI_HHEAP handle, void **data)
     if (data == nullptr) return E_INVALIDARG;
     *data = nullptr;
     const HeapRecord &heap = *static_cast<const HeapRecord *>(handle.pDrvPrivate);
-    uint8_t *const    view = session_.arena_view();
-    if (heap.arena_offset == HeapRecord::no_arena || view == nullptr) return E_INVALIDARG;
-    *data = view + heap.arena_offset;
+    if (heap.memory == nullptr) return E_INVALIDARG;
+    *data = heap.memory->view();
     return S_OK;
 }
 

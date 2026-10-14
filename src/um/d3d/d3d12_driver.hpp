@@ -10,7 +10,6 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/log/driver_log.hpp"
-#include "icd/d3d/d3d12_heap_arena.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d12_device.hpp"
@@ -61,8 +60,6 @@ private:
     DriverLog                      lines_;
     ObjectPool<D3d12Device>         devices_;
     AdapterSessions<D3d12HostCaps>  adapters_;
-    SrwLock                         arena_locks_[max_adapters];
-    ObjectStorage<d3d::D3d12HeapArena> heaps_[max_adapters];
     /* D3D12Core's handle for the command-list table this driver filled. */
     void                           *list_table_;
 };

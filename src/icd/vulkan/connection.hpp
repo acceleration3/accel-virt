@@ -92,17 +92,16 @@ public:
      * answer, so none is waited for. */
     [[nodiscard]] TransportResult send_batch(const uint8_t *framed, size_t length);
 
-    /* `bytes` of the host memory `memory` names built in `allocation`, opened
-     * on this connection's context and imported, under the lock
-     * (HostAllocation, docs/host-memory.md). invalid_state while not open,
-     * faulted, or with `allocation` already holding one, and nothing asked of
-     * the Kmt; otherwise the allocation's refusal, with `allocation` empty. */
-    [[nodiscard]] Status open_memory(ObjectStorage<HostAllocation> &allocation, uint64_t bytes,
-                                     HostMemoryRequest memory);
-    /* Gives back what `allocation` holds, under the lock: released on a live
-     * connection, abandoned on a faulted one - its context frees the import
-     * on the host. The first refusal, and `allocation` empty either way. */
-    [[nodiscard]] Status close_memory(ObjectStorage<HostAllocation> &allocation);
+    /* `bytes` of the host memory `memory` names, opened on this connection's
+     * context and imported, under the lock (HostChannel::open_memory).
+     * invalid_state while not open or faulted, with nothing asked of the Kmt;
+     * otherwise the channel's answer. */
+    [[nodiscard]] Status open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
+    /* What open_memory made, released under the lock - abandoned on a faulted
+     * connection, whose context frees it on the host. */
+    [[nodiscard]] Status close_memory(HostAllocation &allocation);
+    /* The allocation the host named `handle`, or null. */
+    HostAllocation      *find_memory(uint64_t handle);
 
     /* Its fields on the line `writer` has open: whether open and faulted, and
      * the adapter, LUID, device and context it sends through. */
