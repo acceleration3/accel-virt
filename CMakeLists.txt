@@ -1010,6 +1010,7 @@ add_test(NAME scope_marks
 # executor library is an ordinary shared object and this calls its ABI.
 add_executable(executor_conformance
   tests/conformance/executor/executor_conformance.cpp
+  tests/conformance/executor/executor_transport.cpp
   tests/conformance/executor/main.cpp)
 target_include_directories(executor_conformance PRIVATE tests src
                            ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
