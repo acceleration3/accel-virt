@@ -39,7 +39,7 @@ MockKmt::MockKmt()
       next_object_id_(first_object_id), scribble_record_(false), short_record_(false), carried_next_(),
       carried_next_size_(0u), carry_next_(false), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), idle_reads_(0u), clock_step_(0u), clock_reader_(nullptr),
-      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
+      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), timeouts_while_beating_(0u), timeout_faulted_(false), timeouts_silent_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbell_page_missing_(0u), doorbells_{},
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
@@ -819,6 +819,21 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
         consume(*object);
         return refuse(io_timeout);
     }
+    if (timeouts_while_beating_ != 0u) {
+        timeouts_while_beating_--;
+        beat(*object);
+        return refuse(io_timeout);
+    }
+    if (timeout_faulted_) {
+        timeout_faulted_ = false;
+        consume(*object);
+        fault_fence_page(*object);
+        return refuse(io_timeout);
+    }
+    if (timeouts_silent_ != 0u) {
+        timeouts_silent_--;
+        return refuse(io_timeout);
+    }
     if (slow_nth_ != 0u && calls_[static_cast<unsigned>(Call::wait_for_context)] % slow_nth_ == 0u) ticks_ += slow_ticks_;
     if (played()) play_(play_context_);
     take_doorbell_store(*object);
@@ -1285,6 +1300,30 @@ std::uint32_t MockKmt::command_size(std::uint32_t index) const
 void MockKmt::spend_on_wait(std::uint64_t ticks) { wait_cost_ = ticks; }
 
 void MockKmt::time_out_while_consuming(std::uint32_t count) { timeouts_while_consuming_ = count; }
+
+void MockKmt::time_out_while_beating(std::uint32_t count) { timeouts_while_beating_ = count; }
+
+void MockKmt::time_out_faulted() { timeout_faulted_ = true; }
+
+void MockKmt::time_out_silently(std::uint32_t count) { timeouts_silent_ = count; }
+
+void MockKmt::beat(const Object &context) const
+{
+    std::uint8_t *const memory = fence_memory(context);
+    FencePage           page;
+    if (memory == nullptr || page.decode(memory, FencePage::encoded_size) != Status::ok) return;
+    static_cast<void>(FencePage(page.completed_fence(), page.progress() + 1u).encode(memory, FencePage::encoded_size));
+}
+
+void MockKmt::fault_fence_page(const Object &context) const
+{
+    constexpr std::uint32_t device_lost = 7u;
+    std::uint8_t *const     memory = fence_memory(context);
+    FencePage               page;
+    if (memory == nullptr || page.decode(memory, FencePage::encoded_size) != Status::ok) return;
+    static_cast<void>(FencePage(page.completed_fence(), page.progress(), device_lost)
+                          .encode(memory, FencePage::encoded_size));
+}
 
 void MockKmt::spend_on_submit(std::uint64_t ticks) { submit_cost_ = ticks; }
 

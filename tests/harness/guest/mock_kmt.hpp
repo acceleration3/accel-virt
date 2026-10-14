@@ -331,6 +331,18 @@ public:
     /* The next `count` waits for a context take what was submitted, as a host
      * that is working does, and still run out their bound: STATUS_IO_TIMEOUT. */
     void          time_out_while_consuming(std::uint32_t count);
+    /* The next `count` waits for a context take nothing and still run out
+     * their bound while the fence page's heartbeat moves: a batch the host GPU
+     * is still running, slower than the wait. */
+    void          time_out_while_beating(std::uint32_t count);
+    /* The next wait for a context takes what was submitted, faults the fence
+     * page (device lost) and runs out its bound: a device that gave up on the
+     * context while the process waited. */
+    void          time_out_faulted();
+    /* The next `count` waits for a context take nothing, move nothing and run
+     * out their bound: a host that has stopped, once the counts above are
+     * spent. */
+    void          time_out_silently(std::uint32_t count);
     /* A submission through the kernel costs this many ticks, as the transition
      * into dxgkrnl does; a store to a doorbell costs nothing here, because it
      * is a write in the process and this mock never sees it (feature 049). */
@@ -551,6 +563,10 @@ private:
     void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
     void          journal(const Object &context);
     void          consume(const Object &context) const;
+    /* The fence page's heartbeat one further, or its fault set: what a device
+     * writes while it decodes a batch, and when it gives a context up. */
+    void          beat(const Object &context) const;
+    void          fault_fence_page(const Object &context) const;
     /* The context's fence page, past its reply slot; null with no memory. */
     std::uint8_t *fence_memory(const Object &context) const;
     bool          played();
@@ -665,6 +681,9 @@ private:
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
     std::uint32_t timeouts_while_consuming_;
+    std::uint32_t timeouts_while_beating_;
+    bool          timeout_faulted_;
+    std::uint32_t timeouts_silent_;
     std::uint64_t submit_cost_;
     std::uint32_t slow_nth_;
     std::uint64_t slow_ticks_;
