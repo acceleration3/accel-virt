@@ -2727,8 +2727,16 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
     const bool      opened = device != nullptr && open_device(*device) == Status::ok;
     lock_.release();
     if (!opened) return CL_OUT_OF_RESOURCES;
-    if (size_ret != nullptr) *size_ret = sizeof(cl_device_id);
-    if (value == nullptr) return CL_SUCCESS;
+    /* A device that does not report cl_khr_gl_sharing - the executor strikes it
+     * where the host's OpenCL refused its GL context, as NVIDIA's refuses
+     * every EGL one - can share with no GL context: answered as no device,
+     * rather than one whose clCreateContext from this GL context must fail. */
+    char         reported[host_extensions_bytes] = {};
+    const cl_int listed = device_extensions(*device, sizeof reported, reported, nullptr);
+    if (listed != CL_SUCCESS) return listed;
+    const bool shares = device->extensions().offered_by(reported, sizeof reported, "cl_khr_gl_sharing");
+    if (size_ret != nullptr) *size_ret = shares ? sizeof(cl_device_id) : 0u;
+    if (value == nullptr || !shares) return CL_SUCCESS;
     if (value_bytes < sizeof(cl_device_id)) return CL_INVALID_VALUE;
     *static_cast<cl_device_id *>(value) = reinterpret_cast<cl_device_id>(device->object());
     return CL_SUCCESS;

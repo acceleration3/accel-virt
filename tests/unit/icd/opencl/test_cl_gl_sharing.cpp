@@ -142,6 +142,8 @@ TEST(cl_gl_sharing, the_device_of_the_current_gl_context_is_the_one_device)
                                            CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
   cl_device_id named = nullptr;
   std::size_t  size = 0u;
+  /* The device's extensions, asked once and kept: it reports the extension. */
+  rig.host().cl_info(CL_SUCCESS, "cl_khr_icd cl_khr_gl_sharing", 29u);
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, &size),
            CL_SUCCESS);
   CHECK(named == found.device());
@@ -201,3 +203,42 @@ TEST(cl_gl_sharing, create_from_gl_buffer_makes_the_host_s_object_and_gl_object_
   made = CL_SUCCESS;
   CHECK(rig.root().create_from_gl_buffer(nullptr, CL_MEM_READ_WRITE, 7u, &made) == nullptr);
   CHECK_EQ(made, CL_INVALID_CONTEXT); }
+
+/* A host whose OpenCL makes no context against its GL - NVIDIA's refuses every
+ * EGL context, and the executor strikes the extension - leaves the device
+ * without cl_khr_gl_sharing, and the current GL context then has no device:
+ * an application that asks is not led to a clCreateContext that must fail. */
+TEST(cl_gl_sharing, a_device_without_the_extension_is_no_device_of_the_gl_context)
+{ ClIcdRig rig;
+  Found     found(rig);
+  rig.gl_share().make_current(current_gl, gl_share_name);
+  const cl_icd_dispatch *const table = rig.loader().dispatch_of(found.device());
+  const cl_context_properties current[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(current_gl),
+                                           CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
+  rig.host().cl_info(CL_SUCCESS, "cl_khr_icd", 11u);
+  cl_device_id named = nullptr;
+  std::size_t  size = 7u;
+  CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, &size),
+           CL_SUCCESS);
+  CHECK(named == nullptr);
+  CHECK_EQ(size, 0u);
+  size = 7u;
+  CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_DEVICES_FOR_GL_CONTEXT_KHR, sizeof named, &named, &size),
+           CL_SUCCESS);
+  CHECK(named == nullptr);
+  CHECK_EQ(size, 0u); }
+
+/* A host that will not say which extensions its device has leaves the question
+ * unanswered, with the host's own error. */
+TEST(cl_gl_sharing, a_host_that_will_not_list_the_extensions_answers_its_error)
+{ ClIcdRig rig;
+  Found     found(rig);
+  rig.gl_share().make_current(current_gl, gl_share_name);
+  const cl_icd_dispatch *const table = rig.loader().dispatch_of(found.device());
+  const cl_context_properties current[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(current_gl),
+                                           CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
+  rig.host().cl_info(CL_OUT_OF_HOST_MEMORY, "", 0u);
+  cl_device_id named = nullptr;
+  CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, nullptr),
+           CL_OUT_OF_HOST_MEMORY);
+  CHECK(named == nullptr); }
