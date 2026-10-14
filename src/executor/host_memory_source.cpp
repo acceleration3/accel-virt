@@ -11,7 +11,7 @@
 namespace av {
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
-    : exporter_(exporter), memories_(blocks), mutex_(PTHREAD_MUTEX_INITIALIZER), asked_(0u), mappable_(0u)
+    : exporter_(exporter), memories_(blocks), mutex_(PTHREAD_MUTEX_INITIALIZER), asked_(0u), mappable_(0u), visible_(0u)
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -39,16 +39,18 @@ uint32_t HostMemorySource::mappable_types()
         asked_ |= bit;
         const uint32_t flags = exporter_.memory_flags(type);
         const bool     shared = (flags & (host_visible | host_coherent)) == (host_visible | host_coherent);
-        if (shared && exporter_.exportable(type)) mappable_ |= bit;
+        if (!shared || !exporter_.exportable(type)) continue;
+        mappable_ |= bit;
+        if (exporter_.imports_host_visible(type)) visible_ |= bit;
     }
     return mappable_;
 }
 
-uint32_t HostMemorySource::first_type(uint32_t wanted, uint32_t refused)
+uint32_t HostMemorySource::first_type(uint32_t among, uint32_t wanted, uint32_t refused)
 {
     AV_SCOPE("HostMemorySource::first_type");
     for (uint32_t type = 0u; type < HostMemoryRequest::memory_types; type++) {
-        if ((mappable_ & (1u << type)) == 0u) continue;
+        if ((among & (1u << type)) == 0u) continue;
         const uint32_t flags = exporter_.memory_flags(type);
         if ((flags & wanted) == wanted && (flags & refused) == 0u) return type;
     }
@@ -58,24 +60,33 @@ uint32_t HostMemorySource::first_type(uint32_t wanted, uint32_t refused)
 /* Upload memory is what the CPU writes and the GPU reads: the GPU's own,
  * through a resizable BAR, where there is one, else uncached system memory.
  * Readback memory is what a CPU reads, the guest's or the host's, which only
- * cached memory serves at speed. A Vulkan request names its type, and has
- * no other. */
+ * cached memory serves at speed. Either is first sought among the types an
+ * importer may map, since vkd3d-proton imports a heap only as a type the
+ * driver reports for its dma-buf: NVIDIA's BAR memory would leave every upload
+ * heap refused. A Vulkan request names its type, and has no other: the
+ * backend imports it as that type. */
 uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[most_choices])
 {
     AV_SCOPE("HostMemorySource::choices");
-    uint32_t found[most_choices] = {HostMemoryRequest::memory_types, HostMemoryRequest::memory_types,
-                                    HostMemoryRequest::memory_types};
+    uint32_t found[most_choices] = {};
+    for (uint32_t &type : found) type = HostMemoryRequest::memory_types;
+    constexpr uint32_t per_group = most_choices / 2u;
+    const uint32_t     groups[2] = {visible_, mappable_ & ~visible_};
     /* The request was judged valid, so a kind that is neither of the first
      * two is readback. */
     if (request.kind() == HostMemoryRequest::Kind::vulkan) {
         if ((mappable_ & (1u << request.vulkan_type())) != 0u) found[0] = request.vulkan_type();
     } else if (request.kind() == HostMemoryRequest::Kind::upload) {
-        found[0] = first_type(device_local, host_cached);
-        found[1] = first_type(0u, device_local | host_cached);
-        found[2] = first_type(0u, 0u);
+        for (uint32_t group = 0u; group < 2u; group++) {
+            found[group * per_group] = first_type(groups[group], device_local, host_cached);
+            found[group * per_group + 1u] = first_type(groups[group], 0u, device_local | host_cached);
+            found[group * per_group + 2u] = first_type(groups[group], 0u, 0u);
+        }
     } else {
-        found[0] = first_type(host_cached, 0u);
-        found[1] = first_type(0u, 0u);
+        for (uint32_t group = 0u; group < 2u; group++) {
+            found[group * per_group] = first_type(groups[group], host_cached, 0u);
+            found[group * per_group + 1u] = first_type(groups[group], 0u, 0u);
+        }
     }
     uint32_t count = 0u;
     for (const uint32_t type : found) {
@@ -187,6 +198,7 @@ void HostMemorySource::report(StateWriter &writer) const
     AV_SCOPE("HostMemorySource::report");
     writer.open("memory_source", 0u);
     writer.hex("mappable_types", mappable_);
+    writer.hex("visible_types", visible_);
     writer.number("live", memories_.live());
     uint64_t bytes = 0u;
     memories_.for_each([&bytes](const SourceMemory &memory) { bytes += memory.size(); });
@@ -208,7 +220,7 @@ bool HostMemorySource::invariants_hold() const
         });
         held = held && answering == 1u;
     });
-    return held && memories_.invariants_hold();
+    return held && (visible_ & ~mappable_) == 0u && memories_.invariants_hold();
 }
 
 }  // namespace av

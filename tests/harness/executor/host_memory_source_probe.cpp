@@ -18,6 +18,8 @@ void HostMemorySourceProbe::drain(SourceMemory &memory)
     while (memory.references() != 0u) static_cast<void>(memory.release());
 }
 
+void HostMemorySourceProbe::mark_visible(uint32_t types) { source.visible_ |= types; }
+
 ObjectPool<SourceMemory> &HostMemorySourceProbe::pool() { return source.memories_; }
 
 }  // namespace av

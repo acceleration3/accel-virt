@@ -28,6 +28,12 @@ public:
     /* Whether memory of `type` is allocated, exported as a dma-buf and mapped
      * through that dma-buf here - what the guest's mapping of it rests on. */
     virtual bool     exportable(uint32_t type) = 0;
+    /* Whether an export of `type`, imported back by a device of this driver,
+     * may be imported as a host-visible type: what an importer that keeps to
+     * the types the driver reports for the dma-buf needs to map it
+     * (vkd3d-proton's heaps). NVIDIA reports only device-local types for a
+     * dma-buf of its BAR memory. */
+    virtual bool     imports_host_visible(uint32_t type) = 0;
     /* `size` bytes of `type`, exported and mapped: ok with `memory` made,
      * no_memory with it empty. */
     [[nodiscard]] virtual Status allocate(uint32_t type, uint64_t size, ExportedMemory &memory) = 0;

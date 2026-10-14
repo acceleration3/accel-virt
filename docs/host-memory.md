@@ -50,7 +50,12 @@ coherent both ways. That was measured on the RX 9070 XT, Radeon 610M, Arc
 - **Probe.** When it opens, it tries every host-visible memory type with one
   small allocation, an export and a CPU map of the export. Only the types that
   pass are ever offered. A Vulkan guest sees the others without
-  `HOST_VISIBLE`.
+  `HOST_VISIBLE`. It also asks the driver which types it would import each
+  type's dma-buf as: an `upload` or `readback` request is answered first with a
+  type that comes back host-visible, because vkd3d-proton imports a heap only
+  as a type the driver reports. NVIDIA reports only device-local types for a
+  dma-buf of its BAR (`DEVICE_LOCAL|HOST_VISIBLE`), which left every Direct3D
+  12 upload heap refused.
 - **Lifetime.** An allocation is counted: the blob holds one reference and
   every import holds one. The memory goes back to the driver when the last
   reference goes.
