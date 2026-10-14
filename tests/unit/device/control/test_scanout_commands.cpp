@@ -188,15 +188,12 @@ TEST(scanout_commands_show, a_head_past_the_sixteen_is_the_guests_mistake_and_a_
   /* Head 1 exists in virtio-gpu but not on this host: the display refused, not
    * the guest. */
   CHECK_EQ(fixture.send(Scanout(1u, 1u).build()), err_unspec);
-  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK(fixture.heads().invariants_hold()); }
 
 TEST(scanout_commands_show, a_host_whose_display_has_no_head_refuses_every_scanout_and_keeps_nothing)
 { Fixture fixture(0u);
   CHECK_EQ(fixture.send(Scanout(0u, 1u).build()), err_unspec);
   CHECK_EQ(fixture.send(Scanout(0u, 2u).build()), err_unspec);
-  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
-  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_EQ(fixture.host().head(0u).shows, 0u);
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);

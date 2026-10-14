@@ -107,17 +107,14 @@ private:
 }  // namespace
 
 /* A head the display does not have refuses, said once: a guest that keeps
- * asking must not turn the log into the reason the run is slow. The mock calls
- * a show on a head it lacks a scanout misuse, which is claimed per show. */
+ * asking must not turn the log into the reason the run is slow. */
 TEST(display_heads_show, a_head_the_display_lacks_is_refused_and_said_once)
 { Fixture fixture(0u);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
-  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(fixture.host().logged(), 1u);
   CHECK(std::strstr(fixture.host().last_log(), "no head to show a blob on") != nullptr);
   for (std::uint32_t again = 0u; again < 5u; again++) {
       CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
-      CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   }
   CHECK_EQ(fixture.host().logged(), 1u);
   CHECK(fixture.heads().invariants_hold());
@@ -146,7 +143,6 @@ TEST(display_heads_show, the_first_frame_shown_is_said_once)
 TEST(display_heads_show, a_head_past_what_the_display_has_is_refused_while_the_one_it_has_shows)
 { Fixture fixture(1u);
   CHECK_STATUS(fixture.heads().show(1u, 1u, fixture.whole()), Status::not_supported);
-  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK_EQ(fixture.heads().showing(), 1u);

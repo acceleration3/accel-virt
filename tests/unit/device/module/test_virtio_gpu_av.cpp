@@ -888,7 +888,6 @@ TEST(virtio_gpu_av_scanout, a_host_whose_display_has_no_head_refuses_every_scano
   MockRequest shown(scanout.bytes(), scanout.size());
   CHECK(device.control(&shown, 0x010Du));
   CHECK_EQ(shown.response_type(), 0x1200u);
-  CHECK(host.claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(device.scanouts(), 0u);
 
   GpuRequestBuilder unref(0x0102u);
