@@ -6,9 +6,7 @@ namespace av {
 
 DisplayHeadsProbe::DisplayHeadsProbe(DisplayHeads &target) : heads(target) {}
 
-void DisplayHeadsProbe::forget_the_display() { heads.display_ = DisplayHeads::Display::refuses_dmabuf; }
-
-void DisplayHeadsProbe::remember_the_display() { heads.display_ = DisplayHeads::Display::takes_dmabuf; }
+void DisplayHeadsProbe::unpicture_head(uint32_t head) { heads.heads_[head].object().framebuffer_.forget(); }
 
 void DisplayHeadsProbe::renumber_head(uint32_t head, uint32_t number)
 {

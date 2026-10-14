@@ -12,13 +12,10 @@ namespace av {
 struct DisplayHeadsProbe {
     explicit DisplayHeadsProbe(DisplayHeads &target);
 
-    /* The display's answer, unasked again: a head showing something on a
-     * device that never agreed to show one is the state the invariant exists
-     * to catch. */
-    void forget_the_display();
-    void remember_the_display();
     /* A binding that thinks it is another head than the slot it is in. */
     void renumber_head(uint32_t head, uint32_t number);
+    /* A binding that shows with no framebuffer: one head out of step. */
+    void unpicture_head(uint32_t head);
 
     DisplayHeads &heads;
 };

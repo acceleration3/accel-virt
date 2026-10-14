@@ -1,10 +1,9 @@
 /* One display head: what it shows, what it lets go of, and what it keeps when
  * it is refused.
  *
- * The dma-buf is a real one, through the kernel's own udmabuf over MockHost's
- * file-backed guest RAM, so what the head hands the display is what a guest's
- * pages actually are. A kernel with no udmabuf refuses, and the tests that
- * need one say so rather than pretending. */
+ * The head is shown the device's own mapping of the blob's pages - a real
+ * alias of MockHost's file-backed guest RAM - so a test reads through what
+ * the display was handed and finds the guest's bytes there. */
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/display/scanout_binding.hpp"
@@ -41,8 +40,7 @@ namespace {
 
 constexpr std::uint64_t ram = 0x40000000u;
 constexpr std::uint64_t ram_bytes = 0x40000u;
-/* 64x16 BGRA is 4096 bytes: one page, so a blob can be exactly a framebuffer
- * and udmabuf will take it. */
+/* 64x16 BGRA is 4096 bytes: one page, so a blob can be exactly a framebuffer. */
 constexpr std::uint32_t picture_width = 64u;
 constexpr std::uint32_t picture_height = 16u;
 constexpr std::uint64_t picture_bytes = 4096u;
@@ -86,6 +84,8 @@ public:
         host_.add_guest_ram(ram, ram_bytes);
         host_.add_display_heads(2u);
         CHECK_STATUS(blobs_.initialize(), Status::ok);
+        std::memset(host_.guest_ram(ram), 0x11, picture_bytes);
+        std::memset(host_.guest_ram(ram + 0x10000u), 0x22, picture_bytes);
         make_blob(1u, ram);
         make_blob(2u, ram + 0x10000u);
     }
@@ -117,17 +117,17 @@ private:
     BlobTable blobs_;
 };
 
-/* Whether this kernel makes dma-bufs at all; a head cannot show anything
- * without one, and a machine that cannot is not a failing test. Asked of the
- * host directly, so the probe leaves no head and no blob touched. */
-bool udmabuf_here(Fixture &fixture)
+/* Whether what the display was handed is the guest's own page: the first and
+ * last byte of the framebuffer read `fill`, and a byte the guest writes now
+ * reads through it too. */
+bool shows_guest_page(Fixture &fixture, const std::uint8_t *blob, std::uint64_t address, std::uint8_t fill)
 {
-    void *const         run = fixture.host().guest_ram(ram);
-    const std::uint64_t bytes = picture_bytes;
-    int                 descriptor = -1;
-    if (fixture.host().dmabuf_over_guest(&run, &bytes, 1u, descriptor) != Status::ok) return false;
-    fixture.host().close_dmabuf(descriptor);
-    return true;
+    if (blob == nullptr || blob[0] != fill || blob[picture_bytes - 1u] != fill) return false;
+    std::uint8_t *const guest = fixture.host().guest_ram(address);
+    guest[100] = static_cast<std::uint8_t>(fill + 1u);
+    const bool seen = blob[100] == static_cast<std::uint8_t>(fill + 1u);
+    guest[100] = fill;
+    return seen;
 }
 
 }  // namespace
@@ -142,12 +142,11 @@ TEST(scanout_binding, a_new_head_shows_nothing_and_hiding_it_is_not_an_error)
   CHECK_EQ(binding.frames(), 0u);
   binding.hide();
   CHECK(binding.invariants_hold());
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.host().live_ranges(), 0u);
   CHECK_EQ(fixture.host().head(1u).hides, 0u); }
 
 TEST(scanout_binding_show, the_head_is_told_the_picture_and_the_blob_is_pinned)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   CHECK(binding.invariants_hold());
@@ -163,18 +162,41 @@ TEST(scanout_binding_show, the_head_is_told_the_picture_and_the_blob_is_pinned)
   CHECK_EQ(shown.plane.stride, picture_width * 4u);
   CHECK_EQ(shown.plane.offset, 0u);
   CHECK_EQ(shown.plane.fourcc, ScanoutFormat(ScanoutFormat::b8g8r8a8).fourcc());
-  CHECK_EQ(fixture.host().live_dmabufs(), 1u);
+  /* The display reads the guest's page itself, through one alias of it. */
+  CHECK(shows_guest_page(fixture, shown.blob, ram, 0x11u));
+  CHECK_EQ(fixture.host().live_ranges(), 1u);
   /* Pinned: the table refuses to release it while the head shows it. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::invalid_state);
   binding.hide();
   CHECK(binding.invariants_hold());
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK(!fixture.host().head(0u).shown);
   CHECK_EQ(fixture.host().head(0u).hides, 1u);
+  /* The alias lives with the blob, not the head; releasing the blob ends it. */
+  CHECK_EQ(fixture.host().live_ranges(), 1u);
+  CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
+  CHECK_EQ(fixture.host().live_ranges(), 0u); }
+
+TEST(scanout_binding_show, the_same_picture_again_is_not_shown_twice)
+{ Fixture fixture;
+  ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
+  CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
+  CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
+  CHECK_EQ(fixture.host().head(0u).shows, 1u);
+  CHECK_EQ(binding.frames(), 1u);
+  /* A different picture out of the same blob is a new show, and keeps one pin. */
+  ScanoutFramebuffer half;
+  std::uint64_t      size = 0u;
+  CHECK_STATUS(fixture.blobs().size(1u, size), Status::ok);
+  CHECK_STATUS(half.adopt(decode(32u, 0u, 32u, picture_height), size), Status::ok);
+  CHECK_STATUS(binding.show(1u, half), Status::ok);
+  CHECK_EQ(fixture.host().head(0u).shows, 2u);
+  CHECK_EQ(fixture.host().head(0u).plane.x, 32u);
+  CHECK_EQ(binding.frames(), 2u);
+  binding.hide();
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
 TEST(scanout_binding_show, a_rebind_never_hides_the_head_in_between)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   CHECK_STATUS(binding.show(2u, fixture.whole(2u)), Status::ok);
@@ -183,16 +205,15 @@ TEST(scanout_binding_show, a_rebind_never_hides_the_head_in_between)
   CHECK_EQ(binding.frames(), 2u);
   CHECK_EQ(fixture.host().head(0u).shows, 2u);
   CHECK_EQ(fixture.host().head(0u).hides, 0u);
-  /* One descriptor and one pin at a time: the first blob is releasable again. */
-  CHECK_EQ(fixture.host().live_dmabufs(), 1u);
+  CHECK(shows_guest_page(fixture, fixture.host().head(0u).blob, ram + 0x10000u, 0x22u));
+  /* One pin at a time: the first blob is releasable again. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(2u), Status::invalid_state);
   binding.hide();
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u); }
+  CHECK_STATUS(fixture.blobs().release(2u), Status::ok); }
 
 TEST(scanout_binding_show, a_rebind_the_display_refuses_leaves_the_head_showing_what_it_showed)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   fixture.host().refuse_scanout_at(1u);
@@ -201,8 +222,9 @@ TEST(scanout_binding_show, a_rebind_the_display_refuses_leaves_the_head_showing_
   CHECK(binding.shows());
   CHECK_EQ(binding.blob(), 1u);
   CHECK_EQ(binding.frames(), 1u);
-  /* The refused descriptor and its pin are gone; the shown one is not. */
-  CHECK_EQ(fixture.host().live_dmabufs(), 1u);
+  /* The refused blob's pin is gone; the shown one is not, and the head
+   * still reads the first blob's page. */
+  CHECK(shows_guest_page(fixture, fixture.host().head(0u).blob, ram, 0x11u));
   CHECK_STATUS(fixture.blobs().release(2u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(1u), Status::invalid_state);
   binding.hide(); }
@@ -214,17 +236,18 @@ TEST(scanout_binding_show, a_first_show_the_display_refuses_leaves_the_head_show
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::not_supported);
   CHECK(binding.invariants_hold());
   CHECK(!binding.shows());
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
-TEST(scanout_binding_show, a_kernel_that_makes_no_dma_buf_refuses_and_holds_nothing)
+/* A blob whose pages cannot be mapped as one range is the alias's refusal:
+ * the display is never asked, and no pin is left behind. */
+TEST(scanout_binding_show, pages_the_host_cannot_map_as_one_range_refuse_and_hold_nothing)
 { Fixture fixture;
-  fixture.host().refuse_dmabufs();
+  fixture.host().fail_reserve_at(1u);
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
-  CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::not_supported);
+  CHECK(binding.show(1u, fixture.whole(1u)) != Status::ok);
   CHECK(binding.invariants_hold());
   CHECK(!binding.shows());
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.host().live_ranges(), 0u);
   CHECK_EQ(fixture.host().head(0u).shows, 0u);
   /* No pin was left behind, so the blob is still the guest's to release. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
@@ -238,7 +261,6 @@ TEST(scanout_binding_show, a_blob_the_table_does_not_hold_is_the_tables_refusal)
 
 TEST(scanout_binding_update, only_the_part_of_the_picture_that_changed_is_updated)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding     binding(fixture.host(), fixture.blobs(), 0u);
   /* A picture that is the right half of the framebuffer. */
   ScanoutFramebuffer half;
@@ -273,7 +295,6 @@ TEST(scanout_binding_update, a_head_showing_nothing_and_a_rectangle_outside_the_
 { Fixture        fixture;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
   CHECK_STATUS(binding.update(rect(0u, 0u, 1u, 1u)), Status::invalid_state);
-  if (!udmabuf_here(fixture)) return;
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   CHECK_STATUS(binding.update(rect(0u, 0u, picture_width + 1u, picture_height)), Status::invalid_parameter);
   CHECK_STATUS(binding.update(rect(0u, 0u, 0u, picture_height)), Status::invalid_parameter);
@@ -281,21 +302,19 @@ TEST(scanout_binding_update, a_head_showing_nothing_and_a_rectangle_outside_the_
   CHECK(binding.invariants_hold());
   binding.hide(); }
 
-TEST(scanout_binding, a_head_destroyed_while_showing_lets_go_of_its_descriptor_and_its_pin)
+TEST(scanout_binding, a_head_destroyed_while_showing_goes_dark_and_lets_go_of_its_pin)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   {
       ScanoutBinding binding(fixture.host(), fixture.blobs(), 1u);
       CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
-      CHECK_EQ(fixture.host().live_dmabufs(), 1u);
+      CHECK(fixture.host().head(1u).shown);
   }
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK(!fixture.host().head(1u).shown);
   CHECK_EQ(fixture.host().head(1u).hides, 1u);
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
 TEST(scanout_binding_report, a_state_dump_names_the_blob_the_geometry_and_the_frames)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 1u);
   char           bytes[512] = {};
   av::StateWriter empty(bytes, sizeof bytes);
@@ -311,10 +330,9 @@ TEST(scanout_binding_report, a_state_dump_names_the_blob_the_geometry_and_the_fr
   CHECK(std::strstr(writer.dump(), "frames=1") != nullptr);
   binding.hide(); }
 
-/* Each of the three things a head keeps in step, broken on its own. */
+/* Each of the two things a head keeps in step with showing, broken on its own. */
 TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_holds)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
   av::ScanoutBindingProbe probe(binding);
   CHECK(binding.invariants_hold());
@@ -334,10 +352,10 @@ TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_hol
   probe.set_blob(1u);
   CHECK(binding.invariants_hold());
 
-  /* Showing the slot it is not holding a descriptor in. */
-  probe.swap_slots();
+  /* Showing nothing, while naming a blob. */
+  probe.set_shown(false);
   CHECK(!binding.invariants_hold());
-  probe.swap_slots();
+  probe.set_shown(true);
   CHECK(binding.invariants_hold());
   binding.hide();
   CHECK(binding.invariants_hold());
@@ -348,7 +366,6 @@ TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_hol
 /* A flush that misses the picture vertically is the other way to miss it. */
 TEST(scanout_binding_update, a_flush_above_the_picture_updates_nothing)
 { Fixture fixture;
-  if (!udmabuf_here(fixture)) return;
   ScanoutBinding     binding(fixture.host(), fixture.blobs(), 0u);
   ScanoutFramebuffer lower;
   std::uint64_t      size = 0u;

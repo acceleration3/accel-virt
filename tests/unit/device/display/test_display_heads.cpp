@@ -1,7 +1,7 @@
 /* A device's display heads: which blob each shows, what the host is told, and
- * what happens on a host whose display cannot show a dma-buf at all - which is
- * every host started with `-display none`, and so the configuration that must
- * never regress. */
+ * what happens on a host whose display has no such head. A head shows the
+ * device's own mapping of the blob's pages, which every display backend reads,
+ * so a host started with `-display none` shows blobs too. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/control/control_request.hpp"
@@ -94,16 +94,6 @@ public:
         return framebuffer;
     }
 
-    bool udmabuf_here()
-    {
-        void *const         run = host_.guest_ram(ram);
-        const std::uint64_t bytes = picture_bytes;
-        int                 descriptor = -1;
-        if (host_.dmabuf_over_guest(&run, &bytes, 1u, descriptor) != Status::ok) return false;
-        host_.close_dmabuf(descriptor);
-        return true;
-    }
-
     MockHost     &host() { return host_; }
     BlobTable    &blobs() { return blobs_; }
     DisplayHeads &heads() { return heads_; }
@@ -116,26 +106,19 @@ private:
 
 }  // namespace
 
-TEST(display_heads, the_display_is_asked_once_and_the_answer_is_kept)
-{ Fixture fixture(1u);
-  CHECK(fixture.heads().takes_dmabuf());
-  CHECK(fixture.heads().takes_dmabuf());
-  CHECK(fixture.heads().invariants_hold());
-  /* A display that goes away later does not change what the guest was told:
-   * the capset it read is the promise, and it is kept. */
-  fixture.host().add_display_heads(0u);
-  CHECK(fixture.heads().takes_dmabuf()); }
-
-TEST(display_heads, a_host_with_no_gl_display_shows_nothing_and_says_so_once)
+/* A head the display does not have refuses, said once: a guest that keeps
+ * asking must not turn the log into the reason the run is slow. The mock calls
+ * a show on a head it lacks a scanout misuse, which is claimed per show. */
+TEST(display_heads_show, a_head_the_display_lacks_is_refused_and_said_once)
 { Fixture fixture(0u);
-  CHECK(!fixture.heads().takes_dmabuf());
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(fixture.host().logged(), 1u);
-  CHECK(std::strstr(fixture.host().last_log(), "shows no dma-buf") != nullptr);
-  /* A guest that keeps asking does not keep saying it: the log is the reason
-   * this host cannot, not a frame counter. */
-  for (std::uint32_t again = 0u; again < 20u; again++)
+  CHECK(std::strstr(fixture.host().last_log(), "no head to show a blob on") != nullptr);
+  for (std::uint32_t again = 0u; again < 5u; again++) {
       CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+      CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
+  }
   CHECK_EQ(fixture.host().logged(), 1u);
   CHECK(fixture.heads().invariants_hold());
   CHECK_EQ(fixture.heads().showing(), 0u);
@@ -143,24 +126,27 @@ TEST(display_heads, a_host_with_no_gl_display_shows_nothing_and_says_so_once)
   /* Nothing was pinned, so the guest may still release the blob. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
-/* The other thing a host can fail at, said once for the same reason. */
-TEST(display_heads_show, a_host_that_makes_no_descriptor_says_so_once)
-{ Fixture fixture(1u);
-  fixture.host().refuse_dmabufs();
-  CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
-  CHECK(std::strstr(fixture.host().last_log(), "makes no dma-buf") != nullptr);
-  const std::uint32_t said = fixture.host().logged();
-  for (std::uint32_t again = 0u; again < 20u; again++)
-      CHECK_STATUS(fixture.heads().show(0u, 2u, fixture.whole()), Status::not_supported);
-  CHECK_EQ(fixture.host().logged(), said);
-  CHECK(fixture.heads().invariants_hold());
-  CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
-  CHECK_STATUS(fixture.blobs().release(2u), Status::ok); }
+/* The first frame a head shows is said once: the moment the guest stopped
+ * copying. */
+TEST(display_heads_show, the_first_frame_shown_is_said_once)
+{ Fixture fixture(2u);
+  CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
+  CHECK_EQ(fixture.host().logged(), 1u);
+  CHECK(std::strstr(fixture.host().last_log(), "a head shows a guest blob") != nullptr);
+  CHECK_STATUS(fixture.heads().show(1u, 2u, fixture.whole()), Status::ok);
+  CHECK_STATUS(fixture.heads().show(0u, 2u, fixture.whole()), Status::ok);
+  CHECK_EQ(fixture.host().logged(), 1u);
+  /* What the head was handed is the device's mapping of the guest's page. */
+  std::memset(fixture.host().guest_ram(ram + 0x10000u), 0x5A, picture_bytes);
+  CHECK(fixture.host().head(0u).blob != nullptr);
+  CHECK_EQ(fixture.host().head(0u).blob[0], 0x5Au);
+  CHECK_EQ(fixture.host().head(0u).blob[picture_bytes - 1u], 0x5Au);
+  fixture.heads().release_all(); }
 
-TEST(display_heads_show, a_head_the_host_does_not_have_is_refused_even_when_the_display_takes_dma_bufs)
+TEST(display_heads_show, a_head_past_what_the_display_has_is_refused_while_the_one_it_has_shows)
 { Fixture fixture(1u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_STATUS(fixture.heads().show(1u, 1u, fixture.whole()), Status::not_supported);
+  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK_EQ(fixture.heads().showing(), 1u);
@@ -174,13 +160,12 @@ TEST(display_heads_show, a_head_past_the_sixteen_virtio_gpu_has_is_the_guests_mi
   CHECK_STATUS(fixture.heads().show(0xFFFFFFFFu, 1u, fixture.whole()), Status::invalid_parameter);
   CHECK(fixture.heads().invariants_hold()); }
 
-TEST(display_heads_show, two_heads_showing_one_blob_hold_a_descriptor_and_a_pin_each)
+TEST(display_heads_show, two_heads_showing_one_blob_hold_a_pin_each)
 { Fixture fixture(2u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK_STATUS(fixture.heads().show(1u, 1u, fixture.whole()), Status::ok);
   CHECK_EQ(fixture.heads().showing(), 2u);
-  CHECK_EQ(fixture.host().live_dmabufs(), 2u);
+  CHECK(fixture.host().head(0u).blob == fixture.host().head(1u).blob);
   CHECK(fixture.heads().shows(1u));
   CHECK(!fixture.heads().shows(2u));
   CHECK(fixture.heads().invariants_hold());
@@ -189,7 +174,6 @@ TEST(display_heads_show, two_heads_showing_one_blob_hold_a_descriptor_and_a_pin_
   CHECK_STATUS(fixture.blobs().release(1u), Status::invalid_state);
   CHECK_STATUS(fixture.heads().hide(1u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
   CHECK(fixture.heads().invariants_hold()); }
 
 TEST(display_heads_hide, hiding_a_head_that_shows_nothing_is_not_an_error)
@@ -201,7 +185,6 @@ TEST(display_heads_hide, hiding_a_head_that_shows_nothing_is_not_an_error)
 
 TEST(display_heads_flush, every_head_showing_the_blob_is_updated_and_no_other)
 { Fixture fixture(2u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_STATUS(fixture.heads().flush(1u, rect(0u, 0u, picture_width, picture_height)), Status::not_found);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK_STATUS(fixture.heads().show(1u, 2u, fixture.whole()), Status::ok);
@@ -224,12 +207,11 @@ TEST(display_heads_flush, every_head_showing_the_blob_is_updated_and_no_other)
 
 TEST(display_heads, release_all_lets_go_of_every_head_from_every_state)
 { Fixture fixture(2u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK_STATUS(fixture.heads().hide(1u), Status::ok);   /* made, never shown */
   fixture.heads().release_all();
   CHECK_EQ(fixture.heads().showing(), 0u);
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK(!fixture.host().head(0u).shown);
   CHECK(fixture.heads().invariants_hold());
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
   /* Again, on heads that are all gone. */
@@ -238,7 +220,6 @@ TEST(display_heads, release_all_lets_go_of_every_head_from_every_state)
 
 TEST(display_heads_report, one_line_per_head_ever_used_and_none_for_the_rest)
 { Fixture fixture(2u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_STATUS(fixture.heads().show(1u, 2u, fixture.whole()), Status::ok);
   char        bytes[1024] = {};
   StateWriter writer(bytes, sizeof bytes);
@@ -248,15 +229,14 @@ TEST(display_heads_report, one_line_per_head_ever_used_and_none_for_the_rest)
   CHECK(std::strstr(writer.dump(), "head/2") == nullptr);
   fixture.heads().release_all(); }
 
-TEST(display_heads_invariants, a_head_showing_something_the_display_never_agreed_to_fails)
+TEST(display_heads_invariants, a_head_in_the_wrong_slot_or_out_of_step_fails)
 { Fixture fixture(1u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK(fixture.heads().invariants_hold());
   av::DisplayHeadsProbe probe(fixture.heads());
-  probe.forget_the_display();
+  probe.unpicture_head(0u);
   CHECK(!fixture.heads().invariants_hold());
-  probe.remember_the_display();
+  CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
   CHECK(fixture.heads().invariants_hold());
   probe.renumber_head(0u, 3u);
   CHECK(!fixture.heads().invariants_hold());
@@ -266,13 +246,12 @@ TEST(display_heads_invariants, a_head_showing_something_the_display_never_agreed
 
 TEST(display_heads_show, every_way_the_host_can_fail_leaves_no_head_half_shown)
 { Fixture fixture(2u);
-  if (!fixture.udmabuf_here()) return;
-  fixture.host().fail_dmabuf_at(1u);
-  CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+  fixture.host().fail_reserve_at(1u);
+  CHECK(fixture.heads().show(0u, 1u, fixture.whole()) != Status::ok);
   fixture.host().refuse_scanout_at(1u);
-  CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+  CHECK_STATUS(fixture.heads().show(0u, 2u, fixture.whole()), Status::not_supported);
   CHECK_EQ(fixture.heads().showing(), 0u);
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.host().head(0u).shows, 0u);
   CHECK(fixture.heads().invariants_hold());
   /* Nothing was pinned by either failure. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);

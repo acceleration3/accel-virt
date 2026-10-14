@@ -50,7 +50,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_,
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.owners_, table.interrupts_,
                                                  table.library_, table.shares_, table.recorder_, table.ordering_, id));
                 static_cast<void>(slot.object().start());
                 return;
@@ -194,12 +194,13 @@ TEST(virtio_gpu_av_control, answers_blob_requests_and_reset_releases_every_blob)
 { MockHost host;
   host.add_gpu(first);
   host.set_hostmem_size(0x10000u);
+  host.add_guest_ram(0x100000u, 0x1000u);
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
   GpuRequestBuilder create(0x010Cu);
-  create.u32(1u).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x1000u);
+  create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(0x1000u).u64(0x100000u).u32(0x1000u).u32(0u);
   MockRequest request(create.bytes(), create.size());
   CHECK(device.control(&request, 0x010Cu));
   CHECK_EQ(request.response_type(), 0x1100u);
@@ -211,7 +212,50 @@ TEST(virtio_gpu_av_control, answers_blob_requests_and_reset_releases_every_blob)
   CHECK(!base.answered());
   device.reset();
   CHECK_EQ(device.blobs(), 0u);
-  CHECK_EQ(host.live_host_memory(), 0u);
+  CHECK_EQ(host.live_guest_mappings(), 0u);
+  CHECK(device.invariants_hold()); }
+
+/* A host blob is the library's memory, made for a live context and placed
+ * where the guest maps it: what the guest writes there the library reads in
+ * its own memory. A reset lets go of every one, placement and all. */
+TEST(virtio_gpu_av_control, a_host_blob_is_the_librarys_memory_where_the_guest_maps_it_until_a_reset)
+{ MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x10000u);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
+  executor.set_memory_caching(AV_MEMORY_WRITE_COMBINED);
+  VirtioGpuAv device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
+  CHECK_STATUS(device.create_context(5u), Status::ok);
+  constexpr std::uint32_t host_blob = 0x01000000u;
+  const std::uint64_t     upload = 1u;   /* HostMemoryRequest::Kind::upload */
+  GpuRequestBuilder create(0x010Cu);
+  create.context(5u).u32(host_blob).u32(2u).u32(1u).u32(0u).u64(upload).u64(0x2000u);
+  MockRequest made(create.bytes(), create.size());
+  CHECK(device.control(&made, 0x010Cu));
+  CHECK_EQ(made.response_type(), 0x1100u);
+  CHECK_EQ(executor.held_memory(), 1u);
+  GpuRequestBuilder map(0x0208u);
+  map.u32(host_blob).u32(0u).u64(0x4000u);
+  MockRequest mapped(map.bytes(), map.size());
+  CHECK(device.control(&mapped, 0x0208u));
+  CHECK_EQ(mapped.response_type(), 0x1106u);
+  CHECK_EQ(mapped.response_u32(24u), 3u);   /* VIRTIO_GPU_MAP_CACHE_WC, as the library maps it */
+  auto *const window = static_cast<std::uint8_t *>(host.placed_at(0x4000u));
+  std::uint8_t *const library = executor.memory_bytes(executor.last_opened_domain(), host_blob);
+  CHECK(window != nullptr && library != nullptr);
+  if (window != nullptr && library != nullptr) {
+      window[0x1FFFu] = 0xA5u;
+      CHECK_EQ(library[0x1FFFu], 0xA5u);
+  }
+  CHECK(device.invariants_hold());
+  device.reset();
+  CHECK_EQ(host.live_placements(), 0u);
+  CHECK_EQ(executor.held_memory(), 0u);
+  CHECK_EQ(executor.memory_frees(), 1u);
   CHECK(device.invariants_hold()); }
 
 TEST(virtio_gpu_av_report, an_unrealized_device_says_so_and_has_no_contexts)
@@ -221,7 +265,8 @@ TEST(virtio_gpu_av_report, an_unrealized_device_says_so_and_has_no_contexts)
   av::StateWriter writer(dump, sizeof dump);
   writer.open("device", 0u);
   device.report(writer);
-  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/contexts/0 live=0") == 0); }
+  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/host_blobs/0 live=0\n"
+                                  "device/0/contexts/0 live=0") == 0); }
 
 TEST(virtio_gpu_av_control, an_unrealized_device_answers_nothing_and_offers_no_capset)
 { MockHost host;
@@ -291,6 +336,27 @@ TEST(virtio_gpu_av_control, a_reset_releases_every_shared_object_on_the_bound_gp
   CHECK_EQ(executor.last_domain_gpu(), second[0]);
   CHECK(executor.last_domain() != 0u); }
 
+namespace {
+
+/* The ring and the fence page a bound context reads, made once: guest blobs
+ * over guest RAM of their own, as the guest's driver makes them. */
+void make_the_ring(MockHost &host, VirtioGpuAv &device)
+{
+    constexpr std::uint64_t ring_ram = 0x200000u;
+    host.add_guest_ram(ring_ram, 0x4000u);
+    for (std::uint32_t id = 1u; id <= 2u; id++) {
+        GpuRequestBuilder blob(0x010Cu);
+        blob.u32(id).u32(1u).u32(0u).u32(1u).u64(0u).u64(0x2000u);
+        blob.u64(ring_ram + (id - 1u) * 0x2000u).u32(0x2000u).u32(0u);
+        MockRequest blob_request(blob.bytes(), blob.size());
+        CHECK(device.control(&blob_request, 0x010Cu));
+        CHECK_EQ(blob_request.response_type(), 0x1100u);
+    }
+    av::VirtioGpuAvProbe::write_ring_header(device, 1u);
+}
+
+}  // namespace
+
 TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts_before_their_blobs)
 { MockHost host;
   host.add_gpu(first);
@@ -307,13 +373,7 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   MockRequest info_request(info.bytes(), info.size());
   CHECK(device.control(&info_request, 0x0108u));
   CHECK_EQ(info_request.response_type(), 0x1102u);
-  for (std::uint32_t id = 1u; id <= 2u; id++) {
-      GpuRequestBuilder blob(0x010Cu);
-      blob.u32(id).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x2000u);
-      MockRequest blob_request(blob.bytes(), blob.size());
-      CHECK(device.control(&blob_request, 0x010Cu));
-  }
-  av::VirtioGpuAvProbe::write_ring_header(device, 1u);
+  make_the_ring(host, device);
   GpuRequestBuilder create(0x0200u);
   create.context(7u).u32(0u).u32(0x72u).zeros(64u);
   MockRequest create_request(create.bytes(), create.size());
@@ -336,12 +396,12 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   writer.open("device", 3u);
   device.report(writer);
   CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
-                                    
+                                    "device/3/host_blobs/0 live=0\n"
                                     "device/3/contexts/0 live=1\n"
                                     "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
                      std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
-                                 
+                                 "device/3/host_blobs/0 live=0\n"
                                  "device/3/contexts/0 live=1\n"
                                  "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                  "ring_order=12 fence=2 doorbell=0 reply=0 attached=")) == 0);
@@ -400,8 +460,8 @@ TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_fence_interrupts_is_refus
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, again), Status::ok);
-  /* The refusal, and one line for each probe realize ran. */
-  CHECK_EQ(host.logged(), 3u); }
+  /* The refusal, and nothing else: a realize probes nothing. */
+  CHECK_EQ(host.logged(), 1u); }
 
 TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_the_blob_table_is_refused)
 { MockHost host;
@@ -418,6 +478,23 @@ TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_the_blob_table_is_refused
   CHECK(device.invariants_hold());
   device.reset(); }
 
+/* The host blob table holds a creation apart from a worker asking who owns a
+ * blob; a host with no lock for it refuses the realize, said. */
+TEST(virtio_gpu_av_realize, a_host_without_a_mutex_for_the_host_blob_table_is_refused)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuAv device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  host.fail_mutex_at(3u);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
+  CHECK(std::strstr(message.text(), "no mutex for the host blob table") != nullptr);
+  CHECK(!device.realized());
+  TextBuffer again(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, again), Status::ok);
+  CHECK(device.invariants_hold());
+  device.reset(); }
+
 /* Feature 050: the contexts' shared executors need a lock of their own, and a
  * host with none refuses the realize with that said; the next one completes.
  * The Direct3D streams' ordering takes the lock before theirs, and its
@@ -428,7 +505,7 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_shared_executors_refuses_th
   VirtioGpuAv device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(4u);
+  host.fail_mutex_at(5u);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the contexts' ordering and executors") != nullptr);
   CHECK(!device.realized());
@@ -445,8 +522,8 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_the_stress_probe_still_real
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(5u);   /* the fence interrupts, the blob table, the D3D ordering and the
-                             * shared executors take the first four */
+  host.fail_mutex_at(6u);   /* the fence interrupts, the blob table, the host blob table, the D3D
+                             * ordering and the shared executors take the first five */
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -471,21 +548,26 @@ TEST(virtio_gpu_av, lifecycle_is_main_loop_only)
                    &device, thread),
                Status::ok);
   host.join_thread(thread);
-  /* realize, its fence interrupts, its blob table, its context table and its
-   * binding, reset, its display clock, its present engine, every table, the
-   * export socket's revocation, the status and the interrupts under it,
-   * create, destroy and its table, and control, which an unrealized device
-   * answers no further */
-  for (int violation = 0; violation < 17; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  /* realize, its fence interrupts, its blob table, its host blob table, its
+   * context table and its binding, reset, its display clock, its present
+   * engine, every table, the host blobs, the export socket's revocation, the
+   * status and the interrupts under it, create, destroy and its table, and
+   * control, which an unrealized device answers no further */
+  for (int violation = 0; violation < 19; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
-TEST(virtio_gpu_av_invariants, a_context_on_an_unrealized_device_or_a_broken_table_or_blob_table_is_detected)
+/* One device per test: a device holds the host blob table's slots inline,
+ * so a few of them would not fit on one test's stack. */
+TEST(virtio_gpu_av_invariants, a_context_on_an_unrealized_device_is_detected)
 { MockHost host;
   VirtioGpuAv unrealized(host);
   av::VirtioGpuAvProbe::orphan_context(unrealized, 1u);
   CHECK(!unrealized.invariants_hold());
-  unrealized.reset();
+  unrealized.reset(); }
+
+TEST(virtio_gpu_av_invariants, a_broken_context_table_is_detected)
+{ MockHost host;
   host.add_gpu(first);
   VirtioGpuAv broken(host);
   char bytes[64];
@@ -493,11 +575,19 @@ TEST(virtio_gpu_av_invariants, a_context_on_an_unrealized_device_or_a_broken_tab
   CHECK_STATUS(broken.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
   av::VirtioGpuAvProbe::duplicate_context(broken, 4u);
   CHECK(!broken.invariants_hold());
-  broken.reset();
+  broken.reset(); }
+
+TEST(virtio_gpu_av_invariants, a_broken_blob_table_is_detected)
+{ MockHost host;
+  host.add_gpu(first);
   VirtioGpuAv broken_blobs(host);
   av::VirtioGpuAvProbe::duplicate_blob(broken_blobs, 9u);
   CHECK(!broken_blobs.invariants_hold());
-  broken_blobs.reset();
+  broken_blobs.reset(); }
+
+TEST(virtio_gpu_av_invariants, interrupts_connected_without_a_lock_are_detected)
+{ MockHost host;
+  host.add_gpu(first);
   VirtioGpuAv broken_interrupts(host);
   av::VirtioGpuAvProbe::break_interrupts(broken_interrupts);
   CHECK(!broken_interrupts.invariants_hold());
@@ -534,37 +624,31 @@ std::uint32_t features_of(VirtioGpuAv &device)
 
 }  // namespace
 
-/* Guest memory reaching the host GPU without a copy needs this device able to
- * build a handle, which its probe proves, and the executor able to take one,
- * which only the executor knows. The same probe result gives the bit to a
- * library that imports and withholds it from one that does not. */
-TEST(virtio_gpu_av_realize, the_import_bit_needs_the_library_to_import_as_well)
-{ constexpr std::uint32_t guest_memory_import = 4u;
-
-  MockHost importing_host;
-  importing_host.add_gpu(first);
-  importing_host.set_hostmem_size(0x100000u);
-  importing_host.add_guest_ram(0x100000u, 0x100000u);
-  av::MockExecutorOps importing(AV_EXECUTOR_SUB_API_VULKAN);
-  importing.set_import_kinds(AV_BLOB_HOST_POINTER);
-  VirtioGpuAv with_import(importing_host);
+/* Every host-visible byte is host GPU memory placed in the window
+ * (docs/host-memory.md): a device with a window offers host-visible memory
+ * whatever its library, and neither retired memory bit. */
+TEST(virtio_gpu_av_realize, offers_host_visible_memory_with_a_window_and_no_retired_memory_bit)
+{ constexpr std::uint32_t retired = 2u | 4u;
+  MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x100000u);
+  av::MockExecutorOps library(AV_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(with_import.realize("auto", false, &importing.table(), nullptr, nullptr, nullptr, message), Status::ok);
-  with_import.status(DriverStatus::driver_ok);
+  CHECK_STATUS(device.realize("auto", false, &library.table(), nullptr, nullptr, nullptr, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
+  const std::uint32_t features = features_of(device);
+  CHECK((features & static_cast<std::uint32_t>(av::CapsetInfo::feature_host_visible_memory)) != 0u);
+  CHECK_EQ(features & retired, 0u);
 
-  MockHost copying_host;
-  copying_host.add_gpu(first);
-  copying_host.set_hostmem_size(0x100000u);
-  copying_host.add_guest_ram(0x100000u, 0x100000u);
-  av::MockExecutorOps copying(AV_EXECUTOR_SUB_API_VULKAN);
-  VirtioGpuAv without_import(copying_host);
+  MockHost windowless;
+  windowless.add_gpu(first);
+  VirtioGpuAv without(windowless);
   TextBuffer other(bytes, sizeof bytes);
-  CHECK_STATUS(without_import.realize("auto", false, &copying.table(), nullptr, nullptr, nullptr, other), Status::ok);
-  without_import.status(DriverStatus::driver_ok);
-
-  CHECK((features_of(with_import) & guest_memory_import) != 0u);
-  CHECK_EQ(features_of(without_import) & guest_memory_import, 0u); }
+  CHECK_STATUS(without.realize("auto", false, &library.table(), nullptr, nullptr, nullptr, other), Status::ok);
+  without.status(DriverStatus::driver_ok);
+  CHECK_EQ(features_of(without) & static_cast<std::uint32_t>(av::CapsetInfo::feature_host_visible_memory), 0u); }
 
 TEST(virtio_gpu_av_realize, a_device_with_no_record_property_records_nothing)
 { MockHost host;
@@ -619,18 +703,6 @@ TEST(virtio_gpu_av_realize, opens_the_recording_its_properties_asked_for)
 
 namespace {
 
-/* The ring and the fence page a bound context reads, made once. */
-void make_the_ring(VirtioGpuAv &device)
-{
-    for (std::uint32_t id = 1u; id <= 2u; id++) {
-        GpuRequestBuilder blob(0x010Cu);
-        blob.u32(id).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x2000u);
-        MockRequest blob_request(blob.bytes(), blob.size());
-        CHECK(device.control(&blob_request, 0x010Cu));
-        CHECK_EQ(blob_request.response_type(), 0x1100u);
-    }
-    av::VirtioGpuAvProbe::write_ring_header(device, 1u);
-}
 
 /* Binds `context` on that ring, which is what makes a realized device record a
  * setup, then takes the context away again so the next one may have the ring. */
@@ -679,7 +751,7 @@ TEST(virtio_gpu_av_realize, record_wrap_decides_what_the_ceiling_does)
       const AvRecordingOptions options = {"run.av", ceiling, "setup", c.wrap};
       CHECK_STATUS(device.realize("auto", false, &executor.table(), &options, nullptr, nullptr, message), Status::ok);
       device.status(DriverStatus::driver_ok);
-      make_the_ring(device);
+      make_the_ring(host, device);
       bind_and_destroy(device, 7u);
       bind_and_destroy(device, 8u);
       av::RecordedFile file(host, "run.av");
@@ -755,12 +827,6 @@ TEST(virtio_gpu_av_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_withou
 
   create_blob(1u, ram);
   create_blob(2u, ram + 0x10000u);
-  void *const         run = host.guest_ram(ram);
-  const std::uint64_t length = frame_bytes;
-  int                 probe = -1;
-  if (host.dmabuf_over_guest(&run, &length, 1u, probe) != Status::ok) return;
-  host.close_dmabuf(probe);
-
   CHECK_EQ(show(0u, 1u), 0x1100u);
   CHECK_EQ(device.scanouts(), 1u);
   for (std::uint32_t frame = 0u; frame < 20u; frame++) CHECK_EQ(flush(1u), 0x1100u);
@@ -771,7 +837,7 @@ TEST(virtio_gpu_av_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_withou
   CHECK_EQ(show(0u, 2u), 0x1100u);
   CHECK_EQ(host.head(0u).shows, 2u);
   CHECK_EQ(host.head(0u).hides, 0u);
-  CHECK_EQ(host.live_dmabufs(), 1u);
+  CHECK(host.head(0u).blob != nullptr);
   /* The blob nobody shows any more is the guest's to release again; the one on
    * screen is not. */
   GpuRequestBuilder unref_first(0x0102u);
@@ -782,24 +848,24 @@ TEST(virtio_gpu_av_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_withou
   CHECK_EQ(send(unref_shown), 0x1205u);
   CHECK(device.invariants_hold());
 
-  /* The device's invariant folds in its heads': a head still showing on a
-   * device whose display has withdrawn its answer is a state neither of them
-   * may report as sound. */
+  /* The device's invariant folds in its heads': a head out of step with what
+   * it shows is a state neither of them may report as sound. */
   { av::DisplayHeadsProbe heads(av::VirtioGpuAvProbe::heads(device));
-    heads.forget_the_display();
+    heads.renumber_head(0u, 1u);
     CHECK(!device.invariants_hold());
-    heads.remember_the_display();
+    heads.renumber_head(0u, 0u);
     CHECK(device.invariants_hold()); }
 
   device.reset();
   CHECK_EQ(device.scanouts(), 0u);
   CHECK_EQ(device.blobs(), 0u);
-  CHECK_EQ(host.live_dmabufs(), 0u);
+  CHECK_EQ(host.live_ranges(), 0u);
   CHECK(device.invariants_hold()); }
 
-/* The same device on a host with no GL display: every scanout is refused, the
- * guest keeps the 2D path of feature 038, and nothing is left behind. */
-TEST(virtio_gpu_av_scanout, a_host_with_no_gl_display_refuses_every_scanout_and_keeps_its_blobs)
+/* The same device on a host whose display has no head: every scanout is
+ * refused, the guest keeps the 2D path of feature 038, and nothing is left
+ * behind. */
+TEST(virtio_gpu_av_scanout, a_host_whose_display_has_no_head_refuses_every_scanout_and_keeps_its_blobs)
 { MockHost host;
   host.add_gpu(first);
   host.add_guest_ram(0x40000000u, 0x10000u);
@@ -822,8 +888,8 @@ TEST(virtio_gpu_av_scanout, a_host_with_no_gl_display_refuses_every_scanout_and_
   MockRequest shown(scanout.bytes(), scanout.size());
   CHECK(device.control(&shown, 0x010Du));
   CHECK_EQ(shown.response_type(), 0x1200u);
+  CHECK(host.claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(device.scanouts(), 0u);
-  CHECK_EQ(host.live_dmabufs(), 0u);
 
   GpuRequestBuilder unref(0x0102u);
   unref.u32(1u).u32(0u);
@@ -859,7 +925,7 @@ namespace {
  * renderer one loopback socket away. */
 class RendererDevice {
 public:
-    explicit RendererDevice(std::uint32_t import_kinds)
+    RendererDevice()
         : executor_(AV_EXECUTOR_SUB_API_VULKAN), peer_(host_, executor_.table()), device_(host_), message_(bytes_, sizeof bytes_)
     {
         host_.add_gpu(first);
@@ -867,7 +933,6 @@ public:
         host_.add_guest_ram(0x100000u, 0x100000u);
         host_.add_guest_region(0u, host_.guest_ram(0x100000u), 0x100000u);
         host_.connect_renderer(peer_);
-        executor_.set_import_kinds(import_kinds);
     }
     ~RendererDevice() { device_.reset(); }
 
@@ -892,16 +957,17 @@ private:
 }  // namespace
 
 /* With renderer= the contexts run in the renderer realize started, and the
- * capset offers what its Ready said - the import bit included, read from the
- * Vulkan lane. */
+ * capset offers what its Ready said, with host-visible memory from the window
+ * QEMU keeps. */
 TEST(virtio_gpu_av_realize, with_a_renderer_the_capset_is_what_the_renderer_offers)
-{ RendererDevice importing(AV_BLOB_HOST_POINTER);
+{ RendererDevice importing;
   CHECK_STATUS(importing.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so"), Status::ok);
   CHECK_EQ(importing.host().renderer_starts(), 1u);
   CHECK(importing.peer().service().ready());
   importing.device().status(DriverStatus::driver_ok);
   CHECK_EQ(importing.device().capsets(), 1u);
-  CHECK((features_of(importing.device()) & 4u) != 0u);
+  CHECK((features_of(importing.device()) & av::CapsetInfo::feature_host_visible_memory) != 0u);
+  CHECK_EQ(features_of(importing.device()) & (2u | 4u), 0u);
   /* The renderer's snapshots are in its memory, which the engine here cannot read. */
   CHECK_EQ(features_of(importing.device()) & av::CapsetInfo::feature_present_from_image, 0u);
   CHECK((features_of(importing.device()) & av::CapsetInfo::feature_present_engine) != 0u);
@@ -910,16 +976,10 @@ TEST(virtio_gpu_av_realize, with_a_renderer_the_capset_is_what_the_renderer_offe
   CHECK_EQ(importing.device().contexts(), 1u);
   CHECK(importing.device().invariants_hold()); }
 
-TEST(virtio_gpu_av_realize, with_a_renderer_whose_library_imports_nothing_there_is_no_import_bit)
-{ RendererDevice copying(0u);
-  CHECK_STATUS(copying.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so"), Status::ok);
-  copying.device().status(DriverStatus::driver_ok);
-  CHECK_EQ(features_of(copying.device()) & 4u, 0u); }
-
 /* The glue's report of a dead renderer reaches the plane: the renderer is
  * started again. A reset tells the renderer the interrupts are off. */
 TEST(virtio_gpu_av_renderer_lost, with_a_renderer_it_is_started_again)
-{ RendererDevice rig(0u);
+{ RendererDevice rig;
   CHECK_STATUS(rig.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so"), Status::ok);
   rig.device().status(DriverStatus::driver_ok);
   CHECK_STATUS(rig.device().create_context(1u), Status::ok);
@@ -938,20 +998,20 @@ TEST(virtio_gpu_av_renderer_lost, with_a_renderer_it_is_started_again)
  * a table QEMU loaded itself; a renderer that does not start fails the
  * realize with its status. */
 TEST(virtio_gpu_av_realize, a_renderer_without_its_library_is_refused)
-{ RendererDevice rig(0u);
+{ RendererDevice rig;
   CHECK_STATUS(rig.realize("/usr/libexec/av-renderer", nullptr), Status::invalid_parameter);
   CHECK(std::strstr(rig.message().text(), "renderer= needs executor=") != nullptr);
   CHECK_EQ(rig.host().renderer_starts(), 0u); }
 
 TEST(virtio_gpu_av_realize, a_renderer_beside_a_library_qemu_loaded_is_refused)
-{ RendererDevice rig(0u);
+{ RendererDevice rig;
   av::MockExecutorOps loaded(AV_EXECUTOR_SUB_API_VULKAN);
   CHECK_STATUS(rig.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so", &loaded.table()),
                Status::invalid_parameter);
   CHECK_EQ(rig.host().renderer_starts(), 0u); }
 
 TEST(virtio_gpu_av_realize, a_renderer_that_does_not_start_fails_the_realize_with_its_status)
-{ RendererDevice rig(0u);
+{ RendererDevice rig;
   rig.host().fail_renderer_start_at(1u);
   CHECK_STATUS(rig.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so"), Status::not_found);
   CHECK(std::strstr(rig.message().text(), "the renderer did not start") != nullptr);
@@ -959,7 +1019,7 @@ TEST(virtio_gpu_av_realize, a_renderer_that_does_not_start_fails_the_realize_wit
 
 /* An empty renderer= is no renderer: the contexts stay in QEMU. */
 TEST(virtio_gpu_av_realize, an_empty_renderer_keeps_the_contexts_in_qemu)
-{ RendererDevice rig(0u);
+{ RendererDevice rig;
   CHECK_STATUS(rig.realize("", nullptr), Status::ok);
   CHECK_EQ(rig.host().renderer_starts(), 0u); }
 

@@ -85,6 +85,7 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
   CHECK(std::strcmp(one.dump(), "module/0 devices=1\n"
                                 "module/0/device/1 realized=true gpu=0 capsets=0 blobs=0 scanouts=0 "
                                 "contexts=0 driver_ok=false\n"
+                                "module/0/device/1/host_blobs/0 live=0\n"
                                 "module/0/device/1/contexts/0 live=0") == 0);
   CHECK_STATUS(module.destroy(second), Status::ok); }
 
@@ -177,20 +178,23 @@ TEST(av_device_abi, av_device_control_answers_blob_requests_and_leaves_the_rest_
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   host.set_hostmem_size(0x10000u);
+  host.add_guest_ram(0x100000u, 0x1000u);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
   char error[96] = {};
   AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
   CHECK(device != nullptr);
   CHECK_EQ(av_device_capsets(device), 1u);
+  /* A guest blob over one page of guest RAM. */
   GpuRequestBuilder create(0x010Cu);
-  create.u32(1u).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x1000u);
+  create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(0x1000u).u64(0x100000u).u32(0x1000u).u32(0u);
   MockRequest blob(create.bytes(), create.size());
   CHECK_EQ(av_device_control(device, &blob, 0x010Cu), 1);
   CHECK_EQ(blob.response_type(), 0x1100u);
   GpuRequestBuilder display_info(0x0100u);
   MockRequest base(display_info.bytes(), display_info.size());
   CHECK_EQ(av_device_control(device, &base, 0x0100u), 0);
+  CHECK_EQ(host.live_guest_mappings(), 1u);
   CHECK_EQ(av_device_destroy(device), 0);
-  CHECK_EQ(host.live_host_memory(), 0u);
+  CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK(av_device_create(&ops.table(), nullptr, "auto", 1, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "blob=on is not supported") != nullptr); }

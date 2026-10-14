@@ -11,6 +11,8 @@
 #include "device/display/scanout_format.hpp"
 #include "device/display/scanout_framebuffer.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
+#include "harness/host/host_violation.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -110,16 +112,6 @@ public:
         return commands_.answer(request, type) ? mock.response_type() : 0u;
     }
 
-    bool udmabuf_here()
-    {
-        void *const         run = host_.guest_ram(ram);
-        const std::uint64_t bytes = blob_bytes;
-        int                 descriptor = -1;
-        if (host_.dmabuf_over_guest(&run, &bytes, 1u, descriptor) != Status::ok) return false;
-        host_.close_dmabuf(descriptor);
-        return true;
-    }
-
     MockHost     &host() { return host_; }
     BlobTable    &blobs() { return blobs_; }
     DisplayHeads &heads() { return heads_; }
@@ -135,10 +127,13 @@ private:
 
 TEST(scanout_commands, a_head_shows_a_blob_and_a_flush_reaches_the_display)
 { Fixture fixture(1u);
-  if (!fixture.udmabuf_here()) return;
+  std::memset(fixture.host().guest_ram(ram), 0x3C, blob_bytes);
   CHECK_EQ(fixture.send(Scanout(0u, 1u).build()), ok_nodata);
   CHECK_EQ(fixture.heads().showing(), 1u);
   CHECK_EQ(fixture.host().head(0u).plane.fourcc, ScanoutFormat(ScanoutFormat::b8g8r8a8).fourcc());
+  /* The display reads the blob's own pages. */
+  CHECK(fixture.host().head(0u).blob != nullptr);
+  CHECK_EQ(fixture.host().head(0u).blob[blob_bytes - 1u], 0x3Cu);
   CHECK_EQ(fixture.send(flush_of(1u, 0u, 0u, width, height)), ok_nodata);
   CHECK_EQ(fixture.host().head(0u).updates, 1u);
   CHECK(fixture.heads().invariants_hold());
@@ -146,7 +141,6 @@ TEST(scanout_commands, a_head_shows_a_blob_and_a_flush_reaches_the_display)
 
 TEST(scanout_commands, resource_zero_hides_the_head_and_hiding_twice_is_not_an_error)
 { Fixture fixture(1u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_EQ(fixture.send(Scanout(0u, 1u).build()), ok_nodata);
   CHECK_EQ(fixture.send(Scanout(0u, 0u).size(0u, 0u).rect(0u, 0u, 0u, 0u).format(0u).stride(0u).build()),
            ok_nodata);
@@ -194,14 +188,17 @@ TEST(scanout_commands_show, a_head_past_the_sixteen_is_the_guests_mistake_and_a_
   /* Head 1 exists in virtio-gpu but not on this host: the display refused, not
    * the guest. */
   CHECK_EQ(fixture.send(Scanout(1u, 1u).build()), err_unspec);
+  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK(fixture.heads().invariants_hold()); }
 
-TEST(scanout_commands_show, a_host_with_no_gl_display_refuses_every_scanout_and_keeps_nothing)
+TEST(scanout_commands_show, a_host_whose_display_has_no_head_refuses_every_scanout_and_keeps_nothing)
 { Fixture fixture(0u);
   CHECK_EQ(fixture.send(Scanout(0u, 1u).build()), err_unspec);
   CHECK_EQ(fixture.send(Scanout(0u, 2u).build()), err_unspec);
+  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
+  CHECK(fixture.host().claim(av::HostViolation::scanout_misuse));
   CHECK_EQ(fixture.heads().showing(), 0u);
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.host().head(0u).shows, 0u);
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(2u), Status::ok); }
 
@@ -216,7 +213,6 @@ TEST(scanout_commands_flush, a_request_the_core_does_not_own_is_left_to_the_base
 
 TEST(scanout_commands_flush, a_flush_no_head_is_showing_and_one_outside_the_framebuffer_are_refused)
 { Fixture fixture(1u);
-  if (!fixture.udmabuf_here()) return;
   CHECK_EQ(fixture.send(flush_of(1u, 0u, 0u, width, height)), err_invalid_parameter);
   CHECK_EQ(fixture.send(Scanout(0u, 1u).build()), ok_nodata);
   CHECK_EQ(fixture.send(flush_of(2u, 0u, 0u, width, height)), err_invalid_parameter);
@@ -231,12 +227,12 @@ TEST(scanout_commands_flush, a_flush_no_head_is_showing_and_one_outside_the_fram
 
 TEST(scanout_commands, a_blob_a_head_shows_cannot_be_unreferenced_until_it_is_hidden)
 { Fixture fixture(1u);
-  if (!fixture.udmabuf_here()) return;
   MockHost        &host = fixture.host();
   av::WireRecorder       recorder(host);
   av::FenceInterrupts    interrupts(host);
-  av::LocalContextPlane  plane(host, fixture.blobs(), interrupts, recorder);
-  av::BlobCommands       blobs(host, fixture.blobs(), recorder, plane);
+  av::HostBlobTable      host_blobs(host);
+  av::LocalContextPlane  plane(host, fixture.blobs(), host_blobs, interrupts, recorder);
+  av::BlobCommands       blobs(host, fixture.blobs(), host_blobs, recorder, plane);
   const auto       unref = [&](std::uint32_t id) {
       GpuRequestBuilder request(av::BlobCommands::resource_unref);
       request.u32(id).u32(0u);

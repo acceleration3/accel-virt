@@ -13,6 +13,8 @@
 #include "harness/context/local_context_plane_probe.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
+#include "harness/context/guest_blob_maker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -106,7 +108,8 @@ class Fixture {
 public:
     /* A device offering `sub_apis`, over a library of `abi_version`. */
     explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = AV_EXECUTOR_ABI_VERSION)
-        : blobs_(host_), interrupts_(host_), ops_(sub_apis), recorder_(host_), plane_(host_, blobs_, interrupts_, recorder_),
+        : blobs_(host_), maker_(host_, blobs_), owners_(host_), interrupts_(host_), ops_(sub_apis), recorder_(host_),
+          plane_(host_, blobs_, owners_, interrupts_, recorder_),
           capset_(host_), commands_(host_, plane_, capset_)
     {
         static_cast<void>(blobs_.initialize());
@@ -117,12 +120,12 @@ public:
         host_.set_hostmem_size(0x10000u);
         capset_.describe(0u, sub_apis, av::CapsetInfo::feature_host_visible_memory);
         static_cast<void>(plane_.start(uuid, capset_.info()));
-        static_cast<void>(blobs_.create_host(ring, 0x2000u));
-        static_cast<void>(blobs_.create_host(fence, 0x1000u));
-        static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
-        static_cast<void>(blobs_.create_host(headless_ring, 0x2000u));
-        static_cast<void>(blobs_.create_host(second_ring, 0x2000u));
-        static_cast<void>(blobs_.create_host(third_ring, 0x2000u));
+        static_cast<void>(maker_.create(ring, 0x2000u));
+        static_cast<void>(maker_.create(fence, 0x1000u));
+        static_cast<void>(maker_.create(small_ring, 0x1000u));
+        static_cast<void>(maker_.create(headless_ring, 0x2000u));
+        static_cast<void>(maker_.create(second_ring, 0x2000u));
+        static_cast<void>(maker_.create(third_ring, 0x2000u));
         av::RingBlobWriter writer(blobs_);
         writer.write_header(ring, 12u);
         writer.write_header(small_ring, 12u);
@@ -153,6 +156,8 @@ public:
 private:
     MockHost              host_;
     BlobTable             blobs_;
+    av::GuestBlobMaker    maker_;
+    av::HostBlobTable     owners_;
     av::FenceInterrupts   interrupts_;
     av::MockExecutorOps   ops_;
     av::WireRecorder      recorder_;
@@ -309,9 +314,10 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
 { MockHost host;
   host.add_gpu(uuid);
   BlobTable blobs(host);
+  av::HostBlobTable owners(host);
   av::FenceInterrupts interrupts(host);
   av::WireRecorder recorder(host);
-  av::LocalContextPlane contexts(host, blobs, interrupts, recorder);
+  av::LocalContextPlane contexts(host, blobs, owners, interrupts, recorder);
   const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
   DeviceCapset undescribed(host);
   undescribed.describe(0u, 0u, 0u);

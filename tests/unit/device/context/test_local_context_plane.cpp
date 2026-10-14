@@ -6,6 +6,8 @@
 #include "device/context/local_context_plane.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
+#include "harness/context/guest_blob_maker.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "harness/context/local_context_plane_probe.hpp"
@@ -37,12 +39,14 @@ constexpr std::uint32_t fence = 2u;
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), interrupts_(host_), recorder_(host_), ops_(vulkan_only), plane_(host_, blobs_, interrupts_, recorder_)
+    Fixture()
+        : blobs_(host_), maker_(host_, blobs_), owners_(host_), interrupts_(host_), recorder_(host_), ops_(vulkan_only),
+          plane_(host_, blobs_, owners_, interrupts_, recorder_)
     {
         host_.set_hostmem_size(0x10000u);
         static_cast<void>(blobs_.initialize());
-        static_cast<void>(blobs_.create_host(ring, 0x2000u));
-        static_cast<void>(blobs_.create_host(fence, 0x1000u));
+        static_cast<void>(maker_.create(ring, 0x2000u));
+        static_cast<void>(maker_.create(fence, 0x1000u));
         av::RingBlobWriter(blobs_).write_header(ring, 12u);
     }
     ~Fixture() { plane_.destroy_all(); }
@@ -54,6 +58,8 @@ public:
 private:
     MockHost          host_;
     BlobTable         blobs_;
+    av::GuestBlobMaker maker_;
+    av::HostBlobTable owners_;
     FenceInterrupts   interrupts_;
     av::WireRecorder  recorder_;
     /* Before the plane, which closes its domain in the library as it goes. */
@@ -86,11 +92,40 @@ TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
   fixture.ops().editable().abi_version = 0u;
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_parameter);
   fixture.ops().editable().abi_version = AV_EXECUTOR_ABI_VERSION;
-  fixture.ops().set_import_kinds(AV_BLOB_HOST_POINTER);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK_EQ(fixture.plane().sub_apis(), vulkan_only);
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_state); }
+
+/* Host memory is the library's, in the device's domain under the key the
+ * device names it by: none before the domain is open, the library's refusal
+ * as no_memory, and a free reaching the same key. */
+TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain)
+{ Fixture fixture;
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, 1u, memory), Status::no_memory);
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(fixture.ops().memory_allocations(), 0u);
+  fixture.plane().free_memory(0x01000000u);
+  CHECK_EQ(fixture.ops().memory_frees(), 0u);
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000000u, 0x2000u, 1u, memory), Status::ok);
+  CHECK(fixture.host().descriptor_open(memory.fd));
+  CHECK_EQ(memory.size, 0x2000u);
+  CHECK_EQ(memory.caching, static_cast<std::uint32_t>(AV_MEMORY_WRITE_BACK));
+  const MockExecutorOps::MemoryRequest asked = fixture.ops().last_memory_request();
+  CHECK_EQ(asked.domain, fixture.ops().last_opened_domain());
+  CHECK_EQ(asked.key, 0x01000000u);
+  CHECK_EQ(asked.size, 0x2000u);
+  CHECK_EQ(asked.request, 1u);
+  fixture.ops().refuse_memory_at(1u);
+  AvHostMemory refused = {-1, 0u, 0u};
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000001u, 0x1000u, 1u, refused), Status::no_memory);
+  CHECK_EQ(refused.fd, -1);
+  fixture.plane().free_memory(0x01000000u);
+  CHECK_EQ(fixture.ops().memory_frees(), 1u);
+  CHECK_EQ(fixture.ops().live_memory(), 0u);
+  fixture.host().close_descriptor(memory.fd); }
 
 /* Frames are the library's: read through the plane from any thread, and
  * none from a plane with no library. */
@@ -165,9 +200,10 @@ TEST(local_context_plane, opens_the_device_s_domain_once_and_closes_it_as_it_goe
 { MockExecutorOps ops(vulkan_only);
   { MockHost          host;
     BlobTable         blobs(host);
+    av::HostBlobTable owners(host);
     FenceInterrupts   interrupts(host);
     av::WireRecorder  recorder(host);
-    LocalContextPlane plane(host, blobs, interrupts, recorder);
+    LocalContextPlane plane(host, blobs, owners, interrupts, recorder);
     CHECK_STATUS(plane.initialize(), Status::ok);
     CHECK_STATUS(plane.accept(&ops.table()), Status::ok);
     CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
@@ -179,9 +215,10 @@ TEST(local_context_plane, opens_the_device_s_domain_once_and_closes_it_as_it_goe
   CHECK_EQ(ops.domains_closed(), 1u);
   MockHost          host;
   BlobTable         blobs(host);
+  av::HostBlobTable owners(host);
   FenceInterrupts   interrupts(host);
   av::WireRecorder  recorder(host);
-  LocalContextPlane plane(host, blobs, interrupts, recorder);
+  LocalContextPlane plane(host, blobs, owners, interrupts, recorder);
   CHECK_STATUS(plane.accept(&ops.table()), Status::ok);
   ops.refuse_domain_at(1u);
   CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
