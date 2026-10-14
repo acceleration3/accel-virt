@@ -11,6 +11,7 @@
 #include "executor/opencl/cl_handle_registry.hpp"
 #include "executor/opencl/cl_bounced_rect.hpp"
 #include "executor/opencl/cl_read_ahead.hpp"
+#include "executor/opencl/cl_renderbuffer_images.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
@@ -18,6 +19,7 @@
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/shim/gl_host_import.hpp"
+#include "executor/shim/gl_renderbuffer_texture.hpp"
 #include "executor/shim/gl_shared_buffer.hpp"
 #include "proto/generated/opencl/cl_real_dispatch.h"
 
@@ -217,6 +219,20 @@ public:
                                        cl_uint num_events_in_wait_list,
                                        const cl_event *event_wait_list, cl_event *event) override;
 
+    /* The host's answer, or - where its GL sharing takes no renderbuffer, as
+     * Intel's compute runtime's takes none - a cl_mem over a texture of the
+     * renderbuffer's own storage (GlRenderbufferTexture), which OpenCL reads as
+     * the guest's GL draws it. The texture is the host's business: the guest
+     * is told of the renderbuffer it named, by clGetGLObjectInfo below. */
+    cl_mem on_clCreateFromGLRenderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
+                                         cl_int *errcode_ret) override;
+    /* A cl_mem made over a renderbuffer is CL_GL_OBJECT_RENDERBUFFER and its
+     * name, as the API has it, whatever the host made it through. */
+    cl_int on_clGetGLObjectInfo(cl_mem memobj, cl_gl_object_type *gl_object_type,
+                                cl_GLuint *gl_object_name) override;
+    /* And no texture: CL_INVALID_GL_OBJECT, as for any renderbuffer's. */
+    cl_int on_clGetGLTextureInfo(cl_mem memobj, cl_gl_texture_info param_name, size_t param_value_size,
+                                 void *param_value, size_t *param_value_size_ret) override;
     /* No guest function pointer crosses the wire, so the callback registered
      * here is this backend's own: it signals the device, which wakes the
      * context's worker, and the guest asks what completed. Refused when the
@@ -236,6 +252,10 @@ private:
      * buffer's reference; the buffer itself where its memory is no image
      * OpenCL names. */
     cl_mem image_over(cl_mem buffer, const SharedImageShape &shape);
+    /* A cl_mem over a texture of `renderbuffer`'s storage, remembered as the
+     * renderbuffer's; null, with the reason in `errcode_ret`, where none can
+     * be made. */
+    cl_mem over_texture(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer, cl_int *errcode_ret);
     friend struct OpenClBackendProbe;
 
     /* A context property list this device will copy: OpenCL defines a handful
@@ -286,6 +306,9 @@ private:
     GlContext      vehicle_;
     GlHostImport   import_;
     GlSharedBuffer buffers_;
+    GlRenderbufferTexture renderbuffer_textures_;
+    /* The cl_mems made over a renderbuffer through one of those textures. */
+    ClRenderbufferImages  renderbuffers_;
     /* The first context the guest made, which is the one a shared object is
      * opened into. An OpenCL application makes one; a second is a context this
      * cannot share with, and an open into it is refused rather than answered

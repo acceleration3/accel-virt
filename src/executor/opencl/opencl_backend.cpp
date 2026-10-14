@@ -57,7 +57,7 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
 }
 
 OpenClBackend::OpenClBackend()
-    : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), context_(nullptr),
+    : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), renderbuffer_textures_(), renderbuffers_(), context_(nullptr),
       queue_(nullptr), handles_(), svm_(), events_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false)
 {
@@ -82,6 +82,7 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     display_ = display;
     import_.configure(vehicle_);
     buffers_.configure(vehicle_);
+    renderbuffer_textures_.configure(vehicle_, *display);
     /* Measured before anything is claimed, and all three together because a
      * context that cannot do every one of them cannot open a shared object at
      * all: it then runs exactly as a context on a GPU with no display does. */
@@ -102,6 +103,7 @@ bool OpenClBackend::share_with(const GlDisplay &display, const OpenGlBackend &sh
     display_ = &display;
     import_.configure(vehicle_);
     buffers_.configure(vehicle_);
+    renderbuffer_textures_.configure(vehicle_, display);
     if (shares_with_gl()) return true;
     display_ = nullptr;
     vehicle_.close();
@@ -357,6 +359,14 @@ void OpenClBackend::released(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::released");
     handles_.release(kind, object);
+    /* The texture a renderbuffer's cl_mem was made over goes with the guest's
+     * last reference: the host's OpenCL holds the memory it imported itself. */
+    uint32_t texture = 0u;
+    void    *image = nullptr;
+    if (kind == clproto::HandleKind::mem &&
+        handles_.resolve(kind, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object))) == nullptr &&
+        renderbuffers_.forget(object, texture, image))
+        renderbuffer_textures_.destroy(texture, image);
 }
 
 cl_int OpenClBackend::on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
@@ -431,7 +441,11 @@ void OpenClBackend::shut_down()
      * told to stop calling them, so being called and doing nothing is what
      * they do from now on. */
     events_.shut_down();
+    uint32_t texture = 0u;
+    void    *image = nullptr;
+    while (renderbuffers_.forget_any(texture, image)) renderbuffer_textures_.destroy(texture, image);
     /* The vehicle last: its context is what deleted the GL objects above. */
+    renderbuffer_textures_.give_back();
     buffers_.give_back();
     import_.give_back();
     vehicle_.close();
@@ -702,6 +716,59 @@ cl_int OpenClBackend::on_clEnqueueWriteBufferRect(
         command_queue, buffer, CL_TRUE, buffer_origin, host_origin, region, buffer_row_pitch,
         buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list,
         event_wait_list, event);
+}
+
+cl_mem OpenClBackend::on_clCreateFromGLRenderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
+                                                    cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateFromGLRenderbuffer");
+    cl_int       refused = CL_SUCCESS;
+    cl_mem const direct = RealDispatch::on_clCreateFromGLRenderbuffer(context, flags, renderbuffer, &refused);
+    if (errcode_ret != nullptr) *errcode_ret = refused;
+    if (direct != nullptr || refused != CL_INVALID_GL_OBJECT || !sharing()) return direct;
+    return over_texture(context, flags, renderbuffer, errcode_ret);
+}
+
+/* A renderbuffer with no image of it - none by that name, or one EGL will not
+ * take - leaves the host's refusal standing; a texture the host took and this
+ * could not hold is out of room. */
+cl_mem OpenClBackend::over_texture(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::over_texture");
+    uint32_t texture = 0u;
+    void    *image = nullptr;
+    if (!renderbuffer_textures_.make(renderbuffer, texture, image)) return nullptr;
+    cl_int       made = CL_SUCCESS;
+    cl_mem const over = RealDispatch::on_clCreateFromGLTexture(context, flags, GlRenderbufferTexture::texture_2d, 0,
+                                                               texture, &made);
+    if (over != nullptr && renderbuffers_.remember(over, renderbuffer, texture, image)) {
+        if (errcode_ret != nullptr) *errcode_ret = CL_SUCCESS;
+        return over;
+    }
+    if (over != nullptr) static_cast<void>(::clReleaseMemObject(over));
+    renderbuffer_textures_.destroy(texture, image);
+    if (errcode_ret != nullptr && over != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+    return nullptr;
+}
+
+cl_int OpenClBackend::on_clGetGLObjectInfo(cl_mem memobj, cl_gl_object_type *gl_object_type,
+                                           cl_GLuint *gl_object_name)
+{
+    AV_SCOPE("OpenClBackend::on_clGetGLObjectInfo");
+    const uint32_t renderbuffer = renderbuffers_.renderbuffer_of(memobj);
+    if (renderbuffer == 0u) return RealDispatch::on_clGetGLObjectInfo(memobj, gl_object_type, gl_object_name);
+    if (gl_object_type != nullptr) *gl_object_type = CL_GL_OBJECT_RENDERBUFFER;
+    if (gl_object_name != nullptr) *gl_object_name = renderbuffer;
+    return CL_SUCCESS;
+}
+
+cl_int OpenClBackend::on_clGetGLTextureInfo(cl_mem memobj, cl_gl_texture_info param_name, size_t param_value_size,
+                                            void *param_value, size_t *param_value_size_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clGetGLTextureInfo");
+    if (renderbuffers_.renderbuffer_of(memobj) != 0u) return CL_INVALID_GL_OBJECT;
+    return RealDispatch::on_clGetGLTextureInfo(memobj, param_name, param_value_size, param_value,
+                                               param_value_size_ret);
 }
 
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)
