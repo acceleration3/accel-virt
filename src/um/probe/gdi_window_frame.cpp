@@ -16,14 +16,19 @@ bool GdiWindowFrame::size(void *window, uint32_t &width, uint32_t &height)
     return true;
 }
 
-/* The window's own pixels, copied into a DIB section of the same shape: what
- * the desktop shows, whoever drew it. */
+/* The window's client area as the desktop composes it, into a DIB section of
+ * the same shape. Not BitBlt from the window's DC: that reads GDI's
+ * redirection bitmap, which a flip-model swap chain never draws into - it
+ * keeps the first frame DWM copied there, and on a resize that frame at its
+ * old size with black around it, while the desktop shows every later one
+ * (measured on avgpu and on Microsoft's Basic Render Driver alike).
+ * PW_RENDERFULLCONTENT has DWM render the window as it shows it, whichever
+ * way its frames arrive, and whatever overlaps it. */
 bool GdiWindowFrame::read(void *window, uint32_t width, uint32_t height, uint8_t *bgra)
 {
     AV_SCOPE("GdiWindowFrame::read");
-    const HDC window_dc = GetDC(static_cast<HWND>(window));
-    if (window_dc == nullptr) return false;
-    const HDC memory_dc = CreateCompatibleDC(window_dc);
+    const HDC memory_dc = CreateCompatibleDC(nullptr);
+    if (memory_dc == nullptr) return false;
     BITMAPINFO info = {};
     info.bmiHeader.biSize = sizeof info.bmiHeader;
     info.bmiHeader.biWidth = static_cast<LONG>(width);
@@ -31,20 +36,17 @@ bool GdiWindowFrame::read(void *window, uint32_t width, uint32_t height, uint8_t
     info.bmiHeader.biPlanes = 1;
     info.bmiHeader.biBitCount = static_cast<WORD>(bits_);
     info.bmiHeader.biCompression = BI_RGB;
-    void      *pixels = nullptr;
-    const HBITMAP bitmap =
-        memory_dc != nullptr ? CreateDIBSection(memory_dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0u) : nullptr;
-    bool read_back = false;
+    void         *pixels = nullptr;
+    const HBITMAP bitmap = CreateDIBSection(memory_dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0u);
+    bool          read_back = false;
     if (bitmap != nullptr) {
         const HGDIOBJ was = SelectObject(memory_dc, bitmap);
-        read_back = BitBlt(memory_dc, 0, 0, static_cast<int>(width), static_cast<int>(height), window_dc, 0, 0,
-                           SRCCOPY) != 0;
+        read_back = PrintWindow(static_cast<HWND>(window), memory_dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != 0;
         if (read_back) __builtin_memcpy(bgra, pixels, static_cast<size_t>(width) * height * 4u);
         static_cast<void>(SelectObject(memory_dc, was));
         static_cast<void>(DeleteObject(bitmap));
     }
-    if (memory_dc != nullptr) static_cast<void>(DeleteDC(memory_dc));
-    static_cast<void>(ReleaseDC(static_cast<HWND>(window), window_dc));
+    static_cast<void>(DeleteDC(memory_dc));
     return read_back;
 }
 

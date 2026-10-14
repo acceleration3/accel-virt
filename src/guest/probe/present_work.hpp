@@ -2,7 +2,14 @@
  * swapchain of the window's size, and the draw step's triangle rendered into
  * each acquired image and presented. What it judges is the window itself, read
  * back through WindowFrame - the pixels the desktop shows, not anything the
- * driver says about them. */
+ * driver says about them.
+ *
+ * A frame is the triangle over the probe's own side x side at its top left,
+ * and the background colour past it: a window grown past that side shows a
+ * frame of its new size only where the background shows, which neither the
+ * last frame of the old size stretched over it (what DWM shows of a flip
+ * chain until it presents again) nor that frame kept at its old size can
+ * pass for. */
 #ifndef AV_PRESENT_WORK_HPP
 #define AV_PRESENT_WORK_HPP
 
@@ -34,6 +41,11 @@ public:
     static constexpr uint64_t acquire_timeout_ns = 5000000000ull;
     /* solid.frag's colour as a window's DIB holds it: blue, green, red. */
     static constexpr uint8_t window_colour[3] = {DrawWork::colour[2], DrawWork::colour[1], DrawWork::colour[0]};
+    /* What a frame is cleared to, as UNORM bytes red, green, blue, alpha -
+     * neither the triangle's colour nor the black of a window nothing drew -
+     * and as a window's DIB holds it. */
+    static constexpr uint8_t background[4] = {192u, 32u, 96u, 255u};
+    static constexpr uint8_t window_background[3] = {background[2], background[1], background[0]};
 
     PresentWork(ProbeDevice &device, WindowFrame &windows, ImageSink &pictures, void *module, void *window);
     ~PresentWork();
@@ -50,9 +62,10 @@ public:
     /* `count` frames drawn and presented; the first result that was not
      * VK_SUCCESS, so a resize is the caller's to act on. */
     VkResult present_frames(uint32_t count, ProbeOutcome &outcome);
-    /* The window read back and kept as `name`: how many of its pixels are the
-     * triangle's colour. */
-    uint32_t coloured_on_the_window(const char *name, ProbeOutcome &outcome);
+    /* The window read back and kept as `name`: how many of its pixels are what
+     * the frames draw there - the triangle's colour over side x side at the top
+     * left, the background past it. */
+    uint32_t drawn_on_the_window(const char *name, ProbeOutcome &outcome);
     /* Everything of the swapchain, so another may be made over the same
      * surface - what an application does when its window is resized. */
     void     release_swapchain();
@@ -69,6 +82,8 @@ private:
     bool     make_render_pass(ProbeOutcome &outcome);
     bool     make_framebuffers(ProbeOutcome &outcome);
     VkResult draw_and_present(uint32_t index, ProbeOutcome &outcome);
+    /* The pixels of the frame read back that are what a frame draws there. */
+    uint32_t matched_frame() const;
     void     release_pipeline();
 
     ProbeDevice     &device_;

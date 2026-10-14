@@ -1,7 +1,7 @@
 /* The probe's window through user32 and gdi32 (feature 046): its client size,
- * its pixels read back into a DIB section, and a resize. Reading the window is
- * the probe's proof that a present reached it - the pixels come from the
- * desktop, not from the driver. Translation only. */
+ * its pixels as the desktop composes them, read into a DIB section, and a
+ * resize. Reading the window is the probe's proof that a present reached it -
+ * the pixels come from the desktop, not from the driver. Translation only. */
 #ifndef AV_UM_GDI_WINDOW_FRAME_HPP
 #define AV_UM_GDI_WINDOW_FRAME_HPP
 

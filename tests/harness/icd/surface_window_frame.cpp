@@ -20,14 +20,17 @@ bool SurfaceWindowFrame::size(void *window, std::uint32_t &width, std::uint32_t 
     return true;
 }
 
-/* The last frame the ICD blitted, which is what a window would be showing. */
+/* The last frame the ICD blitted, which is what a window would be showing,
+ * bottom row first as WindowFrame hands it over. */
 bool SurfaceWindowFrame::read(void *window, std::uint32_t width, std::uint32_t height, std::uint8_t *bgra)
 {
     if (window != window_ || width != windows_.last_blit_width() || height != windows_.last_blit_height())
         return false;
-    const std::uint32_t bytes = width * height * 4u;
-    if (bytes > ScriptedWindowSurface::kept_bytes) return false;
-    std::memcpy(bgra, windows_.last_blit_bytes(), bytes);
+    const std::uint32_t row = width * 4u;
+    if (row * height > ScriptedWindowSurface::kept_bytes) return false;
+    const bool top_down = windows_.last_blit_top_down();
+    for (std::uint32_t line = 0u; line < height; line++)
+        std::memcpy(bgra + line * row, windows_.last_blit_bytes() + (top_down ? height - 1u - line : line) * row, row);
     return true;
 }
 

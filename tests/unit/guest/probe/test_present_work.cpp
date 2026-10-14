@@ -331,7 +331,7 @@ TEST(present_work, the_frames_it_presents_are_what_the_window_shows)
   CHECK_EQ(work.present_frames(3u, outcome), VK_SUCCESS);
   CHECK_EQ(work.presented(), 3u);
   CHECK_EQ(rig.vulkan().presents(), 3u);
-  CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), pixels);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), pixels);
   CHECK_EQ(rig.frames().reads(), 1u);
   /* The picture kept is the window's, and a BMP of its size. */
   CHECK(rig.pictures().bytes("vulkan-present") != nullptr);
@@ -347,10 +347,10 @@ TEST(present_work, a_window_that_is_not_the_frame_is_counted_pixel_by_pixel)
   CHECK(work.make_surface(outcome));
   CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
   CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
-  CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), pixels - 1u);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), pixels - 1u);
   /* A window that cannot be read is no count at all. */
   rig.frames().refuse_read();
-  CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), 0u); }
+  CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), 0u); }
 
 /* The window shows what the GPU drew, and a driver rounds solid.frag's 0.5
  * either way: NVIDIA's present reaches the window as 127 green where Intel's is
@@ -366,19 +366,64 @@ TEST(present_work, a_window_one_off_in_a_channel_is_the_colour_and_two_off_is_no
   const std::uint8_t *const drawn = PresentWork::window_colour;
   const std::uint8_t rounded_down[4] = {drawn[0], static_cast<std::uint8_t>(drawn[1] - 1u), drawn[2], 0u};
   rig.frames().show(rounded_down);
-  CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), pixels);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), pixels);
   for (std::uint32_t channel = 0u; channel < 3u; channel++) {
       std::uint8_t off[4] = {drawn[0], drawn[1], drawn[2], 255u};
       off[channel] = static_cast<std::uint8_t>(drawn[channel] + 1u);
       rig.frames().show(off);
-      CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), pixels);
+      CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), pixels);
       off[channel] = static_cast<std::uint8_t>(drawn[channel] + 2u);
       rig.frames().show(off);
-      CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), 0u);
+      CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), 0u);
       off[channel] = static_cast<std::uint8_t>(drawn[channel] - 2u);
       rig.frames().show(off);
-      CHECK_EQ(work.coloured_on_the_window("vulkan-present", outcome), 0u);
+      CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), 0u);
   } }
+
+/* A window grown past the triangle: a frame of its new size is the triangle
+ * at the top left and the background past it, every pixel of it judged. */
+TEST(present_work, a_frame_larger_than_the_triangle_is_the_background_past_it)
+{ PresentRig   rig;
+  PresentWork  work = rig.work();
+  ProbeOutcome outcome;
+  constexpr std::uint32_t grown = side + side / 2u;
+  CHECK(work.make_surface(outcome));
+  CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
+  CHECK(rig.frames().resize(window_handle, grown, grown));
+  CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), grown * grown);
+  CHECK(work.invariants_hold());
+  /* The window all the triangle's colour - the last frame of the old size,
+   * stretched - is right only where the triangle is. */
+  const std::uint8_t triangle[4] = {PresentWork::window_colour[0], PresentWork::window_colour[1],
+                                    PresentWork::window_colour[2], 255u};
+  rig.frames().show(triangle);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), pixels);
+  /* All background is right only past it. */
+  const std::uint8_t cleared[4] = {PresentWork::window_background[0], PresentWork::window_background[1],
+                                   PresentWork::window_background[2], 255u};
+  rig.frames().show(cleared);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), grown * grown - pixels); }
+
+/* A window that keeps what it showed before it grew - DWM's stretch of the
+ * last frame of the old size - is not a frame of the new size, however much
+ * of it is the triangle's colour. */
+TEST(present_work, a_window_still_showing_the_frame_from_before_it_grew_is_not_the_frame)
+{ PresentRig   rig;
+  PresentWork  work = rig.work();
+  ProbeOutcome outcome;
+  constexpr std::uint32_t grown = side + side / 2u;
+  CHECK(work.make_surface(outcome));
+  CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
+  rig.vulkan().withhold_presents_from(2u);
+  CHECK(rig.frames().resize(window_handle, grown, grown));
+  CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
+  CHECK_EQ(rig.vulkan().presents(), 2u);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), pixels); }
 
 /* Every refusal a frame can meet: the acquire, the recording, the submission
  * and the present itself. */

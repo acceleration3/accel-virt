@@ -80,7 +80,7 @@ bool VulkanProbe::surface_step(PresentWork &present)
 }
 
 /* Sixty FIFO frames, and then the window itself: every pixel of it must be the
- * triangle's colour, whatever the driver says it did. */
+ * frame's, whatever the driver says it did. */
 bool VulkanProbe::present_step(PresentWork &present)
 {
     AV_SCOPE("VulkanProbe::present_step");
@@ -97,10 +97,10 @@ bool VulkanProbe::present_step(PresentWork &present)
         return false;
     }
     const uint32_t pixels = present.width() * present.height();
-    const uint32_t coloured = present.coloured_on_the_window("vulkan-present", outcome);
-    outcome.measure(coloured, pixels);
+    const uint32_t drawn = present.drawn_on_the_window("vulkan-present", outcome);
+    outcome.measure(drawn, pixels);
     outcome.report(steps_, "present");
-    return coloured == pixels;
+    return drawn == pixels;
 }
 
 /* FIFO holds each frame to a vertical blank: sixty frames cannot have taken
@@ -119,7 +119,9 @@ void VulkanProbe::pacing_step()
 }
 
 /* The window changes size under the swapchain: what it hands out is out of
- * date until the application makes another, which presents at the new size. */
+ * date until the application makes another, which presents at the new size -
+ * the background past the triangle shows that it is a frame of that size, and
+ * not the last one before the resize still on the window. */
 void VulkanProbe::resized_step(PresentWork &present)
 {
     AV_SCOPE("VulkanProbe::resized_step");
@@ -142,7 +144,7 @@ void VulkanProbe::resized_step(PresentWork &present)
         return;
     }
     const uint32_t pixels = present.width() * present.height();
-    again.measure(present.coloured_on_the_window("vulkan-resized", again), pixels);
+    again.measure(present.drawn_on_the_window("vulkan-resized", again), pixels);
     again.report(steps_, "resized");
 }
 

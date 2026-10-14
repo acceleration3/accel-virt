@@ -1,6 +1,5 @@
 LIBRARY gdi32.dll
 EXPORTS
-BitBlt
 ChoosePixelFormat
 CreateCompatibleDC
 CreateDCW

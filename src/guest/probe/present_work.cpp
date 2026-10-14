@@ -16,6 +16,7 @@ namespace {
 
 constexpr uint32_t pixel_bytes = 4u;
 constexpr uint32_t triangle_vertices = 3u;
+constexpr float    unorm_max = 255.0f;
 /* The window's format: what a desktop's DIB holds, so the driver's present
  * copies it out without turning the channels around. */
 constexpr VkFormat window_format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -126,7 +127,7 @@ bool PresentWork::make_swapchain(VkPresentModeKHR mode, ProbeOutcome &outcome)
         return false;
     }
     count_ = count;
-    return make_render_pass(outcome) && triangle_.make(outcome, render_pass_, width_, height_) &&
+    return make_render_pass(outcome) && triangle_.make(outcome, render_pass_, side, side) &&
            make_framebuffers(outcome);
 }
 
@@ -209,14 +210,16 @@ VkResult PresentWork::draw_and_present(uint32_t index, ProbeOutcome &outcome)
     {
         ProbeCommands commands(device_);
         if (!commands.begin(outcome)) return VK_ERROR_INITIALIZATION_FAILED;
-        const VkClearValue    black = {};
+        VkClearValue          cleared = {};
+        for (uint32_t channel = 0u; channel < sizeof background; channel++)
+            cleared.color.float32[channel] = static_cast<float>(background[channel]) / unorm_max;
         VkRenderPassBeginInfo pass = {};
         pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         pass.renderPass = render_pass_;
         pass.framebuffer = framebuffers_[index];
         pass.renderArea = {{0, 0}, {width_, height_}};
         pass.clearValueCount = 1u;
-        pass.pClearValues = &black;
+        pass.pClearValues = &cleared;
         vulkan.cmd_begin_render_pass(commands.buffer(), &pass);
         vulkan.cmd_bind_pipeline(commands.buffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_.pipeline());
         vulkan.cmd_draw(commands.buffer(), triangle_vertices);
@@ -231,17 +234,37 @@ VkResult PresentWork::draw_and_present(uint32_t index, ProbeOutcome &outcome)
     return vulkan.queue_present(device_.queue(), &present);
 }
 
-uint32_t PresentWork::coloured_on_the_window(const char *name, ProbeOutcome &outcome)
+uint32_t PresentWork::drawn_on_the_window(const char *name, ProbeOutcome &outcome)
 {
-    AV_SCOPE("PresentWork::coloured_on_the_window");
+    AV_SCOPE("PresentWork::drawn_on_the_window");
     if (!windows_.read(window_, width_, height_, frame_)) {
         outcome.missing();
         return 0u;
     }
     /* A window's DIB is bottom row first, which is how it is kept. */
     pictures_.save(name, BmpImage(frame_, width_, height_, BmpImage::Rows::bottom_first, BmpImage::Order::blue_first));
-    /* The alpha a window keeps is the desktop's, not the frame's. */
-    return ProbeColour(window_colour, sizeof window_colour).matched(frame_, width_ * height_, pixel_bytes);
+    return matched_frame();
+}
+
+/* The alpha a window keeps is the desktop's, not the frame's. The rows are
+ * bottom first, so the triangle's are the last `side` of them. */
+uint32_t PresentWork::matched_frame() const
+{
+    AV_SCOPE("PresentWork::matched_frame");
+    const ProbeColour triangle(window_colour, sizeof window_colour);
+    const ProbeColour cleared(window_background, sizeof window_background);
+    const uint32_t    drawn_width = width_ < side ? width_ : side;
+    uint32_t          matched = 0u;
+    for (uint32_t row = 0u; row < height_; row++) {
+        const uint8_t *const line = frame_ + size_t{row} * width_ * pixel_bytes;
+        if (height_ - row > side) {
+            matched += cleared.matched(line, width_, pixel_bytes);
+            continue;
+        }
+        matched += triangle.matched(line, drawn_width, pixel_bytes) +
+                   cleared.matched(line + size_t{drawn_width} * pixel_bytes, width_ - drawn_width, pixel_bytes);
+    }
+    return matched;
 }
 
 /* Everything of the swapchain that was there before this one. */

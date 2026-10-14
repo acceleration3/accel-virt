@@ -6,7 +6,7 @@ namespace av {
 
 ScriptedWindowFrame::ScriptedWindowFrame()
     : window_(nullptr), width_(0u), height_(0u), refuse_size_(false), limited_sizes_(false), size_limit_(0u),
-      sizes_(0u), refuse_read_(false), refuse_resize_(false), reads_(0u), resizes_(0u), pixels_{}
+      sizes_(0u), refuse_read_(false), refuse_resize_(false), reads_(0u), resizes_(0u), pixels_{}, shown_{}
 {
 }
 
@@ -34,9 +34,21 @@ void ScriptedWindowFrame::show(const std::uint8_t bgra[4])
         std::memcpy(&pixels_[at], bgra, 4u);
 }
 
-void ScriptedWindowFrame::show_but_the_last(const std::uint8_t bgra[4])
+/* The rows are kept bottom first, as a DIB holds them: the top left is the
+ * last rows' first pixels. */
+void ScriptedWindowFrame::show_frame(const std::uint8_t drawn[4], std::uint32_t width, std::uint32_t height,
+                                     const std::uint8_t cleared[4])
 {
-    show(bgra);
+    for (std::uint32_t row = 0u; row < height_ && (row + 1u) * width_ * 4u <= max_bytes; row++)
+        for (std::uint32_t column = 0u; column < width_; column++) {
+            const bool inside = height_ - row <= height && column < width;
+            std::memcpy(&pixels_[(row * width_ + column) * 4u], inside ? drawn : cleared, 4u);
+        }
+}
+
+/* The pixel the bottom-first rows keep last is the window's bottom right. */
+void ScriptedWindowFrame::lose_the_last_pixel()
+{
     const std::uint32_t last = width_ * height_ * 4u;
     if (last >= 4u && last <= max_bytes) std::memset(&pixels_[last - 4u], 0, 4u);
 }
@@ -62,14 +74,19 @@ bool ScriptedWindowFrame::read(void *window, std::uint32_t width, std::uint32_t 
     return true;
 }
 
-/* A resized window keeps nothing of what it showed: the desktop repaints it. */
+/* What it showed, stretched over the new size, nearest pixel. */
 bool ScriptedWindowFrame::resize(void *window, std::uint32_t width, std::uint32_t height)
 {
     if (refuse_resize_ || window != window_ || width > max_side || height > max_side) return false;
     resizes_++;
+    std::memcpy(shown_, pixels_, sizeof shown_);
+    for (std::uint32_t row = 0u; row < height; row++)
+        for (std::uint32_t column = 0u; column < width; column++) {
+            const std::uint32_t from = (row * height_ / height) * width_ + column * width_ / width;
+            std::memcpy(&pixels_[(row * width + column) * 4u], &shown_[from * 4u], 4u);
+        }
     width_ = width;
     height_ = height;
-    std::memset(pixels_, 0, sizeof pixels_);
     return true;
 }
 

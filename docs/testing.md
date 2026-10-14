@@ -199,9 +199,20 @@ probe's `opengl-draw`, `opengl-share` (the 2x2 shared texture) and
 `opengl-recreated`. In the guest the probes write them beside themselves in
 `C:\av`, and `run_guest_suite.py --vulkan` / `--opengl` pull them into
 `<work>/images/` (a passing probe without its pictures fails the run). The
-full-stack tests on the host GPU write them to `build/images/`. Both scenes are
-a full-viewport triangle in solid.frag's colour, so a correct picture is one
-flat colour, RGB (64, 128, 191).
+full-stack tests on the host GPU write them to `build/images/`. The scenes are
+a triangle in solid.frag's colour, RGB (64, 128, 191), over 64x64: the whole
+of `vulkan-draw` and `vulkan-present`, and the top left of `vulkan-resized`,
+whose frame is cleared to RGB (192, 32, 96) past it. That background is what
+tells a frame of the new size from the last one before the resize, which DWM
+goes on showing stretched over the grown window until a present replaces it.
+
+The window is read as DWM composes it (`PrintWindow` with
+`PW_RENDERFULLCONTENT`), not with `BitBlt` from the window's DC: that reads
+GDI's redirection bitmap, which a flip-model swap chain never draws into. It
+holds the first frame DWM copied there, and after a resize that frame at its
+old size with black around it, however many frames follow - on avgpu and on
+Microsoft's Basic Render Driver alike. The resized step read that way failed on
+every GPU (`status=4 4096`) while the desktop showed the new frames.
 
 ### The mock platform
 

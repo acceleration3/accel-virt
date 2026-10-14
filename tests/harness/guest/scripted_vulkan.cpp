@@ -45,7 +45,7 @@ ScriptedVulkan::ScriptedVulkan()
       least_images_(images_per_swapchain), lost_swapchain_images_(false), one_image_(false),
       held_width_(0u), held_height_(0u), swapchain_(0u),
       swapchain_width_(0u), swapchain_height_(0u), swapchain_images_{}, retired_(0u), retired_images_{}, next_image_(0u), presents_(0u),
-      drew_since_present_(false)
+      drew_since_present_(false), withheld_from_(0u), drawn_width_(0u), drawn_height_(0u), drawn_clear_{}
 {
     for (std::uint32_t index = 0u; index < max_physical_devices; index++) {
         luids_[index] = index + 1u;
@@ -492,11 +492,17 @@ VkResult ScriptedVulkan::create_compute_pipeline(VkDevice, const VkComputePipeli
     return result;
 }
 
-VkResult ScriptedVulkan::create_graphics_pipeline(VkDevice, const VkGraphicsPipelineCreateInfo *,
+/* A graphics pipeline's link is its viewport, width high and height low: the
+ * area its draw covers. */
+VkResult ScriptedVulkan::create_graphics_pipeline(VkDevice, const VkGraphicsPipelineCreateInfo *info,
                                                   VkPipeline *pipeline)
 {
     const VkResult result = use(Call::create_graphics_pipeline);
-    if (result == VK_SUCCESS) *pipeline = as_handle<VkPipeline>(make(Kind::pipeline, 0u));
+    if (result != VK_SUCCESS) return result;
+    const VkViewport &viewport = info->pViewportState->pViewports[0];
+    const std::uint64_t covered = (static_cast<std::uint64_t>(viewport.width) << 32u) |
+                                  static_cast<std::uint64_t>(viewport.height);
+    *pipeline = as_handle<VkPipeline>(make(Kind::pipeline, covered));
     return result;
 }
 
@@ -607,6 +613,7 @@ VkResult ScriptedVulkan::end_command_buffer(VkCommandBuffer) { return use(Call::
 void ScriptedVulkan::cmd_bind_pipeline(VkCommandBuffer, VkPipelineBindPoint, VkPipeline pipeline)
 {
     if (find(Kind::pipeline, raw(pipeline)) == nullptr) misuses_++;
+    recording_.pipeline = raw(pipeline);
 }
 
 void ScriptedVulkan::cmd_bind_compute_set(VkCommandBuffer, VkPipelineLayout layout, VkDescriptorSet)
@@ -624,6 +631,10 @@ void ScriptedVulkan::cmd_begin_render_pass(VkCommandBuffer, const VkRenderPassBe
 {
     if (find(Kind::framebuffer, raw(info->framebuffer)) == nullptr) misuses_++;
     recording_.in_render_pass = true;
+    if (info->clearValueCount == 0u) return;
+    for (std::uint32_t channel = 0u; channel < 4u; channel++)
+        recording_.cleared[channel] =
+            static_cast<std::uint8_t>(info->pClearValues[0].color.float32[channel] * 255.0f + 0.5f);
 }
 
 void ScriptedVulkan::cmd_end_render_pass(VkCommandBuffer) { recording_.in_render_pass = false; }
@@ -683,7 +694,13 @@ void ScriptedVulkan::run(const Recording &recording)
              at += sizeof recording.fill_value)
             std::memcpy(target->bytes + at, &recording.fill_value, sizeof recording.fill_value);
     }
-    if (recording.drew) drew_since_present_ = true;
+    if (recording.drew) {
+        drew_since_present_ = true;
+        const Object *const pipeline = find(Kind::pipeline, recording.pipeline);
+        drawn_width_ = pipeline != nullptr ? static_cast<std::uint32_t>(pipeline->link >> 32u) : 0u;
+        drawn_height_ = pipeline != nullptr ? static_cast<std::uint32_t>(pipeline->link) : 0u;
+        std::memcpy(drawn_clear_, recording.cleared, sizeof drawn_clear_);
+    }
     if (recording.drew && recording.copied_to != 0u) {
         const Object *const buffer = find(Kind::buffer, recording.copied_to);
         Allocation *const target = buffer != nullptr ? allocation_of(buffer->link) : nullptr;
@@ -695,6 +712,8 @@ void ScriptedVulkan::run(const Recording &recording)
 }
 
 void ScriptedVulkan::present_into(ScriptedWindowFrame &window) { window_ = &window; }
+
+void ScriptedVulkan::withhold_presents_from(std::uint32_t nth) { withheld_from_ = nth; }
 
 void ScriptedVulkan::present_unpaced() { pacing_kmt_ = nullptr; }
 
@@ -908,11 +927,11 @@ VkResult ScriptedVulkan::queue_present(VkQueue, const VkPresentInfoKHR *info)
     presents_++;
     if (pacing_kmt_ != nullptr)
         static_cast<void>(pacing_kmt_->wait_for_vertical_blank(pacing_adapter_, pacing_device_, 0u));
+    if (withheld_from_ != 0u && presents_ >= withheld_from_) return VK_SUCCESS;
     const std::uint8_t window_order[4] = {colour[2], colour[1], colour[0], colour[3]};
-    if (misdraw_)
-        window_->show_but_the_last(window_order);
-    else
-        window_->show(window_order);
+    const std::uint8_t cleared[4] = {drawn_clear_[2], drawn_clear_[1], drawn_clear_[0], drawn_clear_[3]};
+    window_->show_frame(window_order, drawn_width_, drawn_height_, cleared);
+    if (misdraw_) window_->lose_the_last_pixel();
     return VK_SUCCESS;
 }
 

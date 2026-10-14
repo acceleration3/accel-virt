@@ -97,10 +97,15 @@ public:
     /* What vkAvForceContextFault answers, and what the device answers to
      * vkDeviceWaitIdle after it. */
     void          answer_fault(VkResult fault, VkResult idle_after);
-    /* The window a present draws on, as the driver's blit would: every pixel
-     * of it becomes the fragment shader's colour, in the window's own channel
-     * order, once a frame has been drawn into the image being presented. */
+    /* The window a present draws on, as the driver's blit would, once a frame
+     * has been drawn into the image being presented: the fragment shader's
+     * colour over the drawing pipeline's viewport at the top left, and the
+     * render pass's clear colour past it, in the window's own channel order. */
     void          present_into(ScriptedWindowFrame &window);
+    /* Presents from the `nth` on (1-based) answer success and reach no window:
+     * a driver whose frames stop arriving, and the window keeps showing what
+     * it last showed. */
+    void          withhold_presents_from(std::uint32_t nth);
     /* Each present waits for a vertical blank on `adapter`, as the driver's
      * FIFO pacing does; without this a present is unpaced. */
     void          pace_on(Kmt &kmt, std::uint32_t adapter, std::uint32_t device);
@@ -291,6 +296,10 @@ private:
         std::uint32_t vertices;
         bool          in_render_pass;
         bool          drew;
+        /* The pipeline bound, and what the render pass clears to, as UNORM
+         * bytes red, green, blue, alpha. */
+        std::uint64_t pipeline;
+        std::uint8_t  cleared[4];
         std::uint64_t copied_to;
         /* The buffer a fill names and the word it writes over it, which the
          * run puts into the memory that buffer is bound to. */
@@ -379,6 +388,12 @@ private:
     std::uint32_t next_image_;
     std::uint32_t presents_;
     bool          drew_since_present_;
+    std::uint32_t withheld_from_;
+    /* The last frame drawn: the viewport the colour covers, and the clear past
+     * it. */
+    std::uint32_t drawn_width_;
+    std::uint32_t drawn_height_;
+    std::uint8_t  drawn_clear_[4];
 };
 
 }  // namespace av

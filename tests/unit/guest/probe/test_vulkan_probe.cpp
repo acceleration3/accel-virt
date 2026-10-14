@@ -514,6 +514,19 @@ TEST(vulkan_probe, a_frame_the_new_swapchain_cannot_present_fails_the_resized_st
   CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 2u);
   CHECK_EQ(rig.frames().reads(), 1u); }
 
+/* The new swapchain's frames never reach the window, which goes on showing
+ * the last frame before the resize stretched over its new size, as DWM does:
+ * that is not a resized frame, though every pixel is the triangle's colour.
+ * Read off the window's own DC, the guest showed that frame at its old size
+ * instead, and the step failed on every GPU for want of this distinction. */
+TEST(vulkan_probe, a_window_still_showing_the_frame_from_before_the_resize_fails_the_resized_step)
+{ ProbeRig rig;
+  rig.vulkan().withhold_presents_from(VulkanProbe::frames + 1u);
+  rig.run();
+  CHECK(rig.holds("ok vulkan.present 4096\n"));
+  CHECK(rig.holds("FAIL vulkan.resized status=4 4096\n"));
+  CHECK_EQ(rig.vulkan().presents(), VulkanProbe::frames + 1u); }
+
 /* With no window there are no window-system steps, and the rest of the probe
  * is unchanged: a probe on a machine with no desktop still proves the GPU. */
 TEST(vulkan_probe, no_window_means_no_window_steps)
