@@ -1071,6 +1071,36 @@ TEST(vulkan_backend_device, a_buffer_with_its_own_chain_is_still_made_for_host_a
   }
 }
 
+/* An image laid out by a DRM format modifier is made without asking the
+ * driver whether a dma-buf could back it: that query needs the modifier, and
+ * RADV dereferences the structure that would name it - a guest creating one
+ * took the host process down. */
+TEST(vulkan_backend_device, an_image_laid_out_by_a_drm_modifier_is_made_without_asking_the_driver_about_it)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      const char *const extensions[] = {"VK_EXT_image_drm_format_modifier"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      /* DRM_FORMAT_MOD_LINEAR. */
+      const std::uint64_t linear = 0u;
+      VkImageDrmFormatModifierListCreateInfoEXT modifiers = {};
+      modifiers.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+      modifiers.drmFormatModifierCount = 1u;
+      modifiers.pDrmFormatModifiers = &linear;
+      VkImageCreateInfo create = colour_image();
+      create.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+      create.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+      create.pNext = &modifiers;
+      if (driver_image_types(made.device(), create) == 0u) continue;
+      const VkDevice device = as_handle<VkDevice>(made.device());
+      VkImage image = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkCreateImage(wire, device, &create, nullptr, &image), VK_SUCCESS);
+      CHECK(made.backend().knows_handle(as_wire(image)));
+      vkproto::av_vkDestroyImage(wire, device, image, nullptr);
+  }
+}
+
 namespace {
 
 VkPhysicalDeviceMemoryProperties driver_memory(std::uint64_t physical)

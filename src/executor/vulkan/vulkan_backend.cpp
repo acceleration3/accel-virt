@@ -389,8 +389,12 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
     VkExternalMemoryImageCreateInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
     external.pNext = create.pNext;
-    external.handleTypes =
-        import_.image_external_types(physical_, create, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
+    /* An image laid out by a DRM format modifier is not asked about: the
+     * driver's query needs the modifier, and RADV dereferences the structure
+     * that would name it. */
+    if (create.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+        external.handleTypes =
+            import_.image_external_types(physical_, create, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
     if (backs_with_source(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
     return RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
 }
