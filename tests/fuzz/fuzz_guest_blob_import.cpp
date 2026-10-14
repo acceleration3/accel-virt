@@ -7,6 +7,7 @@
 #include "guest/transport/blob_import.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "proto/submission/blob_import_answer.hpp"
+#include "proto/resources/host_blob_id.hpp"
 #include "proto/submission/command_header.hpp"
 
 #include <cstddef>
@@ -29,7 +30,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::MockTransport transport;
     av::BlobImport    import(transport);
     transport.set_reply(data, size);
-    const av::Status imported = import.import(0x00100003u, 0u, 4096u, 0u);
+    const av::Status imported = import.import(av::HostBlobId::first);
     require(import.invariants_hold());
     require((imported == av::Status::ok) == (import.memory() != 0u));
     if (imported == av::Status::invalid_parameter) require(import.host_status() != 0u);

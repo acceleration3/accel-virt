@@ -1,8 +1,7 @@
-/* A guest process's memory as the host GPU's memory (feature 045, research.md
- * §7, the live experiment): two 64 MiB chunks the driver gives a Vulkan
- * context - of its host window, or of guest RAM where the window cannot hold
- * one - each imported with IMPORT_BLOB as a host-visible memory type, back two
- * buffers on the host's device. The guest writes a
+/* A guest process's memory as the host GPU's memory (docs/host-memory.md):
+ * two 64 MiB chunks of the device's host window, each host memory of the
+ * lowest host-visible type the buffer can live in, imported whole with
+ * IMPORT_BLOB, back two buffers on the host's device. The guest writes a
  * GuestPattern into the first chunk's view and clears the second; the host
  * copies the first buffer into the second with vkCmdCopyBuffer in a submitted
  * command buffer, its fence waited in slices a TDR never sees; and the guest
@@ -10,8 +9,8 @@
  * and written pages the guest reads, with no copy in between.
  *
  * Steps: the context's; instance, physical_device, device; memory_types with
- * how many; for each side (src_, dst_) chunk with the resource, pages, buffer,
- * import with the memory type the host took, bind_buffer; then
+ * how many; for each side (src_, dst_) buffer, chunk with the resource,
+ * import with the memory type the chunk was made as, bind_buffer; then
  * command_pool, command_buffer, record, queue, fence, submit, wait with the
  * slices waited, copied with the bytes that match, guest_saw_host_write with
  * the destination's bytes that were not zero before the copy; release. Every

@@ -5,13 +5,13 @@
 #include "device/abi/av_executor.h"
 #include "device/execution/executor_library.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
-#include "device/present/frame_destination.hpp"
-#include "proto/dma/present_region.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using av::ExecutorLibrary;
 using av::MockExecutorOps;
@@ -53,7 +53,6 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
   CHECK_STATUS(library.accept(nullptr), Status::ok);
   CHECK(!library.available());
   CHECK_EQ(library.sub_apis(), 0u);
-  CHECK_EQ(library.import_kinds(SubApi::vulkan, some_gpu), 0u);
   /* Nothing to open a domain in, which is not a failure: nothing is shared. */
   CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
   CHECK_EQ(library.domain(), 0u);
@@ -64,13 +63,14 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
 /* The device and the library are built together: a table of another version,
  * or one missing any operation, is a build to fix, not one to serve. */
 TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_refused)
-{ for (std::uint32_t broken = 0u; broken <= 24u; broken++) {
+{ for (std::uint32_t broken = 0u; broken <= 25u; broken++) {
       MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
       AvExecutorOps  &table = ops.editable();
       switch (broken) {
       case 0u: table.abi_version = AV_EXECUTOR_ABI_VERSION - 1u; break;
       case 1u: table.sub_apis = nullptr; break;
-      case 2u: table.import_kinds = nullptr; break;
+      case 2u: table.allocate_memory = nullptr; break;
+      case 25u: table.free_memory = nullptr; break;
       case 3u: table.open_domain = nullptr; break;
       case 4u: table.close_domain = nullptr; break;
       case 5u: table.create = nullptr; break;
@@ -104,13 +104,6 @@ TEST(executor_library_sub_apis, bits_the_protocol_does_not_know_are_not_offered)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   CHECK_EQ(library.sub_apis(), 15u); }
-
-TEST(executor_library_import_kinds, come_from_the_library_for_one_api_and_one_gpu_and_only_known_kinds)
-{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
-  ops.set_import_kinds(AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF | 0x40u);
-  ExecutorLibrary library;
-  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_EQ(library.import_kinds(SubApi::vulkan, some_gpu), std::uint32_t{AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF}); }
 
 /* ------------------------------------------------------------- domain */
 
@@ -187,28 +180,68 @@ TEST(executor_library_execute, forwards_a_command_and_its_answer)
   opened.library.destroy(executor);
   CHECK_EQ(opened.ops.misuses(), 0u); }
 
-TEST(executor_library_import_blob, forwards_the_import_its_release_and_the_handle_it_made)
-{ std::uint8_t page[4096] = {};
-  Opened       opened(AV_EXECUTOR_SUB_API_VULKAN);
+TEST(executor_library_import_blob, forwards_the_import_of_a_key_its_release_and_the_handle_it_made)
+{ Opened opened(AV_EXECUTOR_SUB_API_VULKAN);
   AvExecutor *const executor = opened.library.create(SubApi::vulkan, AvContextOptions{}, nullptr);
-  AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.reserved = 4u;
-  handle.pointer = page;
-  handle.fd = -1;
-  handle.size = sizeof page;
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(opened.library.allocate_memory(0x30u, 4096u, 1u, memory), Status::ok);
+  close(memory.fd);
   CHECK_EQ(opened.library.imported_handle(executor, 0x21u), 0u);
-  CHECK_EQ(opened.library.import_blob(executor, 0x21u, handle), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(opened.library.import_blob(executor, 0x21u, 0x30u), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(opened.library.imported_handle(executor, 0x21u), 0x21u | MockExecutorOps::handle_bit);
-  AvBlobHandle seen = {};
-  CHECK(opened.ops.import_of(0x21u, seen));
-  CHECK(seen.pointer == page);
-  CHECK_EQ(seen.reserved, 4u);
+  std::uint64_t key = 0u;
+  CHECK(opened.ops.import_of(0x21u, key));
+  CHECK_EQ(key, 0x30u);
+  CHECK_EQ(opened.library.import_blob(executor, 0x22u, 0x31u), std::uint32_t{AV_UNDECODABLE});   /* no memory */
   opened.library.release_blob(executor, 0x21u);
   CHECK_EQ(opened.library.imported_handle(executor, 0x21u), 0u);
   CHECK_EQ(opened.ops.released(), 1u);
   opened.library.destroy(executor);
   CHECK_EQ(opened.ops.misuses(), 0u); }
+
+/* ------------------------------------------------------------- memory */
+
+/* Host memory is the library's, asked for in the device's domain under the
+ * key the device names it by, and answered as the library answered it. */
+TEST(executor_library_memory, is_allocated_and_freed_in_the_device_s_domain_under_its_key)
+{ Opened opened(AV_EXECUTOR_SUB_API_VULKAN);
+  opened.ops.set_memory_caching(AV_MEMORY_WRITE_COMBINED);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(opened.library.allocate_memory(0x01000005u, 8192u, 0x302u, memory), Status::ok);
+  const MockExecutorOps::MemoryRequest asked = opened.ops.last_memory_request();
+  CHECK_EQ(asked.domain, opened.library.domain());
+  CHECK_EQ(asked.key, 0x01000005u);
+  CHECK_EQ(asked.size, 8192u);
+  CHECK_EQ(asked.request, 0x302u);
+  CHECK(memory.fd >= 0);
+  CHECK_EQ(memory.size, 8192u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  struct stat file = {};
+  CHECK_EQ(fstat(memory.fd, &file), 0);
+  CHECK_EQ(static_cast<std::uint64_t>(file.st_size), 8192u);
+  close(memory.fd);
+  CHECK_EQ(opened.ops.held_memory(), 1u);
+  opened.library.free_memory(0x01000005u);
+  CHECK_EQ(opened.ops.memory_frees(), 1u);
+  CHECK_EQ(opened.ops.held_memory(), 0u); }
+
+TEST(executor_library_memory, a_library_with_none_to_give_or_no_domain_is_out_of_memory)
+{ Opened opened(AV_EXECUTOR_SUB_API_VULKAN);
+  opened.ops.refuse_memory_at(1u);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(opened.library.allocate_memory(1u, 4096u, 1u, memory), Status::no_memory);
+  CHECK_EQ(memory.fd, -1);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.allocate_memory(1u, 4096u, 1u, memory), Status::no_memory);   /* no domain */
+  library.free_memory(1u);
+  CHECK_EQ(ops.memory_allocations(), 0u);
+  CHECK_EQ(ops.memory_frees(), 0u);
+  ExecutorLibrary none;
+  CHECK_STATUS(none.accept(nullptr), Status::ok);
+  CHECK_STATUS(none.allocate_memory(1u, 4096u, 1u, memory), Status::no_memory);   /* no library */
+  none.free_memory(1u); }
 
 TEST(executor_library_signal, an_executor_is_given_one_and_the_library_calls_it)
 { Opened opened(AV_EXECUTOR_SUB_API_OPENCL);
@@ -325,36 +358,6 @@ TEST(executor_library_frames, are_mapped_and_unmapped_in_the_device_s_domain)
   CHECK(!library.map_frame(SurfacePoint(0x51u, 4u), 0u, view));
   library.unmap_frame(SurfacePoint(0x51u, 3u));
   CHECK_EQ(ops.frame_unmaps(), 1u); }
-
-/* A frame written into guest pages goes to the library in the device's
- * domain with the destination as it is; a library with no write_frame, or no
- * domain, writes nothing, and the frame is still there to map. */
-TEST(executor_library_frames, are_written_in_the_device_s_domain_where_the_library_can)
-{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);
-  ExecutorLibrary library;
-  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  std::uint8_t pixels[16] = {};
-  ops.serve_frame(0x52u, 2u, AvFrameView{pixels, 8u, 2u, 2u, 0u});
-  av::FrameDestination destination(5, 8192u, 256u);
-  CHECK(destination.add(av::PresentRegion(0u, 0u, 0u, 0u, 2u, 2u)));
-  CHECK(!library.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));   /* no domain */
-  CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
-  CHECK(library.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));
-  CHECK_EQ(ops.frame_writes(), 1u);
-  CHECK_EQ(ops.written_pitch(), 256u);
-  CHECK_EQ(ops.written_count(), 1u);
-  CHECK_EQ(ops.last_domain(), library.domain());
-  CHECK(!library.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));   /* written and let go */
-
-  MockExecutorOps without(AV_EXECUTOR_SUB_API_D3D);
-  without.editable().write_frame = nullptr;
-  ExecutorLibrary older;
-  CHECK_STATUS(older.accept(&without.table()), Status::ok);
-  CHECK_STATUS(older.open_domain(some_gpu), Status::ok);
-  without.serve_frame(0x52u, 2u, AvFrameView{pixels, 8u, 2u, 2u, 0u});
-  CHECK(!older.write_frame(SurfacePoint(0x52u, 2u), 0u, destination));
-  AvFrameView view = {};
-  CHECK(older.map_frame(SurfacePoint(0x52u, 2u), 0u, view)); }
 
 /* What a library hands over is believed only as far as AV_EXECUTED. */
 TEST(executor_library_surfaces, are_exported_and_synced_in_the_device_s_domain)

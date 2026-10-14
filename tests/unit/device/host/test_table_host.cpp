@@ -32,6 +32,8 @@
 
 #include <cstdint>
 #include <cstring>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -218,14 +220,6 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
   host.unmap_guest(bounce, length);
   mock.set_hostmem_size(0x4000u);
   CHECK_EQ(host.hostmem_size(), 0x4000u);
-  void *view = &mock;
-  void *const memory = host.create_host_memory(0x1000u, view);
-  CHECK(memory != nullptr && view != &mock);
-  CHECK_STATUS(host.place_in_hostmem(memory, 0x1000u), Status::ok);
-  mock.fail_placement_at(1u);
-  CHECK_STATUS(host.place_in_hostmem(memory, 0x2000u), Status::no_memory);
-  host.remove_from_hostmem(0x1000u, 0x1000u);
-  host.destroy_host_memory(memory);
   const std::uint8_t bytes[] = {1, 2, 3};
   av::MockRequest request(bytes, sizeof bytes);
   std::uint8_t read[3] = {};
@@ -237,12 +231,33 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
   CHECK(host.resource_exists(9u));
   CHECK(!host.resource_exists(10u)); }
 
-/* The probes' calls: an export is a block the hostmem placement accepts, an
- * import is a window the host GPU reads back, and every refusal carries the
- * host's own number (feature 039). */
-TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
+/* The executor's dma-buf placed where the guest reads it, through the C
+ * table: the descriptor, its size and the offset reach QEMU unchanged, what
+ * the guest then reads is the descriptor's memory, and a refusal is no
+ * memory. */
+TEST(table_host, places_a_dma_buf_in_the_hostmem_region_and_takes_it_out)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.set_hostmem_size(0x4000u);
+  const int memory = memfd_create("table host memory", MFD_CLOEXEC);
+  CHECK_EQ(ftruncate(memory, 0x2000), 0);
+  auto *const library = static_cast<std::uint8_t *>(mmap(nullptr, 0x2000u, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0));
+  library[0x1800] = 0x39u;
+  CHECK_STATUS(host.place_in_hostmem(memory, 0x2000u, 0x1000u), Status::ok);
+  CHECK_EQ(mock.last_placement().fd, memory);
+  CHECK_EQ(mock.last_placement().size, 0x2000u);
+  CHECK_EQ(mock.last_placement().offset, 0x1000u);
+  CHECK_EQ(static_cast<std::uint8_t *>(mock.placed_at(0x1000u))[0x1800], 0x39u);
+  CHECK(mock.descriptor_open(memory));   /* the descriptor stays the caller's */
+  host.remove_from_hostmem(0x1000u, 0x2000u);
+  CHECK_EQ(mock.live_placements(), 0u);
+  mock.fail_placement_at(1u);
+  CHECK_STATUS(host.place_in_hostmem(memory, 0x2000u, 0u), Status::no_memory);
+  CHECK_EQ(mock.live_placements(), 0u);
+  munmap(library, 0x2000u);
+  close(memory); }
+
+TEST(table_host, forwards_the_clock_and_the_gpu_binding)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.advance_clock_per_read(7u);
   CHECK_EQ(host.monotonic_nanoseconds(), 0u);
   CHECK_EQ(host.monotonic_nanoseconds(), 7u);
@@ -250,55 +265,7 @@ TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
   CHECK_EQ(mock.bound_gpu(), 1u);
   mock.fail_bind_gpu_at(1u);
   CHECK_STATUS(host.bind_gpu(0u), Status::not_supported);
-  void         *view = &mock;
-  std::int32_t  host_error = 7;
-  void *const exported = host.export_gpu_memory(0x1000u, view, host_error);
-  CHECK(exported != nullptr && view != &mock);
-  CHECK_EQ(host_error, 0);
-  CHECK_EQ(mock.live_gpu_memory(), 1u);
-  CHECK_STATUS(host.place_in_hostmem(exported, 0u), Status::ok);
-  static_cast<std::uint8_t *>(view)[0] = 0x39u;
-  std::uint8_t region[1] = {};
-  CHECK_STATUS(host.read_hostmem(0u, region, sizeof region), Status::ok);
-  CHECK_EQ(region[0], 0x39u);
-  host.remove_from_hostmem(0u, 0x1000u);
-  CHECK_STATUS(host.read_hostmem(0u, region, sizeof region), Status::not_supported);
-  host.release_gpu_memory(exported);
-  CHECK_EQ(mock.live_gpu_memory(), 0u);
-  mock.refuse_export_at(1u, -12);
-  view = &mock;
-  CHECK(host.export_gpu_memory(0x1000u, view, host_error) == nullptr);
-  CHECK_EQ(host_error, -12);
-  CHECK(view == nullptr);
-
-  mock.add_guest_ram(0x1000u, 0x2000u);
-  std::uint64_t length = 0x1000u;
-  bool          direct = false;
-  void *const   window = host.map_guest(0x1000u, length, direct);
-  CHECK(window != nullptr && direct);
-  std::uint8_t *const bytes = static_cast<std::uint8_t *>(window);
-  bytes[0] = 0xA5u;
-  bytes[0xFFFu] = 0x5Au;
-  void *const imported = host.import_guest_memory(window, length, host_error);
-  CHECK(imported != nullptr);
-  CHECK_EQ(host_error, 0);
-  CHECK_EQ(mock.live_imports(), 1u);
-  std::uint8_t seen[0x1000] = {};
-  CHECK_STATUS(host.read_imported_memory(imported, 0u, seen, sizeof seen), Status::ok);
-  CHECK_EQ(seen[0], 0xA5u);
-  CHECK_EQ(seen[0xFFFu], 0x5Au);
-  std::uint8_t tail[1] = {};
-  CHECK_STATUS(host.read_imported_memory(imported, 0xFFFu, tail, sizeof tail), Status::ok);
-  CHECK_EQ(tail[0], 0x5Au);
-  mock.refuse_import_read_at(1u);
-  CHECK_STATUS(host.read_imported_memory(imported, 0u, seen, sizeof seen), Status::not_supported);
-  host.release_guest_memory(imported);
-  CHECK_EQ(mock.live_imports(), 0u);
-  /* A host with no VK_EXT_external_memory_host refuses with no number of its own. */
-  mock.refuse_import_at(1u, 0);
-  CHECK(host.import_guest_memory(window, length, host_error) == nullptr);
-  CHECK_EQ(host_error, 0);
-  host.unmap_guest(window, length); }
+  CHECK_EQ(mock.bound_gpu(), 1u); }
 
 TEST(table_host, forwards_doorbell_connections)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
@@ -342,52 +309,6 @@ TEST(table_host, forwards_ranges_and_aliases_and_reads_their_refusals)
   void *refused = &mock;
   CHECK_STATUS(host.reserve_range(0x1000u, refused), Status::no_memory);
   CHECK(refused == nullptr);
-  host.unmap_guest(run, length); }
-
-/* The dma-buf over guest pages, and what a table from before it answers.
- *
- * A host that cannot make one - no udmabuf, or RAM with no file behind it -
- * is not a failure of the blob: the caller imports a host pointer instead,
- * which is what every host did before this op existed. So an older table,
- * with nothing in the slot, has to answer the same refusal rather than call
- * through a null pointer. */
-TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
-{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
-  mock.add_guest_ram(0x1000u, 0x1000u);
-  std::uint64_t length = 0x1000u;
-  bool          direct = false;
-  void *const   run = host.map_guest(0x1000u, length, direct);
-  void *const   runs[] = {run};
-  const std::uint64_t sizes[] = {0x1000u};
-
-  int fd = -1;
-  const Status made = host.dmabuf_over_guest(runs, sizes, 1u, fd);
-  /* A kernel with no udmabuf refuses, which is a legal answer here. */
-  CHECK(made == Status::ok || made == Status::not_supported);
-  if (made == Status::ok) {
-      CHECK(fd >= 0);
-      CHECK_EQ(mock.live_dmabufs(), 1u);
-      host.close_dmabuf(fd);
-      CHECK_EQ(mock.live_dmabufs(), 0u);
-  }
-  /* Closing what was never made is not a close of anything. */
-  host.close_dmabuf(-1);
-  CHECK_EQ(mock.live_dmabufs(), 0u);
-
-  mock.fail_dmabuf_at(1u);
-  int refused = -1;
-  CHECK_STATUS(host.dmabuf_over_guest(runs, sizes, 1u, refused), Status::not_supported);
-  CHECK_EQ(refused, -1);
-
-  /* A table with the slot empty, as one built before the op has it. */
-  AvHostOps older = ops.table();
-  older.dmabuf_over_guest = nullptr;
-  older.close_dmabuf = nullptr;
-  TableHost before(older);
-  int        none = -1;
-  CHECK_STATUS(before.dmabuf_over_guest(runs, sizes, 1u, none), Status::not_supported);
-  before.close_dmabuf(7);
-  CHECK_EQ(none, -1);
   host.unmap_guest(run, length); }
 
 TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
@@ -443,14 +364,12 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
   av::ScanoutFramebuffer framebuffer;
   CHECK_STATUS(framebuffer.adopt(request, picture_bytes), Status::ok);
 
-  void *const         run = mock.guest_ram(ram);
-  const std::uint64_t length = picture_bytes;
-  int                 descriptor = -1;
-  if (host.dmabuf_over_guest(&run, &length, 1u, descriptor) == Status::ok) {
-      CHECK_STATUS(host.show_scanout(0u, descriptor, framebuffer), Status::ok);
+  const std::uint8_t *const blob = mock.guest_ram(ram);
+  {
+      CHECK_STATUS(host.show_scanout(0u, blob, framebuffer), Status::ok);
       const MockHost::Scanout shown = mock.head(0u);
       CHECK(shown.shown);
-      CHECK_EQ(shown.descriptor, descriptor);
+      CHECK(shown.blob == blob);
       CHECK_EQ(shown.plane.x, 8u);
       CHECK_EQ(shown.plane.y, 4u);
       CHECK_EQ(shown.plane.width, 16u);
@@ -466,7 +385,6 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
       CHECK_EQ(x, 1u); CHECK_EQ(y, 2u); CHECK_EQ(width, 3u); CHECK_EQ(height, 4u);
       host.hide_scanout(0u);
       CHECK(!mock.head(0u).shown);
-      host.close_dmabuf(descriptor);
   }
 
   /* A table from before these four: the display shows nothing, which is the
@@ -478,28 +396,29 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
   older.hide_scanout = nullptr;
   TableHost before(older);
   CHECK(!before.display_takes_dmabuf(0u));
-  CHECK_STATUS(before.show_scanout(0u, 0, framebuffer), Status::not_supported);
+  CHECK_STATUS(before.show_scanout(0u, blob, framebuffer), Status::not_supported);
   before.update_scanout(0u, 0u, 0u, 1u, 1u);
   before.hide_scanout(0u);
   CHECK_EQ(mock.head(0u).updates, mock.head(0u).updates); }
 
-/* A display that will not import the descriptor: not the guest's fault, and
- * the core is told so rather than being left to believe the head is showing. */
-TEST(table_host_scanout, a_display_that_refuses_the_descriptor_answers_not_supported)
+/* A display that will not take the surface: not the guest's fault, and the
+ * core is told so rather than being left to believe the head is showing. */
+TEST(table_host_scanout, a_display_that_refuses_the_surface_answers_not_supported)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.add_display_heads(1u);
   av::ScanoutFramebuffer framebuffer;
+  const std::uint8_t blob[16] = {};
   mock.refuse_scanout_at(1u);
-  CHECK_STATUS(host.show_scanout(0u, 1, framebuffer), Status::not_supported);
+  CHECK_STATUS(host.show_scanout(0u, blob, framebuffer), Status::not_supported);
   CHECK(!mock.head(0u).shown);
-  /* A head the host does not have, and a descriptor that is not open: both are
-   * recorded contract breaks, not silent failures. */
-  CHECK_STATUS(host.show_scanout(1u, 1, framebuffer), Status::not_supported);
-  CHECK_STATUS(host.show_scanout(0u, -1, framebuffer), Status::not_supported);
+  /* A head the host does not have is refused; no mapping to read from, and
+   * an update of a head showing nothing, are recorded contract breaks. */
+  CHECK_STATUS(host.show_scanout(1u, blob, framebuffer), Status::not_supported);
+  CHECK_STATUS(host.show_scanout(0u, nullptr, framebuffer), Status::not_supported);
   host.update_scanout(0u, 0u, 0u, 1u, 1u);
   CHECK(mock.claim(av::HostViolation::scanout_misuse));
   CHECK(mock.claim(av::HostViolation::scanout_misuse));
-  CHECK(mock.claim(av::HostViolation::scanout_misuse)); }
+  CHECK(!mock.claim(av::HostViolation::scanout_misuse)); }
 
 namespace {
 
@@ -559,7 +478,7 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   const int eventfd = host.event_descriptor(event);
   CHECK(mock.descriptor_open(eventfd));
   CHECK_EQ(host.event_descriptor(event), eventfd);   /* the event's own, not a copy */
-  CHECK_EQ(mock.live_dmabufs(), 0u);
+  CHECK_EQ(mock.live_descriptors(), 0u);
   host.destroy_event(event);
   CHECK(!mock.descriptor_open(eventfd));
 
@@ -567,11 +486,11 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   CHECK_STATUS(host.connect_fence_interrupts(), Status::ok);
   const int line = host.fence_interrupt_descriptor(63u);
   CHECK(mock.descriptor_open(line));
-  CHECK_EQ(mock.live_dmabufs(), 1u);
+  CHECK_EQ(mock.live_descriptors(), 1u);
   CHECK_EQ(host.fence_interrupt_descriptor(66u), -1);  /* past the fence queues, the display line and the present line */
   host.close_descriptor(line);
   CHECK(!mock.descriptor_open(line));
-  CHECK_EQ(mock.live_dmabufs(), 0u);
+  CHECK_EQ(mock.live_descriptors(), 0u);
   host.disconnect_fence_interrupts();
 
   std::uint8_t ram[0x2000] = {};
@@ -588,9 +507,9 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   CHECK(descriptor != owned && mock.descriptor_open(descriptor));
   CHECK(mock.guest_region_mapping(descriptor, sizeof ram) == ram);
   CHECK(mock.guest_region_mapping(descriptor, sizeof ram + 1u) == nullptr);
-  CHECK_EQ(mock.live_dmabufs(), 1u);
+  CHECK_EQ(mock.live_descriptors(), 1u);
   host.close_descriptor(descriptor);
-  CHECK_EQ(mock.live_dmabufs(), 0u);
+  CHECK_EQ(mock.live_descriptors(), 0u);
   CHECK(mock.descriptor_open(owned));
   int refused = 7;
   CHECK_STATUS(host.guest_region(1u, region, refused, size), Status::not_supported);  /* no shared file */
@@ -604,46 +523,13 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   CHECK_STATUS(host.locate_guest(ram + 0x1FF0u, 0x20u, region, offset), Status::not_found);
   CHECK_STATUS(host.locate_guest(&mock, 1u, region, offset), Status::not_found);
 
-  void *view = nullptr;
-  void *const memory = host.create_host_memory(0x1000u, view);
-  const int memfd = host.host_memory_descriptor(memory);
-  CHECK(mock.descriptor_open(memfd));
-  CHECK_EQ(mock.live_dmabufs(), 1u);
-  host.close_descriptor(memfd);
+  const int counted = mock.open_descriptor();
+  CHECK_EQ(mock.live_descriptors(), 1u);
+  host.close_descriptor(counted);
+  CHECK(!mock.descriptor_open(counted));
   host.close_descriptor(-1);   /* nothing to close is not a close */
-  CHECK_EQ(mock.live_dmabufs(), 0u);
-  host.destroy_host_memory(memory); }
-
-/* A dma-buf over a host blob through the table (docs/host-window.md): what the
- * glue made is the caller's, closed by close_dmabuf; a refusal - no udmabuf,
- * no sealed memfd - and a table from before the op are not_supported, holding
- * nothing. */
-TEST(table_host_host_memory, a_dma_buf_over_host_memory_is_the_glues_or_not_supported)
-{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
-  void *view = nullptr;
-  void *const memory = host.create_host_memory(0x3000u, view);
-  int shared = 7;
-  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0x1000u, 0x2000u, shared), Status::ok);
-  CHECK(mock.descriptor_open(shared));
-  CHECK(mock.last_host_dmabuf().memory == memory);
-  CHECK_EQ(mock.last_host_dmabuf().offset, 0x1000u);
-  CHECK_EQ(mock.last_host_dmabuf().size, 0x2000u);
-  CHECK_EQ(mock.live_dmabufs(), 1u);
-  host.close_dmabuf(shared);
-  CHECK_EQ(mock.live_dmabufs(), 0u);
-  mock.fail_dmabuf_at(1u);
-  int refused = 7;
-  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0u, 0x1000u, refused), Status::not_supported);
-  CHECK_EQ(refused, -1);
-  CHECK_EQ(mock.host_dmabufs(), 1u);
-  AvHostOps older = ops.table();
-  older.dmabuf_over_host_memory = nullptr;
-  TableHost before(older);
-  int none = 7;
-  CHECK_STATUS(before.dmabuf_over_host_memory(memory, 0u, 0x1000u, none), Status::not_supported);
-  CHECK_EQ(none, -1);
-  CHECK_EQ(mock.host_dmabufs(), 1u);
-  host.destroy_host_memory(memory); }
+  CHECK_EQ(mock.live_descriptors(), 0u);
+  CHECK_EQ(mock.unclaimed_violations(), 0u); }
 
 /* The renderer's socket through the table: a start that fails and one that
  * does, a datagram whose descriptor the peer gets its own copy of, a receive
@@ -681,7 +567,7 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   CHECK_EQ(length, 0u);
   CHECK_EQ(count, 0u);
   peer.script(3u, mock.open_descriptor(), 1u);
-  CHECK_EQ(mock.live_dmabufs(), 1u);
+  CHECK_EQ(mock.live_descriptors(), 1u);
   CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::ok);
   CHECK_EQ(length, 3u);
   CHECK_EQ(buffer[0], 0x5Au);
@@ -723,7 +609,6 @@ TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
   older.guest_region_count = nullptr;
   older.guest_region = nullptr;
   older.locate_guest = nullptr;
-  older.host_memory_descriptor = nullptr;
   older.close_descriptor = nullptr;
   older.start_renderer = nullptr;
   older.send_renderer = nullptr;
@@ -743,7 +628,6 @@ TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
   CHECK_EQ(descriptor, -1);
   std::uint64_t offset = 0u;
   CHECK_STATUS(before.locate_guest(ram, 1u, region, offset), Status::not_found);
-  CHECK_EQ(before.host_memory_descriptor(&mock), -1);
   const int kept = mock.open_descriptor();
   before.close_descriptor(kept);
   CHECK(mock.descriptor_open(kept));

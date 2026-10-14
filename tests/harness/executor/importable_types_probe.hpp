@@ -12,9 +12,8 @@ namespace av {
 struct ImportableTypesProbe {
     explicit ImportableTypesProbe(ImportableTypes &target);
 
+    /* A mask with no device learnt, which learn never stores. */
     void set_mask(uint32_t mask);
-    /* A kind no ABI names, which learn never stores. */
-    void set_kind(uint32_t kind);
 
     ImportableTypes &types;
 };

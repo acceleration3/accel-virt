@@ -12,6 +12,7 @@
 #include "proto/virtio_gpu/context_request.hpp"
 #include "proto/virtio_gpu/create_blob_request.hpp"
 #include "proto/resources/guest_page_list.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -27,6 +28,7 @@ using av::ContextSetup;
 using av::CreateBlobRequest;
 using av::ProtocolVersion;
 using av::AvRequestWriter;
+using av::HostMemoryRequest;
 using av::Status;
 using av::SubApi;
 using av::WireReader;
@@ -219,24 +221,27 @@ TEST(av_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(none.unref(1u), Status::too_large);
   CHECK_STATUS(none.setup(1u, ContextSetup()), Status::too_large); }
 
-/* Feature 041: the three requests the driver had never sent. A host-visible
- * blob is the device's own shape - HOST3D, mappable, no memory entries - and
- * the offset it is mapped at is the guest's to choose, which is why the driver
- * has to be able to say it. */
-TEST(av_request_writer_host_blob, is_a_mappable_host3d_blob_of_no_entries)
+/* A host blob is the device's own shape - HOST3D, mappable, no memory
+ * entries - made for one context, with the memory it is wanted as carried as
+ * the blob id (docs/host-memory.md); the offset it is mapped at is the
+ * guest's to choose, which is why the driver has to be able to say it. */
+TEST(av_request_writer_host_blob, is_a_mappable_host3d_blob_of_no_entries_for_its_context)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
-  CHECK_STATUS(writer.host_blob(50u, 0x200000u), Status::ok);
+  const HostMemoryRequest memory(HostMemoryRequest::Kind::vulkan, 7u);
+  CHECK_STATUS(writer.host_blob(9u, 50u, memory, 0x200000u), Status::ok);
   CHECK_EQ(writer.length(), 56u);
   CHECK(ByteLayout(buffer.bytes, 56u).at(0u, 4u) == 0x010Cu);
   WireReader reader(buffer.bytes, writer.length());
   CreateBlobRequest decoded;
   CHECK_STATUS(decoded.decode(reader), Status::ok);
+  CHECK_EQ(decoded.context_id(), 9u);
   CHECK_EQ(decoded.resource_id(), 50u);
   CHECK_EQ(decoded.memory(), CreateBlobRequest::memory_host3d);
   CHECK_EQ(decoded.flags(), CreateBlobRequest::flag_mappable);
   CHECK_EQ(decoded.entries(), 0u);
-  CHECK(decoded.blob_id() == 0u);
+  CHECK(decoded.blob_id() == memory.encoded());
+  CHECK(HostMemoryRequest(static_cast<std::uint32_t>(decoded.blob_id())).vulkan_type() == 7u);
   CHECK(decoded.size() == 0x200000u); }
 
 TEST(av_request_writer_map_blob, carries_the_offset_the_driver_chose)
@@ -267,7 +272,8 @@ TEST(av_request_writer_host_blob, what_does_not_fit_is_not_written)
 { std::uint8_t bytes[40];
   std::memset(bytes, 0xEE, sizeof bytes);
   AvRequestWriter writer(bytes, sizeof bytes);
-  CHECK_STATUS(writer.host_blob(1u, 0x1000u), Status::too_large);
+  const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
+  CHECK_STATUS(writer.host_blob(1u, 1u, upload, 0x1000u), Status::too_large);
   CHECK_EQ(writer.length(), 0u);
   CHECK_EQ(bytes[32], 0xEEu);
   CHECK_STATUS(writer.map_blob(1u, 0u), Status::ok);
@@ -275,6 +281,6 @@ TEST(av_request_writer_host_blob, what_does_not_fit_is_not_written)
   CHECK_STATUS(small.map_blob(1u, 0u), Status::too_large);
   CHECK_EQ(small.length(), 0u);
   AvRequestWriter none(nullptr, 64u);
-  CHECK_STATUS(none.host_blob(1u, 0x1000u), Status::too_large);
+  CHECK_STATUS(none.host_blob(1u, 1u, upload, 0x1000u), Status::too_large);
   CHECK_STATUS(none.map_blob(1u, 0u), Status::too_large);
   CHECK_STATUS(none.unmap_blob(1u), Status::too_large); }

@@ -34,8 +34,9 @@ public:
      * (HostBlobId). */
     static constexpr uint32_t transport_resources   = 3u;
     static constexpr uint32_t resources_per_context = transport_resources;
-    /* Above the cursor's, every scanout's and host-visible memory's resource
-     * ids, so a context's blob never takes one another subsystem uses. */
+    /* Above the cursor's and every scanout's resource ids and below the host
+     * blobs' (HostBlobId), so a context's blob never takes one another
+     * subsystem uses. */
     static constexpr uint32_t first_resource_id = 0x00100000u;
     /* What a request must have room for: a blob over a scattered ring is as
      * wide as a primary's backing, and goes to the same wide control slot. */

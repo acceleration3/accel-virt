@@ -198,8 +198,10 @@ size_t ContextSession::starved() const
 bool ContextSession::invariants_hold() const
 {
     AV_SCOPE("ContextSession::invariants_hold");
-    return arena_.invariants_hold() && imports_.invariants_hold() &&
-           (backend_ != nullptr || !faulted_) && (backend_ != nullptr || imports_.count() == 0u);
+    /* An import is given back to the source it was acquired from: one held
+     * with no source is a reference nothing can let go of. */
+    return arena_.invariants_hold() && imports_.invariants_hold() && (backend_ != nullptr || !faulted_) &&
+           (backend_ != nullptr || imports_.count() == 0u) && (source_ != nullptr || imports_.count() == 0u);
 }
 
 }  // namespace av

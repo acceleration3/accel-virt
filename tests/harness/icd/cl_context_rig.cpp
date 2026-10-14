@@ -15,6 +15,7 @@ ClContextRig::ClContextRig()
     const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                              AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
+    kmt_.open_host_window(MockKmt::rig_window_bytes);
     /* The transport watches the reply slot for a budget of the guest's clock
      * before it asks the kernel to wait, and a command no answer was queued
      * for is one it would watch for ever on a clock that never moves. */

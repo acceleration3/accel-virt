@@ -20,6 +20,7 @@ UmdRig::UmdRig(d3d::UmdHostDriver *builder)
       root_(platform_, kmt_, lock_, log_, d3d::umd_binding, builder)
 {
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
+    kmt_.open_host_window(MockKmt::rig_window_bytes);
     kmt_.set_adapter_luid(0u, adapter_luid);
     kmt_.set_video_memory(MemorySegmentGroup::local, local_budget, 0u);
     kmt_.set_video_memory(MemorySegmentGroup::non_local, non_local_budget, 0u);

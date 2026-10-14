@@ -6,7 +6,10 @@
 #include "device/isolation/remote_context.hpp"
 #include "device/isolation/renderer_link.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/control/control_request.hpp"
 #include "device/memory/blob_window.hpp"
+#include "harness/host/gpu_request_builder.hpp"
+#include "harness/host/mock_request.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/scripted_renderer_peer.hpp"
@@ -32,6 +35,7 @@ using Kind = av::RendererMessageHeader::Kind;
 namespace {
 
 constexpr std::uint32_t ring = 1u, fence = 2u, context_id = 9u, doorbell = 5u;
+constexpr std::uint64_t ram = 0x100000u;
 constexpr std::uint8_t  uuid[av::GpuIdentity::uuid_bytes] = {7u};
 
 av::CapsetInfo capset()
@@ -50,10 +54,10 @@ class Fixture {
 public:
     Fixture() : blobs_(host_), interrupts_(host_), peer_(host_), link_(host_), context_(host_, blobs_, interrupts_, context_id)
     {
-        host_.set_hostmem_size(0x10000u);
+        host_.add_guest_ram(ram, 0x3000u);
         static_cast<void>(blobs_.initialize());
-        static_cast<void>(blobs_.create_host(ring, 0x2000u));
-        static_cast<void>(blobs_.create_host(fence, 0x1000u));
+        guest_blob(ring, 0u, 0x2000u);
+        guest_blob(fence, 0x2000u, 0x1000u);
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
         host_.connect_renderer(peer_);
@@ -63,6 +67,15 @@ public:
 
     MockHost             &host() { return host_; }
     BlobTable            &blobs() { return blobs_; }
+    /* Blob `id` over `size` bytes of guest RAM at `offset`. */
+    void guest_blob(std::uint32_t id, std::uint64_t offset, std::uint64_t size)
+    {
+        av::GpuRequestBuilder entries(0u);
+        entries.u64(ram + offset).u32(static_cast<std::uint32_t>(size)).u32(0u);
+        av::MockRequest    mock(entries.bytes(), entries.size());
+        av::ControlRequest request(host_, &mock);
+        CHECK_STATUS(blobs_.create_guest(id, size, request, 24u, 1u), Status::ok);
+    }
     ScriptedRendererPeer &peer() { return peer_; }
     av::RendererLink     &link() { return link_; }
     RemoteContext        &context() { return context_; }

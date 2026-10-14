@@ -77,8 +77,8 @@ public:
 private:
     void copy()
     {
-        const std::uint8_t *const source = kmt_.ram_chunk(0u);
-        std::uint8_t *const       destination = kmt_.ram_chunk(1u);
+        const std::uint8_t *const source = kmt_.window_chunk_memory(MockKmt::first_window_resource);
+        std::uint8_t *const       destination = kmt_.window_chunk_memory(MockKmt::first_window_resource + 1u);
         if (source == nullptr || destination == nullptr) return;
         std::memcpy(destination, source, HostVisibleImportScenario::copy_bytes);
         for (std::uint32_t byte = 0u; byte < spoiled_; byte++)
@@ -96,6 +96,7 @@ public:
     Rig() : search_(kmt_), host_(kmt_), gpu_(kmt_, 0u)
     {
         kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
+        kmt_.open_host_window(2u * HostVisibleImportScenario::chunk_bytes);
         CHECK_STATUS(search_.find_avgpu(0u), Status::ok);
     }
 
@@ -115,7 +116,7 @@ public:
     {
         CHECK_EQ(kmt_.open_objects(), 1u);
         CHECK_EQ(kmt_.misuses(), 0u);
-        CHECK_EQ(kmt_.ram_chunks(), 0u);
+        CHECK_EQ(kmt_.window_chunks(), 0u);
         CHECK_EQ(kmt_.queued_answers(), 0u);
         CHECK_STATUS(search_.close(), Status::ok);
     }
@@ -168,10 +169,7 @@ void refuse(ScriptedHost &host, std::uint32_t index)
         case 2u: host.vk_physical_devices(vk_error_incompatible_driver, 0u); break;
         case 4u: host.vk_memory_properties(0u, 0u); break;
         case 6u: case 10u: host.vk_memory_requirements(0u); break;
-        case 7u: case 11u:   /* each host-visible type the buffer can live in */
-            host.blob_import(BlobImportAnswer::executor_refused, 0u);
-            host.blob_import(BlobImportAnswer::executor_refused, 0u);
-            break;
+        case 7u: case 11u: host.blob_import(BlobImportAnswer::executor_refused, 0u); break;
         case 8u: case 12u: host.vk_result(vk_error_out_of_device_memory); break;
         case 15u: host.vk_handle(0, 0u); break;
         default: host.vk_handle(vk_error_out_of_device_memory, 0u); break;
@@ -199,14 +197,12 @@ TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_
       expected, sizeof expected,
       "ok import.adapter\nok import.connection\nok import.initialize\nok import.instance\n"
       "ok import.physical_device 2\nok import.device\nok import.memory_types 4\n"
-      "ok import.src_chunk %u\n"
-      "ok import.src_buffer\nok import.src_import 1\nok import.src_bind_buffer\n"
-      "ok import.dst_chunk %u\n"
-      "ok import.dst_buffer\nok import.dst_import 1\nok import.dst_bind_buffer\n"
+      "ok import.src_buffer\nok import.src_chunk %u\nok import.src_import 1\nok import.src_bind_buffer\n"
+      "ok import.dst_buffer\nok import.dst_chunk %u\nok import.dst_import 1\nok import.dst_bind_buffer\n"
       "ok import.command_pool\nok import.command_buffer\nok import.record\nok import.queue\n"
       "ok import.fence\nok import.submit\nok import.wait 1\nok import.copied %u\n"
       "ok import.guest_saw_host_write 0\nok import.release\n",
-      MockKmt::first_chunk_resource, MockKmt::first_chunk_resource + 1u, HostVisibleImportScenario::copy_bytes));
+      MockKmt::first_window_resource, MockKmt::first_window_resource + 1u, HostVisibleImportScenario::copy_bytes));
   CHECK(std::strcmp(report.text(), expected) == 0);
   CHECK_EQ(report.failed(), 0u);
   CHECK_EQ(rig.gpu().copies(), 1u);
@@ -276,10 +272,7 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
       if (id == CommandHeader::import_blob_id) {
           BlobImportRequest request;
           CHECK_STATUS(request.decode(body, BlobImportRequest::encoded_size), Status::ok);
-          CHECK_EQ(request.resource_id(), MockKmt::first_chunk_resource + imports);
-          CHECK_EQ(request.offset(), 0u);
-          CHECK_EQ(request.size(), HostVisibleImportScenario::copy_bytes);
-          CHECK_EQ(request.memory_type(), 1u);
+          CHECK_EQ(request.resource_id(), MockKmt::first_window_resource + imports);
           imports++;
       }
       if (id == kCmd_vkCreateBuffer) {
@@ -315,43 +308,26 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
   }
   CHECK_EQ(imports, 2u);
   CHECK_EQ(buffers, 2u);
+  /* Each chunk was opened as the host-visible type the buffer lives in: the
+   * lowest of the importable ones, 1. */
+  CHECK(rig.kmt().last_window_request().kind() == av::HostMemoryRequest::Kind::vulkan);
+  CHECK_EQ(rig.kmt().last_window_request().vulkan_type(), 1u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A host that cannot import into the first host-visible type the buffer can
- * live in refuses it, and the next is taken: the type is on the line. */
-TEST(host_visible_import_scenario, a_refused_type_is_passed_over_for_the_next_host_visible_one)
-{ Rig rig;
-  rig.host().host_visible_import_device();
-  rig.host().vk_handle(0, ScriptedHost::vk_buffer);
-  rig.host().vk_memory_requirements(ScriptedHost::vk_importable_types);
-  rig.host().blob_import(BlobImportAnswer::executor_refused, 0u);
-  rig.host().blob_import(0u, ScriptedHost::vk_memory);
-  rig.host().vk_result(0);
-  rig.host().host_visible_import_side(1u);
-  rig.host().host_visible_import_copy();
-  rig.host().host_visible_import_releases();
-  rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait + 1u);
-  GuestReport report;
-  rig.run(report);
-  CHECK(has_line(report, "ok import.src_import 2\n"));
-  CHECK(has_line(report, "ok import.dst_import 1\n"));
-  CHECK_EQ(report.failed(), 0u);
-  CHECK_EQ(rig.sent(CommandHeader::import_blob_id), 3u);
-  CHECK_EQ(rig.sent(CommandHeader::release_blob_id), 2u);   /* a refusal holds nothing to release */
-  rig.check_nothing_left_but_the_adapter(); }
-
-/* The search ends when the host refuses every type, answers what the contract
- * does not allow, or there is no type to try; the line says with what. */
+/* The chunk is opened as the lowest host-visible type the buffer can live in
+ * and imported once: a host that refuses it, answers what the contract does
+ * not allow, or a buffer with no such type to live in fails the step, and the
+ * line says with what. */
 TEST(host_visible_import_scenario, an_import_no_type_takes_fails_the_step)
 { struct Case { std::uint32_t script; const char *line; };
-  /* script: 0 every host-visible type refused, 1 an empty answer, 2 a cut
-   * answer, 3 no host-visible type, 4 a buffer that lives nowhere */
+  /* script: 0 the import refused, 1 an empty answer, 2 a cut answer, 3 no
+   * host-visible type, 4 a buffer that lives nowhere */
   const Case cases[] = {
-      {0u, "FAIL import.src_import status=1 5\n"},
+      {0u, "FAIL import.src_import status=1 3\n"},
       {1u, "FAIL import.src_import status=6 0\n"},
       {2u, "FAIL import.src_import status=9 0\n"},
-      {3u, "FAIL import.src_import status=3 0\n"},
-      {4u, "FAIL import.src_import status=3 0\n"},
+      {3u, "FAIL import.src_chunk status=3 code=0x00000000\n"},
+      {4u, "FAIL import.src_chunk status=3 code=0x00000000\n"},
   };
   for (const Case &one : cases) {
       Rig rig;
@@ -360,10 +336,7 @@ TEST(host_visible_import_scenario, an_import_no_type_takes_fails_the_step)
                                       one.script == 3u ? 0u : ScriptedHost::vk_host_visible_types);
       rig.host().vk_handle(0, ScriptedHost::vk_buffer);
       rig.host().vk_memory_requirements(one.script == 4u ? 0u : ScriptedHost::vk_importable_types);
-      if (one.script == 0u) {
-          rig.host().blob_import(BlobImportAnswer::unmappable_pages, 0u);
-          rig.host().blob_import(BlobImportAnswer::executor_refused, 0u);
-      }
+      if (one.script == 0u) rig.host().blob_import(BlobImportAnswer::executor_refused, 0u);
       if (one.script == 1u) rig.host().nop();
       if (one.script == 2u) {
           rig.host().cut_next(BlobImportAnswer::encoded_size - 1u);
@@ -377,7 +350,7 @@ TEST(host_visible_import_scenario, an_import_no_type_takes_fails_the_step)
       CHECK(!has_line(report, "import.dst_"));
       CHECK(!has_line(report, "import.release"));
       CHECK_EQ(report.failed(), 1u);
-      CHECK_EQ(rig.sent(CommandHeader::import_blob_id), one.script == 0u ? 2u : one.script >= 3u ? 0u : 1u);
+      CHECK_EQ(rig.sent(CommandHeader::import_blob_id), one.script >= 3u ? 0u : 1u);
       CHECK_EQ(rig.sent(CommandHeader::release_blob_id), 0u);
       CHECK_EQ(rig.sent(kCmd_vkDestroyBuffer), 2u);   /* the source's, and the destination's null */
       rig.check_nothing_left_but_the_adapter();
@@ -394,12 +367,12 @@ TEST(host_visible_import_scenario, a_host_refusal_at_each_step_is_reported_and_e
       {3u, "FAIL import.device status=7 4294967287\n", "import.memory_types", 0u},
       {4u, "FAIL import.memory_types status=3 0\n", "import.src_chunk", 0u},
       {5u, "FAIL import.src_buffer status=7 4294967294\n", "import.src_import", 0u},
-      {6u, "FAIL import.src_import status=3 0\n", "import.src_bind_buffer", 0u},
-      {7u, "FAIL import.src_import status=1 5\n", "import.src_bind_buffer", 0u},
+      {6u, "FAIL import.src_chunk status=3 code=0x00000000\n", "import.src_import", 0u},
+      {7u, "FAIL import.src_import status=1 3\n", "import.src_bind_buffer", 0u},
       {8u, "FAIL import.src_bind_buffer status=7 4294967294\n", "import.dst_chunk", 1u},
       {9u, "FAIL import.dst_buffer status=7 4294967294\n", "import.dst_import", 1u},
-      {10u, "FAIL import.dst_import status=3 0\n", "import.dst_bind_buffer", 1u},
-      {11u, "FAIL import.dst_import status=1 5\n", "import.dst_bind_buffer", 1u},
+      {10u, "FAIL import.dst_chunk status=3 code=0x00000000\n", "import.dst_import", 1u},
+      {11u, "FAIL import.dst_import status=1 3\n", "import.dst_bind_buffer", 1u},
       {12u, "FAIL import.dst_bind_buffer status=7 4294967294\n", "import.command_pool", 2u},
       {13u, "FAIL import.command_pool status=7 4294967294\n", "import.command_buffer", 2u},
       {14u, "FAIL import.command_buffer status=7 4294967294\n", "import.record", 2u},
@@ -439,14 +412,14 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
       const char   *skipped;
   };
   const Case cases[] = {
-      {Fault::fail, MockKmt::Call::escape, 3u, 5u, "FAIL import.src_chunk status=7 code=0xC0000001\n",
-       "import.src_buffer"},
-      {Fault::zero_escape, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_chunk status=9 code=0x00000000\n",
-       "import.src_buffer"},
-      {Fault::short_pages, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_chunk status=9 code=0x00000000\n",
-       "import.src_buffer"},
-      {Fault::fail, MockKmt::Call::escape, 4u, 9u, "FAIL import.dst_chunk status=7 code=0xC0000001\n",
-       "import.dst_buffer"},
+      {Fault::fail, MockKmt::Call::escape, 3u, 7u, "FAIL import.src_chunk status=7 code=0xC0000001\n",
+       "import.src_import"},
+      {Fault::zero_escape, MockKmt::Call::escape, 0u, 7u, "FAIL import.src_chunk status=9 code=0x00000000\n",
+       "import.src_import"},
+      {Fault::short_pages, MockKmt::Call::escape, 0u, 7u, "FAIL import.src_chunk status=9 code=0x00000000\n",
+       "import.src_import"},
+      {Fault::fail, MockKmt::Call::escape, 4u, 11u, "FAIL import.dst_chunk status=7 code=0xC0000001\n",
+       "import.dst_import"},
       {Fault::fail, MockKmt::Call::wait_for_context, 8u, 7u, "FAIL import.src_import status=7 0\n",
        "import.src_bind_buffer"},
       {Fault::fail, MockKmt::Call::submit, 16u, 15u, "FAIL import.record status=7 4294967292\n", "import.queue"},
@@ -620,6 +593,6 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       CHECK_EQ(rig.kmt().misuses(), 0u);
       /* A refused close leaves the chunk held until its context is
        * destroyed, which closes it as the driver does. */
-      CHECK_EQ(rig.kmt().ram_chunks(), 0u);
+      CHECK_EQ(rig.kmt().window_chunks(), 0u);
       CHECK_STATUS(rig.search().close(), Status::ok);
   } }

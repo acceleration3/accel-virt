@@ -24,7 +24,7 @@ struct VulkanBackendProbe {
     [[nodiscard]] bool run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
                                    WireReader &payload, WireWriter &reply, WireArena &arena);
     const HandleRegistry &handles() const;
-    /* Host-pointer imports the driver made and was not yet asked to free. */
+    /* Dma-buf imports the driver made and was not yet asked to free. */
     uint32_t              imports_held() const;
     /* A slot in the backend's template table, taken as a create does: what
      * fills it in a test without asking the driver for 512 templates
@@ -32,18 +32,15 @@ struct VulkanBackendProbe {
     [[nodiscard]] Status  reserve_template(VkDevice device, const VkDescriptorUpdateTemplateEntry *entry);
     /* The reserved slot's handle, as a create does once the driver answered. */
     static void           name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made);
-    /* The kind the backend decides this device imports, decided afresh, and
-     * the memory types it takes that kind into learnt with it. */
-    uint32_t              decide_import(VkPhysicalDevice physical);
-    /* Decides the host pointer instead of probing, as a host with no udmabuf
-     * leaves the backend deciding: the kernel this runs on may make dma-bufs,
-     * and the pointer path has to be testable on one that does. */
-    void                  import_as_pointer(VkPhysicalDevice physical);
-    /* And the dma-buf instead, whether or not this kernel makes one: which
-     * kind a GPU decides is the host's business, and both halves of what the
-     * backend does with that decision have to be reachable from a test
-     * (feature 053). */
-    void                  import_as_dmabuf(VkPhysicalDevice physical);
+    /* The memory types `physical`'s memory source maps, learnt as the
+     * backend learns them the first time the guest asks about the device:
+     * what a test with no source behind the backend narrows the guest's view
+     * by. */
+    void                  learn_mappable(VkPhysicalDevice physical, uint32_t mask);
+    /* The mask learnt, and whether the device imports go to was made able to
+     * import a dma-buf. */
+    bool                  mappable_known(VkPhysicalDevice physical) const;
+    bool                  memory_import() const;
     /* Whether the backend still holds `fd` as one it exported: what says
      * whether an import took it (feature 047, US3). */
     bool                  holds_fd(int fd) const;

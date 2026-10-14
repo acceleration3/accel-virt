@@ -2,7 +2,8 @@
  * caller acts on is which blob a freed handle names - the wrong one, or one
  * already given back, is an import released twice. */
 #include "core/support/status.hpp"
-#include "device/abi/av_executor.h"
+#include "executor/exported_memory.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/vulkan/adopted_blobs.hpp"
 #include "executor/imported_blob.hpp"
 #include "harness/executor/adopted_blobs_probe.hpp"
@@ -17,16 +18,17 @@ using av::Status;
 
 namespace {
 
-std::uint8_t backing[ImportedBlob::page_bytes];
+std::uint8_t backing[4096];
+
+/* Memory a source keeps, which every blob here imports: what tells the blobs
+ * apart is what the backend made of each. */
+av::SourceMemory &memory()
+{ static av::SourceMemory shared(1u, 1u, 0u, 1u, av::ExportedMemory(0x10u, -1, backing, sizeof backing));
+  return shared; }
 
 /* A blob taken and holding `object`, as a backend leaves one it adopted. */
 void adopted(ImportedBlob &blob, std::uint64_t id, std::uint64_t object)
-{ AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.pointer = backing;
-  handle.fd = -1;
-  handle.size = sizeof backing;
-  CHECK_STATUS(blob.take(id, handle), Status::ok);
+{ CHECK_STATUS(blob.take(id, memory()), Status::ok);
   blob.record(object, object); }
 
 }  // namespace

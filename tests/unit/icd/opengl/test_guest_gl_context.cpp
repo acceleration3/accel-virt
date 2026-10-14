@@ -267,7 +267,7 @@ TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.connection().users(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u);
-  CHECK_EQ(rig.kmt().ram_chunks(), 0u); }
+  CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
 TEST(guest_gl_context, no_avgpu_device_is_not_supported)
 { GlContextRig rig;

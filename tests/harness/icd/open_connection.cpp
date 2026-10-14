@@ -15,6 +15,7 @@ OpenConnection::OpenConnection()
     kmt_.add_adapter(PciIdentity(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                                  AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem),
                      AdapterScenario::wddm_3_2);
+    kmt_.open_host_window(MockKmt::rig_window_bytes);
     CHECK_STATUS(connection_.open(0u), Status::ok);
 }
 

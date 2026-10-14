@@ -1,28 +1,23 @@
-/* One context's imports of its chunks into its executor (feature 045): each
- * chunk aliased once for every import made through it, the alias and the
- * blob's hold gone with the last of them, and every refusal leaving nothing new
- * behind. Everything runs
- * over ImportRig - real file-backed guest pages, the device's blob table and a
- * version 3 mock executor on the context's one worker. */
+/* One context's imports of host blobs into its executor (docs/host-memory.md):
+ * only a blob made for this context is imported, the executor is handed the
+ * memory it allocated under the blob's id, every import is named by a handle
+ * no other answers to, and every refusal leaves nothing new behind. Everything
+ * runs over ImportRig - the device's host blob table allocating through a
+ * mock executor library with real memory, and the context's one worker. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/blob_imports.hpp"
-#include "device/memory/blob_window.hpp"
 #include "device/recording/wire_recorder.hpp"
-#include "proto/context/gpu_identity.hpp"
-#include "proto/context/protocol_version.hpp"
 #include "harness/executor/import_rig.hpp"
-#include "harness/recording/recorded_file.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
-#include "proto/context/context_resources.hpp"
+#include "harness/recording/recorded_file.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 
 #include <cstdint>
-#include <cstring>
-#include <sys/mman.h>
 
 using av::BlobImports;
-using av::ContextResources;
 using av::HostViolation;
 using av::ImportRig;
 using av::MockExecutorOps;
@@ -31,19 +26,13 @@ using av::Status;
 namespace av {
 
 struct BlobImportsProbe {
-    static std::uint64_t swap_handle(BlobImports &imports, std::uint64_t handle)
+    static std::uint64_t swap_handle(BlobImports &imports, std::uint32_t slot, std::uint64_t handle)
     {
-        const std::uint64_t kept = imports.device_memory_[1];
-        imports.device_memory_[1] = handle;
+        const std::uint64_t kept = imports.device_memory_[slot];
+        imports.device_memory_[slot] = handle;
         return kept;
     }
-    static std::uint64_t first_handle(BlobImports &imports) { return imports.device_memory_[0]; }
-    static std::uint32_t swap_resource(BlobImports &imports, std::uint32_t resource)
-    {
-        const std::uint32_t kept = imports.resources_[0];
-        imports.resources_[0] = resource;
-        return kept;
-    }
+    static std::uint64_t handle(BlobImports &imports, std::uint32_t slot) { return imports.device_memory_[slot]; }
     static std::uint64_t swap_blob_id(BlobImports &imports, std::uint64_t blob_id)
     {
         const std::uint64_t kept = imports.blob_ids_[0];
@@ -56,8 +45,6 @@ struct BlobImportsProbe {
 
 namespace {
 
-constexpr std::uint64_t page = ImportRig::page;
-
 /* A little-endian u64 of a record's payload, as docs/protocol.md frames one. */
 std::uint64_t read_u64(const std::uint8_t *bytes)
 {
@@ -67,39 +54,11 @@ std::uint64_t read_u64(const std::uint8_t *bytes)
     return value;
 }
 
-/* The bytes behind a handle the executor was given, whichever kind it is: a
- * dma-buf mapped for as long as this lives, a host pointer as it stands. What
- * the host GPU would see, which is what every byte assertion here is about. */
-class Handed {
-public:
-    explicit Handed(const AvBlobHandle &handle)
-        : bytes_(nullptr), length_(handle.size), mapped_(handle.kind == AV_BLOB_DMA_BUF)
-    {
-        if (!mapped_) {
-            bytes_ = static_cast<std::uint8_t *>(handle.pointer);
-            return;
-        }
-        void *const at = mmap(nullptr, length_, PROT_READ | PROT_WRITE, MAP_SHARED, handle.fd, 0);
-        bytes_ = at == MAP_FAILED ? nullptr : static_cast<std::uint8_t *>(at);
-    }
-    ~Handed() { if (mapped_ && bytes_ != nullptr) munmap(bytes_, length_); }
-    Handed(const Handed &) = delete;
-    Handed &operator=(const Handed &) = delete;
-
-    std::uint8_t *bytes() const { return bytes_; }
-
-private:
-    std::uint8_t *bytes_;
-    std::uint64_t length_;
-    bool          mapped_;
-};
-
 /* An import on the worker: its status, with the handle in `device_memory`. */
-Status import(ImportRig &rig, std::uint32_t resource, std::uint64_t offset, std::uint64_t size,
-              std::uint32_t memory_type, std::uint64_t &device_memory)
+Status import(ImportRig &rig, std::uint32_t resource, std::uint64_t &device_memory)
 {
     Status status = Status::invalid_state;
-    rig.on_worker([&] { status = rig.imports().import(resource, offset, size, memory_type, device_memory); });
+    rig.on_worker([&] { status = rig.imports().import(resource, device_memory); });
     CHECK(rig.imports().invariants_hold());
     return status;
 }
@@ -112,555 +71,247 @@ void release(ImportRig &rig, std::uint64_t device_memory)
 
 }  // namespace
 
-TEST(blob_imports_import, a_chunk_is_aliased_and_the_executor_is_handed_the_range_asked_for)
+/* The executor is handed the very memory the library allocated under the
+ * blob's id - not a copy, and not another blob's. */
+TEST(blob_imports_import, hands_the_executor_the_memory_allocated_under_the_blob_s_id)
 { ImportRig rig;
-  const std::uint32_t pages[] = {9u, 3u, 4u, 20u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(0u), pages, 4u), Status::ok);
-  CHECK(rig.imports().invariants_hold());
+  CHECK_STATUS(rig.create_host_blob(rig.blob(3u), ImportRig::context, 2u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(4u), ImportRig::context), Status::ok);
   std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(0u), page, 2u * page, 5u, device_memory), Status::ok);
-  CHECK_EQ(device_memory, 1u | MockExecutorOps::handle_bit);   /* the device's first blob id */
-  CHECK_EQ(rig.imports().imports(), 1u);
-  CHECK_EQ(rig.host().live_ranges(), 1u);
-  CHECK_EQ(rig.host().live_aliases(), 3u);   /* 9 | 3-4 | 20 */
-  CHECK_STATUS(rig.blobs().release(rig.chunk(0u)), Status::invalid_state);   /* the executor has its pages */
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  /* A dma-buf, because the host makes one: the guest's pages reach a GPU that
-   * refuses a file-backed userptr only that way. */
-  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_DMA_BUF});
-  CHECK_EQ(handed.reserved, 5u);
-  CHECK(handed.fd >= 0);
-  /* Beside it, the device's own mapping of the same pages (ABI 19), which a
-   * GPU that reads an imported dma-buf without snooping imports instead. */
-  CHECK(handed.pointer != nullptr);
-  CHECK(std::memcmp(handed.pointer, rig.guest_page(3u), page) == 0);
-  CHECK_EQ(handed.size, 2u * page);
-  Handed shared(handed);
-  auto *const pointer = shared.bytes();
-  CHECK(pointer != nullptr);
-  CHECK(std::memcmp(pointer, rig.guest_page(3u), page) == 0);
-  CHECK(std::memcmp(pointer + page, rig.guest_page(4u), page) == 0);
-  pointer[page + 7u] = 0xD4u;   /* what the host GPU writes is what the guest reads */
-  CHECK_EQ(rig.guest_page(4u)[7], 0xD4u);
-  rig.guest_page(3u)[0] = 0x3Cu;
-  CHECK_EQ(pointer[0], 0x3Cu);
-  CHECK_EQ(rig.ops().misuses(), 0u); }
-
-/* The same import on a host that makes no dma-buf - no udmabuf in its kernel -
- * which is the path every host took before there was another one. */
-TEST(blob_imports_import, a_host_that_makes_no_dma_buf_hands_a_pointer_into_the_alias)
-{ ImportRig rig;
-  rig.host().refuse_dmabufs();
-  const std::uint32_t pages[] = {9u, 3u, 4u, 20u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(0u), pages, 4u), Status::ok);
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(0u), page, 2u * page, 5u, device_memory), Status::ok);
-  CHECK_EQ(rig.host().live_dmabufs(), 0u);
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_HOST_POINTER});
-  CHECK_EQ(handed.reserved, 5u);
-  CHECK_EQ(handed.fd, -1);
-  CHECK_EQ(handed.size, 2u * page);
-  auto *const pointer = static_cast<std::uint8_t *>(handed.pointer);
-  CHECK(std::memcmp(pointer, rig.guest_page(3u), page) == 0);
-  pointer[page + 7u] = 0xD4u;
-  CHECK_EQ(rig.guest_page(4u)[7], 0xD4u);
-  /* Both attempts were the one import, so the id it was made under is the
-   * first the context hands out and the next import gets the second. */
-  std::uint64_t second = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(0u), 0u, page, 5u, second), Status::ok);
-  CHECK(rig.ops().import_of(2u, handed));
-  CHECK_EQ(rig.ops().misuses(), 0u); }
-
-TEST(blob_imports_import, imports_through_one_chunk_share_its_alias_until_the_last_is_released)
-{ ImportRig rig;
-  const std::uint32_t pages[] = {30u, 31u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(63u), pages, 2u), Status::ok);
-  std::uint64_t first = 0u;
-  std::uint64_t second = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(63u), 0u, page, 0u, first), Status::ok);
-  CHECK_STATUS(import(rig, rig.chunk(63u), page, page, 1u, second), Status::ok);
-  CHECK(first != second);
-  CHECK_EQ(rig.host().live_ranges(), 1u);
-  CHECK_EQ(rig.host().live_aliases(), 1u);
-  AvBlobHandle one = {};
-  AvBlobHandle two = {};
-  CHECK(rig.ops().import_of(1u, one) && rig.ops().import_of(2u, two));
-  /* One alias, two dma-bufs: each names its own page of the same blob. */
-  CHECK(one.fd != two.fd);
-  { Handed lower(one);
-    Handed upper(two);
-    CHECK(lower.bytes() != nullptr && upper.bytes() != nullptr);
-    CHECK(std::memcmp(lower.bytes(), rig.guest_page(30u), page) == 0);
-    CHECK(std::memcmp(upper.bytes(), rig.guest_page(31u), page) == 0); }
-  release(rig, first);
-  CHECK_EQ(rig.imports().imports(), 1u);
-  CHECK_EQ(rig.host().live_ranges(), 1u);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(63u)), Status::invalid_state);
-  CHECK_EQ(rig.ops().live_imports(), 1u);
-  release(rig, first);   /* already released: nothing */
-  CHECK_EQ(rig.ops().released(), 1u);
-  release(rig, second);
-  CHECK_EQ(rig.imports().imports(), 0u);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
-  CHECK_EQ(rig.ops().released(), 2u);
-  CHECK_EQ(rig.ops().live_imports(), 0u);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(63u)), Status::ok); }
-
-TEST(blob_imports_import, a_resource_that_is_no_chunk_of_this_context_is_not_found_and_maps_nothing)
-{ ImportRig rig;
-  const std::uint32_t pages[] = {1u};
-  const std::uint32_t transport[] = {ImportRig::ring, ImportRig::ring + 1u, ImportRig::ring + 2u};
-  for (const std::uint32_t id : transport) CHECK_STATUS(rig.create_guest_blob(id, pages, 1u), Status::ok);
-  CHECK_STATUS(rig.create_guest_blob(ImportRig::ring + ContextResources::per_context, pages, 1u), Status::ok);
-  CHECK_STATUS(rig.blobs().create_host(ImportRig::ring + ContextResources::per_context + 1u, page), Status::ok);
-  const std::uint32_t ids[] = {0u, ImportRig::ring - 1u, ImportRig::ring, ImportRig::ring + 1u, ImportRig::ring + 2u,
-                               ImportRig::ring + ContextResources::per_context, 0xFFFFFFFFu,
-                               ImportRig::ring + ContextResources::per_context + 1u,   /* a host blob past the slots */
-                               rig.chunk(0u)};   /* a chunk slot no blob holds */
-  for (const std::uint32_t id : ids) {
-      std::uint64_t device_memory = 7u;
-      CHECK_STATUS(import(rig, id, 0u, page, 0u, device_memory), Status::not_found);
-      CHECK_EQ(device_memory, 0u);
-  }
-  CHECK_EQ(rig.host().live_ranges(), 0u);
-  CHECK_EQ(rig.ops().imported(), 0u); }
-
-namespace {
-
-/* The device's own view of host blob `id`: what the hostmem BAR shows the
- * guest once the blob is placed there. */
-std::uint8_t *host_view(ImportRig &rig, std::uint32_t id)
-{
-    av::BlobWindow pages;
-    void          *memory = nullptr;
-    if (rig.blobs().backing(id, pages, memory) != Status::ok) return nullptr;
-    std::uint64_t bytes = 0u;
-    return static_cast<std::uint8_t *>(pages.extent(0u, bytes));
-}
-
-}  // namespace
-
-/* A chunk the driver placed in the host window is a host blob
- * (docs/host-window.md): one mapping already, so nothing is aliased, and the
- * executor is handed a dma-buf the host made over the blob's own memory. */
-TEST(blob_imports_import, a_host_chunk_is_handed_as_a_dma_buf_over_its_own_memory_and_held)
-{ ImportRig rig;
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(1u), 3u * page), Status::ok);
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(1u), page, 2u * page, 4u, device_memory), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(3u), device_memory), Status::ok);
+  CHECK(device_memory != 0u);
+  std::uint64_t key = 0u;
+  CHECK(rig.ops().import_of(1u, key));   /* the first import id this context handed out */
+  CHECK_EQ(key, rig.blob(3u));
   CHECK_EQ(device_memory, 1u | MockExecutorOps::handle_bit);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
-  CHECK_EQ(rig.host().host_dmabufs(), 1u);
-  av::BlobWindow pages;
-  void          *memory = nullptr;
-  CHECK_STATUS(rig.blobs().backing(rig.chunk(1u), pages, memory), Status::ok);
-  CHECK(rig.host().last_host_dmabuf().memory == memory);
-  CHECK_EQ(rig.host().last_host_dmabuf().offset, page);
-  CHECK_EQ(rig.host().last_host_dmabuf().size, 2u * page);
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_DMA_BUF});
-  CHECK_EQ(handed.reserved, 4u);
-  CHECK(handed.fd >= 0);
-  CHECK(handed.pointer != nullptr);   /* the device's own mapping, beside it */
-  CHECK_EQ(handed.size, 2u * page);
-  /* The blob is held for the import as a guest chunk is. */
-  CHECK_STATUS(rig.blobs().release(rig.chunk(1u)), Status::invalid_state);
-  release(rig, device_memory);
-  CHECK_EQ(rig.ops().live_imports(), 0u);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(1u)), Status::ok);
-  CHECK_EQ(rig.ops().misuses(), 0u); }
-
-/* OpenGL's and OpenCL's libraries take no dma-buf, and a host without udmabuf
- * makes none: both are handed a pointer into the blob's own mapping - the
- * memfd pages the hostmem BAR shows the guest - at the offset asked for. */
-TEST(blob_imports_import, a_host_chunk_a_library_takes_only_as_a_pointer_is_handed_its_own_mapping)
-{ ImportRig rig;
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(2u), 2u * page), Status::ok);
-  std::uint8_t *const view = host_view(rig, rig.chunk(2u));
-  CHECK(view != nullptr);
-  view[page + 9u] = 0x5Eu;
-  rig.ops().refuse_import_at(1u);
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(2u), page, page, 2u, device_memory), Status::ok);
-  CHECK_EQ(rig.host().live_dmabufs(), 0u);   /* the refused one was closed */
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_HOST_POINTER});
-  CHECK_EQ(handed.fd, -1);
-  CHECK_EQ(handed.size, page);
-  CHECK(handed.pointer == view + page);
-  CHECK_EQ(static_cast<std::uint8_t *>(handed.pointer)[9], 0x5Eu);
-  rig.host().refuse_dmabufs();
-  std::uint64_t whole = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(2u), 0u, 2u * page, 2u, whole), Status::ok);
-  CHECK(rig.ops().import_of(2u, handed));
-  CHECK(handed.pointer == view);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
-  release(rig, device_memory);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(2u)), Status::invalid_state);   /* the second still holds it */
-  release(rig, whole);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(2u)), Status::ok); }
-
-TEST(blob_imports_import, a_host_chunk_refuses_a_range_past_it_and_a_block_with_no_mapping)
-{ ImportRig rig;
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(3u), page), Status::ok);
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(3u), page, page, 0u, device_memory), Status::too_large);
-  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, 2u * page, 0u, device_memory), Status::too_large);
-  CHECK_EQ(rig.host().host_dmabufs(), 0u);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(3u)), Status::ok);   /* a refusal holds nothing */
-  rig.host().empty_host_memory_at(1u);
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(3u), page), Status::ok);
-  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, page, 0u, device_memory), Status::no_memory);
-  CHECK_EQ(device_memory, 0u);
-  CHECK_EQ(rig.ops().imported(), 0u);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(3u)), Status::ok); }
-
-/* A replay recreates a host chunk's import from the bytes the guest wrote
- * through the window, which are the blob's own. */
-TEST(blob_imports_import, records_the_bytes_behind_a_host_chunk)
-{ ImportRig rig;
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(4u), 2u * page), Status::ok);
-  host_view(rig, rig.chunk(4u))[page] = 0x7Au;
-  CHECK_STATUS(rig.recorder().open("host-chunk.av", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
-                                   av::ProtocolVersion(1u, 1u)),
-               Status::ok);
-  std::uint64_t device_memory = 0u;
-  rig.on_worker([&] {
-      CHECK_STATUS(rig.imports().import(rig.chunk(4u), page, page, 0u, device_memory), Status::ok);
-  });
-  av::RecordedFile file(rig.host(), "host-chunk.av");
-  av::RecordHeader record;
-  CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
-  const std::uint8_t *const payload = file.expect(av::RecordKind::blob_bytes, record);
-  CHECK(payload != nullptr);
-  CHECK_EQ(record.length(), 16u + page);
-  if (payload != nullptr) {
-      CHECK_EQ(read_u64(payload + 8u), page);
-      CHECK_EQ(payload[16], 0x7Au);
-  }
-  rig.recorder().close(); }
-
-TEST(blob_imports_import, a_range_past_the_blob_is_too_large_and_the_alias_made_for_it_goes)
-{ ImportRig rig;
-  const std::uint32_t pages[] = {40u, 42u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(2u), pages, 2u), Status::ok);
-  struct Case { std::uint64_t offset; std::uint64_t size; };
-  const Case outside[] = {{0u, 3u * page}, {2u * page, page}, {page, 2u * page},
-                          {0xFFFFFFFFFFFFF000u, page}, {page, 0xFFFFFFFFFFFFF000u}};
-  for (const Case &c : outside) {
-      std::uint64_t device_memory = 0u;
-      CHECK_STATUS(import(rig, rig.chunk(2u), c.offset, c.size, 0u, device_memory), Status::too_large);
-      CHECK_EQ(rig.host().live_ranges(), 0u);
-  }
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(2u), page, page, 0u, device_memory), Status::ok);   /* the last page exactly */
-  CHECK_STATUS(import(rig, rig.chunk(2u), 0u, 3u * page, 0u, device_memory), Status::too_large);
-  CHECK_EQ(rig.host().live_ranges(), 1u);   /* held by the first import, not dropped by the refusal */
+  CHECK_EQ(rig.imports().imports(), 1u);
   CHECK_EQ(rig.ops().imported(), 1u); }
 
-TEST(blob_imports_import, pages_the_host_cannot_alias_are_no_memory_and_leave_nothing)
+TEST(blob_imports_import, each_import_gets_an_id_never_used_before_and_its_own_handle)
 { ImportRig rig;
-  const std::uint32_t pages[] = {50u, 52u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(3u), pages, 2u), Status::ok);
-  std::uint64_t device_memory = 0u;
-  rig.host().fail_reserve_at(1u);
-  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, page, 0u, device_memory), Status::no_memory);
-  rig.host().fail_alias_at(2u);
-  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, page, 0u, device_memory), Status::no_memory);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
-  CHECK_EQ(rig.ops().imported(), 0u);
-  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, page, 0u, device_memory), Status::ok); }
+  CHECK_STATUS(rig.create_host_blob(rig.blob(0u), ImportRig::context), Status::ok);
+  std::uint64_t first = 0u;
+  std::uint64_t second = 0u;
+  std::uint64_t third = 0u;
+  CHECK_STATUS(import(rig, rig.blob(0u), first), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(0u), second), Status::ok);   /* the same blob twice is two imports */
+  release(rig, first);
+  CHECK_STATUS(import(rig, rig.blob(0u), third), Status::ok);
+  CHECK_EQ(first, 1u | MockExecutorOps::handle_bit);
+  CHECK_EQ(second, 2u | MockExecutorOps::handle_bit);
+  CHECK_EQ(third, 3u | MockExecutorOps::handle_bit);   /* id 1 is not reused */
+  CHECK_EQ(rig.imports().imports(), 2u); }
 
-/* A library that takes no dma-buf - OpenCL's, whose import is a host pointer -
- * is handed the pointer instead, under the same id: the refusal left it
- * holding nothing. */
-TEST(blob_imports_import, a_library_that_refuses_the_dma_buf_is_handed_the_pointer_under_the_same_id)
+/* A context imports only what its own process opened: another context's blob,
+ * an id that is no host blob, and a blob already released are not found, and
+ * the executor is never asked. */
+TEST(blob_imports_import, a_blob_this_context_did_not_open_is_not_found_and_asks_nothing)
 { ImportRig rig;
-  const std::uint32_t pages[] = {61u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(1u), ImportRig::other_context), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(2u), ImportRig::context), Status::ok);
+  CHECK_STATUS(rig.host_blobs().release(rig.blob(2u)), Status::ok);
+  std::uint64_t device_memory = 7u;
+  CHECK_STATUS(import(rig, rig.blob(1u), device_memory), Status::not_found);
+  CHECK_EQ(device_memory, 0u);
+  CHECK_STATUS(import(rig, rig.blob(2u), device_memory), Status::not_found);
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::not_found);
+  CHECK_STATUS(import(rig, 12u, device_memory), Status::not_found);
+  CHECK_STATUS(import(rig, 0u, device_memory), Status::not_found);
+  CHECK_EQ(rig.ops().imported(), 0u);
+  CHECK_EQ(rig.imports().imports(), 0u);
+  CHECK_EQ(rig.host().live_allocations(), 0u);   /* no table was taken for a refusal */ }
+
+/* The library keeps the memory for as long as the import holds it, whatever
+ * the guest releases meanwhile. */
+TEST(blob_imports_import, an_import_keeps_the_memory_after_the_guest_releases_the_blob)
+{ ImportRig rig;
+  CHECK_STATUS(rig.create_host_blob(rig.blob(6u), ImportRig::context), Status::ok);
+  rig.memory_of(rig.blob(6u))[5] = 0x5Eu;
   std::uint64_t device_memory = 0u;
-  rig.ops().refuse_import_at(1u);
-  CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 3u, device_memory), Status::ok);
-  CHECK_EQ(rig.imports().imports(), 1u);
-  CHECK_EQ(rig.host().live_dmabufs(), 0u);   /* the one it refused was closed */
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{AV_BLOB_HOST_POINTER});
-  CHECK_EQ(handed.reserved, 3u);
-  CHECK(handed.pointer != nullptr);
-  CHECK_EQ(rig.ops().live_imports(), 1u); }
+  CHECK_STATUS(import(rig, rig.blob(6u), device_memory), Status::ok);
+  CHECK_STATUS(rig.host_blobs().release(rig.blob(6u)), Status::ok);
+  CHECK_EQ(rig.ops().held_memory(), 0u);
+  CHECK_EQ(rig.ops().live_memory(), 1u);
+  CHECK(rig.memory_of(rig.blob(6u)) != nullptr);
+  CHECK_EQ(rig.memory_of(rig.blob(6u))[5], 0x5Eu);
+  release(rig, device_memory);
+  CHECK_EQ(rig.ops().live_memory(), 0u); }
 
 TEST(blob_imports_import, an_executor_that_refuses_names_nothing_or_names_two_imports_alike_is_not_supported)
 { ImportRig rig;
-  /* One attempt per import, so a refusal is the whole answer. */
-  rig.host().refuse_dmabufs();
-  const std::uint32_t pages[] = {60u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(4u), ImportRig::context), Status::ok);
   std::uint64_t device_memory = 0u;
   rig.ops().refuse_import_at(1u);
-  CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 0u, device_memory), Status::not_supported);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
+  CHECK_STATUS(import(rig, rig.blob(4u), device_memory), Status::not_supported);
+  CHECK_EQ(device_memory, 0u);
   rig.ops().withhold_handle_at(1u);
-  CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 0u, device_memory), Status::not_supported);
-  CHECK_EQ(rig.ops().live_imports(), 0u);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
+  CHECK_STATUS(import(rig, rig.blob(4u), device_memory), Status::not_supported);
+  CHECK_EQ(rig.ops().live_imports(), 0u);   /* the nameless import was given back */
   rig.ops().answer_handle(0x77u);
-  CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 0u, device_memory), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(4u), device_memory), Status::ok);
   CHECK_EQ(device_memory, 0x77u);
   std::uint64_t twin = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 0u, twin), Status::not_supported);
+  CHECK_STATUS(import(rig, rig.blob(4u), twin), Status::not_supported);
   CHECK_EQ(twin, 0u);
   CHECK_EQ(rig.imports().imports(), 1u);
   CHECK_EQ(rig.ops().live_imports(), 1u);   /* the second was given back */
-  CHECK_EQ(rig.host().live_ranges(), 1u);   /* the first still holds the alias */
   ImportRig unexecuted(false);
-  CHECK_STATUS(unexecuted.create_guest_blob(unexecuted.chunk(0u), pages, 1u), Status::ok);
-  CHECK_STATUS(import(unexecuted, unexecuted.chunk(0u), 0u, page, 0u, device_memory), Status::not_supported);
-  CHECK_EQ(unexecuted.host().live_ranges(), 0u); }
+  CHECK_STATUS(unexecuted.create_host_blob(unexecuted.blob(0u), ImportRig::context), Status::ok);
+  CHECK_STATUS(import(unexecuted, unexecuted.blob(0u), device_memory), Status::not_supported);
+  CHECK_EQ(unexecuted.imports().imports(), 0u); }
 
 TEST(blob_imports_import, a_context_holding_every_import_it_may_has_no_space)
 { ImportRig rig;
-  const std::uint32_t pages[] = {70u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(5u), pages, 1u), Status::ok);
-  std::uint64_t handles[BlobImports::max_imports] = {};
-  Status        failed = Status::ok;
+  CHECK_STATUS(rig.create_host_blob(rig.blob(5u), ImportRig::context), Status::ok);
+  static std::uint64_t handles[BlobImports::max_imports] = {};
+  Status               failed = Status::ok;
   rig.on_worker([&] {
       for (std::uint32_t index = 0u; index < BlobImports::max_imports && failed == Status::ok; index++)
-          failed = rig.imports().import(rig.chunk(5u), 0u, page, 0u, handles[index]);
+          failed = rig.imports().import(rig.blob(5u), handles[index]);
   });
   CHECK_STATUS(failed, Status::ok);
   CHECK_EQ(rig.imports().imports(), BlobImports::max_imports);
   CHECK(rig.imports().invariants_hold());
   std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(5u), 0u, page, 0u, device_memory), Status::no_space);
-  CHECK_EQ(rig.ops().imported(), BlobImports::max_imports);
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::no_space);
+  CHECK_EQ(rig.ops().imported(), BlobImports::max_imports);   /* the executor was not asked */
   release(rig, handles[100]);
-  CHECK_STATUS(import(rig, rig.chunk(5u), 0u, page, 0u, device_memory), Status::ok);
-  CHECK_EQ(rig.host().live_ranges(), 1u); }
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::ok);
+  CHECK_EQ(rig.imports().imports(), BlobImports::max_imports); }
 
 /* The table is the host's memory, taken by the first import: a host with none
  * refuses that import and the next one tries again. */
 TEST(blob_imports_import, a_host_with_no_memory_for_the_table_has_no_space_and_nothing_is_held)
 { ImportRig rig;
-  const std::uint32_t pages[] = {71u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(5u), pages, 1u), Status::ok);
-  CHECK_EQ(rig.imports().imports(), 0u);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(5u), ImportRig::context), Status::ok);
   const std::uint32_t allocations = rig.host().live_allocations();
   std::uint64_t device_memory = 0u;
   rig.host().fail_allocation_at(1u);
-  CHECK_STATUS(import(rig, rig.chunk(5u), 0u, page, 0u, device_memory), Status::no_space);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::no_space);
   CHECK_EQ(rig.host().live_allocations(), allocations);
-  CHECK_STATUS(import(rig, rig.chunk(5u), 0u, page, 0u, device_memory), Status::ok);
+  CHECK_EQ(rig.ops().imported(), 0u);
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::ok);
   CHECK_EQ(rig.host().live_allocations(), allocations + 1u);
-  CHECK_STATUS(import(rig, rig.chunk(5u), 0u, page, 0u, device_memory), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::ok);
   CHECK_EQ(rig.host().live_allocations(), allocations + 1u); }
 
-/* A chunk unbound and bound again reuses its id over other pages: the blob is
- * not released while an import holds its alias, so the old pages are never
- * handed out under the new blob's id. */
-TEST(blob_imports_import, a_held_chunk_is_not_released_and_its_successor_is_imported_over_its_own_pages)
+TEST(blob_imports_release, lets_go_of_the_import_its_handle_names_and_only_that)
 { ImportRig rig;
-  const std::uint32_t old_pages[] = {80u};
-  const std::uint32_t new_pages[] = {81u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(6u), old_pages, 1u), Status::ok);
-  std::uint64_t held = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(6u), 0u, page, 0u, held), Status::ok);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(6u)), Status::invalid_state);
-  release(rig, held);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(6u)), Status::ok);
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(6u), new_pages, 1u), Status::ok);
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(6u), 0u, page, 0u, device_memory), Status::ok);
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(2u, handed));
-  Handed successor(handed);
-  CHECK(successor.bytes() != nullptr);
-  CHECK_EQ(successor.bytes()[0], static_cast<std::uint8_t>(0x10u + 81u)); }
+  CHECK_STATUS(rig.create_host_blob(rig.blob(7u), ImportRig::context), Status::ok);
+  std::uint64_t first = 0u;
+  std::uint64_t second = 0u;
+  CHECK_STATUS(import(rig, rig.blob(7u), first), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(7u), second), Status::ok);
+  release(rig, second);
+  CHECK_EQ(rig.ops().released(), 1u);
+  CHECK_EQ(rig.imports().imports(), 1u);
+  std::uint64_t key = 0u;
+  CHECK(rig.ops().import_of(1u, key));
+  CHECK(!rig.ops().import_of(2u, key));
+  release(rig, second);   /* already let go: nothing */
+  CHECK_EQ(rig.ops().released(), 1u); }
 
 TEST(blob_imports_release, a_handle_this_context_never_made_releases_nothing)
 { ImportRig rig;
   release(rig, 1u | MockExecutorOps::handle_bit);   /* before any import: there is no table to look in */
   CHECK_EQ(rig.imports().imports(), 0u);
   CHECK_EQ(rig.host().live_allocations(), 0u);
-  const std::uint32_t pages[] = {90u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(7u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(7u), ImportRig::context), Status::ok);
   std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(7u), 0u, page, 0u, device_memory), Status::ok);
-  release(rig, 0u);
+  CHECK_STATUS(import(rig, rig.blob(7u), device_memory), Status::ok);
+  release(rig, 0u);   /* 0 names no import, though a free slot holds 0 */
   release(rig, device_memory + 1u);
   CHECK_EQ(rig.ops().released(), 0u);
   CHECK_EQ(rig.imports().imports(), 1u); }
 
-TEST(blob_imports, the_aliases_still_held_go_with_the_context)
+/* A context going away gives back its table; what it imported the executor
+ * releases with itself. */
+TEST(blob_imports, the_table_goes_with_the_context)
 { ImportRig rig;
-  const std::uint32_t pages[] = {100u, 102u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(8u), pages, 2u), Status::ok);
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(9u), pages, 2u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(8u), ImportRig::context), Status::ok);
   const std::uint32_t allocations = rig.host().live_allocations();
   {
-      BlobImports context(rig.host(), rig.blobs(), rig.executor(), rig.recorder(), 1u);
-      context.configure(ImportRig::ring);
+      BlobImports context(rig.host(), rig.host_blobs(), rig.executor(), rig.recorder(), ImportRig::context);
       std::uint64_t first = 0u;
-      std::uint64_t second = 0u;
-      std::uint64_t third = 0u;
-      rig.on_worker([&] {
-          CHECK_STATUS(context.import(rig.chunk(8u), 0u, page, 0u, first), Status::ok);
-          CHECK_STATUS(context.import(rig.chunk(8u), page, page, 0u, second), Status::ok);
-          CHECK_STATUS(context.import(rig.chunk(9u), page, page, 0u, third), Status::ok);
-      });
-      CHECK_EQ(context.imports(), 3u);
-      CHECK_EQ(rig.host().live_ranges(), 2u);
-      CHECK_STATUS(rig.blobs().release(rig.chunk(8u)), Status::invalid_state);
+      rig.on_worker([&] { CHECK_STATUS(context.import(rig.blob(8u), first), Status::ok); });
+      CHECK_EQ(context.imports(), 1u);
+      CHECK_EQ(rig.host().live_allocations(), allocations + 1u);
   }
-  CHECK_EQ(rig.host().live_ranges(), 0u);
-  CHECK_EQ(rig.host().live_aliases(), 0u);
   CHECK_EQ(rig.host().live_allocations(), allocations);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(8u)), Status::ok);
-  CHECK_STATUS(rig.blobs().release(rig.chunk(9u)), Status::ok);
-  const std::uint32_t without_blobs = rig.host().live_allocations();
-  { BlobImports unused(rig.host(), rig.blobs(), rig.executor(), rig.recorder(), 1u); }   /* never imported: nothing to let go */
-  CHECK_EQ(rig.host().live_allocations(), without_blobs); }
+  { BlobImports unused(rig.host(), rig.host_blobs(), rig.executor(), rig.recorder(), ImportRig::context); }
+  CHECK_EQ(rig.host().live_allocations(), allocations); }
 
-TEST(blob_imports, configures_on_the_main_loop_and_imports_on_the_worker)
+TEST(blob_imports, imports_and_releases_on_the_worker_only)
 { ImportRig rig;
   std::uint64_t device_memory = 0u;
-  CHECK_STATUS(rig.imports().import(rig.chunk(0u), 0u, page, 0u, device_memory), Status::not_found);
+  CHECK_STATUS(rig.imports().import(rig.blob(0u), device_memory), Status::not_found);
   rig.imports().release(1u);
   CHECK(rig.host().claim(HostViolation::worker_required));
   CHECK(rig.host().claim(HostViolation::worker_required));
-  rig.on_worker([&] { rig.imports().configure(ImportRig::ring); });
-  CHECK(rig.host().claim(HostViolation::main_loop_required)); }
+  CHECK(!rig.host().claim(HostViolation::worker_required)); }
 
 TEST(blob_imports_invariants, each_rule_is_detected)
 { ImportRig rig;
   CHECK(rig.imports().invariants_hold());
-  const std::uint32_t pages[] = {110u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(10u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(10u), ImportRig::context), Status::ok);
   std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.chunk(10u), 0u, page, 0u, device_memory), Status::ok);
-  CHECK_STATUS(import(rig, rig.chunk(10u), 0u, page, 0u, device_memory), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(10u), device_memory), Status::ok);
+  CHECK_STATUS(import(rig, rig.blob(10u), device_memory), Status::ok);
   const std::uint64_t kept_handle =
-      av::BlobImportsProbe::swap_handle(rig.imports(), av::BlobImportsProbe::first_handle(rig.imports()));
+      av::BlobImportsProbe::swap_handle(rig.imports(), 1u, av::BlobImportsProbe::handle(rig.imports(), 0u));
   CHECK(!rig.imports().invariants_hold());   /* two imports answering to one handle */
-  static_cast<void>(av::BlobImportsProbe::swap_handle(rig.imports(), kept_handle));
+  static_cast<void>(av::BlobImportsProbe::swap_handle(rig.imports(), 1u, kept_handle));
   CHECK(rig.imports().invariants_hold());
-  const std::uint32_t kept_resource = av::BlobImportsProbe::swap_resource(rig.imports(), ImportRig::ring + 2u);
-  CHECK(!rig.imports().invariants_hold());   /* an import of the reply slot */
-  static_cast<void>(av::BlobImportsProbe::swap_resource(rig.imports(), kept_resource));
   const std::uint64_t kept_id = av::BlobImportsProbe::swap_blob_id(rig.imports(), 0u);
   CHECK(!rig.imports().invariants_hold());   /* an id the device never hands out */
   static_cast<void>(av::BlobImportsProbe::swap_blob_id(rig.imports(), 3u));
   CHECK(!rig.imports().invariants_hold());   /* an id not handed out yet */
+  static_cast<void>(av::BlobImportsProbe::swap_blob_id(rig.imports(), 2u));
+  CHECK(rig.imports().invariants_hold());    /* the last one handed out */
   static_cast<void>(av::BlobImportsProbe::swap_blob_id(rig.imports(), kept_id));
   CHECK(rig.imports().invariants_hold()); }
 
-TEST(blob_imports_import, records_the_blob_it_handed_over_and_the_bytes_behind_it)
+/* What a replay pairs an import with its release by: the action, the import's
+ * id and the resource it imported. */
+TEST(blob_imports_import, records_the_import_and_its_release_under_one_id)
 { ImportRig rig;
-  const std::uint32_t pages[] = {7u, 8u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(3u), pages, 2u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(3u), ImportRig::context), Status::ok);
   CHECK_STATUS(rig.recorder().open("imports.av", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
                                    av::ProtocolVersion(1u, 1u)),
                Status::ok);
   std::uint64_t device_memory = 0u;
-  rig.on_worker([&] {
-      CHECK_STATUS(rig.imports().import(rig.chunk(3u), page, page, 5u, device_memory), Status::ok);
-  });
-  CHECK(rig.imports().invariants_hold());
+  CHECK_STATUS(import(rig, rig.blob(3u), device_memory), Status::ok);
+  release(rig, device_memory);
   av::RecordedFile    file(rig.host(), "imports.av");
-  av::RecordHeader    record;
-  const std::uint8_t *payload = file.expect(av::RecordKind::blob, record);
-  CHECK(payload != nullptr);
-  /* Every field the replay pairs an import with its release by: a blob record
-   * is action, memory type, id, offset and size (docs/protocol.md). */
-  std::uint64_t imported_id = 0u;
-  if (payload != nullptr) {
-      CHECK_EQ(payload[0], 1u);            /* imported */
-      CHECK_EQ(payload[4], 5u);            /* the memory type the guest asked for */
-      imported_id = read_u64(payload + 8u);
-      CHECK_EQ(imported_id, 1u);           /* the first blob this context handed over */
-      CHECK_EQ(read_u64(payload + 16u), page);
-      CHECK_EQ(read_u64(payload + 24u), page);
-  }
-  CHECK_EQ(record.length(), av::WireRecorder::blob_payload);
-  CHECK_EQ(record.context(), 1u);
-  payload = file.expect(av::RecordKind::blob_bytes, record);
-  CHECK(payload != nullptr);
-  CHECK_EQ(record.length(), 16u + page);
-  /* The snapshot names the blob and the offset it was taken from, or a replay
-   * cannot say which import it recreates. */
-  if (payload != nullptr) {
-      CHECK_EQ(read_u64(payload), imported_id);
-      CHECK_EQ(read_u64(payload + 8u), page);
-      /* The second page of the blob is guest page 8, which the rig filled with
-       * 0x10 + 8; a replay recreates the import from exactly these bytes. */
-      CHECK_EQ(payload[16], 0x18u);
-  }
-  CHECK_EQ(file.remaining(), 0u);
-
-  rig.on_worker([&] { rig.imports().release(device_memory); });
-  av::RecordedFile    after(rig.host(), "imports.av");
-  av::RecordHeader    released;
-  const std::uint8_t *last = after.expect(av::RecordKind::blob, released);
-  CHECK(after.expect(av::RecordKind::blob_bytes, released) != nullptr);
-  CHECK(last != nullptr);
-  last = after.expect(av::RecordKind::blob, released);
-  CHECK(last != nullptr);
-  if (last != nullptr) {
-      CHECK_EQ(last[0], 2u);               /* released */
-      CHECK_EQ(read_u64(last + 8u), imported_id);
-  }
-  CHECK_EQ(released.context(), 1u);
-  CHECK_EQ(after.remaining(), 0u);
-  rig.recorder().close(); }
-
-TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_only_its_lifetime)
-{ ImportRig rig;
-  const std::uint32_t pages[] = {7u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
-  CHECK_STATUS(rig.recorder().open("lifetimes.av", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
-                                   av::ProtocolVersion(1u, 1u)),
-               Status::ok);
-  std::uint64_t device_memory = 0u;
-  rig.on_worker([&] {
-      CHECK_STATUS(rig.imports().import(rig.chunk(4u), 0u, page, 0u, device_memory), Status::ok);
-      rig.imports().release(device_memory);
-  });
-  av::RecordedFile    file(rig.host(), "lifetimes.av");
   av::RecordHeader    record;
   const std::uint8_t *imported = file.expect(av::RecordKind::blob, record);
   CHECK(imported != nullptr);
-  if (imported != nullptr) CHECK_EQ(imported[0], 1u);
+  CHECK_EQ(record.context(), ImportRig::context);
+  CHECK_EQ(record.length(), av::WireRecorder::blob_payload);
+  if (imported != nullptr) {
+      CHECK_EQ(imported[0], 1u);   /* imported */
+      CHECK_EQ(read_u64(imported + 8u), 1u);
+      CHECK_EQ(read_u64(imported + 24u), rig.blob(3u));
+  }
   const std::uint8_t *released = file.expect(av::RecordKind::blob, record);
   CHECK(released != nullptr);
-  /* An import and then its release, in that order: two records of the same
-   * action would read as a blob imported twice and never given back. */
-  if (released != nullptr && imported != nullptr) {
-      CHECK_EQ(released[0], 2u);
-      CHECK_EQ(read_u64(released + 8u), read_u64(imported + 8u));
+  if (released != nullptr) {
+      CHECK_EQ(released[0], 2u);   /* released */
+      CHECK_EQ(read_u64(released + 8u), 1u);
   }
   CHECK_EQ(file.remaining(), 0u);
   rig.recorder().close(); }
 
-TEST(blob_imports_import, an_import_the_executor_refuses_records_nothing)
+TEST(blob_imports_import, an_import_refused_records_nothing)
 { ImportRig rig;
-  /* One attempt per import, so a refusal is the whole answer rather than the
-   * dma-buf half of one. */
-  rig.host().refuse_dmabufs();
-  const std::uint32_t pages[] = {7u};
-  CHECK_STATUS(rig.create_guest_blob(rig.chunk(5u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(5u), ImportRig::context), Status::ok);
   CHECK_STATUS(rig.recorder().open("refused.av", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
                                    av::ProtocolVersion(1u, 1u)),
                Status::ok);
   rig.ops().refuse_import_at(1u);
   std::uint64_t device_memory = 0u;
-  rig.on_worker([&] {
-      CHECK_STATUS(rig.imports().import(rig.chunk(5u), 0u, page, 0u, device_memory), Status::not_supported);
-  });
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::not_supported);
+  CHECK_STATUS(import(rig, rig.blob(6u), device_memory), Status::not_found);
+  release(rig, 5u);
   CHECK_EQ(av::RecordedFile(rig.host(), "refused.av").remaining(), 0u);
   rig.recorder().close(); }

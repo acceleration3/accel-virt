@@ -9,22 +9,24 @@
 namespace av {
 
 MockRendererResources::MockRendererResources(MockHost &qemu, const AvExecutorOps &executor)
-    : qemu_(qemu), executor_(executor), descriptors_(0u), mappings_(0u), offered_(-1), lines_{},
+    : qemu_(qemu), executor_(executor), held_{}, mappings_(0u), lines_{},
       refuse_executor_(false), loads_(0u), path_{}
 {
     for (int &line : lines_) line = -1;
+    for (int &held : held_) held = -1;
 }
 
 MockRendererResources::~MockRendererResources()
 {
     drop_interrupt_lines();
-    close_offered();
     if (mappings_ != 0u)
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "%u renderer region(s) never unmapped",
                                                 mappings_);
-    if (descriptors_ != 0u)
+    if (live_descriptors() != 0u)
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "%u renderer descriptor(s) never closed",
-                                                descriptors_);
+                                                live_descriptors());
+    for (int held : held_)
+        if (held >= 0) ::close(held);
 }
 
 Status MockRendererResources::map_region(int descriptor, std::uint64_t size, void *&base)
@@ -46,24 +48,13 @@ void MockRendererResources::unmap_region(void *, std::uint64_t)
 
 void MockRendererResources::close_descriptor(int descriptor)
 {
-    if (descriptor < 0 || ::close(descriptor) != 0 || descriptors_ == 0u) {
+    if (descriptor < 0 || ::close(descriptor) != 0) {
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "descriptor %d closed that was not open",
                                                 descriptor);
         return;
     }
-    descriptors_--;
-}
-
-void MockRendererResources::offer_host_memory(int descriptor)
-{
-    close_offered();
-    offered_ = descriptor;
-}
-
-void MockRendererResources::close_offered()
-{
-    if (offered_ >= 0) close_descriptor(offered_);
-    offered_ = -1;
+    for (int &held : held_)
+        if (held == descriptor) held = -1;
 }
 
 void MockRendererResources::take_interrupt_lines(const int *descriptors, std::uint32_t count)
@@ -98,9 +89,18 @@ Status MockRendererResources::load_executor(const char *path, std::uint32_t leng
     return Status::ok;
 }
 
-void MockRendererResources::adopt(std::uint32_t count)
+void MockRendererResources::adopt(const int *descriptors, std::uint32_t count)
 {
-    descriptors_ += count;
+    for (std::uint32_t index = 0u; index < count; index++) {
+        if (descriptors[index] < 0) continue;
+        bool kept = false;
+        for (int &held : held_) {
+            if (held >= 0 || kept) continue;
+            held = descriptors[index];
+            kept = true;
+        }
+        if (!kept) TestRegistry::instance().record_failure(__FILE__, __LINE__, "more descriptors than the mock keeps");
+    }
 }
 
 void MockRendererResources::refuse_executor()
@@ -110,7 +110,9 @@ void MockRendererResources::refuse_executor()
 
 std::uint32_t MockRendererResources::live_descriptors() const
 {
-    return descriptors_;
+    std::uint32_t live = 0u;
+    for (int held : held_) live += held >= 0 ? 1u : 0u;
+    return live;
 }
 
 std::uint32_t MockRendererResources::live_mappings() const

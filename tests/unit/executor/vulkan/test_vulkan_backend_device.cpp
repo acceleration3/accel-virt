@@ -10,8 +10,9 @@
  * backend's own teardown is judged here by what it still recognises afterwards
  * rather than by a leak report. A host with no GPU makes no device and these
  * tests return without judging; the imports are judged on every GPU the host's
- * own loaders list, because the two measured disagree about which memory types
- * a host pointer may become. */
+ * own loaders list, each imported from that GPU's own memory source - host GPU
+ * memory its compositing context allocated and exported as a dma-buf
+ * (docs/host-memory.md). */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/vulkan/extension_list.hpp"
@@ -19,15 +20,18 @@
 #include "executor/vulkan/host_exported_fds.hpp"
 #include "executor/host_gpu.hpp"
 #include "executor/vulkan/host_template_table.hpp"
+#include "executor/exported_memory.hpp"
+#include "executor/host_memory_source.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/import_table.hpp"
-#include "executor/shim/probe_dma_buf.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/client/client_blob_arena.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -60,7 +64,9 @@ namespace {
 std::uint64_t detail = 0u;
 
 constexpr std::size_t block_bytes = 65536u;
-constexpr std::size_t page = ImportedBlob::page_bytes;
+constexpr std::size_t page = 4096u;
+/* The domain every allocation here is made in. */
+constexpr std::uint32_t domain = 1u;
 
 template <typename H>
 H as_handle(std::uint64_t raw)
@@ -262,25 +268,51 @@ private:
     bool                ran_;
 };
 
-/* Page-aligned memory this process owns, as the device's contiguous view of a
- * guest's pages is. Declared before any backend that imports it, so it is
- * unmapped only after the driver has let it go. */
-class Pages {
+/* One allocation of a GPU's memory source, as the device asks for one: a
+ * Vulkan type the guest named, under `key`, held until this goes. Blobs take
+ * it as an import does - each holding a reference - and give it back before
+ * the device lets go of the key. Made only of a type the source maps. */
+class Allocation {
 public:
-    explicit Pages(std::size_t count)
-        : count_(count),
-          base_(static_cast<std::uint8_t *>(
-              mmap(nullptr, count * page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)))
-    {}
-    ~Pages() { (void)munmap(base_, count_ * page); }
-    Pages(const Pages &) = delete;
-    Pages &operator=(const Pages &) = delete;
+    Allocation(av::HostMemorySource *source, std::uint64_t key, std::uint32_t type, std::uint64_t size = page)
+        : source_(source), key_(key), answered_{-1, 0u, 0u}, made_(false)
+    { made_ = source_ != nullptr &&
+              source_->allocate(domain, key_, size,
+                                av::HostMemoryRequest(av::HostMemoryRequest::Kind::vulkan, type), answered_) ==
+                  av::Status::ok; }
+    ~Allocation()
+    { if (made_) source_->free(domain, key_);
+      if (answered_.fd >= 0) ::close(answered_.fd); }
+    Allocation(const Allocation &) = delete;
+    Allocation &operator=(const Allocation &) = delete;
 
-    std::uint8_t *at(std::size_t index) const { return base_ + index * page; }
+    bool made() const { return made_; }
+    /* What the device was handed: the dma-buf it maps into the window. */
+    int  descriptor() const { return answered_.fd; }
+    /* `blob` holding this memory under `id`, with a reference of its own. */
+    bool take(ImportedBlob &blob, std::uint64_t id)
+    { av::SourceMemory *const memory = made_ ? source_->acquire(domain, key_) : nullptr;
+      if (memory == nullptr) return false;
+      if (blob.take(id, *memory) == av::Status::ok) return true;
+      source_->release(*memory);
+      return false; }
+    /* `blob`'s reference given back, after its backend abandoned it. */
+    void give_back(ImportedBlob &blob)
+    { av::SourceMemory *const memory = blob.give_back();
+      if (memory != nullptr) source_->release(*memory); }
+    /* The source's own mapping, which is what the guest's window shows. */
+    std::uint8_t *bytes() const
+    { if (!made_) return nullptr;
+      av::SourceMemory *const memory = source_->acquire(domain, key_);
+      std::uint8_t *const     pointer = memory->pointer();
+      source_->release(*memory);
+      return pointer; }
 
 private:
-    std::size_t   count_;
-    std::uint8_t *base_;
+    av::HostMemorySource *source_;
+    std::uint64_t         key_;
+    AvHostMemory          answered_;
+    bool                  made_;
 };
 
 /* A backend bound, as the root binds one, to one GPU this host's own loaders
@@ -289,17 +321,13 @@ class GuestDevice {
 public:
     GuestDevice(av::LoaderHostApis &host, std::uint32_t index, std::uint32_t count = 0u,
                 const char *const *extensions = nullptr)
-        : gpu_(), backend_(), probe_(backend_), guest_(backend_), instance_(0u), physical_(0u), device_(0u)
+        : gpu_(), source_(host.memory_source(index)), backend_(), probe_(backend_), guest_(backend_), instance_(0u),
+          physical_(0u), device_(0u)
     { gpu_.describe(host, index);
-      backend_.initialize(gpu_);
+      backend_.initialize(gpu_, source_);
       instance_ = guest_.create_instance();
       physical_ = instance_ != 0u ? guest_.first_physical_device(instance_) : 0u;
-      device_ = physical_ != 0u ? guest_.create_device(physical_, count, extensions) : 0u;
-      /* The host pointer, whether or not this kernel makes dma-bufs: the
-       * pointer is the kind these tests hand over, and a backend left to
-       * decide would take the other one wherever udmabuf exists. What it
-       * decides on its own is its own test, below. */
-      if (physical_ != 0u) probe_.import_as_pointer(as_handle<VkPhysicalDevice>(physical_)); }
+      device_ = physical_ != 0u ? guest_.create_device(physical_, count, extensions) : 0u; }
     ~GuestDevice() { backend_.shut_down(); }
     GuestDevice(const GuestDevice &) = delete;
     GuestDevice &operator=(const GuestDevice &) = delete;
@@ -310,23 +338,14 @@ public:
     std::uint64_t       instance() const { return instance_; }
     std::uint64_t       physical() const { return physical_; }
     std::uint64_t       device() const { return device_; }
+    /* The GPU's memory source, null where its compositing context would not
+     * open, and the types it maps. */
+    av::HostMemorySource *source() const { return source_; }
+    std::uint32_t         mappable() const { return source_ != nullptr ? source_->mappable_types() : 0u; }
 
-    /* The types the driver says `pointer` may become on this device - asked
+    /* The types the driver says dma-buf `fd` may become on this device, asked
      * of the driver directly, so the backend's own answer is judged against
      * it rather than against itself. */
-    std::uint32_t importable(void *pointer) const
-    { const VkDevice device = as_handle<VkDevice>(device_);
-      auto *const properties = reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(
-          ::vkGetDeviceProcAddr(device, "vkGetMemoryHostPointerPropertiesEXT"));
-      if (properties == nullptr) return 0u;
-      VkMemoryHostPointerPropertiesEXT host = {};
-      host.sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT;
-      if (properties(device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer, &host) !=
-          VK_SUCCESS)
-          return 0u;
-      return host.memoryTypeBits; }
-
-    /* The same question for a dma-buf, asked of the driver directly. */
     std::uint32_t importable_dmabuf(int fd) const
     { const VkDevice device = as_handle<VkDevice>(device_);
       auto *const properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
@@ -345,6 +364,7 @@ public:
 
 private:
     av::HostGpu        gpu_;
+    av::HostMemorySource *source_;
     VulkanBackend      backend_;
     VulkanBackendProbe probe_;
     GuestSequence      guest_;
@@ -360,33 +380,18 @@ av::LoaderHostApis &opened_host()
   host.open();
   return host; }
 
-AvBlobHandle host_pointer(void *pointer, std::uint32_t memory_type, std::uint64_t size = page)
-{ AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.reserved = memory_type;
-  handle.pointer = pointer;
-  handle.fd = -1;
-  handle.size = size;
-  return handle; }
-
-AvBlobHandle dma_buf(int fd, std::uint32_t memory_type, std::uint64_t size = page)
-{ AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_DMA_BUF;
-  handle.reserved = memory_type;
-  handle.pointer = nullptr;
-  handle.fd = fd;
-  handle.size = size;
-  return handle; }
-
 std::uint32_t lowest(std::uint32_t mask)
 { return mask != 0u ? static_cast<std::uint32_t>(__builtin_ctz(mask)) : 0u; }
 
-/* A type this device has that the mask does not name, or 0 where it names
- * every one of them. */
-std::uint32_t highest_missing(std::uint32_t mask)
-{ for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++)
-      if ((mask & (1u << type)) == 0u) return type;
-  return 0u; }
+/* Whether `mask` names a type with exactly `type`'s property flags. */
+bool same_kind(std::uint64_t physical, std::uint32_t mask, std::uint32_t type)
+{ VkPhysicalDeviceMemoryProperties memory = {};
+  ::vkGetPhysicalDeviceMemoryProperties(as_handle<VkPhysicalDevice>(physical), &memory);
+  for (std::uint32_t named = 0u; named < memory.memoryTypeCount; named++)
+      if ((mask >> named & 1u) != 0u &&
+          memory.memoryTypes[named].propertyFlags == memory.memoryTypes[type].propertyFlags)
+          return true;
+  return false; }
 
 /* vkFreeMemory of `memory` through the wire; whether the backend ran it. */
 bool free_memory(BackendTransport &wire, std::uint64_t device, std::uint64_t memory)
@@ -395,68 +400,26 @@ bool free_memory(BackendTransport &wire, std::uint64_t device, std::uint64_t mem
 
 }  // namespace
 
-/* Left to itself, a device that can import a dma-buf decides on that kind and
- * takes nothing else: the guest's pages reach a GPU that refuses a file-backed
- * userptr only that way, and memory of the other kind would not bind to the
- * buffers the guest was given for this one. A kernel with no udmabuf decides
- * the pointer, and this says so rather than failing there. */
-TEST(vulkan_backend_device, a_device_that_imports_a_dma_buf_decides_on_it_and_refuses_a_pointer)
-{ av::LoaderHostApis &host = opened_host();
-  Pages pages(1u);
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i);
-      if (made.device() == 0u) continue;
-      av::ProbeDmaBuf shared;
-      if (!shared.make()) continue;
-      const std::uint32_t takes = made.importable_dmabuf(shared.handle());
-      if (takes == 0u) continue;
-
-      /* Undo what the fixture pinned: this is the decision itself. */
-      VulkanBackendProbe deciding(made.backend());
-      CHECK_EQ(deciding.decide_import(as_handle<VkPhysicalDevice>(made.physical())),
-               std::uint32_t{AV_BLOB_DMA_BUF});
-
-      ImportedBlob refused;
-      CHECK_STATUS(refused.take(1u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
-                   av::Status::ok);
-      CHECK(!made.backend().adopt(refused));
-
-      /* A type the driver will not put this descriptor in, refused by the
-       * driver's own answer rather than guessed at here. */
-      ImportedBlob wrong_type;
-      CHECK_STATUS(wrong_type.take(3u, dma_buf(shared.handle(), highest_missing(takes))), av::Status::ok);
-      CHECK(!made.backend().adopt(wrong_type));
-      CHECK_EQ(made.probe().imports_held(), 0u);
-
-      ImportedBlob blob;
-      CHECK_STATUS(blob.take(2u, dma_buf(shared.handle(), lowest(takes))), av::Status::ok);
-      CHECK(made.backend().adopt(blob));
-      CHECK(blob.object() != 0u);
-      CHECK_EQ(made.probe().imports_held(), 1u);
-      made.backend().abandon(blob);
-      CHECK_EQ(made.probe().imports_held(), 0u);
-  }
-}
-
 /* The whole of what a guest's context does with a device, on this host's own
- * Vulkan: make an instance and a device, import a page the host owns, give it
- * back, and destroy both. */
-TEST(vulkan_backend_device, a_guest_s_device_imports_a_host_page_and_tears_down)
+ * Vulkan: make an instance and a device, import memory of its GPU's source,
+ * give it back, and destroy both. */
+TEST(vulkan_backend_device, a_guest_s_device_imports_source_memory_and_tears_down)
 { av::LoaderHostApis &host = opened_host();
-  Pages pages(1u);
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       GuestDevice made(host, i);
       VulkanBackend &backend = made.backend();
-      if (made.device() == 0u) continue;
+      if (made.device() == 0u || made.mappable() == 0u) continue;
       CHECK(backend.knows_handle(made.device()));
+      CHECK(made.probe().memory_import());
 
+      Allocation   allocation(made.source(), 1u, lowest(made.mappable()));
       ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
-                   av::Status::ok);
-      /* A page this process owns, imported as device memory - the zero-copy
-       * claim the whole memory channel exists to make. */
+      CHECK(allocation.take(blob, 1u));
+      /* Memory the host GPU allocated, imported as the guest's device memory -
+       * the zero-copy claim the whole memory channel exists to make. */
       CHECK(backend.adopt(blob));
       CHECK(blob.object() != 0u);
+      CHECK_EQ(made.probe().imports_held(), 1u);
       backend.abandon(blob);
       CHECK_EQ(blob.object(), 0u);
       /* Abandoning what holds nothing is nothing. */
@@ -469,39 +432,36 @@ TEST(vulkan_backend_device, a_guest_s_device_imports_a_host_page_and_tears_down)
       CHECK(!backend.knows_handle(made.device()));
       /* And with no device an import has nowhere to go. */
       CHECK(!backend.adopt(blob));
+      allocation.give_back(blob);
   }
 }
 
-/* The type an import becomes is the one the guest asked for, on each GPU: every
- * type the driver says this pointer may become is imported and made a handle
- * the guest may name, every type it may not - the NVIDIA BAR type among them -
- * is refused, and so is a type past the device's own and past any device's.
- * A device made without naming the extensions imports all the same, because
- * the backend enabled them. */
-TEST(vulkan_backend_device, an_import_becomes_the_type_asked_for_and_only_a_type_the_pointer_may_become)
+/* Each type the source maps is a type of the kind the guest's device takes
+ * the dma-buf into, and the import becomes exactly that type: a handle the guest may
+ * name, gone when abandoned. A type the source does not map is never
+ * allocated, so it never reaches an import at all. */
+TEST(vulkan_backend_device, every_mappable_type_imports_as_itself_and_no_other_is_allocated)
 { av::LoaderHostApis &host = opened_host();
-  Pages pages(1u);
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       GuestDevice made(host, i);
       VulkanBackend &backend = made.backend();
-      if (made.device() == 0u) continue;
-      const std::uint32_t allowed = made.importable(pages.at(0u));
-      const std::uint32_t types = made.memory_types();
-      /* A GPU whose driver takes no host pointer at all would make everything
-       * below pass by refusing; neither GPU here is one. */
-      CHECK(allowed != 0u);
-
-      for (std::uint32_t type = 0u; type < types; type++) {
-          const bool may = ((allowed >> type) & 1u) != 0u;
+      if (made.device() == 0u || made.source() == nullptr) continue;
+      const std::uint32_t mappable = made.mappable();
+      /* Every GPU measured maps at least one host-visible type. */
+      CHECK(mappable != 0u);
+      for (std::uint32_t type = 0u; type < made.memory_types(); type++) {
+          Allocation allocation(made.source(), 100u + type, type);
+          const bool may = ((mappable >> type) & 1u) != 0u;
+          CHECK_EQ(allocation.made(), may);
+          if (!may) continue;
+          /* The driver names one type per kind of memory, and RADV has two
+           * of each host-visible kind with identical flags; the one it names
+           * for the dma-buf is the asked type's twin. */
+          CHECK(same_kind(made.physical(), made.importable_dmabuf(allocation.descriptor()), type));
           ImportedBlob blob;
-          CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), type)), av::Status::ok);
-          CHECK_EQ(backend.adopt(blob), may);
+          CHECK(allocation.take(blob, 1u));
+          CHECK(backend.adopt(blob));
           CHECK(blob.invariants_hold());
-          if (!may) {
-              CHECK_EQ(blob.object(), 0u);
-              CHECK_EQ(blob.wire_handle(), 0u);
-              continue;
-          }
           CHECK(blob.object() != 0u);
           CHECK_EQ(blob.wire_handle(), blob.object());
           CHECK(backend.knows_handle(blob.wire_handle()));
@@ -511,42 +471,31 @@ TEST(vulkan_backend_device, an_import_becomes_the_type_asked_for_and_only_a_type
           CHECK_EQ(blob.wire_handle(), 0u);
           CHECK(!backend.knows_handle(memory));
           CHECK_EQ(made.probe().imports_held(), 0u);
+          allocation.give_back(blob);
       }
-
-      constexpr std::uint32_t never = 0xFFFFFFFFu;
-      const std::uint32_t past[] = {types, VK_MAX_MEMORY_TYPES - 1u, VK_MAX_MEMORY_TYPES, never};
-      for (const std::uint32_t type : past) {
-          if (type < types) continue;
-          ImportedBlob blob;
-          CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), type)), av::Status::ok);
-          CHECK(!backend.adopt(blob));
-          CHECK_EQ(blob.object(), 0u);
-      }
-      CHECK_EQ(made.probe().imports_held(), 0u);
   }
 }
 
-/* A pointer the driver would import, into a type it allows, with a size that
- * runs past the end of the process's address space: the driver refuses it -
- * both measured, where a range merely running into an inaccessible page was
- * pinned lazily by one of them - and the blob holds nothing, with no handle
- * named and no import to release. */
-TEST(vulkan_backend_device, an_import_the_driver_refuses_holds_nothing)
+/* Memory the source has no descriptor of is memory no driver can be handed:
+ * the blob holds nothing, no handle is named and there is no import to
+ * release. */
+TEST(vulkan_backend_device, memory_with_no_descriptor_to_share_is_not_adopted)
 { av::LoaderHostApis &host = opened_host();
-  constexpr std::uint64_t past_user_space = std::uint64_t{1u} << 47u;
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      Pages pages(1u);
       GuestDevice made(host, i);
-      if (made.device() == 0u) continue;
-      const std::uint32_t type = lowest(made.importable(pages.at(0u)));
+      if (made.device() == 0u || made.mappable() == 0u) continue;
+      alignas(4096) static std::uint8_t backing[page];
+      av::SourceMemory memory(domain, 9u, lowest(made.mappable()), AV_MEMORY_WRITE_BACK,
+                              av::ExportedMemory(0x1000u, -1, backing, page));
       const std::uint32_t known = made.probe().handles().count();
       ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), type, past_user_space)), av::Status::ok);
+      CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
       CHECK(!made.backend().adopt(blob));
       CHECK_EQ(blob.object(), 0u);
       CHECK_EQ(blob.wire_handle(), 0u);
       CHECK_EQ(made.probe().imports_held(), 0u);
       CHECK_EQ(made.probe().handles().count(), known);
+      static_cast<void>(blob.give_back());
   }
 }
 
@@ -554,67 +503,68 @@ TEST(vulkan_backend_device, an_import_the_driver_refuses_holds_nothing)
  * extension no driver has is refused - with the host's added or without - and
  * no device is kept. A list counted and not sent is left for the loader to
  * judge, and the loader here makes that device - without the extensions, so
- * nothing imports into it and the guest is copied through instead. */
+ * nothing imports into it. */
 TEST(vulkan_backend_device, a_device_naming_the_extensions_imports_and_a_refused_one_is_not_kept)
 { av::LoaderHostApis &host = opened_host();
-  Pages pages(1u);
-  constexpr const char *named[] = {"VK_KHR_external_memory", "VK_EXT_external_memory_host"};
+  constexpr const char *named[] = {"VK_KHR_external_memory", "VK_KHR_external_memory_fd",
+                                   "VK_EXT_external_memory_dma_buf"};
   constexpr const char *bogus[] = {"VK_accel_virt_no_such_extension"};
   constexpr const char *bogus_and_named[] = {"VK_accel_virt_no_such_extension", "VK_KHR_external_memory",
-                                             "VK_EXT_external_memory_host"};
+                                             "VK_EXT_external_memory_dma_buf"};
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i, 2u, named);
-      if (made.device() == 0u) continue;
+      GuestDevice made(host, i, 3u, named);
+      if (made.device() == 0u || made.mappable() == 0u) continue;
       VulkanBackend &backend = made.backend();
-      ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
-                   av::Status::ok);
+      Allocation     allocation(made.source(), 1u, lowest(made.mappable()));
+      ImportedBlob   blob;
+      CHECK(allocation.take(blob, 1u));
       CHECK(backend.adopt(blob));
       backend.abandon(blob);
+      allocation.give_back(blob);
 
       CHECK_EQ(made.guest().create_device(made.physical(), 1u, bogus), 0u);
       CHECK_EQ(made.guest().create_device(made.physical(), 3u, bogus_and_named), 0u);
       /* The device the refusals did not replace is still the one imports go
        * to. */
       ImportedBlob again;
-      CHECK_STATUS(again.take(2u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
-                   av::Status::ok);
+      CHECK(allocation.take(again, 2u));
       CHECK(backend.adopt(again));
       backend.abandon(again);
+      allocation.give_back(again);
 
       const std::uint64_t unsent = made.guest().create_device(made.physical(), 3u, nullptr);
       CHECK(unsent != 0u);
+      CHECK(!made.probe().memory_import());
       ImportedBlob none;
-      CHECK_STATUS(none.take(3u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
-                   av::Status::ok);
+      CHECK(allocation.take(none, 3u));
       CHECK(!backend.adopt(none));
       CHECK_EQ(none.object(), 0u);
+      allocation.give_back(none);
   }
 }
 
 /* The proof that an import is live GPU memory rather than a handle that merely
- * exists: on each GPU, two imported pages bound to two buffers through the
- * wire, the first filled by this process, and the GPU told - by a command
- * buffer the guest records and submits, all as frames - to copy it into the
- * second. The second page then holds the pattern, written by the GPU. Freeing
- * each memory through the wire - on_vkFreeMemory - releases its import once:
- * the driver's count drops, a second free is refused as a handle nobody has,
- * the pages stay this process's, and the device's own release of the blob
- * afterwards frees nothing. */
+ * exists: on each GPU, two source allocations imported and bound to two
+ * buffers through the wire, the first filled through the source's mapping -
+ * what the guest writes through its window - and the GPU told, by a command
+ * buffer the guest records and submits, all as frames, to copy it into the
+ * second. The second allocation then holds the pattern, written by the GPU and
+ * read through the dma-buf the device maps. Freeing each memory through the
+ * wire - on_vkFreeMemory - releases its import once: the driver's count drops,
+ * a second free is refused as a handle nobody has, and the device's own
+ * release of the blob afterwards frees nothing. */
 TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_through_the_wire)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      Pages pages(2u);
       GuestDevice made(host, i);
-      if (made.device() == 0u) continue;
+      if (made.device() == 0u || made.mappable() == 0u) continue;
       VulkanBackend &backend = made.backend();
       BackendTransport wire(backend);
       const VkDevice device = as_handle<VkDevice>(made.device());
-      for (std::size_t b = 0u; b < page; b++) pages.at(0u)[b] = static_cast<std::uint8_t>(b * 7u + 1u);
 
       VkExternalMemoryBufferCreateInfo external = {};
       external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
-      external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+      external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
       VkBufferCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
       create.pNext = &external;
@@ -628,11 +578,20 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
       VkMemoryRequirements requirements = {};
       vkproto::av_vkGetBufferMemoryRequirements(wire, device, source, &requirements);
       CHECK(requirements.size <= page);
-      const std::uint32_t type = lowest(made.importable(pages.at(0u)) & requirements.memoryTypeBits);
+      const std::uint32_t type = lowest(made.mappable() & requirements.memoryTypeBits);
+      CHECK(((made.mappable() & requirements.memoryTypeBits) >> type & 1u) != 0u);
+
+      Allocation   first(made.source(), 1u, type);
+      Allocation   second(made.source(), 2u, type);
+      Allocation  *allocations[2] = {&first, &second};
+      std::uint8_t *const written = first.bytes();
+      CHECK(written != nullptr);
+      if (written == nullptr) continue;
+      for (std::size_t b = 0u; b < page; b++) written[b] = static_cast<std::uint8_t>(b * 7u + 1u);
 
       ImportedBlob blobs[2];
       for (std::uint32_t b = 0u; b < 2u; b++) {
-          CHECK_STATUS(blobs[b].take(b + 1u, host_pointer(pages.at(b), type)), av::Status::ok);
+          CHECK(allocations[b]->take(blobs[b], b + 1u));
           CHECK(backend.adopt(blobs[b]));
       }
       CHECK_EQ(made.probe().imports_held(), 2u);
@@ -673,8 +632,15 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
                VK_SUCCESS);
       CHECK_EQ(vkproto::av_vkQueueWaitIdle(wire, as_handle<VkQueue>(queue)), VK_SUCCESS);
 
-      CHECK(std::memcmp(pages.at(1u), pages.at(0u), page) == 0);
-      CHECK_EQ(pages.at(1u)[page - 1u], static_cast<std::uint8_t>((page - 1u) * 7u + 1u));
+      /* Read through what the device maps into the window: the dma-buf. */
+      void *const window = ::mmap(nullptr, page, PROT_READ, MAP_SHARED, second.descriptor(), 0);
+      CHECK(window != MAP_FAILED);
+      if (window != MAP_FAILED) {
+          CHECK(std::memcmp(window, written, page) == 0);
+          CHECK_EQ(static_cast<const std::uint8_t *>(window)[page - 1u],
+                   static_cast<std::uint8_t>((page - 1u) * 7u + 1u));
+          ::munmap(window, page);
+      }
 
       vkproto::av_vkDestroyCommandPool(wire, device, pool, nullptr);
       vkproto::av_vkDestroyBuffer(wire, device, source, nullptr);
@@ -691,10 +657,8 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
           CHECK(!free_memory(wire, made.device(), memory));
           backend.abandon(blobs[b]);
           CHECK_EQ(made.probe().imports_held(), 1u - b);
+          allocations[b]->give_back(blobs[b]);
       }
-      /* Still this process's memory, and still what the GPU wrote. */
-      pages.at(1u)[0] ^= 0xFFu;
-      CHECK_EQ(pages.at(1u)[0], static_cast<std::uint8_t>(0xFEu));
   }
 }
 
@@ -726,37 +690,38 @@ TEST(vulkan_backend_device, freeing_memory_that_is_not_an_import_frees_it)
  * whole, rather than answered with a handle the guest would be refused - both
  * when the handle registry is full and when the backend already holds a
  * session's worth of imports - and the device is not lost for it. Room made
- * again is an import accepted again. */
+ * again is an import accepted again. One allocation serves every import here,
+ * each holding a reference of its own, as one memory imported many times. */
 TEST(vulkan_backend_device, an_import_with_no_room_to_be_named_is_refused_and_given_back)
 { av::LoaderHostApis &host = opened_host();
   if (host.gpu_count() == 0u) return;
-  Pages pages(av::ImportTable::max_imports + 1u);
   {
       GuestDevice made(host, 0u);
+      if (made.device() == 0u || made.mappable() == 0u) return;
       VulkanBackend &backend = made.backend();
-      const std::uint32_t type = lowest(made.importable(pages.at(0u)));
+      Allocation     allocation(made.source(), 1u, lowest(made.mappable()));
       for (std::uint64_t raw = 1u; made.probe().handles().count() < av::HandleRegistry::max_handles; raw++)
           backend.made(raw);
       CHECK(!backend.lost());
       ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), type)), av::Status::ok);
+      CHECK(allocation.take(blob, 1u));
       CHECK(!backend.adopt(blob));
       CHECK_EQ(blob.object(), 0u);
       CHECK_EQ(made.probe().imports_held(), 0u);
       CHECK(!backend.lost());
+      allocation.give_back(blob);
   }
   {
       GuestDevice made(host, 0u);
       VulkanBackend &backend = made.backend();
-      const std::uint32_t type = lowest(made.importable(pages.at(0u)));
+      Allocation     allocation(made.source(), 2u, lowest(made.mappable()));
       static ImportedBlob blobs[av::ImportTable::max_imports + 1u];
       for (std::uint32_t b = 0u; b < av::ImportTable::max_imports; b++) {
-          CHECK_STATUS(blobs[b].take(b + 1u, host_pointer(pages.at(b), type)), av::Status::ok);
+          CHECK(allocation.take(blobs[b], b + 1u));
           CHECK(backend.adopt(blobs[b]));
       }
       ImportedBlob &extra = blobs[av::ImportTable::max_imports];
-      CHECK_STATUS(extra.take(0xFFFFu, host_pointer(pages.at(av::ImportTable::max_imports), type)),
-                   av::Status::ok);
+      CHECK(allocation.take(extra, 0xFFFFu));
       CHECK(!backend.adopt(extra));
       CHECK_EQ(extra.object(), 0u);
       CHECK_EQ(made.probe().imports_held(), av::ImportTable::max_imports);
@@ -765,7 +730,7 @@ TEST(vulkan_backend_device, an_import_with_no_room_to_be_named_is_refused_and_gi
       CHECK(backend.adopt(extra));
       for (ImportedBlob &blob : blobs) {
           backend.abandon(blob);
-          blob.give_back();
+          allocation.give_back(blob);
       }
       CHECK_EQ(made.probe().imports_held(), 0u);
   }
@@ -794,7 +759,7 @@ TEST(vulkan_backend_device, a_second_instance_and_device_are_the_ones_kept)
   av::HostGpu gpu;
   gpu.describe(host, 0u);
   VulkanBackend backend;
-  backend.initialize(gpu);
+  backend.initialize(gpu, host.memory_source(0u));
   GuestSequence guest(backend);
   const std::uint64_t first = guest.create_instance();
   if (first == 0u) return;
@@ -832,14 +797,13 @@ TEST(vulkan_backend_device, a_second_instance_and_device_are_the_ones_kept)
  * handle the guest can name. */
 TEST(vulkan_backend_device, memory_of_a_device_that_is_gone_is_not_freed_through_it)
 { av::LoaderHostApis &host = opened_host();
-  Pages pages(1u);
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       GuestDevice made(host, i);
-      if (made.device() == 0u) continue;
+      if (made.device() == 0u || made.mappable() == 0u) continue;
       VulkanBackend &backend = made.backend();
-      ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, host_pointer(pages.at(0u), lowest(made.importable(pages.at(0u))))),
-                   av::Status::ok);
+      Allocation     allocation(made.source(), 1u, lowest(made.mappable()));
+      ImportedBlob   blob;
+      CHECK(allocation.take(blob, 1u));
       CHECK(backend.adopt(blob));
       const std::uint64_t memory = blob.object();
       CHECK(made.guest().destroy(vkproto::kCmd_vkDestroyDevice, made.device()));
@@ -847,6 +811,7 @@ TEST(vulkan_backend_device, memory_of_a_device_that_is_gone_is_not_freed_through
       backend.abandon(blob);
       CHECK_EQ(blob.object(), memory);
       CHECK_EQ(made.probe().imports_held(), 1u);
+      allocation.give_back(blob);
   }
 }
 
@@ -921,7 +886,7 @@ namespace {
 VkExternalMemoryBufferCreateInfo host_buffer()
 { VkExternalMemoryBufferCreateInfo external = {};
   external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
-  external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
   return external; }
 
 VkBufferCreateInfo storage_buffer()
@@ -965,12 +930,12 @@ std::uint32_t driver_image_types(std::uint64_t device, const VkImageCreateInfo &
   ::vkDestroyImage(host, image, nullptr);
   return requirements.memoryTypeBits; }
 
-/* Whether the driver says an image like `create` may live in host memory it
- * imports: Intel's does not for an optimal colour image, NVIDIA's does. */
+/* Whether the driver says an image like `create` may live in a dma-buf it
+ * imports. */
 bool driver_imports_image(std::uint64_t physical, const VkImageCreateInfo &create)
 { VkPhysicalDeviceExternalImageFormatInfo external = {};
   external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
-  external.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  external.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
   VkPhysicalDeviceImageFormatInfo2 format = {};
   format.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
   format.pNext = &external;
@@ -1009,13 +974,11 @@ std::uint32_t wire_image_types(BackendTransport &wire, std::uint64_t device, con
 }  // namespace
 
 /* A guest's ICD cannot know, when an application makes a buffer or an image,
- * whether its memory will be a host-visible chunk the host imports, so the
- * backend makes every one it can for host allocation (feature 045, T035). What
- * the guest is answered is then the requirements of such a buffer: on NVIDIA its
- * BAR type drops out of memoryTypeBits (0x3b becomes 0x1b), which is the type
- * the ICD no longer calls host-visible. An image the driver will not import -
- * Intel's optimal colour image - is made as the guest asked. A buffer that
- * already names its external handle types is the guest's to decide. */
+ * whether its memory will be source memory the host imports, so the backend
+ * makes every one it can for a dma-buf import (docs/host-memory.md). What the
+ * guest is answered is then the requirements of such a buffer. An image the
+ * driver will not import is made as the guest asked. A buffer that already
+ * names its external handle types is the guest's to decide. */
 TEST(vulkan_backend_device, buffers_and_images_are_made_for_host_allocation_where_the_driver_imports_them)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
@@ -1033,7 +996,7 @@ TEST(vulkan_backend_device, buffers_and_images_are_made_for_host_allocation_wher
 
       VkExternalMemoryImageCreateInfo image_external = {};
       image_external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-      image_external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+      image_external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
       const VkImageCreateInfo image = colour_image();
       VkImageCreateInfo image_for_host = colour_image();
       image_for_host.pNext = &image_external;
@@ -1116,8 +1079,7 @@ VkPhysicalDeviceMemoryProperties driver_memory(std::uint64_t physical)
   return memory; }
 
 /* What the guest's view must be: the driver's own properties, with a type host
- * visible only where the driver would import the kind the backend decided on
- * into it. */
+ * visible only where the GPU's memory source maps it. */
 void check_restricted(const VkPhysicalDeviceMemoryProperties &guest, const VkPhysicalDeviceMemoryProperties &driver,
                       std::uint32_t importable)
 { constexpr VkMemoryPropertyFlags host_only = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
@@ -1136,47 +1098,45 @@ void check_restricted(const VkPhysicalDeviceMemoryProperties &guest, const VkPhy
 
 }  // namespace
 
-/* The guest's only mappable memory is its own RAM, which reaches the host GPU
- * as an import, so the guest sees a type host visible only where the driver
- * imports into it the kind this device decided on - a dma-buf where the kernel
- * makes one and the driver takes it, the host pointer otherwise. The answer is
- * the same before the guest has a device - an application chooses its types
- * before it makes one - and through either spelling of the query. */
-TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_decided_kind_imports)
+/* The guest's only mappable memory is its GPU's memory source's, so the guest
+ * sees a type host visible only where the source maps it. The answer is the
+ * same before the guest has a device - an application chooses its types
+ * before it makes one - and through either spelling of the query. A context
+ * with no source maps nothing. */
+TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_source_maps_it)
 { av::LoaderHostApis &host = opened_host();
-  Pages pages(1u);
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i);
-      if (made.device() == 0u) continue;
-      av::ProbeDmaBuf     shared;
-      const std::uint32_t by_dmabuf = shared.make() ? made.importable_dmabuf(shared.handle()) : 0u;
-      const std::uint32_t importable = by_dmabuf != 0u ? by_dmabuf : made.importable(pages.at(0u));
-      CHECK(importable != 0u);
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      av::HostMemorySource *const source = host.memory_source(i);
+      av::HostMemorySource *const sources[] = {source, nullptr};
+      for (av::HostMemorySource *const used : sources) {
+          const std::uint32_t mappable = used != nullptr ? used->mappable_types() : 0u;
+          av::HostGpu gpu;
+          gpu.describe(host, i);
+          VulkanBackend fresh;
+          fresh.initialize(gpu, used);
+          GuestSequence  guest(fresh);
+          BackendTransport wire(fresh);
+          const std::uint64_t instance = guest.create_instance();
+          const std::uint64_t physical = guest.first_physical_device(instance);
+          CHECK(physical != 0u);
+          if (physical == 0u) { fresh.shut_down(); continue; }
+          const VkPhysicalDeviceMemoryProperties driver = driver_memory(physical);
+          VkPhysicalDeviceMemoryProperties before = {};
+          vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &before);
+          check_restricted(before, driver, mappable);
 
-      av::HostGpu gpu;
-      gpu.describe(host, i);
-      VulkanBackend fresh;
-      fresh.initialize(gpu);
-      GuestSequence  guest(fresh);
-      BackendTransport wire(fresh);
-      const std::uint64_t instance = guest.create_instance();
-      const std::uint64_t physical = guest.first_physical_device(instance);
-      CHECK(physical != 0u);
-      const VkPhysicalDeviceMemoryProperties driver = driver_memory(physical);
-      VkPhysicalDeviceMemoryProperties before = {};
-      vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &before);
-      check_restricted(before, driver, importable);
-
-      VkPhysicalDeviceMemoryProperties2 after = {};
-      after.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-      CHECK(guest.create_device(physical) != 0u);
-      vkproto::av_vkGetPhysicalDeviceMemoryProperties2(wire, as_handle<VkPhysicalDevice>(physical), &after);
-      check_restricted(after.memoryProperties, driver, importable);
-      VkPhysicalDeviceMemoryProperties2 khr = {};
-      khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-      vkproto::av_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
-      check_restricted(khr.memoryProperties, driver, importable);
-      fresh.shut_down();
+          VkPhysicalDeviceMemoryProperties2 after = {};
+          after.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+          CHECK(guest.create_device(physical) != 0u);
+          vkproto::av_vkGetPhysicalDeviceMemoryProperties2(wire, as_handle<VkPhysicalDevice>(physical), &after);
+          check_restricted(after.memoryProperties, driver, mappable);
+          VkPhysicalDeviceMemoryProperties2 khr = {};
+          khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+          vkproto::av_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
+          check_restricted(khr.memoryProperties, driver, mappable);
+          fresh.shut_down();
+      }
   }
 }
 
@@ -1436,10 +1396,8 @@ TEST(vulkan_backend_device, a_guest_list_with_no_room_left_is_sent_as_the_guest_
  *
  * Vulkan is the only backend that exports anything, and memory is shared as a
  * dma-buf and nothing else: an opaque fd carries no memory type, and an import
- * has to name the one the allocation was made with. A GPU that imports the
- * host pointer therefore shares no memory at all, which is a refusal the guest
- * is given rather than an object it could not bind. */
-TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_pointer_device)
+ * has to name the one the allocation was made with. */
+TEST(vulkan_backend_device, shares_memory_as_a_dma_buf)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
@@ -1471,13 +1429,6 @@ TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_
       CHECK(!made.backend().export_object(AV_SHARED_MEMORY, 0u, handle_kind, fd));
       CHECK(!made.backend().export_object(AV_SHARED_NATIVE_FENCE + 1u, handle, handle_kind, fd));
 
-      /* A device that decided on the host pointer shares no memory. */
-      made.probe().import_as_pointer(as_handle<VkPhysicalDevice>(made.physical()));
-      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, handle, handle_kind, fd));
-      CHECK_EQ(handle_kind, 0u);
-      CHECK_EQ(fd, -1);
-
-      made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
       if (!made.backend().export_object(AV_SHARED_MEMORY, handle, handle_kind, fd)) continue;
       CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
       CHECK(fd >= 0);
@@ -1519,7 +1470,6 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
       GuestDevice made(host, i, 2u, extensions);
       if (made.device() == 0u) continue;
-      made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
       BackendTransport wire(made.backend());
       const VkDevice   device = as_handle<VkDevice>(made.device());
 
@@ -1618,17 +1568,19 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
   }
 }
 
-/* A device made without the fd extensions has no entry point to export or
- * import through. It is the deterministic half of what a driver refuses: a
- * host GPU that hands out a descriptor anyway is still a host GPU, and the
- * backend's own path has to be provable on every one of them. */
+/* A device made without the fd extensions - a guest list counted and not
+ * sent, which the backend cannot widen and the loader makes as it is - has no
+ * entry point to export or import through. It is the deterministic half of
+ * what a driver refuses: a host GPU that hands out a descriptor anyway is
+ * still a host GPU, and the backend's own path has to be provable on every
+ * one of them. */
 TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_either_way)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
-      GuestDevice made(host, i);
+      GuestDevice made(host, i, 3u, nullptr);
       if (made.device() == 0u) continue;
-      made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
+      CHECK(!made.probe().memory_import());
       BackendTransport wire(made.backend());
       const VkDevice   device = as_handle<VkDevice>(made.device());
 

@@ -26,6 +26,7 @@ GlIcdRig::GlIcdRig(bool present_thread)
 {
     if (!present_thread) presents_.refuse();
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
+    kmt_.open_host_window(MockKmt::rig_window_bytes);
     surface_.add_dc(&dc_, &window_, window_width, window_height);
     surface_.add_dc(&other_dc_, &other_window_, window_width, window_height);
     surface_.add_dc(&memory_dc_, nullptr, 0u, 0u);

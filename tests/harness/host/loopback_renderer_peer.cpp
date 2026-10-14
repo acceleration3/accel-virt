@@ -82,7 +82,7 @@ void LoopbackRendererPeer::deliver(const std::uint8_t *bytes, std::size_t length
     delivered_++;
     spoken_to_ = true;
     Process &process = process_.object();
-    process.resources.adopt(count);
+    process.resources.adopt(descriptors, count);
     Answer     &slot = answers_[(first_ + queued_) % max_answers];
     std::size_t answer_length = 0u;
     int         answer_descriptor = -1;

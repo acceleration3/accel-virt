@@ -3,7 +3,8 @@
  * registered it with, found through any duplicate of its descriptor, so the
  * renderer and the device see the same bytes; the executor is a table the
  * test built. Every descriptor the service is handed is counted until it is
- * closed, and every mapping until it is unmapped. */
+ * closed, and every mapping until it is unmapped; one the service got
+ * elsewhere - its library's dma-buf - is closed uncounted, but must be open. */
 #ifndef AV_MOCK_RENDERER_RESOURCES_HPP
 #define AV_MOCK_RENDERER_RESOURCES_HPP
 
@@ -20,6 +21,7 @@ class MockRendererResources final : public RendererResources {
 public:
     static constexpr std::uint32_t max_lines = 64u;
     static constexpr std::size_t   max_path = 128u;
+    static constexpr std::uint32_t max_held = 256u;
 
     MockRendererResources(MockHost &qemu, const AvExecutorOps &executor);
     ~MockRendererResources();
@@ -29,13 +31,12 @@ public:
     [[nodiscard]] Status map_region(int descriptor, std::uint64_t size, void *&base) override;
     void                 unmap_region(void *base, std::uint64_t size) override;
     void                 close_descriptor(int descriptor) override;
-    void                 offer_host_memory(int descriptor) override;
     void                 take_interrupt_lines(const int *descriptors, std::uint32_t count) override;
     void                 drop_interrupt_lines() override;
     [[nodiscard]] Status load_executor(const char *path, std::uint32_t length, const AvExecutorOps *&ops) override;
 
     /* `count` descriptors arrived with a datagram and are the service's now. */
-    void          adopt(std::uint32_t count);
+    void          adopt(const int *descriptors, std::uint32_t count);
     /* The next load_executor answers not_found, as a path that does not open. */
     void          refuse_executor();
     std::uint32_t live_descriptors() const;
@@ -47,13 +48,10 @@ public:
     const char   *executor_path() const;
 
 private:
-    void close_offered();
-
     MockHost             &qemu_;
     const AvExecutorOps &executor_;
-    std::uint32_t         descriptors_;
+    int                   held_[max_held];   /* -1 for a free slot */
     std::uint32_t         mappings_;
-    int                   offered_;
     int                   lines_[max_lines];
     bool                  refuse_executor_;
     std::uint32_t         loads_;

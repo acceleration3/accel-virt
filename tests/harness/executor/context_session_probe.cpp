@@ -10,6 +10,8 @@ ImportTable &ContextSessionProbe::imports() { return session.imports_; }
 
 void ContextSessionProbe::drop_backend() { session.backend_ = nullptr; }
 
+void ContextSessionProbe::drop_source() { session.source_ = nullptr; }
+
 void ContextSessionProbe::set_faulted(bool faulted) { session.faulted_ = faulted; }
 
 }  // namespace av

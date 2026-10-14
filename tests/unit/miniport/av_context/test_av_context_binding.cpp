@@ -14,6 +14,7 @@
 #include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/resources/host_blob_id.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -59,8 +60,8 @@ constexpr std::uint32_t unref_type = 0x0102u;
 constexpr std::uint32_t submit_3d_type = 0x0207u;
 /* Slot 2: host context 3, doorbell 2, and the three blobs after slots 0 and 1's. */
 constexpr std::uint32_t slot = 2u;
-/* Slot 2: past two slots of the three transport blobs and sixty-four chunks each. */
-constexpr std::uint32_t first_resource = 0x00100000u + 2u * 67u;
+/* Slot 2: past two slots of the three transport blobs each. */
+constexpr std::uint32_t first_resource = 0x00100000u + 2u * 3u;
 /* The request buffer an adapter lends every binding. */
 std::uint8_t lent[AvContextBinding::request_bytes];
 constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {};
@@ -338,85 +339,36 @@ TEST(av_context_binding_abandon, lets_go_without_a_request_and_sets_up_again)
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK(binding.established()); }
 
-/* Feature 045: a chunk a process binds is a blob of the context's own range, past
- * its three transport resources, over the pages the chunk has. */
-TEST(av_context_binding_chunks, a_chunk_is_a_blob_of_the_context_s_range)
+/* A slot's three transport blobs follow the slot before it, and a later
+ * binding of a slot takes ids past every slot's earlier ones, so what an
+ * unfinished teardown left behind never collides with it; the generation
+ * wraps after AvContextBinding::generations. Every id any slot of any
+ * generation takes stays below the host blobs' range, which the chunks own. */
+TEST(av_context_binding_resources, each_slot_and_generation_takes_transport_ids_of_its_own)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
-  Host host(fixture.mapped());
-  AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
-  CHECK_EQ(binding.chunk_resource(0u), first_resource + AvContextBinding::transport_resources);
-  CHECK_EQ(binding.chunk_resource(AvContextBinding::chunk_slots - 1u), first_resource + 66u);
-  /* The next slot's first resource is one past this slot's last chunk. */
-  AvContextBinding next(fixture.mapped().platform(), fixture.doorbells(), record(), slot + 1u, 0u, lent, sizeof lent);
-  CHECK_EQ(next.chunk_resource(0u) - AvContextBinding::transport_resources,
-           binding.chunk_resource(AvContextBinding::chunk_slots - 1u) + 1u);
-  const av::GuestPageList pages = fixture.pages().reply();
-  CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(5u), pages), Status::ok);
-  CHECK_EQ(host.count_of(create_blob_type), 1u);
-  CHECK_EQ(host.field(create_blob_type, 0u, 24u), binding.chunk_resource(5u));
-  CHECK(host.field(create_blob_type, 0u, 56u) == static_cast<std::uint32_t>(pages.frame(0u)));
-  CHECK_STATUS(binding.release_chunk(fixture.device(), binding.chunk_resource(5u)), Status::ok);
-  CHECK_EQ(host.count_of(unref_type), 1u);
-  CHECK_EQ(host.field(unref_type, 0u, 24u), binding.chunk_resource(5u)); }
-
-/* A later binding of a slot takes ids past every slot's earlier ones, so what
- * an unfinished teardown left behind never collides with it; the generation
- * wraps after AvContextBinding::generations. */
-TEST(av_context_binding_chunks, a_later_generation_of_a_slot_takes_ids_of_its_own)
-{ MappedVirtioFunction mapped;
-  FakeDoorbellPages doorbells;
-  AvContextBinding first(mapped.platform(), doorbells, record(), slot, 0u, lent, sizeof lent);
-  AvContextBinding second(mapped.platform(), doorbells, record(), slot, 1u, lent, sizeof lent);
-  AvContextBinding wrapped(mapped.platform(), doorbells, record(), slot, AvContextBinding::generations, lent,
-                            sizeof lent);
-  CHECK_EQ(first.chunk_resource(0u), first_resource + AvContextBinding::transport_resources);
-  CHECK_EQ(second.chunk_resource(0u),
-           first.chunk_resource(0u) + AvContextBinding::resources_per_context * av::RingSubmitter::doorbell_pages);
-  CHECK_EQ(wrapped.chunk_resource(0u), first.chunk_resource(0u)); }
-
-TEST(av_context_binding_chunks, a_refused_short_or_unanswered_blob_is_not_published)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.start(), Status::ok);
-  const av::GuestPageList pages = fixture.pages().reply();
-  { Host host(fixture.mapped());
-    AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
-    host.refuse_at(0);
-    CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages), Status::not_supported); }
-  { Host host(fixture.mapped());
-    AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
-    host.answer_short();
-    CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages), Status::malformed); }
-  { Host host(fixture.mapped());
-    AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
-    host.answer_nothing();
-    CHECK(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages) != Status::ok);
-    /* A release the device does not answer is no release: it may still hold
-     * the blob. */
-    CHECK(binding.release_chunk(fixture.device(), binding.chunk_resource(0u)) != Status::ok); }
-  /* A request buffer too small for the blob writes nothing and asks nothing. */
-  Host host(fixture.mapped());
-  std::uint8_t tiny[16] = {};
-  AvContextBinding cramped(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, tiny, sizeof tiny);
-  CHECK(cramped.publish_chunk(fixture.device(), cramped.chunk_resource(0u), pages) != Status::ok);
-  CHECK(cramped.release_chunk(fixture.device(), cramped.chunk_resource(0u)) != Status::ok);
-  CHECK_EQ(host.queue().requests(), 0u); }
-
-/* A device that will not let go of a chunk - an import still holds it - says
- * so, and one whose answer is no answer a device sends has not let go either:
- * the driver keeps the chunk's pages for both. */
-TEST(av_context_binding_chunks, a_release_the_device_refuses_or_garbles_is_no_release)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.start(), Status::ok);
-  { Host host(fixture.mapped());
-    AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
-    host.refuse_at(0);
-    CHECK_STATUS(binding.release_chunk(fixture.device(), binding.chunk_resource(0u)), Status::not_supported); }
-  Host host(fixture.mapped());
-  AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
-  host.answer_short();
-  CHECK_STATUS(binding.release_chunk(fixture.device(), binding.chunk_resource(0u)), Status::malformed); }
-
+  const std::uint32_t last_slot = av::RingSubmitter::doorbell_pages - 1u;
+  struct Case { std::uint32_t slot; std::uint32_t generation; std::uint32_t first; };
+  const Case cases[] = {
+      {slot, 0u, first_resource},
+      {slot + 1u, 0u, first_resource + AvContextBinding::resources_per_context},
+      {slot, 1u, first_resource + AvContextBinding::resources_per_context * av::RingSubmitter::doorbell_pages},
+      {slot, AvContextBinding::generations, first_resource},
+      {last_slot, AvContextBinding::generations - 1u,
+       AvContextBinding::first_resource_id +
+           AvContextBinding::resources_per_context *
+               (last_slot + av::RingSubmitter::doorbell_pages * (AvContextBinding::generations - 1u))},
+  };
+  for (const Case &c : cases) {
+      Host             host(fixture.mapped());
+      AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), c.slot, c.generation, lent,
+                               sizeof lent);
+      CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
+      CHECK_EQ(host.field(create_blob_type, 0u, 24u), c.first);
+      CHECK_EQ(host.field(create_blob_type, 2u, 24u), c.first + 2u);
+      CHECK(c.first + AvContextBinding::transport_resources <= av::HostBlobId::first);
+      CHECK_STATUS(binding.tear_down(fixture.device()), Status::ok);
+  } }
 
 /* Feature 049: which side of the kernel boundary submits on this context is
  * the binding's to pass on, and its context's to act on - what a process with

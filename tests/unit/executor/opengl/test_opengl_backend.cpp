@@ -5,7 +5,9 @@
  * names, which bytes an offset resolves to, which ids this backend carries -
  * rather than whether a driver drew anything. A host with no EGL fails to open
  * a context and every command is refused, which is also asserted. */
+#include "executor/exported_memory.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/opengl/opengl_backend.hpp"
@@ -67,14 +69,15 @@ std::uint64_t detail = 0u;
 alignas(4096) std::uint8_t region[2u * 4096u];
 alignas(4096) std::uint8_t second_region[4096];
 
-AvBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
+/* Memory of a GPU's source as a session imports it, mapped at `base`: the
+ * two regions here, each its own allocation. */
+av::SourceMemory &memory_over(std::uint8_t *base, std::uint64_t bytes)
 {
-    AvBlobHandle handle = {};
-    handle.kind = AV_BLOB_HOST_POINTER;
-    handle.pointer = base;
-    handle.fd = -1;
-    handle.size = bytes;
-    return handle;
+    static av::SourceMemory whole(1u, 1u, 0u, AV_MEMORY_WRITE_BACK,
+                                  av::ExportedMemory(1u, -1, region, sizeof region));
+    static av::SourceMemory other(1u, 2u, 0u, AV_MEMORY_WRITE_BACK,
+                                  av::ExportedMemory(2u, -1, second_region, sizeof second_region));
+    return base == region && bytes == sizeof region ? whole : other;
 }
 int          fence = 0;
 /* What the stand-in driver answers: the profile mask, and how many errors
@@ -155,7 +158,7 @@ TEST(opengl_backend, guest_bytes_answers_inside_the_region_and_nowhere_else)
 { OpenGlBackend backend;
   CHECK(backend.guest_bytes(0u, 1u) == nullptr);
   av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, host_pointer(region, sizeof region)), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, memory_over(region, sizeof region)), av::Status::ok);
   CHECK(backend.adopt(blob));
   CHECK(backend.guest_bytes(0u, sizeof region) == region);
   CHECK(backend.guest_bytes(16u, 32u) == region + 16u);
@@ -209,20 +212,21 @@ TEST(opengl_backend, without_a_context_nothing_runs)
   backend.shut_down();
   CHECK_EQ(backend.resolved(), 0u); }
 
-/* The region a command reads from is the guest chunk the context imported
- * (feature 050): one host pointer at a time, named by a handle that is not 0,
- * and given back when the import is. A dma-buf is not a region. */
-TEST(opengl_backend, adopts_one_host_pointer_as_its_region)
+/* The region a command reads from is the memory the context imported
+ * (docs/host-memory.md): one import at a time, named by a handle that is not
+ * 0, and given back when the import is. Memory with no mapping is no
+ * region. */
+TEST(opengl_backend, adopts_one_import_as_its_region)
 { OpenGlBackend backend;
   av::ImportedBlob first;
-  CHECK_STATUS(first.take(1u, host_pointer(region, sizeof region)), av::Status::ok);
+  CHECK_STATUS(first.take(1u, memory_over(region, sizeof region)), av::Status::ok);
   CHECK(backend.adopt(first));
   CHECK(first.wire_handle() != 0u);
   CHECK(first.object() != 0u);
   CHECK(backend.guest_bytes(4096u, 4096u) == region + 4096u);
   CHECK(backend.guest_bytes(4096u, 4097u) == nullptr);
   av::ImportedBlob second;
-  CHECK_STATUS(second.take(2u, host_pointer(second_region, sizeof second_region)), av::Status::ok);
+  CHECK_STATUS(second.take(2u, memory_over(second_region, sizeof second_region)), av::Status::ok);
   CHECK(!backend.adopt(second));
   CHECK_EQ(second.wire_handle(), 0u);
   /* Giving back an import that is not the region leaves the region. */
@@ -234,15 +238,15 @@ TEST(opengl_backend, adopts_one_host_pointer_as_its_region)
   CHECK(backend.guest_bytes(0u, 1u) == nullptr);
   CHECK(backend.adopt(second));
   CHECK(backend.guest_bytes(0u, 4096u) == second_region);
-  backend.shut_down();
+  /* A session gives back what it imported before its backend shuts down. */
+  backend.abandon(second);
   CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  backend.shut_down();
+  av::SourceMemory unmapped(1u, 3u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(3u, -1, nullptr, 4096u));
   av::ImportedBlob shared;
-  AvBlobHandle dma = {};
-  dma.kind = AV_BLOB_DMA_BUF;
-  dma.fd = 7;
-  dma.size = 4096u;
-  CHECK_STATUS(shared.take(3u, dma), av::Status::ok);
+  CHECK_STATUS(shared.take(3u, unmapped), av::Status::ok);
   CHECK(!backend.adopt(shared));
+  CHECK_EQ(shared.wire_handle(), 0u);
   CHECK(backend.guest_bytes(0u, 1u) == nullptr); }
 
 /* A real context on a real GPU, found from this host's own enumeration rather

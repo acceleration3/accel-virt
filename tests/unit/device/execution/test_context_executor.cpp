@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <unistd.h>
 
 using av::ContextExecutor;
 using av::ExecutorLibrary;
@@ -52,6 +53,14 @@ public:
     MockExecutorOps &ops() { return ops_; }
     ExecutorShares  &shares() { return shares_; }
     ContextExecutor &executor() { return executor_; }
+    /* Library memory under `key` in the device's domain, as a host blob's is;
+     * the device's descriptor of it closed, since nothing here maps it. */
+    void allocate(std::uint64_t key)
+    {
+        AvHostMemory memory = {-1, 0u, 0u};
+        CHECK_STATUS(library_.allocate_memory(key, 4096u, 1u, memory), Status::ok);
+        close(memory.fd);
+    }
     /* A second context of the same device, context 6. */
     ContextExecutor &sharing() { return sharing_; }
 
@@ -189,44 +198,26 @@ TEST(context_executor_invariants, an_executor_without_a_configuration_is_detecte
   CHECK(!fixture.executor().invariants_hold());
   fixture.on_worker([](ContextExecutor &executor) { executor.destroy(); }); }
 
-namespace {
-
-std::uint8_t page_bytes[8192];
-
-AvBlobHandle host_pointer(std::uint32_t memory_type)
-{
-    AvBlobHandle handle = {};
-    handle.kind = AV_BLOB_HOST_POINTER;
-    handle.reserved = memory_type;
-    handle.pointer = page_bytes;
-    handle.fd = -1;
-    handle.size = 4096u;
-    return handle;
-}
-
-}  // namespace
-
-/* Version 3's round trip: the import is made, then asked what it became, and
- * the answer is what the guest will name the memory by (feature 045). */
+/* The round trip: the import is made of the memory under the key, then asked
+ * what it became, and the answer is what the guest will name the memory by. */
 TEST(context_executor_import, imports_under_the_devices_id_and_answers_the_handle_the_library_named)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.allocate(40u);
   fixture.on_worker([&fixture](ContextExecutor &executor) {
       CHECK_STATUS(executor.create(), Status::ok);
       std::uint64_t device_memory = 0u;
-      CHECK_STATUS(executor.import(7u, host_pointer(3u), device_memory), Status::ok);
+      CHECK_STATUS(executor.import(7u, 40u, device_memory), Status::ok);
       CHECK_EQ(device_memory, 7u | MockExecutorOps::handle_bit);
-      AvBlobHandle seen = {};
-      CHECK(fixture.ops().import_of(7u, seen));
-      CHECK(seen.pointer == page_bytes);
-      CHECK_EQ(seen.reserved, 3u);
-      CHECK_EQ(seen.size, 4096u);
+      std::uint64_t key = 0u;
+      CHECK(fixture.ops().import_of(7u, key));
+      CHECK_EQ(key, 40u);
       executor.release(7u);
       CHECK_EQ(fixture.ops().live_imports(), 0u);
       CHECK_EQ(fixture.ops().released(), 1u);
       executor.destroy();
       executor.release(7u);
-      CHECK_STATUS(executor.import(8u, host_pointer(0u), device_memory), Status::invalid_state);
+      CHECK_STATUS(executor.import(8u, 40u, device_memory), Status::invalid_state);
       CHECK_EQ(device_memory, 0u);
   });
   CHECK_EQ(fixture.ops().released(), 1u);
@@ -235,27 +226,30 @@ TEST(context_executor_import, imports_under_the_devices_id_and_answers_the_handl
 TEST(context_executor_import, a_refusal_or_an_import_named_nothing_leaves_nothing_imported)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.allocate(40u);
   fixture.ops().refuse_import_at(1u);
   fixture.ops().withhold_handle_at(1u);
   fixture.on_worker([&fixture](ContextExecutor &executor) {
       CHECK_STATUS(executor.create(), Status::ok);
       std::uint64_t device_memory = 99u;
-      CHECK_STATUS(executor.import(1u, host_pointer(0u), device_memory), Status::not_supported);
+      CHECK_STATUS(executor.import(1u, 40u, device_memory), Status::not_supported);
       CHECK_EQ(device_memory, 0u);
       CHECK_EQ(fixture.ops().imported(), 0u);
       CHECK_EQ(fixture.ops().released(), 0u);
-      CHECK_STATUS(executor.import(2u, host_pointer(0u), device_memory), Status::not_supported);
+      CHECK_STATUS(executor.import(2u, 40u, device_memory), Status::not_supported);
       CHECK_EQ(device_memory, 0u);
       CHECK_EQ(fixture.ops().imported(), 1u);
       CHECK_EQ(fixture.ops().released(), 1u);   /* made, named nothing, and given back */
       CHECK_EQ(fixture.ops().live_imports(), 0u);
+      CHECK_STATUS(executor.import(3u, 41u, device_memory), Status::not_supported);   /* no memory under it */
+      CHECK_EQ(fixture.ops().imported(), 1u);
       executor.destroy();
   }); }
 
 TEST(context_executor_import, runs_on_a_worker)
 { Fixture fixture;
   std::uint64_t device_memory = 0u;
-  CHECK_STATUS(fixture.executor().import(1u, host_pointer(0u), device_memory), Status::invalid_state);
+  CHECK_STATUS(fixture.executor().import(1u, 40u, device_memory), Status::invalid_state);
   fixture.executor().release(1u);
   CHECK(fixture.host().claim(HostViolation::worker_required));
   CHECK(fixture.host().claim(HostViolation::worker_required)); }

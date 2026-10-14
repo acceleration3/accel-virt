@@ -1,7 +1,7 @@
 /* The seam between the executor library and this host's own loaders. What is
  * asserted here is the contract every implementation of `HostApis` owes -
  * including the mock, which is what makes a host with no GPU, a host with two,
- * and a host whose OpenCL cannot import testable on a machine that is none of
+ * and a GPU with no memory source testable on a machine that is none of
  * those. */
 #include "device/abi/av_executor.h"
 #include "executor/host_apis.hpp"
@@ -23,7 +23,7 @@ constexpr std::uint8_t intel[16] = {0x86, 0x80, 0xa6, 0x46, 0x0c, 0, 0, 0, 0, 0x
  * was given and writes nothing else. */
 TEST(host_apis, gpu_uuid_fills_the_sixteen_bytes_it_was_given)
 { MockHostApis mock;
-  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   HostApis &apis = mock;
   CHECK_EQ(apis.gpu_count(), 1u);
 
@@ -38,7 +38,7 @@ TEST(host_apis, gpu_uuid_fills_the_sixteen_bytes_it_was_given)
  * failure the library can report, so neither may touch anything. */
 TEST(host_apis, an_index_nobody_has_leaves_the_destination_alone)
 { MockHostApis mock;
-  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   HostApis &apis = mock;
 
   std::uint8_t uuid[16];
@@ -46,20 +46,20 @@ TEST(host_apis, an_index_nobody_has_leaves_the_destination_alone)
   apis.gpu_uuid(1u, uuid);
   for (const std::uint8_t byte : uuid) CHECK_EQ(byte, std::uint8_t{0xCD});
   apis.gpu_uuid(0u, nullptr);
-
   CHECK_EQ(apis.sub_apis(1u), 0u);
-  CHECK_EQ(apis.import_kinds(1u, AV_EXECUTOR_SUB_API_VULKAN), 0u); }
+  CHECK(apis.memory_source(1u) == nullptr);
+  CHECK(apis.shares(1u) == nullptr);
+  CHECK(apis.surfaces(1u) == nullptr); }
 
-/* A sub-API value that is not one of the three the ABI defines imports
- * nothing, whatever the loader would have said. */
-TEST(host_apis, an_api_the_abi_does_not_define_imports_nothing)
+/* Every GPU the host has has a memory source unless its compositing context
+ * could not be opened; then it has none, and the guest maps nothing on it. */
+TEST(host_apis, a_gpu_has_a_memory_source_unless_its_context_would_not_open)
 { MockHostApis mock;
-  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, AV_BLOB_DMA_BUF,
-               AV_BLOB_DMA_BUF);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   HostApis &apis = mock;
-  CHECK_EQ(apis.import_kinds(0u, AV_EXECUTOR_SUB_API_VULKAN), std::uint32_t{AV_BLOB_HOST_POINTER});
-  CHECK_EQ(apis.import_kinds(0u, 0u), 0u);
-  CHECK_EQ(apis.import_kinds(0u, 8u), 0u); }
+  CHECK(apis.memory_source(0u) == &mock.source());
+  mock.withhold_memory_source();
+  CHECK(apis.memory_source(0u) == nullptr); }
 
 /* A host with no GPU at all answers zero rather than failing: the library still
  * loads and offers nothing. */
@@ -67,14 +67,15 @@ TEST(host_apis, a_host_with_no_gpu_answers_none)
 { MockHostApis mock;
   HostApis &apis = mock;
   CHECK_EQ(apis.gpu_count(), 0u);
-  CHECK_EQ(apis.sub_apis(0u), 0u); }
+  CHECK_EQ(apis.sub_apis(0u), 0u);
+  CHECK(apis.memory_source(0u) == nullptr); }
 
 /* HostApis::render_minor: -1 wherever the driver does not name a render node,
  * which is what the clock hold takes as "leave the clocks to the driver". The
  * mock's GPUs never name one, and an index nobody has cannot. */
 TEST(host_apis, a_gpu_whose_driver_names_no_render_node_answers_minus_one)
 { MockHostApis mock;
-  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  mock.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   HostApis &apis = mock;
   CHECK_EQ(apis.render_minor(0u), -1);
   CHECK_EQ(apis.render_minor(1u), -1);

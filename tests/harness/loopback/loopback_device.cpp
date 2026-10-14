@@ -43,7 +43,7 @@ void LoopbackDevice::realize(const AvExecutorOps &executor, const std::uint8_t *
     constexpr std::uint64_t nanoseconds_per_read = 1000u;
     host_.advance_clock_per_read(nanoseconds_per_read);
     host_.add_gpu(gpu);
-    host_.set_hostmem_size(64u << 20u);
+    host_.set_hostmem_size(hostmem_bytes);
     host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
         return static_cast<MockPlatform *>(context)->translate_physical(address, static_cast<std::size_t>(length));
     }, &guest_);

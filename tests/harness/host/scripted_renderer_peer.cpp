@@ -3,24 +3,21 @@
 #include "device/abi/av_executor.h"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
+#include "proto/renderer/allocate_memory_message.hpp"
+#include "proto/renderer/allocated_memory_message.hpp"
 #include "proto/renderer/reply_message.hpp"
 
 #include <cstring>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 namespace av {
 
-namespace {
-
-constexpr std::uint32_t no_import_kinds[ReadyMessage::lanes] = {};
-
-}  // namespace
-
 ScriptedRendererPeer::ScriptedRendererPeer(MockHost &host)
     : host_(host), datagrams_{}, delivered_(0u), answers_{}, first_(0u), queued_(0u), outcome_(Status::ok),
-      ready_(1u, AV_EXECUTOR_ABI_VERSION, AV_EXECUTOR_SUB_API_VULKAN, no_import_kinds), silent_(false),
+      ready_(1u, AV_EXECUTOR_ABI_VERSION, AV_EXECUTOR_SUB_API_VULKAN), silent_(false), refuse_memory_(false),
       dying_(false)
 {
 }
@@ -53,10 +50,25 @@ void ScriptedRendererPeer::deliver(const std::uint8_t *bytes, std::size_t length
         host_.renderer_gone();
         return;
     }
-    if (framed && !silent_) answer_request(header);
+    if (framed && !silent_) answer_request(header, bytes + RendererMessageHeader::encoded_size);
 }
 
-void ScriptedRendererPeer::answer_request(const RendererMessageHeader &header)
+void ScriptedRendererPeer::answer_memory(const RendererMessageHeader &header, const std::uint8_t *body)
+{
+    using Kind = RendererMessageHeader::Kind;
+    AllocateMemoryMessage asked;
+    if (asked.decode(body, header.body_length(), 0u) != Status::ok) return;
+    const AllocatedMemoryMessage answer = refuse_memory_ ? AllocatedMemoryMessage()
+                                                         : AllocatedMemoryMessage(AV_MEMORY_WRITE_BACK, asked.size());
+    const RendererMessageHeader  out(Kind::allocated_memory, AllocatedMemoryMessage::encoded_size, header.sequence());
+    std::uint8_t                 bytes[RendererMessageHeader::encoded_size + AllocatedMemoryMessage::encoded_size] = {};
+    if (out.encode(bytes, sizeof bytes) != Status::ok ||
+        answer.encode(bytes + RendererMessageHeader::encoded_size, AllocatedMemoryMessage::encoded_size) != Status::ok)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "the scripted memory answer does not encode");
+    push(bytes, sizeof bytes, answer.descriptors(), asked.size());
+}
+
+void ScriptedRendererPeer::answer_request(const RendererMessageHeader &header, const std::uint8_t *body)
 {
     using Kind = RendererMessageHeader::Kind;
     std::uint8_t bytes[RendererMessageHeader::encoded_size + max_body] = {};
@@ -67,6 +79,10 @@ void ScriptedRendererPeer::answer_request(const RendererMessageHeader &header)
                 Status::ok)
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "the scripted Ready does not encode");
         push(bytes, RendererMessageHeader::encoded_size + ReadyMessage::encoded_size, 0u);
+        return;
+    }
+    if (header.kind() == Kind::allocate_memory) {
+        answer_memory(header, body);
         return;
     }
     if (header.kind() == Kind::create_context || header.kind() == Kind::destroy_context ||
@@ -85,6 +101,12 @@ bool ScriptedRendererPeer::answer(std::uint8_t *buffer, std::size_t capacity, st
     length = next.length < capacity ? next.length : capacity;
     std::memcpy(buffer, next.bytes, length);
     for (std::uint32_t index = 0u; index < next.descriptors && index < capacity_descriptors; index++) {
+        if (next.memory_size != 0u) {
+            const int memory = ::memfd_create("scripted renderer memory", MFD_CLOEXEC);
+            if (memory < 0 || ::ftruncate(memory, static_cast<off_t>(next.memory_size)) != 0) break;
+            descriptors[count++] = memory;
+            continue;
+        }
         int ends[2] = {-1, -1};
         if (::pipe2(ends, O_CLOEXEC) != 0) break;
         ::close(ends[1]);
@@ -93,7 +115,8 @@ bool ScriptedRendererPeer::answer(std::uint8_t *buffer, std::size_t capacity, st
     return true;
 }
 
-void ScriptedRendererPeer::push(const std::uint8_t *bytes, std::size_t length, std::uint32_t descriptors)
+void ScriptedRendererPeer::push(const std::uint8_t *bytes, std::size_t length, std::uint32_t descriptors,
+                                std::uint64_t memory_size)
 {
     if (queued_ == max_queued || length > sizeof answers_[0].bytes) {
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "the scripted answer does not fit");
@@ -103,6 +126,7 @@ void ScriptedRendererPeer::push(const std::uint8_t *bytes, std::size_t length, s
     std::memcpy(slot.bytes, bytes, length);
     slot.length = length;
     slot.descriptors = descriptors < max_attached ? descriptors : max_attached;
+    slot.memory_size = memory_size;
     queued_++;
 }
 
@@ -139,6 +163,7 @@ void ScriptedRendererPeer::queue_reply(std::uint64_t header_sequence, std::uint6
 
 void ScriptedRendererPeer::answer_requests_with(Status outcome) { outcome_ = outcome; }
 void ScriptedRendererPeer::ready_with(const ReadyMessage &ready) { ready_ = ready; }
+void ScriptedRendererPeer::refuse_memory() { refuse_memory_ = true; }
 void ScriptedRendererPeer::fall_silent() { silent_ = true; }
 void ScriptedRendererPeer::die_on_next_delivery() { dying_ = true; }
 std::uint32_t ScriptedRendererPeer::delivered() const { return delivered_; }

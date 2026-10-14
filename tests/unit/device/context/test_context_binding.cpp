@@ -4,6 +4,7 @@
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/context/ring_window.hpp"
+#include "harness/context/guest_blob_maker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -51,14 +52,14 @@ ContextSetup setup(std::uint32_t ring_id = ring, std::uint32_t fence_id = fence,
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), binding_(host_, blobs_)
+    Fixture() : blobs_(host_), maker_(host_, blobs_), binding_(host_, blobs_)
     {
         static_cast<void>(blobs_.initialize());
         host_.add_guest_ram(0x100000u, 0x1000u);
-        static_cast<void>(blobs_.create_host(ring, 0x2000u));
-        static_cast<void>(blobs_.create_host(fence, 0x1000u));
-        static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
-        static_cast<void>(blobs_.create_host(reply, 0x1000u));
+        CHECK_STATUS(maker_.create(ring, 0x2000u), Status::ok);
+        CHECK_STATUS(maker_.create(fence, 0x1000u), Status::ok);
+        CHECK_STATUS(maker_.create(small_ring, 0x1000u), Status::ok);
+        CHECK_STATUS(maker_.create(reply, 0x1000u), Status::ok);
         GpuRequestBuilder entries(0u);
         entries.u64(0x100000u).u32(48u).u32(0u);
         MockRequest    mock(entries.bytes(), entries.size());
@@ -67,12 +68,14 @@ public:
     }
 
     MockHost       &host() { return host_; }
+    av::GuestBlobMaker &maker() { return maker_; }
     BlobTable      &blobs() { return blobs_; }
     ContextBinding &binding() { return binding_; }
 
 private:
     MockHost       host_;
     BlobTable      blobs_;
+    av::GuestBlobMaker maker_;
     ContextBinding binding_;
 };
 
@@ -164,8 +167,9 @@ TEST(context_binding, lets_go_of_its_blobs_when_destroyed)
 { MockHost host;
   BlobTable blobs(host);
   CHECK_STATUS(blobs.initialize(), Status::ok);
-  CHECK_STATUS(blobs.create_host(ring, 0x2000u), Status::ok);
-  CHECK_STATUS(blobs.create_host(fence, 0x1000u), Status::ok);
+  av::GuestBlobMaker maker(host, blobs);
+  CHECK_STATUS(maker.create(ring, 0x2000u), Status::ok);
+  CHECK_STATUS(maker.create(fence, 0x1000u), Status::ok);
   { ContextBinding binding(host, blobs);
     CHECK_STATUS(binding.bind(setup(), capset()), Status::ok); }
   CHECK_STATUS(blobs.release(ring), Status::ok);

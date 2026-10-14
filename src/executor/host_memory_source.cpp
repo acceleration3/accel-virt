@@ -6,6 +6,8 @@
 #include "device/abi/av_executor.h"
 #include "executor/memory_exporter.hpp"
 
+#include <unistd.h>
+
 namespace av {
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
@@ -63,19 +65,17 @@ uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[
     AV_SCOPE("HostMemorySource::choices");
     uint32_t found[most_choices] = {HostMemoryRequest::memory_types, HostMemoryRequest::memory_types,
                                     HostMemoryRequest::memory_types};
-    switch (request.kind()) {
-    case HostMemoryRequest::Kind::vulkan:
+    /* The request was judged valid, so a kind that is neither of the first
+     * two is readback. */
+    if (request.kind() == HostMemoryRequest::Kind::vulkan) {
         if ((mappable_ & (1u << request.vulkan_type())) != 0u) found[0] = request.vulkan_type();
-        break;
-    case HostMemoryRequest::Kind::upload:
+    } else if (request.kind() == HostMemoryRequest::Kind::upload) {
         found[0] = first_type(device_local, host_cached);
         found[1] = first_type(0u, device_local | host_cached);
         found[2] = first_type(0u, 0u);
-        break;
-    case HostMemoryRequest::Kind::readback:
+    } else {
         found[0] = first_type(host_cached, 0u);
         found[1] = first_type(0u, 0u);
-        break;
     }
     uint32_t count = 0u;
     for (const uint32_t type : found) {
@@ -108,6 +108,8 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     const uint32_t caching = (exporter_.memory_flags(type) & host_cached) != 0u ? AV_MEMORY_WRITE_BACK
                                                                                : AV_MEMORY_WRITE_COMBINED;
     if (shared < 0 || memories_.create(made, domain, key, type, caching, exported) != Status::ok) {
+        /* The descriptor shared for the caller is nobody's if the memory is. */
+        if (shared >= 0) close(shared);
         exporter_.free(exported);
         return Status::no_memory;
     }

@@ -13,6 +13,9 @@
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/memory/host_blob_table.hpp"
+#include "harness/context/guest_blob_maker.hpp"
+#include "harness/context/recording_context_plane.hpp"
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
@@ -21,7 +24,8 @@
 #include "harness/host/mock_request.hpp"
 #include "harness/context/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
-#include "proto/context/context_resources.hpp"
+#include "proto/resources/host_blob_id.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -95,14 +99,17 @@ ContextSetup setup(std::uint32_t doorbell = 3u, std::uint32_t reply_id = 0u)
     return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, ring, 12u, fence, doorbell, reply_id);
 }
 
-/* A guest-backed ring the test writes as the guest, and a host fence blob. */
+/* A guest-backed ring the test writes as the guest, a fence page and a reply
+ * slot, and the device's host blobs allocated through the mock library. */
 class Fixture {
 public:
     Fixture()
-        : blobs_(host_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
-          shares_(host_, library_), recorder_(host_), ordering_(host_),
-          context_(host_, blobs_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
+        : blobs_(host_), maker_(host_, blobs_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
+          shares_(host_, library_), recorder_(host_), ordering_(host_), plane_(), host_blobs_(host_),
+          context_(host_, blobs_, host_blobs_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
     {
+        plane_.allocate_through(library_);
+        static_cast<void>(host_blobs_.initialize(plane_));
         static_cast<void>(ordering_.initialize());
         static_cast<void>(blobs_.initialize());
         static_cast<void>(shares_.initialize());
@@ -114,8 +121,8 @@ public:
         MockRequest    mock(entries.bytes(), entries.size());
         ControlRequest request(host_, &mock);
         static_cast<void>(blobs_.create_guest(ring, 0x2000u, request, 24u, 1u));
-        static_cast<void>(blobs_.create_host(fence, 0x1000u));
-        static_cast<void>(blobs_.create_host(reply, 0x1000u));
+        static_cast<void>(maker_.create(fence, 0x1000u));
+        static_cast<void>(maker_.create(reply, 0x1000u));
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
         static_cast<void>(context_.start());
@@ -125,6 +132,7 @@ public:
     av::WireRecorder &recorder() { return recorder_; }
     av::MockExecutorOps &ops() { return ops_; }
     BlobTable     &blobs() { return blobs_; }
+    av::HostBlobTable &host_blobs() { return host_blobs_; }
     DeviceContext &context() { return context_; }
     GuestRing      guest() { return GuestRing(host_.guest_ram(ram), 12u); }
     std::uint8_t  *ring_bytes() { return host_.guest_ram(ram); }
@@ -158,12 +166,15 @@ private:
     /* Declared before the context, which unpins its blobs as it goes. */
     MockHost            host_;
     BlobTable           blobs_;
+    av::GuestBlobMaker  maker_;
     av::FenceInterrupts interrupts_;
     av::MockExecutorOps ops_;
     av::ExecutorLibrary library_;
     av::ExecutorShares  shares_;
     av::WireRecorder    recorder_;
     av::D3dOrdering     ordering_;
+    av::RecordingContextPlane plane_;
+    av::HostBlobTable   host_blobs_;
     DeviceContext       context_;
 };
 
@@ -331,41 +342,55 @@ TEST(device_context, destroying_a_bound_context_disconnects_before_the_worker_go
    * doorbell is connected, or a doorbell outlives the context. */
 }
 
-/* The setup names the context's resources from its ring, so the chunk three ids
- * past it is the context's to import - and a guest blob there imports through
- * the ring like any command (feature 045). */
-TEST(device_context_bind, a_bound_context_imports_the_chunk_after_its_transport_resources)
+/* A host blob made for this context imports through the ring like any
+ * command (docs/host-memory.md); one made for another context does not, and
+ * the guest releasing the blob leaves the import holding its memory. */
+std::uint8_t *import_through_ring(Fixture &fixture, GuestRing &guest, std::uint32_t resource,
+                                  std::uint8_t (&answer)[32u + av::BlobImportAnswer::encoded_size])
+{
+    std::uint8_t batch[8u + av::BlobImportRequest::encoded_size] = {};
+    CHECK_STATUS(av::CommandHeader(av::CommandHeader::import_blob_id, sizeof batch, av::CommandHeader::generate_reply)
+                     .encode(batch, 8u),
+                 Status::ok);
+    CHECK_STATUS(av::BlobImportRequest(resource).encode(batch + 8u, av::BlobImportRequest::encoded_size), Status::ok);
+    guest.write_batch(guest.tail() / 8u + 1u, batch, sizeof batch);
+    guest.publish();
+    CHECK(fixture.host().ring_doorbell(3u));
+    CHECK(fixture.published(guest.tail()));
+    av::BlobWindow window;
+    CHECK_STATUS(fixture.blobs().window(reply, window), Status::ok);
+    CHECK_STATUS(window.read(0u, answer, sizeof answer), Status::ok);
+    return answer + 32u;
+}
+
+TEST(device_context_bind, a_bound_context_imports_a_host_blob_made_for_it_and_no_other)
 { Fixture fixture;
-  constexpr std::uint64_t chunk_ram = 0x400000u;
-  fixture.host().add_guest_ram(chunk_ram, 0x1000u);
-  GpuRequestBuilder entries(0u);
-  entries.u64(chunk_ram).u32(0x1000u).u32(0u);
-  MockRequest    mock(entries.bytes(), entries.size());
-  ControlRequest request(fixture.host(), &mock);
-  const std::uint32_t chunk = av::ContextResources(ring).chunk(0u);
-  CHECK_STATUS(fixture.blobs().create_guest(chunk, 0x1000u, request, 24u, 1u), Status::ok);
+  const std::uint32_t mine = av::HostBlobId::first;
+  const std::uint32_t theirs = av::HostBlobId::first + 1u;
+  const av::HostMemoryRequest upload(av::HostMemoryRequest::Kind::upload, 0u);
+  CHECK_STATUS(fixture.host_blobs().create(mine, 5u, upload, 0x1000u), Status::ok);
+  CHECK_STATUS(fixture.host_blobs().create(theirs, 6u, upload, 0x1000u), Status::ok);
   GuestRing guest = fixture.guest();
   CHECK_STATUS(fixture.context().bind(setup(3u, reply), capset()), Status::ok);
-  std::uint8_t batch[8u + av::BlobImportRequest::encoded_size] = {};
-  CHECK_STATUS(av::CommandHeader(av::CommandHeader::import_blob_id, sizeof batch, av::CommandHeader::generate_reply)
-                   .encode(batch, 8u),
-               Status::ok);
-  CHECK_STATUS(av::BlobImportRequest(chunk, 0u, 0x1000u, 2u).encode(batch + 8u, av::BlobImportRequest::encoded_size),
-               Status::ok);
-  guest.write_batch(1u, batch, sizeof batch);
-  guest.publish();
-  CHECK(fixture.host().ring_doorbell(3u));
-  CHECK(fixture.published(guest.tail()));
-  av::BlobWindow window;
-  CHECK_STATUS(fixture.blobs().window(reply, window), Status::ok);
-  std::uint8_t answer[32u + av::BlobImportAnswer::encoded_size] = {};
-  CHECK_STATUS(window.read(0u, answer, sizeof answer), Status::ok);
+  std::uint8_t         answer[32u + av::BlobImportAnswer::encoded_size] = {};
   av::BlobImportAnswer imported;
-  CHECK_STATUS(imported.decode(answer + 32u, av::BlobImportAnswer::encoded_size), Status::ok);
+  CHECK_STATUS(imported.decode(import_through_ring(fixture, guest, theirs, answer), av::BlobImportAnswer::encoded_size),
+               Status::ok);
+  CHECK_EQ(imported.status(), av::BlobImportAnswer::unknown_resource);
+  CHECK_EQ(fixture.ops().live_imports(), 0u);
+  CHECK_STATUS(imported.decode(import_through_ring(fixture, guest, mine, answer), av::BlobImportAnswer::encoded_size),
+               Status::ok);
   CHECK_EQ(imported.status(), av::BlobImportAnswer::imported);
   CHECK_EQ(imported.device_memory(), 1u | av::MockExecutorOps::handle_bit);
   CHECK_EQ(fixture.ops().live_imports(), 1u);
-  CHECK_STATUS(fixture.blobs().release(chunk), Status::invalid_state); }
+  std::uint64_t key = 0u;
+  CHECK(fixture.ops().import_of(1u, key));
+  CHECK_EQ(key, mine);
+  /* The guest lets go of the blob; the import keeps its memory alive. */
+  CHECK_STATUS(fixture.host_blobs().release(mine), Status::ok);
+  CHECK_STATUS(fixture.host_blobs().release(theirs), Status::ok);
+  CHECK_EQ(fixture.ops().held_memory(), 0u);
+  CHECK_EQ(fixture.ops().live_memory(), 1u); }
 
 /* Feature 050: the options a setup carries are what the worker's executor is
  * made with; options the library cannot make bind nothing. */

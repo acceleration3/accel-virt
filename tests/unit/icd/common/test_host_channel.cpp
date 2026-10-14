@@ -17,6 +17,9 @@
 #include "harness/platform/mock_platform.hpp"
 #include "icd/common/host_channel.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/resources/host_memory_request.hpp"
+#include "proto/submission/blob_import_answer.hpp"
+#include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -41,6 +44,8 @@ struct KmtTransportProbe {
 }  // namespace av
 
 using av::GuestConnection;
+using av::HostAllocation;
+using av::HostMemoryRequest;
 using av::KmtBlobArena;
 using av::KmtTransportProbe;
 using av::MockKmt;
@@ -83,6 +88,7 @@ public:
     Rig() : kmt_(), platform_(), connection_(kmt_), host_(kmt_), log_(), linked_(0u)
     {
         kmt_.add_adapter(avgpu, 3200u);
+        kmt_.open_host_window(MockKmt::rig_window_bytes);
         std::uint32_t adapter = 0u, count = 0u;
         CHECK_STATUS(kmt_.enumerate_adapters(&adapter, 1u, count), Status::ok);
         CHECK_STATUS(connection_.open(adapter), Status::ok);
@@ -218,8 +224,7 @@ TEST(host_channel, a_lost_channel_closes_without_asking_the_host_anything)
   rig.check_nothing_held(channel);
   CHECK_EQ(rig.log().lines(), 0u); }
 
-/* Each size is the host window's when it has room and guest RAM's when not;
- * one neither can hold is asked again at half the size. */
+/* An arena the device refuses is asked again at half the size. */
 TEST(host_channel, an_arena_the_device_refuses_is_asked_again_at_half_the_size)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching());
@@ -366,3 +371,146 @@ TEST(host_channel, a_transport_no_open_made_is_an_open_channel_with_no_staging)
   CHECK(!channel.invariants_hold());
   probe.drop_transport();
   rig.check_nothing_held(channel); }
+
+/* A window with no room for the shape's size holds half of it; a device with
+ * no window at all, or none with room for the least, opens the channel with
+ * its bulk data inline - nothing falls back to guest RAM. */
+TEST(host_channel, the_window_decides_the_arena_and_none_leaves_bulk_data_inline)
+{ { Rig rig;
+    rig.kmt().open_host_window(KmtBlobArena::default_bytes);
+    HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching());
+    rig.host().blob_import(0u, imported_memory);
+    CHECK_STATUS(channel.open(rig.device()), Status::ok);
+    CHECK_EQ(channel.arena_bytes(), KmtBlobArena::default_bytes);
+    CHECK(channel.arena_view() == rig.kmt().window_base());
+    rig.host().nop();
+    channel.close(false);
+    rig.check_nothing_held(channel); }
+  const std::uint64_t windows[] = {0u, KmtBlobArena::default_bytes - 4096u};
+  for (const std::uint64_t window : windows) {
+      Rig rig;
+      rig.kmt().open_host_window(window);
+      HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching());
+      CHECK_STATUS(channel.open(rig.device()), Status::ok);
+      CHECK(channel.arena_view() == nullptr);
+      CHECK_EQ(rig.kmt().commands(), 0u);   /* nothing was imported */
+      CHECK_EQ(rig.log().holding("avtest: no blob arena for the context; bulk data crosses inline"), 1u);
+      CHECK(rig.send(channel.batched()) == TransportResult::ok);
+      channel.close(false);
+      rig.check_nothing_held(channel);
+  } }
+
+namespace {
+
+constexpr std::uint64_t first_memory = 0x0000700000000001ull;
+constexpr std::uint64_t second_memory = 0x0000700000000002ull;
+const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
+
+}  // namespace
+
+/* Each object's host memory is an allocation of its own the channel keeps:
+ * opened and imported on the channel's context, found by the handle the host
+ * named it, and closed import first. */
+TEST(host_channel_memory, opens_finds_and_closes_an_allocation_per_object)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.log(), "avtest: ", plain());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  CHECK_EQ(channel.memories(), 0u);
+  HostAllocation *first = nullptr;
+  HostAllocation *second = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(3u * 4096u, upload, first), Status::ok);
+  rig.host().blob_import(0u, second_memory);
+  CHECK_STATUS(channel.open_memory(4096u, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, 2u), second),
+               Status::ok);
+  CHECK(first != nullptr && second != nullptr && first != second);
+  CHECK_EQ(channel.memories(), 2u);
+  CHECK_EQ(first->bytes(), 3u * 4096u);
+  CHECK_EQ(first->handle(), first_memory);
+  CHECK(first->view() == rig.kmt().window_base());
+  CHECK(second->view() == rig.kmt().window_base() + 3u * 4096u);
+  CHECK_EQ(rig.kmt().last_window_request().vulkan_type(), 2u);
+  CHECK(channel.find_memory(first_memory) == first);
+  CHECK(channel.find_memory(second_memory) == second);
+  CHECK(channel.find_memory(first_memory + 7u) == nullptr);
+  CHECK(channel.find_memory(0u) == nullptr);
+  rig.host().nop();
+  CHECK_STATUS(channel.close_memory(*first), Status::ok);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::CommandHeader::release_blob_id);
+  CHECK_EQ(channel.memories(), 1u);
+  CHECK(channel.find_memory(first_memory) == nullptr);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  /* What the channel does not keep is not its to close. */
+  HostAllocation stranger(rig.device(), channel.transport());
+  CHECK_STATUS(channel.close_memory(stranger), Status::invalid_parameter);
+  CHECK_EQ(channel.memories(), 1u);
+  /* The channel's own close lets go of what is left, import first. */
+  rig.host().nop();
+  channel.close(false);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_EQ(rig.log().lines(), 0u);
+  rig.check_nothing_held(channel); }
+
+/* Nothing is kept of an allocation that did not open, and a channel that is
+ * closed or faulted opens none. */
+TEST(host_channel_memory, a_refusal_keeps_nothing_and_a_closed_or_faulted_channel_opens_none)
+{ Rig rig;
+  HostChannel     channel(rig.platform(), rig.log(), "avtest: ", plain());
+  HostAllocation *made = reinterpret_cast<HostAllocation *>(&rig);
+  CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::invalid_state);
+  CHECK(made == nullptr);
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  rig.host().blob_import(av::BlobImportAnswer::executor_refused, 0u);
+  CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::invalid_parameter);
+  CHECK(made == nullptr);
+  CHECK_EQ(channel.memories(), 0u);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_STATUS(channel.open_memory(4096u, HostMemoryRequest(), made), Status::invalid_parameter);
+  CHECK_EQ(channel.memories(), 0u);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::no_memory);
+  CHECK_EQ(rig.kmt().window_opens(), 1u);   /* only the refused import's chunk was ever opened */
+  WireWriter writer = channel.transport().request_writer();
+  WireReader reply(nullptr, 0u);
+  CHECK(channel.transport().send_sync(command_id, writer, reply) != TransportResult::ok);
+  CHECK(channel.faulted());
+  CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::invalid_state);
+  channel.close(true);
+  rig.check_nothing_held(channel); }
+
+/* A lost channel abandons what it keeps - the host frees it with the context
+ * - and so does closing one allocation on a faulted channel: no release is
+ * sent, and the kernel's refusal of a chunk's close is logged. */
+TEST(host_channel_memory, a_lost_channel_abandons_its_memory_without_asking_the_host)
+{ { Rig rig;
+    HostChannel channel(rig.platform(), rig.log(), "avtest: ", plain());
+    CHECK_STATUS(channel.open(rig.device()), Status::ok);
+    HostAllocation *made = nullptr;
+    rig.host().blob_import(0u, first_memory);
+    CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::ok);
+    HostAllocation *other = nullptr;
+    rig.host().blob_import(0u, second_memory);
+    CHECK_STATUS(channel.open_memory(4096u, upload, other), Status::ok);
+    WireWriter writer = channel.transport().request_writer();
+    WireReader reply(nullptr, 0u);
+    CHECK(channel.transport().send_sync(command_id, writer, reply) != TransportResult::ok);
+    const std::uint32_t sent = rig.kmt().commands();
+    CHECK_STATUS(channel.close_memory(*made), Status::ok);
+    CHECK_EQ(channel.memories(), 1u);
+    channel.close(true);
+    CHECK_EQ(rig.kmt().commands(), sent);
+    CHECK_EQ(rig.log().lines(), 0u);
+    rig.check_nothing_held(channel); }
+  { Rig rig;
+    HostChannel channel(rig.platform(), rig.log(), "avtest: ", plain());
+    CHECK_STATUS(channel.open(rig.device()), Status::ok);
+    HostAllocation *made = nullptr;
+    rig.host().blob_import(0u, first_memory);
+    CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::ok);
+    rig.host().nop();
+    rig.kmt().fail_at(MockKmt::Call::escape, 1u, 0xC0000001u);
+    channel.close(false);
+    CHECK_EQ(rig.log().holding("avtest: host memory did not close whole"), 1u);
+    CHECK_EQ(channel.memories(), 0u);
+    CHECK(!channel.opened()); } }
+

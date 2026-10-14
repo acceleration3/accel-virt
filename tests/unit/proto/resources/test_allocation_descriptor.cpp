@@ -195,7 +195,7 @@ TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
   /* 18 to 20 were a context's fence page and reply slot and a chunk of its
    * guest RAM, all the driver's own memory now (docs/protocol.md, "Context
    * memory"); 21 was host memory VidMm placed in a CPU-visible segment, which
-   * is gone (docs/host-window.md). A stale client asking for any is refused. */
+   * is gone (docs/host-memory.md). A stale client asking for any is refused. */
   const std::uint16_t pasts[] = {18u, 19u, 20u, 21u, 22u};
   for (std::uint16_t past : pasts) {
       std::memcpy(bytes + 4u, &past, sizeof past);

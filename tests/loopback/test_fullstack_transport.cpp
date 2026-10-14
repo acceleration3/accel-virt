@@ -18,6 +18,7 @@
 #include "proto/client/client_transport.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/escape/host_window_record.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -38,6 +39,7 @@ using av::DdiSlot;
 using av::DdiTable;
 using av::FullStackRig;
 using av::GuestConnection;
+using av::HostMemoryRequest;
 using av::HostWindowRecord;
 using av::KmtTransport;
 using av::KmtTransportProbe;
@@ -207,9 +209,10 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 
 /* A process takes a chunk of its device's host window through the real driver
- * and the real device core (docs/host-window.md): a host blob of the context's
- * own range, placed at the window's first page, and the process's view of it.
- * Giving it back takes all three away again. */
+ * and the real device core (docs/host-memory.md): a host blob of executor
+ * memory made for its context, placed at the window's first page, and the
+ * process's view of it. Giving it back takes all three away again, and the
+ * executor's memory with them. */
 TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -224,52 +227,66 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK_EQ(rig.device().device().blobs(), 3u);
+  MockExecutorOps &executor = rig.device().executor();
+  const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
 
   std::uint8_t bytes[HostWindowRecord::encoded_size] = {};
-  HostWindowRecord open(HostWindowRecord::Operation::open, 0xF800u, 0u);
+  HostWindowRecord open(HostWindowRecord::Operation::open, 0xF800u, 0u, upload);
   CHECK_STATUS(open.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(open.accept_answer(bytes, sizeof bytes), Status::ok);
   CHECK(open.resource_id() != 0u);
   CHECK_EQ(open.bytes(), 0x10000u);
   CHECK(open.address() != 0u);
-  CHECK_EQ(rig.device().device().blobs(), 4u);
+  /* A host blob, not a guest one: the executor holds its memory, asked for
+   * as the process asked, under the blob's own id. */
+  CHECK_EQ(rig.device().device().blobs(), 3u);
+  CHECK_EQ(executor.held_memory(), 1u);
+  CHECK_EQ(executor.last_memory_request().key, std::uint64_t{open.resource_id()});
+  CHECK_EQ(executor.last_memory_request().size, 0x10000u);
+  CHECK_EQ(executor.last_memory_request().request, upload.encoded());
   CHECK(rig.device().host().placed_at(0u) != nullptr);
+  CHECK_EQ(rig.device().host().live_placements(), 1u);
   CHECK_EQ(rig.platform().process_mappings(), 4u);   /* and the context's ring, reply slot and fence page */
-  /* The process's view is the host's memory: what it writes, the host reads. */
+  /* The process's view is the executor's memory: what it writes, the host reads. */
   auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
   view[0] = 0x5Au;
   view[0xF7FFu] = 0xA5u;
-  CHECK_EQ(static_cast<const std::uint8_t *>(rig.device().host().placed_at(0u))[0], 0x5Au);
-  CHECK_EQ(static_cast<const std::uint8_t *>(rig.device().host().placed_at(0u))[0xF7FFu], 0xA5u);
+  const std::uint8_t *const host = executor.memory_bytes(executor.last_opened_domain(), open.resource_id());
+  CHECK(host != nullptr);
+  CHECK_EQ(host[0], 0x5Au);
+  CHECK_EQ(host[0xF7FFu], 0xA5u);
 
-  HostWindowRecord close(HostWindowRecord::Operation::close, 0u, open.resource_id());
+  HostWindowRecord close(HostWindowRecord::Operation::close, 0u, open.resource_id(), HostMemoryRequest());
   CHECK_STATUS(close.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK(rig.device().host().placed_at(0u) == nullptr);
+  CHECK_EQ(rig.device().host().live_placements(), 0u);
+  CHECK_EQ(executor.held_memory(), 0u);
+  CHECK_EQ(executor.live_memory(), 0u);
   CHECK_EQ(rig.platform().process_mappings(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
 
   /* One left open is closed with its context. */
-  HostWindowRecord again(HostWindowRecord::Operation::open, 0x1000u, 0u);
+  HostWindowRecord again(HostWindowRecord::Operation::open, 0x1000u, 0u, upload);
   CHECK_STATUS(again.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK_EQ(executor.held_memory(), 1u);
   transport.teardown();
   connection.close();
   CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK_EQ(executor.held_memory(), 0u);
+  CHECK_EQ(rig.device().host().live_placements(), 0u);
   CHECK_EQ(rig.platform().process_mappings(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }
 
 /* DdiKmt's escape is DxgkDdiEscape as dxgkrnl calls it: the driver's device and
  * context, a kernel copy of the record copied back out. A chunk larger than the
- * whole window is guest RAM the driver owns instead, a GUEST blob of the
- * context's own range the device imports, and the process's view is that
- * memory; the close gives the blob back. Handles the process never had, and
- * data that is no record, are refused. */
-TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_guest_ram_through_the_real_driver)
+ * whole window is refused - nothing falls back to guest RAM - with nothing
+ * asked of the host; handles the process never had, and data that is no
+ * record, are refused too. */
+TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_refused_through_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
   DdiKmt &kmt = rig.kmt();
@@ -283,10 +300,12 @@ TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_guest_ram_through_th
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   const std::uint32_t mapped = rig.device().host().live_guest_mappings();
-  const std::uint64_t chunk_bytes = FullStackRig::hostmem_bytes + 0x1000u;
+  MockExecutorOps    &executor = rig.device().executor();
+  const std::uint32_t asked = executor.memory_allocations();
 
   std::uint8_t bytes[HostWindowRecord::encoded_size] = {};
-  HostWindowRecord open(HostWindowRecord::Operation::open, chunk_bytes, 0u);
+  HostWindowRecord open(HostWindowRecord::Operation::open, FullStackRig::hostmem_bytes + 0x1000u, 0u,
+                        HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u));
   CHECK_STATUS(open.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context() + 1u, bytes, sizeof bytes),
                Status::invalid_parameter);
@@ -294,27 +313,31 @@ TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_guest_ram_through_th
                Status::invalid_parameter);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), nullptr, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_EQ(rig.device().device().blobs(), 3u);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
+               Status::invalid_parameter);
+  CHECK_EQ(executor.memory_allocations(), asked);
+  CHECK_EQ(executor.held_memory(), 0u);
+  CHECK_EQ(rig.device().host().live_placements(), 0u);
+  CHECK_EQ(rig.device().host().live_guest_mappings(), mapped);
+  CHECK_EQ(rig.platform().process_mappings(), 3u);
+
+  /* The whole window fits, and is the window's: the refusal was the size. */
+  HostWindowRecord whole(HostWindowRecord::Operation::open, FullStackRig::hostmem_bytes, 0u,
+                         HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u));
+  CHECK_STATUS(whole.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
-  CHECK_STATUS(open.accept_answer(bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(open.bytes(), chunk_bytes);
-  CHECK(open.resource_id() != 0u);
-  CHECK(rig.device().host().placed_at(0u) == nullptr);   /* nothing of the window */
-  CHECK_EQ(rig.device().device().blobs(), 4u);
-  CHECK(rig.device().host().live_guest_mappings() > mapped);
-  CHECK_EQ(rig.platform().process_mappings(), 4u);
-  auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
-  view[chunk_bytes - 1u] = 0x5Au;
-  CHECK_EQ(view[chunk_bytes - 1u], 0x5Au);
+  CHECK_STATUS(whole.accept_answer(bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(whole.bytes(), FullStackRig::hostmem_bytes);
+  CHECK(rig.device().host().placed_at(0u) != nullptr);
 
   std::uint8_t foreign[HostWindowRecord::encoded_size] = {'N', 'O', 'P', 'E'};
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), foreign, sizeof foreign),
                Status::not_supported);
-  HostWindowRecord close(HostWindowRecord::Operation::close, 0u, open.resource_id());
+  HostWindowRecord close(HostWindowRecord::Operation::close, 0u, whole.resource_id(), HostMemoryRequest());
   CHECK_STATUS(close.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(rig.device().device().blobs(), 3u);
-  CHECK_EQ(rig.device().host().live_guest_mappings(), mapped);
+  CHECK_EQ(rig.device().host().live_placements(), 0u);
+  CHECK_EQ(executor.held_memory(), 0u);
   CHECK_EQ(rig.platform().process_mappings(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);

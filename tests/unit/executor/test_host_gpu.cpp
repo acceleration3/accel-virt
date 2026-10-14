@@ -1,6 +1,6 @@
 /* One host GPU, as the executor library sees it. What is asserted is what a
- * backend would act on: the name the device uses, what it may run, and what it
- * may be handed without a copy. */
+ * backend would act on: the name the device uses, what it may run, and where
+ * it sat in the host's enumeration. */
 #include "device/abi/av_executor.h"
 #include "executor/host_gpu.hpp"
 #include "harness/executor/mock_host_apis.hpp"
@@ -25,8 +25,7 @@ constexpr std::uint32_t all_three =
 
 TEST(host_gpu, answers_the_name_the_device_uses_and_what_it_runs)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF, AV_BLOB_DMA_BUF,
-               AV_BLOB_DMA_BUF);
+  apis.add_gpu(intel, all_three);
   HostGpu gpu;
   gpu.describe(apis, 0u);
   CHECK(gpu.matches(intel));
@@ -35,41 +34,18 @@ TEST(host_gpu, answers_the_name_the_device_uses_and_what_it_runs)
   CHECK_EQ(gpu.index(), 0u);
   CHECK(gpu.invariants_hold()); }
 
-/* The measured asymmetry this whole design exists for: Vulkan takes a host
- * pointer where OpenGL and OpenCL take nothing. */
-TEST(host_gpu, import_kinds_differ_per_api_on_one_gpu)
+/* The index is where the GPU sat, which is what a backend opens it by again. */
+TEST(host_gpu, remembers_where_it_sat_in_the_enumeration)
 { MockHostApis apis;
-  apis.add_gpu(nvidia, all_three, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_OPENGL);
   HostGpu gpu;
-  gpu.describe(apis, 0u);
-  CHECK_EQ(gpu.import_kinds(AV_EXECUTOR_SUB_API_VULKAN), std::uint32_t{AV_BLOB_HOST_POINTER});
-  CHECK_EQ(gpu.import_kinds(AV_EXECUTOR_SUB_API_OPENGL), 0u);
-  CHECK_EQ(gpu.import_kinds(AV_EXECUTOR_SUB_API_OPENCL), 0u);
+  gpu.describe(apis, 1u);
+  CHECK(gpu.matches(nvidia));
+  CHECK(!gpu.matches(intel));
+  CHECK_EQ(gpu.sub_apis(), std::uint32_t{AV_EXECUTOR_SUB_API_OPENGL});
+  CHECK_EQ(gpu.index(), 1u);
   CHECK(gpu.invariants_hold()); }
-
-/* A sub-API this GPU cannot run imports nothing, whatever a loader would say
- * if asked - and it is not asked. */
-TEST(host_gpu, an_api_it_cannot_run_imports_nothing)
-{ MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, AV_BLOB_DMA_BUF,
-               AV_BLOB_DMA_BUF);
-  HostGpu gpu;
-  gpu.describe(apis, 0u);
-  CHECK_EQ(gpu.sub_apis(), std::uint32_t{AV_EXECUTOR_SUB_API_VULKAN});
-  CHECK_EQ(gpu.import_kinds(AV_EXECUTOR_SUB_API_OPENGL), 0u);
-  CHECK(gpu.invariants_hold()); }
-
-/* A value that is not one of the three bits, which is what a hostile or a
- * newer device could name. */
-TEST(host_gpu, an_api_nobody_defined_imports_nothing)
-{ MockHostApis apis;
-  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER, AV_BLOB_DMA_BUF, AV_BLOB_DMA_BUF);
-  HostGpu gpu;
-  gpu.describe(apis, 0u);
-  CHECK_EQ(gpu.import_kinds(0u), 0u);
-  CHECK_EQ(gpu.import_kinds(8u), 0u);
-  CHECK_EQ(gpu.import_kinds(AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENGL), 0u); }
-
 
 TEST(host_gpu, a_gpu_nobody_asked_about_matches_nothing)
 { HostGpu gpu;
@@ -78,12 +54,19 @@ TEST(host_gpu, a_gpu_nobody_asked_about_matches_nothing)
   CHECK_EQ(gpu.sub_apis(), 0u);
   CHECK(gpu.invariants_hold()); }
 
-/* An import kind for an API the GPU does not run is an offer of zero-copy to a
- * context that could never be opened, which is what the capset must not carry. */
-TEST(host_gpu_invariants, an_import_kind_for_an_api_it_does_not_run_breaks_them)
-{ MockHostApis apis;
-  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER, 0u, AV_BLOB_DMA_BUF);
-  HostGpu gpu;
-  gpu.describe(apis, 0u);
+/* A GPU never described that claims to run something is one a context could
+ * be opened on with no device behind it. */
+TEST(host_gpu_invariants, an_undescribed_gpu_that_runs_something_breaks_them)
+{ HostGpu gpu;
   HostGpuProbe(gpu).set_sub_apis(AV_EXECUTOR_SUB_API_VULKAN);
   CHECK(!gpu.invariants_hold()); }
+
+/* Described, it may run anything or nothing. */
+TEST(host_gpu_invariants, a_described_gpu_holds_them_whatever_it_runs)
+{ MockHostApis apis;
+  apis.add_gpu(intel, 0u);
+  HostGpu gpu;
+  gpu.describe(apis, 0u);
+  CHECK(gpu.invariants_hold());
+  HostGpuProbe(gpu).set_sub_apis(all_three);
+  CHECK(gpu.invariants_hold()); }

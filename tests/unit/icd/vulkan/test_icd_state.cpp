@@ -128,7 +128,7 @@ TEST(icd_state, dumps_each_connection_with_its_handles_memory_and_batches)
   expected.append("\nconnection/0/handle/0 kind=instance host=0x0000000000001100 parent=none\n"
                   "connection/0/handle/1 kind=physical_device host=0x0000000000002200 parent=0\n"
                   "connection/0/handle/2 kind=device host=0x0000000000003300 parent=1\n"
-                  "connection/0/handle/2/memory/0 types_learnt=false chunks=0 placements=0\n"
+                  "connection/0/handle/2/memory/0 types_learnt=false host_allocations=0\n"
                   "connection/0/handle/3 kind=command_buffer host=0x0000000000007700 parent=2\n"
                   "connection/0/handle/3/batch/0 recorded=");
   expected.append_decimal(recorded);

@@ -51,11 +51,6 @@ public:
     uint32_t               max_contexts() const;
     const GpuIdentity     &gpu() const;
     bool                   offers(SubApi api) const;
-    /* Drops a feature this device turned out not to have after all: the
-     * executor is asked what it can import only once a library is loaded, and
-     * a bit already set from the host's own probe would otherwise promise what
-     * the library cannot do (feature 042). */
-    void                   withdraw(uint64_t feature);
     /* Adds a feature that could not be decided when the capset was described,
      * which is what feature_dmabuf_scanout is. */
     void                   announce(uint64_t feature);

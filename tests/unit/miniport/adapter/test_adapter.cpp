@@ -43,6 +43,8 @@
 #include "miniport/ddi/dxgkarg_escape_record.hpp"
 #include "miniport/av_context/av_context_binding.hpp"
 #include "proto/escape/host_window_record.hpp"
+#include "proto/resources/host_blob_id.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/escape/trace_escape_record.hpp"
 #include "miniport/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "miniport/ddi/dxgkarg_get_scan_line_record.hpp"
@@ -146,7 +148,7 @@ struct AdapterProbe {
      * device object exists and is not running, which is when an interrupt
      * dxgkrnl left connected must be left alone (feature 040, US1). */
     void stop_device_object() { static_cast<void>(adapter.device_.object().stop()); }
-    /* Whether window chunks may be placed now (docs/host-window.md). */
+    /* Whether window chunks may be placed now (docs/host-memory.md). */
     bool window_offered() const { return adapter.window_.offered(); }
     /* What a source shows after a flip. */
     std::uint64_t scanout(std::uint32_t source) { return adapter.sources_.scanout_address(source); }
@@ -375,7 +377,7 @@ public:
     /* A device with no room left for a window chunk's blob. */
     void                   refuse_the_blob() { refuse_blob_ = true; }
     /* MAP_BLOBs and UNMAP_BLOBs the device answered: window chunks placed and
-     * taken down (docs/host-window.md). */
+     * taken down (docs/host-memory.md). */
     std::uint32_t          blob_maps() const { return blob_maps_; }
     std::uint32_t          blob_unmaps() const { return blob_unmaps_; }
     /* A device that stops answering what it is. */
@@ -409,7 +411,7 @@ private:
          * the answers are told apart by what was asked (feature 040, FR-005). */
         const std::uint32_t asked = fixture->control().pending_type();
         /* A context's transport blobs, and a window chunk's host blob placed
-         * and taken down (docs/host-window.md). */
+         * and taken down (docs/host-memory.md). */
         if (asked == create_blob || asked == map_blob || asked == unmap_blob) {
             av::GpuResponse answer;
             if (fixture->refuse_blob_) {
@@ -5350,7 +5352,7 @@ TEST(adapter_escape, a_context_s_views_are_answered_in_the_private_data)
   CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* ---- the host window (docs/host-window.md) ---------------------------------------- */
+/* ---- the host window (docs/host-memory.md) ---------------------------------------- */
 
 namespace {
 
@@ -5383,8 +5385,9 @@ std::uint32_t window_escape(Fixture &fixture, void *context, const av::HostWindo
 
 using WindowOperation = av::HostWindowRecord::Operation;
 
-constexpr std::uint32_t first_chunk_resource =
-    av::AvContextBinding::first_resource_id + av::AvContextBinding::transport_resources;
+/* A chunk is a host blob, with an id of the device's host blob range. */
+constexpr std::uint32_t first_chunk_resource = av::HostBlobId::first;
+const av::HostMemoryRequest upload(av::HostMemoryRequest::Kind::upload, 0u);
 
 }  // namespace
 
@@ -5420,7 +5423,7 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
-  const av::HostWindowRecord open(WindowOperation::open, 0x2800u, 0u);
+  const av::HostWindowRecord open(WindowOperation::open, 0x2800u, 0u, upload);
   CHECK_EQ(window_escape(fixture, context.hContext, open, data), success);
   av::HostWindowRecord answer = open;
   CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
@@ -5428,6 +5431,19 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   CHECK_EQ(answer.bytes(), 0x3000u);
   CHECK(fixture.platform().maps_into_process(answer.address(), host_region_address, 0x3000u));
   CHECK_EQ(fixture.blob_maps(), 1u);
+  /* The blob is HOST3D memory of the kind the process asked for. */
+  const std::uint8_t *created = nullptr;
+  for (std::uint32_t index = 0u; index < fixture.control().requests(); index++)
+      if (fixture.control().request_type(index) == create_blob) created = fixture.control().request(index);
+  CHECK(created != nullptr);
+  std::uint32_t resource = 0u, blob_mem = 0u;
+  std::uint64_t blob_id = 0u;
+  std::memcpy(&resource, created + 24u, sizeof resource);
+  std::memcpy(&blob_mem, created + 28u, sizeof blob_mem);
+  std::memcpy(&blob_id, created + 40u, sizeof blob_id);
+  CHECK_EQ(resource, first_chunk_resource);
+  CHECK_EQ(blob_mem, 2u);   /* VIRTIO_GPU_BLOB_MEM_HOST3D */
+  CHECK(blob_id == upload.encoded());
 
   /* The same bytes again are an answer, not a request. */
   DxgkargEscapeRecord escape = {};
@@ -5445,7 +5461,7 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   CHECK_EQ(fixture.blob_maps(), 1u);
 
   /* Given back by resource: the view, the blob and the pages all go. */
-  const av::HostWindowRecord close(WindowOperation::close, 0u, answer.resource_id());
+  const av::HostWindowRecord close(WindowOperation::close, 0u, answer.resource_id(), av::HostMemoryRequest());
   CHECK_EQ(window_escape(fixture, context.hContext, close, data), success);
   av::HostWindowRecord closed = close;
   CHECK_STATUS(closed.accept_answer(data, sizeof data), av::Status::ok);
@@ -5455,56 +5471,31 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* With no window the chunk is guest RAM the driver owns: a guest blob of its
- * pages, the process's view of the same memory, and on close the blob
- * released and the pages freed. */
-TEST(adapter_escape, a_chunk_with_no_window_is_guest_ram)
+/* With no window there is no chunk: nothing falls back to guest RAM
+ * (docs/host-memory.md). The process is told STATUS_NOT_SUPPORTED, and the
+ * device is asked nothing. */
+TEST(adapter_escape, a_chunk_with_no_window_is_not_supported)
 { Fixture bare; av::FakeHandleTable handles;
   bare.function().add_doorbell_region();
   CHECK_EQ(bare.start(), success);
   AvProcess process(bare, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
-  const std::uint32_t block = bare.platform().page_blocks_made();
+  const std::uint32_t blocks = bare.platform().owned_page_blocks();
   const std::uint32_t requests = bare.context_requests();
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
-  const av::HostWindowRecord open(WindowOperation::open, 0x1800u, 0u);
-  CHECK_EQ(window_escape(bare, context.hContext, open, data), success);
-  av::HostWindowRecord answer = open;
-  CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
-  CHECK_EQ(answer.resource_id(), first_chunk_resource);
-  CHECK_EQ(answer.bytes(), 0x2000u);
+  const av::HostWindowRecord open(WindowOperation::open, 0x1800u, 0u, upload);
+  CHECK_EQ(window_escape(bare, context.hContext, open, data), not_supported);
+  CHECK_EQ(bare.context_requests(), requests);
   CHECK_EQ(bare.blob_maps(), 0u);
-  CHECK_EQ(bare.platform().process_mappings(), 4u);
-  reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(answer.address()))[0x1FFFu] = 0x42u;
-  CHECK(bare.platform().page_block(block) != nullptr);
-  CHECK_EQ(bare.platform().page_block(block)[0x1FFFu], 0x42u);
-  const std::uint8_t *created = nullptr;
-  for (std::uint32_t index = 0u; index < bare.control().requests(); index++)
-      if (bare.control().request_type(index) == create_blob) created = bare.control().request(index);
-  CHECK(created != nullptr);
-  std::uint32_t resource = 0u;
-  std::uint32_t blob_mem = 0u;
-  std::uint32_t entries = 0u;
-  std::memcpy(&resource, created + 24u, sizeof resource);
-  std::memcpy(&blob_mem, created + 28u, sizeof blob_mem);
-  std::memcpy(&entries, created + 36u, sizeof entries);
-  CHECK_EQ(resource, first_chunk_resource);
-  CHECK_EQ(blob_mem, 1u);   /* VIRTIO_GPU_BLOB_MEM_GUEST */
-  CHECK(entries != 0u);
-
-  const av::HostWindowRecord close(WindowOperation::close, 0u, answer.resource_id());
-  CHECK_EQ(window_escape(bare, context.hContext, close, data), success);
-  CHECK_EQ(bare.context_requests(), requests + 1u);   /* the blob's unref */
   CHECK_EQ(bare.platform().process_mappings(), 3u);
-  CHECK(bare.platform().page_block(block) == nullptr);
-  CHECK_EQ(window_escape(bare, context.hContext, close, data), invalid_parameter);
+  CHECK_EQ(bare.platform().owned_page_blocks(), blocks);
   CHECK_EQ(nt(bare.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(bare.adapter().destroy_device(process.device())), success); }
 
-/* A device that will back the chunk neither in the window nor in guest RAM is
- * STATUS_NOT_SUPPORTED, and nothing is left held: a refused blob holds no
- * pages, so they are freed rather than kept out of use. */
+/* A device that will not make the chunk's blob is STATUS_NOT_SUPPORTED, and
+ * nothing is left held: a refused blob holds no pages, so they are freed
+ * rather than kept out of use. */
 TEST(adapter_escape, a_chunk_the_device_will_back_nowhere_is_not_supported)
 { Fixture refusing; av::FakeHandleTable refusing_handles;
   refusing.function().add_doorbell_region();
@@ -5515,7 +5506,7 @@ TEST(adapter_escape, a_chunk_the_device_will_back_nowhere_is_not_supported)
   CHECK_EQ(process.create_context(context), success);
   refusing.refuse_the_blob();
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
-  CHECK_EQ(window_escape(refusing, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+  CHECK_EQ(window_escape(refusing, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u, upload), data),
            not_supported);
   CHECK_EQ(refusing.platform().process_mappings(), 3u);
   CHECK_EQ(refusing.platform().owned_page_blocks(), 3u);   /* the context's own */
@@ -5527,7 +5518,7 @@ TEST(adapter_escape, a_window_chunk_with_no_device_is_invalid)
 { Fixture fixture;
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
   int context = 0;
-  CHECK_EQ(window_escape(fixture, &context, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+  CHECK_EQ(window_escape(fixture, &context, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u, upload), data),
            invalid_parameter); }
 
 /* A context destroyed with a chunk open closes it: the view, the blob and the
@@ -5541,7 +5532,7 @@ TEST(adapter_escape, destroying_a_context_closes_its_window_chunks)
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
-  CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+  CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u, upload), data),
            success);
   CHECK_EQ(fixture.platform().process_mappings(), 4u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
@@ -5561,7 +5552,7 @@ TEST(adapter_set_power_state, the_same_device_at_d0_keeps_the_window_and_frees_w
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
-  CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+  CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u, upload), data),
            success);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.forget_control();
@@ -5573,7 +5564,7 @@ TEST(adapter_set_power_state, the_same_device_at_d0_keeps_the_window_and_frees_w
   CHECK_EQ(fixture.platform().process_mappings(), 0u);
   av::DxgkargCreateContextRecord again = {};
   CHECK_EQ(process.create_context(again), success);
-  const av::HostWindowRecord open(WindowOperation::open, 0x1000u, 0u);
+  const av::HostWindowRecord open(WindowOperation::open, 0x1000u, 0u, upload);
   CHECK_EQ(window_escape(fixture, again.hContext, open, data), success);
   av::HostWindowRecord answer = open;
   CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);

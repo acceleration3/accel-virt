@@ -37,3 +37,16 @@ TEST(host_memory_request, a_class_that_names_a_type_is_refused_rather_than_read_
 TEST(host_memory_request, a_kind_this_protocol_does_not_have_is_refused)
 { const std::uint32_t refused[] = {0u, 4u, 0xFFu, 0x100u, 0xFFFFFF04u};
   for (const std::uint32_t encoded : refused) CHECK(!HostMemoryRequest(encoded).valid()); }
+
+/* The encoding is the protocol: the kind in the low byte and a Vulkan type
+ * above it, as the guest writes it into the escape and the blob id, and as
+ * the executor reads it. */
+TEST(host_memory_request, encodes_the_kind_low_and_the_vulkan_type_above_it)
+{ CHECK_EQ(HostMemoryRequest(Kind::upload, 0u).encoded(), 0x001u);
+  CHECK_EQ(HostMemoryRequest(Kind::readback, 0u).encoded(), 0x002u);
+  CHECK_EQ(HostMemoryRequest(Kind::vulkan, 5u).encoded(), 0x503u);
+  CHECK_EQ(HostMemoryRequest(Kind::vulkan, 31u).encoded(), 0x1F03u);
+  CHECK(HostMemoryRequest(0x503u).kind() == Kind::vulkan);
+  CHECK_EQ(HostMemoryRequest(0x503u).vulkan_type(), 5u);
+  CHECK(HostMemoryRequest(0x001u).kind() == Kind::upload);
+  CHECK_EQ(HostMemoryRequest(0x001u).vulkan_type(), 0u); }

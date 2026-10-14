@@ -101,7 +101,6 @@ public:
     {
         if (instance_ != VK_NULL_HANDLE) rig_.destroy_instance(instance_);
         CHECK(rig_.root().invariants_hold());
-        CHECK_EQ(rig_.kmt().ram_chunks(), 0u);
         CHECK_EQ(rig_.kmt().window_chunks(), 0u);
         CHECK_EQ(rig_.kmt().open_objects(), 0u);
         CHECK_EQ(rig_.kmt().misuses(), 0u);
@@ -346,7 +345,7 @@ TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
       CHECK_EQ(view[offset], static_cast<std::uint8_t>(pattern ^ offset));
   rig.entry<UnmapMemory>("vkUnmapMemory")(rig.device(), memory);
   CHECK_EQ(view[page - 1u], static_cast<std::uint8_t>(pattern ^ (page - 1u)));
-  CHECK(rig.kmt().ram_chunk(0u) != nullptr);
+  CHECK(rig.kmt().window_chunk_memory(MockKmt::first_window_resource) == view);
   const std::uint32_t objects = rig.kmt().open_objects();
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   const std::uint32_t commands = rig.kmt().commands();
@@ -354,7 +353,7 @@ TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
   rig.entry<FreeMemory>("vkFreeMemory")(rig.device(), memory, nullptr);
   CHECK(rig.rig().root().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), objects);
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);   /* the kernel's, until the context goes */
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);   /* the kernel's, until the context goes */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submissions);
   CHECK_EQ(rig.kmt().commands(), commands);
@@ -430,7 +429,7 @@ TEST(device_loss, destroying_a_lost_device_gives_its_chunks_back)
   const std::uint32_t commands = rig.kmt().commands();
   rig.entry<DestroyDevice>("vkDestroyDevice")(rig.device(), nullptr);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().commands(), commands); }
 
@@ -462,7 +461,7 @@ TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
   CHECK(memory == VK_NULL_HANDLE);
   CHECK(rig.connection()->faulted());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);   /* the open */
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), objects); }
 
 /* A refusal that is not a loss stays what it was: an import the host refuses

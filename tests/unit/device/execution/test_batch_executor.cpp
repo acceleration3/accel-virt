@@ -18,7 +18,7 @@
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
-#include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/context/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -230,7 +230,7 @@ private:
     ExecutorLibrary library_;
     av::ExecutorShares shares_;
     ContextExecutor executor_;
-    av::BlobTable   blobs_;
+    av::HostBlobTable blobs_;
     av::WireRecorder recorder_;
     av::BlobImports imports_;
     BatchStaging    staging_;
@@ -536,7 +536,7 @@ TEST(batch_executor_run, a_ring_the_blob_cannot_hold_is_refused_before_anything_
 TEST(batch_executor_run, a_refused_import_is_answered_in_the_slot_and_the_context_runs_on)
 { Fixture fixture;
   std::uint8_t body[av::BlobImportRequest::encoded_size] = {};
-  CHECK_STATUS(av::BlobImportRequest(77u, 0u, 4096u, 0u).encode(body, sizeof body), Status::ok);
+  CHECK_STATUS(av::BlobImportRequest(77u).encode(body, sizeof body), Status::ok);
   Commands commands;
   commands.add_body(CommandHeader::import_blob_id, body, sizeof body, CommandHeader::generate_reply)
           .add(CommandHeader::release_blob_id, 8u);

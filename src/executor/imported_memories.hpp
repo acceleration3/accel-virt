@@ -14,6 +14,7 @@ namespace av {
 
 class ImportedBlob;
 class SourceMemory;
+struct ImportedMemoriesProbe;
 
 class ImportedMemories {
 public:
@@ -38,6 +39,8 @@ public:
 private:
     const SourceMemory *memories_[capacity];
     uint32_t            count_;
+
+    friend struct ImportedMemoriesProbe;
 };
 
 }  // namespace av

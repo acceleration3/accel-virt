@@ -136,7 +136,7 @@ TEST(renderer_loopback, a_guest_region_maps_to_the_bytes_qemu_registered)
   CHECK_STATUS(peer.last_outcome(), Status::ok);
   CHECK(qemu.descriptor_open(descriptor));
   qemu.close_descriptor(descriptor);
-  CHECK_EQ(qemu.live_dmabufs(), 0u);
+  CHECK_EQ(qemu.live_descriptors(), 0u);
   CHECK_EQ(peer.memory().count(), 1u);
   const auto *const seen = static_cast<const std::uint8_t *>(
       peer.memory().resolve(static_cast<std::uint64_t>(2u) << av::GuestMemoryTable::region_shift | 0x10u, 1u));
@@ -167,4 +167,4 @@ TEST(renderer_loopback, a_datagram_before_the_hello_is_refused_and_its_descripto
   CHECK_EQ(peer.resources().live_descriptors(), 0u);
   CHECK_EQ(peer.memory().count(), 0u);
   qemu.close_descriptor(descriptor);
-  CHECK_EQ(qemu.live_dmabufs(), 0u); }
+  CHECK_EQ(qemu.live_descriptors(), 0u); }

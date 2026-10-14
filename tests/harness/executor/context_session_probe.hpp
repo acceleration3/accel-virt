@@ -18,6 +18,7 @@ struct ContextSessionProbe {
     ImportTable &imports();
     WireArena   &arena();
     void         drop_backend();
+    void         drop_source();
     void         set_faulted(bool faulted);
 
     ContextSession &session;

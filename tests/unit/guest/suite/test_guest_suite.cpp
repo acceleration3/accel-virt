@@ -603,6 +603,9 @@ TEST(guest_suite_run_av, runs_only_the_av_scenarios_in_order_and_closes_the_adap
   /* Hardware scheduling on, so the benchmark measures both paths and the
    * doorbell is exercised by a whole suite run (feature 049). */
   kmt.allow_hardware_scheduling();
+  /* Room for the import's two chunks; every byte a process maps is the
+   * window's (docs/host-memory.md). */
+  kmt.open_host_window(2u * HostVisibleImportScenario::chunk_bytes);
   av::ScriptedHost host(kmt);
   host.transport_run();
   host.submit_run();
@@ -616,8 +619,8 @@ TEST(guest_suite_run_av, runs_only_the_av_scenarios_in_order_and_closes_the_adap
   /* The host GPU's copy, played on the chunks' views at the import's fence wait. */
   kmt.play_at_wait(before_import + av::ScriptedHost::host_visible_import_copy_wait, [](void *played) {
       MockKmt &mock = *static_cast<MockKmt *>(played);
-      std::memcpy(mock.ram_chunk(1u), mock.ram_chunk(0u),
-                  HostVisibleImportScenario::copy_bytes);
+      std::memcpy(mock.window_chunk_memory(MockKmt::first_window_resource + 1u),
+                  mock.window_chunk_memory(MockKmt::first_window_resource), HostVisibleImportScenario::copy_bytes);
   }, &kmt);
   const std::uint32_t before_fault = before_import + av::ScriptedHost::host_visible_import_waits +
                                      av::ScriptedHost::transport_waits + av::ScriptedHost::isolation_waits_before_fault;

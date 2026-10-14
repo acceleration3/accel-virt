@@ -16,8 +16,8 @@ Status ImportTable::take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&
     if (find(blob_id) != nullptr) return Status::conflict;
     for (uint32_t slot = 0u; slot < max_imports; slot++) {
         if (blobs_[slot].live()) continue;
-        const Status status = blobs_[slot].take(blob_id, memory);
-        if (status != Status::ok) return status;
+        /* A slot that holds nothing always takes. */
+        static_cast<void>(blobs_[slot].take(blob_id, memory));
         count_++;
         taken = &blobs_[slot];
         return Status::ok;

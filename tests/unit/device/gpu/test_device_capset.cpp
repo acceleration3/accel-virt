@@ -24,15 +24,11 @@ namespace {
 
 constexpr std::uint8_t first[GpuIdentity::uuid_bytes] = {1};
 constexpr std::uint8_t second[GpuIdentity::uuid_bytes] = {2};
-constexpr std::uint64_t probe_window = 0x100000u;
-
-/* What a device offers is what its probes found, so every test here says which
+/* What a device offers is what its host has, so every test here says which
  * host it ran on. */
 std::uint64_t decided(MockHost &host)
 {
-    HostFeasibility feasibility(host);
-    feasibility.decide(probe_window);
-    return feasibility.features();
+    return HostFeasibility(host).features();
 }
 
 }  // namespace
@@ -66,29 +62,25 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   CapsetInfo decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok); }
 
-/* Constitution VI: every bit the guest reads is one a probe passed for. */
-TEST(device_capset_describe, offers_exactly_the_memory_paths_the_probes_proved)
+/* Constitution VI: every bit the guest reads is one this host has. Host
+ * memory reaches the guest only through the hostmem window, so the window is
+ * the bit, and the two memory paths that were once a choice are gone. */
+TEST(device_capset_describe, offers_host_visible_memory_exactly_when_there_is_a_window)
 { MockHost host;
   host.add_gpu(first);
   host.set_hostmem_size(0x100000u);
-  host.add_guest_ram(probe_window, 0x100000u);
   DeviceCapset capset(host);
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK(capset.info().has_feature(CapsetInfo::feature_host_visible_memory));
-  CHECK(capset.info().has_feature(CapsetInfo::feature_gpu_exported_memory));
-  CHECK(capset.info().has_feature(CapsetInfo::feature_guest_memory_import));
+  /* Bits 2 and 4 are retired, and no host sets them. */
+  CHECK(!capset.info().has_feature(2u));
+  CHECK(!capset.info().has_feature(4u));
 
-  MockHost refusing;
-  refusing.add_gpu(first);
-  refusing.set_hostmem_size(0x100000u);
-  refusing.add_guest_ram(probe_window, 0x100000u);
-  refusing.refuse_export_at(1u, -2);
-  refusing.refuse_import_at(1u, 0);
-  DeviceCapset fallback(refusing);
-  fallback.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(refusing));
-  CHECK(fallback.info().has_feature(CapsetInfo::feature_host_visible_memory));
-  CHECK(!fallback.info().has_feature(CapsetInfo::feature_gpu_exported_memory));
-  CHECK(!fallback.info().has_feature(CapsetInfo::feature_guest_memory_import)); }
+  MockHost windowless;
+  windowless.add_gpu(first);
+  DeviceCapset none(windowless);
+  none.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(windowless));
+  CHECK(!none.info().has_feature(CapsetInfo::feature_host_visible_memory)); }
 
 TEST(device_capset_describe, offers_exactly_the_sub_apis_the_executor_offers)
 { MockHost host;
@@ -122,30 +114,6 @@ TEST(device_capset, describe_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   CHECK(host.claim(HostViolation::main_loop_required)); }
-
-/* A guest blob reaching the host GPU without a copy needs two things: this
- * device able to build a handle, which its own probe proves, and the executor
- * able to take one, which only the executor knows. A bit set from the probe
- * alone promises what the library may not keep (feature 042). */
-TEST(device_capset_withdraw, takes_back_the_import_bit_the_probe_alone_claimed)
-{ MockHost host;
-  host.add_gpu(first);
-  DeviceCapset capset(host);
-  capset.describe(0u, 1u,
-                  CapsetInfo::feature_host_visible_memory | CapsetInfo::feature_guest_memory_import);
-  CHECK(capset.described());
-  CHECK(capset.info().has_feature(CapsetInfo::feature_guest_memory_import));
-
-  capset.withdraw_guest_import();
-  CHECK(!capset.info().has_feature(CapsetInfo::feature_guest_memory_import));
-  /* Only that one: what the host visibly has is not withdrawn with it. */
-  CHECK(capset.info().has_feature(CapsetInfo::feature_host_visible_memory)); }
-
-TEST(device_capset_withdraw, withdrawing_from_a_capset_nobody_described_is_nothing)
-{ MockHost host;
-  DeviceCapset capset(host);
-  capset.withdraw_guest_import();
-  CHECK(!capset.described()); }
 
 /* The display's answer is not the device's to know at realize: QEMU registers
  * its display backends in qemu_init_displays(), after qmp_x_exit_preconfig()

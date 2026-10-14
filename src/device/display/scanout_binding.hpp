@@ -70,7 +70,6 @@ private:
 
     friend struct DisplayHeadsProbe;
     friend struct ScanoutBindingProbe;
-struct ScanoutBindingProbe;
 };
 
 }  // namespace av

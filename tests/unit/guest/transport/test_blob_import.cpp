@@ -1,7 +1,7 @@
-/* IMPORT_BLOB and RELEASE_BLOB as a process sends them (feature 045,
- * contracts/host_visible_memory.md §2), over MockTransport playing the host:
- * the request is the contract's 32 bytes, the answer's 16 are the host's word
- * and judged as hostile, and the device memory it names is released once. */
+/* IMPORT_BLOB and RELEASE_BLOB as a process sends them (docs/host-memory.md,
+ * docs/protocol.md), over MockTransport playing the host: the request names
+ * one host blob whole in 8 bytes, the answer's 16 are the host's word and
+ * judged as hostile, and the device memory it names is released once. */
 #include "core/support/status.hpp"
 #include "guest/transport/blob_import.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -33,9 +33,8 @@ using av::Status;
 
 namespace {
 
-constexpr std::uint32_t chunk_resource = 0x00100003u;
+constexpr std::uint32_t chunk_resource = 0x01000003u;
 constexpr std::uint64_t device_memory = 0x0000700000000042ull;
-constexpr std::uint64_t one_mebibyte = 1u << 20u;
 
 class Answer {
 public:
@@ -74,22 +73,19 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   const Answer taken(0u, 0u, device_memory);
   transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
   CHECK_EQ(import.memory(), 0u);
-  CHECK_STATUS(import.import(chunk_resource, 4096u, one_mebibyte, 5u), Status::ok);
+  CHECK_STATUS(import.import(chunk_resource), Status::ok);
   CHECK(import.invariants_hold());
   CHECK_EQ(import.memory(), device_memory);
   CHECK_EQ(import.host_status(), 0u);
   CHECK_EQ(transport.end_calls(), 1u);
   CHECK_EQ(transport.last_command(), CommandHeader::import_blob_id);
   CHECK_EQ(transport.last_length(), BlobImportRequest::encoded_size);
+  CHECK_EQ(BlobImportRequest::encoded_size, 8u);
   const std::uint8_t *const request = transport.last_payload();
   CHECK_EQ(u32_at(request, 0u), chunk_resource);
   CHECK_EQ(u32_at(request, 4u), 0u);
-  CHECK_EQ(u64_at(request, 8u), 4096u);
-  CHECK_EQ(u64_at(request, 16u), one_mebibyte);
-  CHECK_EQ(u32_at(request, 24u), 5u);
-  CHECK_EQ(u32_at(request, 28u), 0u);
   /* One import per object: a second is refused without a send. */
-  CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 5u), Status::invalid_state);
+  CHECK_STATUS(import.import(chunk_resource), Status::invalid_state);
   CHECK_EQ(transport.sends(), 1u);
   transport.set_reply(taken.bytes(), 0u);
   CHECK_STATUS(import.release(), Status::ok);
@@ -110,7 +106,7 @@ TEST(blob_import, a_refusal_keeps_the_hosts_status_and_holds_nothing)
   BlobImport import(transport);
   const Answer refused(BlobImportAnswer::executor_refused, 0u, 0u);
   transport.set_reply(refused.bytes(), BlobImportAnswer::encoded_size);
-  CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 2u), Status::invalid_parameter);
+  CHECK_STATUS(import.import(chunk_resource), Status::invalid_parameter);
   CHECK(import.invariants_hold());
   CHECK_EQ(import.host_status(), static_cast<std::uint32_t>(BlobImportAnswer::executor_refused));
   CHECK_EQ(import.memory(), 0u);
@@ -118,7 +114,7 @@ TEST(blob_import, a_refusal_keeps_the_hosts_status_and_holds_nothing)
   CHECK_EQ(transport.sends(), 1u);
   const Answer taken(0u, 0u, device_memory);
   transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
-  CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 3u), Status::ok);
+  CHECK_STATUS(import.import(chunk_resource), Status::ok);
   CHECK_EQ(import.host_status(), 0u);
   CHECK_EQ(import.memory(), device_memory); }
 
@@ -146,7 +142,7 @@ TEST(blob_import, hostile_answers_hold_nothing)
       BlobImport import(transport);
       const Answer answer(one.status, one.reserved, one.memory);
       transport.set_reply(answer.bytes(), one.length);
-      CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 0u), one.expected);
+      CHECK_STATUS(import.import(chunk_resource), one.expected);
       CHECK_EQ(import.memory(), 0u);
       CHECK_EQ(import.host_status(), 0u);
       CHECK(import.invariants_hold());
@@ -154,7 +150,7 @@ TEST(blob_import, hostile_answers_hold_nothing)
   MockTransport transport;
   BlobImport import(transport);
   transport.fail_next();
-  CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 0u), Status::invalid_state);
+  CHECK_STATUS(import.import(chunk_resource), Status::invalid_state);
   CHECK_EQ(import.memory(), 0u); }
 
 /* One bit of an accepted answer flipped anywhere: a refusal only if it names no
@@ -167,7 +163,7 @@ TEST(blob_import, a_byte_flip_sweep_accepts_only_what_the_bytes_say)
           Answer        answer(0u, 0u, device_memory);
           answer.bytes()[byte] = static_cast<std::uint8_t>(answer.bytes()[byte] ^ (1u << bit));
           transport.set_reply(answer.bytes(), BlobImportAnswer::encoded_size);
-          const Status status = import.import(chunk_resource, 0u, one_mebibyte, 0u);
+          const Status status = import.import(chunk_resource);
           CHECK(import.invariants_hold());
           if (status == Status::ok) {
               CHECK(byte >= 8u);
@@ -186,7 +182,7 @@ TEST(blob_import, release_forgets_the_import_whatever_the_host_answers)
     BlobImport import(transport);
     const Answer taken(0u, 0u, device_memory);
     transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
-    CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 0u), Status::ok);
+    CHECK_STATUS(import.import(chunk_resource), Status::ok);
     CHECK_STATUS(import.release(), Status::malformed);
     CHECK_EQ(import.memory(), 0u);
     CHECK_STATUS(import.release(), Status::ok);
@@ -195,7 +191,7 @@ TEST(blob_import, release_forgets_the_import_whatever_the_host_answers)
     BlobImport import(transport);
     const Answer taken(0u, 0u, device_memory);
     transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
-    CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 0u), Status::ok);
+    CHECK_STATUS(import.import(chunk_resource), Status::ok);
     transport.fail_next();
     CHECK_STATUS(import.release(), Status::invalid_state);
     CHECK_EQ(import.memory(), 0u);
@@ -215,7 +211,7 @@ TEST(blob_import, forget_drops_the_import_without_a_call)
   BlobImport import(transport);
   const Answer taken(0u, 0u, device_memory);
   transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
-  CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 0u), Status::ok);
+  CHECK_STATUS(import.import(chunk_resource), Status::ok);
   import.forget();
   CHECK_EQ(import.memory(), 0u);
   CHECK(import.invariants_hold());

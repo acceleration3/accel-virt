@@ -7,8 +7,12 @@
 #include "executor/gpu_clock_hold.hpp"
 #include "executor/import_table.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/host_memory_source.hpp"
+#include "executor/source_memory.hpp"
+#include "executor/shim/host_heap.hpp"
+#include "harness/executor/mock_memory_exporter.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "harness/executor/context_session_probe.hpp"
-#include "harness/executor/imported_blob_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -18,7 +22,6 @@
 
 using av::ContextSession;
 using av::ContextSessionProbe;
-using av::ImportedBlobProbe;
 using av::MockSessionBackend;
 using av::Status;
 
@@ -201,127 +204,209 @@ TEST(context_session, a_released_session_is_not_still_faulted)
 
 namespace {
 
-std::uint8_t blob_backing[av::ImportedBlob::page_bytes];
+constexpr std::uint32_t domain = 3u;
+constexpr std::uint64_t key = 0x10u;
 
-AvBlobHandle blob_handle(std::uint64_t size = av::ImportedBlob::page_bytes)
-{ AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.pointer = blob_backing;
-  handle.fd = -1;
-  handle.size = size;
-  return handle; }
+/* A session drawing from a memory source of one coherent, exportable type,
+ * with one page allocated under `key` in its domain - the device's hold. */
+class Drawing {
+public:
+    Drawing() : exporter_(), heap_(), source_(exporter_, heap_), memory_{-1, 0u, 0u}
+    {
+        exporter_.add_type(av::MockMemoryExporter::host_visible | av::MockMemoryExporter::host_coherent, true);
+        bound_.session().draw_from(source_, domain);
+        static_cast<void>(source_.allocate(domain, key, 4096u, upload(), memory_));
+    }
+    ~Drawing()
+    {
+        bound_.session().release();
+        if (memory_.fd >= 0) close(memory_.fd);
+    }
+    static av::HostMemoryRequest upload() { return av::HostMemoryRequest(av::HostMemoryRequest::Kind::upload, 0u); }
+    Bound                  &bound() { return bound_; }
+    ContextSession         &session() { return bound_.session(); }
+    MockSessionBackend     &backend() { return bound_.backend(); }
+    av::MockMemoryExporter &exporter() { return exporter_; }
+    av::HostMemorySource   &source() { return source_; }
+
+private:
+    av::MockMemoryExporter exporter_;
+    av::HostHeap           heap_;
+    av::HostMemorySource   source_;
+    AvHostMemory           memory_;
+    Bound                  bound_;
+};
 
 }  // namespace
 
-TEST(context_session_import, a_blob_the_backend_takes_is_held_until_released)
-{ Bound bound;
-  CHECK_EQ(bound.session().imports(), 0u);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(bound.session().imports(), 1u);
-  CHECK_EQ(bound.backend().adopted(), 1u);
+TEST(context_session_import, memory_the_backend_takes_is_held_until_released)
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().imports(), 1u);
+  CHECK_EQ(drawing.backend().adopted(), 1u);
+  CHECK(drawing.session().invariants_hold());
 
-  bound.session().release_blob(5u);
-  CHECK_EQ(bound.session().imports(), 0u);
-  CHECK_EQ(bound.backend().abandoned(), 1u);
-  CHECK(bound.session().invariants_hold()); }
+  drawing.session().release_blob(5u);
+  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.backend().abandoned(), 1u);
+  CHECK(drawing.session().invariants_hold()); }
+
+/* The import holds the memory: the device letting go of its key leaves it
+ * alive until the import goes, and then it is freed. */
+TEST(context_session_import, an_import_keeps_memory_the_device_let_go_of)
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.exporter().live(), 1u);
+  CHECK_EQ(drawing.source().live(), 1u);
+  drawing.session().release_blob(5u);
+  CHECK_EQ(drawing.exporter().live(), 0u);
+  CHECK_EQ(drawing.source().live(), 0u); }
 
 /* The guest names imported memory by what the backend recorded for the guest,
  * not by what the host API holds: an id never imported answers nothing, an
  * import answers its own, and a released one nothing again. */
 TEST(context_session_import, answers_the_handle_the_guest_names_an_import_by)
-{ Bound bound;
-  CHECK_EQ(bound.session().imported_handle(5u), 0u);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(bound.session().import_blob(6u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(bound.session().imported_handle(5u), 5u + MockSessionBackend::wire_offset);
-  CHECK_EQ(bound.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
-  CHECK_EQ(bound.session().imported_handle(7u), 0u);
-  CHECK(bound.session().invariants_hold());
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().imported_handle(5u), 0u);
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().import_blob(6u, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().imported_handle(5u), 5u + MockSessionBackend::wire_offset);
+  CHECK_EQ(drawing.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
+  CHECK_EQ(drawing.session().imported_handle(7u), 0u);
+  CHECK(drawing.session().invariants_hold());
 
-  bound.session().release_blob(5u);
-  CHECK_EQ(bound.session().imported_handle(5u), 0u);
-  CHECK_EQ(bound.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
+  drawing.session().release_blob(5u);
+  CHECK_EQ(drawing.session().imported_handle(5u), 0u);
+  CHECK_EQ(drawing.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
 
   /* A refused import leaves nothing to name. */
-  bound.backend().set_adopts(false);
-  CHECK_EQ(bound.session().import_blob(8u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(bound.session().imported_handle(8u), 0u);
-  CHECK(bound.session().invariants_hold()); }
+  drawing.backend().set_adopts(false);
+  CHECK_EQ(drawing.session().import_blob(8u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(drawing.session().imported_handle(8u), 0u);
+  CHECK(drawing.session().invariants_hold()); }
 
 /* Release is idempotent: the device may release an id whose import failed. */
 TEST(context_session_import, releasing_one_it_never_took_is_nothing)
-{ Bound bound;
-  bound.session().release_blob(5u);
-  CHECK_EQ(bound.backend().abandoned(), 0u);
-  CHECK(bound.session().invariants_hold()); }
+{ Drawing drawing;
+  drawing.session().release_blob(5u);
+  CHECK_EQ(drawing.backend().abandoned(), 0u);
+  CHECK(drawing.session().invariants_hold()); }
 
-/* An id already imported is refused rather than silently torn down. */
+/* An id already imported is refused rather than silently torn down, and the
+ * reference the refused one took goes back. */
 TEST(context_session_import, the_same_id_twice_is_refused)
-{ Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(bound.session().imports(), 1u);
-  CHECK_EQ(bound.backend().adopted(), 1u); }
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(drawing.session().imports(), 1u);
+  CHECK_EQ(drawing.backend().adopted(), 1u);
+  drawing.session().release_blob(5u);
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.exporter().live(), 0u); }
 
-TEST(context_session_import, a_handle_the_abi_refuses_never_reaches_the_backend)
-{ Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle(1u)), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(bound.backend().adopted(), 0u);
-  CHECK_EQ(bound.session().imports(), 0u); }
+/* A key the source has no memory under - never allocated, freed, or another
+ * domain's - never reaches the backend. */
+TEST(context_session_import, a_key_with_no_memory_never_reaches_the_backend)
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().import_blob(5u, key + 1u), std::uint32_t{AV_UNDECODABLE});
+  AvHostMemory elsewhere = {-1, 0u, 0u};
+  CHECK_STATUS(drawing.source().allocate(domain + 1u, key + 2u, 4096u, Drawing::upload(), elsewhere), Status::ok);
+  CHECK_EQ(drawing.session().import_blob(5u, key + 2u), std::uint32_t{AV_UNDECODABLE});
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(drawing.backend().adopted(), 0u);
+  CHECK_EQ(drawing.session().imports(), 0u);
+  drawing.source().free(domain + 1u, key + 2u);
+  close(elsewhere.fd); }
 
-/* An API that cannot take this kind is not a fault: the device is told no and
- * the guest is copied through instead, and the slot goes back. */
+/* An API that will not take the memory is not a fault: the device is told no,
+ * the slot goes back, and so does the memory's reference. */
 TEST(context_session_import, a_backend_that_will_not_take_it_costs_no_slot)
-{ Bound bound;
-  bound.backend().set_adopts(false);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(bound.session().imports(), 0u);
-  bound.backend().set_adopts(true);
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(bound.session().imports(), 1u); }
+{ Drawing drawing;
+  drawing.backend().set_adopts(false);
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(drawing.session().imports(), 0u);
+  drawing.backend().set_adopts(true);
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().imports(), 1u);
+  drawing.session().release_blob(5u);
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.exporter().live(), 0u); }
+
+/* A table that is full refuses the next import and gives its reference back. */
+TEST(context_session_import, a_full_table_refuses_and_holds_nothing_more)
+{ Drawing drawing;
+  for (std::uint64_t id = 1u; id <= av::ImportTable::max_imports; id++)
+      CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().import_blob(av::ImportTable::max_imports + 1u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(drawing.session().imports(), av::ImportTable::max_imports);
+  drawing.session().release();
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.exporter().live(), 0u); }
 
 /* A guest that never releases leaks nothing: destroying the session gives back
- * what it never did, which is what an imported host pointer needs, since the
- * device unmaps it afterwards. */
+ * what it never did, to the backend and to the source. */
 TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did_not)
-{ Bound bound;
-  for (std::uint64_t id = 1u; id <= 3u; id++) {
-      CHECK_EQ(bound.session().import_blob(id, blob_handle()), std::uint32_t{AV_EXECUTED});
-  }
-  CHECK_EQ(bound.session().imports(), 3u);
-  bound.session().release();
-  CHECK_EQ(bound.backend().abandoned(), 3u);
-  CHECK_EQ(bound.session().imports(), 0u);
-  CHECK(bound.session().invariants_hold()); }
+{ Drawing drawing;
+  for (std::uint64_t id = 1u; id <= 3u; id++)
+      CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.session().imports(), 3u);
+  drawing.source().free(domain, key);
+  CHECK_EQ(drawing.exporter().live(), 1u);
+  drawing.session().release();
+  CHECK_EQ(drawing.backend().abandoned(), 3u);
+  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.exporter().live(), 0u);
+  CHECK(drawing.session().invariants_hold()); }
 
-TEST(context_session_import, a_session_with_no_backend_imports_nothing)
+/* A session with no backend, or none to draw from, imports nothing. */
+TEST(context_session_import, a_session_with_no_backend_or_source_imports_nothing)
 { ContextSession session;
-  CHECK_EQ(session.import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(session.import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(session.imports(), 0u);
   session.release_blob(5u);
-  CHECK(session.invariants_hold()); }
+  CHECK(session.invariants_hold());
+  Bound bound;
+  CHECK_EQ(bound.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(bound.backend().adopted(), 0u); }
 
-/* Nothing is handed to a host device that is gone, a blob included: the
- * backend would be adopting memory into a device that will never run. */
+/* Nothing is handed to a host device that is gone: the backend would be
+ * adopting memory into a device that will never run. */
 TEST(context_session_import, a_lost_device_imports_nothing)
-{ Bound bound;
+{ Drawing drawing;
   std::size_t answer = 0u;
-  CHECK_EQ(bound.session().execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr,
-                                   0u, answer),
+  CHECK_EQ(drawing.session().execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr, 0u, answer),
            std::uint32_t{AV_DEVICE_LOST});
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(bound.backend().adopted(), 0u);
-  CHECK_EQ(bound.session().imports(), 0u);
-  CHECK(bound.session().invariants_hold()); }
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(drawing.backend().adopted(), 0u);
+  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK(drawing.session().invariants_hold()); }
 
-/* A session holding a blob the ABI would refuse is one whose backend was handed
- * something take never let through. */
-TEST(context_session_invariants, an_import_that_breaks_its_own_breaks_them)
-{ Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  ContextSessionProbe probe(bound.session());
-  ImportedBlobProbe(*probe.imports().find(5u)).set_size(1u);
-  CHECK(!bound.session().invariants_hold()); }
+/* A table whose count and slots disagree is one the session cannot release
+ * whole. */
+TEST(context_session_invariants, an_import_table_that_breaks_its_own_breaks_them)
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  ContextSessionProbe probe(drawing.session());
+  av::ImportedBlob *const dropped = probe.imports().drop(5u);
+  CHECK(!drawing.session().invariants_hold());
+  /* Back as the session would have it, so the rig releases it whole. */
+  av::ImportedBlob *taken = nullptr;
+  av::SourceMemory &memory = *dropped->give_back();
+  CHECK_STATUS(probe.imports().take(5u, memory, taken), Status::ok);
+  CHECK(drawing.session().invariants_hold()); }
+
+/* Imports with no source are references nobody can let go of. */
+TEST(context_session_invariants, imports_with_no_source_break_them)
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  ContextSessionProbe probe(drawing.session());
+  probe.drop_source();
+  CHECK(!drawing.session().invariants_hold());
+  drawing.session().draw_from(drawing.source(), domain);
+  CHECK(drawing.session().invariants_hold()); }
 
 /* A fault belongs to a host device; a session with none has nothing to be
  * faulted on, and the next context bound to the slot would inherit the fault. */
@@ -330,13 +415,17 @@ TEST(context_session_invariants, a_fault_with_no_backend_breaks_them)
   ContextSessionProbe(session).set_faulted(true);
   CHECK(!session.invariants_hold()); }
 
-/* Imports with no backend are blobs nobody can abandon, so an imported host
- * pointer would outlive the mapping the device keeps for it. */
+/* Imports with no backend are imports nobody can abandon. */
 TEST(context_session_invariants, imports_with_no_backend_break_them)
-{ Bound bound;
-  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{AV_EXECUTED});
-  ContextSessionProbe(bound.session()).drop_backend();
-  CHECK(!bound.session().invariants_hold()); }
+{ Drawing drawing;
+  CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
+  ContextSessionProbe probe(drawing.session());
+  probe.drop_backend();
+  CHECK(!drawing.session().invariants_hold());
+  /* Given back by hand, since a session with no backend releases nothing. */
+  av::ImportedBlob *const dropped = probe.imports().drop(5u);
+  drawing.source().release(*dropped->give_back());
+  CHECK(drawing.session().invariants_hold()); }
 
 /* The one clause a public call cannot break: the arena's mark past its room. It
  * is what would let a decode hand out memory beyond the block, so it is proven

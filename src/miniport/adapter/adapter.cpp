@@ -794,8 +794,9 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
 }
 
 /* A process asking for a chunk of the host window on its av context, or
- * giving one back (docs/host-memory.md). No window is STATUS_NOT_SUPPORTED;
- * every other refusal is STATUS_INVALID_PARAMETER. */
+ * giving one back (docs/host-memory.md). A device with no window, or one that
+ * refuses the chunk's blob, is STATUS_NOT_SUPPORTED; every other refusal is
+ * STATUS_INVALID_PARAMETER. Nothing falls back to guest RAM. */
 int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::window_chunk");

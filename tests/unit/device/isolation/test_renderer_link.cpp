@@ -141,10 +141,9 @@ TEST(renderer_link_request, skips_stale_replies_other_kinds_and_garbage_closing_
 { Fixture fixture;
   fixture.peer().queue_reply(7u, Status::no_memory, 2u);   /* a sequence this link never used */
   std::uint8_t ready[RendererMessageHeader::encoded_size + av::ReadyMessage::encoded_size] = {};
-  const std::uint32_t no_kinds[av::ReadyMessage::lanes] = {};
   CHECK_STATUS(RendererMessageHeader(Kind::ready, av::ReadyMessage::encoded_size, 1u).encode(ready, sizeof ready),
                Status::ok);
-  CHECK_STATUS(av::ReadyMessage(1u, 1u, 1u, no_kinds).encode(ready + RendererMessageHeader::encoded_size,
+  CHECK_STATUS(av::ReadyMessage(1u, 1u, 1u).encode(ready + RendererMessageHeader::encoded_size,
                                                              av::ReadyMessage::encoded_size),
                Status::ok);
   fixture.peer().queue(ready, sizeof ready, 1u);            /* the right sequence, the wrong kind */
@@ -155,7 +154,7 @@ TEST(renderer_link_request, skips_stale_replies_other_kinds_and_garbage_closing_
   CHECK_STATUS(fixture.create(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::not_supported);
   CHECK_EQ(fixture.peer().queued(), 0u);
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u);   /* all six closed */
+  CHECK_EQ(fixture.host().live_descriptors(), 0u);   /* all six closed */
   CHECK_EQ(fixture.host().unclaimed_violations(), 0u); }
 
 /* Even the awaited reply's descriptors are closed: no reply carries any. */
@@ -166,7 +165,7 @@ TEST(renderer_link_request, closes_descriptors_that_came_with_the_awaited_reply)
   Status outcome = Status::invalid_state;
   CHECK_STATUS(fixture.create(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::ok);
-  CHECK_EQ(fixture.host().live_dmabufs(), 0u); }
+  CHECK_EQ(fixture.host().live_descriptors(), 0u); }
 
 /* A reply of the right kind and sequence whose body does not decode, or
  * names another request, is something no renderer sends. */
@@ -224,8 +223,7 @@ TEST(renderer_link_request, refuses_a_body_it_cannot_frame_without_sending)
  * Ready is decoded whole. */
 TEST(renderer_link_greet, sends_the_hello_and_decodes_the_ready)
 { Fixture fixture;
-  const std::uint32_t kinds[av::ReadyMessage::lanes] = {AV_BLOB_HOST_POINTER, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
-  fixture.peer().ready_with(av::ReadyMessage(1u, 6u, 5u, kinds));
+  fixture.peer().ready_with(av::ReadyMessage(1u, 6u, 5u));
   const std::uint8_t body[4] = {1u, 2u, 3u, 4u};
   av::ReadyMessage   ready;
   CHECK_STATUS(fixture.link().greet(body, sizeof body, ready), Status::ok);
@@ -235,8 +233,7 @@ TEST(renderer_link_greet, sends_the_hello_and_decodes_the_ready)
   CHECK_EQ(fixture.host().last_receive_timeout(), RendererLink::hello_timeout_ms);
   CHECK_EQ(ready.version(), 1u);
   CHECK_EQ(ready.executor_abi(), 6u);
-  CHECK_EQ(ready.sub_apis(), 5u);
-  CHECK_EQ(ready.import_kinds(0u), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER)); }
+  CHECK_EQ(ready.sub_apis(), 5u); }
 
 TEST(renderer_link_greet, a_silent_gone_or_garbled_renderer_is_refused)
 { { Fixture fixture;
@@ -293,7 +290,7 @@ TEST(renderer_link_exchange, keeps_the_answers_descriptors_up_to_capacity_and_cl
   CHECK_EQ(count, 2u);
   CHECK(fixture.host().descriptor_open(kept[0]));
   CHECK(fixture.host().descriptor_open(kept[1]));
-  CHECK_EQ(fixture.host().live_dmabufs(), 2u);   /* the stale two and the third closed */
+  CHECK_EQ(fixture.host().live_descriptors(), 2u);   /* the stale two and the third closed */
   fixture.host().close_descriptor(kept[0]);
   fixture.host().close_descriptor(kept[1]);
   CHECK_EQ(fixture.host().unclaimed_violations(), 0u); }

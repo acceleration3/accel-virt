@@ -195,9 +195,12 @@ Status RendererService::allocate_memory(const RendererMessageHeader &header, con
     AllocatedMemoryMessage allocated;
     if (plane_.allocate_memory(request.context(), request.key(), request.size(), request.request(), memory) ==
         Status::ok) {
-        const bool kept = HostBlobId(static_cast<uint32_t>(request.key())).valid() && request.key() <= UINT32_MAX &&
+        /* Owned only once there is memory to hand over: an owner kept for
+         * memory QEMU never got would name it to an import. A key that is no
+         * host blob's id the owners refuse. */
+        const bool kept = memory.fd >= 0 && request.key() <= UINT32_MAX &&
                           owners_.adopt(static_cast<uint32_t>(request.key()), request.context()) == Status::ok;
-        if (kept && memory.fd >= 0) {
+        if (kept) {
             allocated = AllocatedMemoryMessage(memory.caching, memory.size);
             answered_memory_ = memory.fd;
             answer_descriptor = memory.fd;

@@ -1,5 +1,5 @@
 /* Where the device's hostmem region is, and whether the driver may use it as
- * its host window at all (docs/host-window.md). */
+ * its host window at all (docs/host-memory.md). */
 #include "miniport/memory/host_visible_segment.hpp"
 #include "miniport/pci/pci_base_addresses.hpp"
 #include "core/support/status.hpp"

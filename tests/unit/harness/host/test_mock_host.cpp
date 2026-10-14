@@ -11,6 +11,8 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <sys/mman.h>
+#include <unistd.h>
 
 using av::GpuIdentity;
 using av::Host;
@@ -48,6 +50,14 @@ void record_first(void *context) { auto *r = static_cast<Rendezvous *>(context);
 void record_second(void *context) { auto *r = static_cast<Rendezvous *>(context); r->order[r->recorded++] = 2u; }
 
 void touch_main_loop_state(void *host) { static_cast<Host *>(host)->require_main_loop("touch_main_loop_state"); }
+
+/* What an executor hands the device: a file of `size` bytes it can map. */
+int memfd(std::uint64_t size)
+{
+    const int fd = memfd_create("test memory", MFD_CLOEXEC);
+    if (fd >= 0 && ftruncate(fd, static_cast<off_t>(size)) != 0) return -1;
+    return fd;
+}
 
 }  // namespace
 
@@ -214,36 +224,103 @@ TEST(mock_host_map_guest, maps_ram_up_to_a_boundary_and_bounces_the_rest)
   CHECK(mock.claim(HostViolation::unknown_handle));
   CHECK_EQ(mock.live_guest_mappings(), 0u); }
 
-TEST(mock_host_hostmem, placements_are_tracked_and_misuse_is_caught)
+/* A placement is a real mapping of the descriptor's pages: what the executor
+ * writes into its memory is what the guest reads at the offset, and both
+ * ways. */
+TEST(mock_host_hostmem, a_placement_maps_the_descriptor_where_the_guest_reads_it)
 { MockHost mock;
   mock.set_hostmem_size(0x10000u);
   CHECK_EQ(mock.hostmem_size(), 0x10000u);
-  void *view = nullptr;
-  void *const first = mock.create_host_memory(0x2000u, view);
-  CHECK(first != nullptr && view != nullptr);
-  void *const second = mock.create_host_memory(0x2000u, view);
-  CHECK_STATUS(mock.place_in_hostmem(first, 0u), Status::ok);
-  CHECK(mock.placed_at(0u) != nullptr);
-  CHECK(mock.placed_at(0x1000u) == nullptr);
-  CHECK_STATUS(mock.place_in_hostmem(second, 0x1000u), Status::ok);
-  CHECK(mock.claim(HostViolation::overlapping_placement));
-  mock.remove_from_hostmem(0x1000u, 0x2000u);
-  mock.fail_placement_at(1u);
-  CHECK_STATUS(mock.place_in_hostmem(second, 0x4000u), Status::no_memory);
-  CHECK_STATUS(mock.place_in_hostmem(&view, 0x4000u), Status::invalid_parameter);
-  CHECK(mock.claim(HostViolation::unknown_handle));
-  mock.destroy_host_memory(first);
-  CHECK(mock.claim(HostViolation::unknown_handle));
-  mock.remove_from_hostmem(0u, 0x1000u);
-  CHECK(mock.claim(HostViolation::unknown_handle));
+  const int memory = memfd(0x2000u);
+  auto *const executor = static_cast<std::uint8_t *>(
+      mmap(nullptr, 0x2000u, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0));
+  executor[0x1234] = 0x5A;
+  CHECK_STATUS(mock.place_in_hostmem(memory, 0x2000u, 0x4000u), Status::ok);
+  auto *const guest = static_cast<std::uint8_t *>(mock.placed_at(0x4000u));
+  CHECK(guest != nullptr);
+  CHECK(mock.placed_at(0x5000u) == nullptr);   /* only where a placement starts */
+  CHECK_EQ(guest[0x1234], 0x5Au);
+  guest[0x10] = 0xA5;
+  CHECK_EQ(executor[0x10], 0xA5u);
   CHECK_EQ(mock.live_placements(), 1u);
+  CHECK_EQ(mock.placements(), 1u);
+  CHECK_EQ(mock.last_placement().fd, memory);
+  CHECK_EQ(mock.last_placement().size, 0x2000u);
+  CHECK_EQ(mock.last_placement().offset, 0x4000u);
+  mock.remove_from_hostmem(0x4000u, 0x2000u);
+  CHECK_EQ(mock.live_placements(), 0u);
+  CHECK(mock.placed_at(0x4000u) == nullptr);
+  CHECK_EQ(mock.placements(), 1u);
+  munmap(executor, 0x2000u);
+  close(memory); }
+
+TEST(mock_host_hostmem, refuses_what_qemu_could_not_map_and_catches_misuse)
+{ MockHost mock;
+  mock.set_hostmem_size(0x10000u);
+  const int memory = memfd(0x2000u);
+  CHECK_STATUS(mock.place_in_hostmem(memory, 0x3000u, 0u), Status::no_memory);   /* past the file */
+  CHECK_STATUS(mock.place_in_hostmem(memory, 0u, 0u), Status::no_memory);
+  int ends[2] = {-1, -1};
+  CHECK_EQ(pipe(ends), 0);
+  CHECK_STATUS(mock.place_in_hostmem(ends[0], 0x1000u, 0u), Status::no_memory);   /* nothing to map */
+  close(ends[0]);
+  close(ends[1]);
+  CHECK_STATUS(mock.place_in_hostmem(ends[0], 0x1000u, 0u), Status::invalid_parameter);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  mock.fail_placement_at(1u);
+  CHECK_STATUS(mock.place_in_hostmem(memory, 0x2000u, 0u), Status::no_memory);
+  CHECK_EQ(mock.placements(), 0u);
+  CHECK_STATUS(mock.place_in_hostmem(memory, 0x2000u, 0u), Status::ok);
+  CHECK_STATUS(mock.place_in_hostmem(memory, 0x2000u, 0x1000u), Status::ok);
+  CHECK(mock.claim(HostViolation::overlapping_placement));
+  mock.remove_from_hostmem(0u, 0x1000u);   /* not what was placed */
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  CHECK_EQ(mock.live_placements(), 2u);
   mock.remove_from_hostmem(0u, 0x2000u);
-  mock.destroy_host_memory(first);
-  mock.destroy_host_memory(second);
-  CHECK_EQ(mock.live_host_memory(), 0u);
-  mock.fail_host_memory_at(1u);
-  CHECK(mock.create_host_memory(0x1000u, view) == nullptr);
-  CHECK(view == nullptr); }
+  mock.remove_from_hostmem(0x1000u, 0x2000u);
+  CHECK_EQ(mock.live_placements(), 0u);
+  close(memory); }
+
+/* A descriptor the mock handed out is counted until the device closes it;
+ * one it got elsewhere is closed and not counted; a closed one is a double
+ * close. */
+TEST(mock_host_descriptors, counts_what_it_handed_out_and_catches_a_double_close)
+{ MockHost mock;
+  const int counted = mock.open_descriptor();
+  CHECK(counted >= 0);
+  CHECK(mock.descriptor_open(counted));
+  CHECK_EQ(mock.live_descriptors(), 1u);
+  const int elsewhere = memfd(0x1000u);
+  mock.close_descriptor(elsewhere);
+  CHECK(!mock.descriptor_open(elsewhere));
+  CHECK_EQ(mock.live_descriptors(), 1u);
+  mock.close_descriptor(counted);
+  CHECK(!mock.descriptor_open(counted));
+  CHECK_EQ(mock.live_descriptors(), 0u);
+  mock.close_descriptor(counted);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  CHECK(!mock.descriptor_open(-1)); }
+
+/* A head shows a frame out of the device's own mapping of a blob; a head
+ * shown nothing to read from is the device's bug, and one the display lacks
+ * is refused. */
+TEST(mock_host_scanout, a_head_keeps_the_mapping_it_reads_and_refuses_none)
+{ MockHost mock;
+  mock.add_display_heads(1u);
+  const std::uint8_t blob[64] = {};
+  const MockHost::Plane plane = {8u, 2u, 0u, 0u, 8u, 2u, 32u, 0u, 0x34325241u};
+  CHECK_STATUS(mock.show_scanout_plane(0u, nullptr, plane), Status::not_supported);
+  CHECK(mock.claim(HostViolation::scanout_misuse));
+  CHECK_STATUS(mock.show_scanout_plane(0u, blob, plane), Status::ok);
+  CHECK(mock.head(0u).shown);
+  CHECK(mock.head(0u).blob == blob);
+  CHECK_EQ(mock.head(0u).plane.stride, 32u);
+  CHECK_STATUS(mock.show_scanout_plane(1u, blob, plane), Status::not_supported);   /* a head it lacks */
+  CHECK(!mock.claim(HostViolation::scanout_misuse));
+  mock.hide_scanout(0u);
+  CHECK(!mock.head(0u).shown);
+  CHECK(mock.head(0u).blob == nullptr);
+  CHECK_EQ(mock.live_scanouts(), 0u); }
 
 TEST(mock_host_requests, answers_once_and_knows_the_base_class_resources)
 { MockHost mock;

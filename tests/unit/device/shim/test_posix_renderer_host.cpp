@@ -390,99 +390,11 @@ TEST(posix_renderer_host_guest, maps_extents_and_aliases_runs_through_the_region
   std::uint8_t outside[page] = {};
   CHECK_STATUS(host.alias_guest_run(outside, page, range), Status::not_supported);
   host.release_range(range, 2u * page);
-  /* A dma-buf needs runs, all of them in a region. */
-  void *const         runs[1] = {outside};
-  const std::uint64_t sizes[1] = {page};
-  int                 fd = 7;
-  CHECK_STATUS(host.dmabuf_over_guest(nullptr, sizes, 1u, fd), Status::invalid_parameter);
-  CHECK_EQ(fd, -1);
-  CHECK_STATUS(host.dmabuf_over_guest(runs, nullptr, 1u, fd), Status::invalid_parameter);
-  CHECK_STATUS(host.dmabuf_over_guest(runs, sizes, 0u, fd), Status::invalid_parameter);
-  CHECK_STATUS(host.dmabuf_over_guest(runs, sizes, 1u, fd), Status::not_supported);
-  CHECK_EQ(fd, -1);
-  host.close_dmabuf(-1);
   int           removed = -1;
   std::uint64_t size = 0u;
   CHECK_STATUS(rig.memory().remove(2u, base, size, removed), Status::ok);
   host.unmap_region(base, size);
   host.close_descriptor(removed); }
-
-/* A host blob maps the memfd QEMU placed and offered; the offer is taken
- * once, kept through a map that fails, and replaced - closed - by the next. */
-TEST(posix_renderer_host_memory, a_host_blob_maps_the_memfd_qemu_offered)
-{ Rig rig;
-  PosixRendererHost &host = rig.host();
-  void *pointer = &rig;
-  CHECK(host.create_host_memory(page, pointer) == nullptr);   /* nothing offered */
-  CHECK(pointer == nullptr);
-  const int first = memfd(page);
-  host.offer_host_memory(first);
-  const int second = memfd(page);
-  host.offer_host_memory(second);
-  CHECK(!is_open(first));
-  CHECK(host.create_host_memory(0u, pointer) == nullptr);   /* does not map: the offer stays */
-  CHECK(is_open(second));
-  const std::uint8_t byte = 0x61u;
-  CHECK_EQ(::pwrite(second, &byte, 1u, 9), 1);
-  void *const memory = host.create_host_memory(page, pointer);
-  CHECK(memory != nullptr);
-  CHECK_EQ(static_cast<std::uint8_t *>(pointer)[9], 0x61u);
-  void *again = nullptr;
-  CHECK(host.create_host_memory(page, again) == nullptr);   /* taken once */
-  host.destroy_host_memory(memory);
-  CHECK(!is_open(second));
-  const int unused = memfd(page);
-  host.offer_host_memory(unused);   /* closed with the host */
-  CHECK(is_open(unused)); }
-
-/* A host blob's dma-buf is the renderer's own, over the memfd QEMU made
- * sealed against growing and shrinking: the same pages the mapping shows, at
- * the range asked for (docs/host-window.md). A memfd that is not sealed is
- * refused by udmabuf, as is a range past the block. */
-TEST(posix_renderer_host_memory, a_host_blob_is_a_dma_buf_over_the_memfd_qemu_offered)
-{ Rig rig;
-  PosixRendererHost &host = rig.host();
-  const int sealed = ::memfd_create("av-test", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-  CHECK(sealed >= 0);
-  CHECK_EQ(::ftruncate(sealed, static_cast<off_t>(3u * page)), 0);
-  CHECK_EQ(::fcntl(sealed, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL), 0);
-  host.offer_host_memory(sealed);
-  void *pointer = nullptr;
-  void *const memory = host.create_host_memory(3u * page, pointer);
-  CHECK(memory != nullptr);
-  static_cast<std::uint8_t *>(pointer)[page + 5u] = 0x7Du;
-  int fd = 7;
-  const Status made = host.dmabuf_over_host_memory(memory, page, 2u * page, fd);
-  const bool udmabuf = ::access("/dev/udmabuf", R_OK | W_OK) == 0;
-  CHECK_STATUS(made, udmabuf ? Status::ok : Status::not_supported);
-  if (made == Status::ok) {
-      auto *const shared = static_cast<std::uint8_t *>(
-          ::mmap(nullptr, 2u * page, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
-      CHECK(shared != MAP_FAILED);
-      if (shared != MAP_FAILED) {
-          CHECK_EQ(shared[5], 0x7Du);
-          shared[page + 3u] = 0x2Bu;   /* what a host GPU writes, the mapping reads */
-          CHECK_EQ(static_cast<std::uint8_t *>(pointer)[2u * page + 3u], 0x2Bu);
-          ::munmap(shared, 2u * page);
-      }
-      host.close_dmabuf(fd);
-  } else {
-      CHECK_EQ(fd, -1);
-  }
-  int refused = 7;
-  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 2u * page, 2u * page, refused), Status::not_supported);
-  CHECK_EQ(refused, -1);
-  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 4u * page, page, refused), Status::not_supported);
-  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0u, 0u, refused), Status::not_supported);
-  CHECK_STATUS(host.dmabuf_over_host_memory(nullptr, 0u, page, refused), Status::not_supported);
-  host.destroy_host_memory(memory);
-  /* Unsealed, as a memfd QEMU made before the seals were asked for. */
-  host.offer_host_memory(memfd(page));
-  void *const unsealed = host.create_host_memory(page, pointer);
-  CHECK(unsealed != nullptr);
-  CHECK_STATUS(host.dmabuf_over_host_memory(unsealed, 0u, page, refused), Status::not_supported);
-  CHECK_EQ(refused, -1);
-  host.destroy_host_memory(unsealed); }
 
 /* A fence interrupt is a write to the guest notifier of its line, while the
  * lines are connected and only for a line QEMU gave. */
@@ -587,24 +499,15 @@ TEST(posix_renderer_host, what_only_qemu_has_is_not_supported)
   av::PciAddress address;
   CHECK_STATUS(host.gpu_pci_address(0u, address), Status::not_supported);
   CHECK_EQ(host.hostmem_size(), 0u);
-  CHECK_STATUS(host.place_in_hostmem(&rig, 0u), Status::not_supported);
+  const int placed = memfd(page);
+  CHECK_STATUS(host.place_in_hostmem(placed, page, 0u), Status::not_supported);
+  CHECK(is_open(placed));   /* the caller's, untouched */
+  ::close(placed);
   host.remove_from_hostmem(0u, page);
   std::uint8_t buffer[8] = {};
-  CHECK_STATUS(host.read_hostmem(0u, buffer, sizeof buffer), Status::not_supported);
   CHECK_STATUS(host.bind_gpu(0u), Status::not_supported);
-  void        *pointer = &rig;
-  std::int32_t error = 5;
-  CHECK(host.export_gpu_memory(page, pointer, error) == nullptr);
-  CHECK(pointer == nullptr);
-  CHECK_EQ(error, 0);
-  host.release_gpu_memory(nullptr);
-  error = 5;
-  CHECK(host.import_guest_memory(buffer, sizeof buffer, error) == nullptr);
-  CHECK_EQ(error, 0);
-  host.release_guest_memory(nullptr);
-  CHECK_STATUS(host.read_imported_memory(nullptr, 0u, buffer, 1u), Status::not_supported);
   CHECK(!host.display_takes_dmabuf(0u));
-  CHECK_STATUS(host.show_scanout(0u, -1, av::ScanoutFramebuffer()), Status::not_supported);
+  CHECK_STATUS(host.show_scanout(0u, buffer, av::ScanoutFramebuffer()), Status::not_supported);
   host.update_scanout(0u, 0u, 0u, 1u, 1u);
   host.hide_scanout(0u);
   CHECK_EQ(host.fence_interrupt_descriptor(0u), -1);
@@ -616,7 +519,6 @@ TEST(posix_renderer_host, what_only_qemu_has_is_not_supported)
   CHECK_EQ(descriptor, -1);
   std::uint64_t offset = 0u;
   CHECK_STATUS(host.locate_guest(buffer, 1u, region, offset), Status::not_found);
-  CHECK_EQ(host.host_memory_descriptor(&rig), -1);
   CHECK_STATUS(host.start_renderer("/bin/true"), Status::not_supported);
   CHECK_STATUS(host.send_renderer(buffer, 1u, nullptr, 0u), Status::not_supported);
   std::size_t   length = 5u;

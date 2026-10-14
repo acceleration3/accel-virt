@@ -1,9 +1,9 @@
-/* The room an OpenGL context lends bulk data in (feature 050, research.md §5),
- * over MockKmt: a chunk bound to the context's own transport - guest RAM on a
- * device with no window, else a chunk of its host window - and imported whole
- * with IMPORT_BLOB, lent through that transport's blobs() only
- * while it is held, and let go import first - the device refuses to unbind a
- * chunk it still has imported. */
+/* The room a context lends bulk data in (docs/host-memory.md), over MockKmt:
+ * a chunk of the device's host window of readback memory, opened on the
+ * context's own transport and imported whole with IMPORT_BLOB, lent through
+ * that transport's blobs() only while it is held, and let go import first.
+ * Nothing falls back to guest RAM: a device with no window, or no room in
+ * it, lends nothing. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -14,6 +14,7 @@
 #include "harness/guest/scripted_host.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -34,6 +35,7 @@ struct KmtBlobArenaProbe {
 using av::ClientBlobLease;
 using av::CommandHeader;
 using av::GuestConnection;
+using av::HostMemoryRequest;
 using av::KmtBlobArena;
 using av::KmtBlobArenaProbe;
 using av::KmtTransport;
@@ -53,11 +55,13 @@ constexpr std::uint32_t reply_bytes = 4096u;
 /* The connection's device and queue, the transport's two allocations, its DMA
  * mapping and its context, with the adapter. */
 constexpr std::uint32_t link_objects = 7u;
+/* Room for the largest arena, and the page past it. */
+constexpr std::uint64_t window_bytes = KmtBlobArena::max_bytes + 4096u;
 
 class Rig {
 public:
     Rig()
-        : adapter_(0u), connection_(kmt_), host_(kmt_), staging_{},
+        : adapter_(0u), connection_(kmt_), host_(kmt_), staging_{}, spare_{},
           transport_(connection_, SubApi::opengl, 12u, reply_bytes, staging_, sizeof staging_),
           arena_(connection_, transport_)
     {
@@ -66,12 +70,15 @@ public:
         CHECK_STATUS(kmt_.enumerate_adapters(&adapter_, 1u, count), Status::ok);
         CHECK_STATUS(connection_.open(adapter_), Status::ok);
         CHECK_STATUS(transport_.initialize(), Status::ok);
+        kmt_.open_host_window(window_bytes);
         CHECK(arena_.invariants_hold());
     }
     ~Rig() { CHECK_EQ(kmt_.misuses(), 0u); }
 
-    MockKmt      &kmt() { return kmt_; }
-    ScriptedHost &host() { return host_; }
+    MockKmt         &kmt() { return kmt_; }
+    ScriptedHost    &host() { return host_; }
+    GuestConnection &connection() { return connection_; }
+    std::uint8_t    *spare_staging() { return spare_; }
     KmtTransport &transport() { return transport_; }
     KmtBlobArena &arena() { return arena_; }
 
@@ -89,7 +96,7 @@ public:
         CHECK(!transport_.blobs().ready());
         CHECK(!transport_.blobs().take(1u).taken());
         CHECK_EQ(kmt_.open_objects(), link_objects);
-        CHECK_EQ(kmt_.ram_chunks(), kernels);
+        CHECK_EQ(kmt_.window_chunks(), kernels);
     }
 
 private:
@@ -98,6 +105,7 @@ private:
     GuestConnection connection_;
     ScriptedHost    host_;
     std::uint8_t    staging_[1024];
+    std::uint8_t    spare_[1024];
     KmtTransport    transport_;
     KmtBlobArena    arena_;
 };
@@ -125,13 +133,6 @@ struct ReleaseWitness {
 void witness_release(void *context)
 {
     ReleaseWitness &witness = *static_cast<ReleaseWitness *>(context);
-    witness.bindings_at_release = witness.kmt->ram_chunks();
-}
-
-/* The window chunks held when the release was waited for. */
-void witness_window_release(void *context)
-{
-    ReleaseWitness &witness = *static_cast<ReleaseWitness *>(context);
     witness.bindings_at_release = witness.kmt->window_chunks();
 }
 
@@ -154,22 +155,21 @@ TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_vie
   CHECK(rig.arena().lending());
   CHECK_EQ(rig.arena().bytes(), KmtBlobArena::default_bytes);
   CHECK_EQ(KmtBlobArena::default_bytes, 16u * mib);
-  /* One chunk of guest RAM - the device has no window - on this transport's
-   * context. */
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
-  CHECK_EQ(rig.kmt().ram_chunk_pages(0u), 16u * mib / MockKmt::page_bytes);
-  /* The import asked for all of it, at its start, and needs no memory type. */
+  /* One chunk of the window, of readback memory: both CPUs read it. */
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  CHECK(rig.kmt().last_window_request().kind() == HostMemoryRequest::Kind::readback);
+  CHECK(rig.kmt().last_window_request().valid());
+  /* The import names it, whole. */
   CHECK_EQ(rig.kmt().commands(), 1u);
   CHECK_EQ(rig.kmt().command_id(0u), CommandHeader::import_blob_id);
   const std::uint8_t *const request = rig.kmt().command_bytes(0u) + CommandHeader::encoded_size;
-  CHECK_EQ(u32_at(request, 0u), MockKmt::first_chunk_resource);
-  CHECK_EQ(u64_at(request, 8u), 0u);
-  CHECK_EQ(u64_at(request, 16u), 16u * mib);
-  CHECK_EQ(u32_at(request, 24u), 0u);
+  CHECK_EQ(u32_at(request, 0u), MockKmt::first_window_resource);
+  CHECK_EQ(u32_at(request, 4u), 0u);
   /* Leases are the chunk's own bytes, at their offset from its start. */
   av::ClientBlobArena &blobs = rig.transport().blobs();
   CHECK(blobs.ready());
-  const std::uint8_t *const view = rig.kmt().ram_chunk(0u);
+  const std::uint8_t *const view = rig.kmt().window_chunk_memory(MockKmt::first_window_resource);
+  CHECK(view == rig.arena().view());
   ClientBlobLease first = blobs.take(4096u);
   ClientBlobLease second = blobs.take(100u);
   CHECK(first.taken());
@@ -197,7 +197,7 @@ TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_vie
   /* A second open is refused and asks nothing. */
   CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
   CHECK_EQ(rig.kmt().commands(), 1u);
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
   rig.host().nop();
   CHECK_STATUS(rig.arena().close(), Status::ok);
   CHECK_EQ(rig.kmt().commands(), 2u);
@@ -217,7 +217,8 @@ TEST(kmt_blob_arena, sizes_are_whole_pages_between_the_default_and_the_ceiling)
       rig.host_takes_the_import();
       CHECK_STATUS(rig.arena().open(one.asked), Status::ok);
       CHECK_EQ(rig.arena().bytes(), one.made);
-      CHECK_EQ(rig.kmt().ram_chunk_pages(0u), one.made / MockKmt::page_bytes);
+      /* The window's next page is free from the chunk's end on. */
+      CHECK(rig.kmt().window_chunk_memory(MockKmt::first_window_resource) == rig.kmt().window_base());
       CHECK(!rig.transport().blobs().take(static_cast<std::size_t>(one.made)).taken());
       CHECK(rig.transport().blobs().take(static_cast<std::size_t>(one.made - KmtBlobArena::error_word_bytes)).taken());
       CHECK(rig.arena().invariants_hold());
@@ -231,6 +232,7 @@ TEST(kmt_blob_arena, sizes_are_whole_pages_between_the_default_and_the_ceiling)
       Rig rig;
       CHECK_STATUS(rig.arena().open(past), Status::invalid_parameter);
       CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 2u);   /* the transport's own */
+      CHECK_EQ(rig.kmt().window_opens(), 0u);
       CHECK_EQ(rig.kmt().commands(), 0u);
       rig.check_nothing_is_held();
   } }
@@ -302,7 +304,7 @@ TEST(kmt_blob_arena, close_lets_every_part_go_and_answers_the_first_failure)
     CHECK_STATUS(rig.arena().close(), Status::invalid_state);
     CHECK(!rig.arena().lending());
     CHECK(!rig.transport().blobs().ready());
-    CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+    CHECK_EQ(rig.kmt().window_chunks(), 1u);
     rig.host_takes_the_import();
     CHECK_STATUS(rig.arena().open(0u), Status::ok);
     rig.host().nop();
@@ -317,7 +319,7 @@ TEST(kmt_blob_arena, keeps_the_last_word_for_the_hosts_errors)
   CHECK_EQ(rig.arena().host_errors(), 0u);
   rig.host_takes_the_import();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  std::uint8_t *const chunk = rig.kmt().ram_chunk(0u);
+  std::uint8_t *const chunk = rig.kmt().window_base();
   CHECK_EQ(rig.arena().host_errors(), 0u);
   const std::uint64_t word = 0x8000000000030201ull;
   std::memcpy(chunk + 16u * mib - 8u, &word, sizeof word);
@@ -346,7 +348,7 @@ TEST(kmt_blob_arena, the_invariant_catches_a_size_it_never_makes_and_lending_out
   KmtBlobArenaProbe::claim_bytes(rig.arena(), 16u * mib);
   rig.transport().blobs().lend(nullptr, 0u);
   CHECK(!rig.arena().invariants_hold());
-  rig.transport().blobs().lend(rig.kmt().ram_chunk(0u), 16u * mib);
+  rig.transport().blobs().lend(rig.kmt().window_base(), 16u * mib);
   CHECK(rig.arena().invariants_hold());
   KmtBlobArenaProbe::lend_without_chunk(rig.arena());
   CHECK(!rig.arena().invariants_hold());
@@ -387,59 +389,45 @@ TEST(kmt_blob_arena, an_arena_that_lends_nothing_has_no_view)
   CHECK_EQ(rig.arena().bytes(), 0u);
   CHECK(rig.arena().invariants_hold()); }
 
-/* On a device with a host window the arena is a chunk of it: imported and
- * lent the same way, with leases in the window's own memory, and closed with
- * the import released first. */
-TEST(kmt_blob_arena, over_a_host_window_lends_the_windows_memory)
+/* A second arena lies after the first in the window, and each lends its own
+ * memory. */
+TEST(kmt_blob_arena, two_arenas_lend_apart_in_the_window)
 { Rig rig;
-  rig.kmt().open_host_window(64u * mib);
   rig.host_takes_the_import();
-  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  CHECK(rig.arena().invariants_hold());
-  CHECK_EQ(rig.arena().bytes(), KmtBlobArena::default_bytes);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);
-  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
-  CHECK_EQ(rig.kmt().window_chunks(), 1u);
-  /* The import names the window chunk's resource, all of it. */
-  CHECK_EQ(rig.kmt().commands(), 1u);
-  const std::uint8_t *const request = rig.kmt().command_bytes(0u) + CommandHeader::encoded_size;
-  CHECK_EQ(u32_at(request, 0u), MockKmt::first_window_resource);
-  CHECK_EQ(u64_at(request, 16u), 16u * mib);
-  CHECK(rig.arena().view() == rig.kmt().window_base());
-  ClientBlobLease lease = rig.transport().blobs().take(64u);
-  CHECK(lease.taken());
-  CHECK(static_cast<const void *>(lease.data()) == static_cast<const void *>(rig.kmt().window_base()));
-  std::memset(lease.data(), 0x77, lease.bytes());
-  CHECK_EQ(rig.kmt().window_base()[63u], 0x77u);
-  ReleaseWitness witness = {&rig.kmt(), 0xFFu};
-  rig.kmt().play_at_wait(1u, &witness_window_release, &witness);
+  KmtTransport other(rig.connection(), SubApi::opengl, 12u, reply_bytes, rig.spare_staging(), 1024u);
+  CHECK_STATUS(other.initialize(), Status::ok);
+  KmtBlobArena second(rig.connection(), other);
+  rig.host_takes_the_import();
+  CHECK_STATUS(second.open(0u), Status::ok);
+  CHECK(second.view() == rig.arena().view() + KmtBlobArena::default_bytes);
+  CHECK_EQ(rig.kmt().window_chunks(), 2u);
   rig.host().nop();
-  CHECK_STATUS(rig.arena().close(), Status::ok);
-  CHECK_EQ(witness.bindings_at_release, 1u);
-  CHECK_EQ(rig.kmt().commands(), 2u);
-  CHECK_EQ(rig.kmt().command_id(1u), CommandHeader::release_blob_id);
-  rig.check_nothing_is_held();
-  CHECK_EQ(rig.kmt().window_chunks(), 0u); }
-
-/* A window with no room for the arena leaves it to guest RAM, as before. */
-TEST(kmt_blob_arena, a_full_window_leaves_the_arena_to_guest_ram)
-{ Rig rig;
-  rig.kmt().open_host_window(8u * mib);
-  rig.host_takes_the_import();
-  CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  CHECK_EQ(rig.kmt().window_chunks(), 0u);
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
-  CHECK(rig.arena().view() == rig.kmt().ram_chunk(0u));
+  CHECK_STATUS(second.close(), Status::ok);
+  other.teardown();
   rig.host().nop();
   CHECK_STATUS(rig.arena().close(), Status::ok);
   rig.check_nothing_is_held(); }
+
+/* Nothing falls back to guest RAM: with no window, or none with room, the
+ * open is the kernel's refusal, nothing is imported and nothing lent. */
+TEST(kmt_blob_arena, no_window_or_no_room_lends_nothing)
+{ { Rig rig;
+    rig.kmt().open_host_window(0u);
+    CHECK_STATUS(rig.arena().open(0u), Status::not_supported);
+    CHECK_EQ(rig.kmt().commands(), 0u);
+    rig.check_nothing_is_held(); }
+  { Rig rig;
+    rig.kmt().open_host_window(8u * mib);
+    CHECK_STATUS(rig.arena().open(0u), Status::invalid_parameter);
+    CHECK_EQ(rig.kmt().commands(), 0u);
+    CHECK(rig.arena().view() == nullptr);
+    rig.check_nothing_is_held(); } }
 
 /* An abandoned window arena on a faulted context sends nothing: the kernel
  * closes the chunk with the context. */
 TEST(kmt_blob_arena, an_abandoned_window_arena_is_closed_by_the_kernel)
 { Rig rig;
-  rig.kmt().open_host_window(64u * mib);
   rig.host_takes_the_import();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
   rig.kmt().withhold_answer_at(1u);

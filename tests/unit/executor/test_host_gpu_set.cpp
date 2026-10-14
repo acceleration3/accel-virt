@@ -29,16 +29,15 @@ void fill(MockHostApis &apis, std::uint32_t how_many)
 { std::uint8_t uuid[16] = {};
   for (std::uint32_t i = 0u; i < how_many; i++) {
       uuid[0] = static_cast<std::uint8_t>(i + 1u);
-      apis.add_gpu(uuid, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+      apis.add_gpu(uuid, AV_EXECUTOR_SUB_API_VULKAN);
   } }
 
 }  // namespace
 
 TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF, AV_BLOB_DMA_BUF,
-               AV_BLOB_DMA_BUF);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, all_three);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
@@ -47,19 +46,19 @@ TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
   const HostGpu *const first = set.find(intel);
   CHECK(first != nullptr);
   CHECK_EQ(first->index(), 0u);
-  CHECK_EQ(first->import_kinds(AV_EXECUTOR_SUB_API_OPENCL), std::uint32_t{AV_BLOB_DMA_BUF});
+  CHECK_EQ(first->sub_apis(), all_three);
 
   const HostGpu *const second = set.find(nvidia);
   CHECK(second != nullptr);
   CHECK_EQ(second->index(), 1u);
-  CHECK_EQ(second->import_kinds(AV_EXECUTOR_SUB_API_OPENCL), 0u);
+  CHECK_EQ(second->sub_apis(), std::uint32_t{AV_EXECUTOR_SUB_API_VULKAN});
   CHECK(set.invariants_hold()); }
 
 /* A domain remembers its GPU by index once the device named it by UUID. */
 TEST(host_gpu_set, answers_each_gpu_by_its_index)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, 0u, 0u, 0u);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.add_gpu(intel, all_three);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(set.at(0u) == set.find(intel));
@@ -68,7 +67,7 @@ TEST(host_gpu_set, answers_each_gpu_by_its_index)
 
 TEST(host_gpu_set, a_uuid_no_gpu_has_is_not_found)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, 0u, 0u, 0u);
+  apis.add_gpu(intel, all_three);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
@@ -92,8 +91,8 @@ TEST(host_gpu_set, a_host_with_no_gpu_is_empty_and_offers_nothing)
  * one GPU and one API and the capset carries the union. */
 TEST(host_gpu_set, offers_the_union_of_what_its_gpus_run)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_OPENGL, 0u, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_OPENGL);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
@@ -130,13 +129,16 @@ TEST(host_gpu_set_invariants, a_count_past_the_array_breaks_them)
   HostGpuSetProbe(set).set_count(HostGpuSet::max_gpus + 1u);
   CHECK(!set.invariants_hold()); }
 
-/* The set answers the capset from its GPUs, so one broken GPU is a broken set. */
+/* The set answers the capset from its GPUs, so one broken GPU is a broken set:
+ * here a slot counted in that was never described yet claims to run Vulkan. */
 TEST(host_gpu_set_invariants, a_gpu_that_breaks_its_own_breaks_them)
 { MockHostApis apis;
-  apis.add_gpu(intel, all_three, AV_BLOB_HOST_POINTER, 0u, AV_BLOB_DMA_BUF);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, all_three);
   HostGpuSet set;
   set.initialize(apis);
   CHECK(!set.overflowed());
-  HostGpuProbe(HostGpuSetProbe(set).gpu_at(0u)).set_sub_apis(AV_EXECUTOR_SUB_API_VULKAN);
+  HostGpuSetProbe probe(set);
+  probe.set_count(2u);
+  CHECK(set.invariants_hold());
+  HostGpuProbe(probe.gpu_at(1u)).set_sub_apis(AV_EXECUTOR_SUB_API_VULKAN);
   CHECK(!set.invariants_hold()); }

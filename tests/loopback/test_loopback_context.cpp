@@ -70,17 +70,19 @@ TEST(loopback_capset, the_driver_reads_the_devices_capset_and_refuses_another_ma
   CHECK(other.failed());
   CHECK(other.invariants_hold()); }
 
-/* Feature 039: the guest reads a memory path only where the device's probe
- * passed on this host. The rig's MockHost has a hostmem region, so the export
- * probe passes; nothing is mapped where the import probe looks, so that bit is
- * clear - and the whole suite runs on the paths that exist today either way,
- * which is what a cleared bit has to mean until 041 takes the fallback. */
-TEST(loopback_capset, offers_only_the_memory_paths_its_probes_proved)
-{ LoopbackRig rig;
+/* Host memory reaches the guest only through the hostmem window
+ * (docs/host-memory.md): the rig's MockHost has one, so the guest reads that
+ * path, and the two bits feature 039's probes once set - exporting host GPU
+ * memory and importing guest pages - are never set, since neither is a
+ * choice any more. */
+TEST(loopback_capset, offers_host_visible_memory_and_no_retired_memory_path)
+{ constexpr std::uint64_t gpu_exported_memory = 2u;
+  constexpr std::uint64_t guest_memory_import = 4u;
+  LoopbackRig rig;
   CHECK(rig.read_capset());
   CHECK(rig.capset().has_feature(CapsetInfo::feature_host_visible_memory));
-  CHECK(rig.capset().has_feature(CapsetInfo::feature_gpu_exported_memory));
-  CHECK(!rig.capset().has_feature(CapsetInfo::feature_guest_memory_import));
+  CHECK(!rig.capset().has_feature(gpu_exported_memory));
+  CHECK(!rig.capset().has_feature(guest_memory_import));
   CHECK(rig.establish(0u));
   GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
   ring.write_batch(1u, 64u);

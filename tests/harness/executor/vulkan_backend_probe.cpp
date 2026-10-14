@@ -1,7 +1,5 @@
 #include "harness/executor/vulkan_backend_probe.hpp"
 
-#include "device/abi/av_executor.h"
-
 namespace av {
 
 VulkanBackendProbe::VulkanBackendProbe(VulkanBackend &target) : backend(target) {}
@@ -35,23 +33,16 @@ void VulkanBackendProbe::name_template(VulkanBackend &target, VkDescriptorUpdate
     target.templates_.name(made);
 }
 
-uint32_t VulkanBackendProbe::decide_import(VkPhysicalDevice physical)
+void VulkanBackendProbe::learn_mappable(VkPhysicalDevice physical, uint32_t mask)
 {
-    backend.importable_.learn(0u, 0u, 0u);
-    backend.decide_import(physical);
-    return backend.importable_.kind();
+    backend.importable_.learn(reinterpret_cast<uint64_t>(physical), mask);
 }
 
-void VulkanBackendProbe::import_as_pointer(VkPhysicalDevice physical)
+bool VulkanBackendProbe::mappable_known(VkPhysicalDevice physical) const
 {
-    backend.importable_.learn(reinterpret_cast<uint64_t>(physical), 0u, backend.import_.probe_types(physical));
+    return backend.importable_.known_for(reinterpret_cast<uint64_t>(physical));
 }
 
-void VulkanBackendProbe::import_as_dmabuf(VkPhysicalDevice physical)
-{
-    /* A mask of one type, which is enough: what the backend does with the kind
-     * is what this makes reachable, not which types that kind lands in. */
-    backend.importable_.learn(reinterpret_cast<uint64_t>(physical), 1u, 0u);
-}
+bool VulkanBackendProbe::memory_import() const { return backend.memory_import_; }
 
 }  // namespace av

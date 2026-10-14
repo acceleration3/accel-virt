@@ -14,12 +14,13 @@
  * A host with no OpenCL, no EGL display, or no GL import returns without
  * judging, as every device-backed test here does. */
 #include "device/abi/av_executor.h"
+#include "executor/exported_memory.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
-#include "executor/shim/probe_dma_buf.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -557,13 +558,9 @@ TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_
   if (context == nullptr) { backend.shut_down(); return; }
   constexpr std::size_t bytes = std::size_t{1} << 20;
   alignas(4096) static std::uint8_t lent[bytes];
-  AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.pointer = lent;
-  handle.fd = -1;
-  handle.size = sizeof lent;
+  av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, lent, sizeof lent));
   av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
   CHECK(backend.adopt(blob));
   cl_int                 error = CL_SUCCESS;
   const cl_command_queue queue = ::clCreateCommandQueueWithProperties(

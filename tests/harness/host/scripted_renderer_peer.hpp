@@ -1,8 +1,9 @@
 /* A renderer that answers from a script, for tests of QEMU's end of the
  * socket: it keeps the kind, sequence, descriptor count and body of every
  * datagram it is sent, closing the duplicates it is handed, and answers each
- * hello with a Ready and each request with a reply carrying the outcome the
- * test set - unless it was told to fall silent. Datagrams a test queues are
+ * hello with a Ready, each request with a reply carrying the outcome the
+ * test set, and each allocate_memory with memory of the size asked - a
+ * memfd, so QEMU's end maps it - unless it was told to fall silent. Datagrams a test queues are
  * answered before those, so a stale reply, a wrong kind, garbage or a
  * datagram carrying descriptors can stand between a request and its answer. */
 #ifndef AV_SCRIPTED_RENDERER_PEER_HPP
@@ -39,6 +40,8 @@ public:
     void answer_requests_with(Status outcome);
     /* What each hello is answered with from here on. */
     void ready_with(const ReadyMessage &ready);
+    /* Each allocate_memory is answered from here on with nothing allocated. */
+    void refuse_memory();
     /* Nothing is answered from here on, as a renderer that hung. */
     void fall_silent();
     /* The next datagram delivered makes the renderer die, as MockHost's
@@ -77,10 +80,14 @@ private:
         std::uint8_t  bytes[RendererMessageHeader::encoded_size + max_body];
         std::size_t   length;
         std::uint32_t descriptors;
+        /* Bytes of the memfd each descriptor is, or 0 for a pipe. */
+        std::uint64_t memory_size;
     };
 
-    void push(const std::uint8_t *bytes, std::size_t length, std::uint32_t descriptors);
-    void answer_request(const RendererMessageHeader &header);
+    void push(const std::uint8_t *bytes, std::size_t length, std::uint32_t descriptors,
+              std::uint64_t memory_size = 0u);
+    void answer_request(const RendererMessageHeader &header, const std::uint8_t *body);
+    void answer_memory(const RendererMessageHeader &header, const std::uint8_t *body);
 
     MockHost     &host_;
     Datagram      datagrams_[max_datagrams];
@@ -91,6 +98,7 @@ private:
     Status        outcome_;
     ReadyMessage  ready_;
     bool          silent_;
+    bool          refuse_memory_;
     bool          dying_;
 };
 
