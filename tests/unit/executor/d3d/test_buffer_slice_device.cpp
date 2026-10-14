@@ -199,8 +199,11 @@ const Misuse misuses[] = {
     [](av::D3dLoopback &wire, std::uint64_t) {   /* no memory at all */
         CHECK(av_d3d_BindBufferSlice(wire, dynamic, 0u, 0u, buffer_bytes));
     },
-    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice past the store */
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice at the store's end */
         CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, store_bytes, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice past it */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, store_bytes + 4096u, buffer_bytes));
     },
     [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice running off its end */
         CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, store_bytes - 1024u, buffer_bytes));
@@ -309,9 +312,13 @@ TEST(buffer_slice_device, a_buffer_on_a_store_that_goes_is_given_storage_of_its_
     av::D3dLoopback &wire = session.wire();
     const std::uint64_t store = wire.open_memory(upload, store_bytes);
     CHECK(store != 0u);
-    constexpr std::uint32_t mapped = 10u, copy = 11u;
+    constexpr std::uint32_t mapped = 10u, copy = 11u, shader = 12u;
     CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
     CHECK(av_d3d_CreateResource(wire, copy, buffer_desc(usage_default, 0u, 0u), 0u));
+    /* An object that is no resource at all, beside them. */
+    CHECK(av_d3d_CreateShader(wire, shader, 0u, triangle_vs::inputs_count, triangle_vs::inputs,
+                              triangle_vs::outputs_count, triangle_vs::outputs, 0u, nullptr, 0u, nullptr, 0u, nullptr,
+                              0xffffffffu, triangle_vs::tokens, sizeof(triangle_vs::tokens)));
     fill(wire.memory(store, first_slice), 1000u);
     CHECK(av_d3d_BindBufferSlice(wire, mapped, store, first_slice, buffer_bytes));
     CHECK(av_d3d_CopyResource(wire, copy, mapped));

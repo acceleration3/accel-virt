@@ -26,6 +26,7 @@
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/local_import.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/resources/host_memory_request.hpp"
@@ -578,6 +579,18 @@ const HeapMisuse heap_misuses[] = {
         CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes + 4096u, 0u,
                                     heaps.readback));
     },
+    [](av::D3dLoopback &wire) {   /* of no heap type */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(0u), 0u, heap_bytes, 0u, heaps.readback));
+    },
+    [](av::D3dLoopback &wire) {   /* of a heap type past the last */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(5u), 0u, heap_bytes, 0u, heaps.readback));
+    },
+    [](av::D3dLoopback &wire) {   /* of no bytes */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, 0u, 0u, heaps.readback));
+    },
+    [](av::D3dLoopback &wire) {   /* of more bytes than any heap holds */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_default), 0u, ~std::uint64_t{0}, 0u, 0u));
+    },
     [](av::D3dLoopback &wire) {   /* over memory the guest let go of */
         const std::uint64_t gone = wire.open_memory(upload_memory, heap_bytes);
         CHECK(gone != 0u);
@@ -618,6 +631,37 @@ TEST(d3d12_session_device, each_cpu_visible_heap_over_memory_it_cannot_have_remo
         CHECK_EQ(removed, driver_internal_error);
         backend.shut_down();
     }
+}
+
+/* Memory the session imported that vkd3d-proton cannot open a heap over - no
+ * dma-buf behind it - is refused like memory it never imported. */
+TEST(d3d12_session_device, a_heap_over_memory_vkd3d_cannot_open_removes_the_device)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend;
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
+    alignas(4096) static std::uint8_t bytes[heap_bytes];
+    av::LocalImport unexported(bytes, sizeof bytes, 99u);
+    CHECK(backend.adopt(unexported.blob()));
+    std::uint32_t hresult = 1u;
+    Caps12        caps = {};
+    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u,
+                                unexported.blob().wire_handle()));
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, driver_internal_error);
+    backend.abandon(unexported.blob());
+    backend.shut_down();
 }
 
 /* Each CPU-visible heap is memory of its own: a heap smaller than its memory
