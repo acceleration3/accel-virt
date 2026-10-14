@@ -1,0 +1,16 @@
+The text overlay prints the device's name, and a guest's adapter names itself
+as the native Windows driver would while the host's Vulkan driver uses its own
+name: every sample with an overlay then differed by that line alone between
+the two runs it is compared across. The label is the same fixed word in both.
+
+--- a/base/vulkanexamplebase.cpp
++++ b/base/vulkanexamplebase.cpp
+@@ -679,7 +679,7 @@
+ 	ss << std::fixed << std::setprecision(2) << (frameTimer * 1000.0f) << "ms (" << lastFPS << " fps)";
+ 	textOverlay->addText(ss.str(), 5.0f, 25.0f, VulkanTextOverlay::alignLeft);
+ 
+-	textOverlay->addText(deviceProperties.deviceName, 5.0f, 45.0f, VulkanTextOverlay::alignLeft);
++	textOverlay->addText("GPU", 5.0f, 45.0f, VulkanTextOverlay::alignLeft);
+ 
+ 	getOverlayText(textOverlay);
+ 

@@ -16,7 +16,7 @@
 
 dEQP-VK.api.smoke.*                             for: core
 dEQP-VK.api.device_init.*                       for: core
-dEQP-VK.api.info.device.*                       for: core
+dEQP-VK.info.*                                  for: core
 dEQP-VK.api.object_management.single.*          for: core
 dEQP-VK.memory.allocation.basic.*               for: core
 dEQP-VK.memory.mapping.suballocation.*          for: core
@@ -26,15 +26,73 @@ dEQP-VK.memory.mapping.dedicated_alloc.*        for: VK_KHR_map_memory2
 dEQP-VK.wsi.win32.surface.*                     for: VK_KHR_surface, VK_KHR_win32_surface
 dEQP-VK.wsi.win32.swapchain.simulate_oom.*      for: VK_KHR_swapchain
 dEQP-VK.wsi.win32.swapchain.render.*            for: VK_KHR_swapchain
-dEQP-VK.memory.budget.*                         for: VK_EXT_memory_budget
+dEQP-VK.info.device_memory_budget*              for: VK_EXT_memory_budget
 
 # Feature 047: what DXVK and vkd3d-proton need.
 dEQP-VK.binding_model.descriptor_update.*       for: VK_KHR_descriptor_update_template
-dEQP-VK.binding_model.push_descriptor.*         for: VK_KHR_push_descriptor
+dEQP-VK.pipeline.monolithic.push_descriptor.*   for: VK_KHR_push_descriptor
 dEQP-VK.api.external.memory.opaque_win32.*      for: VK_KHR_external_memory_win32
 dEQP-VK.api.external.semaphore.opaque_win32.*   for: VK_KHR_external_semaphore_win32
 
 # The surface queries the ICD answers itself (046), which vkd3d-proton resolves
 # whether or not it enabled them.
-dEQP-VK.wsi.win32.surface.query_capabilities2.* for: VK_KHR_get_surface_capabilities2
-dEQP-VK.api.info.instance.*                     for: VK_KHR_get_physical_device_properties2
+dEQP-VK.wsi.win32.surface.query_capabilities2*  for: VK_KHR_get_surface_capabilities2
+dEQP-VK.api.info.get_physical_device_properties2.*  for: VK_KHR_get_physical_device_properties2
+
+# What DXVK 3 and vkd3d-proton 3 use (icd_root.cpp's audit, 2026-09-30). Each
+# crosses as a feature or property structure in the chain, which
+# get_physical_device_properties2 above queries; each group below is the
+# behaviour behind one extension, a few hundred cases at most so a run stays a
+# run. Every pattern in this file was checked against the CTS's main mustpass
+# list on 2026-10-14: each keeps at least one case.
+dEQP-VK.api.buffer_marker.*  for: VK_AMD_buffer_marker
+dEQP-VK.api.device_init.create_device_unsupported_features.coherent_memory_features_amd  for: VK_AMD_device_coherent_memory
+dEQP-VK.api.info.get_physical_device_properties2.properties.basic  for: VK_AMD_shader_core_properties, VK_AMD_shader_core_properties2
+dEQP-VK.draw.renderpass.explicit_vertex_parameter.*  for: VK_AMD_shader_explicit_vertex_parameter
+dEQP-VK.pipeline.monolithic.multisample.shader_fragment_mask.*  for: VK_AMD_shader_fragment_mask
+dEQP-VK.pipeline.monolithic.sampler.view_type.2d.format.a4?4?4?4_unorm_pack16.*  for: VK_EXT_4444_formats
+dEQP-VK.pipeline.monolithic.attachment_feedback_loop_layout.sampler.attachment_feedback_loop_optimal.sampled_image.*  for: VK_EXT_attachment_feedback_loop_layout
+dEQP-VK.pipeline.monolithic.sampler.border_swizzle.r8g8b8a8_unorm.rgba.*  for: VK_EXT_border_color_swizzle
+dEQP-VK.conditional_rendering.draw.*  for: VK_EXT_conditional_rendering
+dEQP-VK.rasterization.conservative.*  for: VK_EXT_conservative_rasterization
+dEQP-VK.pipeline.monolithic.sampler.view_type.2d.format.r8g8b8a8_unorm.address_modes.*border_custom*  for: VK_EXT_custom_border_color
+dEQP-VK.rasterization.depth_bias_control.d32_sfloat.float_exact.*  for: VK_EXT_depth_bias_control
+dEQP-VK.pipeline.monolithic.extended_dynamic_state.cmd_buffer_start.*  for: VK_EXT_extended_dynamic_state, VK_EXT_extended_dynamic_state2, VK_EXT_extended_dynamic_state3, VK_EXT_depth_clip_enable
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.unused_attachments.extra_*  for: VK_EXT_dynamic_rendering_unused_attachments
+dEQP-VK.fragment_shader_interlock.basic.*  for: VK_EXT_fragment_shader_interlock
+dEQP-VK.pipeline.fast_linked_library.misc.*  for: VK_EXT_graphics_pipeline_library, VK_KHR_pipeline_library
+dEQP-VK.api.image_compression_control.create_image.explicit.*  for: VK_EXT_image_compression_control
+dEQP-VK.pipeline.monolithic.sliced_view_of_3d_image.*  for: VK_EXT_image_sliced_view_of_3d
+dEQP-VK.texture.mipmap.*.image_view_min_lod.*  for: VK_EXT_image_view_min_lod
+dEQP-VK.rasterization.primitives.static_stipple.*  for: VK_EXT_line_rasterization
+dEQP-VK.memory.binding.priority.*  for: VK_EXT_memory_priority
+dEQP-VK.mesh_shader.ext.smoke.*  for: VK_EXT_mesh_shader
+dEQP-VK.binding_model.mutable_descriptor.misc.*  for: VK_EXT_mutable_descriptor_type
+dEQP-VK.texture.filtering.cube.combinations.*non_seamless*  for: VK_EXT_non_seamless_cube_map
+dEQP-VK.memory.pageable_allocation.*  for: VK_EXT_pageable_device_local_memory
+dEQP-VK.robustness.robustness2.push.template.rgba32ui.dontunroll.nonvolatile.*  for: VK_EXT_robustness2
+dEQP-VK.pipeline.monolithic.multisample.sample_locations_ext.verify_*  for: VK_EXT_sample_locations
+dEQP-VK.image.atomic_operations.*.2d.*r64*  for: VK_EXT_shader_image_atomic_int64
+dEQP-VK.pipeline.monolithic.shader_module_identifier.pipeline_from_id.compute.*  for: VK_EXT_shader_module_identifier
+dEQP-VK.pipeline.monolithic.shader_stencil_export.*  for: VK_EXT_shader_stencil_export
+dEQP-VK.transform_feedback.simple.basic_*  for: VK_EXT_transform_feedback
+dEQP-VK.draw.renderpass.vertex_attribute_divisor.*  for: VK_EXT_vertex_attribute_divisor
+dEQP-VK.spirv_assembly.instruction.compute.compute_shader_derivatives.compute.*  for: VK_KHR_compute_shader_derivatives
+dEQP-VK.compute.pipeline.cooperative_matrix.khr_c.*  for: VK_KHR_cooperative_matrix
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.basic.*  for: VK_KHR_dynamic_rendering
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.local_read.*  for: VK_KHR_dynamic_rendering_local_read
+dEQP-VK.fragment_shading_barycentric.weights.*  for: VK_KHR_fragment_shader_barycentric
+dEQP-VK.fragment_shading_rate.renderpass2.monolithic.misc*  for: VK_KHR_fragment_shading_rate
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_*_format_list  for: VK_KHR_image_format_list
+dEQP-VK.renderpasses.renderpass2.suballocation.load_store_op_none.*  for: VK_KHR_load_store_op_none
+dEQP-VK.api.maintenance5.*  for: VK_KHR_maintenance5
+dEQP-VK.memory.binding.maintenance6.*  for: VK_KHR_maintenance6
+dEQP-VK.api.maintenance6_check.*  for: VK_KHR_maintenance6
+dEQP-VK.api.maintenance7.*  for: VK_KHR_maintenance7
+dEQP-VK.spirv_assembly.instruction.compute.maintenance8.*  for: VK_KHR_maintenance8
+dEQP-VK.spirv_assembly.instruction.compute.float_controls2.fp32.*  for: VK_KHR_shader_float_controls2
+dEQP-VK.reconvergence.maximal.compute.nesting2.*  for: VK_KHR_shader_maximal_reconvergence
+dEQP-VK.subgroups.shader_quad_control.*  for: VK_KHR_shader_quad_control
+dEQP-VK.subgroups.subgroup_uniform_control_flow.*  for: VK_KHR_shader_subgroup_uniform_control_flow
+dEQP-VK.synchronization2.basic.*  for: VK_KHR_synchronization2
+dEQP-VK.api.device_init.create_device_unsupported_features.image_alignment_control_features_mesa  for: VK_MESA_image_alignment_control

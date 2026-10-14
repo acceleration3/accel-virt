@@ -109,6 +109,19 @@ TEST(cl_dispatch_table, the_external_memory_pair_is_answered_outside_the_table_t
   CHECK(table.external_mem_acquire() != table.external_mem_release());
   CHECK(table.external_mem_acquire() != table.icd_get_platform_ids()); }
 
+/* clGetGLContextInfoKHR is asked before there is any object to dispatch
+ * through, so a loader finds it by name as well as in its slot: both routes
+ * reach the one entry, and the name answers nothing else. */
+TEST(cl_dispatch_table, the_gl_context_query_is_answered_by_name_and_by_its_slot_alike)
+{ ClIcdRig        rig;
+  ClDispatchTable table;
+  table.fill();
+  CHECK(table.gl_context_info() != nullptr);
+  CHECK(table.gl_context_info() == reinterpret_cast<void *>(table.table().clGetGLContextInfoKHR));
+  CHECK(rig.root().extension_function("clGetGLContextInfoKHR") == table.gl_context_info());
+  CHECK(table.gl_context_info() != table.external_mem_acquire());
+  CHECK(table.gl_context_info() != table.icd_get_platform_ids()); }
+
 TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
 { ClDispatchTable table;
   table.fill();

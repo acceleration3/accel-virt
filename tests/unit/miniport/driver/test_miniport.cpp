@@ -1,6 +1,7 @@
 #include "miniport/ddi/entry_points.hpp"
 #include "miniport/driver/ddi_slot.hpp"
 #include "miniport/driver/ddi_table.hpp"
+#include "miniport/driver/image_exit.hpp"
 #include "miniport/driver/miniport.hpp"
 #include "miniport/driver/miniport_binding.hpp"
 #include "core/support/status.hpp"
@@ -280,6 +281,45 @@ TEST(miniport_invariants, a_corrupted_table_is_detected)
 { MockPlatform platform; Miniport miniport(platform);
   av::DdiTableProbe(MiniportProbe(miniport).table()).set_padding(1u);
   CHECK(!miniport.invariants_hold()); }
+
+namespace {
+
+/* An image that records its leaving, and how many adapters were still there
+ * when it left: none, since the code they run is about to be unmapped. */
+class RecordingExit final : public av::ImageExit {
+public:
+    explicit RecordingExit(const Miniport &miniport) : miniport_(miniport) {}
+    void leave() override { left++; adapters_when_left = miniport_.adapter_count(); }
+
+    std::uint32_t left = 0u;
+    std::uint32_t adapters_when_left = 99u;
+
+private:
+    const Miniport &miniport_;
+};
+
+}  // namespace
+
+/* DxgkDdiUnload ends with the whole image leaving, after the adapters are
+ * gone (1729ac46: a log thread outlived the unload and ran unmapped code). A
+ * root bound without an ImageExit, or unbound, leaves nothing. */
+TEST(miniport_binding, unload_ends_with_the_image_exit_after_the_adapters)
+{ MockPlatform platform; Miniport miniport(platform); MiniportBinding binding;
+  RecordingExit exit(miniport);
+  binding.bind(miniport, &exit);
+  int pdo = 0; void *context = nullptr;
+  CHECK_EQ(binding.add_device(&pdo, &context), 0);
+  binding.unload();
+  CHECK_EQ(exit.left, 1u);
+  CHECK_EQ(exit.adapters_when_left, 0u);
+
+  binding.bind(miniport);
+  binding.unload();
+  CHECK_EQ(exit.left, 1u);
+  binding.bind(miniport, &exit);
+  binding.unbind();
+  binding.unload();
+  CHECK_EQ(exit.left, 1u); }
 
 TEST(miniport_binding, remove_and_unload_with_nothing_bound_fail_safely)
 { MiniportBinding binding; int context = 0;

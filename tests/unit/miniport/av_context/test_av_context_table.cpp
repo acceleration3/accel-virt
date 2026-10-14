@@ -1794,6 +1794,38 @@ TEST(av_context_table, tells_the_context_whose_process_submits_for_itself)
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
+/* A hardware queue being destroyed frees the progress fence a context of the
+ * table wrote its completions to: the table finds that context and has it let
+ * go, and answers false for a context it did not bind or a location the
+ * context was not writing. */
+TEST(av_context_table, forget_progress_stops_a_bound_context_writing_where_its_queue_was)
+{ Fixture fixture;
+  Host    host(fixture.mapped());
+  std::uint64_t progress = 0u;
+  std::uint64_t other = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(!fixture.table().forget_progress(&first_context, &progress));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().user_mode_submits(&first_context, &progress), Status::ok);
+  CHECK(!fixture.table().forget_progress(&second_context, &progress));
+  CHECK(!fixture.table().forget_progress(&first_context, &other));
+  fixture.platform().set_irql(Irql::passive);
+  fixture.complete_through(2u);
+  fixture.serve();
+  CHECK_EQ(progress, 2u);
+
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.table().forget_progress(&first_context, &progress));
+  CHECK(!fixture.table().forget_progress(&first_context, &progress));
+  fixture.platform().set_irql(Irql::passive);
+  fixture.complete_through(5u);
+  fixture.serve();
+  CHECK_EQ(progress, 2u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
 /* SubmitCommandVirtual asks for a DPC only for a batch the host already
  * finished, whose interrupt may have come before the packet was queued; the
  * answer reads the fence page as it is now. A context that is not there, or

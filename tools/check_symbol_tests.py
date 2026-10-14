@@ -52,6 +52,10 @@ EXCLUDE = {
     "src/icd/opencl/d3d_adapter_source.hpp": "the DXGI the OpenCL ICD asks for an adapter's LUID, implemented "
                              "by WindowsD3dAdapterSource in src/um and by ScriptedD3dAdapterSource in "
                              "tests/harness, and exercised through every cl_d3d10_sharing test",
+    "src/icd/opencl/gl_share_source.hpp": "the opengl32 and OpenGL ICD the OpenCL ICD asks for a GL context's "
+                             "share name, implemented by WindowsGlShareSource in src/um and by "
+                             "ScriptedGlShareSource in tests/harness, and exercised through every "
+                             "cl_gl_sharing test",
     "src/icd/opencl/d3d11_bridge.hpp": "the Direct3D 11 the OpenCL ICD copies through, implemented by "
                              "WindowsD3d11Bridge in src/um and by ScriptedD3d11Bridge in tests/harness, and "
                              "exercised through every cl_d3d11_sharing test",

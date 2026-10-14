@@ -3,12 +3,17 @@
  * texture over exportable memory and says what image it is
  * (SharedImageShape), the session publishes the memory, and an OpenCL
  * session's open of it is an image over that memory - read back texel for
- * texel where Direct3D wrote it, with nothing copied. A host without DXVK,
- * OpenGL or OpenCL on one GPU returns without judging. */
+ * texel where Direct3D wrote it, with nothing copied. An OpenCL without
+ * cl_khr_image2d_from_buffer (rusticl on radeonsi) can name no image over a
+ * buffer, and the open is the bytes themselves, read at the pitch Direct3D
+ * laid them out with. A host without DXVK, OpenGL or OpenCL on one GPU
+ * returns without judging. */
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
+#include "executor/shim/d3d11_host_device.hpp"
+#include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "harness/executor/d3d_loopback.hpp"
@@ -44,6 +49,38 @@ cl_context guest_context(av::OpenClBackend &backend, const av::OpenClDevice &dev
     cl_context const      context = backend.on_clCreateContext(props, 1u, &named, &made);
     if (context != nullptr) backend.made(av::clproto::HandleKind::context, context);
     return context;
+}
+
+/* Whether `device` makes an image over a buffer's memory, an optional
+ * feature of OpenCL 3.0. */
+bool images_over_buffers(cl_device_id device)
+{
+    std::size_t length = 0u;
+    if (::clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &length) != CL_SUCCESS || length == 0u)
+        return false;
+    static char names[16384];
+    if (length > sizeof names ||
+        ::clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, length, names, nullptr) != CL_SUCCESS)
+        return false;
+    return std::strstr(names, "cl_khr_image2d_from_buffer") != nullptr;
+}
+
+/* The pitch Direct3D laid the shared texture's rows out with. */
+std::uint32_t texture_pitch(av::HostShares &shares, av::D3d11HostDevice &device)
+{
+    IUnknown *const held = shares.resource(domain, key);
+    ID3D11Texture2D *texture = nullptr;
+    if (held == nullptr || FAILED(held->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)))) {
+        if (held != nullptr) held->Release();
+        return 0u;
+    }
+    std::uint32_t pitch = 0u;
+    device.lock(nullptr);
+    if (!device.exportable_pitch(texture, pitch)) pitch = 0u;
+    device.unlock();
+    texture->Release();
+    held->Release();
+    return pitch;
 }
 
 }  // namespace
@@ -112,22 +149,33 @@ TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direc
     std::uint64_t handle = 0u;
     CHECK(cl_session.open(key, AV_SHARED_MEMORY, static_cast<std::uint64_t>(bytes), handle) == av::Status::ok);
     cl_mem const image = reinterpret_cast<cl_mem>(handle);
+    cl_device_id const device = static_cast<cl_device_id>(apis.opencl_device(gpu)->device());
+    const bool         as_image = images_over_buffers(device);
     cl_mem_object_type type = 0u;
     CHECK_EQ(::clGetMemObjectInfo(image, CL_MEM_TYPE, sizeof type, &type, nullptr), CL_SUCCESS);
-    CHECK_EQ(type, static_cast<cl_mem_object_type>(CL_MEM_OBJECT_IMAGE2D));
-    cl_image_format format = {};
-    CHECK_EQ(::clGetImageInfo(image, CL_IMAGE_FORMAT, sizeof format, &format, nullptr), CL_SUCCESS);
-    CHECK_EQ(format.image_channel_order, static_cast<cl_channel_order>(CL_BGRA));
+    CHECK_EQ(type, static_cast<cl_mem_object_type>(as_image ? CL_MEM_OBJECT_IMAGE2D : CL_MEM_OBJECT_BUFFER));
 
     cl_int                 made = CL_SUCCESS;
-    cl_command_queue const queue = ::clCreateCommandQueueWithProperties(
-        context, static_cast<cl_device_id>(apis.opencl_device(gpu)->device()), nullptr, &made);
+    cl_command_queue const queue = ::clCreateCommandQueueWithProperties(context, device, nullptr, &made);
     CHECK_EQ(made, CL_SUCCESS);
     static std::uint8_t read[size * size * 4u];
     const std::size_t   origin[3] = {0u, 0u, 0u};
-    const std::size_t   region[3] = {size, size, 1u};
-    CHECK_EQ(::clEnqueueReadImage(queue, image, CL_TRUE, origin, region, size * 4u, 0u, read, 0u, nullptr, nullptr),
-             CL_SUCCESS);
+    if (as_image) {
+        cl_image_format format = {};
+        CHECK_EQ(::clGetImageInfo(image, CL_IMAGE_FORMAT, sizeof format, &format, nullptr), CL_SUCCESS);
+        CHECK_EQ(format.image_channel_order, static_cast<cl_channel_order>(CL_BGRA));
+        const std::size_t region[3] = {size, size, 1u};
+        CHECK_EQ(::clEnqueueReadImage(queue, image, CL_TRUE, origin, region, size * 4u, 0u, read, 0u, nullptr,
+                                      nullptr),
+                 CL_SUCCESS);
+    } else {
+        const std::uint32_t pitch = texture_pitch(*shares, *apis.d3d11_device(gpu));
+        CHECK(pitch >= size * 4u);
+        const std::size_t region[3] = {size * 4u, size, 1u};
+        CHECK_EQ(::clEnqueueReadBufferRect(queue, image, CL_TRUE, origin, origin, region, pitch, 0u, size * 4u, 0u,
+                                           read, 0u, nullptr, nullptr),
+                 CL_SUCCESS);
+    }
     CHECK(std::memcmp(read, pattern, sizeof read) == 0);
     ::clReleaseCommandQueue(queue);
     cl_session.close(key);

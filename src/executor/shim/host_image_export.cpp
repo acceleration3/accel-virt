@@ -11,6 +11,9 @@ namespace av {
 
 namespace {
 
+/* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
+constexpr uint64_t drm_format_mod_linear = 0u;
+
 /* The formats a scanout's image is copied out of as they are; undefined for
  * any other. */
 VkFormat vk_format(uint32_t format)
@@ -39,12 +42,17 @@ HostImageExport::~HostImageExport()
     release();
 }
 
-/* Linear, so the display imports it with no modifier to agree on; device
- * local where the GPU allows it, so the copy and the display stay in VRAM. */
+/* Linear, so the display imports it with the one modifier every driver reads
+ * alike - and under that modifier rather than VK_IMAGE_TILING_LINEAR, which a
+ * driver may refuse a dma-buf for (RADV from Mesa 26.2). Device local where
+ * the GPU allows it, so the copy and the display stay in VRAM. */
 bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
 {
     AV_SCOPE("HostImageExport::make_image");
-    VkExternalMemoryImageCreateInfo external = {VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO, nullptr,
+    const uint64_t                                  linear = drm_format_mod_linear;
+    const VkImageDrmFormatModifierListCreateInfoEXT modifiers = {
+        VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT, nullptr, 1u, &linear};
+    VkExternalMemoryImageCreateInfo external = {VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO, &modifiers,
                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
     VkImageCreateInfo created = {};
     created.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -55,7 +63,7 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     created.mipLevels = 1u;
     created.arrayLayers = 1u;
     created.samples = VK_SAMPLE_COUNT_1_BIT;
-    created.tiling = VK_IMAGE_TILING_LINEAR;
+    created.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     created.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     created.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (!vulkan_.table().create_image(created, image.image_)) return false;

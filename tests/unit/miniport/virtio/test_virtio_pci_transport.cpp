@@ -52,6 +52,8 @@ public:
     FakeCommonConfig   &common() { return common_; }
     FakeIsrRegister    &isr() { return isr_; }
     VirtioPciTransport &transport() { return transport_; }
+    FakeRegisterBytes  &device_config() { return device_; }
+    std::uint32_t       config_writes() const { return device_.writes(); }
 
 private:
     MockPlatform       platform_;
@@ -207,6 +209,29 @@ TEST(virtio_pci_transport_device_config, refuses_reads_past_the_region)
   CHECK_STATUS(device.transport().read_device_u32(~std::uint64_t{0} - 1u, value), Status::invalid_parameter);
   CHECK_EQ(value, 7u); }
 
+/* The device configuration's one writable field is events_clear: a write
+ * lands where it was asked, and one that would reach past the region - or
+ * wrap round it - touches nothing. */
+TEST(virtio_pci_transport_device_config, writes_within_the_region_and_refuses_past_it)
+{ Device device;
+  device.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(device.transport().write_device_u32(4u, 1u), Status::ok);
+  device.platform().set_irql(Irql::passive);
+  CHECK_EQ(device.config_writes(), 1u);
+  CHECK_EQ(device.device_config().last_write_offset(), 4u);
+  CHECK_EQ(device.device_config().read_u32(4u), 1u);
+  CHECK_STATUS(device.transport().write_device_u32(12u, 3u), Status::ok);
+  CHECK_EQ(device.device_config().read_u32(12u), 3u);
+  CHECK_STATUS(device.transport().write_device_u32(13u, 5u), Status::invalid_parameter);
+  CHECK_STATUS(device.transport().write_device_u32(~std::uint64_t{0} - 1u, 5u), Status::invalid_parameter);
+  CHECK_EQ(device.config_writes(), 2u);
+  CHECK_EQ(device.device_config().read_u32(12u), 3u);
+  CHECK_EQ(device.platform().unclaimed_violations(), 0u);
+  device.platform().set_irql(Irql::isr);
+  static_cast<void>(device.transport().write_device_u32(4u, 1u));
+  device.platform().set_irql(Irql::passive);
+  CHECK(device.platform().claim(Violation::irql_ceiling)); }
+
 TEST(virtio_pci_transport_fail, marks_the_device_failed)
 { Device device;
   CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
@@ -232,7 +257,9 @@ TEST(virtio_pci_transport_device_config, a_region_shorter_than_a_field_refuses_e
   FakeRegisterBytes tiny(2u);
   VirtioPciTransport transport(platform, common, notify, isr, tiny, 4u);
   std::uint32_t value = 0u;
-  CHECK_STATUS(transport.read_device_u32(0u, value), Status::invalid_parameter); }
+  CHECK_STATUS(transport.read_device_u32(0u, value), Status::invalid_parameter);
+  CHECK_STATUS(transport.write_device_u32(0u, value), Status::invalid_parameter);
+  CHECK_EQ(tiny.writes(), 0u); }
 
 /* Feature 043: a context's fence queue gets its vector when the context is set
  * up, long after DRIVER_OK, and is never enabled. */

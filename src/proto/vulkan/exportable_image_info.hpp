@@ -36,11 +36,13 @@ public:
 private:
     static constexpr uint32_t max_views = 2u;
 
-    VkExternalMemoryImageCreateInfo external_;
-    VkImageFormatListCreateInfo     list_;
-    VkFormat                        views_[max_views];
-    VkImageCreateInfo               info_;
-    bool                            supported_;
+    VkExternalMemoryImageCreateInfo           external_;
+    VkImageFormatListCreateInfo               list_;
+    VkFormat                                  views_[max_views];
+    VkImageDrmFormatModifierListCreateInfoEXT modifiers_;
+    uint64_t                                  modifier_;
+    VkImageCreateInfo                         info_;
+    bool                                      supported_;
 };
 
 }  // namespace av

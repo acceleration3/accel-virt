@@ -268,9 +268,16 @@ The dma-buf is the texture's own memory, bound to memory of its own
 (dedicated) and laid out linear: an implicit layout is one only some drivers
 keep with the memory - RADV writes it into the buffer's metadata, Intel's i915
 and Xe do not, and an importer there read the picture scrambled - so the image
-is made with `VK_IMAGE_TILING_LINEAR` where the GPU can export it so
-(`ExportableImages`), and the modifier is `DRM_FORMAT_MOD_LINEAR` (0). It is
-still imported on the same GPU (§4, hello).
+is made with `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` and the one modifier
+`DRM_FORMAT_MOD_LINEAR` (0) listed, where the GPU can export it so
+(`ExportableImages`) - not `VK_IMAGE_TILING_LINEAR`, for which RADV from Mesa
+26.2 offers no dma-buf. The device that makes it has
+`VK_EXT_image_drm_format_modifier` enabled: the compositor's own, the guest's
+Vulkan devices, and DXVK's (`tools/dxvk-patches/0006`). A shared Direct3D 11
+texture's memory is device local and host visible where the GPU has such
+memory, which GFX12 keeps uncompressed: an OpenCL buffer over its compressed
+VRAM read the compression's bytes. It is still imported on the same GPU (§4,
+hello).
 
 - **EGL** (Qt's OpenGL, Mesa radeonsi): `eglCreateImageKHR(display,
   EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, { EGL_WIDTH, w, EGL_HEIGHT, h,
@@ -281,7 +288,8 @@ still imported on the same GPU (§4, hello).
   (`EGL_EXT_platform_device` / `EGL_EXT_device_drm`).
 - **Vulkan** (same GPU): make the image exactly as `ExportableImageInfo`
   describes it - 2D, the format, one mip, layer and sample,
-  `VK_IMAGE_TILING_OPTIMAL`, usage `TRANSFER_SRC | TRANSFER_DST | SAMPLED |
+  `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` with `DRM_FORMAT_MOD_LINEAR`
+  listed, usage `TRANSFER_SRC | TRANSFER_DST | SAMPLED |
   COLOR_ATTACHMENT`, `MUTABLE_FORMAT` with the format and its sRGB sibling in
   a `VkImageFormatListCreateInfo` for the 8-bit formats, external memory
   `DMA_BUF` - and import the fd as its dedicated memory. RADV lays out an

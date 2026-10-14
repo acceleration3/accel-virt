@@ -365,6 +365,29 @@ TEST(virtio_gpu_device_scanouts, are_what_the_device_configuration_says)
   CHECK_STATUS(device.stop(), Status::ok);
   CHECK_EQ(device.scanouts(), 0u); }
 
+/* The host changed the displays (VIRTIO_GPU_EVENT_DISPLAY): the driver clears
+ * that event by writing its bit to events_clear, the configuration's second
+ * field, which is what lets the device raise it again. */
+TEST(virtio_gpu_device_acknowledge_display_event, writes_the_display_bit_to_events_clear)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  CHECK_STATUS(device.start(3u), Status::ok);
+  const std::uint32_t before = mapped.function().device_config().writes();
+  mapped.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(device.acknowledge_display_event(), Status::ok);
+  mapped.platform().set_irql(Irql::passive);
+  CHECK_EQ(mapped.function().device_config().writes(), before + 1u);
+  CHECK_EQ(mapped.function().device_config().last_write_offset(), 4u);
+  CHECK_EQ(mapped.function().device_config().last_write_value(), 1u);
+  CHECK_EQ(mapped.platform().unclaimed_violations(), 0u);
+  mapped.platform().set_irql(Irql::isr);
+  static_cast<void>(device.acknowledge_display_event());
+  mapped.platform().set_irql(Irql::passive);
+  CHECK(mapped.platform().claim(Violation::irql_ceiling));
+  while (mapped.platform().claim(Violation::irql_ceiling)) {}
+  CHECK_STATUS(device.stop(), Status::ok); }
+
 /* Feature 043: each context's fence queue gets a message of its own while the
  * grant lasts, and shares the granted ones round the doorbells past it. */
 TEST(virtio_gpu_device_connect_fence_queue, gives_each_doorbell_a_message_past_the_sources)

@@ -1,3 +1,4 @@
+#include "miniport/ddi/dxgk_child_status_record.hpp"
 #include "miniport/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "miniport/ddi/dxgk_device_info_record.hpp"
 #include "miniport/ddi/dxgkrnl_interface_record.hpp"
@@ -82,6 +83,12 @@ public:
             static_cast<Callbacks *>(handle)->last_interrupt_fence = data->FenceId;
         };
         record_.DxgkCbNotifyDpc = +[](void *handle) { static_cast<Callbacks *>(handle)->dpc_notifications++; };
+        record_.DxgkCbIndicateChildStatus = +[](void *handle, const av::DxgkChildStatusRecord *status) {
+            auto *self = static_cast<Callbacks *>(handle);
+            if (self->child_statuses < max_statuses) self->statuses[self->child_statuses] = *status;
+            self->child_statuses++;
+            return self->answer;
+        };
         record_.DxgkCbQueryVidPnInterface = +[](void *vidpn, std::int32_t version,
                                                 const av::DxgkVidPnInterfaceRecord **table) {
             auto *self = static_cast<Callbacks *>(vidpn);
@@ -162,6 +169,9 @@ public:
     std::uint32_t       synchronized_message = 9u;
     std::uint32_t       last_interrupt_fence = 0u;
     std::uint32_t       dpc_notifications = 0u;
+    static constexpr std::uint32_t max_statuses = 4u;
+    std::uint32_t       child_statuses = 0u;
+    av::DxgkChildStatusRecord statuses[max_statuses] = {};
     std::int32_t        vidpn_version = 0;
     av::DxgkVidPnInterfaceRecord  vidpn_record = {};
     const av::DxgkVidPnInterfaceRecord *vidpn_table = &vidpn_record;
@@ -393,6 +403,47 @@ TEST(dxgkrnl_interface_notify_dpc, is_dispatch_at_most_and_notify_interrupt_is_d
   static_cast<void>(interface.synchronize_execution(&mark_ran, &ran));
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
+
+/* Windows reads a monitor's EDID and modes again only when it is told the
+ * monitor went away and came back: one connection status of each, in that
+ * order, for the child named. A table it was never handed, or one too old to
+ * carry the callback, has no one to tell. */
+TEST(dxgkrnl_interface_replug, tells_dxgkrnl_the_child_unplugged_then_plugged_back)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  interface.replug(1u);
+  CHECK_EQ(callbacks.child_statuses, 0u);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  interface.replug(1u);
+  platform.set_irql(Irql::passive);
+  CHECK_EQ(platform.unclaimed_violations(), 0u);
+  CHECK_EQ(callbacks.child_statuses, 2u);
+  constexpr std::int32_t status_connection = 1;
+  for (std::uint32_t at = 0u; at < 2u; at++) {
+      CHECK_EQ(callbacks.statuses[at].Type, status_connection);
+      CHECK_EQ(callbacks.statuses[at].ChildUid, 1u);
+  }
+  CHECK_EQ(callbacks.statuses[0].HotPlugConnected, 0u);
+  CHECK_EQ(callbacks.statuses[1].HotPlugConnected, 1u);
+
+  /* A refusal of either is not the driver's to act on: both are still sent. */
+  callbacks.answer = no_memory;
+  interface.replug(0u);
+  CHECK_EQ(callbacks.child_statuses, 4u);
+  CHECK_EQ(callbacks.statuses[2].ChildUid, 0u);
+  CHECK_EQ(callbacks.statuses[3].HotPlugConnected, 1u);
+
+  DxgkrnlInterface older(platform);
+  Callbacks        without;
+  without.record().DxgkCbIndicateChildStatus = nullptr;
+  CHECK_STATUS(older.initialize(&without.record()), Status::ok);
+  older.replug(0u);
+  CHECK_EQ(without.child_statuses, 0u);
+
+  platform.set_irql(Irql::isr);
+  interface.replug(0u);
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }
 
 TEST(dxgkrnl_interface_query_vidpn_interface, answers_version_one_of_the_table)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;

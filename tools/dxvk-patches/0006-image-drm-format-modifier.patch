@@ -1,0 +1,53 @@
+From: accel-virt
+Subject: [PATCH] dxvk: enable VK_EXT_image_drm_format_modifier for an embedder
+
+accel-virt makes the images it shares with other APIs and processes on this
+device, exportable as dma-bufs and laid out linear (ExportableImageInfo). A
+driver may offer dma-buf export of an image only under an explicit modifier -
+RADV from Mesa 26.2 refuses it for VK_IMAGE_TILING_LINEAR - and an image under
+one needs the extension enabled on the device that makes it.
+---
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index a935aa45..60ce074d 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -52,6 +52,7 @@ namespace dxvk {
+     HANDLE_EXT(extExternalMemoryDmaBuf);           \
+     HANDLE_EXT(extExternalMemoryHost);             \
+     HANDLE_EXT(khrExternalSemaphoreFd);            \
++    HANDLE_EXT(extImageDrmFormatModifier);         \
+     HANDLE_EXT(khrIncrementalPresent);             \
+     HANDLE_EXT(khrLoadStoreOpNone);                \
+     HANDLE_EXT(khrMaintenance5);                   \
+@@ -1041,6 +1042,11 @@ namespace dxvk {
+        * another's on the same GPU (accel-virt's Direct3D 12 swapchains) */
+       ENABLE_EXT(khrExternalSemaphoreFd, false),
+ 
++      /* An image an embedder makes exportable as a dma-buf, laid out linear:
++       * a driver may offer dma-buf export only under an explicit modifier
++       * (accel-virt's shared textures, RADV from Mesa 26.2) */
++      ENABLE_EXT(extImageDrmFormatModifier, false),
++
+       /* Dirty rects for presentation */
+       ENABLE_EXT(khrIncrementalPresent, false),
+ 
+diff --git a/src/dxvk/dxvk_device_info.h b/src/dxvk/dxvk_device_info.h
+index 5de3c15d..07dc7eb7 100644
+--- a/src/dxvk/dxvk_device_info.h
++++ b/src/dxvk/dxvk_device_info.h
+@@ -95,6 +95,7 @@ namespace dxvk {
+     VkBool32                                                  extExternalMemoryDmaBuf         = VK_FALSE;
+     VkBool32                                                  extExternalMemoryHost           = VK_FALSE;
+     VkBool32                                                  khrExternalSemaphoreFd          = VK_FALSE;
++    VkBool32                                                  extImageDrmFormatModifier       = VK_FALSE;
+     VkBool32                                                  khrIncrementalPresent           = VK_FALSE;
+     VkBool32                                                  khrLoadStoreOpNone              = VK_FALSE;
+     VkPhysicalDeviceMaintenance5FeaturesKHR                   khrMaintenance5                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR };
+@@ -175,6 +176,7 @@ namespace dxvk {
+     VkExtensionProperties extExternalMemoryDmaBuf           = vk::makeExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+     VkExtensionProperties extExternalMemoryHost             = vk::makeExtension(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+     VkExtensionProperties khrExternalSemaphoreFd            = vk::makeExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
++    VkExtensionProperties extImageDrmFormatModifier         = vk::makeExtension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+     VkExtensionProperties khrIncrementalPresent             = vk::makeExtension(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME);
+     VkExtensionProperties khrLoadStoreOpNone                = vk::makeExtension(VK_KHR_LOAD_STORE_OP_NONE_EXTENSION_NAME);
+     VkExtensionProperties khrMaintenance5                   = vk::makeExtension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);

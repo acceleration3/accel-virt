@@ -220,7 +220,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 19)
+        self.assertEqual(events.count("file"), 20)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\av\\package\\avgpu.sys 900", lines)
         self.assertIn("file C:\\av\\package\\avgpu.inf", "\n".join(lines))
@@ -245,6 +245,11 @@ class GuestSuiteRun(unittest.TestCase):
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\av\\avinspect.exe 1300", lines)
+        # And the package's hashes, which provision.ps1 checks before signing
+        # and after installing; with provision.ps1 itself and avtest.exe, that
+        # is every file the run pushes.
+        self.assertIn("file C:\\av\\package\\package.sha256", "\n".join(lines))
+        self.assertIn("file C:\\av\\provision.ps1", "\n".join(lines))
         self.assertNotIn("vulkaninfo", "\n".join(lines))
         order = [line for line in lines
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "avtest" in line))]
@@ -1163,7 +1168,7 @@ class GuestSuiteRun(unittest.TestCase):
         outputs.update(behaviour.pop("outputs", {}))
         files = dict(logs or {"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Pass"),
-                                                              ("dEQP-VK.memory.budget.query", "Pass"))})
+                                                              ("dEQP-VK.info.device_memory_budget", "Pass"))})
         files.update(behaviour.pop("files", {}))
         self.script(outputs=outputs, files=dict(GUEST_FILES, **files), **behaviour)
 
@@ -1185,7 +1190,7 @@ class GuestSuiteRun(unittest.TestCase):
         # The three cases the subset names, and not the one it does not.
         cases = (self.work / "cts" / "cases.txt").read_text()
         self.assertIn("dEQP-VK.api.smoke.triangle", cases)
-        self.assertIn("dEQP-VK.memory.budget.query", cases)
+        self.assertIn("dEQP-VK.info.device_memory_budget", cases)
         self.assertNotIn("dEQP-VK.pipeline.enormous.case", cases)
         self.assertIn("guest: cts: 3 case(s) in 1 shard(s), 1 log(s)", result.stdout)
         self.assertIn("guest: cts: 3 case(s) answered, 3 passed", result.stdout)
@@ -1200,7 +1205,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.cts_script(logs={
             "C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"), ended=False) +
                                         "#beginTestCaseResult dEQP-VK.api.smoke.create_sampler\r\n",
-            "C:\\av\\cts\\shard0.r1.qpa": qpa(("dEQP-VK.memory.budget.query", "Pass")),
+            "C:\\av\\cts\\shard0.r1.qpa": qpa(("dEQP-VK.info.device_memory_budget", "Pass")),
         })
         result = self.run_cts("--cts-shard", "8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1211,7 +1216,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertTrue(any(line.startswith("file C:\\av\\cts\\shard0.r1.cases.txt ") for line in lines),
                         lines)
         resumed = (self.work / "cts" / "shard0.r1.qpa").read_text()
-        self.assertIn("dEQP-VK.memory.budget.query", resumed)
+        self.assertIn("dEQP-VK.info.device_memory_budget", resumed)
         self.assertIn("guest: cts: 3 case(s) answered, 2 passed", result.stdout)
         # And the case that killed it is in the merged log as a crash.
         whole = (self.work / "cts" / "guest.qpa").read_text()
@@ -1230,7 +1235,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_run_that_lost_a_case_the_guest_used_to_pass_fails(self):
         self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
-                                                              ("dEQP-VK.memory.budget.query", "Pass"))})
+                                                              ("dEQP-VK.info.device_memory_budget", "Pass"))})
         extra = self.cts_build()
         (self.scratch / "cts_ratchet.txt").write_text("dEQP-VK.api.smoke.create_sampler\n")
         result = self.run_suite("--cts", "--executor", "/nowhere/libav_executor.so",
@@ -1245,11 +1250,11 @@ class GuestSuiteRun(unittest.TestCase):
         run; one that fails on both does not."""
         self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
-                                                              ("dEQP-VK.memory.budget.query", "Fail"))})
+                                                              ("dEQP-VK.info.device_memory_budget", "Fail"))})
         host = self.scratch / "host.qpa"
         host.write_text(qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                             ("dEQP-VK.api.smoke.create_sampler", "Pass"),
-                            ("dEQP-VK.memory.budget.query", "Fail")))
+                            ("dEQP-VK.info.device_memory_budget", "Fail")))
         failed = self.run_cts("--cts-shard", "8", "--cts-host", host)
         self.assertEqual(failed.returncode, 1)
         self.assertIn("guest: cts: dEQP-VK.api.smoke.create_sampler passes on the host and does not in the "
@@ -1260,10 +1265,10 @@ class GuestSuiteRun(unittest.TestCase):
         # many failures matched.
         host.write_text(qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                             ("dEQP-VK.api.smoke.create_sampler", "Fail"),
-                            ("dEQP-VK.memory.budget.query", "Fail")))
+                            ("dEQP-VK.info.device_memory_budget", "Fail")))
         self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
-                                                              ("dEQP-VK.memory.budget.query", "Fail"))})
+                                                              ("dEQP-VK.info.device_memory_budget", "Fail"))})
         passed = self.run_cts("--cts-shard", "8", "--cts-host", host)
         self.assertEqual(passed.returncode, 0, passed.stdout + passed.stderr)
         self.assertIn("guest: cts ok: 3 compared, 0 guest-only failures, 2 matching failure(s)", passed.stdout)
@@ -2461,7 +2466,7 @@ CTS_CASELIST = ("DEQP-VK\r\nTopLevel\r\n"
                 "GROUP: api\r\nTEST: dEQP-VK.api.smoke.triangle\r\n"
                 "TEST: dEQP-VK.api.smoke.create_sampler\r\n"
                 "TEST: dEQP-VK.pipeline.enormous.case\r\n"
-                "TEST: dEQP-VK.memory.budget.query\r\n")
+                "TEST: dEQP-VK.info.device_memory_budget\r\n")
 """What deqp-vk --deqp-runmode=stdout-caselist prints: groups, cases, and a case
 this repository's subset does not name."""
 

@@ -166,10 +166,26 @@ class WhatTheGuestIsTold(unittest.TestCase):
         for name, text in (("vendor", "0x10de\n"), ("device", "0x24e0\n"), ("revision", "0xa1\n")):
             self.tree.write(f"0000:7b:00.0/{name}", text)
         self.assertEqual(list_gpus.adapter_names(self.gpus, self.tree.root).splitlines(), [
-            f"1af4\t1050\t{self.gpus[0].adapter_name()}",
-            f"10de\t24e0\t{self.gpus[1].adapter_name()}",
+            "1af4\t1050\tIntel(R) Iris(R) Xe Graphics",
+            "10de\t24e0\tNVIDIA GeForce RTX 3070 Ti Laptop GPU",
         ])
         self.assertEqual(list_gpus.adapter_names([self.gpus[2]], self.tree.root), "")
+
+    def test_the_adapter_names_read_the_name_from_the_sysfs_they_read_the_ids_from(self):
+        """An integrated AMD GPU is named by its PCI identity, so the name has to
+        come from the same sysfs as the ids beside it - not the machine's own,
+        where the bus address is some other function or none."""
+        integrated = CAPTURE.replace("\tvendorID          = 0x10de", "\tvendorID          = 0x1002") \
+                            .replace("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU") \
+                            .replace("NVIDIA GeForce RTX 3070 Ti Laptop GPU", "AMD Radeon Graphics (RADV RAPHAEL_MENDOCINO)") \
+                            .replace("pciBus      = 123", "pciBus      = 255").replace("pciDevice   = 0", "pciDevice   = 31")
+        gpu = list_gpus.parse(integrated)[1]
+        self.assertEqual(gpu.pci_address, "0000:ff:1f.0")
+        # A revision no product table lists, so AMD's generic name is the answer.
+        for name, text in (("vendor", "0x1002\n"), ("device", "0x13c0\n"), ("revision", "0xfe\n")):
+            self.tree.write(f"0000:ff:1f.0/{name}", text)
+        self.assertEqual(list_gpus.adapter_names([gpu], self.tree.root), "1002\t13c0\tAMD Radeon(TM) Graphics\n")
+        self.assertEqual(list_gpus.adapter_names([gpu], self.tree.root / "missing"), "1af4\t1050\tAMD Radeon Graphics\n")
 
     def test_the_adapter_name_drops_the_driver_suffix_as_the_device_does(self):
         """The cases tests/unit/device/gpu/test_adapter_name.cpp holds the C++ to."""

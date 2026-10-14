@@ -596,12 +596,12 @@ Each test must judge an outcome. Cover at least:
 
 ### Step 10: on the real system (LSW)
 
-The LSW repository (`/home/accel/Coding/linux-subsystem-windows`) builds
-this one as `external/accel-virt`.
+The LSW repository builds this one as `external/accel-virt`; `$LSW` below is
+that checkout's root.
 
 1. Rebuild QEMU, the executor and the guest drivers:
    ```
-   cmake --build /home/accel/Coding/linux-subsystem-windows/build --target accel_virt_host accel_virt_drivers -j"$(nproc)"
+   cmake --build "$LSW/build" --target accel_virt_host accel_virt_drivers -j"$(nproc)"
    ```
 2. Install the new guest driver package in the VM. The guest UMD, ICDs and
    miniport all changed, and the device and guest must match. LSW has
@@ -623,7 +623,7 @@ this one as `external/accel-virt`.
    - Launch it: `agent.py launch '{"app_id":"C:\\Windows\\System32\\charmap.exe"}'`.
    - Start a host mirror:
      ```
-     RWIN_LOG=info /home/accel/Coding/linux-subsystem-windows/build/remotewin/source/host/remotewin \
+     RWIN_LOG=info $LSW/build/remotewin/source/host/remotewin \
          --port 48730 --export-socket /run/user/1000/lsw-export.sock --pid <pid> --app-id lsw-test
      ```
      Run it in the background with its output in a file, then
@@ -744,7 +744,7 @@ closes.
   file per process (`tasklist /fo csv /nh`), and read the names back with
   `list_dir`.
 - To dump the guest driver's state, upload
-  `/home/accel/Coding/linux-subsystem-windows/build/accel-virt/drivers/guest/avinspect.exe`,
+  `$LSW/build/accel-virt/drivers/guest/avinspect.exe`,
   then run `avinspect.exe kernel-state --out C:\ProgramData\LSW\ks.snap` and
   `type` the file in a console. The dump has
   `adapter/0/shared_objects/0/object/<id> ... opens=N` and

@@ -984,7 +984,7 @@ class GuestRun:
         for gpu in gpus:
             vendor, device, revision = gpu.pci_identity(self.args.sysfs)
             self.say(f"host gpu: {gpu.uuid} {vendor:04x}:{device:04x} rev {revision:02x} "
-                     f"{gpu.adapter_name()!r}")
+                     f"{gpu.adapter_name(self.args.sysfs)!r}")
         return gpus
 
     def adapter_names(self):
@@ -1178,7 +1178,8 @@ class GuestRun:
     def expected_adapters(self):
         """(vendor, device, revision, name) for each device an --all-gpus run
         started: what Windows must say it is."""
-        return [(*gpu.pci_identity(self.args.sysfs), gpu.adapter_name()) for gpu in self.host_gpus]
+        return [(*gpu.pci_identity(self.args.sysfs), gpu.adapter_name(self.args.sysfs))
+                for gpu in self.host_gpus]
 
     def adapters(self):
         """Every host GPU shown by its host's name and PCI identity, in the two

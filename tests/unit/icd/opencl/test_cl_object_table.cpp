@@ -130,6 +130,22 @@ TEST(cl_object_table, an_object_it_made_is_the_one_it_answers_for)
   CHECK(context->invariants_hold());
   CHECK(rig.objects().invariants_hold()); }
 
+/* A transfer to a queue known idle drains nothing first (cd4ec66d): a new
+ * queue has nothing outstanding, work sent to it makes it busy, and only an
+ * answer the host gave once everything was done makes it idle again. */
+TEST(cl_object, a_queue_is_known_idle_until_work_is_sent_and_again_once_it_is_done)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x901u, context);
+  CHECK(queue->known_idle());
+  queue->busy();
+  CHECK(!queue->known_idle());
+  queue->busy();
+  CHECK(!queue->known_idle());
+  queue->idle();
+  CHECK(queue->known_idle());
+  CHECK(queue->invariants_hold()); }
+
 TEST(cl_object_table, an_object_of_another_kind_is_not_that_object)
 { Table rig;
   ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
