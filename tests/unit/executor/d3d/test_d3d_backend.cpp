@@ -9,7 +9,9 @@
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
+#include "harness/executor/local_import.hpp"
 #include "core/log/driver_log.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -35,18 +37,20 @@ struct D3dBackendProbe {
 };
 
 }  // namespace av
-
 using av::D3dBackend;
 using av::ImportedBlob;
+using av::LocalImport;
 using namespace av::d3dproto;
 
 namespace {
 
 constexpr std::uint32_t nobody = 77u;
+constexpr std::uint64_t page_bytes = 4096u;
 
 /* Megabytes: in static storage, made fresh for each test. */
 av::ObjectStorage<D3dBackend> backend_storage;
-alignas(4096) std::uint8_t guest[2u * ImportedBlob::page_bytes];
+alignas(4096) std::uint8_t guest[2u * page_bytes];
+alignas(4096) std::uint8_t store_bytes[page_bytes];
 
 class FreshBackend {
 public:
@@ -60,50 +64,106 @@ public:
     FreshBackend &operator=(const FreshBackend &) = delete;
 
     D3dBackend &backend() { return backend_storage.object(); }
-
-    /* The session's blob arena: the guest's memory, lent as a host pointer. */
-    bool adopt(ImportedBlob &blob)
-    {
-        AvBlobHandle handle = {};
-        handle.kind = AV_BLOB_HOST_POINTER;
-        handle.pointer = guest;
-        handle.fd = -1;
-        handle.size = sizeof guest;
-        return blob.take(1u, handle) == av::Status::ok && backend().adopt(blob);
-    }
 };
+
+std::uint64_t address_of(const av::SourceMemory &memory)
+{
+    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&memory));
+}
 
 }  // namespace
 
-TEST(d3d_backend_guest_bytes_out, reaches_the_adopted_arena_and_nothing_else)
+/* The session's first import is its region, which bulk data and query
+ * results are reached in: inside it, never past it. */
+TEST(d3d_backend_guest_bytes_out, reaches_the_first_import_and_nothing_else)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
   CHECK(backend.guest_bytes_out(0u, 1u) == nullptr);   /* nothing adopted yet */
-  ImportedBlob blob;
-  CHECK(fresh.adopt(blob));
+  LocalImport region(guest, sizeof guest);
+  CHECK(backend.adopt(region.blob()));
   CHECK(backend.guest_bytes_out(0u, 16u) == guest);
-  CHECK(backend.guest_bytes_out(ImportedBlob::page_bytes, ImportedBlob::page_bytes) == guest + ImportedBlob::page_bytes);
-  CHECK(backend.guest_bytes_out(ImportedBlob::page_bytes, ImportedBlob::page_bytes + 1u) == nullptr);
+  CHECK(backend.guest_bytes_out(page_bytes, page_bytes) == guest + page_bytes);
+  CHECK(backend.guest_bytes_out(page_bytes, page_bytes + 1u) == nullptr);
   CHECK(backend.guest_bytes(8u, 8u) == guest + 8u);
-  ImportedBlob second;
-  CHECK(!fresh.adopt(second));   /* one arena a session */
-  backend.abandon(blob);
-  CHECK(backend.guest_bytes_out(0u, 16u) == nullptr); }
+  backend.abandon(region.blob());
+  CHECK(backend.guest_bytes_out(0u, 16u) == nullptr);
+  CHECK(backend.invariants_hold()); }
 
-/* Query results go to slots in the arena: all of them inside it, and a
+/* Every import after the region is an object's own memory - a Direct3D 12
+ * heap's, a slice store's - named by the memory's address, and never part of
+ * the region: abandoning one leaves the region, and the region's going leaves
+ * it. */
+TEST(d3d_backend_adopt, imports_after_the_region_are_objects_memory_named_by_their_address)
+{ FreshBackend fresh;
+  D3dBackend &backend = fresh.backend();
+  LocalImport region(guest, sizeof guest, 1u);
+  LocalImport object(store_bytes, sizeof store_bytes, 2u);
+  CHECK(backend.adopt(region.blob()));
+  CHECK(backend.adopt(object.blob()));
+  CHECK_EQ(object.blob().wire_handle(), address_of(object.memory()));
+  CHECK_EQ(object.blob().object(), address_of(object.memory()));
+  CHECK(backend.guest_bytes_out(0u, sizeof guest) == guest);   /* still the region */
+  CHECK(backend.guest_bytes_out(sizeof guest, 1u) == nullptr);
+  backend.abandon(object.blob());
+  CHECK(backend.guest_bytes_out(0u, 16u) == guest);
+  CHECK(backend.adopt(object.blob()));
+  backend.abandon(region.blob());
+  CHECK(backend.guest_bytes_out(0u, 16u) == nullptr);
+  /* The next import is a region again. */
+  LocalImport next(guest, page_bytes, 3u);
+  CHECK(backend.adopt(next.blob()));
+  CHECK(backend.guest_bytes_out(page_bytes - 1u, 1u) == guest + page_bytes - 1u);
+  CHECK(backend.guest_bytes_out(page_bytes, 1u) == nullptr);
+  backend.abandon(object.blob());
+  backend.abandon(next.blob());
+  CHECK(backend.invariants_hold()); }
+
+/* An import the session never adopted made nothing, so abandoning it gives
+ * nothing back - not even the region, whose memory it names. */
+TEST(d3d_backend_abandon, an_import_never_adopted_gives_nothing_back)
+{ FreshBackend fresh;
+  D3dBackend &backend = fresh.backend();
+  LocalImport region(guest, sizeof guest);
+  CHECK(backend.adopt(region.blob()));
+  ImportedBlob stranger;
+  CHECK_STATUS(stranger.take(9u, region.memory()), av::Status::ok);
+  backend.abandon(stranger);
+  CHECK(backend.guest_bytes_out(0u, 16u) == guest);
+  static_cast<void>(stranger.give_back());
+  backend.abandon(region.blob());
+  CHECK(backend.invariants_hold()); }
+
+/* Query results go to slots in the region: all of them inside it, and a
  * sensible number of them. */
 TEST(d3d_backend_on_BindQueryResults, binds_slots_only_inside_the_arena)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
   CHECK(!backend.on_BindQueryResults(0u, 1u));   /* no arena */
-  ImportedBlob blob;
-  CHECK(fresh.adopt(blob));
+  LocalImport region(guest, sizeof guest);
+  CHECK(backend.adopt(region.blob()));
   const std::uint32_t fit = sizeof guest / av::QueryResultPublisher::slot_bytes;
   CHECK(backend.on_BindQueryResults(0u, fit));
   CHECK(!backend.on_BindQueryResults(0u, fit + 1u));
   CHECK(!backend.on_BindQueryResults(av::QueryResultPublisher::slot_bytes, fit));
   CHECK(!backend.on_BindQueryResults(0u, 0u));
-  CHECK(!backend.on_BindQueryResults(0u, 4097u)); }
+  CHECK(!backend.on_BindQueryResults(0u, 4097u));
+  backend.abandon(region.blob()); }
+
+/* A session on no GPU draws nothing in place: it answers that buffers have no
+ * slices, and binds none - not even to a store it imported. */
+TEST(d3d_backend_on_BindBufferSlice, a_session_with_no_device_has_no_slices)
+{ FreshBackend fresh;
+  D3dBackend &backend = fresh.backend();
+  std::uint32_t supported = 1u;
+  CHECK(backend.on_QueryBufferSlices11(supported));
+  CHECK_EQ(supported, 0u);
+  LocalImport region(guest, sizeof guest, 1u);
+  LocalImport store(store_bytes, sizeof store_bytes, 2u);
+  CHECK(backend.adopt(region.blob()));
+  CHECK(backend.adopt(store.blob()));
+  CHECK(!backend.on_BindBufferSlice(1u, store.blob().wire_handle(), 0u, 256u));
+  backend.abandon(store.blob());
+  backend.abandon(region.blob()); }
 
 TEST(d3d_backend, makes_nothing_before_the_guest_made_a_device)
 { FreshBackend fresh;

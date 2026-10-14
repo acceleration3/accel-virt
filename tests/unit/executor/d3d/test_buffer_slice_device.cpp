@@ -1,105 +1,109 @@
-/* A Direct3D 11 buffer bound to a slice of its session's region
- * (docs/mapped-buffers-plan.md, 3.2): the host GPU reads guest memory in
- * place, when the work runs - so bytes the guest writes after a command that
- * reads the buffer was recorded, but before the GPU ran it, are the bytes it
- * reads, as on a real driver whose mapped pointer is the GPU's memory. A
- * buffer bound again reads its new slice in the commands after, and its old
- * one in the commands before. The region is memory shaped as QEMU's guest RAM:
- * a sealed memfd, mapped shared, made a dma-buf by udmabuf. A host without
- * DXVK, the patched DXVK or udmabuf returns without judging. */
+/* A Direct3D 11 buffer bound to a slice of its session's slice store
+ * (docs/mapped-buffers-plan.md, 3.2; docs/host-memory.md): the store is
+ * upload memory of the GPU's memory source, which DXVK's device imports by
+ * its dma-buf, so the host GPU reads what the guest wrote in place, when the
+ * work runs - bytes the guest writes after a command that reads the buffer was
+ * recorded, but before the GPU ran it, are the bytes it reads, as on a real
+ * driver whose mapped pointer is the GPU's memory. A buffer bound again reads
+ * its new slice in the commands after, and its old one in the commands before.
+ * A host without a DXVK that renames a buffer to imported storage
+ * (tools/dxvk-patches/0003) returns without judging. */
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d_backend.hpp"
-#include "executor/imported_blob.hpp"
+#include "executor/host_memory_source.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "fixtures/d3d/triangle_ps.hpp"
 #include "fixtures/d3d/triangle_vs.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/local_import.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
-#include <linux/udmabuf.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <unistd.h>
 
 using namespace av::d3dproto;
 
 namespace {
 
 constexpr std::uint64_t region_bytes = std::uint64_t{1} << 20u;
+constexpr std::uint64_t lent_bytes = region_bytes / 2u;
+constexpr std::uint64_t store_bytes = std::uint64_t{1} << 20u;
 constexpr std::uint32_t buffer_bytes = 4096u;
 constexpr std::uint64_t first_slice = 64u * 1024u;
 constexpr std::uint64_t second_slice = 128u * 1024u;
 constexpr std::uint32_t usage_default = 0u, usage_dynamic = 2u;
 constexpr std::uint32_t bind_vertex = 0x1u;
 constexpr std::uint32_t cpu_write = 0x10000u;
+constexpr std::uint32_t copy_no_overwrite = 0x1u;
 constexpr std::uint32_t driver_internal_error = 0x887A0020u;   /* DXGI_ERROR_DRIVER_INTERNAL_ERROR */
 
-/* Guest RAM as QEMU makes it, and a dma-buf of it from udmabuf. */
-class GuestMemory {
-public:
-    GuestMemory() : memfd_(-1), dmabuf_(-1), bytes_(nullptr)
-    {
-        memfd_ = memfd_create("guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-        if (memfd_ < 0 || ftruncate(memfd_, region_bytes) != 0 || fcntl(memfd_, F_ADD_SEALS, F_SEAL_SHRINK) != 0)
-            return;
-        void *const mapped = mmap(nullptr, region_bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memfd_, 0);
-        if (mapped == MAP_FAILED) return;
-        bytes_ = static_cast<std::uint8_t *>(mapped);
-        const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-        if (device < 0) return;
-        udmabuf_create request = {};
-        request.memfd = static_cast<std::uint32_t>(memfd_);
-        request.flags = UDMABUF_FLAGS_CLOEXEC;
-        request.size = region_bytes;
-        dmabuf_ = ioctl(device, UDMABUF_CREATE, &request);
-        close(device);
-    }
-    ~GuestMemory()
-    {
-        if (bytes_ != nullptr) munmap(bytes_, region_bytes);
-        if (dmabuf_ >= 0) close(dmabuf_);
-        if (memfd_ >= 0) close(memfd_);
-    }
-    bool          made() const { return dmabuf_ >= 0 && bytes_ != nullptr; }
-    int           dmabuf() const { return dmabuf_; }
-    std::uint8_t *at(std::uint64_t offset) { return bytes_ + offset; }
-    /* A buffer's words at `offset`, each `seed` plus its index. */
-    void          fill(std::uint64_t offset, std::uint32_t seed)
-    {
-        for (std::uint32_t at = 0u; at < buffer_bytes / 4u; at++) {
-            const std::uint32_t value = seed + at;
-            std::memcpy(bytes_ + offset + std::uint64_t{at} * 4u, &value, sizeof value);
-        }
-    }
+const av::HostMemoryRequest upload(av::HostMemoryRequest::Kind::upload, 0u);
 
-private:
-
-    int           memfd_;
-    int           dmabuf_;
-    std::uint8_t *bytes_;
-};
+/* The first GPU here whose Direct3D 11 device draws buffers from imported
+ * storage, and its memory source. */
+bool slice_host(av::LoaderHostApis &apis, av::D3d11HostDevice *&device, av::HostMemorySource *&source)
+{
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    apis.open();
+    for (std::uint32_t index = 0u; index < apis.gpu_count(); index++) {
+        device = apis.d3d11_device(index);
+        source = apis.memory_source(index);
+        if (device != nullptr && source != nullptr && device->slices()) return true;
+    }
+    std::fprintf(stderr, "no DXVK here renames a buffer to imported storage: nothing judged\n");
+    return false;
+}
 
 av::ObjectStorage<av::D3dBackend> backend_storage;
 
-class HeldBackend {
+/* A session on `device` with a region of the source's memory, and a device
+ * made on it after asking whether buffers can be drawn from slices, as the
+ * guest asks: before it has a device of its own. */
+class SliceSession {
 public:
-    HeldBackend() { static_cast<void>(backend_storage.construct()); }
-    ~HeldBackend()
+    SliceSession(av::D3d11HostDevice &device, av::HostMemorySource &source)
+        : made_(backend_storage.construct()), wire_(backend_storage.object(), &source, region_bytes, lent_bytes)
     {
-        backend_storage.object().shut_down();
-        backend_storage.destroy();
+        CHECK(backend().initialize(unshared_, &device));
+        std::uint32_t hresult = 1u, level = 0u, supported = 0u;
+        CHECK(av_d3d_QueryBufferSlices11(wire_, &supported));
+        CHECK_EQ(supported, 1u);
+        CHECK(av_d3d_CreateDevice11(wire_, 1u, 0u, 0u, &hresult, &level));
+        CHECK_EQ(hresult, 0u);
     }
-    HeldBackend(const HeldBackend &) = delete;
-    HeldBackend &operator=(const HeldBackend &) = delete;
-    av::D3dBackend &backend() { return backend_storage.object(); }
+    ~SliceSession() { backend().shut_down(); }
+    SliceSession(const SliceSession &) = delete;
+    SliceSession &operator=(const SliceSession &) = delete;
+
+    av::D3dBackend  &backend() { return backend_storage.object(); }
+    av::D3dLoopback &wire() { return wire_; }
+    /* The removed reason the next Finish11 answers. */
+    std::uint32_t    finish()
+    {
+        std::uint32_t hresult = 1u;
+        CHECK(av_d3d_Finish11(wire_, &hresult));
+        return hresult;
+    }
+
+private:
+    /* Destroyed last: the loopback's imports go back to a live backend. */
+    class Made {
+    public:
+        explicit Made(av::Status status) { CHECK_STATUS(status, av::Status::ok); }
+        ~Made() { backend_storage.destroy(); }
+        Made(const Made &) = delete;
+        Made &operator=(const Made &) = delete;
+    };
+
+    Made              made_;
+    av::SessionShares unshared_;
+    av::D3dLoopback   wire_;
 };
 
 ResourceDesc buffer_desc(std::uint32_t usage, std::uint32_t bind, std::uint32_t cpu)
@@ -111,6 +115,15 @@ ResourceDesc buffer_desc(std::uint32_t usage, std::uint32_t bind, std::uint32_t 
     desc.bind_flags = bind;
     desc.cpu_access = cpu;
     return desc;
+}
+
+/* A buffer's words at `at`, each `seed` plus its index. */
+void fill(std::uint8_t *at, std::uint32_t seed)
+{
+    for (std::uint32_t word = 0u; word < buffer_bytes / 4u; word++) {
+        const std::uint32_t value = seed + word;
+        std::memcpy(at + std::uint64_t{word} * 4u, &value, sizeof value);
+    }
 }
 
 /* Whether `resource` holds `seed` plus each word's index, read back. */
@@ -132,35 +145,14 @@ bool holds(av::D3dLoopback &wire, std::uint32_t resource, std::uint32_t seed)
 
 TEST(buffer_slice_device, a_buffer_on_a_slice_reads_what_the_guest_wrote_when_the_gpu_runs)
 {
-    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
-    av::LoaderHostApis   apis;
-    apis.open();
-    av::D3d11HostDevice *device = nullptr;
-    for (std::uint32_t index = 0u; index < apis.gpu_count() && device == nullptr; index++)
-        device = apis.d3d11_device(index);
-    GuestMemory memory;
-    if (device == nullptr || !memory.made() || !device->slices()) {
-        std::fprintf(stderr, "no DXVK that renames to imported storage, or no udmabuf, here: nothing judged\n");
-        return;
-    }
-    HeldBackend       held;
-    av::D3dBackend   &backend = held.backend();
-    av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
-    av::ImportedBlob region;
-    AvBlobHandle     handle = {};
-    handle.kind = AV_BLOB_DMA_BUF;
-    handle.fd = dup(memory.dmabuf());
-    handle.pointer = memory.at(0u);   /* the device's own mapping, which the GPU imports */
-    handle.size = region_bytes;
-    CHECK_STATUS(region.take(1u, handle), av::Status::ok);
-    CHECK(backend.adopt(region));
-    av::D3dLoopback wire(backend);
-    std::uint32_t   hresult = 1u, level = 0u, supported = 0u;
-    /* Asked before the session has a device, as the guest asks. */
-    CHECK(av_d3d_QueryBufferSlices11(wire, &supported));
-    CHECK_EQ(supported, 1u);
-    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    av::LoaderHostApis    apis;
+    av::D3d11HostDevice  *device = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device, source)) return;
+    SliceSession     session(*device, *source);
+    av::D3dLoopback &wire = session.wire();
+    const std::uint64_t store = wire.open_memory(upload, store_bytes);
+    CHECK(store != 0u);
 
     constexpr std::uint32_t mapped = 10u, early = 11u, late = 12u;
     CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
@@ -169,70 +161,175 @@ TEST(buffer_slice_device, a_buffer_on_a_slice_reads_what_the_guest_wrote_when_th
 
     /* Recorded first, written after: the copy reads what is there when the
      * GPU runs it. */
-    memory.fill(first_slice, 1000u);
-    CHECK(av_d3d_BindBufferSlice(wire, mapped, first_slice, buffer_bytes));
+    fill(wire.memory(store, first_slice), 1000u);
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, store, first_slice, buffer_bytes));
     CHECK(av_d3d_CopyResource(wire, early, mapped));
-    memory.fill(first_slice, 5000u);
+    fill(wire.memory(store, first_slice), 5000u);
     /* Bound again: the copy before read the first slice, the one after reads
      * the second. */
-    memory.fill(second_slice, 9000u);
-    CHECK(av_d3d_BindBufferSlice(wire, mapped, second_slice, buffer_bytes));
+    fill(wire.memory(store, second_slice), 9000u);
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, store, second_slice, buffer_bytes));
     CHECK(av_d3d_CopyResource(wire, late, mapped));
-    CHECK(av_d3d_Finish11(wire, &hresult));
+    CHECK_EQ(session.finish(), 0u);
     CHECK(holds(wire, early, 5000u));
     CHECK(holds(wire, late, 9000u));
+    /* The last slice of the store, to its last byte, is a slice. */
+    fill(wire.memory(store, store_bytes - buffer_bytes), 3000u);
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, store, store_bytes - buffer_bytes, buffer_bytes));
+    CHECK(av_d3d_CopyResource(wire, late, mapped));
+    CHECK_EQ(session.finish(), 0u);
+    CHECK(holds(wire, late, 3000u));
     CHECK_EQ(wire.refused(), 0u);
-
-    /* A slice running past the region is refused: the device that asked is
-     * removed, and the next Finish11 says so. */
-    CHECK(av_d3d_BindBufferSlice(wire, mapped, region_bytes - 1024u, buffer_bytes));
-    CHECK(av_d3d_Finish11(wire, &hresult));
-    CHECK_EQ(hresult, driver_internal_error);
+    CHECK(session.backend().invariants_hold());
 }
 
-/* A region handed over as a dma-buf with no host mapping beside it - an
- * older device's - has no pages a GPU can import coherently: the session says
- * no, and refuses a bind; the guest then copies what it writes, as before. */
-TEST(buffer_slice_device, a_region_with_no_host_pages_has_no_slices)
+namespace {
+
+/* Ids the misuses name: a dynamic buffer, a default one, a texture. */
+constexpr std::uint32_t dynamic = 20u, fixed = 21u, texture = 22u;
+
+/* One bind the host must refuse, given the store; on a session that was
+ * healthy until it came. */
+using Misuse = void (*)(av::D3dLoopback &wire, std::uint64_t store);
+
+const Misuse misuses[] = {
+    [](av::D3dLoopback &wire, std::uint64_t) {   /* memory the session never imported */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, 0x1234u, 0u, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t) {   /* no memory at all */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, 0u, 0u, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice past the store */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, store_bytes, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice running off its end */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, store_bytes - 1024u, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* an offset and length that wrap */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, 4096u, ~std::uint64_t{0} - 1024u));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a slice smaller than the buffer */
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, 0u, buffer_bytes / 2u));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a resource nothing names */
+        CHECK(av_d3d_BindBufferSlice(wire, 99u, store, 0u, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a texture */
+        CHECK(av_d3d_BindBufferSlice(wire, texture, store, 0u, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t store) {   /* a buffer the CPU never writes */
+        CHECK(av_d3d_BindBufferSlice(wire, fixed, store, 0u, buffer_bytes));
+    },
+    [](av::D3dLoopback &wire, std::uint64_t) {   /* a second store, while buffers are on the first */
+        const std::uint64_t second = wire.open_memory(upload, store_bytes);
+        CHECK(second != 0u);
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, second, 0u, buffer_bytes));
+    },
+};
+
+}  // namespace
+
+/* Every bind the host refuses - memory the session never imported or none, a
+ * slice outside the store or smaller than the buffer, a resource that is
+ * none, a texture, a buffer the CPU never writes, a second store - each alone,
+ * on a session whose bind to its store was taken: the device is removed after
+ * it and not before. */
+TEST(buffer_slice_device, each_misuse_of_a_bind_removes_a_healthy_device)
 {
-    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
-    av::LoaderHostApis   apis;
-    apis.open();
-    av::D3d11HostDevice *device = nullptr;
-    for (std::uint32_t index = 0u; index < apis.gpu_count() && device == nullptr; index++)
-        device = apis.d3d11_device(index);
-    GuestMemory memory;
-    if (device == nullptr || !memory.made()) {
-        std::fprintf(stderr, "no DXVK or no udmabuf here: nothing judged\n");
-        return;
+    av::LoaderHostApis    apis;
+    av::D3d11HostDevice  *device = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device, source)) return;
+    for (const Misuse misuse : misuses) {
+        SliceSession     session(*device, *source);
+        av::D3dLoopback &wire = session.wire();
+        const std::uint64_t store = wire.open_memory(upload, store_bytes);
+        CHECK(store != 0u);
+        CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
+        CHECK(av_d3d_CreateResource(wire, fixed, buffer_desc(usage_default, bind_vertex, 0u), 0u));
+        ResourceDesc image = {};
+        image.dimension = 3u;
+        image.width = 64u;
+        image.height = 64u;
+        image.depth_or_array = 1u;
+        image.mip_levels = 1u;
+        image.format = 87u;
+        image.sample_count = 1u;
+        CHECK(av_d3d_CreateResource(wire, texture, image, 0u));
+        CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, first_slice, buffer_bytes));
+        CHECK_EQ(session.finish(), 0u);
+        misuse(wire, store);
+        CHECK_EQ(session.finish(), driver_internal_error);
     }
-    HeldBackend       held;
-    av::D3dBackend   &backend = held.backend();
-    av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
-    av::ImportedBlob region;
-    AvBlobHandle     handle = {};
-    handle.kind = AV_BLOB_DMA_BUF;
-    handle.fd = dup(memory.dmabuf());
-    handle.size = region_bytes;
-    CHECK_STATUS(region.take(1u, handle), av::Status::ok);
-    CHECK(backend.adopt(region));
-    av::D3dLoopback wire(backend);
-    std::uint32_t   hresult = 1u, level = 0u, supported = 1u;
-    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
-    CHECK(av_d3d_QueryBufferSlices11(wire, &supported));
-    CHECK_EQ(supported, 0u);
-    /* The same, asked of the backend itself: answered, and no bind taken. */
-    supported = 1u;
-    CHECK(backend.on_QueryBufferSlices11(supported));
-    CHECK_EQ(supported, 0u);
-    CHECK(!backend.on_BindBufferSlice(10u, 0u, buffer_bytes));   /* not made yet */
-    CHECK(av_d3d_CreateResource(wire, 10u, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
-    CHECK(av_d3d_Finish11(wire, &hresult));
-    CHECK_EQ(hresult, 0u);
-    CHECK(av_d3d_BindBufferSlice(wire, 10u, 0u, buffer_bytes));
-    CHECK(av_d3d_Finish11(wire, &hresult));
-    CHECK_EQ(hresult, driver_internal_error);
+}
+
+/* A store DXVK's device cannot import - memory with no dma-buf behind it - is
+ * refused, and from then on every store is: the session's buffers are
+ * copied, so a later bind on any of its devices is a guest that did not ask
+ * first. */
+TEST(buffer_slice_device, a_store_that_cannot_be_imported_refuses_every_bind_after)
+{
+    av::LoaderHostApis    apis;
+    av::D3d11HostDevice  *device = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device, source)) return;
+    SliceSession     session(*device, *source);
+    av::D3dLoopback &wire = session.wire();
+    alignas(4096) static std::uint8_t unexported[store_bytes];
+    av::LocalImport lost(unexported, sizeof unexported, 99u);
+    CHECK(session.backend().adopt(lost.blob()));
+    CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
+    CHECK(av_d3d_BindBufferSlice(wire, dynamic, lost.blob().wire_handle(), 0u, buffer_bytes));
+    CHECK_EQ(session.finish(), driver_internal_error);
+    /* A second device of the session, healthy, binds to a store that is. */
+    const std::uint64_t store = wire.open_memory(upload, store_bytes);
+    CHECK(store != 0u);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
+    CHECK(av_d3d_SelectDevice11(wire, 2u));
+    CHECK(av_d3d_CreateResource(wire, dynamic + 1u, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
+    CHECK_EQ(session.finish(), 0u);
+    CHECK(av_d3d_BindBufferSlice(wire, dynamic + 1u, store, 0u, buffer_bytes));
+    CHECK_EQ(session.finish(), driver_internal_error);
+    session.backend().abandon(lost.blob());
+}
+
+/* The guest lets go of its store while a buffer is still bound to it - as a
+ * dying process's memory goes before its objects. The buffer goes back to
+ * storage of its own first: what is written into it afterwards is kept there,
+ * and never reaches memory that has gone; and a bind naming the store is
+ * refused from then on. */
+TEST(buffer_slice_device, a_buffer_on_a_store_that_goes_is_given_storage_of_its_own)
+{
+    av::LoaderHostApis    apis;
+    av::D3d11HostDevice  *device = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device, source)) return;
+    SliceSession     session(*device, *source);
+    av::D3dLoopback &wire = session.wire();
+    const std::uint64_t store = wire.open_memory(upload, store_bytes);
+    CHECK(store != 0u);
+    constexpr std::uint32_t mapped = 10u, copy = 11u;
+    CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
+    CHECK(av_d3d_CreateResource(wire, copy, buffer_desc(usage_default, 0u, 0u), 0u));
+    fill(wire.memory(store, first_slice), 1000u);
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, store, first_slice, buffer_bytes));
+    CHECK(av_d3d_CopyResource(wire, copy, mapped));
+    CHECK_EQ(session.finish(), 0u);
+    CHECK(holds(wire, copy, 1000u));
+
+    wire.close_memory(store);
+    static std::uint8_t written[buffer_bytes];
+    fill(written, 7000u);
+    CHECK(av_d3d_UpdateSubresource(wire, mapped, 0u, 0u, Box{}, buffer_bytes, buffer_bytes, copy_no_overwrite, written,
+                                   sizeof written));
+    CHECK(av_d3d_CopyResource(wire, copy, mapped));
+    CHECK_EQ(session.finish(), 0u);
+    CHECK(holds(wire, copy, 7000u));
+    CHECK(holds(wire, mapped, 7000u));
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, store, first_slice, buffer_bytes));
+    CHECK_EQ(session.finish(), driver_internal_error);
+    CHECK_EQ(wire.refused(), 0u);
 }
 
 namespace {
@@ -255,37 +352,18 @@ std::uint32_t pixel(const std::uint8_t *pixels, std::uint32_t x, std::uint32_t y
 
 /* A draw reads its vertices and its constants from buffers on slices: the
  * triangle test_d3d_backend_device draws from default buffers, here from
- * dynamic ones whose bytes the guest wrote into the region, as avumd does. */
+ * dynamic ones whose bytes the guest wrote into the store, as avumd does. */
 TEST(buffer_slice_device, a_draw_reads_vertices_and_constants_from_slices)
 {
-    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
-    av::LoaderHostApis   apis;
-    apis.open();
-    av::D3d11HostDevice *device = nullptr;
-    for (std::uint32_t index = 0u; index < apis.gpu_count() && device == nullptr; index++)
-        device = apis.d3d11_device(index);
-    GuestMemory memory;
-    if (device == nullptr || !memory.made() || !device->slices()) {
-        std::fprintf(stderr, "no DXVK that renames to imported storage, or no udmabuf, here: nothing judged\n");
-        return;
-    }
-    HeldBackend       held;
-    av::D3dBackend   &backend = held.backend();
-    av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
-    av::ImportedBlob region;
-    AvBlobHandle     handle = {};
-    handle.kind = AV_BLOB_DMA_BUF;
-    handle.fd = dup(memory.dmabuf());
-    handle.pointer = memory.at(0u);   /* the device's own mapping, which the GPU imports */
-    handle.size = region_bytes;
-    CHECK_STATUS(region.take(1u, handle), av::Status::ok);
-    CHECK(backend.adopt(region));
-    av::D3dLoopback wire(backend);
-    std::uint32_t   hresult = 1u, level = 0u, supported = 0u;
-    CHECK(av_d3d_QueryBufferSlices11(wire, &supported));
-    CHECK_EQ(supported, 1u);
-    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    av::LoaderHostApis    apis;
+    av::D3d11HostDevice  *device = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device, source)) return;
+    SliceSession     session(*device, *source);
+    av::D3dLoopback &wire = session.wire();
+    const std::uint64_t store = wire.open_memory(upload, store_bytes);
+    CHECK(store != 0u);
+    std::uint32_t hresult = 1u;
 
     ResourceDesc target = {};
     target.dimension = 3u;
@@ -318,10 +396,10 @@ TEST(buffer_slice_device, a_draw_reads_vertices_and_constants_from_slices)
     cb.width = 16u;
     cb.bind_flags = 0x4u;
     CHECK(av_d3d_CreateResource(wire, 4u, cb, 0u));
-    std::memcpy(memory.at(first_slice), vertices, sizeof vertices);
-    std::memcpy(memory.at(second_slice), tint, sizeof tint);
-    CHECK(av_d3d_BindBufferSlice(wire, 3u, first_slice, 256u));
-    CHECK(av_d3d_BindBufferSlice(wire, 4u, second_slice, 256u));
+    std::memcpy(wire.memory(store, first_slice), vertices, sizeof vertices);
+    std::memcpy(wire.memory(store, second_slice), tint, sizeof tint);
+    CHECK(av_d3d_BindBufferSlice(wire, 3u, store, first_slice, 256u));
+    CHECK(av_d3d_BindBufferSlice(wire, 4u, store, second_slice, 256u));
 
     CHECK(av_d3d_CreateShader(wire, 5u, 0u, triangle_vs::inputs_count, triangle_vs::inputs, triangle_vs::outputs_count,
                               triangle_vs::outputs, 0u, nullptr, 0u, nullptr, 0u, nullptr, 0xffffffffu,
@@ -360,8 +438,8 @@ TEST(buffer_slice_device, a_draw_reads_vertices_and_constants_from_slices)
      * after reads the new slice, with the buffer still bound from before. */
     constexpr std::uint64_t third_slice = 192u * 1024u;
     const float full[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    std::memcpy(memory.at(third_slice), full, sizeof full);
-    CHECK(av_d3d_BindBufferSlice(wire, 4u, third_slice, 256u));
+    std::memcpy(wire.memory(store, third_slice), full, sizeof full);
+    CHECK(av_d3d_BindBufferSlice(wire, 4u, store, third_slice, 256u));
     CHECK(av_d3d_Draw(wire, 3u, 0u));
     CHECK(av_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
     CHECK_EQ(pixel(pixels, 4u, target_size / 2u), 0xffff0000u);

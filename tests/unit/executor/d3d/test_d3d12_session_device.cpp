@@ -2,19 +2,23 @@
  * vkd3d-proton: a render target cleared and a triangle drawn the way the
  * guest's user-mode driver will draw one - shaders as the DDI hands them (a
  * DXIL program and its signatures as registers, tests/fixtures/d3d12/), an
- * input layout naming registers, constants and vertices in an upload heap of
- * guest memory at guest GPU addresses - and read back through a readback
- * heap of guest memory, judged pixel by pixel where the answer is certain.
+ * input layout naming registers, constants and vertices in an upload heap at
+ * guest GPU addresses - and read back through a readback heap, judged pixel by
+ * pixel where the answer is certain. Each CPU-visible heap is an allocation
+ * of its own from the GPU's memory source, which vkd3d-proton opens by its
+ * dma-buf (docs/host-memory.md); the test reads and writes it through the
+ * source's mapping, where the guest uses its view.
  *
  * vkd3d-proton is loaded from AV_D3D_PATH, or build-d3d/lib in this checkout
- * (tools/build_d3d_runtime.sh, which applies the host-pointer heap patch this
- * needs). A host without it, or with a vkd3d-proton that cannot import guest
- * memory, returns without judging, as the other device tests do. */
-#include "executor/d3d/frame_target.hpp"
+ * (tools/build_d3d_runtime.sh, which applies the dma-buf heap patch this
+ * needs). A host without it, or with a vkd3d-proton that opens no heap over
+ * a dma-buf, returns without judging, as the other device tests do. */
 #include "executor/d3d/shared_surfaces.hpp"
 #include "fixtures/d3d12/triangle_ps.hpp"
 #include "fixtures/d3d12/triangle_vs.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/host_memory_source.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -24,16 +28,13 @@
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
-#include <linux/udmabuf.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
 namespace {
@@ -64,30 +65,41 @@ constexpr std::uint32_t root_cbv = 2u;
 constexpr std::uint32_t allow_input_layout = 0x1u;
 constexpr std::uint32_t driver_internal_error = 0x887A0020u;
 
-/* The guest arena: bulk data is lent from the first 8 MiB, heaps start there. */
-constexpr std::size_t   guest_bytes = 32u << 20u;
+/* The session's region: bulk data is lent from its first 8 MiB, and the
+ * fence is published past them. */
+constexpr std::size_t   region_bytes = 16u << 20u;
 constexpr std::size_t   lent_bytes = 8u << 20u;
-constexpr std::uint64_t readback_at = lent_bytes;
-constexpr std::uint64_t upload_at = lent_bytes + (1u << 20u);
-constexpr std::uint64_t fence_at = lent_bytes + (2u << 20u);
+constexpr std::uint64_t fence_at = lent_bytes;
 constexpr std::uint64_t heap_bytes = 64u * 1024u;
 /* Guest GPU addresses, as the guest's driver would have chosen them. */
 constexpr std::uint64_t readback_address = 0x100000000ull;
 constexpr std::uint64_t upload_address = 0x200000000ull;
+
+const av::HostMemoryRequest upload_memory(av::HostMemoryRequest::Kind::upload, 0u);
+const av::HostMemoryRequest readback_memory(av::HostMemoryRequest::Kind::readback, 0u);
 
 enum Id : std::uint32_t {
     queue = 1, allocator, list, target, rtv_heap, readback_heap, readback, upload_heap, vertices, constants, fence,
     root, pipeline, signature, arguments, counts, shown, shown_rtv
 };
 
+/* The memory the session's two CPU-visible heaps are, as the handles
+ * CreateHeap12 names: opened by make_frame and make_triangle. */
+struct HeapMemory {
+    std::uint64_t readback;
+    std::uint64_t upload;
+};
+HeapMemory heaps = {};
+
 struct Vertex {
     float x, y;
     float r, g, b, a;
 };
 
-/* The first GPU here with both devices; nulls when there is none. */
+/* The first GPU here with both devices and a memory source; nulls when there
+ * is none. */
 bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::D3d12HostDevice *&device12,
-                  av::HostShares *&shares)
+                  av::HostShares *&shares, av::HostMemorySource *&source)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     apis.open();
@@ -95,7 +107,8 @@ bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::
         device11 = apis.d3d11_device(index);
         device12 = apis.d3d12_device(index);
         shares = apis.shares(index);
-        if (device11 != nullptr && device12 != nullptr) return true;
+        source = apis.memory_source(index);
+        if (device11 != nullptr && device12 != nullptr && source != nullptr) return true;
     }
     std::fprintf(stderr, "no GPU here runs vkd3d-proton: nothing judged\n");
     return false;
@@ -108,12 +121,18 @@ av::SessionShares *shared_as(av::SessionShares &session, av::HostShares *shares,
     return &session;
 }
 
-/* Whether this vkd3d-proton imports guest memory: a stock one does not. */
+/* Whether this vkd3d-proton opens a heap over the source's memory: a stock
+ * one does not. */
 bool imports(av::D3d12HostDevice &device, av::D3dLoopback &wire)
 {
-    ID3D12Heap *const imported = device.import_heap(wire.guest(readback_at), heap_bytes);
+    const std::uint64_t        memory = wire.open_memory(readback_memory, heap_bytes);
+    const av::SourceMemory *const held = wire.source_memory(memory);
+    const int                  fd = held != nullptr ? held->share() : -1;
+    ID3D12Heap *const imported = fd >= 0 ? device.import_dmabuf_heap(held->pointer(), fd, held->size()) : nullptr;
+    if (fd >= 0) close(fd);
+    wire.close_memory(memory);
     if (imported == nullptr) {
-        std::fprintf(stderr, "this vkd3d-proton imports no host memory (tools/vkd3d-proton-patches): nothing judged\n");
+        std::fprintf(stderr, "this vkd3d-proton opens no heap over a dma-buf (tools/vkd3d-proton-patches): nothing judged\n");
         return false;
     }
     imported->Release();
@@ -185,7 +204,10 @@ void make_frame(av::D3dLoopback &wire)
     view.resource = target;
     CHECK(av_d3d12_CreateRenderTargetView12(wire, DescriptorRef{rtv_heap, 0u}, 0u, view));
 
-    CHECK(av_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, readback_at));
+    heaps.readback = wire.open_memory(readback_memory, heap_bytes);
+    CHECK(heaps.readback != 0u);
+    std::memset(wire.memory(heaps.readback), 0xcd, heap_bytes);
+    CHECK(av_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, heaps.readback));
     CHECK(av_d3d12_CreatePlacedResource12(wire, readback, readback_heap, 0u, buffer_of(row_pitch * size),
                                            state_copy_dest, ClearValue{}, readback_address));
 }
@@ -220,7 +242,7 @@ void read_frame(av::D3dLoopback &wire, std::uint64_t value)
 std::uint32_t pixel(const av::D3dLoopback &wire, std::uint32_t x, std::uint32_t y)
 {
     std::uint32_t value = 0u;
-    std::memcpy(&value, wire.guest(readback_at + y * row_pitch + x * 4u), sizeof(value));
+    std::memcpy(&value, wire.memory(heaps.readback, y * row_pitch + x * 4u), sizeof(value));
     return value;
 }
 
@@ -229,13 +251,15 @@ std::uint32_t pixel(const av::D3dLoopback &wire, std::uint32_t x, std::uint32_t 
  * the pipeline, from the shaders as the DDI gives them or whole. */
 void make_triangle(av::D3dLoopback &wire, bool whole_containers)
 {
-    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, upload_at));
+    heaps.upload = wire.open_memory(upload_memory, heap_bytes);
+    CHECK(heaps.upload != 0u);
+    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, heaps.upload));
     const Vertex triangle[3] = {{-1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
                                 {-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
                                 {0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f}};
-    std::memcpy(wire.guest(upload_at), triangle, sizeof(triangle));
+    std::memcpy(wire.memory(heaps.upload), triangle, sizeof(triangle));
     const float tint[4] = {0.5f, 0.5f, 0.5f, 1.0f};
-    std::memcpy(wire.guest(upload_at + 256u), tint, sizeof(tint));
+    std::memcpy(wire.memory(heaps.upload, 256u), tint, sizeof(tint));
     CHECK(av_d3d12_CreatePlacedResource12(wire, vertices, upload_heap, 0u, buffer_of(256u), state_generic_read,
                                            ClearValue{}, upload_address));
     CHECK(av_d3d12_CreatePlacedResource12(wire, constants, upload_heap, 256u, buffer_of(256u), state_generic_read,
@@ -321,16 +345,16 @@ TEST(d3d12_session_device, a_cleared_target_reads_back_through_guest_memory)
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     av::D3dBackend backend;
     av::SessionShares session;
     CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
         return;
     }
-    std::memset(wire.guest(readback_at), 0xcd, row_pitch * size);
     make_frame(wire);
     CHECK(av_d3d12_CreateFence12(wire, fence, 0u, 0u));
     /* The fence's completed value is published into guest memory. */
@@ -377,12 +401,13 @@ TEST(d3d12_session_device, a_triangle_drawn_from_ddi_dxil_reads_back_where_it_wa
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     for (int whole = 0; whole < 2; whole++) {
         av::D3dBackend backend;
         av::SessionShares session;
         CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
         if (!imports(*device12, wire)) {
             backend.shut_down();
             return;
@@ -417,9 +442,9 @@ void make_indirect(av::D3dLoopback &wire)
     CHECK(av_d3d12_CreateFence12(wire, fence, 0u, 0u));
     make_triangle(wire, false);
     const std::uint32_t draw[4] = {3u, 1u, 0u, 0u};
-    std::memcpy(wire.guest(upload_at + arguments_at), draw, sizeof draw);
+    std::memcpy(wire.memory(heaps.upload, arguments_at), draw, sizeof draw);
     const std::uint32_t one = 1u;
-    std::memcpy(wire.guest(upload_at + counts_at), &one, sizeof one);
+    std::memcpy(wire.memory(heaps.upload, counts_at), &one, sizeof one);
     CHECK(av_d3d12_CreatePlacedResource12(wire, arguments, upload_heap, arguments_at, buffer_of(argument_bytes),
                                            state_generic_read, ClearValue{}, upload_address + arguments_at));
     CHECK(av_d3d12_CreatePlacedResource12(wire, counts, upload_heap, counts_at, buffer_of(argument_bytes),
@@ -479,11 +504,12 @@ TEST(d3d12_session_device, a_triangle_drawn_indirectly_reads_back_where_it_was_d
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     av::D3dBackend backend;
     av::SessionShares session;
     CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
         return;
@@ -512,12 +538,13 @@ TEST(d3d12_session_device, each_indirect_misuse_removes_a_healthy_device)
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     for (const Misuse misuse : misuses) {
         av::D3dBackend backend;
         av::SessionShares session;
         CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
         if (!imports(*device12, wire)) {
             backend.shut_down();
             return;
@@ -533,6 +560,117 @@ TEST(d3d12_session_device, each_indirect_misuse_removes_a_healthy_device)
     }
 }
 
+namespace {
+
+constexpr std::uint32_t named_heap = 40u;
+
+/* One CPU-visible heap the host must refuse to open. */
+using HeapMisuse = void (*)(av::D3dLoopback &wire);
+
+const HeapMisuse heap_misuses[] = {
+    [](av::D3dLoopback &wire) {   /* over memory the session never imported */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, 0x1234u));
+    },
+    [](av::D3dLoopback &wire) {   /* over no memory at all */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes, 0u, 0u));
+    },
+    [](av::D3dLoopback &wire) {   /* larger than the memory it names */
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_readback), 0u, heap_bytes + 4096u, 0u,
+                                    heaps.readback));
+    },
+    [](av::D3dLoopback &wire) {   /* over memory the guest let go of */
+        const std::uint64_t gone = wire.open_memory(upload_memory, heap_bytes);
+        CHECK(gone != 0u);
+        wire.close_memory(gone);
+        CHECK(av_d3d12_CreateHeap12(wire, named_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, gone));
+    },
+};
+
+}  // namespace
+
+/* A CPU-visible heap is opened over memory the session imported for it, of
+ * at least the heap's size: one over memory it never imported or none, larger
+ * than its memory, or over memory the guest let go of is refused, on a session
+ * that was healthy until it came - a guest's handle is a foreign number. */
+TEST(d3d12_session_device, each_cpu_visible_heap_over_memory_it_cannot_have_removes_a_healthy_device)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    for (const HeapMisuse misuse : heap_misuses) {
+        av::D3dBackend backend;
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
+        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
+        if (!imports(*device12, wire)) {
+            backend.shut_down();
+            return;
+        }
+        make_frame(wire);
+        std::uint32_t removed = 1u;
+        CHECK(av_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, 0u);
+        misuse(wire);
+        CHECK(av_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, driver_internal_error);
+        backend.shut_down();
+    }
+}
+
+/* Each CPU-visible heap is memory of its own: a heap smaller than its memory
+ * is opened, two heaps over two allocations hold what each was written, and
+ * a heap's memory the guest let go of while the heap lives leaves the heap
+ * whole - vkd3d-proton holds the dma-buf it opened. */
+TEST(d3d12_session_device, a_heap_is_its_own_memory_and_outlives_the_guest_s_hold_on_it)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend;
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
+    if (!imports(*device12, wire)) {
+        backend.shut_down();
+        return;
+    }
+    make_frame(wire);
+    CHECK(av_d3d12_CreateFence12(wire, fence, 0u, 0u));
+    /* Upload memory twice the heap's size: the heap is its first half. */
+    const std::uint64_t memory = wire.open_memory(upload_memory, 2u * heap_bytes);
+    CHECK(memory != 0u);
+    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, heap_bytes, 0u, memory));
+    CHECK(av_d3d12_CreatePlacedResource12(wire, vertices, upload_heap, 0u, buffer_of(256u), state_generic_read,
+                                           ClearValue{}, upload_address));
+    std::uint32_t words[64];
+    for (std::uint32_t at = 0u; at < 64u; at++) words[at] = 0xa000u + at;
+    std::memcpy(wire.memory(memory), words, sizeof words);
+    /* The guest lets go of the memory; the heap and the buffer in it stay. */
+    wire.close_memory(memory);
+    CHECK(wire.memory(memory) == nullptr);
+    CHECK(av_d3d12_CopyBufferRegion12(wire, list, readback, 0u, vertices, 0u, sizeof words));
+    CHECK(av_d3d12_CloseCommandList12(wire, list));
+    const std::uint32_t lists[1] = {list};
+    CHECK(av_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
+    CHECK(av_d3d12_SignalFence12(wire, queue, fence, 1u));
+    std::uint64_t completed = 0u;
+    CHECK(av_d3d12_FenceValue12(wire, fence, 1u, 1u, &completed));
+    CHECK(completed >= 1u);
+    CHECK_EQ(std::memcmp(wire.memory(heaps.readback), words, sizeof words), 0);
+    std::uint32_t removed = 1u;
+    CHECK(av_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
 /* A shader-visible sampler heap of the size the guest's runtime reports - more
  * than the 2048 vkd3d-proton makes - is made with 2048: a sampler at the last
  * of them is written, one past them is refused as outside the heap. */
@@ -542,14 +680,15 @@ TEST(d3d12_session_device, a_sampler_heap_past_2048_is_made_with_2048)
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     constexpr std::uint32_t descriptors_sampler = 1u, shader_visible = 1u, reported = 4000u, made = 2048u;
     const std::uint32_t indices[2] = {made - 1u, made};
     for (const std::uint32_t index : indices) {
         av::D3dBackend backend;
         av::SessionShares session;
         CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
         std::uint32_t hresult = 1u;
         Caps12 caps = {};
         CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
@@ -578,13 +717,14 @@ TEST(d3d12_session_device, a_buffer_placed_inside_a_spanning_buffer_is_taken_and
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     constexpr std::uint64_t heap_size = 1u << 20u, piece = 64u * 1024u, base = 0x300000000ull;
     constexpr std::uint32_t heap = 1u, spanning = 2u, inner = 3u, misplaced = 4u;
     av::D3dBackend backend;
     av::SessionShares session;
     CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
     std::uint32_t hresult = 1u;
     Caps12 caps = {};
     CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
@@ -702,11 +842,12 @@ TEST(d3d12_session_device, a_shared_buffer_drawn_on_d3d12_is_what_d3d11_reads_un
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     av::D3dBackend backend;
     av::SessionShares session;
     CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
         return;
@@ -739,12 +880,13 @@ TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     av::SharedSurfaces surfaces;
     av::D3dBackend     backend;
     av::SessionShares session;
     CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12, &surfaces));
-    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
     if (!imports(*device12, wire)) {
         backend.shut_down();
         return;
@@ -770,103 +912,6 @@ TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_
     device11->retire_shares();
 }
 
-/* Guest RAM as QEMU makes it - a memfd that cannot shrink, mapped shared -
- * and a dma-buf of it from udmabuf, as the device makes one of a window's
- * pages. */
-class GuestPages {
-public:
-    static constexpr std::uint64_t bytes = 64u * 1024u;
-    static constexpr std::uint32_t untouched = 0x11111111u;
-
-    GuestPages() : memfd_(-1), dmabuf_(-1), pixels_(nullptr)
-    {
-        memfd_ = memfd_create("guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-        if (memfd_ < 0 || ftruncate(memfd_, bytes) != 0 || fcntl(memfd_, F_ADD_SEALS, F_SEAL_SHRINK) != 0) return;
-        void *const mapped = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memfd_, 0);
-        if (mapped == MAP_FAILED) return;
-        pixels_ = static_cast<std::uint32_t *>(mapped);
-        for (std::uint64_t at = 0u; at < bytes / 4u; at++) pixels_[at] = untouched;
-        const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-        if (device < 0) return;
-        udmabuf_create request = {};
-        request.memfd = static_cast<std::uint32_t>(memfd_);
-        request.flags = UDMABUF_FLAGS_CLOEXEC;
-        request.size = bytes;
-        dmabuf_ = ioctl(device, UDMABUF_CREATE, &request);
-        close(device);
-    }
-    ~GuestPages()
-    {
-        if (pixels_ != nullptr) munmap(pixels_, bytes);
-        if (dmabuf_ >= 0) close(dmabuf_);
-        if (memfd_ >= 0) close(memfd_);
-    }
-    bool          made() const { return dmabuf_ >= 0 && pixels_ != nullptr; }
-    int           dmabuf() const { return dmabuf_; }
-    std::uint32_t pixel(std::uint32_t index) const { return pixels_[index]; }
-
-private:
-    int            memfd_;
-    int            dmabuf_;
-    std::uint32_t *pixels_;
-};
-
-/* A staged frame is written by vkd3d's GPU straight into guest pages
- * (StagedFrame::write) - the present's frame, not the clear after it - and
- * let go once written; nothing outside the region changes. */
-TEST(d3d12_session_device, a_staged_frame_is_written_by_the_gpu_into_guest_pages)
-{
-    av::LoaderHostApis apis;
-    av::D3d11HostDevice *device11 = nullptr;
-    av::D3d12HostDevice *device12 = nullptr;
-    av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
-    GuestPages pages;
-    if (!pages.made()) {
-        std::fprintf(stderr, "no udmabuf here: nothing judged\n");
-        return;
-    }
-    av::SharedSurfaces surfaces;
-    av::D3dBackend     backend;
-    av::SessionShares  session;
-    CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12, &surfaces));
-    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
-    if (!imports(*device12, wire)) {
-        backend.shut_down();
-        return;
-    }
-    make_shown(wire);
-    present_cleared(wire, Float4{{1.0f, 0.0f, 0.0f, 1.0f}}, 1u);
-    std::uint32_t removed = 1u;
-    CHECK(av_d3d12_Finish12(wire, &removed));
-    AvFrameView view = {};
-    CHECK(!surfaces.map(av::SurfacePoint(shown_key, 1u), 1000u, view));   /* a blt asks: stage from now on */
-    present_cleared(wire, Float4{{0.0f, 1.0f, 0.0f, 1.0f}}, 2u);
-    draw_cleared(wire, Float4{{0.0f, 0.0f, 1.0f, 1.0f}});
-    /* Rows 3 and 4 of the frame, whole, into rows 1 and 2 of a surface 128
-     * pixels wide. */
-    constexpr std::uint32_t pitch = 512u;
-    const AvFrameRegion     rows = {0u, 3u, 0u, 1u, size, 2u};
-    CHECK(surfaces.write(av::SurfacePoint(shown_key, 2u), 1000u,
-                         av::FrameTarget(pages.dmabuf(), GuestPages::bytes, pitch, &rows, 1u)));
-    std::uint32_t wrong = 0u;
-    for (std::uint32_t row = 1u; row <= 2u; row++)
-        for (std::uint32_t x = 0u; x < size; x++) wrong += pages.pixel(row * pitch / 4u + x) == opaque_green ? 0u : 1u;
-    CHECK_EQ(wrong, 0u);
-    CHECK_EQ(pages.pixel(0u), GuestPages::untouched);
-    CHECK_EQ(pages.pixel(pitch / 4u + size), GuestPages::untouched);
-    CHECK_EQ(pages.pixel(3u * pitch / 4u), GuestPages::untouched);
-    CHECK(!surfaces.map(av::SurfacePoint(shown_key, 2u), 0u, view));   /* written and let go */
-    CHECK(av_d3d12_Finish12(wire, &removed));
-    CHECK_EQ(removed, 0u);
-    CHECK_EQ(wire.refused(), 0u);
-    CHECK(surfaces.invariants_hold());
-    backend.shut_down();
-    surfaces.release(0u);
-    shares->release(1u, shown_key);
-    device11->retire_shares();
-}
-
 /* A share of a texture not made shared, of none, under key 0 or a key already
  * shown; a present from a queue or of a resource nothing names: each alone
  * removes a session that was healthy until it came. */
@@ -876,12 +921,13 @@ TEST(d3d12_session_device, each_share_or_present_misuse_removes_a_healthy_device
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostShares      *shares = nullptr;
-    if (!host_devices(apis, device11, device12, shares)) return;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
     for (const ShowMisuse misuse : show_misuses) {
         av::D3dBackend backend;
         av::SessionShares session;
         CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
-        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
         make_shown(wire);
         std::uint32_t removed = 1u;
         CHECK(av_d3d12_Finish12(wire, &removed));
