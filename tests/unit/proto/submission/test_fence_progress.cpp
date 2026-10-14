@@ -98,6 +98,21 @@ TEST(fence_progress_observe, raises_move_forward_and_moving_backwards_is_rejecte
   CHECK_STATUS(older.observe(FencePage(0u, 5u)), Status::ok);
   CHECK(older.raised() == 0u); }
 
+/* The pulse's beat only moves forward, and moves alone: a page whose beat went
+ * back is one no device wrote, whatever else it says. */
+TEST(fence_progress_observe, the_beat_moves_alone_and_moving_backwards_is_rejected)
+{ FenceProgress progress;
+  CHECK_STATUS(progress.record_submission(9u), Status::ok);
+  CHECK(progress.beat() == 0u);
+  CHECK_STATUS(progress.observe(FencePage(6u, 20u).beating(40u)), Status::ok);
+  CHECK(progress.beat() == 40u);
+  CHECK_STATUS(progress.observe(FencePage(6u, 20u).beating(41u)), Status::ok);
+  CHECK(progress.beat() == 41u);
+  CHECK(progress.progress() == 20u);
+  CHECK_STATUS(progress.observe(FencePage(7u, 21u).beating(40u)), Status::invalid_state);
+  CHECK(progress.beat() == 41u);
+  CHECK(progress.completed_fence() == 6u); }
+
 TEST(fence_progress_observe, a_fault_is_latched)
 { FenceProgress progress;
   CHECK_STATUS(progress.record_submission(2u), Status::ok);

@@ -37,6 +37,8 @@ public:
     /* The out-of-band raises the device has delivered: 0 from a device that
      * counts none (no feature_raises). */
     uint64_t raised() const;
+    /* The device's pulse (docs/protocol.md, "Fence page"). */
+    uint64_t beat() const;
     bool     faulted() const;
 
     bool invariants_hold() const;
@@ -47,6 +49,7 @@ private:
     uint64_t completed_;
     uint64_t progress_;
     uint64_t raised_;
+    uint64_t beat_;
     bool     faulted_;
 
     friend struct FenceProgressProbe;
