@@ -204,7 +204,9 @@ void GuestGlContext::end_frame()
     if (state_ != State::made) return;
     flush();
     KmtTransport  &transport = channel_.transport();
-    const uint64_t behind = frames_.end(transport.published_fence());
+    uint64_t       frequency = 0u;
+    const uint64_t now = link_.device().kmt().performance_counter(frequency);
+    const uint64_t behind = frames_.end(transport.published_fence(), now, frequency, transport.gpu_completed());
     if (behind != 0u && transport.await_gpu(behind) != Status::ok)
         log_.write("avgl: the host never finished an earlier frame; the context is lost");
 }

@@ -123,9 +123,9 @@ public:
      * context may depend on them. */
     void                 flush();
     /* The application ended a frame - glFlush, a swap: what is held goes to
-     * the host, and the application goes on only once the host has finished
-     * the frame FramesInFlight::depth before it. A host that never does loses
-     * the context. */
+     * the host, and the application goes on only once the host is no more
+     * than FramesInFlight::latency_ms behind it. A host that never catches up
+     * loses the context. */
     void                 end_frame();
     /* The newest batch sent, for another thread to wait on (BatchMark); one
      * of no batch unless made. */

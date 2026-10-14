@@ -625,40 +625,46 @@ std::uint64_t end_a_frame(GuestGlContext &context)
 
 }  // namespace
 
-/* An application goes on past the end of a frame only once the host has
- * finished the frame FramesInFlight::depth before it - not the one just
- * before, which the host may still be running - and asks the kernel nothing
- * to learn it. */
-TEST(guest_gl_context, a_frame_ends_once_the_host_finished_the_one_two_before_it)
+namespace {
+
+/* Each read of the clock 60 ms on: every frame ends more than
+ * FramesInFlight::latency_ms after the one before it. */
+constexpr std::uint64_t frame_apart = av::MockKmt::ticks_per_second / 1000u * 60u;
+
+}  // namespace
+
+/* A host that finishes each frame before the next ends is never waited for,
+ * and nothing is asked of the kernel to learn it. */
+TEST(guest_gl_context, a_frame_ends_without_waiting_on_a_host_that_keeps_up)
 { GlContextRig rig;
   Context      context(rig);
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   const std::uint32_t ring = av::glicd::GuestGlContextProbe::channel(*context).transport().context();
   const std::uint32_t waits = rig.kmt().calls(av::MockKmt::Call::wait_for_context);
-  const std::uint64_t first = end_a_frame(*context);
-  const std::uint64_t second = end_a_frame(*context);
-  CHECK(second > first);
-  rig.kmt().complete_on_page(ring, first);
-  end_a_frame(*context);
-  CHECK(context->state() == State::made);
-  rig.kmt().complete_on_page(ring, second);
-  end_a_frame(*context);
+  rig.kmt().reads_clock(nullptr, frame_apart);
+  for (int frame = 0; frame < 4; frame++) {
+      const std::uint64_t ended = end_a_frame(*context);
+      rig.kmt().complete_on_page(ring, ended);
+  }
+  rig.kmt().reads_clock(nullptr, 0u);
   CHECK(context->state() == State::made);
   CHECK(context->wire() != nullptr);
   CHECK_EQ(rig.kmt().calls(av::MockKmt::Call::wait_for_context), waits); }
 
-/* A host that never finishes a frame, and has gone quiet, loses the context
- * at the frame that waits for it, and says so. */
+/* A frame ending while the one before it, longer ago than the latency, is
+ * unfinished waits for it; a host that never finishes it, and has gone
+ * quiet, loses the context, which says so. */
 TEST(guest_gl_context, a_frame_the_host_never_finishes_loses_the_context)
 { GlContextRig rig;
   Context      context(rig);
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
-  end_a_frame(*context);
+  rig.kmt().reads_clock(nullptr, frame_apart);
   end_a_frame(*context);
   CHECK(context->wire() != nullptr);
   end_a_frame(*context);
+  rig.kmt().reads_clock(nullptr, 0u);
   CHECK(context->wire() == nullptr);
   CHECK(context->state() == State::lost);
   CHECK_EQ(rig.log().holding("never finished an earlier frame"), 1u);
