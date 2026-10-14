@@ -334,9 +334,6 @@ endif()
 # Harness includes name a path from tests/ ("harness/vidsch/fake_vidsch.hpp").
 file(GLOB_RECURSE AV_HARNESS_SOURCES CONFIGURE_DEPENDS tests/harness/*.cpp)
 list(FILTER AV_HARNESS_SOURCES EXCLUDE REGEX "/test_main\\.cpp$")
-# The Direct3D loopback is built into the Direct3D executor tests that use it,
-# not the harness every test links: it rides the Direct3D backends' own API.
-list(FILTER AV_HARNESS_SOURCES EXCLUDE REGEX "/executor/d3d_loopback\\.cpp$")
 add_library(av_harness STATIC ${AV_HARNESS_SOURCES})
 target_include_directories(av_harness PUBLIC tests)
 # MockHost runs the device core's workers on real threads.
@@ -513,9 +510,6 @@ foreach(src ${AV_UNIT_TESTS})
   endif()
   if(name STREQUAL "test_fullstack_av")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
-  endif()
-  if(src MATCHES "/tests/unit/executor/d3d/")
-    target_sources(${name} PRIVATE ${CMAKE_SOURCE_DIR}/tests/harness/executor/d3d_loopback.cpp)
   endif()
   # The host makes the shader the guest's driver writes for a stream output
   # with no shader: the writer is the guest's, compiled here alone.

@@ -7,7 +7,6 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/d3d/buffer_slices.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -227,29 +226,19 @@ VOID D3d11Device::default_constant_buffer_update_subresource_up(D3D10DDI_HRESOUR
 bool D3d11Device::place_on_slice(ResourceRecord &resource, size_t bytes)
 {
     AV_SCOPE("D3d11Device::place_on_slice");
-    d3d::BufferSlices *const slices = session_.slices();
-    if (slices == nullptr || parent_ != nullptr || resource.dimension != D3D10DDIRESOURCE_BUFFER ||
-        (resource.cpu_access & D3D10_DDI_CPU_ACCESS_WRITE) == 0u)
+    if (resource.dimension != D3D10DDIRESOURCE_BUFFER || (resource.cpu_access & D3D10_DDI_CPU_ACCESS_WRITE) == 0u ||
+        !slices_.place(bytes, resource.slice))
         return false;
-    d3d::BufferSlices::Slice slice = {};
-    if (slices->take_slice(bytes, slice) != Status::ok) return false;
-    resource.slice_offset = slice.offset_;
-    resource.slice_bytes = slice.bytes_;
     resource.on_slice = 1u;
-    resource.shadow = session_.slice_view() + slice.offset_;
+    resource.shadow = session_.slice_view() + resource.slice.offset_;
     return true;
 }
 
 bool D3d11Device::rename_slice(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::rename_slice");
-    d3d::BufferSlices *const slices = session_.slices();
-    d3d::BufferSlices::Slice fresh = {};
-    if (slices == nullptr || slices->take_slice(resource.shadow_bytes, fresh) != Status::ok) return false;
-    slices->retire(d3d::BufferSlices::Slice{resource.slice_offset, resource.slice_bytes});
-    resource.slice_offset = fresh.offset_;
-    resource.slice_bytes = fresh.bytes_;
-    resource.shadow = session_.slice_view() + fresh.offset_;
+    if (!slices_.rename(resource.shadow_bytes, resource.slice)) return false;
+    resource.shadow = session_.slice_view() + resource.slice.offset_;
     return bind_slice(resource);
 }
 
@@ -273,25 +262,23 @@ bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
 bool D3d11Device::bind_slice(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::bind_slice");
-    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.id, session_.slice_memory(), resource.slice_offset,
-                                            resource.slice_bytes);
+    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.id, session_.slice_memory(), resource.slice.offset_,
+                                            resource.slice.bytes_);
 }
 
 /* A deferred context's record is a copy of the immediate one's
  * (context_local), whose slice it names: the immediate record keeps it, and
- * retires it when it renames or destroys the buffer. Retired here too, it went
- * back free twice - once while the immediate buffer was still on it - and two
- * buffers took the same slice: the multithreading sample's per-thread constant
- * buffers left duplicates that computeparticles' constants, renamed a thousand
- * times a batch, then shared, one step reading another's. */
+ * retires it when it renames or destroys the buffer, while a deferred
+ * context owns no slices (ContextSlices) and only forgets it. Retired there
+ * too, it went back free twice - once while the immediate buffer was still on
+ * it - and two buffers took the same slice: the multithreading sample's
+ * per-thread constant buffers left duplicates that computeparticles'
+ * constants, renamed a thousand times a batch, then shared, one step reading
+ * another's. */
 void D3d11Device::leave_slice(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::leave_slice");
-    d3d::BufferSlices *const slices = session_.slices();
-    if (slices != nullptr && parent_ == nullptr)
-        slices->retire(d3d::BufferSlices::Slice{resource.slice_offset, resource.slice_bytes});
-    resource.slice_offset = 0u;
-    resource.slice_bytes = 0u;
+    slices_.leave(resource.slice);
     resource.on_slice = 0u;
     resource.shadow = nullptr;
 }

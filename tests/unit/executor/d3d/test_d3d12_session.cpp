@@ -10,7 +10,9 @@
 #include "executor/d3d/d3d12_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/guest_region.hpp"
+#include "executor/imported_memories.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "harness/executor/local_import.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -48,11 +50,11 @@ alignas(64) std::uint8_t guest[8192];
 
 class FreshSession {
 public:
-    FreshSession()
+    FreshSession() : import_(guest, sizeof guest)
     {
-        region_.take(guest, sizeof guest);
+        CHECK(region_.adopt(import_.blob()));
         objects.clear();
-        CHECK_STATUS(session_storage.construct(region_, objects), av::Status::ok);
+        CHECK_STATUS(session_storage.construct(region_, imported_, objects), av::Status::ok);
         session_storage.object().initialize(nullptr);
     }
     ~FreshSession()
@@ -63,10 +65,13 @@ public:
     FreshSession(const FreshSession &) = delete;
     FreshSession &operator=(const FreshSession &) = delete;
 
-    D3d12Session &session() { return session_storage.object(); }
+    D3d12Session         &session() { return session_storage.object(); }
+    av::ImportedMemories &imported() { return imported_; }
 
 private:
-    GuestRegion region_;
+    av::LocalImport      import_;
+    GuestRegion          region_;
+    av::ImportedMemories imported_;
 };
 
 }  // namespace
@@ -129,6 +134,13 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   const ClearValue none = {};
   CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, 0u));
   CHECK(!session.on_CreateHeap12(1u, device_local, 0u, 4096u, 0u, 0u));
+  /* Not even over memory the session imported for the heap. */
+  alignas(4096) static std::uint8_t heap_memory[4096];
+  av::LocalImport heap(heap_memory, sizeof heap_memory, 2u);
+  CHECK(fresh.imported().adopt(heap.blob()));
+  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, heap.blob().wire_handle()));
+  CHECK(objects.find(1u, av::D3dObjectKind::heap12) == nullptr);
+  fresh.imported().abandon(heap.blob());
   CHECK(!session.on_CreateCommittedResource12(2u, device_local, 0u, buffer, 0u, none, 0u));
   CHECK(!session.on_CreatePlacedResource12(3u, 1u, 0u, buffer, 0u, none, 0u));
   CHECK(!session.on_CreateReservedResource12(3u, buffer, 0u, none, 0u));
