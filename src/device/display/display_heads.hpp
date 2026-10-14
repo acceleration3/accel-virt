@@ -1,12 +1,7 @@
 /* A device's display heads: which blob each is showing, and the host display
- * they are shown on.
- *
- * Whether the host can show a dma-buf at all is asked once and remembered,
- * because QEMU registers its display backends after every device has realized
- * (system/vl.c: qemu_init_displays runs after qmp_x_exit_preconfig) and it is
- * the backend that gives a console its GL context, so the question has no
- * useful answer until the guest is running. Until it is asked the heads show
- * nothing and the capset carries no scanout bit. */
+ * they are shown on. A head shows a blob as a display surface over the
+ * device's own mapping of its pages, which every display backend reads, GL or
+ * not (docs/host-memory.md). */
 #ifndef AV_DISPLAY_HEADS_HPP
 #define AV_DISPLAY_HEADS_HPP
 
@@ -35,9 +30,6 @@ public:
     DisplayHeads(const DisplayHeads &) = delete;
     DisplayHeads &operator=(const DisplayHeads &) = delete;
 
-    /* Main loop. Whether any head can show a dma-buf, asked of the host the
-     * first time and remembered. */
-    bool                 takes_dmabuf();
     /* Main loop. Head `head` shows `framebuffer` out of blob `blob`.
      * invalid_parameter for a head past max_heads, and the binding's answer
      * otherwise: not_supported when the display has no such head. */
@@ -61,21 +53,18 @@ public:
     bool invariants_hold() const;
 
 private:
-    enum class Display : uint32_t { unasked, takes_dmabuf, refuses_dmabuf };
-
-    /* Head `head`, made on first use; `head` must be below max_heads. */
-    /* The first refusal of each kind, once per device (FR-006): a display that
-     * will not show a dma-buf and a blob whose memory cannot become one are
-     * both things about this host, and a guest that keeps asking must not turn
-     * the log into the reason the run is slow. */
+    /* The first refusal, and the first frame shown, once per device (FR-006):
+     * a display with no such head is a thing about this host, and a guest
+     * that keeps asking must not turn the log into the reason the run is
+     * slow. */
     void                  say_once(bool &said, const char *what);
+    /* Head `head`, made on first use; `head` must be below max_heads. */
     ScanoutBinding       &binding(uint32_t head);
     /* Head `head` if it has ever been used, else null. */
     const ScanoutBinding *made(uint32_t head) const;
 
     Host                            &host_;
     BlobTable                       &blobs_;
-    Display                          display_;
     bool                             said_no_display_;
     bool                             said_showing_;
     ObjectStorage<ScanoutBinding>    heads_[max_heads];

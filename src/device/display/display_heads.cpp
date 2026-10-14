@@ -8,8 +8,7 @@
 namespace av {
 
 DisplayHeads::DisplayHeads(Host &host, BlobTable &blobs)
-    : host_(host), blobs_(blobs), display_(Display::unasked), said_no_display_(false),
-      said_showing_(false)
+    : host_(host), blobs_(blobs), said_no_display_(false), said_showing_(false)
 {
     AV_SCOPE("DisplayHeads::DisplayHeads");
 }
@@ -18,15 +17,6 @@ DisplayHeads::~DisplayHeads()
 {
     AV_SCOPE("DisplayHeads::~DisplayHeads");
     release_all();
-}
-
-bool DisplayHeads::takes_dmabuf()
-{
-    AV_SCOPE("DisplayHeads::takes_dmabuf");
-    host_.require_main_loop("DisplayHeads::takes_dmabuf");
-    if (display_ == Display::unasked)
-        display_ = host_.display_takes_dmabuf(0u) ? Display::takes_dmabuf : Display::refuses_dmabuf;
-    return display_ == Display::takes_dmabuf;
 }
 
 /* A binding acquires nothing at construction, so the only way construct
@@ -128,8 +118,7 @@ bool DisplayHeads::invariants_hold() const
     for (uint32_t head = 0u; head < max_heads; head++) {
         const ScanoutBinding *const made_head = made(head);
         if (made_head == nullptr) continue;
-        if (made_head->head() != head) return false;
-        if (made_head->shows() && display_ != Display::takes_dmabuf) return false;
+        if (made_head->head() != head || !made_head->invariants_hold()) return false;
     }
     return true;
 }

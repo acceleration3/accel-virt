@@ -47,16 +47,14 @@ bool BlobCommands::answer(ControlRequest &request, uint32_t type)
 }
 
 /* A base-class resource, or a short request the base class refuses, is not
- * ours. A blob still pinned or imported is refused, not released. */
+ * ours. A guest blob still pinned is refused, not released; a host blob is
+ * always released, since an import holding its memory keeps it in the
+ * library rather than here. */
 bool BlobCommands::unref(ControlRequest &request, GpuResponse &response)
 {
     AV_SCOPE("BlobCommands::unref");
     const uint32_t resource = named_resource(request);
-    if (host_blobs_.contains(resource)) {
-        if (host_blobs_.release(resource) != Status::ok) {
-            response.set(GpuResponse::err_invalid_parameter);
-            return true;
-        }
+    if (host_blobs_.release(resource) == Status::ok) {
         recorder_.record_blob(0u, BlobAction::released, 0u, resource, 0u, 0u);
         return true;
     }
