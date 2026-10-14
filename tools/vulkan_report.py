@@ -224,7 +224,19 @@ def report(args, out, names):
             ratios.append(g["fps"] / h["fps"])
         rows.append(entry)
     write_html(args, out, rows, ratios)
-    write_summary(out, "Vulkan", rows)
+    write_summary(out, "Vulkan", rows, judge=picture_verdict)
+
+
+def picture_verdict(row):
+    """A sample NOTES says differs by its own doing cannot be held to its
+    picture: two runs of it on one machine differ, so a difference is a
+    warning there and never a failure."""
+    if not row.get("stats"):
+        return "missing", "bad"
+    label, tone = verdict(row["stats"])
+    if tone == "bad" and row["name"] in NOTES:
+        return "varies", "warn"
+    return label, tone
 
 
 def cell(value, unit="", decimals=1):
