@@ -36,13 +36,29 @@ using av::TraceSnapshot;
 
 namespace {
 
-/* How the test's main loop answers: at once, or never. */
-bool main_loop_answers = true;
-int  bus_handled = 0;
+/* How the test's main loop answers: at once, or not until the test says it
+ * caught up - the routine it was handed meanwhile is kept, as QEMU's main
+ * loop keeps a bottom half it has not reached. */
+bool          main_loop_answers = true;
+int           bus_handled = 0;
+AvHostRoutine deferred = nullptr;
+void         *deferred_context = nullptr;
 
 void schedule(AvHostRoutine routine, void *context)
 {
-    if (main_loop_answers) routine(context);
+    if (main_loop_answers) {
+        routine(context);
+        return;
+    }
+    __atomic_store_n(&deferred_context, context, __ATOMIC_RELAXED);
+    __atomic_store_n(&deferred, routine, __ATOMIC_RELEASE);
+}
+
+/* The main loop reaches what it was handed while it was not answering. */
+void catch_up()
+{
+    const AvHostRoutine routine = __atomic_exchange_n(&deferred, nullptr, __ATOMIC_ACQUIRE);
+    if (routine != nullptr) routine(__atomic_load_n(&deferred_context, __ATOMIC_RELAXED));
 }
 
 void count_bus(int, siginfo_t *, void *) { bus_handled++; }
@@ -209,7 +225,18 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   ask("st", answer, sizeof answer);
   CHECK(std::strcmp(answer, "error unknown request\n") == 0);
   main_loop_answers = false;
+  /* The socket is the host's: avinspector samples every state socket in
+   * /dev/shm, and its request, queued behind the one above that waited for a
+   * newline, can be the one the silent main loop leaves owed. Every client is
+   * then told the previous request is unfinished until the main loop catches
+   * up, and the test asks again once it has. */
+  const char *const still_answering = "error the main loop has not finished the previous request\n";
   ask("state\n", answer, sizeof answer);
+  for (int attempt = 0; attempt < 10 && std::strcmp(answer, still_answering) == 0; attempt++) {
+      usleep(100000);
+      catch_up();
+      ask("state\n", answer, sizeof answer);
+  }
   CHECK(std::strcmp(answer, "error the main loop did not answer within 2 s\n") == 0);
   /* The routine that never ran is still owed: a request now is refused until
    * it runs and clears the abandoned one. */
