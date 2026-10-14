@@ -514,7 +514,7 @@ static int av_show_scanout(void *opaque, uint32_t head, const void *blob, const 
              (uint64_t)frame->x * (PIXMAN_FORMAT_BPP(format) / 8);
     surface = qemu_create_displaysurface_from(frame->width, frame->height, format, frame->stride, pixels);
     VIRTIO_GPU_BASE(r)->enable = 1;
-    dpy_gfx_replace_surface(con, surface);
+    qemu_console_set_surface(con, surface);
     r->scanouts[head] = true;
     return 0;
 }
@@ -601,7 +601,7 @@ static void av_update_scanout(void *opaque, uint32_t head, uint32_t x, uint32_t 
     QemuConsole *con = av_head_console(r, head);
 
     if (con && r->scanouts[head]) {
-        dpy_gfx_update(con, x, y, width, height);
+        qemu_console_update(con, x, y, width, height);
     }
 }
 
@@ -611,7 +611,7 @@ static void av_hide_scanout(void *opaque, uint32_t head)
     QemuConsole *con = av_head_console(r, head);
 
     if (con && r->scanouts[head]) {
-        dpy_gfx_replace_surface(con, NULL);
+        qemu_console_set_surface(con, NULL);
         r->scanouts[head] = false;
     }
 }
