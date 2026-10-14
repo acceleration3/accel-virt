@@ -167,7 +167,7 @@ public:
     /* Answers at any adapter state: capabilities describe the driver. */
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
     /* A host-visible chunk binding (feature 045), a host window chunk
-     * (docs/host-window.md), a tail publish, or avinspect.exe's trace escape
+     * (docs/host-memory.md), a tail publish, or avinspect.exe's trace escape
      * (docs/trace.md), told apart by the record's magic. */
     int32_t escape(const DxgkargEscapeRecord *escape);
     int32_t collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect);

@@ -793,11 +793,10 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     return NtStatus(answered == Status::malformed ? Status::invalid_parameter : answered).value();
 }
 
-/* A process asking for a chunk on its av context - of the host window, or of
- * guest RAM where the window cannot hold it - or giving one back
- * (docs/host-window.md). A device that refuses the chunk's blob, or refuses to
- * let go of one an import still holds, is STATUS_NOT_SUPPORTED; every other
- * refusal is STATUS_INVALID_PARAMETER. */
+/* A process asking for a chunk of the host window on its av context, or
+ * giving one back (docs/host-memory.md). A device with no window, or one that
+ * refuses the chunk's blob, is STATUS_NOT_SUPPORTED; every other refusal is
+ * STATUS_INVALID_PARAMETER. Nothing falls back to guest RAM. */
 int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::window_chunk");

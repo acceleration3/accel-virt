@@ -6,7 +6,7 @@
  * added, and none is changed: a window chunk is mapped write-back on both
  * sides, which is what the host's HOST_CACHED types promise, and a chunk
  * that fell back to guest RAM is the kernel's lock of it, coherent either
- * way (docs/host-window.md). A device-local heap is the host's own size:
+ * way (docs/host-memory.md). A device-local heap is the host's own size:
  * what lives there is host GPU memory the guest never maps, which the
  * adapter's local segment only names to VidMm. Any other heap is the
  * adapter's non-local budget, as D3DKMTQueryVideoMemoryInfo answers it for
