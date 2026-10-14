@@ -136,7 +136,19 @@ Nothing falls back to guest RAM. An `open` the window cannot hold fails:
 
 What happens next depends on the API:
 - **Arenas** (Direct3D, OpenGL, OpenCL) halve their request, down to 16 MiB.
-  With none at all, bulk data crosses inline in the ring.
+  With none at all, bulk data crosses inline in the ring - and inline is
+  bounded: an OpenGL command carries 256 KiB, its reply 64 KiB, and the
+  executor decodes it in a 1 MiB arena. A command larger than any of them is
+  dropped, or faults the context, so nothing sends one:
+  - OpenGL buffer data (`glBufferData`, `glBufferSubData`,
+    `glGetBufferSubData` and their named spellings) goes in pieces each
+    within the room (`BufferPieces`).
+  - An OpenGL pixel transfer too large for its command goes through a host
+    pixel buffer the context keeps (`PixelStagingBuffer`): the command names
+    offset 0 of it bound at `GL_PIXEL_UNPACK_BUFFER` or `GL_PIXEL_PACK_BUFFER`,
+    the host applies the pixel store there, and the bytes cross to it or
+    from it in pieces.
+  - OpenCL transfers are cut the same way (`ClTransferChunks`).
 - **Direct3D 11 slices**: the guest copies mapped buffers instead.
 - **Vulkan** answers `VK_ERROR_OUT_OF_DEVICE_MEMORY`, as a full GPU would.
 - **A Direct3D 12 CPU-visible heap** answers `E_OUTOFMEMORY`.

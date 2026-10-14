@@ -34,10 +34,16 @@ void             forget_bindings() noexcept;
 bool             skip_active_texture(GLenum texture) noexcept;
 bool             skip_bind_texture(GLenum target, GLuint texture) noexcept;
 bool             skip_bind_sampler(GLuint unit, GLuint sampler) noexcept;
+/* A pixel transfer of `bytes` too large to cross with its command goes
+ * through the context's staging buffer (av::glicd::PixelStagingBuffer): true
+ * when it was staged, and the command then names offset 0; finish_* after the
+ * command, which a download's bytes come back in. */
+bool             stage_upload(const void *pixels, size_t bytes) noexcept;
+void             finish_upload() noexcept;
+bool             stage_download(const void *pixels, size_t bytes) noexcept;
+void             finish_download(void *pixels, size_t bytes) noexcept;
 /* What changes a buffer's bytes on the host, for the guest's copies of them
  * (av::glicd::BufferShadows): before the command is sent. */
-void             wrote_buffer(GLenum target, GLintptr offset, GLsizeiptr size, const void *data) noexcept;
-void             wrote_named_buffer(GLuint buffer, GLintptr offset, GLsizeiptr size, const void *data) noexcept;
 void             host_writes_target(GLenum target) noexcept;
 void             host_writes_buffer(GLuint buffer) noexcept;
 void             bind_buffer_indexed(GLenum target, GLuint buffer) noexcept;

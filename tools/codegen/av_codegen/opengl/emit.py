@@ -2139,6 +2139,14 @@ HANDWRITTEN = {
     # host for — a round trip in front of every map.
     "glBufferData", "glBufferStorage", "glNamedBufferData",
     "glNamedBufferStorage",
+    # Every call that moves a buffer's bytes. One command carries only so
+    # much inline, and without a blob arena to lend the bytes whole a
+    # transfer goes as many commands as it takes (av::glicd::BufferPieces)
+    # - one command larger than the room is dropped, or faults the context.
+    "glBufferSubData", "glNamedBufferSubData", "glNamedBufferSubDataEXT",
+    "glGetBufferSubData", "glGetNamedBufferSubData",
+    "glGetNamedBufferSubDataEXT", "glNamedBufferDataEXT",
+    "glNamedBufferStorageEXT",
 }
 
 
@@ -2180,11 +2188,9 @@ ANSWERED_BY_GUEST_NAMES = {
 # that writes a buffer drops that buffer's copy, glBufferSubData updates it,
 # and anything that lets a shader write buffers the guest cannot follow ends
 # the copies for the context. A download into a pack or query buffer is
-# every command with pixels out, which _icd_buffer_writes adds itself.
+# every command with pixels out, which _icd_buffer_writes adds itself; the
+# calls that write a buffer's bytes themselves are the ICD's own (HANDWRITTEN).
 BUFFER_WRITES = {
-    "glBufferSubData": "::av::glicd::wrote_buffer(target, offset, size, data)",
-    "glNamedBufferSubData": "::av::glicd::wrote_named_buffer(buffer, offset, size, data)",
-    "glNamedBufferSubDataEXT": "::av::glicd::wrote_named_buffer(buffer, offset, size, data)",
     "glCopyBufferSubData": "::av::glicd::host_writes_target(writeTarget)",
     "glCopyNamedBufferSubData": "::av::glicd::host_writes_buffer(writeBuffer)",
     "glNamedCopyBufferSubDataEXT": "::av::glicd::host_writes_buffer(writeBuffer)",
@@ -2196,8 +2202,6 @@ BUFFER_WRITES = {
     "glClearNamedBufferSubDataEXT": "::av::glicd::host_writes_buffer(buffer)",
     "glInvalidateBufferData": "::av::glicd::host_writes_buffer(buffer)",
     "glInvalidateBufferSubData": "::av::glicd::host_writes_buffer(buffer)",
-    "glNamedBufferDataEXT": "::av::glicd::host_writes_buffer(buffer)",
-    "glNamedBufferStorageEXT": "::av::glicd::host_writes_buffer(buffer)",
     "glBufferPageCommitmentARB": "::av::glicd::host_writes_target(target)",
     "glNamedBufferPageCommitmentARB": "::av::glicd::host_writes_buffer(buffer)",
     "glNamedBufferPageCommitmentEXT": "::av::glicd::host_writes_buffer(buffer)",
@@ -2295,6 +2299,15 @@ def _icd_signature(cmd: Command) -> str:
     return f"{ret} APIENTRY {cmd.name}({', '.join(params) if params else 'void'})"
 
 
+def _stages(cmd: Command, p: Param) -> bool:
+    """Whether this parameter's bytes may cross through the context's pixel
+    staging buffer: a pixel transfer, which a pixel buffer can stand in for.
+    A query result's buffer is another binding, and its few bytes always
+    fit a command."""
+    return ((p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT) and
+            not cmd.name.startswith("glGetQueryObject"))
+
+
 def _icd_prologue(cmd: Command) -> list[str]:
     """What the driver has to look up before it can forward the call."""
     lines = []
@@ -2311,6 +2324,35 @@ def _icd_prologue(cmd: Command) -> list[str]:
                 packing = "true" if p.role is Role.PIXELS_OUT else "false"
                 bound = f"::av::glicd::pixel_buffer_bound({packing})"
             lines.append(f"    const bool av_{p.name}_offset = {bound};")
+            # An offset needs no length, and working one out would ask
+            # the host how big a texture level is for an answer that is
+            # then thrown away.
+            lines.append(f"    const size_t av_{p.name}_bytes = av_{p.name}_offset ? 0 : "
+                         f"{_icd_pixel_bytes(cmd, p)};")
+        if _stages(cmd, p):
+            # Too many bytes to cross with the command and no blob arena
+            # to lend them: they go through a host pixel buffer, and the
+            # command names offset 0 in it (av::glicd::PixelStagingBuffer).
+            hook = ("stage_download" if p.role is Role.PIXELS_OUT
+                    else "stage_upload")
+            lines.append(f"    const bool av_{p.name}_staged = !av_{p.name}_offset && "
+                         f"::av::glicd::{hook}({p.name}, av_{p.name}_bytes);")
+    return lines
+
+
+def _icd_epilogue(cmd: Command) -> list[str]:
+    """What a staged transfer needs once its command is sent."""
+    lines = []
+    for p in cmd.params:
+        if not _stages(cmd, p):
+            continue
+        if _ret_kind(cmd) != "void":
+            raise AssertionError(f"{cmd.name}: a staged transfer that answers a value")
+        if p.role is Role.PIXELS_OUT:
+            lines.append(f"    if (av_{p.name}_staged) "
+                         f"::av::glicd::finish_download({p.name}, av_{p.name}_bytes);")
+        else:
+            lines.append(f"    if (av_{p.name}_staged) ::av::glicd::finish_upload();")
     return lines
 
 
@@ -2327,14 +2369,15 @@ def _icd_forward_args(cmd: Command) -> list[str]:
         elif p.role is Role.OFFSET_ARRAY:
             args.append(f"::av::glicd::offsets_of({p.name}, "
                         f"static_cast<size_t>({p.length.text}))")
+        elif _stages(cmd, p):
+            args.append(f"av_{p.name}_staged ? nullptr : {p.name}")
+            if _stated_size(cmd) is None:
+                args.append(f"av_{p.name}_staged ? 0 : av_{p.name}_bytes")
+            args.append(f"av_{p.name}_offset || av_{p.name}_staged")
         elif p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT:
-            # An offset needs no length, and working one out would ask
-            # the host how big a texture level is for an answer that
-            # is then thrown away.
             args.append(p.name)
             if _stated_size(cmd) is None:
-                args.append(
-                    f"av_{p.name}_offset ? 0 : {_icd_pixel_bytes(cmd, p)}")
+                args.append(f"av_{p.name}_bytes")
             args.append(f"av_{p.name}_offset")
         else:
             args.append(p.name)
@@ -2527,10 +2570,13 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             out += prologue
             out += _icd_buffer_writes(cmd)
             out.append(f"    ::av::glproto::av_{cmd.name}({args});")
+            out += _icd_epilogue(cmd)
         elif kind == "sync":
             out.append("    if (av_t == nullptr) return nullptr;")
             out += prologue
             out += _icd_buffer_writes(cmd)
+            if _icd_epilogue(cmd):
+                raise AssertionError(f"{cmd.name}: a staged transfer that answers a sync")
             out.append(f"    return reinterpret_cast<GLsync>("
                        f"static_cast<uintptr_t>("
                        f"::av::glproto::av_{cmd.name}({args})));")
@@ -2538,6 +2584,8 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             out.append(f"    if (av_t == nullptr) return 0;")
             out += prologue
             out += _icd_buffer_writes(cmd)
+            if _icd_epilogue(cmd):
+                raise AssertionError(f"{cmd.name}: a staged transfer that answers a value")
             out.append(f"    return ::av::glproto::av_{cmd.name}({args});")
         out.append("}")
         out.append("")

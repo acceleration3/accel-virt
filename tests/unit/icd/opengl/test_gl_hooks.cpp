@@ -39,10 +39,13 @@ void check_nothing_answers(av::ClientTransport &wire)
     CHECK(!glicd::skip_active_texture(texture0));
     CHECK(!glicd::skip_bind_texture(texture_2d, 1u));
     CHECK(!glicd::skip_bind_sampler(0u, 1u));
-    /* No copies of buffers to tell. */
-    const std::uint8_t data[4] = {};
-    glicd::wrote_buffer(pixel_pack_buffer, 0, 4, data);
-    glicd::wrote_named_buffer(1u, 0, 4, data);
+    /* Nothing to stage a transfer in, and no copies of buffers to tell. */
+    std::uint8_t data[4] = {};
+    CHECK(!glicd::stage_upload(data, std::size_t{1} << 20u));
+    CHECK(!glicd::stage_download(data, std::size_t{1} << 20u));
+    glicd::finish_upload();
+    glicd::finish_download(data, std::size_t{1} << 20u);
+    CHECK_EQ(data[0], 0u);
     glicd::host_writes_target(pixel_pack_buffer);
     glicd::host_writes_buffer(1u);
     glicd::bind_buffer_indexed(0x90D2u, 1u);
@@ -118,12 +121,7 @@ TEST(gl_hooks, answer_from_the_current_context)
   /* The copies of buffers are told what changes. */
   av::glicd::BufferShadows &shadows = context.shadows();
   std::uint8_t              bytes[8] = {};
-  const std::uint8_t        data[4] = {1u, 2u, 3u, 4u};
   for (std::uint32_t buffer = 3u; buffer <= 6u; buffer++) shadows.keep(buffer, 0u, sizeof bytes, bytes);
-  glicd::wrote_buffer(pixel_pack_buffer, 0, sizeof data, data);
-  CHECK_EQ(shadows.covering(3u, 0u, 1u)[0], 1u);
-  glicd::wrote_named_buffer(5u, 4, sizeof data, data);
-  CHECK_EQ(shadows.covering(5u, 4u, 1u)[0], 1u);
   glicd::host_writes_target(query_buffer);
   CHECK(shadows.covering(4u, 0u, 1u) == nullptr);
   glicd::host_writes_buffer(5u);

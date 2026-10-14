@@ -32,7 +32,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, memory, log),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -244,6 +244,12 @@ BufferShadows &GuestGlContext::shadows()
     return shadows_;
 }
 
+PixelStagingBuffer &GuestGlContext::staging()
+{
+    AV_SCOPE("GuestGlContext::staging");
+    return staging_;
+}
+
 void GuestGlContext::lend()
 {
     AV_SCOPE("GuestGlContext::lend");
@@ -397,11 +403,12 @@ bool GuestGlContext::invariants_hold() const
     const bool held = state_ != State::created;
     if (held != channel_.opened() || held != link_.held()) return false;
     if (loss_reported_ && state_ != State::lost) return false;
+    if (!held && staging_.name() != 0u) return false;
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
     return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
            framebuffers_.invariants_hold() && mappings_.invariants_hold() && shadows_.invariants_hold() &&
-           channel_.invariants_hold();
+           staging_.invariants_hold() && channel_.invariants_hold();
 }
 
 Status GuestGlContext::build()
@@ -481,6 +488,12 @@ void GuestGlContext::teardown()
     framebuffers_.release(nullptr);
     mappings_.release();
     shadows_.forget_all();
+    /* A made context's host is still there to delete its staging buffer: a
+     * buffer outlives its context while another shares its objects. */
+    if (state_ == State::made)
+        staging_.release(channel_.batched());
+    else
+        staging_.forget();
     /* What the application sent last still reaches the host before its
      * context goes; a lost context's goes with DestroyContext, and its arena
      * import with it, so nothing is asked of the host. */
