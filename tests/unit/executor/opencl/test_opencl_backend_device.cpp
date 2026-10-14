@@ -728,3 +728,52 @@ TEST(opencl_backend_device, on_clReleaseMemObject_of_a_mapped_buffer_forgets_its
   ::clReleaseMemObject(kept);
   ::clReleaseCommandQueue(queue);
   backend.shut_down(); }
+
+/* A guest's kernels reach the host GPU in groups KernelPacer sizes, flushed
+ * by the backend itself: one the guest never flushed still runs, so a few
+ * hundred enqueued before a wait are several jobs, not one the host kernel
+ * would reset as hung. The guest's own flush and finish still answer. */
+TEST(opencl_backend_device, a_kernel_runs_without_the_guest_flushing_it)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  cl_int                 error = CL_SUCCESS;
+  cl_device_id const     device = static_cast<cl_device_id>(hosts.device(0u)->device());
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(context, device, nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  const char       *source = "__kernel void fill(__global uint *out) { out[get_global_id(0)] = 7u; }";
+  cl_program const  program = ::clCreateProgramWithSource(context, 1u, &source, nullptr, &error);
+  CHECK_EQ(::clBuildProgram(program, 1u, &device, nullptr, nullptr, nullptr), CL_SUCCESS);
+  cl_kernel const kernel = ::clCreateKernel(program, "fill", &error);
+  cl_mem const    out = ::clCreateBuffer(context, CL_MEM_READ_WRITE, 4096u * 4u, nullptr, &error);
+  CHECK_EQ(::clSetKernelArg(kernel, 0u, sizeof out, &out), CL_SUCCESS);
+  const std::size_t global = 4096u;
+  cl_event          done = nullptr;
+  CHECK_EQ(backend.on_clEnqueueNDRangeKernel(queue, kernel, 1u, nullptr, &global, nullptr, 0u, nullptr, &done),
+           CL_SUCCESS);
+  cl_int status = CL_QUEUED;
+  for (std::uint32_t look = 0u; look < 5000u && status != CL_COMPLETE; look++) {
+      CHECK_EQ(::clGetEventInfo(done, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr),
+               CL_SUCCESS);
+      if (status != CL_COMPLETE) ::usleep(1000u);
+  }
+  CHECK_EQ(status, CL_COMPLETE);
+  for (std::uint32_t again = 0u; again < 8u; again++)
+      CHECK_EQ(backend.on_clEnqueueNDRangeKernel(queue, kernel, 1u, nullptr, &global, nullptr, 0u, nullptr,
+                                                 nullptr),
+               CL_SUCCESS);
+  CHECK_EQ(backend.on_clEnqueueTask(queue, kernel, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(backend.on_clFlush(queue), CL_SUCCESS);
+  CHECK_EQ(backend.on_clFinish(queue), CL_SUCCESS);
+  std::uint32_t first = 0u;
+  CHECK_EQ(::clEnqueueReadBuffer(queue, out, CL_TRUE, 0u, sizeof first, &first, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(first, 7u);
+  ::clReleaseEvent(done);
+  ::clReleaseMemObject(out);
+  ::clReleaseKernel(kernel);
+  ::clReleaseProgram(program);
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down(); }
