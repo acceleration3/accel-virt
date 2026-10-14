@@ -45,12 +45,6 @@ bool CapsetInfo::offers(SubApi api) const
     return (sub_apis_ & static_cast<uint32_t>(api)) != 0u;
 }
 
-void CapsetInfo::withdraw(uint64_t feature)
-{
-    AV_SCOPE("CapsetInfo::withdraw");
-    features_ &= ~feature;
-}
-
 void CapsetInfo::announce(uint64_t feature)
 {
     AV_SCOPE("CapsetInfo::announce");

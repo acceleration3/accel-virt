@@ -320,7 +320,7 @@ Status AvContextTable::wake_on_raise(void *context, uint64_t handle)
 }
 
 /* The id first, then the pages: a chunk takes both, and gives both back if
- * anything after fails. Nothing here falls back to guest RAM - every byte a
+ * anything after fails - unless the device kept a blob under them. Nothing here falls back to guest RAM - every byte a
  * process maps is host GPU memory (docs/host-memory.md). */
 Status AvContextTable::open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device)
 {
@@ -328,9 +328,7 @@ Status AvContextTable::open_window(uint32_t slot, HostWindowRecord &record, Virt
     if (held_chunks_[slot] == max_chunks_per_context) return Status::no_space;
     uint32_t resource = 0u;
     if (ids_.take(resource) != Status::ok) return Status::no_space;
-    const Status placed = place_in_window(slot, resource, record, device);
-    if (placed != Status::ok) ids_.give_back(resource);
-    return placed;
+    return place_in_window(slot, resource, record, device);
 }
 
 /* Each step is undone in reverse if a later one fails. The pages go back only
@@ -341,6 +339,12 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWin
                                         VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::place_in_window");
+    /* The id goes back with everything else, unless a blob the device kept
+     * still answers to it. */
+    bool      keep_id = false;
+    ScopeExit id_back([this, resource, &keep_id] {
+        if (!keep_id) ids_.give_back(resource);
+    });
     const uint64_t wanted_pages = record.bytes() / HostWindow::page_bytes +
                                   (record.bytes() % HostWindow::page_bytes != 0u ? 1u : 0u);
     if (wanted_pages > UINT32_MAX) return Status::no_space;
@@ -352,9 +356,10 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWin
     HostVisibleBlob blob(platform_);
     /* What destroy answers is read back from the blob: still created is a
      * device that did not let go of it. */
-    ScopeExit       unwind([this, &blob, &device, first, pages] {
+    ScopeExit       unwind([this, &blob, &device, &keep_id, first, pages] {
         if (blob.created()) static_cast<void>(blob.destroy(device));
-        if (!blob.created()) window_.give_back(first, pages);
+        keep_id = blob.created();
+        if (!keep_id) window_.give_back(first, pages);
     });
     uint64_t        view = 0u;
     void           *mapping = nullptr;
@@ -370,6 +375,7 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWin
     }
     if (status != Status::ok) return status;
     unwind.dismiss();
+    keep_id = true;
     {
         SpinLockGuard locked(lock_);
         held_chunks_[slot]++;

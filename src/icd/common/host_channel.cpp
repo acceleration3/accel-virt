@@ -104,7 +104,7 @@ Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAl
 {
     AV_SCOPE("HostChannel::open_memory");
     made = nullptr;
-    if (!opened() || faulted() || device_ == nullptr) return Status::invalid_state;
+    if (!opened() || faulted()) return Status::invalid_state;
     ObjectStorage<HostAllocation> *kept = nullptr;
     if (memories_.create(kept) != Status::ok) return Status::no_memory;
     static_cast<void>(kept->construct(*device_, transport_.object()));   /* a fresh slot */
