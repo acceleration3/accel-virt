@@ -35,3 +35,17 @@ TEST(cl_noted_error, a_success_is_handed_back_and_logs_nothing)
   { ClNotedError noted(rig.root(), "clCreateCommandQueue", &application); }
   CHECK_EQ(application, CL_SUCCESS);
   CHECK_EQ(rig.log().lines(), before); }
+
+/* An entry point this ICD does not serve (icd::stub_called) is named once,
+ * however often an application calls it, so a log says what was missing
+ * without drowning; a stub with no name to give says nothing. */
+TEST(cl_noted_error, note_refused_names_an_unserved_entry_point_once)
+{ ClIcdRig rig;
+  const std::uint32_t before = rig.log().lines();
+  rig.root().note_refused("clCreateFromEGLImageKHR");
+  rig.root().note_refused("clCreateFromEGLImageKHR");
+  rig.root().note_refused(nullptr);
+  CHECK_EQ(rig.log().lines(), before + 1u);
+  CHECK_EQ(rig.log().holding("does not serve was called: clCreateFromEGLImageKHR"), 1u);
+  rig.root().note_refused("clEnqueueAcquireEGLObjectsKHR");
+  CHECK_EQ(rig.log().holding("clEnqueueAcquireEGLObjectsKHR"), 1u); }

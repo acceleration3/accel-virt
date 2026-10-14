@@ -279,6 +279,7 @@ TEST(guest_context, runs_at_the_levels_it_declares)
   static_cast<void>(fixture.context().serve());
   std::uint64_t progress = 0u;
   fixture.context().user_mode_submits(&progress);
+  static_cast<void>(fixture.context().forget_progress(&progress));
   fixture.context().driver_submits();
   static_cast<void>(fixture.context().tear_down());
   fixture.context().abandon();
@@ -341,6 +342,36 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(progress, 3u);
   CHECK_EQ(fixture.context().completed(), 4u); }
+
+/* A hardware queue going takes its progress fence with it, and dxgkrnl frees
+ * that memory: the context stops writing there only when it is that queue's
+ * progress it still writes, and a stale or absent location changes nothing. */
+TEST(guest_context, forget_progress_lets_go_of_the_going_queues_progress_only)
+{ Fixture      fixture;
+  std::uint64_t progress = 0u;
+  std::uint64_t other = 0u;
+  fixture.established();
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(!fixture.context().forget_progress(&progress));
+  fixture.context().user_mode_submits(&progress);
+  CHECK(!fixture.context().forget_progress(nullptr));
+  CHECK(!fixture.context().forget_progress(&other));
+  fixture.platform().set_irql(Irql::passive);
+  static_cast<void>(FencePage(2u, 64u).encode(fixture.page(), av::FencePage::encoded_size));
+  CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
+  CHECK_EQ(progress, 2u);
+
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.context().forget_progress(&progress));
+  CHECK(!fixture.context().forget_progress(&progress));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.context().invariants_hold());
+  /* Nothing more is written through the freed location, and the driver
+   * judges submissions again: one it never saw completing is not believed. */
+  static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), av::FencePage::encoded_size));
+  static_cast<void>(fixture.at_dispatch(&GuestContext::serve));
+  CHECK_EQ(progress, 2u);
+  CHECK_EQ(other, 0u); }
 
 /* A kick rings the context's doorbell only once it is established - before
  * then there is no ring the device could look at, and once it is being torn

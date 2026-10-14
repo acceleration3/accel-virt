@@ -159,3 +159,45 @@ TEST(cl_gl_sharing, the_device_of_the_current_gl_context_is_the_one_device)
   CHECK_EQ(table->clGetGLContextInfoKHR(current, 0x2005u, sizeof named, &named, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, 1u, &named, nullptr),
            CL_INVALID_VALUE); }
+
+
+/* A buffer over a GL buffer is the host's object over that name, and what it
+ * says of itself is the host's answer: a buffer made, then asked which GL
+ * object it is. A host that made nothing is CL_INVALID_GL_OBJECT whether or
+ * not it said why, and a cl_mem the ICD never made is refused without asking. */
+TEST(cl_gl_sharing, create_from_gl_buffer_makes_the_host_s_object_and_gl_object_info_answers_for_it)
+{ ClIcdRig rig;
+  Found     found(rig);
+  rig.gl_share().make_current(current_gl, gl_share_name);
+  const cl_context_properties properties[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(current_gl),
+                                              CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
+  cl_int error = CL_INVALID_VALUE;
+  const cl_context context = found.create(properties, error);
+  CHECK_EQ(error, CL_SUCCESS);
+
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  cl_int made = CL_INVALID_VALUE;
+  const cl_mem buffer = rig.root().create_from_gl_buffer(context, CL_MEM_READ_WRITE, 7u, &made);
+  CHECK_EQ(made, CL_SUCCESS);
+  CHECK(buffer != nullptr);
+
+  rig.host().cl_gl_object(CL_SUCCESS, CL_GL_OBJECT_BUFFER, 7u);
+  cl_gl_object_type type = 0u;
+  cl_GLuint         name = 0u;
+  CHECK_EQ(rig.root().gl_object_info(buffer, &type, &name), CL_SUCCESS);
+  CHECK_EQ(type, static_cast<cl_gl_object_type>(CL_GL_OBJECT_BUFFER));
+  CHECK_EQ(name, 7u);
+  CHECK_EQ(rig.root().gl_object_info(nullptr, &type, &name), CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().gl_object_info(reinterpret_cast<cl_mem>(context), &type, &name), CL_INVALID_MEM_OBJECT);
+
+  rig.host().cl_handle(0u, CL_INVALID_GL_OBJECT);
+  made = CL_SUCCESS;
+  CHECK(rig.root().create_from_gl_buffer(context, CL_MEM_READ_WRITE, 8u, &made) == nullptr);
+  CHECK_EQ(made, CL_INVALID_GL_OBJECT);
+  rig.host().cl_handle(0u, CL_SUCCESS);
+  made = CL_SUCCESS;
+  CHECK(rig.root().create_from_gl_buffer(context, CL_MEM_READ_WRITE, 9u, &made) == nullptr);
+  CHECK_EQ(made, CL_INVALID_GL_OBJECT);
+  made = CL_SUCCESS;
+  CHECK(rig.root().create_from_gl_buffer(nullptr, CL_MEM_READ_WRITE, 7u, &made) == nullptr);
+  CHECK_EQ(made, CL_INVALID_CONTEXT); }

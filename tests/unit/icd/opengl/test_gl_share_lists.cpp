@@ -283,3 +283,30 @@ TEST(gl_share_lists, a_walk_through_a_deleted_target_stops_at_it)
   CHECK(rig.opengl32().share_lists(b, c));
   CHECK_EQ(av::glicd::GlIcdRootProbe::context(rig.root(), rig.opengl32().driver_context(c))->share_target(),
            rig.opengl32().driver_context(b)); }
+
+/* What the OpenCL ICD asks for the GL context an application names
+ * (cl_khr_gl_sharing, avGetShareName): the calling thread's current
+ * context's share name, by which the miniport finds its objects - and 0 with
+ * nothing current, which the OpenCL ICD refuses as no share group. */
+TEST(gl_share_lists, the_current_share_name_is_the_current_context_s_and_none_without_one)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  Root &root = rig.root();
+  CHECK_EQ(root.current_share_name(), 0u);
+  void *const a = rig.opengl32().create_context(rig.dc());
+  void *const b = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const first = current_on(rig, a);
+  CHECK(first != nullptr);
+  CHECK(first->share_name() != 0u);
+  CHECK_EQ(root.current_share_name(), first->share_name());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const second = current_on(rig, b);
+  CHECK(second != nullptr);
+  CHECK(second->share_name() != first->share_name());
+  CHECK_EQ(root.current_share_name(), second->share_name());
+  CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
+  CHECK_EQ(root.current_share_name(), 0u);
+  CHECK(root.invariants_hold()); }

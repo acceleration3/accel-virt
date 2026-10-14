@@ -256,6 +256,15 @@ void ScriptedHost::cl_result(std::int32_t result)
     queue(writer);
 }
 
+void ScriptedHost::cl_gl_object(std::int32_t result, std::uint32_t type, std::uint32_t name)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(static_cast<std::uint64_t>(type));
+    writer.write_varint(static_cast<std::uint64_t>(name));
+    queue(writer);
+}
+
 void ScriptedHost::cl_handle(std::uint64_t handle, std::int32_t error)
 {
     WireWriter writer(answer_, sizeof answer_);

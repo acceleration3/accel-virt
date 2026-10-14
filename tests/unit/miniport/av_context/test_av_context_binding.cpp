@@ -394,3 +394,24 @@ TEST(av_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
   CHECK_EQ(progress, 2u);
   fixture.mapped().platform().set_irql(av::Irql::passive);
   CHECK(binding.invariants_hold()); }
+
+/* The hardware queue whose progress a process read is going: the binding
+ * passes that on to its context, which lets go of that location only. */
+TEST(av_context_binding, forget_progress_reaches_the_context_for_its_own_location_only)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host              host(fixture.mapped());
+  AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
+  CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
+  std::uint64_t progress = 0u;
+  std::uint64_t other = 0u;
+  fixture.mapped().platform().set_irql(av::Irql::dispatch);
+  binding.user_mode_submits(&progress);
+  CHECK(!binding.forget_progress(&other));
+  CHECK(binding.forget_progress(&progress));
+  CHECK(!binding.forget_progress(&progress));
+  static_cast<void>(av::FencePage(2u, 64u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
+  static_cast<void>(binding.serve());
+  CHECK_EQ(progress, 0u);
+  fixture.mapped().platform().set_irql(av::Irql::passive);
+  CHECK(binding.invariants_hold()); }

@@ -5,12 +5,15 @@
  * queue, its fences and the device are scripted stand-ins for vkd3d-proton's,
  * so which fence was signalled and waited on with which value is what is
  * judged, and a fence completes when the test says the GPU got there. */
+#include "core/log/driver_log.hpp"
 #include "executor/d3d/d3d12_fence_wake.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::D3d12FenceWake;
 using av::D3d12QueueProgress;
@@ -327,4 +330,29 @@ TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reache
   CHECK(progress.mark_all());
   CHECK(copy.signalled_value == 6u);                /* the forgotten queue is not marked */
   CHECK(direct.signalled_value == 0u);
+  CHECK(progress.invariants_hold()); }
+
+/* A drain that never finishes says which queue it waits for: each queue's
+ * guest id, the mark it last signalled and what its fence completed, one line
+ * a queue, and nothing for a session with no queue. */
+TEST(d3d12_queue_progress_log_stuck, names_each_queue_with_its_signalled_and_completed_marks)
+{ D3d12FenceWake     wake;
+  D3d12QueueProgress progress(wake);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  av::RecordingLog   log;
+  av::DriverLog      lines(log, "d3d12: ");
+  progress.log_stuck(lines);
+  CHECK_EQ(log.lines(), 0u);
+  CHECK(progress.executed(5u, &direct, &device));   /* mark 1 */
+  CHECK(progress.executed(9u, &copy, &device));     /* mark 2 */
+  device.fences[0].completed = 1u;
+  device.fences[1].completed = 0u;
+  progress.log_stuck(lines);
+  CHECK_EQ(log.lines(), 2u);
+  CHECK(std::strcmp(log.line(0u), "d3d12: queue 5 progress signalled 1 completed 1") == 0);
+  CHECK(std::strcmp(log.line(1u), "d3d12: queue 9 progress signalled 2 completed 0") == 0);
+  progress.clear();
+  progress.log_stuck(lines);
+  CHECK_EQ(log.lines(), 2u);
   CHECK(progress.invariants_hold()); }

@@ -52,11 +52,11 @@ public:
     WaitRig()
     {
         instance_ = rig_.create_instance();
-        const VkPhysicalDevice physical_device = rig_.physical_device(instance_);
+        physical_ = rig_.physical_device(instance_);
         VkDeviceCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         rig_.host().vk_handle(0, ScriptedHost::vk_device);
-        CHECK_EQ(entry<CreateDevice>("vkCreateDevice")(physical_device, &info, nullptr, &device_), VK_SUCCESS);
+        CHECK_EQ(entry<CreateDevice>("vkCreateDevice")(physical_, &info, nullptr, &device_), VK_SUCCESS);
         rig_.kmt().spend_on_wait(slice_ticks);
     }
     ~WaitRig() { rig_.destroy_instance(instance_); }
@@ -64,6 +64,7 @@ public:
     IcdRig  &rig() { return rig_; }
     MockKmt &kmt() { return rig_.kmt(); }
     VkDevice device() const { return device_; }
+    VkPhysicalDevice physical() const { return physical_; }
 
     template <typename Function>
     Function entry(const char *name) { return rig_.entry<Function>(instance_, name); }
@@ -107,8 +108,9 @@ public:
 
 private:
     IcdRig     rig_;
-    VkInstance instance_ = VK_NULL_HANDLE;
-    VkDevice   device_ = VK_NULL_HANDLE;
+    VkInstance       instance_ = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_ = VK_NULL_HANDLE;
+    VkDevice         device_ = VK_NULL_HANDLE;
 };
 
 }  // namespace
@@ -344,3 +346,54 @@ TEST(icd_waits, a_device_waits_idle_on_every_queue_it_handed_out_in_turn)
   CHECK_EQ(rig.id_back(1u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
   CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
+
+/* vkAcquireNextImageKHR's semaphore and fence are signalled by an empty
+ * submission on the first queue the device handed out: the host needs a
+ * signal operation before a submission waits on that semaphore. Nothing to
+ * signal sends nothing; a device that is not this ICD's, or that handed out
+ * no queue to signal on, is lost. */
+TEST(icd_waits, signal_acquire_submits_nothing_but_the_signal_on_the_first_queue)
+{ WaitRig rig;
+  const VkSemaphore semaphore = reinterpret_cast<VkSemaphore>(semaphore_host);
+  const VkFence     fence = reinterpret_cast<VkFence>(fence_host);
+  std::uint32_t     sent = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().signal_acquire(rig.device(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  int stack = 0;
+  CHECK_EQ(rig.rig().root().signal_acquire(reinterpret_cast<VkDevice>(&stack), semaphore, fence),
+           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.rig().root().signal_acquire(rig.device(), semaphore, fence), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.rig().log().holding("vkAcquireNextImageKHR has nothing to signal on"), 1u);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  static_cast<void>(rig.queue(queue_host + 1u));
+  static_cast<void>(rig.queue(queue_host));
+  sent = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().signal_acquire(rig.device(), semaphore, fence), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
+  WireReader submitted = rig.body_back(0u);
+  CHECK_EQ(submitted.read_u64(), queue_host + 1u);
+  CHECK_EQ(submitted.read_u32(), 1u);
+  /* A fence alone is signalled by a batch that signals no semaphore. */
+  CHECK_EQ(rig.rig().root().signal_acquire(rig.device(), VK_NULL_HANDLE, fence), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK(rig.rig().root().invariants_hold()); }
+
+/* What a swapchain needs of its device: the physical device it was made on
+ * and the connection it presents through; nothing for a device this ICD did
+ * not make. */
+TEST(icd_waits, present_context_answers_a_device_s_physical_device_and_connection)
+{ WaitRig rig;
+  VkPhysicalDevice  physical = VK_NULL_HANDLE;
+  av::icd::Connection *connection = nullptr;
+  CHECK(rig.rig().root().present_context(rig.device(), physical, connection));
+  CHECK(physical == rig.physical());
+  CHECK(connection == av::icd::connection_of(rig.device()));
+  CHECK(connection != nullptr);
+  int stack = 0;
+  physical = VK_NULL_HANDLE;
+  connection = nullptr;
+  CHECK(!rig.rig().root().present_context(reinterpret_cast<VkDevice>(&stack), physical, connection));
+  CHECK(physical == VK_NULL_HANDLE);
+  CHECK(connection == nullptr); }

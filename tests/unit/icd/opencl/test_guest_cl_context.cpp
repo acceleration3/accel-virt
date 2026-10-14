@@ -176,6 +176,45 @@ TEST(guest_cl_context, it_names_the_device_its_transport_runs_on_once_it_has_one
   CHECK_EQ(device, rig.connection().device(0u).device());
   CHECK(context.invariants_hold()); }
 
+/* A GL name an application hands a context means a GL object only when the
+ * context was made from a GL context: made with a share name, it shares;
+ * made with none, or not made at all, it does not. */
+TEST(guest_cl_context, it_shares_gl_only_once_made_from_a_gl_context)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext sharing = made_context(rig);
+  CHECK(!sharing.shares_gl());
+  CHECK_STATUS(sharing.make(0x40000C42u), Status::ok);
+  CHECK(sharing.shares_gl());
+  CHECK(sharing.invariants_hold());
+
+  ClContextRig   plain_rig;
+  arena_answers(plain_rig);
+  GuestClContext plain = made_context(plain_rig);
+  CHECK_STATUS(plain.make(), Status::ok);
+  CHECK(!plain.shares_gl()); }
+
+/* CL_CONTEXT_PROPERTIES answers the list clCreateContext was given, as given,
+ * terminator included; a context given none, or a buffer too small for the
+ * list, is answered nothing. A second list replaces the first. */
+TEST(guest_cl_context, the_properties_it_keeps_are_the_list_it_was_made_with)
+{ ClContextRig rig;
+  GuestClContext context = made_context(rig);
+  cl_context_properties out[8] = {};
+  CHECK_EQ(context.properties(out, 8u), 0u);
+  const cl_context_properties given[] = {CL_CONTEXT_PLATFORM, 0x7200, CL_CONTEXT_INTEROP_USER_SYNC, CL_TRUE, 0};
+  context.keep_properties(given);
+  CHECK_EQ(context.properties(out, 8u), 5u);
+  for (std::uint32_t at = 0u; at < 5u; at++) CHECK_EQ(out[at], given[at]);
+  CHECK_EQ(context.properties(out, 4u), 0u);
+  const cl_context_properties shorter[] = {CL_CONTEXT_PLATFORM, 0x7300, 0};
+  context.keep_properties(shorter);
+  CHECK_EQ(context.properties(out, 8u), 3u);
+  CHECK_EQ(out[1], 0x7300);
+  context.keep_properties(nullptr);
+  CHECK_EQ(context.properties(out, 8u), 0u);
+  CHECK(context.invariants_hold()); }
+
 TEST(guest_cl_context, a_second_make_is_refused_and_changes_nothing)
 { ClContextRig rig;
   arena_answers(rig);

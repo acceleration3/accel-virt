@@ -329,6 +329,36 @@ TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
   CHECK_STATUS(second.close(), Status::ok);
   CHECK(first.held_with(second)); }
 
+/* An OpenCL context sharing an OpenGL one is made by another ICD on a device
+ * of its own, so its rings are held in one process rather than by one device
+ * (feature 052's cl_khr_gl_sharing). Unlike held_with, rings nobody holds are
+ * not held together: there is no process to compare. */
+TEST(allocation_open, rings_are_held_in_one_process_only_when_both_are_held_there)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int gl_device = 0;
+  int cl_device = 0;
+  int process = 0;
+  int other_process = 0;
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation gl(platform, segments.segments(), ring, 0x1000u);
+  Allocation cl(platform, segments.segments(), ring, 0x1000u);
+  CHECK(!gl.held_in_process_of(cl));
+  CHECK_STATUS(gl.open(&gl_device, &process), Status::ok);
+  CHECK(!gl.held_in_process_of(cl));
+  CHECK(!cl.held_in_process_of(gl));
+  CHECK_STATUS(cl.open(&cl_device, &process), Status::ok);
+  CHECK(gl.held_in_process_of(cl));
+  CHECK(cl.held_in_process_of(gl));
+  CHECK(!gl.held_with(cl));
+  CHECK_STATUS(cl.close(), Status::ok);
+  CHECK_STATUS(cl.open(&cl_device, &other_process), Status::ok);
+  CHECK(!gl.held_in_process_of(cl));
+  CHECK_STATUS(gl.close(), Status::ok);
+  CHECK_STATUS(cl.close(), Status::ok);
+  CHECK(!gl.held_in_process_of(cl));
+  CHECK(gl.invariants_hold()); }
+
 /* Only a context's name is one device's: every other kind is memory, which
  * any device may open. */
 TEST(allocation_open, a_shadow_is_opened_by_any_device)

@@ -99,6 +99,9 @@ public:
      * command's zero, the count, and the structures. */
     void vk_queue_families(std::uint32_t count);
     void cl_result(std::int32_t result);
+    /* clGetGLObjectInfo's answer: its result, then the object's type and
+     * name, as the call asked for both. */
+    void cl_gl_object(std::int32_t result, std::uint32_t type, std::uint32_t name);
     void cl_handle(std::uint64_t handle, std::int32_t error);
     /* What a map answers when an event was asked for as well: the address,
      * then the event, then the error - which is the order the emitter writes
