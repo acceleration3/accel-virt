@@ -253,7 +253,7 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
     return bind_slice(resource);
 }
 
-/* The slice is retired behind what was recorded, for the GPU may still read
+/* The slice is left behind what was recorded, for the GPU may still read
  * it; the buffer's bytes go on in a shadow of its own, which the copies send
  * from. The host's buffer leaves the slice at the first copy's discard. */
 bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
@@ -277,11 +277,18 @@ bool D3d11Device::bind_slice(const ResourceRecord &resource)
                                             resource.slice_bytes);
 }
 
+/* A deferred context's record is a copy of the immediate one's
+ * (context_local), whose slice it names: the immediate record keeps it, and
+ * retires it when it renames or destroys the buffer. Retired here too, it went
+ * back free twice - once while the immediate buffer was still on it - and two
+ * buffers took the same slice: the multithreading sample's per-thread constant
+ * buffers left duplicates that computeparticles' constants, renamed a thousand
+ * times a batch, then shared, one step reading another's. */
 void D3d11Device::leave_slice(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::leave_slice");
     d3d::BufferSlices *const slices = session_.slices();
-    if (slices != nullptr)
+    if (slices != nullptr && parent_ == nullptr)
         slices->retire(d3d::BufferSlices::Slice{resource.slice_offset, resource.slice_bytes});
     resource.slice_offset = 0u;
     resource.slice_bytes = 0u;

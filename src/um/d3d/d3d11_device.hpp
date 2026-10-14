@@ -162,10 +162,13 @@ private:
      * recorded so far, and the host told. */
     [[nodiscard]] bool rename_slice(ResourceRecord &resource);
     [[nodiscard]] bool bind_slice(const ResourceRecord &resource);
-    /* The slice, if any, retired behind what was recorded so far. */
+    /* The slice, if any, retired behind what was recorded so far; on a
+     * deferred context only forgotten, for the record is a copy and the slice
+     * is the immediate context's to retire. */
     void               leave_slice(ResourceRecord &resource);
     /* A buffer on a slice moved to the copy path: its bytes in a shadow of
-     * its own, the slice retired. False, nothing changed, with no memory. */
+     * its own, the slice left (leave_slice). False, nothing changed, with no
+     * memory. */
     [[nodiscard]] bool leave_slice_for_copies(ResourceRecord &resource);
     /* `box` (or the whole subresource) of one subresource from `data` at
      * these pitches, as UpdateSubresource1 takes it, in as many pieces as one
