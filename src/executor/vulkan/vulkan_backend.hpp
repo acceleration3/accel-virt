@@ -262,9 +262,10 @@ private:
      * take the host process down. The device still gets no more than its GPU
      * supports, and an alias does exactly what its core command does. */
     void adopt_host_version(VkInstanceCreateInfo &create);
-    /* Adds the dma-buf import extensions to the ones a device is made with,
-     * unless the guest named them or its list has no room. */
-    void enable_memory_import(VkDeviceCreateInfo &create);
+    /* Adds the dma-buf import extensions, then the modifier extension, to the
+     * ones a device is made with, unless the guest named them or its list has
+     * no room; the count before the modifier extension. */
+    uint32_t enable_memory_import(VkDeviceCreateInfo &create);
 
     HostTemplateTable templates_;
     HostExportedFds   fds_;

@@ -41,6 +41,10 @@ public:
         VkExternalMemoryHandleTypeFlags  external;
         /* The formats its VkImageFormatListCreateInfo lists. */
         std::uint32_t                    view_formats;
+        /* The modifiers its VkImageDrmFormatModifierListCreateInfoEXT lists,
+         * and the first of them. */
+        std::uint32_t                    modifiers;
+        std::uint64_t                    first_modifier;
         VkDeviceMemory                   bound;
     };
 

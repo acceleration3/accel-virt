@@ -24,6 +24,8 @@ constexpr uint32_t dxgi_b8g8r8a8_unorm_srgb = 91u;
 constexpr uint32_t bind_shader_resource = 0x8u;
 constexpr uint32_t bind_render_target = 0x20u;
 constexpr uint32_t shared_binds = bind_shader_resource | bind_render_target;
+/* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
+constexpr uint64_t drm_format_mod_linear = 0u;
 
 /* A format, and its sRGB or linear sibling; VK_FORMAT_UNDEFINED for none. */
 struct ViewPair {
@@ -57,8 +59,9 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
                                          uint32_t samples, uint32_t format, uint32_t bind_flags)
     : external_{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO, nullptr,
                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT},
-      list_{VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, views_}, views_{}, info_{},
-      supported_(false)
+      list_{VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, views_}, views_{},
+      modifiers_{VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT, nullptr, 1u, &modifier_},
+      modifier_(drm_format_mod_linear), info_{}, supported_(false)
 {
     AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
     const ViewPair *pair = nullptr;
@@ -77,11 +80,14 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     info_.samples = VK_SAMPLE_COUNT_1_BIT;
     /* Linear: the memory goes to processes outside QEMU (a window mirror's
      * import, docs/external-export.md), and only a linear layout is one every
-     * driver reads the same with no modifier to agree on. An optimal image's
-     * tiling travels with its memory on some kernels' buffers (amdgpu) and on
-     * others not at all (i915, Xe), where the importer read it as linear and
-     * showed it scrambled. */
-    info_.tiling = VK_IMAGE_TILING_LINEAR;
+     * driver reads the same. An optimal image's tiling travels with its memory
+     * on some kernels' buffers (amdgpu) and on others not at all (i915, Xe),
+     * where the importer read it as linear and showed it scrambled. Linear
+     * under the modifier that names it rather than VK_IMAGE_TILING_LINEAR: a
+     * driver may export a dma-buf only for an image laid out by a modifier -
+     * RADV from Mesa 26.2 refuses the other - and listing just the one leaves
+     * it no layout to choose but linear. */
+    info_.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     /* Drawn and sampled whatever the binds say: another API opening the
      * memory draws into it, and a superset of what DXVK asks is an image DXVK
      * can wrap. */
@@ -89,10 +95,12 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     info_.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info_.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    external_.pNext = &modifiers_;
     if (pair->sibling != VK_FORMAT_UNDEFINED) {
         views_[0] = pair->format;
         views_[1] = pair->sibling;
         list_.viewFormatCount = max_views;
+        list_.pNext = &modifiers_;
         external_.pNext = &list_;
         info_.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     }

@@ -97,12 +97,29 @@ bool VulkanDeviceTable::supports_exportable(const VkImageCreateInfo &info) const
     /* The view formats are part of what is asked: a mutable image is
      * supported only as the formats it is viewed in are. */
     VkImageFormatListCreateInfo views = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, nullptr};
+    /* An image laid out by a modifier is asked about with the modifier: the
+     * query is of that layout, and RADV dereferences the structure naming it
+     * whether or not it was given. */
+    VkPhysicalDeviceImageDrmFormatModifierInfoEXT modifier = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT, nullptr, 0u, VK_SHARING_MODE_EXCLUSIVE, 0u,
+        nullptr};
+    bool modified = false;
     for (auto *next = static_cast<const VkBaseInStructure *>(info.pNext); next != nullptr; next = next->pNext) {
-        if (next->sType != VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) continue;
-        views = *reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
-        views.pNext = nullptr;
-        external.pNext = &views;
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
+            views = *reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
+            views.pNext = external.pNext;
+            external.pNext = &views;
+        }
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT) {
+            const auto *listed = reinterpret_cast<const VkImageDrmFormatModifierListCreateInfoEXT *>(next);
+            if (listed->drmFormatModifierCount != 1u) return false;
+            modifier.drmFormatModifier = listed->pDrmFormatModifiers[0];
+            modifier.pNext = external.pNext;
+            external.pNext = &modifier;
+            modified = true;
+        }
     }
+    if ((info.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) != modified) return false;
     const VkPhysicalDeviceImageFormatInfo2 asked = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
                                                     &external,
                                                     info.format,
@@ -273,7 +290,9 @@ bool VulkanDeviceTable::memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleT
 VkSubresourceLayout VulkanDeviceTable::row_layout(VkImage image) const
 {
     AV_SCOPE("VulkanDeviceTable::row_layout");
-    const VkImageSubresource first = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u};
+    /* Every image read here is laid out by a modifier (ExportableImageInfo),
+     * whose layout is its memory planes'. */
+    const VkImageSubresource first = {VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT, 0u, 0u};
     VkSubresourceLayout      laid = {};
     if (loaded() && layout_ != nullptr) layout_(device_, image, &first, &laid);
     return laid;

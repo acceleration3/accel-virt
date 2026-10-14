@@ -179,16 +179,22 @@ void VulkanBackend::adopt_host_version(VkInstanceCreateInfo &create)
 
 /* The guest's host-visible memory is the memory source's, which reaches the
  * guest's device as a dma-buf (docs/host-memory.md). VK_KHR_external_memory
- * is core from 1.1 and still valid to enable there. */
-void VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create)
+ * is core from 1.1 and still valid to enable there. The modifier extension is
+ * what the ICD's swapchain images are laid out by over a window chain's
+ * memory (ChainedImage, ExportableImageInfo). */
+uint32_t VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create)
 {
     AV_SCOPE("VulkanBackend::enable_memory_import");
-    if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok) return;
+    if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok)
+        return create.enabledExtensionCount;
     extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
     extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
     extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+    const uint32_t importing = extensions_.count();
+    extensions_.add(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
+    return importing;
 }
 
 VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
@@ -299,12 +305,19 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDevice");
     VkDeviceCreateInfo create = *pCreateInfo;
-    enable_memory_import(create);
+    const uint32_t     importing = enable_memory_import(create);
     VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
-    /* Made as the guest asked when what was added is what the driver lacks:
-     * listing the physical device's extensions first would take a table of
-     * hundreds of names, and a refusal costs one more create. A guest naming
-     * one that does not exist is refused twice, the same way. */
+    /* Made without what the driver lacks: listing the physical device's
+     * extensions first would take a table of hundreds of names, and a refusal
+     * costs one more create. A driver without the modifier extension still
+     * imports guest memory, and only a swapchain over a window chain needs
+     * it; one without the import extensions is made as the guest asked. A
+     * guest naming one that does not exist is refused each time, the same
+     * way. */
+    if (result == VK_ERROR_EXTENSION_NOT_PRESENT && importing != create.enabledExtensionCount) {
+        create.enabledExtensionCount = importing;
+        result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
+    }
     if (result == VK_ERROR_EXTENSION_NOT_PRESENT &&
         create.enabledExtensionCount != pCreateInfo->enabledExtensionCount)
         result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, pCreateInfo, nullptr, pDevice);

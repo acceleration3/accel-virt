@@ -27,8 +27,8 @@ public:
     VkDevice           device() const;
 
     /* Whether the GPU makes an image as `info` describes - its format, type,
-     * tiling, usage and flags, its view formats, and its extent - over memory
-     * it can export as a dma-buf. */
+     * tiling, usage and flags, its view formats, the one modifier it lists,
+     * and its extent - over memory it can export as a dma-buf. */
     [[nodiscard]] bool supports_exportable(const VkImageCreateInfo &info) const;
     /* The first memory type `allowed` permits, a device-local one first;
      * VK_MAX_MEMORY_TYPES for none. */
@@ -51,7 +51,8 @@ public:
                                         VkDeviceMemory &memory) const;
     void                 free_memory(VkDeviceMemory memory) const;
     [[nodiscard]] bool   memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagBits type, int &fd) const;
-    /* The first row of a linear image's only subresource. */
+    /* The first row of the only memory plane of an image laid out by a
+     * modifier - the linear one ExportableImageInfo describes. */
     VkSubresourceLayout  row_layout(VkImage image) const;
 
     [[nodiscard]] bool create_buffer(const VkBufferCreateInfo &info, VkBuffer &buffer) const;
