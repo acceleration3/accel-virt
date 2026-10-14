@@ -9,7 +9,7 @@
 namespace av {
 
 MockRendererResources::MockRendererResources(MockHost &qemu, const AvExecutorOps &executor)
-    : qemu_(qemu), executor_(executor), descriptors_(0u), mappings_(0u), offered_(-1), lines_{},
+    : qemu_(qemu), executor_(executor), descriptors_(0u), mappings_(0u), lines_{},
       refuse_executor_(false), loads_(0u), path_{}
 {
     for (int &line : lines_) line = -1;
@@ -18,7 +18,6 @@ MockRendererResources::MockRendererResources(MockHost &qemu, const AvExecutorOps
 MockRendererResources::~MockRendererResources()
 {
     drop_interrupt_lines();
-    close_offered();
     if (mappings_ != 0u)
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "%u renderer region(s) never unmapped",
                                                 mappings_);
@@ -52,18 +51,6 @@ void MockRendererResources::close_descriptor(int descriptor)
         return;
     }
     descriptors_--;
-}
-
-void MockRendererResources::offer_host_memory(int descriptor)
-{
-    close_offered();
-    offered_ = descriptor;
-}
-
-void MockRendererResources::close_offered()
-{
-    if (offered_ >= 0) close_descriptor(offered_);
-    offered_ = -1;
 }
 
 void MockRendererResources::take_interrupt_lines(const int *descriptors, std::uint32_t count)

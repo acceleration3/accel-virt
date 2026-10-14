@@ -29,7 +29,6 @@ public:
     [[nodiscard]] Status map_region(int descriptor, std::uint64_t size, void *&base) override;
     void                 unmap_region(void *base, std::uint64_t size) override;
     void                 close_descriptor(int descriptor) override;
-    void                 offer_host_memory(int descriptor) override;
     void                 take_interrupt_lines(const int *descriptors, std::uint32_t count) override;
     void                 drop_interrupt_lines() override;
     [[nodiscard]] Status load_executor(const char *path, std::uint32_t length, const AvExecutorOps *&ops) override;
@@ -47,13 +46,10 @@ public:
     const char   *executor_path() const;
 
 private:
-    void close_offered();
-
     MockHost             &qemu_;
     const AvExecutorOps &executor_;
     std::uint32_t         descriptors_;
     std::uint32_t         mappings_;
-    int                   offered_;
     int                   lines_[max_lines];
     bool                  refuse_executor_;
     std::uint32_t         loads_;

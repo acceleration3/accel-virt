@@ -1,5 +1,7 @@
-/* Reaches into an ImportedBlob so invariant tests can corrupt it. Declared a
- * friend by ImportedBlob; nothing outside the tests uses it. */
+/* Reaches into an ImportedBlob so invariant tests can corrupt it: a free slot
+ * left with an id, an object or a wire handle of an import it no longer
+ * holds. Declared a friend by ImportedBlob; nothing outside the tests uses
+ * it. */
 #ifndef AV_IMPORTED_BLOB_PROBE_HPP
 #define AV_IMPORTED_BLOB_PROBE_HPP
 
@@ -12,11 +14,8 @@ namespace av {
 struct ImportedBlobProbe {
     explicit ImportedBlobProbe(ImportedBlob &target);
 
-    void set_kind(uint32_t kind);
-    void set_size(uint64_t size);
-    void set_pointer(void *pointer);
-    void set_descriptor(int descriptor);
-    void set_memory_type(uint32_t type);
+    void set_id(uint64_t id);
+    void set_object(uint64_t object);
     void set_wire_handle(uint64_t handle);
 
     ImportedBlob &blob;

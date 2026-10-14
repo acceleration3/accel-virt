@@ -11,7 +11,7 @@
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
-#include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 
@@ -38,7 +38,7 @@ private:
     ExecutorLibrary library_;
     ExecutorShares  shares_;
     ContextExecutor executor_;
-    BlobTable            blobs_;
+    HostBlobTable   blobs_;
     BlobImports          imports_;
     BatchStaging    staging_;
     BatchExecutor   batches_;

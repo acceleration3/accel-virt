@@ -87,43 +87,16 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).alias_guest_run(run, size, at) == Status::ok ? 0 : 1;
     };
     table_.release_range = [](void *opaque, void *base, std::uint64_t size) { host_of(opaque).release_range(base, size); };
-    table_.dmabuf_over_guest = [](void *opaque, void *const *runs, const std::uint64_t *sizes,
-                                  std::uint32_t count, int *fd) {
-        return host_of(opaque).dmabuf_over_guest(runs, sizes, count, *fd) == Status::ok ? 0 : 1;
-    };
-    table_.close_dmabuf = [](void *opaque, int fd) { host_of(opaque).close_dmabuf(fd); };
-    table_.create_host_memory = [](void *opaque, std::uint64_t size, void **pointer) {
-        void *view = nullptr;
-        void *const memory = host_of(opaque).create_host_memory(size, view);
-        *pointer = view;
-        return memory;
-    };
-    table_.destroy_host_memory = [](void *opaque, void *memory) { host_of(opaque).destroy_host_memory(memory); };
     table_.hostmem_size = [](void *opaque) { return host_of(opaque).hostmem_size(); };
-    table_.place_in_hostmem = [](void *opaque, void *memory, std::uint64_t offset) {
-        return host_of(opaque).place_in_hostmem(memory, offset) == Status::ok ? 0 : 1;
+    table_.place_in_hostmem = [](void *opaque, int fd, std::uint64_t size, std::uint64_t offset) {
+        return host_of(opaque).place_in_hostmem(fd, size, offset) == Status::ok ? 0 : 1;
     };
     table_.remove_from_hostmem = [](void *opaque, std::uint64_t offset, std::uint64_t size) {
         host_of(opaque).remove_from_hostmem(offset, size);
     };
     table_.monotonic_nanoseconds = [](void *opaque) { return host_of(opaque).monotonic_nanoseconds(); };
-    table_.read_hostmem = [](void *opaque, std::uint64_t offset, std::uint8_t *buffer, std::uint64_t size) {
-        return host_of(opaque).read_hostmem(offset, buffer, size) == Status::ok ? 0 : 1;
-    };
     table_.bind_gpu = [](void *opaque, std::uint32_t index) {
         return host_of(opaque).bind_gpu(index) == Status::ok ? 0 : 1;
-    };
-    table_.export_gpu_memory = [](void *opaque, std::uint64_t size, void **pointer, std::int32_t *host_error) {
-        return host_of(opaque).export_gpu_memory(size, *pointer, *host_error);
-    };
-    table_.release_gpu_memory = [](void *opaque, void *memory) { host_of(opaque).release_gpu_memory(memory); };
-    table_.import_guest_memory = [](void *opaque, void *pointer, std::uint64_t size, std::int32_t *host_error) {
-        return host_of(opaque).import_guest_memory(pointer, size, *host_error);
-    };
-    table_.release_guest_memory = [](void *opaque, void *memory) { host_of(opaque).release_guest_memory(memory); };
-    table_.read_imported_memory = [](void *opaque, void *memory, std::uint64_t offset, std::uint8_t *buffer,
-                                     std::uint64_t size) {
-        return host_of(opaque).read_imported_memory(memory, offset, buffer, size) == Status::ok ? 0 : 1;
     };
     table_.connect_doorbell = [](void *opaque, void *event, std::uint32_t index) {
         host_of(opaque).connect_doorbell(event, index);
@@ -157,14 +130,14 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.display_takes_dmabuf = [](void *opaque, std::uint32_t head) {
         return host_of(opaque).display_takes_dmabuf(head) ? 1 : 0;
     };
-    table_.show_scanout = [](void *opaque, std::uint32_t head, int fd, const AvScanoutFrame *frame) {
+    table_.show_scanout = [](void *opaque, std::uint32_t head, const void *blob, const AvScanoutFrame *frame) {
         /* The modifier and the reserved word are the table's promise, not the
          * mock's business; a plane that broke either is a caught ABI change. */
         if (frame == nullptr || frame->reserved != 0u || frame->modifier != 0u) return 1;
         const MockHost::Plane plane = {frame->width,          frame->height,  frame->x,      frame->y,
                                        frame->backing_width,  frame->backing_height,
                                        frame->stride,         frame->offset,  frame->fourcc};
-        return host_of(opaque).show_scanout_plane(head, fd, plane) == Status::ok ? 0 : 1;
+        return host_of(opaque).show_scanout_plane(head, static_cast<const std::uint8_t *>(blob), plane) == Status::ok ? 0 : 1;
     };
     table_.update_scanout = [](void *opaque, std::uint32_t head, std::uint32_t x, std::uint32_t y,
                                std::uint32_t width, std::uint32_t height) {
@@ -184,9 +157,6 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
                              std::uint64_t *offset) {
         return host_of(opaque).locate_guest(pointer, length, *region, *offset) == Status::ok ? 0 : 1;
     };
-    table_.host_memory_descriptor = [](void *opaque, void *memory) {
-        return host_of(opaque).host_memory_descriptor(memory);
-    };
     table_.close_descriptor = [](void *opaque, int descriptor) { host_of(opaque).close_descriptor(descriptor); };
     table_.start_renderer = [](void *opaque, const char *path) {
         return host_of(opaque).start_renderer(path) == Status::ok ? 0 : 1;
@@ -205,10 +175,6 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return received == Status::invalid_state ? 1 : 2;
     };
     table_.kill_renderer = [](void *opaque) { host_of(opaque).kill_renderer(); };
-    table_.dmabuf_over_host_memory = [](void *opaque, void *memory, std::uint64_t offset, std::uint64_t size,
-                                        int *fd) {
-        return host_of(opaque).dmabuf_over_host_memory(memory, offset, size, *fd) == Status::ok ? 0 : 1;
-    };
     table_.receive_export = [](void *opaque, int connection, std::uint8_t *buffer, std::size_t capacity,
                                std::size_t *length) {
         return host_of(opaque).receive_export(connection, buffer, capacity, *length) == Status::ok ? 0 : 1;

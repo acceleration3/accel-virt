@@ -1082,7 +1082,7 @@ Status MockKmt::window_chunk(std::uint32_t context, std::uint8_t *data, std::uin
 {
     HostWindowRecord record;
     if (record.decode(data, size) != Status::ok) return refuse(invalid_parameter);
-    if (record.opens()) return open_window_chunk(context, data, size, record.bytes());
+    if (record.opens()) return open_window_chunk(context, data, size, record);
     for (WindowChunk &chunk : window_chunks_) {
         if (chunk.resource != record.resource_id() || chunk.context != context) continue;
         clear_chunk(chunk);
@@ -1093,39 +1093,38 @@ Status MockKmt::window_chunk(std::uint32_t context, std::uint8_t *data, std::uin
 
 void MockKmt::clear_chunk(WindowChunk &chunk)
 {
-    if (chunk.ram != nullptr) munmap(chunk.ram, chunk.pages * page_bytes);
     chunk = WindowChunk{};
 }
 
+std::uint32_t MockKmt::free_window_resource() const
+{
+    for (std::uint32_t resource = first_window_resource;; resource++) {
+        bool held = false;
+        for (const WindowChunk &chunk : window_chunks_) held = held || chunk.resource == resource;
+        if (!held) return resource;
+    }
+}
+
+/* The driver judges the request before it places anything, as the device
+ * would refuse a blob of memory no GPU has. */
 Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
-                                  std::uint64_t bytes)
+                                  const HostWindowRecord &request)
 {
     if (window_refusal_ != 0u) {
         const std::uint32_t code = window_refusal_;
         window_refusal_ = 0u;
         return refuse(code);
     }
+    const std::uint64_t bytes = request.bytes();
     const std::uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
     const std::uint64_t first = bytes <= window_pages_ * page_bytes ? window_fit(pages) : window_pages_;
-    const HostWindowRecord request(HostWindowRecord::Operation::open, bytes, 0u);
+    if (first == window_pages_ || !request.memory().valid()) return refuse(invalid_parameter);
     for (WindowChunk &chunk : window_chunks_) {
         if (chunk.resource != 0u) continue;
-        if (first != window_pages_) {
-            chunk = WindowChunk{first_window_resource + window_opens_, context, first, pages};
-            window_opens_++;
-            const std::uint64_t address = reinterpret_cast<std::uintptr_t>(window_ + first * page_bytes);
-            static_cast<void>(request.answered(chunk.resource, answered_bytes(pages), address).encode(data, size));
-            return succeed();
-        }
-        /* Anonymous pages are zero and cost nothing until touched, so a 64 MiB
-         * chunk is only what a test writes into it. */
-        void *const ram = mmap(nullptr, pages * page_bytes, PROT_READ | PROT_WRITE,
-                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-        if (ram == MAP_FAILED) return refuse(invalid_parameter);
-        chunk = WindowChunk{first_chunk_resource + ram_opens_, context, 0u, pages,
-                            static_cast<std::uint8_t *>(ram), ram_opens_};
-        ram_opens_++;
-        const std::uint64_t address = reinterpret_cast<std::uintptr_t>(ram);
+        chunk = WindowChunk{free_window_resource(), context, first, pages, request.memory().encoded()};
+        window_opens_++;
+        last_window_request_ = request.memory().encoded();
+        const std::uint64_t address = reinterpret_cast<std::uintptr_t>(window_ + first * page_bytes);
         static_cast<void>(request.answered(chunk.resource, answered_bytes(pages), address).encode(data, size));
         return succeed();
     }
@@ -1139,7 +1138,7 @@ std::uint64_t MockKmt::window_fit(std::uint64_t pages) const
     while (moved) {
         moved = false;
         for (const WindowChunk &chunk : window_chunks_) {
-            if (chunk.resource == 0u || chunk.ram != nullptr || chunk.first >= first + pages ||
+            if (chunk.resource == 0u || chunk.first >= first + pages ||
                 chunk.first + chunk.pages <= first)
                 continue;
             first = chunk.first + chunk.pages;
@@ -1171,15 +1170,27 @@ void MockKmt::refuse_next_window_open(std::uint32_t code) { window_refusal_ = co
 std::uint32_t MockKmt::window_chunks() const
 {
     std::uint32_t held = 0u;
-    for (const WindowChunk &chunk : window_chunks_) held += chunk.resource != 0u && chunk.ram == nullptr ? 1u : 0u;
+    for (const WindowChunk &chunk : window_chunks_) held += chunk.resource != 0u ? 1u : 0u;
     return held;
 }
 
-std::uint32_t MockKmt::ram_chunks() const
+HostMemoryRequest MockKmt::last_window_request() const
 {
-    std::uint32_t held = 0u;
-    for (const WindowChunk &chunk : window_chunks_) held += chunk.ram != nullptr ? 1u : 0u;
-    return held;
+    return HostMemoryRequest(last_window_request_);
+}
+
+HostMemoryRequest MockKmt::window_request(std::uint32_t resource) const
+{
+    for (const WindowChunk &chunk : window_chunks_)
+        if (resource != 0u && chunk.resource == resource) return HostMemoryRequest(chunk.memory);
+    return HostMemoryRequest();
+}
+
+std::uint8_t *MockKmt::window_chunk_memory(std::uint32_t resource) const
+{
+    for (const WindowChunk &chunk : window_chunks_)
+        if (resource != 0u && chunk.resource == resource) return window_ + chunk.first * page_bytes;
+    return nullptr;
 }
 
 std::uint64_t MockKmt::answered_bytes(std::uint64_t pages)
@@ -1190,20 +1201,6 @@ std::uint64_t MockKmt::answered_bytes(std::uint64_t pages)
 }
 
 void MockKmt::answer_next_chunk_bytes(std::uint64_t bytes) { chunk_bytes_answer_ = bytes; }
-
-std::uint64_t MockKmt::ram_chunk_pages(std::uint32_t index) const
-{
-    for (const WindowChunk &chunk : window_chunks_)
-        if (chunk.ram != nullptr && chunk.ram_index == index) return chunk.pages;
-    return 0u;
-}
-
-std::uint8_t *MockKmt::ram_chunk(std::uint32_t index) const
-{
-    for (const WindowChunk &chunk : window_chunks_)
-        if (chunk.ram != nullptr && chunk.ram_index == index) return chunk.ram;
-    return nullptr;
-}
 
 std::uint32_t MockKmt::window_opens() const { return window_opens_; }
 std::uint8_t *MockKmt::window_base() const { return window_; }

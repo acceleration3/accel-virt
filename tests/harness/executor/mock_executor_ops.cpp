@@ -1,6 +1,9 @@
 #include "harness/executor/mock_executor_ops.hpp"
 
 #include <cstring>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace av {
 
@@ -22,7 +25,7 @@ private:
 }  // namespace
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
-    : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(),
+    : table_{}, sub_apis_(sub_apis), imported_(0u), released_blobs_(0u), lock_(), released_(),
       held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u), executed_(0u), ids_{},
       sizes_{}, last_sub_api_(0u), misuses_(0u), imports_{}, refuse_import_(0u), withhold_handle_(0u),
       answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr),
@@ -30,25 +33,44 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
 {
     pthread_mutex_init(&lock_, nullptr);
     pthread_cond_init(&released_, nullptr);
+    for (Memory &memory : memory_) memory = Memory{0u, 0u, 0u, -1, nullptr, -1, false, 0u};
     table_.abi_version = AV_EXECUTOR_ABI_VERSION;
     table_.opaque = this;
     table_.sub_apis = [](void *opaque) { return mock_of(opaque).sub_apis_; };
-    table_.import_kinds = [](void *opaque, std::uint32_t, const std::uint8_t *) {
-        return mock_of(opaque).import_kinds_;
+    table_.allocate_memory = [](void *opaque, std::uint32_t domain, std::uint64_t key, std::uint64_t size,
+                                std::uint32_t request, AvHostMemory *memory) -> std::uint32_t {
+        if (memory == nullptr) return 1u;
+        return mock_of(opaque).allocate(domain, key, size, request, *memory);
     };
-    table_.import_blob = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id,
-                            const AvBlobHandle *blob) -> std::uint32_t {
+    table_.free_memory = [](void *opaque, std::uint32_t domain, std::uint64_t key) {
         MockExecutorOps &mock = mock_of(opaque);
-        if (mock.executor_of(handle) == nullptr || blob == nullptr) return AV_UNDECODABLE;
+        Lock             lock(mock.lock_);
+        Memory *const    memory = mock.held_memory_of(domain, key);
+        if (memory == nullptr) return;
+        mock.memory_frees_++;
+        memory->held = false;
+        mock.settle(*memory);
+    };
+    /* An import names memory of the executor's own domain the device still
+     * holds: memory it already freed is gone to a new import, as the
+     * library's own source refuses it. */
+    table_.import_blob = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id,
+                            std::uint64_t memory_key) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        Executor *const  executor = mock.executor_of(handle);
+        if (executor == nullptr) return AV_UNDECODABLE;
         Lock lock(mock.lock_);
-        if (mock.refuse_import_ != 0u && --mock.refuse_import_ == 0u) return AV_UNDECODABLE;
+        if (mock.fires(mock.refuse_import_)) return AV_UNDECODABLE;
+        Memory *const memory = mock.held_memory_of(executor->domain, memory_key);
+        if (memory == nullptr) return AV_UNDECODABLE;
         for (Import &import : mock.imports_) {
             if (import.live) continue;
-            import = Import{blob_id, *blob, true};
-            break;
+            import = Import{blob_id, memory_key, memory, handle, true};
+            memory->imports++;
+            mock.imported_++;
+            return AV_EXECUTED;
         }
-        mock.imported_++;
-        return AV_EXECUTED;
+        return AV_UNDECODABLE;
     };
     table_.release_blob = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id) {
         MockExecutorOps &mock = mock_of(opaque);
@@ -56,7 +78,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         Lock lock(mock.lock_);
         mock.released_blobs_++;
         for (Import &import : mock.imports_)
-            if (import.live && import.blob_id == blob_id) import.live = false;
+            if (import.live && import.executor == handle && import.blob_id == blob_id) mock.release_import(import);
     };
     table_.imported_handle = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id) -> std::uint64_t {
         MockExecutorOps &mock = mock_of(opaque);
@@ -64,7 +86,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         Lock lock(mock.lock_);
         if (mock.withhold_handle_ != 0u && --mock.withhold_handle_ == 0u) return 0u;
         for (const Import &import : mock.imports_) {
-            if (!import.live || import.blob_id != blob_id) continue;
+            if (!import.live || import.executor != handle || import.blob_id != blob_id) continue;
             return mock.answered_handle_ != 0u ? mock.answered_handle_ : blob_id | handle_bit;
         }
         return 0u;
@@ -177,20 +199,6 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         *view = mock.frame_;
         return AV_EXECUTED;
     };
-    table_.write_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point,
-                            std::uint32_t, int fd, std::uint64_t, std::uint32_t pitch, const AvFrameRegion *regions,
-                            std::uint32_t count) -> std::uint32_t {
-        MockExecutorOps &mock = mock_of(opaque);
-        mock.last_domain_ = domain;
-        if (fd < 0 || regions == nullptr || surface == 0u || surface != mock.frame_surface_ ||
-            point != mock.frame_point_)
-            return AV_UNKNOWN;
-        mock.frame_surface_ = 0u;
-        mock.frame_writes_++;
-        mock.written_pitch_ = pitch;
-        mock.written_count_ = count;
-        return AV_EXECUTED;
-    };
     table_.unmap_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point) {
         MockExecutorOps &mock = mock_of(opaque);
         mock.last_domain_ = domain;
@@ -240,7 +248,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (mock.fail_create_ != 0u && --mock.fail_create_ == 0u) return nullptr;
         for (Executor &executor : mock.executors_) {
             if (executor.live) continue;
-            executor = Executor{pthread_self(), true};
+            executor = Executor{pthread_self(), mock.last_options_.domain, true};
             mock.created_++;
             return static_cast<AvExecutor *>(static_cast<void *>(&executor));
         }
@@ -254,7 +262,8 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         executor->live = false;
         mock.destroyed_++;
         /* Destroy releases whatever the device never did (av_executor.h). */
-        for (Import &import : mock.imports_) import.live = false;
+        for (Import &import : mock.imports_)
+            if (import.live && import.executor == handle) mock.release_import(import);
         for (Open &open : mock.opens_)
             if (open.executor == handle) open.live = false;
     };
@@ -293,6 +302,11 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
 MockExecutorOps::~MockExecutorOps()
 {
     release();
+    for (Memory &memory : memory_) {
+        if (memory.fd < 0) continue;
+        ::munmap(memory.bytes, static_cast<std::size_t>(memory.size));
+        ::close(memory.fd);
+    }
     pthread_cond_destroy(&released_);
     pthread_mutex_destroy(&lock_);
 }
@@ -360,11 +374,118 @@ std::uint32_t MockExecutorOps::last_sub_api() { Lock lock(lock_); return last_su
 void          MockExecutorOps::refuse_domain_at(std::uint32_t nth) { Lock lock(lock_); refuse_domain_ = nth; }
 std::uint32_t MockExecutorOps::domains_opened() { Lock lock(lock_); return domains_opened_; }
 std::uint32_t MockExecutorOps::domains_closed() { Lock lock(lock_); return domains_closed_; }
+std::uint32_t MockExecutorOps::last_opened_domain() { Lock lock(lock_); return domain_bit | domains_opened_; }
 std::uint32_t MockExecutorOps::last_closed_domain() { Lock lock(lock_); return last_closed_domain_; }
 std::uint8_t  MockExecutorOps::last_domain_gpu() { Lock lock(lock_); return last_domain_gpu_; }
 std::uint32_t MockExecutorOps::misuses() { return misuses_.load(); }
 
-void MockExecutorOps::set_import_kinds(std::uint32_t kinds) { import_kinds_ = kinds; }
+bool MockExecutorOps::fires(std::uint32_t &countdown)
+{
+    return countdown != 0u && --countdown == 0u;
+}
+
+MockExecutorOps::Memory *MockExecutorOps::held_memory_of(std::uint32_t domain, std::uint64_t key)
+{
+    for (Memory &memory : memory_)
+        if (memory.fd >= 0 && memory.held && memory.domain == domain && memory.key == key) return &memory;
+    return nullptr;
+}
+
+void MockExecutorOps::settle(Memory &memory)
+{
+    if (memory.held || memory.imports != 0u) return;
+    ::munmap(memory.bytes, static_cast<std::size_t>(memory.size));
+    ::close(memory.fd);
+    memory = Memory{0u, 0u, 0u, -1, nullptr, -1, false, 0u};
+}
+
+void MockExecutorOps::release_import(Import &import)
+{
+    import.live = false;
+    import.memory->imports--;
+    settle(*import.memory);
+}
+
+/* A real allocation, so a test reads through it what the guest wrote into
+ * the window: the device is handed its own duplicate of the descriptor, as
+ * the library's source hands one, and closes it with the blob. */
+std::uint32_t MockExecutorOps::allocate(std::uint32_t domain, std::uint64_t key, std::uint64_t size,
+                                        std::uint32_t request, AvHostMemory &answer)
+{
+    Lock lock(lock_);
+    memory_allocations_++;
+    last_memory_request_ = MemoryRequest{domain, key, size, request};
+    if (fires(refuse_memory_) || size == 0u || held_memory_of(domain, key) != nullptr) return 1u;
+    std::uint64_t made = size;
+    if (memory_rounding_ != 0u) made = (size + memory_rounding_ - 1u) / memory_rounding_ * memory_rounding_;
+    Memory *slot = nullptr;
+    for (Memory &memory : memory_)
+        if (memory.fd < 0 && slot == nullptr) slot = &memory;
+    if (slot == nullptr) return 1u;
+    const int fd = ::memfd_create("mock executor memory", MFD_CLOEXEC);
+    if (fd < 0) return 1u;
+    void *bytes = MAP_FAILED;
+    if (::ftruncate(fd, static_cast<off_t>(made)) == 0)
+        bytes = ::mmap(nullptr, static_cast<std::size_t>(made), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (bytes == MAP_FAILED) {
+        ::close(fd);
+        return 1u;
+    }
+    const int handed = fires(withhold_memory_descriptor_) ? -1 : ::fcntl(fd, F_DUPFD_CLOEXEC, 0);
+    *slot = Memory{domain, key, made, fd, static_cast<std::uint8_t *>(bytes), handed, true, 0u};
+    answer.fd = handed;
+    answer.caching = memory_caching_;
+    answer.size = fires(shrink_memory_) ? made - 4096u : made;
+    return 0u;
+}
+
+void MockExecutorOps::refuse_memory_at(std::uint32_t nth) { Lock lock(lock_); refuse_memory_ = nth; }
+void MockExecutorOps::withhold_memory_descriptor_at(std::uint32_t nth)
+{
+    Lock lock(lock_);
+    withhold_memory_descriptor_ = nth;
+}
+void MockExecutorOps::shrink_memory_at(std::uint32_t nth) { Lock lock(lock_); shrink_memory_ = nth; }
+void MockExecutorOps::round_memory_to(std::uint64_t bytes) { Lock lock(lock_); memory_rounding_ = bytes; }
+void MockExecutorOps::set_memory_caching(std::uint32_t caching) { Lock lock(lock_); memory_caching_ = caching; }
+std::uint32_t MockExecutorOps::memory_allocations() { Lock lock(lock_); return memory_allocations_; }
+std::uint32_t MockExecutorOps::memory_frees() { Lock lock(lock_); return memory_frees_; }
+
+std::uint32_t MockExecutorOps::held_memory()
+{
+    Lock          lock(lock_);
+    std::uint32_t count = 0u;
+    for (const Memory &memory : memory_) count += memory.fd >= 0 && memory.held ? 1u : 0u;
+    return count;
+}
+
+std::uint32_t MockExecutorOps::live_memory()
+{
+    Lock          lock(lock_);
+    std::uint32_t count = 0u;
+    for (const Memory &memory : memory_) count += memory.fd >= 0 ? 1u : 0u;
+    return count;
+}
+
+MockExecutorOps::MemoryRequest MockExecutorOps::last_memory_request() { Lock lock(lock_); return last_memory_request_; }
+
+/* The held allocation under the key, else the newest one an import still
+ * keeps alive after the device let the key go. */
+std::uint8_t *MockExecutorOps::memory_bytes(std::uint32_t domain, std::uint64_t key)
+{
+    Lock lock(lock_);
+    for (const Memory &memory : memory_)
+        if (memory.fd >= 0 && memory.domain == domain && memory.key == key) return memory.bytes;
+    return nullptr;
+}
+
+int MockExecutorOps::answered_descriptor(std::uint32_t domain, std::uint64_t key)
+{
+    Lock lock(lock_);
+    for (const Memory &memory : memory_)
+        if (memory.fd >= 0 && memory.domain == domain && memory.key == key) return memory.answered;
+    return -1;
+}
 
 std::uint32_t MockExecutorOps::imported()
 {
@@ -386,12 +507,12 @@ void MockExecutorOps::refuse_import_at(std::uint32_t nth) { Lock lock(lock_); re
 void MockExecutorOps::withhold_handle_at(std::uint32_t nth) { Lock lock(lock_); withhold_handle_ = nth; }
 void MockExecutorOps::answer_handle(std::uint64_t handle) { Lock lock(lock_); answered_handle_ = handle; }
 
-bool MockExecutorOps::import_of(std::uint64_t blob_id, AvBlobHandle &handle)
+bool MockExecutorOps::import_of(std::uint64_t blob_id, std::uint64_t &memory_key)
 {
     Lock lock(lock_);
     for (const Import &import : imports_) {
         if (!import.live || import.blob_id != blob_id) continue;
-        handle = import.handle;
+        memory_key = import.memory_key;
         return true;
     }
     return false;
@@ -468,12 +589,6 @@ void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, co
     frame_point_ = point;
     frame_ = view;
 }
-
-std::uint32_t MockExecutorOps::frame_writes() const { return frame_writes_; }
-
-std::uint32_t MockExecutorOps::written_pitch() const { return written_pitch_; }
-
-std::uint32_t MockExecutorOps::written_count() const { return written_count_; }
 
 std::uint32_t MockExecutorOps::frame_unmaps() const { return frame_unmaps_; }
 

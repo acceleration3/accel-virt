@@ -1,11 +1,14 @@
 /* A ContextPlane that runs nothing and remembers what it was told: which
- * blobs were made and let go, whether the interrupts were connected, and how
- * often the renderer was lost. For tests of the control plane's commands. */
+ * blobs were made and let go, which host memory was asked for and freed,
+ * whether the interrupts were connected, and how often the renderer was lost.
+ * Its host memory is a fresh memfd per allocation - a real descriptor the
+ * device must place and close - unless a test has it allocate through an
+ * executor library instead. For tests of the control plane's commands. */
 #ifndef AV_RECORDING_CONTEXT_PLANE_HPP
 #define AV_RECORDING_CONTEXT_PLANE_HPP
 
 #include "device/context/context_plane.hpp"
-#include "device/present/frame_destination.hpp"
+#include "device/execution/executor_library.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <cstdint>
@@ -20,7 +23,9 @@ public:
     Status        initialize() override { return Status::ok; }
     Status        start(const std::uint8_t *, const CapsetInfo &) override { return Status::ok; }
     std::uint32_t sub_apis() const override { return 0u; }
-    std::uint32_t import_kinds(SubApi, const std::uint8_t *) const override { return 0u; }
+    Status        allocate_memory(std::uint32_t context, std::uint64_t key, std::uint64_t size,
+                                  std::uint32_t request, AvHostMemory &memory) override;
+    void          free_memory(std::uint64_t key) override;
     Status        create(std::uint32_t) override { return Status::not_supported; }
     Status        destroy(std::uint32_t) override { return Status::not_found; }
     void          destroy_all() override {}
@@ -84,27 +89,28 @@ public:
         snapshot_mapped_ = false;
         unmaps_++;
     }
-    /* Written by the GPU only once the test says the host can (write_frames):
-     * then the served frame is written into the destination and let go, and
-     * what the destination was is kept for the test to judge. */
-    bool write_frame(const std::uint8_t *, const SurfacePoint &frame, std::uint32_t,
-                     const FrameDestination &destination) override
-    {
-        write_tries_++;
-        if (!writes_frames_ || !frame.names() || !(frame == frame_) || destination.fd() < 0) return false;
-        frame_ = SurfacePoint();
-        written_bytes_ = destination.bytes();
-        written_pitch_ = destination.pitch();
-        written_count_ = destination.count();
-        if (destination.count() != 0u) written_region_ = destination.regions()[0];
-        return true;
-    }
-    void          write_frames() { writes_frames_ = true; }
-    std::uint32_t write_tries() const { return write_tries_; }
-    std::uint64_t written_bytes() const { return written_bytes_; }
-    std::uint32_t written_pitch() const { return written_pitch_; }
-    std::uint32_t written_count() const { return written_count_; }
-    const AvFrameRegion &written_region() const { return written_region_; }
+    /* What allocate_memory was asked last, and how often; the keys freed. */
+    struct MemoryAsked {
+        std::uint32_t context;
+        std::uint64_t key;
+        std::uint64_t size;
+        std::uint32_t request;
+    };
+    MemoryAsked   last_memory() const { return last_memory_; }
+    std::uint32_t memory_allocations() const { return memory_allocations_; }
+    std::uint64_t freed(std::uint32_t index) const { return freed_[index]; }
+    std::uint32_t freed_count() const { return freed_count_; }
+    /* The Nth allocation from now is refused. */
+    void          refuse_memory_at(std::uint32_t nth) { refuse_memory_ = nth; }
+    /* What every answer carries: its caching (write-back unless told), one
+     * page less than asked, or no descriptor at all - the last two a library
+     * breaking the ABI. */
+    void          answer_caching(std::uint32_t caching) { caching_ = caching; }
+    void          answer_short() { short_ = true; }
+    void          answer_without_descriptor() { without_descriptor_ = true; }
+    /* Memory allocated and freed through `library` from now on, as the local
+     * plane does, so an import of it reaches memory the library knows. */
+    void          allocate_through(ExecutorLibrary &library) { library_ = &library; }
     void serve_frame(const SurfacePoint &frame, const AvFrameView &view)
     {
         frame_ = frame;
@@ -168,7 +174,7 @@ public:
     std::uint32_t losses() const { return losses_; }
 
 private:
-    int fresh_memfd() const;
+    int fresh_memfd(std::uint64_t size = 4096u) const;
     int fresh_eventfd() const;
 
     bool exported(std::uint64_t surface) const
@@ -195,12 +201,15 @@ private:
     SurfacePoint    frame_;
     AvFrameView snapshot_ = {};
     bool            snapshot_mapped_ = false;
-    bool            writes_frames_ = false;
-    std::uint32_t   write_tries_ = 0u;
-    std::uint64_t   written_bytes_ = 0u;
-    std::uint32_t   written_pitch_ = 0u;
-    std::uint32_t   written_count_ = 0u;
-    AvFrameRegion   written_region_ = {};
+    MemoryAsked     last_memory_ = {};
+    std::uint32_t   memory_allocations_ = 0u;
+    std::uint64_t   freed_[capacity] = {};
+    std::uint32_t   freed_count_ = 0u;
+    std::uint32_t   refuse_memory_ = 0u;
+    std::uint32_t   caching_ = AV_MEMORY_WRITE_BACK;
+    bool            short_ = false;
+    bool            without_descriptor_ = false;
+    ExecutorLibrary *library_ = nullptr;
     bool            served_ = false;
     std::uint32_t   unmaps_ = 0u;
     std::uint32_t created_[capacity] = {};
