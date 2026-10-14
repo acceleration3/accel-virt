@@ -92,7 +92,7 @@ SUBMIT_DOORBELL = re.compile(rb"^note submit\.doorbell (\w+)\r?$", re.M)
 STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)\r?$", re.M)
 STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 # What the adapter logs when it sets up the host window for a device
-# (docs/host-window.md): the only place a run sees whether it has one.
+# (docs/host-memory.md): the only place a run sees whether it has one.
 WINDOW_LINE = re.compile(r"^avgpu: host window status 0x([0-9a-fA-F]{8})\r?$", re.M)
 PROBE_SUMMARY = re.compile(rb"^avvkprobe: (\d+) passed, (\d+) failed\r?$", re.M)
 # avglprobe --discovery's facts (feature 050): `discovery <key> <text> value=0x.. error=..`.
@@ -303,7 +303,7 @@ def arguments():
                         help="the recording's ceiling; it stops there rather than growing past it")
     parser.add_argument("--hostmem", type=int, default=8192, metavar="MIB",
                         help="the device's host window, in MiB; 0 gives it none, and every chunk a "
-                             "process asks for is guest memory (docs/host-window.md)")
+                             "process asks for is guest memory (docs/host-memory.md)")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
     parser.add_argument("--vsync-wait", type=float, default=60.0,
                         help="seconds to wait for the driver to log a window at its own period")
@@ -1217,7 +1217,7 @@ class GuestRun:
 
     def window(self):
         """Whether the driver set up the host window it hands processes their
-        write-back chunks from (docs/host-window.md). Without one every chunk
+        write-back chunks from (docs/host-memory.md). Without one every chunk
         is guest memory, which works but is not what a run with --hostmem is
         measuring."""
         opened = WINDOW_LINE.search(self.driver_log())

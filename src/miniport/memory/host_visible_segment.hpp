@@ -5,7 +5,7 @@
  * It is offered only where two things agree - the PCI capability walk found the
  * region, and the capset says the device has one (feature 039's
  * `feature_host_visible_memory`). A device without it has no window, and every
- * chunk falls back to guest RAM. */
+ * chunk is refused: nothing falls back to guest RAM. */
 #ifndef AV_HOST_VISIBLE_SEGMENT_HPP
 #define AV_HOST_VISIBLE_SEGMENT_HPP
 

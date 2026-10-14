@@ -13,8 +13,10 @@ The whole per-context worker moves: ring consumer, batch executor, executor
 library, blob imports, fence reporter, D3D ordering, and the device's domain in
 the library, where the objects the contexts share are kept: the renderer opens
 it as QEMU's hello reaches it. QEMU keeps
-the control plane - the virtqueue, the authoritative `BlobTable`, the hostmem
-BAR, the display heads, doorbell ioeventfds and guest notifiers.
+the control plane - the virtqueue, the authoritative `BlobTable` and
+`HostBlobTable`, the hostmem BAR, the display heads, doorbell ioeventfds and
+guest notifiers. Host blobs' memory is the renderer's: its library allocates
+it, and QEMU maps the dma-buf it is sent.
 
 Nothing crosses the process boundary per batch. The guest's ring, fence page
 and reply slot are guest RAM, which both processes map; the doorbell is a KVM
@@ -36,13 +38,13 @@ Only file descriptors and bytes, over one `SOCK_SEQPACKET` socketpair:
 |---|---|
 | Guest RAM | Each RAMBlock's memfd (`share=on` is required), mapped once |
 | Guest blobs | Mirrored into its own `BlobTable`, extents as `(region << 40) \| offset` |
-| Host blobs | The hostmem memfd QEMU made and placed |
+| Host blobs | Allocated by its own library (`allocate_memory`, answered `allocated_memory` with the dma-buf beside it, which QEMU maps into the hostmem BAR) and let go by `free_memory`; it records which context each was made for (`RendererHostBlobs`), since IMPORT_BLOB runs here |
 | Doorbell | The eventfd QEMU created and registered as the ioeventfd |
 | Fence interrupts | Each queue's guest-notifier eventfd |
 | Scanout images | Sent back as a dma-buf when the image changed (phase 2) |
 
 QEMU never registers a descriptor the renderer made with KVM, and accepts only
-dma-bufs back.
+dma-bufs back: host GPU memory for a host blob, and scanout images.
 
 A device with a renderer exports no surface on its export socket
 (docs/external-export.md): the surfaces are the renderer's, and nothing asks
@@ -51,11 +53,11 @@ it for their descriptors yet.
 ## Lifecycle
 
 QEMU spawns the renderer at realize and waits for `Ready`, which carries the
-sub-APIs and import kinds the capset needs. It watches the socket and a pidfd.
-When the renderer dies or misses a request's deadline, every bound context's
+protocol and executor ABI it speaks and the sub-APIs the capset needs. It
+watches the socket and a pidfd. When the renderer dies or misses a request's deadline, every bound context's
 fence page is republished with `device_lost` and its interrupt raised, the
 doorbells are disconnected, and a new renderer is started, which is replayed
-the regions, live blobs and interrupt lines before it takes a context. A
+the regions, live guest blobs and interrupt lines before it takes a context. A
 renderer that dies too often in a short time is not restarted; new contexts
 then fault with `no_executor`.
 

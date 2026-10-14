@@ -217,8 +217,11 @@ unit test walks the filled tables and fails on a null slot, or on an
 
 Measured at the desktop: 7 processes load `avumd.dll`; each holds one session
 (one doorbell of the adapter's 64), a 4 MiB ring and a 64 MiB blob arena. The
-arena is guest memory the host imports: 7 × 64 MiB is 448 MiB of a 4 GiB
-guest. The arena drops to 32 MiB, and an upload larger than half of it crosses
+arena was then guest memory the host imported: 7 × 64 MiB was 448 MiB of a
+4 GiB guest. It is host GPU memory in the window now (docs/host-memory.md),
+so it costs the guest no RAM, but each session's still counts against the
+window.
+The arena drops to 32 MiB, and an upload larger than half of it crosses
 in pieces (depth slices, then rows or block rows; a buffer by bytes) rather
 than failing. A read larger than the arena still fails, because
 `ReadSubresource` names no region to read in pieces; after step 2 the only

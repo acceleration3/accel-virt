@@ -77,11 +77,11 @@ only through the entry points the loader would be handed, so a unit test is a
 Vulkan call sequence: negotiation, `vkCreateInstance`, adapter enumeration by
 LUID, device creation under `ExtensionPolicy`, command buffers recording into
 `CommandBatch` (read back off MockKmt's ring with `ShippedBatch`), sliced
-waits against MockKmt's counter, host-visible allocations placed in chunks and
-mapped as MockKmt's lock views, and device loss through a withheld answer. The
-generated wrappers are linked as the DLL links them (`av_icd`), so a reply the
-host shapes wrongly reaches the ICD's own parsing, which has hostile tables and
-fuzz targets (`fuzz_physical_device_view`, `fuzz_extension_policy`,
+waits against MockKmt's counter, each host-visible allocation a host window
+chunk of its own, mapped as MockKmt's lock views, and device loss through a
+withheld answer. The generated wrappers are linked as the DLL links them
+(`av_icd`), so a reply the host shapes wrongly reaches the ICD's own parsing,
+which has hostile tables and fuzz targets (`fuzz_physical_device_view`, `fuzz_extension_policy`,
 `fuzz_memory_type_table`).
 
 The window-system extensions (feature 046) are tested in the same layers.
@@ -747,7 +747,8 @@ started), the `adapters` stage lists `Win32_VideoController` and DXGI's
 its name, `VEN_`/`DEV_`/`SUBSYS_52561AF4`/`REV_` and, for DXGI, VendorId,
 DeviceId, SubSysId `0x52561af4` and Revision. AdapterRAM and
 DedicatedVideoMemory are reported, not judged: DXGI counts the segments the
-driver reports, which is the hostmem region, not the host GPU's memory.
+driver reports, whose local segment is the host GPU's memory as the capset
+gives it (docs/host-memory.md, Budgets).
 
 ### As built
 
@@ -951,12 +952,12 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   `VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP` (0x1A8) - which is expected until
   something renders into the primary, since dxgkrnl takes that dump when a
   source shows nothing. Two of feature 038's five consecutive runs left one.
-- **The host probes** are the other thing only real hardware answers, and they
-  need no guest at all: `tools/host/probe_host_memory.py --qemu build-qemu/qemu`
-  starts one device per host GPU and prints what its feasibility probes found at
-  realize - whether memory the GPU exports reaches a guest through the hostmem
-  BAR, and whether the GPU can address guest pages directly (feature 039). A
-  refused probe is an answer; the per-GPU results live in `docs/kb/04-memory.md`.
+- **Host memory** is the other thing only real hardware answers. The device
+  runs no memory probes at realize any more: each GPU's memory source proves a
+  host-visible type - allocated, exported as a dma-buf and mapped through the
+  export - the first time it considers it, and offers only the types that pass
+  (docs/host-memory.md). Feature 039's per-GPU results, which explain why the
+  export is a dma-buf, live in `docs/kb/04-memory.md`.
 - **The power scenarios** are what a laptop does to a GPU every day
   (feature 040): `cycle` disables and enables the adapter `--power-cycles N`
   times inside one provisioning stage and reads Driver Verifier's pool tracking
@@ -1153,76 +1154,32 @@ and the citation says where to look. It happened once: the fake accepted
 `DMA_FAULTED`, and dxgmms2.sys bugchecks 0x119/0xD on it (see
 `docs/kb/05-scheduling.md`).
 
-## When the host GPU stops importing guest memory
+## Guest memory is never imported
 
-Feature 047's host-visible import hands the host GPU a pointer into guest
-memory and asks it to make a `VkDeviceMemory` over it, through
-`VK_EXT_external_memory_host`. That guest memory is a **memfd mapped
-`MAP_SHARED`** — in the L4 rig (`MockHost`) and in real QEMU alike, because
-that is what a guest's RAM is.
+Earlier builds handed the host GPU guest pages: a host pointer through
+`VK_EXT_external_memory_host`, or a dma-buf over guest RAM made through
+udmabuf. That path is gone. Every byte the guest CPU and a host GPU share is
+host GPU memory the executor allocates and exports (docs/host-memory.md), and
+no test depends on what a host kernel lets a GPU pin.
 
-On kernel 7.2.6 `amdgpu` refuses to pin a userptr whose pages are file-backed.
-`vkGetMemoryHostPointerPropertiesEXT` still answers a memory-type mask, so the
-pointer looks importable; `vkAllocateMemory` then fails with
-`VK_ERROR_INVALID_EXTERNAL_HANDLE` (-1000072003). The guest sees blob import
-status 5, `executor_refused`, and every scenario that imports fails.
+What the old path ran into is why:
 
-`tools/re/probe_host_pointer_import.c` is the ten-second check, and it needs
-none of this repository:
+- **amdgpu refuses file-backed userptrs.** From kernel 7.2.6 it will not pin
+  a userptr whose pages are file-backed, and guest RAM is a memfd.
+  `vkGetMemoryHostPointerPropertiesEXT` still answered a memory-type mask, and
+  `vkAllocateMemory` then failed with `VK_ERROR_INVALID_EXTERNAL_HANDLE`
+  (-1000072003), so a checkout that was green before a reboot failed after it
+  with nothing changed. It was neither the Mesa version nor memlock: anonymous
+  memory imported fine under the same limits.
+- **udmabuf was no way around it.** It caps a dma-buf at 64 MiB and 1024
+  pages by default, and an Intel GPU reads an imported dma-buf of guest RAM
+  without snooping the CPU's caches (docs/mapped-buffers-plan.md, open
+  question 2).
+- **Every API took a different handle.** The device negotiated an import kind
+  per sub-API and per GPU, and one refusal cost a GPU a whole API.
 
-```
-clang -O0 -D_GNU_SOURCE -I third_party/khronos/include \
-      tools/re/probe_host_pointer_import.c -lvulkan -o /tmp/probe && /tmp/probe
-```
-
-It imports anonymous memory at four sizes and memfd-backed shared memory at
-one. If the anonymous imports succeed and the memfd one answers
--1000072003, the host kernel is refusing file-backed userptr and the four
-import tests cannot pass on it — `test_fullstack_av`,
-`test_fullstack_vulkan_icd`, `test_fullstack_external_objects` and
-`test_opengl_backend_device`. Nothing in the driver is wrong; the capability
-the feature is built on is not there.
-
-Two things this rules out, both of which looked likely first:
-
-- **It is not the Mesa version.** The same Mesa passes when the memory is
-  anonymous.
-- **It is not memlock.** The import works at 8 MiB against a `RLIMIT_MEMLOCK`
-  of 8 MiB when the pages are anonymous.
-
-A kernel that has this behaviour is reported by `uname -r`; the one before it
-did not, which is why a checkout that was green before a reboot can fail
-after one with nothing changed in it.
-
-### What the device does about it
-
-It hands the same pages over as a **dma-buf** instead, which such a driver
-takes. `BlobDmaBuf` turns a blob's extents into one descriptor through
-udmabuf (`/dev/udmabuf`, `UDMABUF_CREATE_LIST`), so the host GPU sees one
-contiguous range and no byte is copied — the same thing `GuestPageAlias` does
-for a pointer, one layer down. The guest RAM memfd must be sealed against
-shrinking; udmabuf takes no other kind, and `MockHost::add_guest_ram` seals
-its own for the same reason.
-
-Which of the two a device uses is **one decision per device, not one per
-blob**: a buffer or an image is made for a single external handle type, and
-the memory types the two kinds land in are not the same either - on this host
-a userptr reaches 0x20 and a dma-buf 0x20, on another they differ. So
-`VulkanBackend` measures both when the guest first asks anything about
-importing, `ImportableTypes` holds the kind that won along with that kind's
-mask, and everything downstream reads it: the memory types the guest is shown,
-the handle type named on every buffer and image, and the kind `adopt` will
-take. A guest that names no `VkExternalMemoryBufferCreateInfo` of its own gets
-the right one; a guest that names one is not second-guessed.
-
-The device still offers both kinds through `import_kinds` and tries the
-dma-buf first, because a library that takes no descriptor - OpenCL's, whose
-import is `CL_MEM_USE_HOST_PTR` - and a host with no udmabuf both have to keep
-working. Both attempts are one import and carry one blob id: the refused one
-left the library holding nothing.
-
-A host where this matters can be told apart in one line:
-
-```
-ls /dev/udmabuf && vulkaninfo 2>/dev/null | grep -c VK_EXT_external_memory_dma_buf
-```
+Memory a GPU's own driver allocated and exported as a dma-buf imports back
+into any device of that driver, maps on the CPU and is coherent both ways, on
+every host GPU measured. A guest allocation that fails now is the memory
+source refusing a request - no memory type of that class, or no room - and the
+guest sees it as a full GPU would.

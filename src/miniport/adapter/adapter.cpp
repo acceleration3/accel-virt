@@ -231,7 +231,7 @@ void Adapter::remember_device()
         scanout_.offer(capset);
         overlays_.offer(capset);
         /* A window this driver cannot place chunks in is logged, never a
-         * failed start: every chunk then falls back to guest RAM. */
+         * failed start: every chunk is then refused. */
         if (host_visible_.offered())
             log_status("avgpu: host window",
                        NtStatus(window_.initialize(host_visible_.base(), host_visible_.size())).value());

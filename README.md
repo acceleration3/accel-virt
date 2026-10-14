@@ -103,20 +103,21 @@ before a host driver sees it. An object ID of the wrong kind, an address in no
 allocation, or a length past the frame faults that context and nothing else.
 Host drivers trust their callers; a guest is not a caller to trust.
 
-**Memory.** The host GPU reads guest pages directly
-(`VK_EXT_external_memory_host`, or a dma-buf made through `/dev/udmabuf`). A
-`hostmem=` window adds a BAR of host memory the guest CPU maps write-back.
-Uploads, readbacks and `HOST_VISIBLE` Vulkan memory are placed there, so CPU
-reads of GPU results are cached rather than uncached. The host GPU's VRAM is
-reported to Windows as dedicated video memory. Nothing is ever placed in that
-segment; it is a budget, and what lives there stays on the host
-([`docs/host-window.md`](docs/host-window.md)).
+**Memory.** Every byte the guest CPU and a host GPU share is host GPU memory.
+The executor allocates it on demand, one allocation per request, on each GPU's
+compositing Vulkan device, and exports it as a dma-buf. QEMU maps it into the
+`hostmem=` window, a BAR the guest maps with the host's own caching, and the
+context's host API imports it. Upload heaps, readback heaps, API arenas and
+`HOST_VISIBLE` Vulkan allocations all live there. Guest RAM is never handed to
+a host GPU. The host GPU's VRAM is reported to Windows as dedicated video
+memory. Nothing is ever placed in that segment; it is a budget, and what lives
+there stays on the host ([`docs/host-memory.md`](docs/host-memory.md)).
 
 **Display.** The host decides the resolutions ([Resolutions](#resolutions)).
-The desktop's primary surface is a blob the host scans out directly as a
-dma-buf when the display backend has a GL context (`gtk,gl=on` or
-`egl-headless`). Otherwise it is transferred. Vsync is a synthetic 60 Hz, and
-the cursor is a 64x64 hardware cursor.
+The desktop's primary surface is a blob the host shows directly, as a display
+surface over the device's own mapping of its pages, when the display backend
+has a GL context (`gtk,gl=on` or `egl-headless`). Otherwise it is transferred.
+Vsync is a synthetic 60 Hz, and the cursor is a 64x64 hardware cursor.
 
 **Isolation.** With `renderer=`, the whole host GPU stack runs in
 `av-renderer`. A crash there loses the device's contexts, which the guest sees
@@ -195,17 +196,22 @@ Tested beyond the probes and sample suites:
   table has no entry for these types, so QEMU itself is rebuilt from the pinned
   source.
 - **Guest RAM must be a shared memfd**
-  (`-object memory-backend-memfd,...,share=on`). The host imports guest pages
-  as dma-bufs, and the renderer process maps them.
+  (`-object memory-backend-memfd,...,share=on`). The renderer process maps it
+  to reach the rings, fence pages and other guest blobs, and vhost-user
+  devices such as virtiofsd need it too. No host GPU imports it.
 - **Give the host window room.** `hostmem=8192M` is what runs real
-  applications. At 256 MiB, context arenas run out.
+  applications. The window holds every host-visible byte: with too little,
+  arenas shrink, and Vulkan and Direct3D 12 allocations fail as they would on
+  a full GPU.
 
 ## Requirements
 
 **Host:**
-- Linux, x86-64, with KVM. `/dev/udmabuf` should be available (the `udmabuf`
-  module): dma-buf imports of guest memory and zero-copy scanout depend on it,
-  and the device's capset reports only what the host proved it can do.
+- Linux, x86-64, with KVM. Nothing uses `/dev/udmabuf`.
+- On each host GPU, a Vulkan driver that exports memory as dma-bufs
+  (`VK_EXT_external_memory_dma_buf`). Every API's guest-mapped memory comes
+  from it; without it a GPU's arenas cross inline in the ring and its Vulkan
+  allocations have no host-visible memory.
 - Per API you want served:
   - a Vulkan loader and driver (Mesa RADV or ANV, NVIDIA, ...);
   - EGL with desktop OpenGL;
@@ -491,7 +497,7 @@ Stock virtio-gpu properties that matter here:
 
 | Property | Use | Why |
 |---|---|---|
-| `hostmem` | `8192M` | The host window's size. `0` (virtio-gpu's default) means no window: every host-visible chunk is then guest RAM the driver allocates and the host imports (`docs/host-window.md`). |
+| `hostmem` | `8192M` | The host window's size: where every byte the guest CPU and the host GPU share is mapped. `0` (virtio-gpu's default) means no window and no host-visible memory at all: Vulkan allocations of a host-visible type fail with `VK_ERROR_OUT_OF_DEVICE_MEMORY`, Direct3D 12 CPU-visible heaps fail, and arenas' bulk data crosses inline in the ring (`docs/host-memory.md`). |
 | `max_outputs` | `1` | Display heads. The driver drives one. |
 | `vectors` | `11` | MSI-X vectors: 3 for the device's own sources (control, cursor, configuration) and 8 the contexts' fence queues share. This matches the INF's `MessageNumberLimit`. |
 | `xres`, `yres` | `1280`, `800` | The scanout size. The driver's standard list is clipped to it when the host offers no modes at all. |
@@ -771,7 +777,7 @@ tools/                        gates, fetches, generators, reports, profilers
   guest/                        run_guest_suite.py, provision.ps1, guest_shell.py, read_bugcheck.py
     probes/                       wgc_probe.exe and etw_schema.exe, the guest's side of frame_pacing.py
   etw/                          ETL reading, the guest's event schemas, scheduling, DWM frames, symbols
-  host/                         list_gpus.py, device captures, host-memory probes
+  host/                         list_gpus.py, device captures
   mcp/                          av_inspect.py
   re/                           symbol and binary fetching for reverse engineering
   dxvk-patches/  vkd3d-proton-patches/   what the host's Direct3D is patched with
@@ -787,7 +793,7 @@ third_party/                  fetched and pinned: windows-kit, khronos, qemu, dx
 | [`docs/protocol.md`](docs/protocol.md) | The av wire protocol, normative: the capset, context setup, rings, batches, fence pages, the executor ABI, recordings |
 | [`docs/ddi-sequences.md`](docs/ddi-sequences.md) | What each DDI does and answers, and the sequences dxgkrnl drives them in |
 | [`docs/d3d-desktop.md`](docs/d3d-desktop.md) | The desktop on Direct3D: the design, from guest evidence, dxgkrnl's code and prior art |
-| [`docs/host-window.md`](docs/host-window.md) | Host-visible memory: the hostmem window, and dedicated video memory |
+| [`docs/host-memory.md`](docs/host-memory.md) | Host memory: the one source of every byte the guest CPU and a host GPU share, the hostmem window, and dedicated video memory |
 | [`docs/renderer.md`](docs/renderer.md) | The renderer process: where the line is, what crosses it, recovery |
 | [`docs/trace.md`](docs/trace.md) | Thread and state tracking, crash reports, the trace table format |
 | [`docs/frame-pacing.md`](docs/frame-pacing.md) | Why a guest frame came late: the frame-pacing recording and report, and the WGC capture rule |

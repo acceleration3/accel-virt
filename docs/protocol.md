@@ -84,12 +84,12 @@ Each feature bit is something the host **proved**, not something it hopes for
 | Bit | Name | What the device had to show |
 |---|---|---|
 | 0 | `host_visible_memory` | the device has a host-visible region at all: `hostmem=` is non-zero, so there is a BAR to place blobs in |
-| 1 | `gpu_exported_memory` | memory allocated on the bound host GPU can be placed in that region and read back correctly through it (feature 039's `HostMemoryProbe`; on NVIDIA this works through dma-buf and not through an opaque fd) |
-| 2 | `guest_memory_import` | the host GPU can address guest pages directly, `VK_EXT_external_memory_host` (feature 039's `GuestImportProbe`, which refuses anything that is not a direct mapping) |
-| 3 | `dmabuf_scanout` | a display head's console can show a dma-buf, so a blob may be scanned out instead of transferred (feature 058) |
+| 1, 2 | unused | feature 039's probes of exporting host GPU memory and of importing guest pages. Every host-visible byte is host GPU memory now (docs/host-memory.md), so neither is a choice; a device never sets them |
+| 3 | `dmabuf_scanout` | a display head's console can show a dma-buf, so a blob or an exported image may be scanned out instead of transferred (feature 058) |
 | 4 | `present_engine` | the device moves queued presents on its own thread (see "Present engine") |
 | 5 | `present_from_image` | a queued present's source may be a host image, which this device can read (see "Present engine"); set only with bit 4 |
 | 6 | `raises` | the fence page counts out-of-band raises in `raised`, so the driver can wake a process that waits on them (see "Fence page" and "Wake event record") |
+| 7 | `scanout_planes` | the device composes a head's overlay planes (see "Scanout planes") |
 
 Bit 3 is the one bit the device cannot decide when it describes the capset, and
 the reason is QEMU's own order: `qemu_init_displays()` runs after
@@ -98,11 +98,12 @@ backend - not the device - that gives a console its GL context. So it is
 decided when the guest first reads the capset, once, and the answer the guest
 was given is the one that stands for the life of the device.
 
-A guest driver reports a CPU-visible memory segment over the region only when
-bit 0 is set **and** it found shared memory region 1 in the device's PCI
-capabilities: two answers from the device, because a segment reported without
+A guest driver uses the region as its host window (docs/host-memory.md) only
+when bit 0 is set **and** it found shared memory region 1 in the device's PCI
+capabilities: two answers from the device, because a window used without
 storage behind it is how a guest ends up writing into memory that is not there
-(feature 041).
+(feature 041). VidMm is never told of the region. A driver with no window has
+no host-visible memory at all: nothing falls back to guest RAM.
 
 Features are the only field where unknown values are tolerated: a newer device
 may advertise a capability an older guest does not use.
@@ -171,10 +172,10 @@ its worker.
 | `CTX_CREATE` with every context slot taken, or no thread for it; a setup the host cannot stage | `ERR_OUT_OF_MEMORY` |
 | `CTX_DESTROY` of a live context / any other | `OK_NODATA` / `ERR_INVALID_CONTEXT_ID` |
 | `SUBMIT_3D` to a context that does not exist | `ERR_INVALID_CONTEXT_ID` |
-| a setup naming a ring, fence or reply resource that is not a blob | `ERR_INVALID_RESOURCE_ID` |
+| a setup naming a ring, fence or reply resource that is not a `GUEST` blob | `ERR_INVALID_RESOURCE_ID` |
 | `size` not 32, the buffer short or malformed, a setup the capset does not allow, a blob too small for its role, a ring header that is not fresh, a doorbell another context holds, or a context already set up | `ERR_INVALID_PARAMETER` |
 | `RESOURCE_UNREF` of a blob a context is bound to | `ERR_INVALID_PARAMETER`, the blob kept |
-| `RESOURCE_UNREF` of a blob an IMPORT_BLOB still holds | `ERR_INVALID_PARAMETER`, the blob kept |
+| `RESOURCE_UNREF` of a host blob an IMPORT_BLOB still holds | `OK_NODATA`: the blob goes, and the executor library keeps its memory until the import does |
 
 A device reset destroys every context, then releases every blob.
 
@@ -269,7 +270,7 @@ whichever library is loaded, so they behave the same under every executor.
 | Id | Command | Body | Answer |
 |--:|---|---|---|
 | `0x00000001` | NOP | none | empty: with *generate reply*, a reply of size 0 for the batch's fence |
-| `0x00000002` | IMPORT_BLOB | 32 bytes: u32 resource_id, u32 reserved, u64 offset, u64 size, u32 memory_type, u32 reserved | 16 bytes: u32 status, u32 reserved, u64 device_memory |
+| `0x00000002` | IMPORT_BLOB | 8 bytes: u32 resource_id, u32 reserved | 16 bytes: u32 status, u32 reserved, u64 device_memory |
 | `0x00000003` | RELEASE_BLOB | 8 bytes: u64 device_memory | empty |
 | `0x00000004` | SHARE_OBJECT | 32 bytes: u64 object_id, u32 kind, u32 reserved, u64 wire_handle, u64 size | 16 bytes: u32 status, u32 reserved, u64 zero |
 | `0x00000005` | OPEN_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 wire_handle |
@@ -279,29 +280,32 @@ A NOP does nothing but complete, which makes it the round trip a guest times to
 measure the transport alone rather than a backend (feature 044). It moves the
 context's progress like any command run.
 
-IMPORT_BLOB hands `size` bytes at `offset` of one of the context's guest blobs
-to its executor as memory of type `memory_type`, and answers the wire handle -
-for Vulkan the `VkDeviceMemory` - the guest names that memory by from then on
-(feature 045). A context's resources are laid out from its ring: the ring, the
-fence page and the reply slot, then 64 chunk slots, so the resource must be one
-of the ids `ring_resource + 3` to `ring_resource + 66`: a `GUEST` blob, or a
-`HOST3D` blob the driver placed in the host window (docs/host-window.md).
-The device maps a guest blob's scattered pages again, in order, as one host
-range (the pages themselves, not a copy); one range serves every import of the
-blob and goes with the last of them. A host blob is one range already, its
-memfd's own mapping. The executor is handed `size` bytes at `offset` of that
-range as a dma-buf where the host makes one and the library takes it, and as a
-host pointer otherwise. While any import holds a blob, `RESOURCE_UNREF` of it
-answers `ERR_INVALID_PARAMETER`, so its id is never re-created over other
-memory under a live import.
+IMPORT_BLOB hands one host blob, whole, to the context's executor and answers
+the wire handle the guest names that memory by from then on: for Vulkan the
+`VkDeviceMemory`, for a Direct3D 12 heap or the Direct3D 11 slice store the
+handle `CreateHeap12` and `BindBufferSlice` name it by (docs/host-memory.md).
+The resource must be a `HOST3D` blob made for this context - its
+`RESOURCE_CREATE_BLOB` named the context in `ctx_id` (see Blob resources) - so
+a context imports only memory its own process opened. A guest blob, another
+context's host blob or any other id is refused. The device hands the library
+the blob's resource id, which is the key the library allocated its memory
+under, and the context's API takes that allocation: Vulkan imports its dma-buf
+as the guest's `VkDeviceMemory`, vkd3d-proton opens a Direct3D 12 heap from
+it, DXVK's device imports the slice store as a `VkBuffer`, and an arena is read
+and written through the memory source's own mapping. An import holds a
+reference to the memory, so `RESOURCE_UNREF` of a host blob is never refused:
+the window range and the blob go, and the memory stays until RELEASE_BLOB,
+`CTX_DESTROY` or a reset ends the import.
 
-An OpenGL context imports once (feature 050): its guest ICD binds one
-host-visible chunk as its blob arena and imports all of it at offset 0 with
-memory type 0, and the OpenGL backend adopts that host range as the context's
-region - bulk data a GL command names by offset into the arena (a
-`glReadPixels` destination, a texture upload, a buffer map's copy) is read and
-written there in place. A second import into the same context is refused; the
-wire handle it answers is the region's address, which no GL command names.
+An OpenGL context imports once (feature 050): its guest ICD opens one
+`readback` chunk as its blob arena and imports it, and the OpenGL backend
+adopts that memory as the context's region - bulk data a GL command names by
+offset into the arena (a `glReadPixels` destination, a texture upload, a
+buffer map's copy) is read and written there in place. A second import into
+the same context is refused; the wire handle it answers is the region's
+address, which no GL command names. A Direct3D session's first import is its
+arena, adopted the same way; every later one is a CPU-visible Direct3D 12 heap
+or the slice store, kept apart from the region (`ImportedMemories`).
 
 A body of any length but its command's is command framing, fault 5, as for a
 NOP with a body. Every other refusal is an answer, and the context runs on:
@@ -309,12 +313,10 @@ NOP with a body. Every other refusal is an answer, and the context runs on:
 | status | IMPORT_BLOB refused because |
 |--:|---|
 | 0 | not refused: `device_memory` names the import, never 0 |
-| 1 | a reserved field is not 0, `offset` or `size` is not a whole number of 4096-byte pages, `size` is 0, or `offset + size` passes 2^64 |
-| 2 | the resource is no blob in one of the context's chunk slots |
-| 3 | `offset + size` is past the blob |
-| 4 | the host cannot map the blob's pages as one range (RAM with no file behind it, pages that are not whole, more than 16384 runs, a host blob with no mapping) |
-| 5 | the context has no executor, or the library refused the import |
-| 6 | the context holds 256 imports, or the host has no memory for the table of them |
+| 1 | `resource_id` is 0, or the reserved field is not 0 |
+| 2 | the resource is no host blob made for this context |
+| 3 | the context has no executor, or its API will not take the memory |
+| 4 | the context holds 4096 imports, or the host has no memory for the table of them |
 
 A refused import answers `device_memory` 0. RELEASE_BLOB of a handle the context
 never imported, or already released, answers empty and does nothing.
@@ -503,7 +505,7 @@ asking for no answer leaves the slot as it was.
 
 ### The executor ABI (device <-> host library)
 
-`src/device/abi/av_executor.h`, version 16, is what runs a context's commands
+`src/device/abi/av_executor.h`, version 20, is what runs a context's commands
 on the host's API, and the library behind it is where every object the
 contexts share is kept. The QEMU device loads the library its `executor`
 property names and calls `av_executor_ops` for the table; a library that does
@@ -536,8 +538,8 @@ generated server dispatch in `src/proto/generated/*/` over host API backends
   OpenCL cannot unregister a callback, a signal may arrive after the executor
   it names is destroyed: the `context` the device hands over lives as long as
   the device does, and a signal for a context that is gone is tolerated.
-- **Memory.** `import_kinds`, `import_blob`, `release_blob` and
-  `imported_handle` are the memory channel (features 042 and 045), below.
+- **Memory.** `allocate_memory`, `free_memory`, `import_blob`, `release_blob`
+  and `imported_handle` are the memory channel (docs/host-memory.md), below.
 - **Shared objects** (feature 053). `share_object(executor, id, kind, size,
   wire_handle)`, `open_object(executor, id, kind, size, &wire_handle)` and
   `close_object(executor, id)` are the three transport commands above, run on
@@ -556,29 +558,33 @@ generated server dispatch in `src/proto/generated/*/` over host API backends
 Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
-A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
-API can take without a copy - with no offset, because the device hands over a
-handle naming exactly the range and OpenCL's own import has no offset property.
-`import_kinds` is asked per sub-API and per GPU, on the main loop, while the
-capset is being described; `import_blob` and `release_blob` run on the context's
-worker like `execute`. The capset's `feature_guest_memory_import` bit means both
-halves are true: this device can build a handle, and the library will take one.
+The library is the source of every byte the guest CPU and a host GPU share
+(docs/host-memory.md). `allocate_memory(domain, key, size, request)` answers
+`size` bytes of the memory a `HostMemoryRequest` names - `upload`, `readback`
+or one Vulkan memory type - on the domain's GPU, as an `AvHostMemory`: a
+dma-buf the device owns and maps into the hostmem region, its size, and how
+the host maps it (`AV_MEMORY_WRITE_BACK` or `AV_MEMORY_WRITE_COMBINED`), which
+is how the guest must map it too. The device allocates under the host blob's
+resource id and `free_memory(domain, key)` lets go of it when the guest
+releases the blob; both run on the main loop. `import_blob(executor, blob_id,
+memory_key)` makes the memory under a key usable by one executor's commands
+and holds it until `release_blob` or `destroy`, so memory the guest released
+while an import still has it lives until the import goes. Both run on the
+context's worker like `execute`. No guest page is ever handed to the library,
+and no import kind is negotiated: every import is the library's own
+allocation.
 
-Which handle kinds work is a property of the host, not of the protocol: a host
-pointer imports into Vulkan on every GPU measured, while OpenGL and OpenCL take
-a dma-buf and only on some drivers. Where neither works the guest is copied at
-the boundary and the capset bit is clear.
-
-**What the guest is told is host visible** is what IMPORT_BLOB can serve. The
-executor answers `vkGetPhysicalDeviceMemoryProperties` (all three spellings)
-with `HOST_VISIBLE`, and `HOST_COHERENT` and `HOST_CACHED` with it, cleared from
-every type the driver will not import a host pointer into - NVIDIA's BAR type,
-here - since the guest maps host-visible memory as its own RAM and has no other
-way to reach it. The mask is learnt once per physical device, from a device the
-executor makes for the question over an anonymous page; `import_blob` still
-checks the type against the real pointer. Buffers and images made on the device
-imports go to carry `HOST_ALLOCATION` external-memory create info where the
-driver reports the create importable, unless the guest's chain names its own.
+**What the guest is told is host visible** is what the memory source can
+serve. The executor answers `vkGetPhysicalDeviceMemoryProperties` (all three
+spellings) with `HOST_VISIBLE`, and `HOST_COHERENT` and `HOST_CACHED` with it,
+cleared from every type the GPU's memory source could not allocate, export as
+a dma-buf and map through the export when it first tried that type - a driver
+can claim a type exports and then refuse it - since the guest maps
+host-visible memory through the window and has no other way to reach it. The
+mask is learnt once per physical device (`ImportableTypes`). Buffers and
+images made on the guest's device carry dma-buf external-memory create info
+where the driver reports the create importable, unless the guest's chain names
+its own, so any of them can bind memory the source made.
 
 ### The export socket (device <-> a host process)
 
@@ -832,10 +838,39 @@ waits on from the fence-page interrupt (see Fence page). A reply-generating
 command's answer is in the reply slot before the fence completes, so a process
 that waited reads a finished answer.
 
-Chunks of host-visible memory are taken on the context by the host window's
-escape (docs/host-window.md): a chunk of the window, or of guest RAM the
-miniport owns where the window cannot hold it, in one of the context's 64
-chunk slots, which IMPORT_BLOB then names.
+### Host window record (user mode -> guest driver, escape)
+
+Host-visible memory is taken on the context by this escape
+(docs/host-memory.md): a chunk of the host window, which is host GPU memory of
+the kind the record names, and which IMPORT_BLOB then names by its resource.
+32 bytes, sent with the av context's handle:
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `AVW` = `0x00575641` |
+| 4 | u16 | version | 2 |
+| 6 | u16 | operation | 1 open, 2 close |
+| 8 | u32 | resource_id | open: 0, answered with the chunk's resource; close: the resource |
+| 12 | u32 | memory | open: a `HostMemoryRequest` - bits 0-7 the kind (1 `upload`, 2 `readback`, 3 `vulkan`), bits 8-31 the Vulkan memory type, below 32, for `vulkan` and 0 otherwise; close: 0 |
+| 16 | u64 | bytes | open: non-zero, answered with the whole pages granted; close: 0 |
+| 24 | u64 | address | 0; an open is answered with the process's view |
+
+An open takes a free host blob id from `0x01000000` to `0x01003FFF`, lowest
+first, and the first run of window pages that holds the bytes. The miniport
+then sends `RESOURCE_CREATE_BLOB` (`HOST3D`, the context's `ctx_id`, the
+request as `blob_id`) and `RESOURCE_MAP_BLOB` at that run, and maps the pages
+into the process with the caching the device answered. A close unmaps the view,
+sends `RESOURCE_UNMAP_BLOB` and `RESOURCE_UNREF`, and only once the device has
+answered frees the pages and the id; pages and an id the device may still hold
+are kept out of use for good. A context holds at most 4096 chunks, a quarter of
+the ids, and a context that goes closes every chunk it still holds.
+
+Nothing falls back to guest RAM. An adapter with no window, or a device that
+refuses the blob or its mapping, answers `STATUS_NOT_SUPPORTED`; every other
+refusal is `STATUS_INVALID_PARAMETER`: a malformed record, a context that is
+not live, a resource that is none of the context's chunks, every chunk or id
+taken, no run of pages that long, or a view the process cannot be given - a
+32-bit process's view must end below 4 GiB.
 
 ## Present command (guest driver -> device, in a DMA buffer)
 
@@ -975,38 +1010,53 @@ property refused at realize. Two kinds of blob exist; every other combination is
 
 | `blob_mem` | Flags | Entries | `blob_id` | Backing |
 |---|---|---|---|---|
-| `GUEST` (1) | any | at least one, covering `size` | 0 | the guest pages, mapped by the device once at creation and held until unreferenced |
-| `HOST3D` (2) | `MAPPABLE` | none | 0 | a zeroed, device-allocated page multiple; the guest reaches it through the host-visible shared memory region (id 1, BAR 4) once mapped |
+| `GUEST` (1) | any | at least one, covering `size` | 0 | the guest pages, mapped by the device once at creation and held until unreferenced: a context's ring, fence page and reply slot, a scanout's framebuffer, a present's pages. No guest blob is ever handed to a host GPU |
+| `HOST3D` (2) | `MAPPABLE` | none | a `HostMemoryRequest` (see Host window record), in the low 32 bits | host GPU memory the executor library allocates for the context the header's `ctx_id` names (docs/host-memory.md); the guest reaches it through the host-visible shared memory region (id 1, BAR 4) once mapped |
+
+A host blob's id is one of the 16384 from `0x01000000` (`HostBlobId`), a range
+above every id the driver gives a guest blob, a scanout or the cursor; its
+size is whole 4096-byte pages, and its context must exist. The device asks the
+executor library for the memory (`allocate_memory`, keyed by the resource id)
+as the blob is created; in renderer mode the renderer's library allocates it
+and the dma-buf comes back over the renderer socket (docs/renderer.md).
 
 `RESOURCE_MAP_BLOB` places a `HOST3D` blob at a page-aligned offset of the
-region, wholly inside it and overlapping no other mapping, and answers
-`VIRTIO_GPU_RESP_OK_MAP_INFO` with `map_info` `VIRTIO_GPU_MAP_CACHE_CACHED`. The
-contents survive `RESOURCE_UNMAP_BLOB` and a later map elsewhere; unmapped
-offsets read as zero. `RESOURCE_UNREF` of a blob releases it, mapped or not.
+region, wholly inside it and overlapping no other mapping, by mapping the
+memory's dma-buf there, and answers `VIRTIO_GPU_RESP_OK_MAP_INFO` with the
+host's own caching: `VIRTIO_GPU_MAP_CACHE_CACHED` for memory the host maps
+write-back, `VIRTIO_GPU_MAP_CACHE_WC` for memory it maps write-combined. The
+guest must map the pages the same way. The contents survive
+`RESOURCE_UNMAP_BLOB` and a later map elsewhere; unmapped offsets read as
+zero. `RESOURCE_UNREF` of a host blob releases it, mapped or not, and is never
+refused: the library frees the memory once no import holds it.
 
 | Request | Answer |
 |---|---|
 | `RESOURCE_CREATE_BLOB` shorter than its 56 bytes, or its entries | `ERR_INVALID_PARAMETER` |
-| id 0, or an id a 2D resource or blob holds | `ERR_INVALID_RESOURCE_ID` |
-| guest entries shorter than `size` | `ERR_INVALID_PARAMETER` |
+| id 0, or an id a 2D resource or blob holds; a `HOST3D` id outside the host blob range | `ERR_INVALID_RESOURCE_ID` |
+| guest entries shorter than `size`; a guest blob with a `blob_id` | `ERR_INVALID_PARAMETER` |
 | guest entries that are not guest RAM (the device would see a copy) | `ERR_UNSPEC` |
-| host memory or blob slots exhausted | `ERR_OUT_OF_MEMORY` |
-| `RESOURCE_MAP_BLOB` of an unknown id | `ERR_INVALID_RESOURCE_ID` |
-| a guest blob, a blob already mapped, a misaligned offset, one past the region, or an overlap | `ERR_INVALID_PARAMETER` |
-| `RESOURCE_UNMAP_BLOB` of an unknown id / an unmapped blob | `ERR_INVALID_RESOURCE_ID` / `ERR_INVALID_PARAMETER` |
+| a `HOST3D` blob without `MAPPABLE`, with entries, with a `blob_id` that is no request, or with a size of no whole pages | `ERR_INVALID_PARAMETER` |
+| a `HOST3D` blob for a context that does not exist | `ERR_INVALID_CONTEXT_ID` |
+| guest blob slots exhausted, or memory the library would not allocate | `ERR_OUT_OF_MEMORY` |
+| `RESOURCE_MAP_BLOB` of an id that is no host blob (a guest blob included) | `ERR_INVALID_RESOURCE_ID` |
+| a blob already mapped, a misaligned offset, one past the region, or an overlap | `ERR_INVALID_PARAMETER` |
+| a dma-buf the host could not map there | `ERR_UNSPEC` |
+| `RESOURCE_UNMAP_BLOB` of an id that is no host blob / an unmapped blob | `ERR_INVALID_RESOURCE_ID` / `ERR_INVALID_PARAMETER` |
 | `RESOURCE_CREATE_2D` over a blob id | `ERR_INVALID_RESOURCE_ID` |
-| `RESOURCE_UNREF` of a blob a display head is showing | `ERR_INVALID_PARAMETER` |
+| `RESOURCE_UNREF` of a guest blob a display head is showing | `ERR_INVALID_PARAMETER` |
 
 A device reset releases every display head, then every blob and mapping.
 
 ## Blob scanout (guest -> device)
 
-A display head shows a blob directly: the blob's guest pages become one
-dma-buf and the host's display samples them, so no frame is transferred. The
-guest may send `SET_SCANOUT_BLOB` only when the capset carries
-`feature_dmabuf_scanout`; without it the head keeps `SET_SCANOUT`,
-`TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` over a 2D resource, which is what
-every host started without a GL-capable display gives.
+A display head shows a guest blob directly: the host's display shows a
+display surface over the device's own mapping of the blob's pages, so no frame
+is transferred and no dma-buf is made. The guest may send `SET_SCANOUT_BLOB`
+only when the capset carries `feature_dmabuf_scanout`; without it the head
+keeps `SET_SCANOUT`, `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` over a 2D
+resource, which is what every host started without a GL-capable display
+gives.
 
 **`SET_SCANOUT_BLOB`** (96 bytes; virtio 1.2 5.7.6.10) binds head `scanout_id`
 to blob `resource_id`, showing the rectangle `r` of a `width` x `height`
@@ -1014,8 +1064,8 @@ framebuffer of `format` at `offsets[0]` with `strides[0]`. Only plane 0 is
 carried: a non-zero stride or offset on planes 1 to 3 is refused rather than
 dropped, because the display shows one plane. `resource_id` 0 hides the head,
 twice in a row without error. A head already showing something is not hidden
-first - the new descriptor is taken before the old one is let go, so nothing
-blank reaches the screen between two pictures.
+first - the new blob is pinned and shown before the old one is let go, so
+nothing blank reaches the screen between two pictures.
 
 | Refusal | Answer |
 |---|---|
@@ -1024,12 +1074,12 @@ blank reaches the screen between two pictures.
 | a format outside the eight 32-bit colour formats, a zero `width` or `height`, a stride below `width` x 4 or above `INT32_MAX` | `ERR_INVALID_PARAMETER` |
 | a framebuffer whose last row runs past the blob | `ERR_INVALID_PARAMETER` |
 | `r` outside the framebuffer, or with a zero side | `ERR_INVALID_PARAMETER` |
-| `resource_id` naming no blob | `ERR_INVALID_RESOURCE_ID` |
-| a display that will not show a dma-buf, a head the host does not have, or a blob whose memory cannot become one | `ERR_UNSPEC` |
+| `resource_id` naming no guest blob | `ERR_INVALID_RESOURCE_ID` |
+| a head the host does not have, or a blob whose pages the device cannot map as one range | `ERR_UNSPEC` |
 
 The rule behind the table: `ERR_INVALID_PARAMETER` is the guest being wrong and
 `ERR_UNSPEC` is the host declining. A refusal changes nothing - the head goes on
-showing what it showed, and no descriptor is opened.
+showing what it showed, and the new blob is not pinned.
 
 **`RESOURCE_FLUSH`** naming a blob updates every head showing it, clipped to
 the part of the head's picture the rectangle covers; a rectangle inside the
@@ -1488,8 +1538,8 @@ A record occupies `32 + length` bytes and is not padded.
 | 3 | reply | the answer bytes, 0 or more | the answer is written to the reply slot |
 | 4 | fence completed | empty | the fence page records the batch complete |
 | 5 | fault | 8 bytes: u32 fault code, u32 reserved | a batch fails |
-| 6 | blob | 32 bytes: u32 action (0 created, 1 imported, 2 released), u32 memory_type, u64 blob_id, u64 offset, u64 size | a blob is created, imported into a context, or released |
-| 7 | blob bytes | 16 bytes: u64 blob_id, u64 offset; then the snapshot | an import is recorded and this kind was asked for |
+| 6 | blob | 32 bytes: u32 action (0 created, 1 imported, 2 released), u32 reserved 0, u64 id, u64 offset 0, u64 size | a blob is created (the resource and its bytes), imported into a context (the import's id, with the resource it imported in `size`), or released (the resource, or in a context's record the import's id; `size` 0) |
+| 7 | blob bytes | 16 bytes: u64 blob_id, u64 offset; then the snapshot | never written now: an import is host GPU memory the device keeps no copy of (docs/host-memory.md), so a replay reports a context's first import as unreplayable and gives that context up |
 
 A batch's payload is the same sequence of framed commands *Execution* above
 describes, so a reader walks it with the same header. A recording holds what the

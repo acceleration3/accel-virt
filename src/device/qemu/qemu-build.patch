@@ -100,3 +100,18 @@ diff --git a/ui/gtk-gl-area.c b/ui/gtk-gl-area.c
  #ifdef CONFIG_GBM
          if (dmabuf) {
              egl_dmabuf_create_sync(dmabuf);
+diff --git a/accel/kvm/kvm-all.c b/accel/kvm/kvm-all.c
+--- a/accel/kvm/kvm-all.c
++++ b/accel/kvm/kvm-all.c
+@@ -4266,7 +4266,10 @@
+     s->xen_evtchn_max_pirq = 256;
+     s->device = NULL;
+     s->msr_energy.enable = false;
+-    s->honor_guest_pat = ON_OFF_AUTO_OFF;
++    /* virtio-gpu-av maps host GPU memory into the guest write-combined where
++     * the host maps it so, and a GPU that does not snoop reads stale data
++     * through any other memory type: the guest's PAT must reach the EPT. */
++    s->honor_guest_pat = ON_OFF_AUTO_AUTO;
+ }
+ 
+ static void kvm_accel_class_init(ObjectClass *oc, const void *data)
