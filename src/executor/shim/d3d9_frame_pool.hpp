@@ -1,13 +1,13 @@
 /* The frames Direct3D 9 stages for the present engine (docs/shared-surfaces.md,
  * "Readers"): a blt-model present's render target copied on the GPU into a
  * single-sample render target the frame keeps (StretchRect, which resolves a
- * multisampled one too), which the GPU then writes into the window's own pages
- * through the device's Vulkan (write_frame, docs/compositor.md). Where it
- * cannot, the engine maps it: copied into a system-memory surface first
- * (GetRenderTargetData), with an event query after the copy, which the engine
- * maps once the query says the GPU is done. The surfaces are kept and reused -
- * a free one of the frame's device and shape first - and a frame is the
- * pool's again once SharedSurfaces gives it back.
+ * multisampled one too). The engine maps it to make its one CPU copy into the
+ * window's pages (docs/compositor.md): the first read copies it into a
+ * system-memory surface (GetRenderTargetData), with an event query after the
+ * copy, and the engine maps that surface once the query says the GPU is done.
+ * The surfaces are kept and reused - a free one of the frame's device and
+ * shape first - and a frame is the pool's again once SharedSurfaces gives it
+ * back.
  *
  * DXVK's LockRect waits for the GPU whatever its flags say, so the query is
  * what keeps the engine's read from blocking. A Direct3D 9 device is a guest
@@ -20,8 +20,6 @@
 #include "executor/d3d/frame_claim.hpp"
 #include "executor/d3d/frame_pool.hpp"
 #include "executor/d3d/staged_frame.hpp"
-#include "executor/shim/d3d9_vulkan_lane.hpp"
-#include "executor/shim/vulkan_timeline.hpp"
 
 #include <stdint.h>
 
@@ -73,8 +71,6 @@ private:
     private:
         /* The copy into system memory queued, behind the one into held_. */
         bool    copy_to_memory();
-        /* The lane and its timeline, made the first time a frame is written. */
-        bool    lane_ready();
 
         IDirect3DDevice9  *device_;
         IDirect3DSurface9 *surface_;
@@ -83,9 +79,6 @@ private:
         IDirect3DQuery9   *copied_;
         bool               multisampled_;
         bool               staged_;
-        D3d9VulkanLane     lane_;
-        VulkanTimeline     written_;
-        uint64_t           writes_;
         uint32_t           width_;
         uint32_t           height_;
         uint32_t           format_;

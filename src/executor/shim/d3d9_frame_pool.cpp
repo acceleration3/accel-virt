@@ -2,10 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "executor/shim/vulkan_buffer.hpp"
-#include "proto/virtio_gpu/present_copy_request.hpp"
-
-#include <unistd.h>
 
 namespace av {
 
@@ -43,7 +39,7 @@ void D3d9FramePool::clear()
 
 D3d9FramePool::Frame::Frame()
     : device_(nullptr), surface_(nullptr), held_(nullptr), copied_(nullptr), multisampled_(false), staged_(false),
-      lane_(), written_(), writes_(0u), width_(0u), height_(0u), format_(0u), mapped_(false), pixels_(nullptr),
+      width_(0u), height_(0u), format_(0u), mapped_(false), pixels_(nullptr),
       pitch_(0u), claim_()
 {
     AV_SCOPE("D3d9FramePool::Frame::Frame");
@@ -126,10 +122,6 @@ void D3d9FramePool::Frame::drop()
     if (surface_ != nullptr && mapped_) surface_->UnlockRect();
     if (surface_ != nullptr) surface_->Release();
     if (held_ != nullptr) held_->Release();
-    /* Its timeline was made on its device: it goes first. */
-    written_.release();
-    lane_.release();
-    writes_ = 0u;
     if (copied_ != nullptr) copied_->Release();
     if (device_ != nullptr) device_->Release();
     surface_ = nullptr;
@@ -140,13 +132,6 @@ void D3d9FramePool::Frame::drop()
     device_ = nullptr;
     mapped_ = false;
     width_ = height_ = format_ = 0u;
-}
-
-bool D3d9FramePool::Frame::lane_ready()
-{
-    AV_SCOPE("D3d9FramePool::Frame::lane_ready");
-    if (!lane_.connected() && !lane_.connect(device_)) return false;
-    return written_.made() || written_.make_exportable(lane_.table());
 }
 
 /* The first read copies the frame into memory and flushes it to the GPU; a

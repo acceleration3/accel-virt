@@ -3,7 +3,7 @@
  * crosses the process line as (region << region_shift) | offset, because a
  * guest physical address means nothing without QEMU's memory map; a host
  * pointer goes back to its descriptor and file offset when its pages must be
- * aliased or handed to udmabuf. A region's mapping starts at offset 0 of its
+ * aliased (GuestPageAlias). A region's mapping starts at offset 0 of its
  * descriptor.
  *
  * State only: the owner maps, unmaps and closes, and adds every region before

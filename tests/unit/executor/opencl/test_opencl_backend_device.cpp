@@ -61,7 +61,7 @@ namespace {
 /* What the last import answered beside its handle, handed back to its release. */
 std::uint64_t detail = 0u;
 
-/* One page, which is what udmabuf and every exporter here agree on. */
+/* One page, the size every exporter here allocates in. */
 constexpr std::uint64_t page = 4096u;
 
 /* The host's GPUs, with the two things a shared object needs from each: the
@@ -101,11 +101,10 @@ private:
 /* A shared object as this device really holds one: memory a Vulkan device
  * allocated and exported as a dma-buf, with known bytes in it.
  *
- * Not av::ProbeDmaBuf, which is a udmabuf - system memory wrapped as a
- * descriptor. OpenGL imports one of those happily and rusticl then faults
- * reading it, so a test built on one would be testing a shape this device
- * never produces: every shared object here comes out of vkGetMemoryFdKHR
- * (research.md §21). */
+ * Not a udmabuf - system memory wrapped as a descriptor. OpenGL imports one
+ * of those happily and rusticl then faults reading it, so a test built on one
+ * would be testing a shape this device never produces: every shared object
+ * here comes out of vkGetMemoryFdKHR (research.md §21). */
 class Exported {
 public:
     Exported() : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE), fd_(-1) {}

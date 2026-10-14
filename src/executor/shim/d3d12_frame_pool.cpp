@@ -2,9 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "executor/shim/vulkan_buffer.hpp"
-
-#include <unistd.h>
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/dxgi_resolve_format.hpp"
 
@@ -77,8 +74,8 @@ D3d12FramePool::Frame *D3d12FramePool::claim(uint64_t bytes)
 
 D3d12FramePool::Frame::Frame()
     : buffer_(nullptr), resolved_(nullptr), resolved_format_(0u), mapped_(nullptr), bytes_(0u), allocator_(nullptr), list_(nullptr), fence_(nullptr),
-      value_(0u), offset_(0u), row_pitch_(0u), width_(0u), height_(0u), device_(nullptr), lane_(), written_(),
-      writes_(0u), claim_()
+      value_(0u), offset_(0u), row_pitch_(0u), width_(0u), height_(0u), device_(nullptr),
+      claim_()
 {
     AV_SCOPE("D3d12FramePool::Frame::Frame");
 }
@@ -250,10 +247,6 @@ void D3d12FramePool::Frame::drop()
     list_ = nullptr;
     fence_ = nullptr;
     value_ = 0u;
-    /* Its timeline was made on the lane's device: it goes first. */
-    written_.release();
-    lane_.release();
-    writes_ = 0u;
 }
 
 StagedFrame::Reading D3d12FramePool::Frame::read(AvFrameView &view)
