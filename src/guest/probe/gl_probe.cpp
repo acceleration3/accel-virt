@@ -5,6 +5,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/probe/bmp_image.hpp"
 #include "guest/probe/gl_entry.hpp"
+#include "guest/probe/probe_colour.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/image_sink.hpp"
 
@@ -50,22 +51,6 @@ uint32_t number_at(const char *text, const char *&end)
     return value;
 }
 
-/* How many of `count` RGBA pixels are GlProbe::colour within 1. */
-uint32_t matching(const uint8_t *rgba, uint32_t count)
-{
-    AV_SCOPE("matching");
-    uint32_t matched = 0u;
-    for (uint32_t pixel = 0u; pixel < count; pixel++) {
-        bool close = true;
-        for (uint32_t channel = 0u; channel < bytes_per_pixel; channel++) {
-            const int32_t difference = static_cast<int32_t>(rgba[pixel * bytes_per_pixel + channel]) -
-                                       static_cast<int32_t>(GlProbe::colour[channel]);
-            close = close && difference >= -1 && difference <= 1;
-        }
-        matched += close ? 1u : 0u;
-    }
-    return matched;
-}
 
 }  // namespace
 
@@ -178,7 +163,7 @@ void GlProbe::judge_frame(const char *name)
     /* glReadPixels returns the bottom row first. */
     images_.save(named.text(), BmpImage(pixels, width, height, BmpImage::Rows::bottom_first));
     const uint32_t count = width * height;
-    const uint32_t matched = matching(pixels, count);
+    const uint32_t matched = ProbeColour(colour, sizeof colour).matched(pixels, count, bytes_per_pixel);
     /* A window of no pixels proves nothing, however well the swap went. */
     const bool     whole = count != 0u && swapped && error == 0u && matched == count;
     static_cast<void>(steps_.check_measured(name, whole ? Status::ok : Status::invalid_state, matched));

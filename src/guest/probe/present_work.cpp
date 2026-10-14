@@ -4,6 +4,7 @@
 #include "guest/probe/bmp_image.hpp"
 #include "guest/probe/image_sink.hpp"
 #include "guest/probe/probe_commands.hpp"
+#include "guest/probe/probe_colour.hpp"
 #include "guest/probe/probe_device.hpp"
 #include "guest/probe/probe_outcome.hpp"
 #include "guest/probe/vulkan_entry.hpp"
@@ -239,15 +240,8 @@ uint32_t PresentWork::coloured_on_the_window(const char *name, ProbeOutcome &out
     }
     /* A window's DIB is bottom row first, which is how it is kept. */
     pictures_.save(name, BmpImage(frame_, width_, height_, BmpImage::Rows::bottom_first, BmpImage::Order::blue_first));
-    uint32_t matched = 0u;
-    for (uint32_t pixel = 0u; pixel < width_ * height_; pixel++) {
-        const uint8_t *const bytes = &frame_[pixel * pixel_bytes];
-        /* The alpha a window keeps is the desktop's, not the frame's. */
-        bool                 same = true;
-        for (uint32_t channel = 0u; channel < 3u; channel++) same = same && bytes[channel] == window_colour[channel];
-        matched += same ? 1u : 0u;
-    }
-    return matched;
+    /* The alpha a window keeps is the desktop's, not the frame's. */
+    return ProbeColour(window_colour, sizeof window_colour).matched(frame_, width_ * height_, pixel_bytes);
 }
 
 /* Everything of the swapchain that was there before this one. */

@@ -4,6 +4,7 @@
 #include "guest/probe/bmp_image.hpp"
 #include "guest/probe/image_sink.hpp"
 #include "guest/probe/probe_device.hpp"
+#include "guest/probe/probe_colour.hpp"
 #include "guest/probe/probe_outcome.hpp"
 #include "guest/probe/vulkan_entry.hpp"
 
@@ -114,17 +115,7 @@ void DrawWork::record()
 uint32_t DrawWork::coloured() const
 {
     AV_SCOPE("DrawWork::coloured");
-    uint32_t matched = 0u;
-    for (uint32_t pixel = 0u; pixel < pixels; pixel++) {
-        const unsigned char *const at = readback_.bytes() + pixel * pixel_bytes;
-        bool                       close = true;
-        for (uint32_t channel = 0u; channel < pixel_bytes; channel++) {
-            const int difference = static_cast<int>(at[channel]) - static_cast<int>(colour[channel]);
-            close = close && difference >= -1 && difference <= 1;
-        }
-        matched += close ? 1u : 0u;
-    }
-    return matched;
+    return ProbeColour(colour, sizeof colour).matched(readback_.bytes(), pixels, static_cast<uint32_t>(pixel_bytes));
 }
 
 bool DrawWork::invariants_hold() const
