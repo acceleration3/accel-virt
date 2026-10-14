@@ -91,6 +91,7 @@ public:
 
     MockHost     &host() { return host_; }
     RingConsumer &consumer() { return consumer_; }
+    FenceReporter &fences() { return fences_; }
     /* The thread that would serve the ring; nothing starts it but a test. */
     av::Worker   &worker() { return worker_; }
     RingWindow    window() const { return memory_.window(); }
@@ -280,6 +281,7 @@ TEST(ring_consumer_service, a_batch_that_cannot_run_faults_the_context_before_it
       if (fixture.page().fault_code() != static_cast<std::uint32_t>(c.code))
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
       CHECK(fixture.consumer().faulted());
+      CHECK(!fixture.fences().working());
       CHECK_EQ(fixture.page().completed_fence(), 1u);
       CHECK_EQ(fixture.ops().live(), 0u);
       CHECK_EQ(fixture.consumer().head(), 40u);
@@ -648,6 +650,54 @@ TEST(ring_consumer_poll, completes_held_batches_as_the_gpu_reaches_their_marks)
   fixture.serve();
   CHECK_EQ(fixture.page().completed_fence(), 3u);
   CHECK(fixture.consumer().invariants_hold()); }
+
+namespace {
+
+std::uint32_t publishing_answer = 0u;
+
+std::uint32_t scripted_poll(void *, AvExecutor *) { return publishing_answer; }
+
+}  // namespace
+
+/* The pulse beats while the worker is at work for the guest: from the moment
+ * a batch starts until it is done - here held inside a host call that does not
+ * return - and not a moment after. */
+TEST(ring_consumer_service, the_worker_is_at_work_for_the_whole_of_a_batch_and_no_longer)
+{ Fixture fixture;
+  fixture.bind();
+  CHECK(!fixture.fences().working());
+  fixture.ops().hold();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  void *thread = nullptr;
+  CHECK_STATUS(fixture.host().start_thread([](void *consumer) { static_cast<RingConsumer *>(consumer)->service(); },
+                                           &fixture.consumer(), thread),
+               Status::ok);
+  while (fixture.ops().waiting() == 0u) sched_yield();
+  CHECK(fixture.fences().working());
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  fixture.ops().release();
+  fixture.host().join_thread(thread);
+  CHECK_EQ(fixture.page().completed_fence(), 1u);
+  CHECK(!fixture.fences().working()); }
+
+/* Between batches the worker keeps watch on results the host GPU has yet to
+ * finish, and is at work while it does; asleep, it is not. */
+TEST(ring_consumer_poll, keeping_watch_on_the_gpu_is_work_and_sleeping_is_not)
+{ Fixture fixture;
+  fixture.ops().editable().poll = scripted_poll;
+  fixture.bind();
+  publishing_answer = 1u;
+  CHECK(fixture.poll());
+  CHECK(fixture.fences().working());
+  fixture.consumer().announce_awake(true);
+  CHECK(fixture.fences().working());
+  fixture.consumer().announce_awake(false);
+  CHECK(!fixture.fences().working());
+  CHECK(fixture.poll());
+  publishing_answer = 0u;
+  CHECK(!fixture.poll());
+  CHECK(!fixture.fences().working()); }
 
 TEST(ring_consumer_poll, a_ring_not_attached_or_faulted_polls_nothing)
 { Fixture fixture;

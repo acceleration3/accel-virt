@@ -9,6 +9,8 @@
 #include "core/support/status.hpp"
 #include "device/memory/blob_window.hpp"
 
+#include <stdint.h>
+
 namespace av {
 
 class FencePage;
@@ -18,8 +20,12 @@ public:
     FenceWindow();
     explicit FenceWindow(const BlobWindow &blob);
 
-    /* invalid_parameter when the blob cannot hold a page. */
+    /* Everything but the beat word, which is the pulse's alone: a worker that
+     * wrote it back would carry it backwards past a beat stored meanwhile.
+     * invalid_parameter when the blob cannot hold a page. */
     [[nodiscard]] Status publish(const FencePage &page) const;
+    /* The beat word alone, in one store. */
+    [[nodiscard]] Status publish_beat(uint64_t beat) const;
     /* What was last published: malformed for a page that does not decode. */
     [[nodiscard]] Status read(FencePage &page) const;
 

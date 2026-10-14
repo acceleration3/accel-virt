@@ -86,6 +86,10 @@ private:
     /* Completes what the GPU has reached; whether anything was. */
     bool                 settle();
     void                 note_clock(uint64_t published_at);
+    /* Tells the pulse whether the worker is at work for the guest: running a
+     * batch, which can block in a host call for seconds, or keeping watch on
+     * results the host GPU has yet to finish. */
+    void                 note_work();
     void                 fault(FaultCode code, const char *reason, uint64_t value);
 
     Host          &host_;
@@ -105,6 +109,8 @@ private:
     bool         prepared_;
     bool         attached_;
     bool         faulted_;
+    bool         serving_;
+    bool         publishing_;
 
     friend struct RingConsumerProbe;
 };

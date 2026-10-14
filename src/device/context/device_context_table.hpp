@@ -10,6 +10,7 @@
 #include "device/context/d3d_ordering.hpp"
 #include "device/context/device_context.hpp"
 #include "device/execution/executor_shares.hpp"
+#include "device/fence/device_pulse.hpp"
 
 #include <stdint.h>
 
@@ -35,8 +36,9 @@ public:
     DeviceContextTable(const DeviceContextTable &) = delete;
     DeviceContextTable &operator=(const DeviceContextTable &) = delete;
 
-    /* The lock the contexts share executors under: invalid_state once made,
-     * no_memory when the host has none. */
+    /* The lock the contexts share executors under, and the pulse their fence
+     * pages beat by: invalid_state once made, no_memory when the host has
+     * none. */
     [[nodiscard]] Status initialize();
     /* Before the scanout reads an image: every Direct3D stream has run what it published. */
     void                 settle_d3d();
@@ -70,6 +72,8 @@ private:
     /* Before the contexts, whose executors are withdrawn from it as they go. */
     ExecutorShares               shares_;
     D3dOrdering                  ordering_;
+    /* Before the contexts, which it carries until each goes. */
+    DevicePulse                  pulse_;
     ObjectStorage<DeviceContext> slots_[max_contexts];
 
     friend struct DeviceContextTableProbe;

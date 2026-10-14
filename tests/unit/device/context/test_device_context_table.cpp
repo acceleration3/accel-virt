@@ -43,7 +43,7 @@ struct DeviceContextTableProbe {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
                 static_cast<void>(slot.construct(table.host_, table.blobs_, table.owners_, table.interrupts_, table.library_, table.shares_,
-                                                table.recorder_, table.ordering_, id));
+                                                table.recorder_, table.ordering_, table.pulse_, id));
                 if (started) static_cast<void>(slot.object().start());
                 return;
             }
@@ -135,6 +135,7 @@ TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbel
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
   host.set_hostmem_size(0x10000u);
   CHECK_STATUS(blobs.initialize(), Status::ok);
+  CHECK_STATUS(table.initialize(), Status::ok);
   av::GuestBlobMaker maker(host, blobs);
   CHECK_STATUS(maker.create(1u, 0x2000u), Status::ok);
   CHECK_STATUS(maker.create(2u, 0x1000u), Status::ok);

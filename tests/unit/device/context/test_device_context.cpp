@@ -6,6 +6,8 @@
 #include "device/recording/wire_recorder.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
+#include "core/support/object_storage.hpp"
+#include "device/fence/device_pulse.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "device/control/control_request.hpp"
@@ -105,9 +107,11 @@ class Fixture {
 public:
     Fixture()
         : blobs_(host_), maker_(host_, blobs_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
-          shares_(host_, library_), recorder_(host_), ordering_(host_), plane_(), host_blobs_(host_),
-          context_(host_, blobs_, host_blobs_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
+          shares_(host_, library_), recorder_(host_), ordering_(host_), pulse_(host_), plane_(),
+          host_blobs_(host_),
+          context_(host_, blobs_, host_blobs_, interrupts_, library_, shares_, recorder_, ordering_, pulse_, 5u)
     {
+        static_cast<void>(pulse_.initialize());
         plane_.allocate_through(library_);
         static_cast<void>(host_blobs_.initialize(plane_));
         static_cast<void>(ordering_.initialize());
@@ -134,6 +138,8 @@ public:
     BlobTable     &blobs() { return blobs_; }
     av::HostBlobTable &host_blobs() { return host_blobs_; }
     DeviceContext &context() { return context_; }
+    av::DevicePulse &pulse() { return pulse_; }
+    av::FenceInterrupts &interrupts() { return interrupts_; }
     GuestRing      guest() { return GuestRing(host_.guest_ram(ram), 12u); }
     std::uint8_t  *ring_bytes() { return host_.guest_ram(ram); }
 
@@ -173,6 +179,7 @@ private:
     av::ExecutorShares  shares_;
     av::WireRecorder    recorder_;
     av::D3dOrdering     ordering_;
+    av::DevicePulse     pulse_;
     av::RecordingContextPlane plane_;
     av::HostBlobTable   host_blobs_;
     DeviceContext       context_;
@@ -307,6 +314,51 @@ TEST(device_context_bind, a_fence_page_that_cannot_be_prepared_binds_nothing)
   CHECK(!fixture.context().binding().bound());
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok); }
 
+/* While the worker is held inside a host call, nothing it writes moves, and
+ * the pulse beats the context's page; the beat is what tells the guest it is
+ * still at work. */
+TEST(device_context_bind, a_bound_context_s_page_beats_while_its_worker_is_in_a_host_call)
+{ Fixture fixture;
+  GuestRing guest = fixture.guest();
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
+  fixture.ops().hold();
+  guest.write_batch(1u, 8u);
+  guest.publish();
+  CHECK(fixture.host().ring_doorbell(3u));
+  while (fixture.ops().waiting() == 0u) sched_yield();
+  const std::uint64_t progress = fixture.page().progress();
+  bool working = false;
+  CHECK(fixture.pulse().tick(working));
+  CHECK(working);
+  CHECK(fixture.pulse().tick(working));
+  CHECK(fixture.page().beat() >= 2u);
+  CHECK_EQ(fixture.page().progress(), progress);
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  fixture.ops().release();
+  CHECK(fixture.published(guest.tail())); }
+
+/* A pulse with no room for the page binds nothing, and leaves nothing
+ * connected or carried. */
+TEST(device_context_bind, a_pulse_with_no_room_for_the_page_binds_nothing)
+{ Fixture fixture;
+  static_cast<void>(fixture.guest());
+  static av::ObjectStorage<av::FenceReporter> others[av::DevicePulse::capacity];
+  for (std::uint32_t index = 0u; index < av::DevicePulse::capacity; index++) {
+      CHECK_STATUS(others[index].construct(fixture.host(), fixture.interrupts(), fixture.recorder(), index + 10u),
+                   Status::ok);
+      CHECK_STATUS(fixture.pulse().carry(others[index].object()), Status::ok);
+  }
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::no_space);
+  CHECK(!fixture.context().binding().bound());
+  CHECK_EQ(fixture.host().live_doorbells(), 0u);
+  fixture.pulse().drop(others[0].object());
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
+  CHECK_EQ(fixture.pulse().carried(), av::DevicePulse::capacity);
+  for (av::ObjectStorage<av::FenceReporter> &other : others) {
+      fixture.pulse().drop(other.object());
+      other.destroy();
+  } }
+
 TEST(device_context_bind, a_worker_that_is_not_running_binds_nothing)
 { Fixture fixture;
   static_cast<void>(fixture.guest());
@@ -330,7 +382,9 @@ TEST(device_context_bind, a_full_work_queue_disconnects_unpins_and_withdraws_the
   while (worker.pending() != 0u) sched_yield();
   CHECK(!fixture.context().binding().bound());
   CHECK_EQ(fixture.host().live_doorbells(), 0u);
+  CHECK_EQ(fixture.pulse().carried(), 0u);
   CHECK_STATUS(fixture.context().bind(setup(8u), capset()), Status::ok);
+  CHECK_EQ(fixture.pulse().carried(), 1u);
   CHECK_EQ(fixture.context().binding().doorbell(), 8u);
   fixture.host().destroy_event(gate.event); }
 

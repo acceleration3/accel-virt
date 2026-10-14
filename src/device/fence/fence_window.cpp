@@ -20,7 +20,15 @@ Status FenceWindow::publish(const FencePage &page) const
     AV_SCOPE("FenceWindow::publish");
     uint8_t bytes[FencePage::encoded_size] = {};
     static_cast<void>(page.encode(bytes, sizeof bytes));   /* sized for it */
-    return blob_.write(0u, bytes, sizeof bytes);
+    if (!invariants_hold()) return Status::invalid_parameter;
+    return blob_.write(0u, bytes, FencePage::beat_at);
+}
+
+Status FenceWindow::publish_beat(uint64_t beat) const
+{
+    AV_SCOPE("FenceWindow::publish_beat");
+    if (!invariants_hold()) return Status::invalid_parameter;
+    return blob_.store_u64(FencePage::beat_at, beat);
 }
 
 Status FenceWindow::read(FencePage &page) const

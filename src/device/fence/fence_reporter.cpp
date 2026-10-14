@@ -1,6 +1,7 @@
 #include "device/fence/fence_reporter.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/fence/device_pulse.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/host/host.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -11,8 +12,9 @@ namespace av {
 
 FenceReporter::FenceReporter(Host &host, FenceInterrupts &interrupts, WireRecorder &recorder,
                              uint32_t context)
-    : host_(host), interrupts_(interrupts), recorder_(recorder), context_(context), page_(), line_(0u), completed_(0u), progress_(0u),
-      raised_(0u), fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false)
+    : host_(host), interrupts_(interrupts), recorder_(recorder), context_(context), page_(), pulse_(nullptr), line_(0u), completed_(0u), progress_(0u),
+      raised_(0u), beats_(0u), fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false),
+      working_(false), quiet_(true)
       {
           AV_SCOPE("FenceReporter::FenceReporter");
       }
@@ -24,12 +26,15 @@ Status FenceReporter::prepare(const FenceWindow &page, uint32_t line)
     if (prepared_) return Status::invalid_state;
     if (!page.invariants_hold() || line >= Doorbell::pages) return Status::invalid_parameter;
     static_cast<void>(page.publish(FencePage(0u, 0u)));   /* the window holds a page */
+    static_cast<void>(page.publish_beat(0u));
     page_ = page;
     line_ = line;
     completed_ = 0u;
     progress_ = 0u;
     raised_ = 0u;
+    beats_ = 0u;
     prepared_ = true;
+    __atomic_store_n(&quiet_, false, __ATOMIC_RELEASE);
     return Status::ok;
 }
 
@@ -39,6 +44,7 @@ void FenceReporter::withdraw()
     host_.require_main_loop("FenceReporter::withdraw");
     page_ = FenceWindow();
     prepared_ = false;
+    __atomic_store_n(&quiet_, true, __ATOMIC_RELEASE);
     faulted_ = false;
     fault_ = FaultCode::none;
     pending_ = false;
@@ -86,6 +92,8 @@ void FenceReporter::fault(FaultCode code)
     faulted_ = true;
     fault_ = code;
     pending_ = true;
+    __atomic_store_n(&quiet_, true, __ATOMIC_RELEASE);
+    __atomic_store_n(&working_, false, __ATOMIC_RELEASE);
     static_cast<void>(page_.publish(FencePage(completed_, progress_, static_cast<uint32_t>(code)).raising(raised_)));
 }
 
@@ -96,6 +104,41 @@ void FenceReporter::signal()
     if (!pending_) return;
     pending_ = false;
     interrupts_.raise(line_);
+}
+
+void FenceReporter::at_work(bool working)
+{
+    AV_SCOPE("FenceReporter::at_work");
+    __atomic_store_n(&working_, working, __ATOMIC_SEQ_CST);
+    if (working && pulse_ != nullptr) pulse_->stir();
+}
+
+void FenceReporter::beat_by(DevicePulse &pulse)
+{
+    AV_SCOPE("FenceReporter::beat_by");
+    pulse_ = &pulse;
+}
+
+bool FenceReporter::working() const
+{
+    AV_SCOPE("FenceReporter::working");
+    return __atomic_load_n(&working_, __ATOMIC_SEQ_CST);
+}
+
+/* The page is the main loop's to replace, and the pulse holds its lock across
+ * this; a fault on the worker meanwhile may still see one beat after it. */
+void FenceReporter::beat()
+{
+    AV_SCOPE("FenceReporter::beat");
+    if (__atomic_load_n(&quiet_, __ATOMIC_ACQUIRE)) return;
+    beats_++;
+    static_cast<void>(page_.publish_beat(beats_));   /* checked when prepared */
+}
+
+uint64_t FenceReporter::beats() const
+{
+    AV_SCOPE("FenceReporter::beats");
+    return beats_;
 }
 
 bool     FenceReporter::faulted() const
@@ -119,14 +162,16 @@ uint64_t FenceReporter::raised() const
     return raised_;
 }
 
-/* Nothing completes or faults before the page exists, every completion moved
- * progress, and a fault always has a reason. */
+/* Nothing completes, faults or beats before the page exists, every completion
+ * moved progress, a fault always has a reason, and a faulted page is beaten no
+ * more. */
 bool FenceReporter::invariants_hold() const
 {
     AV_SCOPE("FenceReporter::invariants_hold");
-    if (!prepared_) return !pending_ && !faulted_;
+    const bool quiet = __atomic_load_n(&quiet_, __ATOMIC_ACQUIRE);
+    if (!prepared_) return !pending_ && !faulted_ && quiet;
     return page_.invariants_hold() && (completed_ == 0u || progress_ != 0u) && raised_ <= progress_ &&
-           (!faulted_ || fault_ != FaultCode::none);
+           (!faulted_ || (fault_ != FaultCode::none && quiet));
 }
 
 }  // namespace av
