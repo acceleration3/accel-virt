@@ -6,6 +6,7 @@
 #include "executor/d3d/d3d12_fence_publisher.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "harness/executor/local_import.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
@@ -45,10 +46,11 @@ public:
     UINT64 completed = 0u;
 };
 
-/* A region of guest memory and the word at `offset` in it. */
+/* A session's region over memory of the test's own, and the word at `offset`
+ * in it. */
 class Arena {
 public:
-    Arena() : bytes_{} { region_.take(bytes_, sizeof bytes_); }
+    Arena() : bytes_{}, import_(bytes_, sizeof bytes_) { CHECK(region_.adopt(import_.blob())); }
     GuestRegion  &region() { return region_; }
     std::uint64_t word(std::uint64_t offset) const
     {
@@ -59,7 +61,8 @@ public:
 
 private:
     alignas(8) std::uint8_t bytes_[4096];
-    GuestRegion region_;
+    av::LocalImport import_;
+    GuestRegion     region_;
 };
 
 }  // namespace
@@ -148,8 +151,9 @@ TEST(d3d12_fence_publisher_forget, the_last_fence_takes_the_forgotten_one_s_plac
 
 TEST(d3d12_fence_publisher_publish, a_full_table_refuses_the_next_fence)
 { alignas(8) static std::uint8_t bytes[D3d12FencePublisher::capacity * 8u + 8u];
-  GuestRegion region;
-  region.take(bytes, sizeof bytes);
+  av::LocalImport import(bytes, sizeof bytes);
+  GuestRegion     region;
+  CHECK(region.adopt(import.blob()));
   D3d12FencePublisher publisher(region);
   ScriptedFence fence;
   for (std::uint32_t id = 1u; id <= D3d12FencePublisher::capacity; id++)

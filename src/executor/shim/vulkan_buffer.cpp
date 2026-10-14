@@ -18,12 +18,6 @@ VulkanBuffer::~VulkanBuffer()
     release();
 }
 
-bool VulkanBuffer::import_dma_buf(const VulkanDeviceTable &table, int fd, VkDeviceSize size)
-{
-    AV_SCOPE("VulkanBuffer::import_dma_buf");
-    return import(table, fd, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-}
-
 /* An allocation that succeeded owns the fd even when the bind after it fails;
  * one that failed left it with the caller. A buffer whose device address is
  * taken needs memory allocated for it. */

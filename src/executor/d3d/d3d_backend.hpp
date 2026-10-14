@@ -188,12 +188,16 @@ public:
 private:
     /* The slice store `store` imported for DXVK to draw from, if it can be:
      * false for a device that cannot rename a buffer to it, and for good once
-     * an import failed. A store other than the one held replaces it. Under
-     * the device's lock. */
+     * an import failed, and for a store other than the one held. Under the
+     * device's lock. */
     bool slice_storage_for(const SourceMemory &store);
-    /* The slice store's import let go of, once the GPU has finished what read
-     * it. Under the device's lock. */
+    /* The slice store's import let go of, every buffer that may be on it
+     * given storage of its own first, once the GPU has finished what read it.
+     * Under the device's lock. */
     void release_slice_storage();
+    /* Whether `resource` is a buffer of dynamic usage: the one kind a slice
+     * takes. */
+    bool dynamic_buffer(ID3D11Resource *resource) const;
     friend struct D3dBackendProbe;
 
     static constexpr uint32_t stage_count = 6u;

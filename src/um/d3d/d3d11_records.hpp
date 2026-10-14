@@ -8,6 +8,7 @@
 #ifndef AV_UM_D3D11_RECORDS_HPP
 #define AV_UM_D3D11_RECORDS_HPP
 
+#include "icd/d3d/buffer_slices.hpp"
 #include "icd/d3d/swap_chain_buffer.hpp"
 
 #include <stddef.h>
@@ -53,14 +54,13 @@ struct ResourceRecord {
     void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
     uint8_t *shadow;
     size_t   shadow_bytes;
-    /* A buffer whose shadow is a slice of the session's arena, which the host
+    /* A buffer whose shadow is a slice of the session's slice store, which the host
      * GPU reads in place (docs/mapped-buffers-plan.md): where, and how much.
      * on_slice is whether the host's buffer is bound to it; a buffer a
      * deferred context maps falls back to being copied, its slice kept as
      * its shadow until it goes. */
-    uint64_t slice_offset;
-    uint64_t slice_bytes;
-    uint32_t on_slice;
+    d3d::BufferSlices::Slice slice;
+    uint32_t                 on_slice;
 };
 
 /* A view of any kind, a shader, an input layout, a state object, a sampler. */

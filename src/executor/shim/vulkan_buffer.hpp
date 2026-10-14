@@ -1,7 +1,8 @@
 /* A buffer over memory another party exported as a dma-buf, on one device
- * (VulkanDeviceTable): the guest's own pages, which the device made a dma-buf
- * of (BlobDmaBuf), written by the GPU in place - a staged frame copied into a
- * window's surface with no CPU between. */
+ * (VulkanDeviceTable): a Direct3D 11 slice store's memory, which the GPU's
+ * memory source allocated and the guest writes through the host window
+ * (docs/host-memory.md), imported on DXVK's device for it to draw from in
+ * place. */
 #ifndef AV_VULKAN_BUFFER_HPP
 #define AV_VULKAN_BUFFER_HPP
 
@@ -18,13 +19,11 @@ public:
     VulkanBuffer(const VulkanBuffer &) = delete;
     VulkanBuffer &operator=(const VulkanBuffer &) = delete;
 
-    /* `size` bytes of the dma-buf `fd`, imported to be copied into. The fd is
-     * this one's whatever happens: closed where the import does not take it. */
-    [[nodiscard]] bool import_dma_buf(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
     /* The dma-buf `fd` - memory of the GPU's memory source - as a buffer
      * of DXVK's to be drawn from in place (D3d11HostDevice::bind_storage):
      * every use a buffer has, and the device address DXVK takes of every
-     * buffer. Owns `fd` as import_dma_buf does. */
+     * buffer. The fd is this one's whatever happens: closed where the import
+     * does not take it. */
     [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
     void               release();
     bool               made() const;

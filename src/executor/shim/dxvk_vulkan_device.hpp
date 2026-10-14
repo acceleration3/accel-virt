@@ -26,8 +26,6 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
-class VulkanBuffer;
-
 class DxvkVulkanDevice {
 public:
     DxvkVulkanDevice();
@@ -73,8 +71,6 @@ private:
     /* A signal submitted and never exported leaves the semaphore signalled,
      * which no batch may signal again: from then on there are no more. */
     bool                   sync_spent_;
-    VulkanTimeline         written_;
-    uint64_t               writes_;
 };
 
 }  // namespace av

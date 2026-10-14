@@ -44,10 +44,6 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
         reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(entry("vkGetBufferMemoryRequirements"));
     bind_buffer_ = reinterpret_cast<PFN_vkBindBufferMemory>(entry("vkBindBufferMemory"));
     fd_properties_ = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(entry("vkGetMemoryFdPropertiesKHR"));
-    host_properties_ =
-        reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(entry("vkGetMemoryHostPointerPropertiesEXT"));
-    copy_to_buffer_ = reinterpret_cast<PFN_vkCmdCopyImageToBuffer>(entry("vkCmdCopyImageToBuffer"));
-    copy_buffer_ = reinterpret_cast<PFN_vkCmdCopyBuffer>(entry("vkCmdCopyBuffer"));
     create_semaphore_ = reinterpret_cast<PFN_vkCreateSemaphore>(entry("vkCreateSemaphore"));
     destroy_semaphore_ = reinterpret_cast<PFN_vkDestroySemaphore>(entry("vkDestroySemaphore"));
     import_semaphore_ = reinterpret_cast<PFN_vkImportSemaphoreFdKHR>(entry("vkImportSemaphoreFdKHR"));
@@ -64,8 +60,7 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     submit_ = reinterpret_cast<PFN_vkQueueSubmit>(entry("vkQueueSubmit"));
     queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(entry("vkQueueWaitIdle"));
     if (memory_fd_ == nullptr || import_semaphore_ == nullptr || semaphore_fd_ == nullptr ||
-        wait_semaphores_ == nullptr || create_image_ == nullptr || submit_ == nullptr || create_buffer_ == nullptr ||
-        copy_to_buffer_ == nullptr || copy_buffer_ == nullptr) {
+        wait_semaphores_ == nullptr || create_image_ == nullptr || submit_ == nullptr || create_buffer_ == nullptr) {
         forget();
         return false;
     }
@@ -248,31 +243,6 @@ uint32_t VulkanDeviceTable::dma_buf_types(int fd) const
     return properties.memoryTypeBits;
 }
 
-uint32_t VulkanDeviceTable::host_pointer_types(void *pointer) const
-{
-    AV_SCOPE("VulkanDeviceTable::host_pointer_types");
-    if (!loaded() || host_properties_ == nullptr || pointer == nullptr) return 0u;
-    VkMemoryHostPointerPropertiesEXT properties = {VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT, nullptr, 0u};
-    if (host_properties_(device_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer, &properties) !=
-        VK_SUCCESS)
-        return 0u;
-    return properties.memoryTypeBits;
-}
-
-bool VulkanDeviceTable::bind_buffer_shared(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
-                                           VkDeviceMemory &memory) const
-{
-    AV_SCOPE("VulkanDeviceTable::bind_buffer_shared");
-    memory = VK_NULL_HANDLE;
-    if (!loaded() || type == VK_MAX_MEMORY_TYPES) return false;
-    const VkMemoryAllocateInfo allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, chain, size, type};
-    if (allocate_(device_, &allocation, nullptr, &memory) != VK_SUCCESS) {
-        memory = VK_NULL_HANDLE;
-        return false;
-    }
-    return bind_buffer_(device_, buffer, memory, 0u) == VK_SUCCESS;
-}
-
 bool VulkanDeviceTable::bind_buffer(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
                                     VkDeviceMemory &memory) const
 {
@@ -423,38 +393,6 @@ void VulkanDeviceTable::copy_image(VkCommandBuffer buffer, VkImage source, VkIma
     if (loaded())
         copy_image_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
-}
-
-void VulkanDeviceTable::copy_buffer(VkCommandBuffer buffer, VkBuffer source, VkBuffer destination, uint32_t count,
-                                    const VkBufferCopy *regions) const
-{
-    AV_SCOPE("VulkanDeviceTable::copy_buffer");
-    copy_buffer_(buffer, source, destination, count, regions);
-}
-
-void VulkanDeviceTable::to_transfer(VkCommandBuffer buffer) const
-{
-    AV_SCOPE("VulkanDeviceTable::to_transfer");
-    const VkMemoryBarrier written = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr, VK_ACCESS_MEMORY_WRITE_BIT,
-                                     VK_ACCESS_TRANSFER_READ_BIT};
-    barrier_(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0u, 1u, &written, 0u,
-             nullptr, 0u, nullptr);
-}
-
-void VulkanDeviceTable::to_host(VkCommandBuffer buffer) const
-{
-    AV_SCOPE("VulkanDeviceTable::to_host");
-    const VkMemoryBarrier written = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr, VK_ACCESS_TRANSFER_WRITE_BIT,
-                                     VK_ACCESS_HOST_READ_BIT};
-    barrier_(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0u, 1u, &written, 0u, nullptr, 0u,
-             nullptr);
-}
-
-void VulkanDeviceTable::copy_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination, uint32_t count,
-                                       const VkBufferImageCopy *regions) const
-{
-    AV_SCOPE("VulkanDeviceTable::copy_to_buffer");
-    copy_to_buffer_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination, count, regions);
 }
 
 bool VulkanDeviceTable::submit(VkQueue queue, const VkSubmitInfo &submitted) const

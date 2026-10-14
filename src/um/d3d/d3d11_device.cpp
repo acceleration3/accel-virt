@@ -34,7 +34,7 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), shadows_(memory), maps_(), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
-      core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
+      core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), gate_(), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u)
 {
@@ -89,6 +89,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
         return E_FAIL;
     }
     session_.query_results().bind(channel_.object());
+    slices_.own(session_.slices());
     return S_OK;
 }
 
