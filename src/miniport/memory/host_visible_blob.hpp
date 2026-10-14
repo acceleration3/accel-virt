@@ -35,7 +35,9 @@ public:
     /* A mappable blob of `bytes` of the memory `memory` names, for the
      * device's context `context_id`. invalid_parameter for no context, no
      * resource, no memory, no bytes or a size that is not a page multiple;
-     * invalid_state if this already holds one. */
+     * invalid_state if this already holds one. A create the device did not
+     * answer (not_found) counts as created: the device may still make it, and
+     * only an unref can tell it to let go of the id. */
     [[nodiscard]] Status create(VirtioGpuDevice &device, uint32_t context_id, uint32_t resource_id,
                                 HostMemoryRequest memory, uint64_t bytes);
     /* Placed at `offset` of the region. The device's answer is judged: only
