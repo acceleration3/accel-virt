@@ -24,6 +24,11 @@ class MockPlatform;
 class LoopbackDevice {
 public:
     static constexpr std::uint32_t patience_ms = 5000u;
+    /* The hostmem window: every byte a guest process maps is a chunk of it,
+     * with nothing behind it in guest RAM (docs/host-memory.md), so it holds
+     * what `avtest av` opens at once - two 64 MiB chunks of the import
+     * experiment beside the API arenas. */
+    static constexpr std::uint64_t hostmem_bytes = std::uint64_t{256} << 20u;
 
     /* The UUID of the host GPU the device is bound to: the default is the one
      * every rig shares, and another one is another device to a guest that

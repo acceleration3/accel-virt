@@ -112,9 +112,10 @@ TEST(fullstack_av, the_published_table_is_this_abi_and_fills_every_entry)
   CHECK(ops != nullptr);
   CHECK_EQ(ops->abi_version, std::uint32_t{AV_EXECUTOR_ABI_VERSION});
   CHECK(ops->sub_apis != nullptr);
-  CHECK(ops->import_kinds != nullptr);
   CHECK(ops->open_domain != nullptr);
   CHECK(ops->close_domain != nullptr);
+  CHECK(ops->allocate_memory != nullptr);
+  CHECK(ops->free_memory != nullptr);
   CHECK(ops->create != nullptr);
   CHECK(ops->destroy != nullptr);
   CHECK(ops->execute != nullptr);
@@ -165,10 +166,11 @@ TEST(fullstack_av, vector_add_runs_on_the_host_gpu)
   CHECK(reported(report, "ok opencl.release")); }
 
 /* Feature 045's experiment through the real driver, device and executor: two
- * 64 MiB host-visible chunks bound by escape and imported with IMPORT_BLOB into
- * the host GPU's device, the source's pattern copied into the destination by a
- * submitted vkCmdCopyBuffer, and read back exactly through the guest's view -
- * the host GPU read and wrote the guest's own pages. */
+ * 64 MiB host-visible chunks of the GPU's own memory (docs/host-memory.md),
+ * opened by escape in the Vulkan type the guest chose and imported with
+ * IMPORT_BLOB into the host GPU's device, the source's pattern copied into
+ * the destination by a submitted vkCmdCopyBuffer, and read back exactly
+ * through the guest's view - the guest saw what the host GPU wrote. */
 TEST(fullstack_av, the_host_gpu_copies_between_two_imported_guest_chunks)
 { const WidestHostGpu gpu;
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
