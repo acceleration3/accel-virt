@@ -1,8 +1,8 @@
-/* IMPORT_BLOB and RELEASE_BLOB as the device answers them (feature 045, T013):
- * an import of a context's chunk - guest or host blob - answers status 0 and
- * the executor's handle; every refusal is an answer with its own status and the context runs
- * on; only a body of the wrong length is framing. Run over ImportRig, on the
- * context's worker, with guest pages behind every blob. */
+/* IMPORT_BLOB and RELEASE_BLOB as the device answers them (docs/host-memory.md):
+ * an import of a host blob the context's process opened answers status 0 and
+ * the executor's handle; every refusal is an answer with its own status and
+ * the context runs on; only a body of the wrong length is framing. Run over
+ * ImportRig, on the context's worker, with library memory behind every blob. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_import_command.hpp"
 #include "device/execution/blob_imports.hpp"
@@ -27,7 +27,6 @@ using av::Status;
 
 namespace {
 
-constexpr std::uint64_t page = ImportRig::page;
 constexpr std::uint8_t  untouched = 0xEEu;
 
 /* One command run on the worker, as the batch runs it: its status, what it
@@ -64,9 +63,9 @@ private:
 
 class ImportBody {
 public:
-    ImportBody(std::uint32_t resource, std::uint64_t offset, std::uint64_t size, std::uint32_t memory_type)
+    explicit ImportBody(std::uint32_t resource)
     {
-        CHECK_STATUS(BlobImportRequest(resource, offset, size, memory_type).encode(bytes_, sizeof bytes_), Status::ok);
+        CHECK_STATUS(BlobImportRequest(resource).encode(bytes_, sizeof bytes_), Status::ok);
     }
     std::uint8_t       *bytes() { return bytes_; }
     const std::uint8_t *bytes() const { return bytes_; }
@@ -87,14 +86,10 @@ Run release(ImportRig &rig, std::uint64_t device_memory)
     return Run(rig, CommandHeader::release_blob_id, bytes, sizeof bytes);
 }
 
-/* A rig whose chunk 0 is a guest blob over pages 12, 7 and 8. */
+/* A rig whose host blob 0 is three pages the context opened. */
 class Chunked {
 public:
-    Chunked()
-    {
-        const std::uint32_t pages[] = {12u, 7u, 8u};
-        CHECK_STATUS(rig_.create_guest_blob(rig_.chunk(0u), pages, 3u), Status::ok);
-    }
+    Chunked() { CHECK_STATUS(rig_.create_host_blob(rig_.blob(0u), ImportRig::context, 3u), Status::ok); }
     ImportRig &rig() { return rig_; }
 
 private:
@@ -103,37 +98,17 @@ private:
 
 }  // namespace
 
-TEST(blob_import_command_run, an_import_of_a_guest_chunk_answers_status_0_and_the_executors_handle)
+TEST(blob_import_command_run, an_import_of_a_host_blob_answers_status_0_and_the_executors_handle)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  /* Over a host that makes no dma-buf, so the range handed over is a pointer
-   * this test can read; which kind a host with udmabuf picks is
-   * BlobImports' subject, not the command's. */
-  rig.host().refuse_dmabufs();
-  const Run run = import(rig, ImportBody(rig.chunk(0u), page, 2u * page, 6u));
+  const Run run = import(rig, ImportBody(rig.blob(0u)));
   CHECK_STATUS(run.status(), Status::ok);
   CHECK_EQ(run.produced(), BlobImportAnswer::encoded_size);
   CHECK_EQ(run.answer().status(), BlobImportAnswer::imported);
   CHECK_EQ(run.answer().device_memory(), 1u | MockExecutorOps::handle_bit);
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.reserved, 6u);
-  CHECK_EQ(handed.size, 2u * page);
-  CHECK(std::memcmp(handed.pointer, rig.guest_page(7u), page) == 0);
-  CHECK_EQ(rig.imports().imports(), 1u); }
-
-/* A host blob the driver placed in the host window, in a chunk slot, imports
- * the same way (docs/host-window.md). */
-TEST(blob_import_command_run, an_import_of_a_host_chunk_answers_status_0_and_the_executors_handle)
-{ ImportRig rig;
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(5u), 2u * page), Status::ok);
-  const Run run = import(rig, ImportBody(rig.chunk(5u), 0u, 2u * page, 1u));
-  CHECK_STATUS(run.status(), Status::ok);
-  CHECK_EQ(run.answer().status(), BlobImportAnswer::imported);
-  CHECK_EQ(run.answer().device_memory(), 1u | MockExecutorOps::handle_bit);
-  AvBlobHandle handed = {};
-  CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.size, 2u * page);
+  std::uint64_t key = 0u;
+  CHECK(rig.ops().import_of(1u, key));
+  CHECK_EQ(key, rig.blob(0u));   /* the memory allocated under the blob's id */
   CHECK_EQ(rig.imports().imports(), 1u);
   CHECK_STATUS(release(rig, run.answer().device_memory()).status(), Status::ok);
   CHECK_EQ(rig.imports().imports(), 0u); }
@@ -141,26 +116,19 @@ TEST(blob_import_command_run, an_import_of_a_host_chunk_answers_status_0_and_the
 TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and_no_fault)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(1u), page), Status::ok);
+  CHECK_STATUS(rig.create_host_blob(rig.blob(1u), ImportRig::other_context), Status::ok);
   struct Case { const char *name; ImportBody body; std::uint32_t status; };
-  ImportBody reserved(rig.chunk(0u), 0u, page, 0u);
+  ImportBody reserved(rig.blob(0u));
   reserved.bytes()[5] = 1u;
-  ImportBody trailing(rig.chunk(0u), 0u, page, 0u);
-  trailing.bytes()[31] = 0x80u;
+  ImportBody high_reserved(rig.blob(0u));
+  high_reserved.bytes()[7] = 0x80u;
   const Case cases[] = {
       {"a reserved field", reserved, BlobImportAnswer::refused_request},
-      {"a trailing reserved field", trailing, BlobImportAnswer::refused_request},
-      {"an offset inside a page", ImportBody(rig.chunk(0u), 1u, page, 0u), BlobImportAnswer::refused_request},
-      {"a size short of a page", ImportBody(rig.chunk(0u), 0u, page - 1u, 0u), BlobImportAnswer::refused_request},
-      {"no size", ImportBody(rig.chunk(0u), 0u, 0u, 0u), BlobImportAnswer::refused_request},
-      {"a range wrapping 2^64", ImportBody(rig.chunk(0u), 0xFFFFFFFFFFFFF000u, 2u * page, 0u),
-       BlobImportAnswer::refused_request},
-      {"the ring", ImportBody(ImportRig::ring, 0u, page, 0u), BlobImportAnswer::unknown_resource},
-      {"past the last chunk slot", ImportBody(ImportRig::ring + 67u, 0u, page, 0u), BlobImportAnswer::unknown_resource},
-      {"a chunk slot with no blob", ImportBody(rig.chunk(2u), 0u, page, 0u), BlobImportAnswer::unknown_resource},
-      {"a page past a host chunk", ImportBody(rig.chunk(1u), page, page, 0u), BlobImportAnswer::outside_blob},
-      {"a page past the blob", ImportBody(rig.chunk(0u), 3u * page, page, 0u), BlobImportAnswer::outside_blob},
-      {"one page too many", ImportBody(rig.chunk(0u), 0u, 4u * page, 0u), BlobImportAnswer::outside_blob},
+      {"the top of the reserved field", high_reserved, BlobImportAnswer::refused_request},
+      {"no resource", ImportBody(0u), BlobImportAnswer::refused_request},
+      {"another context's blob", ImportBody(rig.blob(1u)), BlobImportAnswer::unknown_resource},
+      {"a host blob id with no blob", ImportBody(rig.blob(2u)), BlobImportAnswer::unknown_resource},
+      {"an id below the host blob range", ImportBody(rig.blob(0u) - 1u), BlobImportAnswer::unknown_resource},
   };
   for (const Case &c : cases) {
       const Run run = import(rig, c.body);
@@ -171,24 +139,28 @@ TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and
                                                       run.answer().status());
       CHECK_EQ(run.answer().device_memory(), 0u);
   }
-  rig.host().fail_alias_at(1u);
-  CHECK_EQ(import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().status(), BlobImportAnswer::unmappable_pages);
-  /* One attempt per import, so one refusal is the executor's whole answer. */
-  rig.host().refuse_dmabufs();
+  rig.host().fail_allocation_at(1u);   /* the first import takes the context's table */
+  CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::no_room);
   rig.ops().refuse_import_at(1u);
-  CHECK_EQ(import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().status(), BlobImportAnswer::executor_refused);
+  CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::executor_refused);
   CHECK_EQ(rig.imports().imports(), 0u);
-  CHECK_EQ(rig.host().live_ranges(), 0u);
   CHECK_EQ(rig.ops().imported(), 0u);
   /* After all of that, the context imports as if nothing happened. */
-  CHECK_EQ(import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().status(), BlobImportAnswer::imported); }
+  CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::imported); }
 
 TEST(blob_import_command_run, a_context_with_no_room_for_another_import_answers_no_room)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  for (std::uint32_t index = 0u; index < av::BlobImports::max_imports; index++)
-      CHECK_EQ(import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().status(), BlobImportAnswer::imported);
-  const Run full = import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u));
+  /* Filled on the worker directly: a Run per import would judge the whole
+   * table's invariants 4096 times over. */
+  Status filled = Status::ok;
+  rig.on_worker([&] {
+      std::uint64_t handle = 0u;
+      for (std::uint32_t index = 0u; index < av::BlobImports::max_imports && filled == Status::ok; index++)
+          filled = rig.imports().import(rig.blob(0u), handle);
+  });
+  CHECK_STATUS(filled, Status::ok);
+  const Run full = import(rig, ImportBody(rig.blob(0u)));
   CHECK_STATUS(full.status(), Status::ok);
   CHECK_EQ(full.answer().status(), BlobImportAnswer::no_room); }
 
@@ -196,9 +168,9 @@ TEST(blob_import_command_run, a_body_of_the_wrong_length_is_framing_and_answers_
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
   std::uint8_t bytes[64] = {};
-  const ImportBody valid(rig.chunk(0u), 0u, page, 0u);
+  const ImportBody valid(rig.blob(0u));
   std::memcpy(bytes, valid.bytes(), BlobImportRequest::encoded_size);
-  const std::size_t import_lengths[] = {0u, 8u, 16u, 31u, 33u, 40u, 64u};
+  const std::size_t import_lengths[] = {0u, 4u, 7u, 9u, 16u, 32u, 64u};
   for (const std::size_t length : import_lengths) {
       const Run run(rig, CommandHeader::import_blob_id, bytes, length);
       CHECK_STATUS(run.status(), Status::malformed);
@@ -217,9 +189,8 @@ TEST(blob_import_command_run, a_body_of_the_wrong_length_is_framing_and_answers_
 TEST(blob_import_command_run, release_answers_empty_whether_or_not_the_handle_was_imported)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  const std::uint64_t first = import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().device_memory();
-  const std::uint64_t second = import(rig, ImportBody(rig.chunk(0u), page, page, 1u)).answer().device_memory();
-  CHECK_EQ(rig.host().live_ranges(), 1u);   /* one alias per blob, however many imports */
+  const std::uint64_t first = import(rig, ImportBody(rig.blob(0u))).answer().device_memory();
+  const std::uint64_t second = import(rig, ImportBody(rig.blob(0u))).answer().device_memory();
   const Run never = release(rig, 0x1234u);
   CHECK_STATUS(never.status(), Status::ok);
   CHECK_EQ(never.produced(), 0u);
@@ -227,17 +198,15 @@ TEST(blob_import_command_run, release_answers_empty_whether_or_not_the_handle_wa
   CHECK_EQ(rig.ops().released(), 0u);
   CHECK_STATUS(release(rig, first).status(), Status::ok);
   CHECK_EQ(rig.ops().live_imports(), 1u);
-  CHECK_EQ(rig.host().live_ranges(), 1u);
   CHECK_STATUS(release(rig, second).status(), Status::ok);
   CHECK_EQ(rig.ops().live_imports(), 0u);
-  CHECK_EQ(rig.host().live_ranges(), 0u);   /* released with its last import */
   CHECK_STATUS(release(rig, second).status(), Status::ok);
   CHECK_EQ(rig.ops().released(), 2u); }
 
 TEST(blob_import_command_run, a_slot_too_small_for_the_answer_is_written_nothing_but_told_its_length)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  const ImportBody body(rig.chunk(0u), 0u, page, 0u);
+  const ImportBody body(rig.blob(0u));
   const Run small(rig, CommandHeader::import_blob_id, body.bytes(), BlobImportRequest::encoded_size,
                   BlobImportAnswer::encoded_size - 1u);
   CHECK_STATUS(small.status(), Status::ok);
@@ -257,22 +226,25 @@ TEST(blob_import_command_run, a_transport_id_that_is_neither_is_not_its_to_answe
   } }
 
 /* Every single-bit corruption of a valid import: always an answer - the length
- * is right - whose status the contract decides, and never a handle without an
- * import behind it. */
+ * is right - whose status the contract decides. A flip in the resource names
+ * another id, no blob of this context's - or, for the one bit set, no resource
+ * at all; a flip in the reserved half is a request no driver writes. */
 TEST(blob_import_command_run, every_bit_flip_of_an_import_is_an_answer_and_leaves_the_context_consistent)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  const ImportBody valid(rig.chunk(0u), page, page, 2u);
+  const ImportBody    valid(rig.blob(0u));
+  const std::uint32_t only_bit = 24u;   /* HostBlobId::first is 1 << 24 */
   for (std::uint32_t bit = 0u; bit < BlobImportRequest::encoded_size * 8u; bit++) {
       ImportBody flipped = valid;
       flipped.bytes()[bit / 8u] = static_cast<std::uint8_t>(flipped.bytes()[bit / 8u] ^ (1u << (bit % 8u)));
       const Run run = import(rig, flipped);
       CHECK_STATUS(run.status(), Status::ok);
       const BlobImportAnswer answer = run.answer();
-      const bool             memory_type = bit >= 192u && bit < 224u;
-      if (memory_type) CHECK_EQ(answer.status(), BlobImportAnswer::imported);
-      if ((bit >= 32u && bit < 64u) || bit >= 224u) CHECK_EQ(answer.status(), BlobImportAnswer::refused_request);
-      if (answer.status() == BlobImportAnswer::imported) CHECK_STATUS(release(rig, answer.device_memory()).status(), Status::ok);
+      const std::uint32_t    expected = bit >= 32u || bit == only_bit ? BlobImportAnswer::refused_request
+                                                                      : BlobImportAnswer::unknown_resource;
+      if (answer.status() != expected)
+          av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "bit %u answered %u", bit, answer.status());
+      CHECK_EQ(answer.device_memory(), 0u);
       CHECK_EQ(rig.imports().imports(), 0u);
-      CHECK_EQ(rig.host().live_ranges(), 0u);
-  } }
+  }
+  CHECK_EQ(rig.ops().imported(), 0u); }

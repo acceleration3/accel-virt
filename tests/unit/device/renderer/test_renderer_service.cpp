@@ -10,6 +10,7 @@
 #include "device/memory/blob_window.hpp"
 #include "device/renderer/doorbell_offers.hpp"
 #include "device/renderer/guest_memory_table.hpp"
+#include "device/renderer/renderer_host_blobs.hpp"
 #include "device/renderer/renderer_service.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -21,14 +22,17 @@
 #include "proto/context/device_uuid.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
+#include "proto/resources/host_blob_id.hpp"
 #include "proto/renderer/bind_context_message.hpp"
+#include "proto/renderer/allocate_memory_message.hpp"
+#include "proto/renderer/allocated_memory_message.hpp"
 #include "proto/renderer/blob_retired_message.hpp"
+#include "proto/renderer/free_memory_message.hpp"
 #include "proto/renderer/context_message.hpp"
 #include "proto/renderer/export_image_message.hpp"
 #include "proto/renderer/exported_image_message.hpp"
 #include "proto/renderer/guest_blob_message.hpp"
 #include "proto/renderer/hello_message.hpp"
-#include "proto/renderer/host_blob_message.hpp"
 #include "proto/renderer/interrupt_lines_message.hpp"
 #include "proto/renderer/ready_message.hpp"
 #include "proto/renderer/region_message.hpp"
@@ -53,6 +57,7 @@ namespace av {
 struct RendererServiceProbe {
     static BlobTable         &blobs(RendererService &service) { return service.blobs_; }
     static LocalContextPlane &plane(RendererService &service) { return service.plane_; }
+    static RendererHostBlobs &owners(RendererService &service) { return service.owners_; }
     static void               forget_hello(RendererService &service) { service.ready_ = false; }
 };
 
@@ -69,15 +74,6 @@ constexpr std::uint32_t region_number = 3u;
 constexpr std::uint64_t region_size = 0x8000u;
 constexpr std::uint32_t ring = 11u, fence = 12u, context_id = 4u, doorbell = 6u;
 constexpr std::size_t   capacity = av::RendererMessageHeader::encoded_size + 4096u + 256u;
-
-/* Vulkan's import kind is host pointers, OpenGL's dma-bufs: a lane read for
- * the wrong sub-API shows. */
-std::uint32_t kinds_by_api(void *, std::uint32_t sub_api, const std::uint8_t *)
-{
-    if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) return AV_BLOB_HOST_POINTER;
-    if (sub_api == AV_EXECUTOR_SUB_API_OPENGL) return AV_BLOB_DMA_BUF;
-    return 0u;
-}
 
 /* What the executor has published, which a test sets. */
 struct Published {
@@ -161,11 +157,43 @@ public:
         if (length != 0u) std::memcpy(datagram + RendererMessageHeader::encoded_size, body, length);
         return raw(datagram, RendererMessageHeader::encoded_size + length, descriptors, count);
     }
-    Status raw(const std::uint8_t *datagram, std::size_t length, const int *descriptors, std::uint32_t count)
+    Status raw(const std::uint8_t *datagram, std::size_t length, const int *descriptors, std::uint32_t count,
+               std::size_t room = RendererService::answer_capacity)
     {
-        resources_.adopt(count);
-        return service_.receive(datagram, length, descriptors, count, answer_, sizeof answer_, answer_length_,
+        resources_.adopt(descriptors, count);
+        return service_.receive(datagram, length, descriptors, count, answer_, room, answer_length_,
                                 answer_descriptor_);
+    }
+    /* Host memory for host blob `key`, made for `context`, as QEMU asks for it. */
+    Status allocate(std::uint32_t context, std::uint64_t key, std::uint64_t size, std::uint64_t sequence = 5u,
+                    std::size_t room = RendererService::answer_capacity)
+    {
+        std::uint8_t datagram[RendererMessageHeader::encoded_size + av::AllocateMemoryMessage::encoded_size] = {};
+        static_cast<void>(RendererMessageHeader(Kind::allocate_memory, av::AllocateMemoryMessage::encoded_size, sequence)
+                              .encode(datagram, sizeof datagram));
+        static_cast<void>(av::AllocateMemoryMessage(context, 0x101u, key, size)
+                              .encode(datagram + RendererMessageHeader::encoded_size,
+                                      av::AllocateMemoryMessage::encoded_size));
+        return raw(datagram, sizeof datagram, nullptr, 0u, room);
+    }
+    Status free_memory(std::uint64_t key)
+    {
+        std::uint8_t body[av::FreeMemoryMessage::encoded_size] = {};
+        static_cast<void>(av::FreeMemoryMessage(key).encode(body, sizeof body));
+        return send(Kind::free_memory, 6u, body, sizeof body);
+    }
+    /* The allocated_memory the last answer is, with the descriptor beside it. */
+    av::AllocatedMemoryMessage allocated(std::uint64_t sequence = 5u)
+    {
+        RendererMessageHeader      header;
+        av::AllocatedMemoryMessage message;
+        CHECK_STATUS(header.decode(answer_, answer_length_), Status::ok);
+        CHECK(header.kind() == Kind::allocated_memory);
+        CHECK_EQ(header.sequence(), sequence);
+        CHECK_STATUS(message.decode(answer_ + RendererMessageHeader::encoded_size, header.body_length(),
+                                    answer_descriptor_ >= 0 ? 1u : 0u),
+                     Status::ok);
+        return message;
     }
     Status hello(std::uint64_t sequence = 1u)
     {
@@ -251,11 +279,10 @@ private:
 
 }  // namespace
 
-/* The Ready names the library's sub-APIs, and each lane holds what the
- * library imports for the sub-API whose bit that lane is. */
-TEST(renderer_service_hello, answers_ready_with_each_sub_apis_import_kinds_in_its_own_lane)
+/* The Ready names the protocol, the executor ABI and the library's
+ * sub-APIs, under the hello's sequence. */
+TEST(renderer_service_hello, answers_ready_with_the_librarys_sub_apis)
 { Rig rig;
-  rig.ops().editable().import_kinds = &kinds_by_api;
   CHECK_STATUS(rig.hello(9u), Status::ok);
   CHECK(rig.service().ready());
   CHECK_EQ(rig.resources().executor_loads(), 1u);
@@ -269,9 +296,6 @@ TEST(renderer_service_hello, answers_ready_with_each_sub_apis_import_kinds_in_it
   CHECK_EQ(ready.version(), av::HelloMessage::protocol_version);
   CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(AV_EXECUTOR_ABI_VERSION));
   CHECK_EQ(ready.sub_apis(), both);
-  CHECK_EQ(ready.import_kinds(0u), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));   /* Vulkan, bit 0 */
-  CHECK_EQ(ready.import_kinds(1u), static_cast<std::uint32_t>(AV_BLOB_DMA_BUF));        /* OpenGL, bit 1 */
-  CHECK_EQ(ready.import_kinds(2u), 0u);
   CHECK_EQ(rig.answer_descriptor(), -1);
   CHECK(rig.service().invariants_hold());
   /* The executor is loaded once: a second hello is answered nothing. */
@@ -459,9 +483,7 @@ TEST(renderer_service_guest_blob, mirrors_the_blob_over_the_bytes_its_extents_na
   av::BlobTable &blobs = RendererServiceProbe::blobs(rig.service());
   CHECK(blobs.contains(21u));
   av::BlobWindow pages;
-  void          *host_memory = nullptr;
-  CHECK_STATUS(blobs.backing(21u, pages, host_memory), Status::ok);
-  CHECK(host_memory == nullptr);
+  CHECK_STATUS(blobs.backing(21u, pages), Status::ok);
   CHECK_EQ(pages.length(), 0x2000u);
   std::uint64_t bytes = 0u;
   CHECK(pages.extent(0u, bytes) == rig.ram() + 0x1000);
@@ -500,30 +522,97 @@ TEST(renderer_service_guest_blob, refuses_an_extent_longer_than_a_memory_entry_c
   /* A body that does not decode. */
   CHECK_STATUS(rig.send(Kind::guest_blob, 3u, body, 8u), Status::malformed); }
 
-/* A host blob is made over the memfd that came with it, which the resources
- * keep; one without its memfd, or with two, is refused and closed. */
-TEST(renderer_service_host_blob, makes_the_blob_over_the_memfd_it_brought)
+/* Host memory for a host blob is the library's, answered with its dma-buf
+ * beside the message under the request's sequence; the renderer keeps who
+ * it was made for, and closes its own copy of the descriptor once the answer
+ * has gone. */
+TEST(renderer_service_allocate_memory, answers_the_librarys_memory_and_keeps_its_owner)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
-  std::uint8_t body[av::HostBlobMessage::encoded_size] = {};
-  CHECK_STATUS(av::HostBlobMessage(31u, 0x1000u).encode(body, sizeof body), Status::ok);
-  const int memfd = fresh_descriptor();
-  CHECK_STATUS(rig.send(Kind::host_blob, 2u, body, sizeof body, &memfd, 1u), Status::ok);
-  CHECK(RendererServiceProbe::blobs(rig.service()).contains(31u));
-  CHECK(is_open(memfd));
-  CHECK_EQ(rig.resources().live_descriptors(), 1u);
+  rig.ops().set_memory_caching(AV_MEMORY_WRITE_COMBINED);
+  const std::uint32_t key = av::HostBlobId::first + 2u;
+  CHECK_STATUS(rig.allocate(context_id, key, 0x2000u, 7u), Status::ok);
+  const av::AllocatedMemoryMessage answer = rig.allocated(7u);
+  CHECK(answer.allocated());
+  CHECK_EQ(answer.size(), 0x2000u);
+  CHECK_EQ(answer.caching(), std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  const int handed = rig.answer_descriptor();
+  CHECK(is_open(handed));
+  const MockExecutorOps::MemoryRequest asked = rig.ops().last_memory_request();
+  CHECK_EQ(asked.key, key);
+  CHECK_EQ(asked.size, 0x2000u);
+  CHECK_EQ(asked.request, 0x101u);
+  CHECK(RendererServiceProbe::owners(rig.service()).owns(context_id, key));
+  CHECK(!RendererServiceProbe::owners(rig.service()).owns(context_id + 1u, key));
+  CHECK_EQ(rig.resources().live_descriptors(), 0u);   /* the library's, not one QEMU sent */
+  /* The answer has gone: the next datagram closes the renderer's copy. */
+  CHECK_STATUS(rig.free_memory(key), Status::ok);
+  CHECK(!is_open(handed));
   CHECK_EQ(rig.answer_length(), 0u);
-  CHECK_STATUS(rig.send(Kind::host_blob, 2u, body, sizeof body), Status::malformed);
-  const int two[2] = {fresh_descriptor(), fresh_descriptor()};
-  CHECK_STATUS(rig.send(Kind::host_blob, 2u, body, sizeof body, two, 2u), Status::malformed);
-  CHECK(!is_open(two[0]));
-  CHECK(!is_open(two[1]));
-  CHECK_EQ(rig.resources().live_descriptors(), 1u);
-  /* The same id again: the offer replaces the last, and the table refuses. */
-  const int again = fresh_descriptor();
-  CHECK_STATUS(rig.send(Kind::host_blob, 2u, body, sizeof body, &again, 1u), Status::conflict);
-  CHECK(!is_open(memfd));
-  CHECK_EQ(rig.resources().live_descriptors(), 1u); }
+  CHECK_EQ(rig.ops().memory_frees(), 1u);
+  CHECK_EQ(rig.ops().held_memory(), 0u);
+  CHECK(!RendererServiceProbe::owners(rig.service()).owns(context_id, key));
+  CHECK(rig.service().invariants_hold()); }
+
+/* Nothing allocated is an answer of no memory and no descriptor: a library
+ * with none to give, a key that names no host blob - allocated, then given
+ * back, so no import can name it - and memory answered without a dma-buf. */
+TEST(renderer_service_allocate_memory, memory_it_cannot_hand_over_is_answered_as_none_and_given_back)
+{ Rig rig;
+  CHECK_STATUS(rig.hello(), Status::ok);
+  rig.ops().refuse_memory_at(1u);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first, 0x1000u), Status::ok);
+  CHECK(!rig.allocated().allocated());
+  CHECK_EQ(rig.answer_descriptor(), -1);
+  CHECK_EQ(rig.ops().memory_frees(), 0u);
+  const std::uint64_t not_blobs[] = {5u, av::HostBlobId::first + av::HostBlobId::count,
+                                     std::uint64_t{1} << 32 | av::HostBlobId::first};
+  std::uint32_t frees = 0u;
+  for (const std::uint64_t key : not_blobs) {
+      CHECK_STATUS(rig.allocate(context_id, key, 0x1000u), Status::ok);
+      CHECK(!rig.allocated().allocated());
+      CHECK_EQ(rig.answer_descriptor(), -1);
+      CHECK_EQ(rig.ops().memory_frees(), ++frees);
+  }
+  rig.ops().withhold_memory_descriptor_at(1u);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first + 1u, 0x1000u), Status::ok);
+  CHECK(!rig.allocated().allocated());
+  CHECK_EQ(rig.ops().memory_frees(), frees + 1u);
+  CHECK_EQ(rig.ops().held_memory(), 0u);
+  CHECK_EQ(RendererServiceProbe::owners(rig.service()).live(), 0u);
+  CHECK_EQ(rig.resources().live_descriptors(), 0u); }
+
+TEST(renderer_service_allocate_memory, a_request_that_does_not_decode_or_an_answer_that_does_not_fit_is_refused)
+{ Rig rig;
+  CHECK_STATUS(rig.hello(), Status::ok);
+  CHECK_STATUS(rig.allocate(0u, av::HostBlobId::first, 0x1000u), Status::malformed);   /* no context */
+  CHECK_STATUS(rig.allocate(context_id, 0u, 0x1000u), Status::malformed);              /* no key */
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first, 0u), Status::malformed); /* no size */
+  std::uint8_t body[av::AllocateMemoryMessage::encoded_size] = {};
+  CHECK_STATUS(av::AllocateMemoryMessage(context_id, 1u, av::HostBlobId::first, 0x1000u).encode(body, sizeof body),
+               Status::ok);
+  const int stray = fresh_descriptor();
+  CHECK_STATUS(rig.send(Kind::allocate_memory, 5u, body, sizeof body, &stray, 1u), Status::malformed);
+  CHECK(!is_open(stray));
+  CHECK_EQ(rig.ops().memory_allocations(), 0u);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first, 0x1000u, 5u, 8u), Status::too_large);
+  CHECK_EQ(rig.answer_descriptor(), -1);
+  CHECK_EQ(rig.resources().live_descriptors(), 0u); }
+
+TEST(renderer_service_free_memory, frees_the_key_and_forgets_its_owner)
+{ Rig rig;
+  CHECK_STATUS(rig.hello(), Status::ok);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first + 9u, 0x1000u), Status::ok);
+  CHECK(RendererServiceProbe::owners(rig.service()).owns(context_id, av::HostBlobId::first + 9u));
+  CHECK_STATUS(rig.free_memory(std::uint64_t{1} << 32), Status::ok);   /* names no blob: nothing of it held */
+  CHECK_EQ(rig.ops().held_memory(), 1u);
+  CHECK_STATUS(rig.free_memory(av::HostBlobId::first + 9u), Status::ok);
+  CHECK_EQ(rig.ops().held_memory(), 0u);
+  CHECK(!RendererServiceProbe::owners(rig.service()).owns(context_id, av::HostBlobId::first + 9u));
+  std::uint8_t body[av::FreeMemoryMessage::encoded_size] = {};
+  CHECK_STATUS(rig.send(Kind::free_memory, 6u, body, sizeof body), Status::malformed);   /* key 0 */
+  CHECK_STATUS(rig.send(Kind::free_memory, 6u, body, 4u), Status::malformed);
+  CHECK_EQ(rig.answer_length(), 0u); }
 
 TEST(renderer_service_blob_retired, retires_a_blob_and_refuses_one_it_does_not_hold)
 { Rig rig;
@@ -633,7 +722,7 @@ TEST(renderer_service_bind, a_doorbell_that_conflicts_is_refused_and_closed)
   rig.rings();
   CHECK_STATUS(rig.context(Kind::create_context, context_id, 1u), Status::ok);
   const int standing = fresh_descriptor();
-  rig.resources().adopt(1u);
+  rig.resources().adopt(&standing, 1u);
   CHECK_STATUS(rig.doorbells().offer(doorbell, standing), Status::ok);
   const int bell = fresh_descriptor();
   CHECK_STATUS(rig.bind(context_id, doorbell, bell, 9u), Status::ok);
@@ -798,10 +887,11 @@ TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_ch
   CHECK(is_open(image_fd));
   ::close(image_fd); }
 
-/* QEMU going away leaves nothing: contexts, blobs, lines and offers. */
+/* QEMU going away leaves nothing: contexts, blobs, owners, lines and offers. */
 TEST(renderer_service_shut_down, leaves_no_context_blob_line_or_offer)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first, 0x1000u), Status::ok);
   CHECK_STATUS(rig.region(), Status::ok);
   rig.rings();
   CHECK_STATUS(rig.context(Kind::create_context, context_id, 1u), Status::ok);
@@ -811,11 +901,12 @@ TEST(renderer_service_shut_down, leaves_no_context_blob_line_or_offer)
   const int line = fresh_descriptor();
   CHECK_STATUS(rig.send(Kind::interrupt_lines, 3u, body, sizeof body, &line, 1u), Status::ok);
   const int offered = fresh_descriptor();
-  rig.resources().adopt(1u);
+  rig.resources().adopt(&offered, 1u);
   CHECK_STATUS(rig.doorbells().offer(9u, offered), Status::ok);
   rig.service().shut_down();
   CHECK_EQ(RendererServiceProbe::plane(rig.service()).live(), 0u);
   CHECK_EQ(RendererServiceProbe::blobs(rig.service()).live(), 0u);
+  CHECK_EQ(RendererServiceProbe::owners(rig.service()).live(), 0u);
   CHECK_EQ(rig.resources().interrupt_lines(), 0u);
   CHECK(!rig.host().fence_interrupts_connected());
   CHECK(!is_open(offered));

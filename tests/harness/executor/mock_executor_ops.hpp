@@ -210,7 +210,7 @@ private:
         std::uint64_t wire_handle;
         bool          live;
     };
-    static constexpr std::uint32_t max_imports = 512u;
+    static constexpr std::uint32_t max_imports = 4096u;   /* BlobImports::max_imports */
     static constexpr std::uint32_t max_memory = 256u;
     /* More than any per-context table the device kept, so a test can show
      * there is none now. */

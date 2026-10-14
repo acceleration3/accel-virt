@@ -9,7 +9,7 @@
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/execution/transport_command.hpp"
-#include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
@@ -50,7 +50,7 @@ private:
     av::ExecutorLibrary library_;
     av::ExecutorShares  shares_;
     av::ContextExecutor executor_;
-    av::BlobTable       blobs_;
+    av::HostBlobTable   blobs_;
     av::WireRecorder    recorder_;
     av::BlobImports     imports_;
     std::uint8_t        reply_[32] = {};
@@ -95,9 +95,9 @@ TEST(transport_command_run, the_blob_ids_are_answered_by_the_blob_command)
 { Fixture fixture;
   CHECK_EQ(CommandHeader::import_blob_id, 0x00000002u);
   CHECK_EQ(CommandHeader::release_blob_id, 0x00000003u);
-  std::uint8_t reserved_set[32] = {};
+  std::uint8_t reserved_set[8] = {};
   reserved_set[4] = 1u;
-  CHECK_STATUS(fixture.run(CommandHeader(CommandHeader::import_blob_id, 40u, CommandHeader::generate_reply),
+  CHECK_STATUS(fixture.run(CommandHeader(CommandHeader::import_blob_id, 16u, CommandHeader::generate_reply),
                            reserved_set),
                Status::ok);
   CHECK_EQ(fixture.produced(), BlobImportAnswer::encoded_size);

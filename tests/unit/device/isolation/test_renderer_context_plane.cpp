@@ -13,6 +13,7 @@
 #include "device/fence/fence_interrupts.hpp"
 #include "device/isolation/renderer_context_plane.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/renderer/renderer_host_blobs.hpp"
 #include "device/renderer/renderer_service.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -26,6 +27,7 @@
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
+#include "proto/renderer/allocated_memory_message.hpp"
 #include "proto/renderer/exported_image_message.hpp"
 #include "proto/renderer/renderer_message_header.hpp"
 #include "proto/resources/surface_point.hpp"
@@ -46,6 +48,7 @@ namespace av {
 
 struct RendererServiceProbe {
     static BlobTable         &blobs(RendererService &service) { return service.blobs_; }
+    static RendererHostBlobs &owners(RendererService &service) { return service.owners_; }
     static LocalContextPlane &plane(RendererService &service) { return service.plane_; }
 };
 
@@ -136,6 +139,7 @@ public:
     RendererContextPlane     &plane() { return plane_; }
     av::BlobTable            &renderer_blobs() { return RendererServiceProbe::blobs(peer_.service()); }
     av::LocalContextPlane    &renderer_plane() { return RendererServiceProbe::plane(peer_.service()); }
+    av::RendererHostBlobs    &renderer_owners() { return RendererServiceProbe::owners(peer_.service()); }
 
     Status start()
     {
@@ -154,12 +158,6 @@ public:
         av::MockRequest    mock(entries.bytes(), entries.size());
         av::ControlRequest request(qemu_, &mock);
         const Status       made = blobs_.create_guest(id, size, request, 24u, 1u);
-        if (made == Status::ok) plane_.blob_created(id);
-        return made;
-    }
-    Status host_blob(std::uint32_t id, std::uint64_t size)
-    {
-        const Status made = blobs_.create_host(id, size);
         if (made == Status::ok) plane_.blob_created(id);
         return made;
     }
@@ -250,7 +248,6 @@ TEST(renderer_context_plane_accept, takes_no_executor_table_of_its_own)
  * RAM - QEMU's own duplicate closed again - before any context. */
 TEST(renderer_context_plane_start, starts_greets_and_hands_over_guest_memory)
 { Fixture fixture;
-  fixture.ops().set_import_kinds(AV_BLOB_HOST_POINTER);
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK(fixture.plane().alive());
   CHECK_EQ(fixture.plane().epoch(), 1u);
@@ -259,14 +256,9 @@ TEST(renderer_context_plane_start, starts_greets_and_hands_over_guest_memory)
   CHECK(fixture.peer().service().ready());
   CHECK(std::strcmp(fixture.peer().resources().executor_path(), executor_path) == 0);
   CHECK_EQ(fixture.peer().memory().count(), 1u);
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u);
   /* What the Ready said, by the sub-API's own lane. */
   CHECK_EQ(fixture.plane().sub_apis(), both);
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::vulkan, uuid), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::opengl, uuid), static_cast<std::uint32_t>(AV_BLOB_HOST_POINTER));
-  CHECK_EQ(fixture.plane().import_kinds(av::SubApi::opencl, uuid), 0u);
-  CHECK_EQ(fixture.plane().import_kinds(static_cast<av::SubApi>(3u), uuid), 0u);
-  CHECK_EQ(fixture.plane().import_kinds(static_cast<av::SubApi>(0x100u), uuid), 0u);
   CHECK(fixture.plane().invariants_hold()); }
 
 TEST(renderer_context_plane_start, refuses_before_configure_or_without_a_gpu)
@@ -478,7 +470,7 @@ TEST(renderer_context_plane_renderer_lost, reports_every_bound_context_lost_and_
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.connect_interrupts();
   fixture.rings();
-  CHECK_STATUS(fixture.host_blob(9u, 0x1000u), Status::ok);
+  CHECK_STATUS(fixture.guest_blob(9u, 0x8000u, 0x1000u), Status::ok);
   CHECK_STATUS(fixture.plane().create(3u), Status::ok);
   CHECK_STATUS(fixture.plane().create(4u), Status::ok);
   CHECK_STATUS(fixture.plane().create(8u), Status::ok);   /* never bound */
@@ -525,7 +517,7 @@ TEST(renderer_context_plane_renderer_lost, reports_every_bound_context_lost_and_
   CHECK_EQ(fixture.peer().resources().interrupt_lines(), lines);
   CHECK(fixture.peer().host().fence_interrupts_connected());
   CHECK_EQ(fixture.renderer_plane().live(), 0u);   /* the old contexts died with it */
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u);
   CHECK(fixture.plane().invariants_hold());
   /* A lost context is not bound again; a new one is, on the new renderer. */
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::invalid_state);
@@ -598,24 +590,23 @@ TEST(renderer_context_plane_renderer_lost, a_death_a_nanosecond_inside_the_windo
   CHECK(!fixture.plane().alive());
   CHECK_EQ(fixture.qemu().renderer_starts(), RendererContextPlane::max_losses + 1u); }
 
-/* A blob QEMU makes is the renderer's too - over the same guest pages, or
- * the memfd QEMU placed - and one QEMU lets go of is retired there. */
-TEST(renderer_context_plane_blobs, mirrors_guest_and_host_blobs_and_their_release)
+/* A guest blob QEMU makes is the renderer's too, over the same guest pages,
+ * and one QEMU lets go of is retired there. */
+TEST(renderer_context_plane_blobs, mirrors_guest_blobs_and_their_release)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.qemu().guest_ram(ram + 0x8000u)[0] = 0x3Cu;
   CHECK_STATUS(fixture.guest_blob(20u, 0x8000u, 0x1000u), Status::ok);
-  CHECK_STATUS(fixture.host_blob(21u, 0x1000u), Status::ok);
+  CHECK_STATUS(fixture.guest_blob(21u, 0x9000u, 0x1000u), Status::ok);
   CHECK(fixture.renderer_blobs().contains(20u));
   CHECK(fixture.renderer_blobs().contains(21u));
   av::BlobWindow pages;
-  void          *host_memory = nullptr;
-  CHECK_STATUS(fixture.renderer_blobs().backing(20u, pages, host_memory), Status::ok);
+  CHECK_STATUS(fixture.renderer_blobs().backing(20u, pages), Status::ok);
   std::uint64_t bytes = 0u;
   CHECK(pages.extent(0u, bytes) == fixture.qemu().guest_ram(ram + 0x8000u));
   CHECK_EQ(bytes, 0x1000u);
-  CHECK_EQ(fixture.peer().resources().live_descriptors(), 2u);   /* the region's, the offered memfd */
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.peer().resources().live_descriptors(), 1u);   /* the region's */
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u);
   fixture.release(20u);
   CHECK(!fixture.renderer_blobs().contains(20u));
   CHECK(fixture.renderer_blobs().contains(21u));
@@ -626,6 +617,125 @@ TEST(renderer_context_plane_blobs, mirrors_guest_and_host_blobs_and_their_releas
   fixture.plane().blob_released(99u);
   CHECK_EQ(fixture.peer().delivered(), sent);
   CHECK(fixture.plane().invariants_hold()); }
+
+/* Host memory for a host blob is the renderer's library's: QEMU is answered
+ * its dma-buf, of the size and caching the library gave, and the renderer
+ * keeps who it was made for so that context alone imports it. */
+TEST(renderer_context_plane_memory, is_allocated_in_the_renderer_and_its_dma_buf_crosses_to_qemu)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  fixture.ops().set_memory_caching(AV_MEMORY_WRITE_COMBINED);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000002u, 0x2000u, 0x101u, memory), Status::ok);
+  CHECK(memory.fd >= 0);
+  CHECK_EQ(memory.size, 0x2000u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  const MockExecutorOps::MemoryRequest asked = fixture.ops().last_memory_request();
+  CHECK_EQ(asked.key, 0x01000002u);
+  CHECK_EQ(asked.size, 0x2000u);
+  CHECK_EQ(asked.request, 0x101u);
+  CHECK(fixture.renderer_owners().owns(3u, 0x01000002u));
+  CHECK(!fixture.renderer_owners().owns(4u, 0x01000002u));
+  /* The very memory: what QEMU's descriptor holds, the library sees. */
+  CHECK_EQ(fixture.qemu().place_in_hostmem(memory.fd, 0x2000u, 0u), Status::ok);
+  static_cast<std::uint8_t *>(fixture.qemu().placed_at(0u))[0x1001] = 0x4Bu;
+  CHECK_EQ(fixture.ops().memory_bytes(asked.domain, 0x01000002u)[0x1001], 0x4Bu);
+  fixture.qemu().remove_from_hostmem(0u, 0x2000u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 1u);   /* QEMU's to close */
+  fixture.qemu().close_descriptor(memory.fd);
+  CHECK_EQ(fixture.peer().resources().live_descriptors(), 1u);   /* the renderer closed its answer */
+  fixture.plane().free_memory(0x01000002u);
+  CHECK_EQ(fixture.ops().memory_frees(), 1u);
+  CHECK_EQ(fixture.ops().held_memory(), 0u);
+  CHECK(!fixture.renderer_owners().owns(3u, 0x01000002u));
+  CHECK(fixture.plane().alive());
+  CHECK(fixture.plane().invariants_hold()); }
+
+/* Nothing allocated is an answer, not a death: the renderer runs on. A key
+ * that names no host blob is not kept by the renderer, whatever its library
+ * did, and freed again at once. */
+TEST(renderer_context_plane_memory, memory_the_renderer_does_not_give_is_out_of_memory_and_ends_nothing)
+{ Fixture fixture;
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);   /* none */
+  fixture.plane().free_memory(0x01000002u);   /* none to tell */
+  CHECK_EQ(fixture.peer().delivered(), 0u);
+  CHECK_STATUS(fixture.start(), Status::ok);
+  fixture.ops().refuse_memory_at(1u);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(memory.fd, -1);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 77u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(fixture.ops().memory_frees(), 1u);   /* allocated, and given back as no blob's */
+  CHECK_EQ(fixture.ops().held_memory(), 0u);
+  fixture.ops().withhold_memory_descriptor_at(1u);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000003u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(fixture.ops().held_memory(), 0u);
+  CHECK_EQ(fixture.qemu().renderer_kills(), 0u);
+  CHECK(fixture.plane().alive());
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u); }
+
+TEST(renderer_context_plane_memory, a_renderer_that_does_not_answer_or_cannot_be_told_is_given_up_on)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  fixture.peer().fall_silent();
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(fixture.qemu().renderer_kills(), 1u);
+  CHECK_EQ(fixture.plane().epoch(), 2u);
+  fixture.qemu().renderer_gone();
+  fixture.plane().free_memory(0x01000002u);
+  CHECK_EQ(fixture.qemu().renderer_kills(), 2u);
+  CHECK_EQ(fixture.plane().epoch(), 3u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u); }
+
+/* An answer no renderer sends - a body that does not decode, or memory
+ * with no descriptor beside it - is a renderer to give up on, and whatever
+ * descriptor came with it is closed. */
+TEST(renderer_context_plane_memory, a_garbled_answer_closes_what_came_with_it_and_ends_the_renderer)
+{ MockHost qemu;
+  av::ScriptedRendererPeer peer(qemu);
+  av::BlobTable blobs(qemu);
+  av::FenceInterrupts interrupts(qemu);
+  RendererContextPlane plane(qemu, blobs, interrupts);
+  static std::uint8_t region[0x1000];
+  qemu.add_guest_region(0u, region, sizeof region);
+  qemu.connect_renderer(peer);
+  CHECK_STATUS(plane.configure(renderer_path, executor_path), Status::ok);
+  CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
+  /* hello 1, region 2: the allocation is 3. */
+  std::uint8_t datagram[av::RendererMessageHeader::encoded_size + av::AllocatedMemoryMessage::encoded_size] = {};
+  CHECK_STATUS(av::RendererMessageHeader(av::RendererMessageHeader::Kind::allocated_memory,
+                                         av::AllocatedMemoryMessage::encoded_size, 3u)
+                   .encode(datagram, sizeof datagram),
+               Status::ok);
+  CHECK_STATUS(av::AllocatedMemoryMessage(AV_MEMORY_WRITE_BACK, 0x1000u)
+                   .encode(datagram + av::RendererMessageHeader::encoded_size, av::AllocatedMemoryMessage::encoded_size),
+               Status::ok);
+  peer.queue(datagram, sizeof datagram, 0u);   /* memory, and no descriptor */
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(plane.allocate_memory(3u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(qemu.renderer_kills(), 1u);
+  CHECK_EQ(memory.fd, -1);
+  /* hello 4, region 5: the allocation is 6; nothing allocated, yet a
+   * descriptor beside it. */
+  std::uint8_t nothing[av::RendererMessageHeader::encoded_size + av::AllocatedMemoryMessage::encoded_size] = {};
+  CHECK_STATUS(av::RendererMessageHeader(av::RendererMessageHeader::Kind::allocated_memory,
+                                         av::AllocatedMemoryMessage::encoded_size, 6u)
+                   .encode(nothing, sizeof nothing),
+               Status::ok);
+  peer.queue(nothing, sizeof nothing, 1u);
+  CHECK_STATUS(plane.allocate_memory(3u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(qemu.renderer_kills(), 2u);
+  CHECK_EQ(qemu.live_descriptors(), 0u);
+  /* hello 7, region 8: an honest refusal, 9, ends nothing. */
+  CHECK_STATUS(av::RendererMessageHeader(av::RendererMessageHeader::Kind::allocated_memory,
+                                         av::AllocatedMemoryMessage::encoded_size, 9u)
+                   .encode(nothing, sizeof nothing),
+               Status::ok);
+  peer.queue(nothing, sizeof nothing, 0u);
+  CHECK_STATUS(plane.allocate_memory(3u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_EQ(qemu.renderer_kills(), 2u);
+  CHECK(plane.alive()); }
 
 /* What was shared lives in the renderer's contexts, so the guest's release
  * reaches the executor there, and so does a reset's release of everything. A
@@ -770,7 +880,7 @@ TEST(renderer_context_plane_interrupts, follows_the_guests_interrupts_on_and_off
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK_EQ(fixture.peer().resources().interrupt_lines(), lines);
   CHECK(fixture.peer().host().fence_interrupts_connected());
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 0u);   /* QEMU's duplicates closed */
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u);   /* QEMU's duplicates closed */
   fixture.plane().interrupts_changed(false);
   CHECK_EQ(fixture.peer().resources().interrupt_lines(), 0u);
   CHECK(!fixture.peer().host().fence_interrupts_connected());
@@ -810,32 +920,32 @@ TEST(renderer_context_plane_export_image, keeps_each_slots_dma_buf_until_the_ima
   CHECK_EQ(image.offset, 16u);
   CHECK_EQ(image.fourcc, 0x34325258u);
   CHECK_EQ(image.modifier, 5u);
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 1u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 1u);
   const int held = image.fd;
   AvExportedImage again = {};
   CHECK(fixture.plane().export_image(uuid, 0x77u, again));
   CHECK_EQ(again.fd, held);
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 1u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 1u);
   /* The slot holds another image: the old copy goes, the new one is kept. */
   published.image.height = 48u;
   CHECK(fixture.plane().export_image(uuid, 0x77u, again));
   CHECK_EQ(again.height, 48u);
   CHECK(fixture.qemu().descriptor_open(again.fd));
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 1u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 1u);
   /* The other slot is kept beside it. */
   published.image.slot = 1u;
   CHECK(fixture.plane().export_image(uuid, 0x77u, again));
   CHECK_EQ(again.slot, 1u);
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 2u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 2u);
   /* Nothing published: nothing shown, nothing let go. */
   published.found = false;
   CHECK(!fixture.plane().export_image(uuid, 0x77u, again));
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 2u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 2u);
   CHECK_EQ(fixture.qemu().renderer_kills(), 0u);
   /* The renderer's images go with it. */
   fixture.qemu().renderer_gone();
   fixture.plane().renderer_lost();
-  CHECK_EQ(fixture.qemu().live_dmabufs(), 0u);
+  CHECK_EQ(fixture.qemu().live_descriptors(), 0u);
   /* A silent renderer is given up on. */
   fixture.peer().fall_silent();
   CHECK(!fixture.plane().export_image(uuid, 0x77u, again));
@@ -878,7 +988,7 @@ TEST(renderer_context_plane_export_image, a_garbled_answer_or_an_image_never_sen
   peer.queue(datagram, sizeof datagram, 1u);
   CHECK(!plane.export_image(uuid, 0x77u, image));
   CHECK_EQ(qemu.renderer_kills(), 1u);
-  CHECK_EQ(qemu.live_dmabufs(), 0u);
+  CHECK_EQ(qemu.live_descriptors(), 0u);
   CHECK(plane.alive());
   CHECK_EQ(plane.epoch(), 2u);
   /* A flag that is neither 0 nor 1, with nothing beside it: hello 5, region
@@ -891,7 +1001,7 @@ TEST(renderer_context_plane_export_image, a_garbled_answer_or_an_image_never_sen
   peer.queue(datagram, sizeof datagram, 0u);
   CHECK(!plane.export_image(uuid, 0x77u, image));
   CHECK_EQ(qemu.renderer_kills(), 2u);
-  CHECK_EQ(qemu.live_dmabufs(), 0u); }
+  CHECK_EQ(qemu.live_descriptors(), 0u); }
 
 /* A line QEMU has no notifier for is marked absent, and none is sent. */
 TEST(renderer_context_plane_interrupts, lines_qemu_has_no_notifier_for_are_sent_absent)

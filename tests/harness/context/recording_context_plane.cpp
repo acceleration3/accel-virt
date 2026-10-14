@@ -29,9 +29,10 @@ Status RecordingContextPlane::allocate_memory(std::uint32_t context, std::uint64
     memory_allocations_++;
     if (refuse_memory_ != 0u && --refuse_memory_ == 0u) return Status::no_memory;
     if (library_ != nullptr) return library_->allocate_memory(key, size, request, memory);
-    memory.fd = without_descriptor_ ? -1 : fresh_memfd(size);
+    const std::uint64_t made = long_ ? size + 4096u : size;
+    memory.fd = without_descriptor_ ? -1 : fresh_memfd(made);
     memory.caching = caching_;
-    memory.size = short_ ? size - 4096u : size;
+    memory.size = short_ ? size - 4096u : made;
     return Status::ok;
 }
 

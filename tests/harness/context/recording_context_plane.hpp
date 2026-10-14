@@ -29,7 +29,9 @@ public:
     Status        create(std::uint32_t) override { return Status::not_supported; }
     Status        destroy(std::uint32_t) override { return Status::not_found; }
     void          destroy_all() override {}
-    bool          holds(std::uint32_t) override { return false; }
+    /* Only the context a test said is live (hold_context): none by default. */
+    bool          holds(std::uint32_t id) override { return id != 0u && id == held_context_; }
+    void          hold_context(std::uint32_t id) { held_context_ = id; }
     Status        bind(std::uint32_t, const ContextSetup &, const CapsetInfo &) override { return Status::not_supported; }
     bool          holds_doorbell(std::uint32_t) override { return false; }
     bool          can_share(std::uint32_t, std::uint32_t) override { return false; }
@@ -107,6 +109,8 @@ public:
      * breaking the ABI. */
     void          answer_caching(std::uint32_t caching) { caching_ = caching; }
     void          answer_short() { short_ = true; }
+    /* One page more than asked, as a driver that rounds an allocation up. */
+    void          answer_long() { long_ = true; }
     void          answer_without_descriptor() { without_descriptor_ = true; }
     /* Memory allocated and freed through `library` from now on, as the local
      * plane does, so an import of it reaches memory the library knows. */
@@ -208,8 +212,10 @@ private:
     std::uint32_t   refuse_memory_ = 0u;
     std::uint32_t   caching_ = AV_MEMORY_WRITE_BACK;
     bool            short_ = false;
+    bool            long_ = false;
     bool            without_descriptor_ = false;
     ExecutorLibrary *library_ = nullptr;
+    std::uint32_t   held_context_ = 0u;
     bool            served_ = false;
     std::uint32_t   unmaps_ = 0u;
     std::uint32_t created_[capacity] = {};

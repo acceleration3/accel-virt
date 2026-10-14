@@ -1,9 +1,9 @@
 /* A transport blob command as a hostile guest frames it, run over a context
- * whose chunk 0 is a guest blob of three scattered pages and chunk 1 a host
- * blob: whatever the bytes, the command answers or refuses the framing, an
- * import it answers names memory only when it made some, releasing that import
- * leaves the context as it was, and nothing reads or writes outside what it was
- * given (ASan).
+ * whose process opened host blob 0, beside host blob 1 of another context:
+ * whatever the bytes, the command answers or refuses the framing, an import
+ * it answers names memory only when it made some, releasing that import
+ * leaves the context as it was, and nothing reads or writes outside what it
+ * was given (ASan).
  *
  * Input: u8 command (0 IMPORT_BLOB, 1 RELEASE_BLOB, anything else another
  * transport id), u8 reply capacity, then the body. */
@@ -23,8 +23,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
 
 namespace {
 
-constexpr std::size_t   max_body = 64u;
-constexpr std::uint32_t pages[] = {5u, 1u, 2u};
+constexpr std::size_t max_body = 64u;
 
 std::uint32_t command_of(std::uint8_t selector)
 {
@@ -44,8 +43,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     std::memcpy(body, data + 2, length);
 
     av::ImportRig rig;
-    if (rig.create_guest_blob(rig.chunk(0u), pages, 3u) != av::Status::ok ||
-        rig.blobs().create_host(rig.chunk(1u), av::ImportRig::page) != av::Status::ok)
+    if (rig.create_host_blob(rig.blob(0u), av::ImportRig::context) != av::Status::ok ||
+        rig.create_host_blob(rig.blob(1u), av::ImportRig::other_context) != av::Status::ok)
         __builtin_trap();
     std::uint8_t      reply[32] = {};
     std::size_t       produced = 0u;
@@ -66,7 +65,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (rig.imports().imports() != (imported ? 1u : 0u) || rig.ops().live_imports() != rig.imports().imports())
         __builtin_trap();
     rig.on_worker([&] { rig.imports().release(answer.device_memory()); });
-    if (rig.imports().imports() != 0u || rig.ops().live_imports() != 0u || rig.host().live_ranges() != 0u)
-        __builtin_trap();
+    if (rig.imports().imports() != 0u || rig.ops().live_imports() != 0u) __builtin_trap();
     return 0;
 }

@@ -964,10 +964,8 @@ Status MockHost::show_scanout(std::uint32_t head, const std::uint8_t *blob, cons
 Status MockHost::show_scanout_plane(std::uint32_t head, const std::uint8_t *blob, const Plane &plane)
 {
     StateLock lock(state_);
-    if (head >= display_heads_ || head >= max_scanout_heads) {
-        violations_[static_cast<std::uint32_t>(HostViolation::scanout_misuse)]++;
-        return Status::not_supported;
-    }
+    /* A head the display lacks is refused, as QEMU's glue refuses it. */
+    if (head >= display_heads_ || head >= max_scanout_heads) return Status::not_supported;
     /* A head reads the frame out of the mapping until it shows something
      * else; there is no frame without one. */
     if (blob == nullptr) {
@@ -1552,7 +1550,7 @@ Status MockHost::receive_renderer(std::uint8_t *buffer, std::size_t capacity, st
         return Status::invalid_state;
     length = got;
     count = taken;
-    for (std::uint32_t index = 0u; index < taken; index++)
+    for (std::uint32_t index = 0u; index < taken && index < capacity_descriptors; index++)
         if (descriptors[index] >= 0) count_descriptor(descriptors[index]);
     return Status::ok;
 }
@@ -1634,6 +1632,10 @@ void MockHost::close_export(int descriptor)
     {
         StateLock lock(state_);
         exports_closed_++;
+        /* A counted descriptor the device handed on and closed this way is
+         * closed all the same. */
+        for (int &slot : counted_)
+            if (slot == descriptor) slot = -1;
     }
     ::close(descriptor);
 }

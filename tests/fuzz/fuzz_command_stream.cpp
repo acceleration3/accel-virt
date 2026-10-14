@@ -15,7 +15,7 @@
 #include "device/execution/executor_shares.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
-#include "device/memory/blob_table.hpp"
+#include "device/memory/host_blob_table.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/context/ring_window.hpp"
@@ -68,7 +68,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::FenceInterrupts interrupts(host);
     av::WireRecorder    recorder(host);
     av::FenceReporter   fences(host, interrupts, recorder, 1u);
-    av::BlobTable       blobs(host);
+    av::HostBlobTable   blobs(host);
     av::BlobImports     imports(host, blobs, executor, recorder, 1u);
     av::BatchExecutor batches(host, executor, imports, staging, fences, recorder, 1u);
     batches.prepare(with_reply ? av::BlobWindow(&reply_pointer, &reply_bytes, 1u, reply_bytes) : av::BlobWindow());
