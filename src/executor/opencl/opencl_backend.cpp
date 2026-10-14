@@ -30,6 +30,7 @@
 
 #include <CL/cl_ext.h>
 #include <string.h>
+#include <time.h>
 
 namespace av {
 
@@ -57,7 +58,8 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
 
 OpenClBackend::OpenClBackend()
     : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), context_(nullptr),
-      queue_(nullptr), handles_(), svm_(), events_(), ran_(0u), lost_(false)
+      queue_(nullptr), handles_(), svm_(), events_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+      lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
@@ -414,6 +416,7 @@ void OpenClBackend::shut_down()
     AV_SCOPE("OpenClBackend::shut_down");
     /* What this context imported is released by HostShares as the session
      * ends, before this: the registry holds no shared cl_mem by now. */
+    stop_pacing();
     handles_.release_all(*this);
     /* Before the ranges go: a release may free an allocation, and nothing
      * afterwards may resolve one. */
@@ -436,6 +439,100 @@ void OpenClBackend::shut_down()
     bound_ = nullptr;
     ran_ = 0u;
     lost_ = false;
+}
+
+cl_int OpenClBackend::on_clEnqueueNDRangeKernel(cl_command_queue command_queue, cl_kernel kernel, cl_uint work_dim,
+                                                const size_t *global_work_offset, const size_t *global_work_size,
+                                                const size_t *local_work_size, cl_uint num_events_in_wait_list,
+                                                const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueNDRangeKernel");
+    const cl_int enqueued = RealDispatch::on_clEnqueueNDRangeKernel(command_queue, kernel, work_dim,
+                                                                    global_work_offset, global_work_size,
+                                                                    local_work_size, num_events_in_wait_list,
+                                                                    event_wait_list, event);
+    if (enqueued == CL_SUCCESS) pace(command_queue);
+    return enqueued;
+}
+
+cl_int OpenClBackend::on_clEnqueueTask(cl_command_queue command_queue, cl_kernel kernel,
+                                       cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                       cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueTask");
+    const cl_int enqueued =
+        RealDispatch::on_clEnqueueTask(command_queue, kernel, num_events_in_wait_list, event_wait_list, event);
+    if (enqueued == CL_SUCCESS) pace(command_queue);
+    return enqueued;
+}
+
+cl_int OpenClBackend::on_clFlush(cl_command_queue command_queue)
+{
+    AV_SCOPE("OpenClBackend::on_clFlush");
+    const cl_int flushed = RealDispatch::on_clFlush(command_queue);
+    if (command_queue == paced_queue_) pacer_.flushed();
+    look_at_marker();
+    return flushed;
+}
+
+cl_int OpenClBackend::on_clFinish(cl_command_queue command_queue)
+{
+    AV_SCOPE("OpenClBackend::on_clFinish");
+    const cl_int finished = RealDispatch::on_clFinish(command_queue);
+    if (command_queue == paced_queue_) pacer_.flushed();
+    look_at_marker();
+    return finished;
+}
+
+void OpenClBackend::pace(cl_command_queue queue)
+{
+    AV_SCOPE("OpenClBackend::pace");
+    look_at_marker();
+    if (queue != paced_queue_) {
+        if (paced_queue_ != nullptr) {
+            static_cast<void>(::clFlush(static_cast<cl_command_queue>(paced_queue_)));
+            static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(paced_queue_)));
+        }
+        pacer_.flushed();
+        paced_queue_ = ::clRetainCommandQueue(queue) == CL_SUCCESS ? queue : nullptr;
+    }
+    if (!pacer_.kernel()) return;
+    cl_event marker = nullptr;
+    if (!pacer_.timing() && ::clEnqueueMarkerWithWaitList(queue, 0u, nullptr, &marker) == CL_SUCCESS) {
+        timespec now = {};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        marker_ = marker;
+        pacer_.time_from(static_cast<uint64_t>(now.tv_sec) * 1000000000u + static_cast<uint64_t>(now.tv_nsec));
+    }
+    static_cast<void>(::clFlush(queue));
+    pacer_.flushed();
+}
+
+/* A marker that failed is a group that ended, as far as timing it goes. */
+void OpenClBackend::look_at_marker()
+{
+    AV_SCOPE("OpenClBackend::look_at_marker");
+    if (marker_ == nullptr) return;
+    cl_int status = CL_QUEUED;
+    if (::clGetEventInfo(static_cast<cl_event>(marker_), CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
+                         nullptr) == CL_SUCCESS &&
+        status > CL_COMPLETE)
+        return;
+    timespec now = {};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    pacer_.timed(static_cast<uint64_t>(now.tv_sec) * 1000000000u + static_cast<uint64_t>(now.tv_nsec));
+    static_cast<void>(::clReleaseEvent(static_cast<cl_event>(marker_)));
+    marker_ = nullptr;
+}
+
+void OpenClBackend::stop_pacing()
+{
+    AV_SCOPE("OpenClBackend::stop_pacing");
+    if (marker_ != nullptr) static_cast<void>(::clReleaseEvent(static_cast<cl_event>(marker_)));
+    if (paced_queue_ != nullptr) static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(paced_queue_)));
+    marker_ = nullptr;
+    paced_queue_ = nullptr;
+    pacer_ = KernelPacer();
 }
 
 uint64_t OpenClBackend::ran() const

@@ -529,6 +529,26 @@ TEST(gl_icd_root_set_swap_interval, unpaced_only_the_first_swap_after_a_blank_is
   CHECK_EQ(rig.surface().blits(), 3u);
   CHECK(rig.root().invariants_hold()); }
 
+/* A swap ends the application's frame whether or not the screen shows it:
+ * what the frame held reaches the host, as a native driver's swap flushes,
+ * and the frame counts toward how far ahead the application may run. */
+TEST(gl_icd_root_swap_buffers, a_swap_the_screen_does_not_show_still_sends_what_the_frame_held)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+  CHECK_EQ(set(0), 1);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  const std::uint32_t before = rig.kmt().commands();
+  rig.opengl32().gl<ClearFn>(slot_clear)(0x4000u);
+  CHECK_EQ(rig.kmt().commands(), before);   /* held in the batch */
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));   /* the same refresh: not shown */
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK_EQ(rig.kmt().command_id(before), av::glproto::kCmd_glClear); }
+
 /* A swap puts the calling thread's context's frame on the DC's window: a DC of
  * a window with another format, a memory DC and a thread with nothing current
  * swap nothing, and only the main plane is a layer that swaps. */

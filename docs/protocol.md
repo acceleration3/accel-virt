@@ -1110,8 +1110,9 @@ the head is hidden.
 
 ## Fence page (device -> guest)
 
-Offset 0 of the fence resource. The device updates it from its worker thread;
-the guest reads it from its interrupt path. 40 bytes.
+Offset 0 of the fence resource. The device updates it from its worker thread,
+all but the beat word, which its pulse thread writes; the guest reads it from
+its interrupt path and from the processes that wait on it. 48 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
@@ -1122,6 +1123,7 @@ the guest reads it from its interrupt path. 40 bytes.
 | 24 | u32 | fault_code | 0 unless `faulted` |
 | 28 | u32 | reserved | 0 |
 | 32 | u64 | raised | out-of-band raises delivered (feature 052); capset bit 6 |
+| 40 | u64 | beat | moves while the device is at work for the guest (below) |
 
 The fault codes, which say where to look rather than only that something
 failed: 1 ring header, 2 ring tail, 3 batch header, 4 batch order, 5 command
@@ -1130,20 +1132,42 @@ last is a library answering a value the executor ABI does not define, and it is
 separate from device lost on purpose - folded together, a bug in an executor
 reads as a GPU fault and is chased in the wrong place.
 
-Against what the guest has seen: `completed_fence`, `progress` and `raised`
-never decrease, `completed_fence` never exceeds the highest fence id submitted, and
+Against what the guest has seen: `completed_fence`, `progress`, `raised` and
+`beat` never decrease, `completed_fence` never exceeds the highest fence id submitted, and
 once `faulted` is observed it stays set for the context's lifetime.
 
 **When the device writes it.** At the context setup, before the ring is
-attached: magic, flags 0, completed 0, progress 0, fault code 0. Then from the
+attached: magic, flags 0, completed 0, progress 0, fault code 0, beat 0. Then from the
 context's worker: after every command it executes, progress moves on (a
 heartbeat: a long batch reads as busy, not hung); after every batch it
 completes, completed is that batch's fence and progress moves on again; and
 once, if the context faults, the page reads `faulted` with the last completed
 fence, the progress so far and the fault code. Nothing is written after a
-fault. Every write is the whole page from the device's own counters; the
+fault. Every write is the whole page but the beat from the device's own counters; the
 device never reads the page back, so a page the guest overwrites is rewritten
 by the next write.
+
+**The beat.** A worker writes the page only between commands, and one command
+can sit in a host call for seconds: a host driver holds the call until the GPU
+drains a queue (a Radeon 610M running a few hundred compute dispatches a
+frame), and nothing else on the page moves meanwhile. The device's pulse - one
+thread per device (`DevicePulse`) - moves `beat` on every bound context's page
+every 250 ms while any context of the device is at work: running a batch, a
+host call included, or keeping watch on GPU results it has yet to publish.
+Every page, not only the busy context's, because a context whose work waits
+behind another's is waiting on the same device. With nothing at work nothing
+beats, and the pulse sleeps until a worker goes to work. The worker never
+writes the word - its whole-page writes stop at offset 40 - so the two writers
+never store each other's words, and the beat only goes forward; a faulted
+page is beaten no more (at most once after the fault, by a pulse already
+inside its pass).
+
+**How long a guest waits.** Never for a fixed time. A process waiting on its
+context (`KmtTransport`, through `HostWatch`) gives up only when the page says
+`faulted`, or when nothing the device publishes - the ring's head,
+`completed_fence`, `progress`, `beat` - has moved for 30 s, which no device at
+work is ever quiet for. A host GPU that is truly hung is the host kernel's to
+reset, and the reset reaches the guest as a fault.
 
 **The out-of-band raise** (feature 052). A host API that finishes work on a
 thread the device never gave it - OpenCL's event callbacks - reaches the guest

@@ -6,20 +6,20 @@
 
 namespace av {
 
-FencePage::FencePage() : flags_(0u), completed_fence_(0u), progress_(0u), fault_code_(0u), raised_(0u)
+FencePage::FencePage() : flags_(0u), completed_fence_(0u), progress_(0u), fault_code_(0u), raised_(0u), beat_(0u)
 {
     AV_SCOPE("FencePage::FencePage");
 }
 
 FencePage::FencePage(uint64_t completed_fence, uint64_t progress)
-    : flags_(0u), completed_fence_(completed_fence), progress_(progress), fault_code_(0u), raised_(0u)
+    : flags_(0u), completed_fence_(completed_fence), progress_(progress), fault_code_(0u), raised_(0u), beat_(0u)
     {
         AV_SCOPE("FencePage::FencePage");
     }
 
 FencePage::FencePage(uint64_t completed_fence, uint64_t progress, uint32_t fault_code)
     : flags_(faulted_flag), completed_fence_(completed_fence), progress_(progress),
-      fault_code_(fault_code), raised_(0u)
+      fault_code_(fault_code), raised_(0u), beat_(0u)
       {
           AV_SCOPE("FencePage::FencePage");
       }
@@ -29,6 +29,14 @@ FencePage FencePage::raising(uint64_t raised) const
     AV_SCOPE("FencePage::raising");
     FencePage page = *this;
     page.raised_ = raised;
+    return page;
+}
+
+FencePage FencePage::beating(uint64_t beat) const
+{
+    AV_SCOPE("FencePage::beating");
+    FencePage page = *this;
+    page.beat_ = beat;
     return page;
 }
 
@@ -57,6 +65,11 @@ uint64_t FencePage::raised() const
     AV_SCOPE("FencePage::raised");
     return raised_;
 }
+uint64_t FencePage::beat() const
+{
+    AV_SCOPE("FencePage::beat");
+    return beat_;
+}
 
 Status FencePage::encode(uint8_t *bytes, size_t capacity) const
 {
@@ -70,6 +83,7 @@ Status FencePage::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(fault_code_);
     writer.write_zeros(4u);
     writer.write_u64(raised_);
+    writer.write_u64(beat_);
     return writer.status();
 }
 
@@ -85,6 +99,7 @@ Status FencePage::decode(const uint8_t *bytes, size_t length)
     candidate.fault_code_      = reader.read_u32();
     reader.expect_zero(4u);
     candidate.raised_          = reader.read_u64();
+    candidate.beat_            = reader.read_u64();
     if (reader.status() != Status::ok) return reader.status();
     const bool unknown_flags = (candidate.flags_ & ~faulted_flag) != 0u;
     const bool stray_code = !candidate.faulted() && candidate.fault_code_ != 0u;

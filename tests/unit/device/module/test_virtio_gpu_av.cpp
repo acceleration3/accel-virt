@@ -51,7 +51,7 @@ struct DeviceContextTableProbe {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
                 static_cast<void>(slot.construct(table.host_, table.blobs_, table.owners_, table.interrupts_,
-                                                 table.library_, table.shares_, table.recorder_, table.ordering_, id));
+                                                 table.library_, table.shares_, table.recorder_, table.ordering_, table.pulse_, id));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -507,7 +507,7 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_shared_executors_refuses_th
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(5u);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::no_memory);
-  CHECK(std::strstr(message.text(), "no mutex for the contexts' ordering and executors") != nullptr);
+  CHECK(std::strstr(message.text(), "no mutex for the contexts' ordering, pulse and executors") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, again), Status::ok);
@@ -522,8 +522,8 @@ TEST(virtio_gpu_av_realize, a_host_with_no_mutex_for_the_stress_probe_still_real
   VirtioGpuAv device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(6u);   /* the fence interrupts, the blob table, the host blob table, the D3D
-                             * ordering and the shared executors take the first five */
+  host.fail_mutex_at(7u);   /* the fence interrupts, the blob table, the host blob table, the D3D
+                             * ordering, the pulse and the shared executors take the first six */
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -549,11 +549,11 @@ TEST(virtio_gpu_av, lifecycle_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   /* realize, its fence interrupts, its blob table, its host blob table, its
-   * context table and its binding, reset, its display clock, its present
+   * context table, its pulse and its binding, reset, its display clock, its present
    * engine, every table, the host blobs, the export socket's revocation, the
    * status and the interrupts under it, create, destroy and its table, and
    * control, which an unrealized device answers no further */
-  for (int violation = 0; violation < 19; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  for (int violation = 0; violation < 20; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 

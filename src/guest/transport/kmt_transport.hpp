@@ -17,6 +17,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
 #include "guest/transport/guest_doorbell.hpp"
+#include "guest/transport/host_watch.hpp"
 #include "guest/transport/reply_reader.hpp"
 #include "guest/transport/submission_path.hpp"
 #include "guest/transport/transport_fence.hpp"
@@ -43,9 +44,6 @@ struct KmtTransportProbe;
 class KmtTransport final : public ClientTransport {
 public:
     static constexpr uint32_t dma_bytes    = 4096u;
-    /* Kernel waits (ten seconds each, GdiKmt) in a row with nothing moving
-     * before the host is given up on: past amdgpu's 60 s for a compute job. */
-    static constexpr uint32_t silent_waits = 7u;
 
     /* A ring of 2^ring_order data bytes, a reply slot of `reply_bytes` (whole
      * pages), and `staging_bytes` of the caller's memory at `staging`, which
@@ -84,8 +82,8 @@ public:
      * be published: invalid_parameter for one that is not. ok at once for 0
      * or a fence already finished. A driver with no fence page is waited on
      * for the whole context, which the kernel signals only once the GPU has
-     * run it. A wait that fails, or progress that never arrives, faults the
-     * context: invalid_state, as on one already faulted. */
+     * run it. A wait that fails, or a host that goes silent (HostWatch),
+     * faults the context: invalid_state, as on one already faulted. */
     [[nodiscard]] Status await_gpu(uint64_t fence);
     /* How this transport's submissions went (feature 049): through the
      * doorbell, and through the kernel. */
@@ -196,12 +194,10 @@ private:
     void                          spin_once() const;
     template <typename Arrived> bool arrives_eventually(Arrived arrived);
     [[nodiscard]] Status          wait_for_host(uint64_t fence);
-    /* The fence page's heartbeat (docs/protocol.md, "Fence page"): it advances
-     * as the device decodes a batch, so a batch the host GPU is slow to run is
-     * told from one that will never end. 0 without a fence page. */
-    uint64_t                      device_heartbeat() const;
-    /* Whether the fence page says the device faulted this context. */
-    bool                          device_faulted() const;
+    /* Whether the kernel can wait for `fence` alone: a queue's progress fence
+     * can, and so can a context's wait for its newest batch; for an older one
+     * the context's wait would wait for every batch after it too. */
+    bool                          kernel_waits_for(uint64_t fence) const;
     bool                          room_within_spin(uint64_t span);
 
     GuestConnection &connection_;
@@ -228,8 +224,9 @@ private:
     GuestDoorbell    doorbell_;
     SubmissionPath   path_;
     ReplyReader      reply_;
-    /* The fence page, read-only; null from a driver that maps none. */
-    const uint8_t   *fence_page_;
+    /* The fence page, read-only, and whether the host still works on what is
+     * waited for. */
+    HostWatch        watch_;
     TransportFence   fences_;
     /* Where each outstanding fence's batch ends in the ring. */
     uint64_t         fence_ends_[TransportFence::max_outstanding];

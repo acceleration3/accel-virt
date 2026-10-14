@@ -3,7 +3,9 @@
  * batch completed, and a fault that, once written, is the page's last change -
  * and one interrupt on the context's line for each service that completed
  * anything or faulted. Prepared on the main loop at setup, before the ring is
- * attached; used only by the worker after that. */
+ * attached; used only by the worker after that, but for the beat word, which
+ * the device's pulse writes (DevicePulse) while the worker says it is at
+ * work. */
 #ifndef AV_FENCE_REPORTER_HPP
 #define AV_FENCE_REPORTER_HPP
 
@@ -15,6 +17,7 @@
 
 namespace av {
 
+class DevicePulse;
 class FenceInterrupts;
 class Host;
 class WireRecorder;
@@ -45,6 +48,19 @@ public:
     void                 fault(FaultCode code);
     /* Worker: one interrupt when anything completed or faulted since the last. */
     void                 signal();
+    /* Worker: whether it is at work for the guest now - inside a host call or
+     * waiting on the host GPU - which is when the pulse beats; going to work
+     * stirs the pulse that carries the page. */
+    void                 at_work(bool working);
+    /* The pulse, as it takes the page on: the one at_work stirs. It outlives
+     * the reporter. */
+    void                 beat_by(DevicePulse &pulse);
+    /* Any thread. */
+    bool                 working() const;
+    /* The pulse, under its lock: the beat word one further. Nothing once
+     * faulted, or before the page is prepared. */
+    void                 beat();
+    uint64_t             beats() const;
     bool                 faulted() const;
 
     uint64_t completed() const;
@@ -59,14 +75,19 @@ private:
     WireRecorder    &recorder_;
     uint32_t         context_;
     FenceWindow      page_;
+    DevicePulse     *pulse_;
     uint32_t         line_;
     uint64_t         completed_;
     uint64_t         progress_;
     uint64_t         raised_;
+    uint64_t         beats_;
     FaultCode        fault_;
     bool             prepared_;
     bool             faulted_;
     bool             pending_;
+    /* Shared with the pulse's thread, so stored and read atomically. */
+    bool             working_;
+    bool             quiet_;
 
     friend struct FenceReporterProbe;
 };

@@ -31,7 +31,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), fence_page_(nullptr), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -159,7 +159,7 @@ Status KmtTransport::adopt_views()
     const Status ring_bound = ring_.initialize(reinterpret_cast<uint8_t *>(ring), ring_order_);
     if (ring_bound != Status::ok) return ring_bound;
     reply_ = ReplyReader(reinterpret_cast<uint8_t *>(reply), reply_bytes_);
-    fence_page_ = reinterpret_cast<const uint8_t *>(fence);
+    watch_.read_page(reinterpret_cast<const uint8_t *>(fence));
     return Status::ok;
 }
 
@@ -174,20 +174,16 @@ Status KmtTransport::ask_views(ContextViewsRecord &views)
     return views.accept_answer(bytes, sizeof bytes);
 }
 
-/* The field is one aligned u64 the device stores whole, so a load of it alone
- * is never torn, while a decode of the page could mix two of its writes. */
 uint64_t KmtTransport::gpu_completed() const
 {
     AV_SCOPE("KmtTransport::gpu_completed");
-    constexpr size_t completed_fence_at = 8u;
-    if (fence_page_ == nullptr) return 0u;
-    return __atomic_load_n(reinterpret_cast<const uint64_t *>(fence_page_ + completed_fence_at), __ATOMIC_ACQUIRE);
+    return watch_.completed();
 }
 
 bool KmtTransport::knows_gpu_progress() const
 {
     AV_SCOPE("KmtTransport::knows_gpu_progress");
-    return fence_page_ != nullptr;
+    return watch_.reads_page();
 }
 
 uint64_t KmtTransport::published_fence() const
@@ -196,17 +192,26 @@ uint64_t KmtTransport::published_fence() const
     return newest_fence_;
 }
 
+/* The fence page says when one batch is done, so a wait the kernel would
+ * stretch over later batches - a frame's throttle waits for one a few behind
+ * the newest - is a watch on the page alone. */
 Status KmtTransport::await_gpu(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::await_gpu");
     if (faulted_) return Status::invalid_state;
     if (fence > newest_fence_) return Status::invalid_parameter;
-    if (fence == 0u || (fence_page_ != nullptr && gpu_completed() >= fence)) return Status::ok;
-    const bool waited = wait_for_host(fence) == Status::ok;
-    if (waited && fence_page_ == nullptr) return Status::ok;
+    if (fence == 0u || (watch_.reads_page() && gpu_completed() >= fence)) return Status::ok;
+    const bool waited = !kernel_waits_for(fence) || wait_for_host(fence) == Status::ok;
+    if (waited && !watch_.reads_page()) return Status::ok;
     if (waited && arrives_eventually([this, fence] { return gpu_completed() >= fence; })) return Status::ok;
     faulted_ = true;
     return Status::invalid_state;
+}
+
+bool KmtTransport::kernel_waits_for(uint64_t fence) const
+{
+    AV_SCOPE("KmtTransport::kernel_waits_for");
+    return !watch_.reads_page() || doorbell_.queue() != 0u || fence == newest_fence_;
 }
 
 Status KmtTransport::wake_on_raise(uint64_t handle)
@@ -299,7 +304,7 @@ void KmtTransport::teardown()
      * down could never be initialized again. */
     ring_ = TransportRing();
     reply_ = ReplyReader();
-    fence_page_ = nullptr;
+    watch_.read_page(nullptr);
     fences_ = TransportFence();
     faulted_ = false;
     /* A gate is its device's, which a transport torn down outlives no longer. */
@@ -396,55 +401,23 @@ bool KmtTransport::make_room_for_blobs(size_t bytes)
     return blobs_.room() >= bytes;
 }
 
-/* The kernel's wait is bounded, so a host that died is reported rather than
- * waited on forever; but a host still working through what was queued ahead
- * of `fence` is alive, just behind. A wait that times out while the device's
- * head moved is waited again; only one in which the device took nothing at
- * all gives up. */
-/* A wait that times out is a hang only when nothing has moved for longer than
- * a host GPU may legitimately run one job. The head moves as a batch ends and
- * the device's heartbeat as it decodes, but one command can block in the host
- * driver until the GPU drains: a batch of a few hundred compute dispatches ran
- * past the kernel's ten-second wait on an integrated GPU (a Radeon 610M, an
- * Iris Xe), and the context was lost although the host was still running it.
- * The host kernel resets a GPU that is truly hung (amdgpu lets a compute job
- * run 60 s), and the reset reaches here as a fault, which ends the wait at
- * once; silence is given up on only after outlasting that. */
+/* The kernel's wait is bounded, so it is asked again for as long as the host
+ * is still at work: one command can block in a host driver until the GPU
+ * drains a queue of seconds (a Radeon 610M, an Iris Xe), and a guest that
+ * gave up on it lost a context the host was still running. Only a fault, or a
+ * device gone silent, ends it (HostWatch). */
 Status KmtTransport::wait_for_host(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::wait_for_host");
-    uint32_t silent = 0u;
+    watch_.start();
     for (;;) {
-        const uint64_t head = ring_.head();
-        const uint64_t heartbeat = device_heartbeat();
-        const Status   waited = doorbell_.queue() != 0u
-                                    ? connection_.kmt().wait_for_hw_queue(connection_.device(),
-                                                                          doorbell_.progress_fence(), fence)
-                                    : connection_.kmt().wait_for_context(connection_.device(), context_);
-        if (waited == Status::ok || connection_.kmt().last_code() != wait_timed_out || device_faulted())
+        const Status waited = doorbell_.queue() != 0u
+                                  ? connection_.kmt().wait_for_hw_queue(connection_.device(),
+                                                                        doorbell_.progress_fence(), fence)
+                                  : connection_.kmt().wait_for_context(connection_.device(), context_);
+        if (waited == Status::ok || connection_.kmt().last_code() != wait_timed_out || !watch_.keeps_waiting())
             return waited;
-        silent = ring_.head() == head && device_heartbeat() == heartbeat ? silent + 1u : 0u;
-        if (silent == silent_waits) return waited;
     }
-}
-
-/* Each field is one aligned word the device stores whole, as gpu_completed's. */
-uint64_t KmtTransport::device_heartbeat() const
-{
-    AV_SCOPE("KmtTransport::device_heartbeat");
-    constexpr size_t progress_at = 16u;
-    if (fence_page_ == nullptr) return 0u;
-    return __atomic_load_n(reinterpret_cast<const uint64_t *>(fence_page_ + progress_at), __ATOMIC_ACQUIRE);
-}
-
-bool KmtTransport::device_faulted() const
-{
-    AV_SCOPE("KmtTransport::device_faulted");
-    constexpr size_t   flags_at = 4u;
-    constexpr uint32_t faulted_flag = 1u;
-    if (fence_page_ == nullptr) return false;
-    return (__atomic_load_n(reinterpret_cast<const uint32_t *>(fence_page_ + flags_at), __ATOMIC_ACQUIRE) &
-            faulted_flag) != 0u;
 }
 
 /* Every fence whose batch the device has moved its head past is done: the
@@ -700,23 +673,20 @@ bool KmtTransport::room_within_spin(uint64_t span)
     }
 }
 
-/* A device that has stopped taking the ring leaves the process waiting, so
- * the wait ends in a fault after a few seconds rather than never. */
+/* What the device has yet to write is watched for for as long as the host is
+ * at work (HostWatch): a device that has stopped taking the ring ends the wait
+ * in a fault rather than never. */
 template <typename Arrived> bool KmtTransport::arrives_eventually(Arrived arrived)
 {
     AV_SCOPE("KmtTransport::arrives_eventually");
-    constexpr uint64_t patience_seconds = 5u;
-    uint64_t           frequency = 0u;
-    const uint64_t     started = connection_.kmt().performance_counter(frequency);
+    /* Spinning, as a GPU wait of a few milliseconds usually is; a sleep
+     * costs a timer tick. */
+    constexpr uint64_t spins_per_second = 50u;
+    watch_.start();
     for (;;) {
         if (arrived()) return true;
-        uint64_t unused = 0u;
-        const uint64_t elapsed = connection_.kmt().performance_counter(unused) - started;
-        if (elapsed >= frequency * patience_seconds) return false;
-        /* Spinning, as a GPU wait of a few milliseconds usually is; a sleep
-         * costs a timer tick, up to 15 ms on Windows' default resolution. */
-        constexpr uint64_t spins_per_second = 50u;
-        if (elapsed < frequency / spins_per_second) spin_once();
+        if (!watch_.keeps_waiting()) return false;
+        if (watch_.elapsed() < watch_.frequency() / spins_per_second) spin_once();
         else connection_.kmt().sleep_briefly();
     }
 }

@@ -7,6 +7,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "guest/transport/host_watch.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "guest/transport/publish_gate.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -638,6 +639,112 @@ TEST(kmt_transport, a_wait_for_the_gpu_returns_once_the_page_shows_the_batch)
   CHECK(transport.faulted());
   CHECK_STATUS(transport.await_gpu(1u), Status::invalid_state); }
 
+namespace {
+
+/* The device behind a transport while the process watches its fence page:
+ * every read of the clock is a millisecond, its pulse beats at each one if
+ * it is at work, and the batch `fence` finishes after `after` of them. */
+class SlowDevice final : public av::ClockReader {
+public:
+    SlowDevice(MockKmt &kmt, std::uint32_t context, bool pulsing, std::uint64_t fence, std::uint32_t after)
+        : kmt_(kmt), context_(context), pulsing_(pulsing), fence_(fence), after_(after), reads_(0u)
+    {
+    }
+
+    void clock_read() override
+    {
+        reads_++;
+        if (pulsing_) kmt_.pulse(context_);
+        if (reads_ == after_) kmt_.complete_on_page(context_, fence_);
+    }
+
+    std::uint32_t reads() const { return reads_; }
+
+private:
+    MockKmt      &kmt_;
+    std::uint32_t context_;
+    bool          pulsing_;
+    std::uint64_t fence_;
+    std::uint32_t after_;
+    std::uint32_t reads_;
+};
+
+constexpr std::uint64_t millisecond = MockKmt::ticks_per_second / 1000u;
+
+}  // namespace
+
+/* A batch older than the newest is waited for on the fence page alone - the
+ * kernel's wait would wait for the newer ones too - and for as long as the
+ * device's pulse says it is at work: two minutes here, far past any fixed
+ * patience. */
+TEST(kmt_transport, a_wait_for_an_older_batch_watches_the_page_for_as_long_as_the_pulse_beats)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  for (std::uint32_t i = 0u; i < 2u; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(i);
+      CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  }
+  const std::uint32_t waits = fixture.kmt().calls(MockKmt::Call::wait_for_context);
+  constexpr std::uint32_t two_minutes = 120000u;
+  SlowDevice device(fixture.kmt(), transport.context(), true, 1u, two_minutes);
+  fixture.kmt().reads_clock(&device, millisecond);
+  CHECK_STATUS(transport.await_gpu(1u), Status::ok);
+  fixture.kmt().reads_clock(nullptr, 0u);
+  CHECK(device.reads() >= two_minutes);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), waits);
+  CHECK_EQ(transport.gpu_completed(), 1u);
+  CHECK(!transport.faulted()); }
+
+/* A hardware queue's progress fence is a wait for one batch alone, so the
+ * kernel is asked for an older batch through it rather than the page being
+ * watched. */
+TEST(kmt_transport, a_queue_waits_for_an_older_batch_through_its_progress_fence)
+{ Fixture fixture;
+  fixture.kmt().allow_hardware_scheduling();
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  for (std::uint32_t i = 0u; i < 2u; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(i);
+      CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  }
+  const std::uint32_t waits = fixture.kmt().calls(MockKmt::Call::wait_for_hw_queue);
+  CHECK_STATUS(transport.await_gpu(1u), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_hw_queue), waits + 1u);
+  CHECK(transport.gpu_completed() >= 1u);
+  CHECK(!transport.faulted()); }
+
+/* With nothing on the page moving, the same wait ends once the device has
+ * been silent for HostWatch::silence_seconds, and loses the context. */
+TEST(kmt_transport, a_wait_on_a_silent_page_gives_up_after_the_silence)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  for (std::uint32_t i = 0u; i < 2u; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(i);
+      CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  }
+  SlowDevice device(fixture.kmt(), transport.context(), false, 1u, 0u);
+  fixture.kmt().reads_clock(&device, millisecond);
+  CHECK_STATUS(transport.await_gpu(1u), Status::invalid_state);
+  fixture.kmt().reads_clock(nullptr, 0u);
+  const std::uint32_t silence = static_cast<std::uint32_t>(av::HostWatch::silence_seconds * 1000u);
+  CHECK(device.reads() >= silence);
+  CHECK(device.reads() < silence + 1000u);
+  CHECK(transport.faulted()); }
+
 /* A driver from before the fence page refuses version 2 of the views escape:
  * asked again with version 1, the context works as before and says it knows
  * nothing of the GPU's progress. */
@@ -738,6 +845,13 @@ void fill_the_fence_window(KmtTransport &transport)
     }
 }
 
+/* GdiKmt bounds each kernel wait at ten seconds; a mock wait costs as much,
+ * so a host silent for HostWatch::silence_seconds outlasts this many. */
+constexpr std::uint64_t kernel_wait_seconds = 10u;
+constexpr std::uint32_t silent_waits = static_cast<std::uint32_t>(av::HostWatch::silence_seconds / kernel_wait_seconds);
+
+void bound_each_wait(MockKmt &kmt) { kmt.spend_on_wait(MockKmt::ticks_per_second * kernel_wait_seconds); }
+
 }  // namespace
 
 /* A wait that runs out its bound while the host took batches is a host that is
@@ -758,10 +872,11 @@ TEST(kmt_transport, a_wait_that_times_out_while_the_host_works_is_waited_again)
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
   CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 2u); }
 
-/* Waits that run out their bound with nothing taken, for longer than a host
- * GPU may run one job, are a host that is gone: the context is faulted after
- * them, not waited on forever. */
-TEST(kmt_transport, a_wait_that_times_out_with_nothing_taken_gives_up)
+/* Waits that run out their bound with nothing taken and nothing moving on the
+ * fence page, for longer than a device at work is ever quiet, are a host that
+ * is gone: the context is faulted after them, not waited on forever. The
+ * silence is counted from the first wait's end, the clock's first reading. */
+TEST(kmt_transport, a_wait_that_times_out_with_nothing_moving_gives_up)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
@@ -771,11 +886,13 @@ TEST(kmt_transport, a_wait_that_times_out_with_nothing_taken_gives_up)
   CHECK_STATUS(transport.initialize(), Status::ok);
   fill_the_fence_window(transport);
   const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
-  kmt.fail_first(MockKmt::Call::wait_for_context, 64u, MockKmt::io_timeout);
+  bound_each_wait(kmt);
+  kmt.time_out_silently(64u);
   WireWriter writer = transport.request_writer();
   writer.write_u32(64u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
-  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + KmtTransport::silent_waits); }
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u + silent_waits);
+  CHECK(transport.faulted()); }
 
 /* One silent wait short of the limit, then the host answers: a job that ran
  * longer than one kernel wait is waited out, and the send goes. */
@@ -789,16 +906,17 @@ TEST(kmt_transport, a_host_silent_for_less_than_the_limit_is_waited_out)
   CHECK_STATUS(transport.initialize(), Status::ok);
   fill_the_fence_window(transport);
   const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
-  kmt.time_out_silently(KmtTransport::silent_waits - 1u);
+  bound_each_wait(kmt);
+  kmt.time_out_silently(silent_waits - 1u);
   WireWriter writer = transport.request_writer();
   writer.write_u32(64u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
-  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + KmtTransport::silent_waits);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + silent_waits);
   CHECK(!transport.faulted()); }
 
 /* The host took what it had, then stopped: every wait after the first finds
- * the head where the first left it, and the last silent one is the end. */
-TEST(kmt_transport, a_host_that_stops_taking_batches_is_given_up_on_after_its_silent_waits)
+ * the head where the first left it, and the silence is counted from there. */
+TEST(kmt_transport, a_host_that_stops_taking_batches_is_given_up_on_after_its_silence)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
@@ -808,11 +926,12 @@ TEST(kmt_transport, a_host_that_stops_taking_batches_is_given_up_on_after_its_si
   CHECK_STATUS(transport.initialize(), Status::ok);
   fill_the_fence_window(transport);
   const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  bound_each_wait(kmt);
   kmt.time_out_while_consuming(64u);
   WireWriter writer = transport.request_writer();
   writer.write_u32(64u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
-  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u + KmtTransport::silent_waits); }
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u + silent_waits); }
 
 /* One batch the host GPU runs for longer than the kernel's wait moves no head
  * until it ends, but the device's heartbeat moves while it decodes: the waits
@@ -837,8 +956,8 @@ TEST(kmt_transport, a_wait_that_times_out_while_the_device_beats_is_waited_again
   CHECK(transport.invariants_hold()); }
 
 /* The heartbeat moved once and then stopped, with no head moving either: the
- * silent waits after it are counted from there, and the last is the end. */
-TEST(kmt_transport, a_heartbeat_that_stops_is_given_up_on_after_its_silent_waits)
+ * silence is counted from there, and its end is the end. */
+TEST(kmt_transport, a_heartbeat_that_stops_is_given_up_on_after_its_silence)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
   GuestConnection connection(kmt);
@@ -848,13 +967,84 @@ TEST(kmt_transport, a_heartbeat_that_stops_is_given_up_on_after_its_silent_waits
   CHECK_STATUS(transport.initialize(), Status::ok);
   fill_the_fence_window(transport);
   const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  bound_each_wait(kmt);
   kmt.time_out_while_beating(1u);
-  kmt.time_out_silently(KmtTransport::silent_waits);
+  kmt.time_out_silently(silent_waits);
   WireWriter writer = transport.request_writer();
   writer.write_u32(64u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
-  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u + KmtTransport::silent_waits);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u + silent_waits);
   CHECK(transport.faulted()); }
+
+/* One host call that blocks for minutes - a host driver holding it until the
+ * GPU drains its queue - moves no head, no progress and no completion; the
+ * device's pulse beats all the while, and the guest waits it out, however
+ * long. Given up on, the context was lost although the host was running it
+ * (a Radeon 610M, an Iris Xe). */
+TEST(kmt_transport, a_wait_through_a_host_call_of_minutes_lasts_while_the_pulse_beats)
+{ MockKmt kmt;
+  kmt.add_adapter(av_gpu, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fill_the_fence_window(transport);
+  const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  bound_each_wait(kmt);
+  constexpr std::uint32_t five_minutes = 30u;
+  kmt.time_out_while_pulsing(five_minutes);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + five_minutes + 1u);
+  CHECK(!transport.faulted());
+  CHECK(transport.invariants_hold()); }
+
+/* The pulse stopping is silence like any other, counted from its last beat. */
+TEST(kmt_transport, a_pulse_that_stops_is_given_up_on_after_its_silence)
+{ MockKmt kmt;
+  kmt.add_adapter(av_gpu, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fill_the_fence_window(transport);
+  const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  bound_each_wait(kmt);
+  kmt.time_out_while_pulsing(2u);
+  kmt.time_out_silently(64u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 2u + silent_waits);
+  CHECK(transport.faulted()); }
+
+/* The case that lost a Radeon 610M's context: a full window drains, the
+ * kernel's wait for the context returns, and the ring the device publishes
+ * catches up only a minute later - a host call held the device's worker the
+ * whole time. The pulse beat throughout, so the drain waits, and the send
+ * goes. */
+TEST(kmt_transport, a_drain_waits_for_a_ring_a_minute_behind_its_fence_while_the_pulse_beats)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fill_the_fence_window(transport);
+  constexpr std::uint32_t one_minute = 60000u;
+  fixture.kmt().consume_late_at(1u, one_minute);
+  SlowDevice device(fixture.kmt(), transport.context(), true, 0u, 0u);
+  fixture.kmt().reads_clock(&device, millisecond);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  fixture.kmt().reads_clock(nullptr, 0u);
+  CHECK(device.reads() >= one_minute);
+  CHECK(!transport.faulted());
+  CHECK(transport.invariants_hold()); }
 
 /* A device that faulted the context ends the wait whatever else moved: the
  * head it published before giving up is no reason to wait for more. */

@@ -2,6 +2,7 @@
 
 #include "device/context/d3d_ordering.hpp"
 
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/host/env_setting.hpp"
 #include "device/execution/batch_executor.hpp"
@@ -19,7 +20,7 @@ namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
     : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), running_end_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(EnvSetting("AV_PERFETTO").on()), prepared_(false),
-      attached_(false), faulted_(false)
+      attached_(false), faulted_(false), serving_(false), publishing_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
       }
@@ -112,6 +113,12 @@ Status RingConsumer::consume_next()
         return Status::malformed;
     }
     if (published < batch.span()) return Status::no_space;
+    serving_ = true;
+    note_work();
+    ScopeExit served([this] {
+        serving_ = false;
+        note_work();
+    });
     if (ordering_ != nullptr) ordering_->wait_before(*this, batch.published_at());
     note_clock(batch.published_at());
     __atomic_store_n(&running_end_, head_ + batch.span(), __ATOMIC_RELEASE);
@@ -179,6 +186,8 @@ bool RingConsumer::poll()
     if (!attached_ || faulted_) return false;
     const bool publishing = executor_.poll();
     if (settle()) fences_.signal();
+    publishing_ = publishing;
+    note_work();
     return publishing;
 }
 
@@ -186,6 +195,17 @@ void RingConsumer::announce_awake(bool awake)
 {
     AV_SCOPE("RingConsumer::announce_awake");
     if (attached_) static_cast<void>(ring_.announce_awake(awake));
+    /* Asleep, it keeps watch on nothing. */
+    if (!awake && publishing_) {
+        publishing_ = false;
+        note_work();
+    }
+}
+
+void RingConsumer::note_work()
+{
+    AV_SCOPE("RingConsumer::note_work");
+    fences_.at_work(serving_ || publishing_);
 }
 
 uint64_t RingConsumer::earliest_pending() const

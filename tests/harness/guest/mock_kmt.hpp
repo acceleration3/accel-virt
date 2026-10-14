@@ -346,6 +346,15 @@ public:
      * out their bound: a host that has stopped, once the counts above are
      * spent. */
     void          time_out_silently(std::uint32_t count);
+    /* The next `count` waits for a context take nothing, move neither head
+     * nor progress, and run out their bound while the device's pulse beats:
+     * one host call blocking for the whole of them. */
+    void          time_out_while_pulsing(std::uint32_t count);
+    /* The context's fence page as the device writes it: its pulse's beat one
+     * further, or a completed fence, the rest of the page kept. What a test
+     * reading the clock (reads_clock) plays the device with. */
+    void          pulse(std::uint32_t context);
+    void          complete_on_page(std::uint32_t context, std::uint64_t fence);
     /* A submission through the kernel costs this many ticks, as the transition
      * into dxgkrnl does; a store to a doorbell costs nothing here, because it
      * is a write in the process and this mock never sees it (feature 049). */
@@ -387,6 +396,10 @@ public:
      * head where it was, and the head moves at the next clock read: how the
      * device looks when its fence is seen before the head it published. */
     void          consume_late_at(std::uint32_t nth);
+    /* The same, with the head moving only at the `reads`th clock read after
+     * that wait: a device whose fence the kernel signalled long before the
+     * ring it publishes caught up. */
+    void          consume_late_at(std::uint32_t nth, std::uint32_t reads);
     /* From now on a context views escape newer than `version` is refused with
      * STATUS_INVALID_PARAMETER, as a driver from before it refuses it. */
     void          answer_views_up_to(std::uint16_t version);
@@ -683,6 +696,7 @@ private:
     std::uint64_t wait_cost_;
     std::uint32_t timeouts_while_consuming_;
     std::uint32_t timeouts_while_beating_;
+    std::uint32_t timeouts_while_pulsing_;
     bool          timeout_faulted_;
     std::uint32_t timeouts_silent_;
     std::uint64_t submit_cost_;
@@ -698,6 +712,7 @@ private:
     std::uint32_t queued_taken_;
     std::uint32_t withheld_countdown_;
     std::uint32_t late_countdown_ = 0u;
+    mutable std::uint32_t late_reads_ = 0u;
     std::uint16_t newest_views_ = ContextViewsRecord::with_fence;
     mutable const Object *late_context_ = nullptr;
     /* Feature 049: whether the OS gives this adapter hardware queues, and the

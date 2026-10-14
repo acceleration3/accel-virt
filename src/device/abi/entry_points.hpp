@@ -20,6 +20,7 @@ extern "C" {
 void AvWorkerRun(void *worker);
 void AvRingAttach(void *ring);
 void AvDisplayClockRun(void *clock);
+void AvDevicePulseRun(void *pulse);
 void AvDisplayFramesShow(void *device);
 void AvPresentEngineRun(void *engine);
 void AvExportConnectionServe(void *connection);

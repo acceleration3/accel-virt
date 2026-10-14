@@ -39,6 +39,13 @@ struct FenceReporterProbe {
     static void lose_progress(FenceReporter &reporter) { reporter.completed_ = 5u; reporter.progress_ = 0u; }
     static void lose_page(FenceReporter &reporter) { reporter.page_ = FenceWindow(); }
     static void fault_without_code(FenceReporter &reporter) { reporter.faulted_ = true; reporter.fault_ = FaultCode::none; }
+    static void fault_loudly(FenceReporter &reporter)
+    {
+        reporter.faulted_ = true;
+        reporter.fault_ = FaultCode::device_lost;
+        reporter.quiet_ = false;
+    }
+    static void open_unprepared(FenceReporter &reporter) { reporter.quiet_ = false; }
 };
 
 }  // namespace av
@@ -109,6 +116,7 @@ TEST(fence_reporter_prepare, writes_a_fresh_page)
   CHECK(layout.at(16u, 8u) == 0u);
   CHECK(layout.at(24u, 8u) == 0u);
   CHECK(layout.at(32u, 8u) == 0u);
+  CHECK(layout.at(FencePage::beat_at, 8u) == 0u);
   CHECK_EQ(fixture.bytes()[FencePage::encoded_size], 0xEEu);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::invalid_state); }
 
@@ -121,7 +129,15 @@ TEST(fence_reporter_prepare, a_blob_too_small_for_a_page_or_a_line_past_the_queu
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), av::Doorbell::pages), Status::invalid_parameter);
   CHECK_EQ(fixture.bytes()[0], 0xEEu);
   CHECK(!FenceWindow().invariants_hold());
-  CHECK_STATUS(FenceWindow().publish(FencePage()), Status::invalid_parameter); }
+  CHECK_STATUS(FenceWindow().publish(FencePage()), Status::invalid_parameter);
+  CHECK_STATUS(FenceWindow().publish_beat(1u), Status::invalid_parameter);
+  /* Room for everything but the beat word is no page either. */
+  void               *pointer_short = fixture.bytes();
+  const std::uint64_t short_length = FencePage::beat_at;
+  const FenceWindow   no_beat(BlobWindow(&pointer_short, &short_length, 1u, short_length));
+  CHECK_STATUS(no_beat.publish(FencePage(1u, 1u)), Status::invalid_parameter);
+  CHECK_STATUS(no_beat.publish_beat(1u), Status::invalid_parameter);
+  CHECK_EQ(fixture.bytes()[0], 0xEEu); }
 
 TEST(fence_reporter_complete, publishes_each_completion_and_signals_once)
 { Fixture fixture;
@@ -199,6 +215,67 @@ TEST(fence_reporter_fault, a_faulted_context_reports_nothing_more)
   CHECK_EQ(fixture.page().progress(), 0u);
   CHECK_EQ(fixture.host().raised(line), 1u);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::invalid_state); }
+
+/* The beat word is the pulse's: it moves by one each time the pulse beats,
+ * and nothing the worker writes touches it, so a page rewritten from the
+ * worker's counters never carries it back. */
+TEST(fence_reporter_beat, moves_the_beat_word_alone_and_the_worker_never_writes_it)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.reporter().beat();
+  fixture.reporter().beat();
+  CHECK_EQ(fixture.page().beat(), 2u);
+  CHECK_EQ(fixture.reporter().beats(), 2u);
+  CHECK_EQ(fixture.page().progress(), 0u);
+  CHECK_EQ(fixture.host().raised(line), 0u);
+  std::memset(fixture.bytes() + FencePage::beat_at, 0x77, 8u);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.complete(3u);
+      reporter.heartbeat();
+  });
+  const ByteLayout layout(fixture.bytes(), FencePage::encoded_size);
+  CHECK(layout.at(FencePage::beat_at, 8u) == 0x7777777777777777u);
+  CHECK_EQ(fixture.page().completed_fence(), 3u);
+  fixture.reporter().beat();
+  CHECK_EQ(fixture.page().beat(), 3u);
+  CHECK(fixture.reporter().invariants_hold()); }
+
+/* A page not yet prepared, one withdrawn and one faulted are beaten no more:
+ * after a fault the page's last change is the fault. Preparing again starts
+ * the count from nothing. */
+TEST(fence_reporter_beat, an_unprepared_withdrawn_or_faulted_page_is_not_beaten)
+{ Fixture fixture;
+  fixture.reporter().beat();
+  CHECK_EQ(fixture.bytes()[FencePage::beat_at], 0xEEu);
+  CHECK_EQ(fixture.reporter().beats(), 0u);
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.reporter().beat();
+  fixture.reporter().withdraw();
+  fixture.reporter().beat();
+  CHECK_EQ(fixture.page().beat(), 1u);
+  CHECK(fixture.reporter().invariants_hold());
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  CHECK_EQ(fixture.page().beat(), 0u);
+  fixture.reporter().beat();
+  fixture.on_worker([](FenceReporter &reporter) { reporter.fault(FaultCode::device_lost); });
+  fixture.reporter().beat();
+  CHECK_EQ(fixture.page().beat(), 1u);
+  CHECK(fixture.page().faulted()); }
+
+/* Whether the worker is at work is its own to say, and a fault ends it. */
+TEST(fence_reporter_at_work, says_what_the_worker_last_said_until_a_fault)
+{ Fixture fixture;
+  CHECK(!fixture.reporter().working());
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) { reporter.at_work(true); });
+  CHECK(fixture.reporter().working());
+  fixture.on_worker([](FenceReporter &reporter) { reporter.at_work(false); });
+  CHECK(!fixture.reporter().working());
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.at_work(true);
+      reporter.fault(FaultCode::device_lost);
+  });
+  CHECK(!fixture.reporter().working()); }
 
 TEST(fence_reporter_heartbeat, moves_progress_without_an_interrupt)
 { Fixture fixture;
@@ -335,7 +412,15 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
   CHECK(!codeless.reporter().invariants_hold());
   Fixture unprepared;
   av::FenceReporterProbe::fault_without_code(unprepared.reporter());
-  CHECK(!unprepared.reporter().invariants_hold()); }
+  CHECK(!unprepared.reporter().invariants_hold());
+  /* A faulted page still open to the pulse, and an unprepared one. */
+  Fixture loud;
+  CHECK_STATUS(loud.reporter().prepare(loud.window(), line), Status::ok);
+  av::FenceReporterProbe::fault_loudly(loud.reporter());
+  CHECK(!loud.reporter().invariants_hold());
+  Fixture open;
+  av::FenceReporterProbe::open_unprepared(open.reporter());
+  CHECK(!open.reporter().invariants_hold()); }
 
 TEST(fence_reporter_complete, records_the_fence_it_told_the_guest_about)
 { Fixture fixture;

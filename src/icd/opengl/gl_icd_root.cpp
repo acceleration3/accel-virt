@@ -369,14 +369,17 @@ bool GlIcdRoot::swap_layer_buffers(void *dc, uint32_t planes)
     return (planes & swap_main_plane) != 0u && swap_buffers(dc);
 }
 
-/* The calling thread's context puts its frame for the DC's window there, and
- * waits out the interval after it (feature 051, US2.2). */
+/* The calling thread's context puts its frame for the DC's window there, ends
+ * the frame - shown or not, it is the application's - and waits out the
+ * interval after it (feature 051, US2.2). */
 bool GlIcdRoot::swap_buffers(void *dc)
 {
     AV_SCOPE("GlIcdRoot::swap_buffers");
     const Shown shown = show_frame(dc);
+    if (shown == Shown::refused) return false;
+    currents_.current()->end_frame();
     if (shown == Shown::handed) currents_.current()->pace();
-    return shown != Shown::refused;
+    return true;
 }
 
 GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)

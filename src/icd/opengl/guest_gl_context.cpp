@@ -9,6 +9,7 @@
 #include "icd/common/thread_lock.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "guest/transport/kmt_transport.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "proto/context/sub_api.hpp"
@@ -32,7 +33,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), frames_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -193,6 +194,21 @@ uint32_t GuestGlContext::guest_device() const
     AV_SCOPE("GuestGlContext::guest_device");
     if (!link_.held()) return 0u;
     return link_.device().device();
+}
+
+/* Outside the send lock: the wait is this context's alone, and WGL lets it be
+ * current on this thread only. */
+void GuestGlContext::end_frame()
+{
+    AV_SCOPE("GuestGlContext::end_frame");
+    if (state_ != State::made) return;
+    flush();
+    KmtTransport  &transport = channel_.transport();
+    uint64_t       frequency = 0u;
+    const uint64_t now = link_.device().kmt().performance_counter(frequency);
+    const uint64_t behind = frames_.end(transport.published_fence(), now, frequency, transport.gpu_completed());
+    if (behind != 0u && transport.await_gpu(behind) != Status::ok)
+        log_.write("avgl: the host never finished an earlier frame; the context is lost");
 }
 
 ClientTransport *GuestGlContext::wire()
@@ -499,6 +515,7 @@ void GuestGlContext::teardown()
      * import with it, so nothing is asked of the host. */
     channel_.close(state_ == State::lost);
     pacer_.destroy();
+    frames_.forget();
     link_.release();
     loss_reported_ = false;
     state_ = State::created;

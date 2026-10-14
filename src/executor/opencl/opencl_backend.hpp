@@ -13,6 +13,7 @@
 #include "executor/opencl/cl_read_ahead.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
+#include "executor/opencl/kernel_pacer.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -179,6 +180,16 @@ public:
     cl_int on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read,
                                   size_t offset, size_t size, void *ptr, cl_uint num_events_in_wait_list,
                                   const cl_event *event_wait_list, cl_event *event) override;
+    /* A kernel goes to the host GPU in a group no longer than KernelPacer
+     * allows, and a flush or a finish ends the group the guest gathered. */
+    cl_int on_clEnqueueNDRangeKernel(cl_command_queue command_queue, cl_kernel kernel, cl_uint work_dim,
+                                     const size_t *global_work_offset, const size_t *global_work_size,
+                                     const size_t *local_work_size, cl_uint num_events_in_wait_list,
+                                     const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clEnqueueTask(cl_command_queue command_queue, cl_kernel kernel, cl_uint num_events_in_wait_list,
+                            const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clFlush(cl_command_queue command_queue) override;
+    cl_int on_clFinish(cl_command_queue command_queue) override;
     cl_int on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_write,
                                    size_t offset, size_t size, const void *ptr,
                                    cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
@@ -260,6 +271,13 @@ private:
      * first import: the acquire is the device's own bookkeeping and no guest
      * queue should carry it. Null when there is no context to make one on. */
     void *acquire_queue();
+    /* After a kernel enqueued on `queue`: its group flushed when full, the
+     * group before it on another queue flushed first. */
+    void  pace(cl_command_queue queue);
+    /* The timed group's marker, if it has completed. */
+    void  look_at_marker();
+    /* The queue and the marker the pacing holds, let go. */
+    void  stop_pacing();
 
     const OpenClDevice *bound_;
     const GlDisplay    *display_;
@@ -283,6 +301,11 @@ private:
     ClReadAhead      read_ahead_;
     /* Rectangles read into the arena where the host will not read into it. */
     ClBouncedRect    bounced_;
+    KernelPacer      pacer_;
+    /* The queue the group being gathered is on, retained while it is, and
+     * the marker after the group being timed. */
+    void            *paced_queue_;
+    void            *marker_;
     uint64_t       ran_;
     bool           lost_;
 };

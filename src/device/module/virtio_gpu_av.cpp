@@ -73,7 +73,7 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         return Status::no_memory;
     }
     if (contexts_->initialize() == Status::no_memory) {
-        message.append("virtio-gpu-av: the host has no mutex for the contexts' ordering and executors");
+        message.append("virtio-gpu-av: the host has no mutex for the contexts' ordering, pulse and executors");
         host_.log(message.text());
         return Status::no_memory;
     }

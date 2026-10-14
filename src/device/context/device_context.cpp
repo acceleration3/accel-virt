@@ -9,6 +9,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/support/scope_exit.hpp"
 #include "device/abi/entry_points.hpp"
+#include "device/fence/device_pulse.hpp"
 #include "device/fence/fence_window.hpp"
 #include "device/host/stdio_log.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -25,8 +26,9 @@ namespace av {
 
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library,
-                             ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id)
-    : ordering_(ordering), recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
+                             ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering,
+                             DevicePulse &pulse, uint32_t id)
+    : ordering_(ordering), pulse_(pulse), recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
       imports_(host, owners, executor_, recorder, id),
       executor_(host, library, shares, id), staging_(host),
       batches_(host, executor_, imports_, staging_, fences_, recorder, id),
@@ -35,12 +37,14 @@ DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owner
           AV_SCOPE("DeviceContext::DeviceContext");
       }
 
-/* Out of the order before the worker and the ring go, so no other stream
- * looks at a ring that is no longer there. */
+/* Out of the order and the pulse before the worker, the ring and the fence
+ * page go, so no other stream looks at a ring, and no beat lands on a page,
+ * that is no longer there. */
 DeviceContext::~DeviceContext()
 {
     AV_SCOPE("DeviceContext::~DeviceContext");
     ordering_.remove(ring_);
+    pulse_.drop(fences_);
 }
 
 Status DeviceContext::start()
@@ -103,8 +107,12 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     status = worker_.connect_doorbell(setup.doorbell());
     if (status != Status::ok) return refused("doorbell", status);
     ScopeExit disconnect([this] { worker_.disconnect_doorbell(); });
+    status = pulse_.carry(fences_);
+    if (status != Status::ok) return refused("pulse", status);
+    ScopeExit uncarry([this] { pulse_.drop(fences_); });
     status = worker_.post(WorkItem(&AvRingAttach, nullptr, &ring_));
     if (status != Status::ok) return refused("attach", status);
+    uncarry.dismiss();
     disconnect.dismiss();
     withdraw.dismiss();
     unbind.dismiss();

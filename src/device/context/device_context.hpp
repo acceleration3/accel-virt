@@ -22,6 +22,7 @@
 namespace av {
 
 class D3dOrdering;
+class DevicePulse;
 
 class BlobTable;
 class CapsetInfo;
@@ -39,7 +40,8 @@ struct DeviceContextProbe;
 class DeviceContext {
 public:
     DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
-                  const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id);
+                  const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering,
+                  DevicePulse &pulse, uint32_t id);
     ~DeviceContext();
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
@@ -51,8 +53,8 @@ public:
      * library cannot make; the binding's answer; invalid_parameter for a ring
      * header that is not fresh or a fence page that cannot be prepared; no_memory when the
      * host cannot stage its batches; the worker's answer when the doorbell cannot be connected
-     * or the ring handed over. Nothing stays pinned, connected or prepared
-     * unless ok. */
+     * or the ring handed over, or the pulse's when it cannot carry the fence
+     * page. Nothing stays pinned, connected, prepared or carried unless ok. */
     [[nodiscard]] Status  bind(const ContextSetup &setup, const CapsetInfo &capset);
     Status                refused(const char *step, Status status) const;
     const ContextBinding &binding() const;
@@ -64,6 +66,7 @@ public:
 
 private:
     D3dOrdering          &ordering_;
+    DevicePulse          &pulse_;
     WireRecorder  &recorder_;
     uint32_t       id_;
     ContextBinding binding_;

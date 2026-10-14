@@ -22,6 +22,7 @@
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
 #include "icd/common/frame_pacer.hpp"
+#include "icd/opengl/frames_in_flight.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/swap_interval.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
@@ -122,6 +123,11 @@ public:
     /* The calls held so far go to the host: at glFlush, and before another
      * context may depend on them. */
     void                 flush();
+    /* The application ended a frame - glFlush, a swap: what is held goes to
+     * the host, and the application goes on only once the host is no more
+     * than FramesInFlight::latency_ms behind it. A host that never catches up
+     * loses the context. */
+    void                 end_frame();
     /* The newest batch sent, for another thread to wait on (BatchMark); one
      * of no batch unless made. */
     BatchMark            mark() const;
@@ -229,6 +235,7 @@ private:
     QueryShapes                    queries_;
     GrantedProfile                 profile_;
     SwapInterval                   interval_;
+    FramesInFlight                 frames_;
     /* Made with the device, since a blank is waited for on the adapter it
      * belongs to. */
     ObjectStorage<icd::FramePacer> pacer_;
