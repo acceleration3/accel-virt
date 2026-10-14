@@ -48,7 +48,7 @@ TEST(renderer_message_header, kinds_are_numbered_from_one_in_protocol_order)
   CHECK_EQ(static_cast<std::uint32_t>(Kind::ready), 2u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::region), 3u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::guest_blob), 4u);
-  CHECK_EQ(static_cast<std::uint32_t>(Kind::host_blob), 5u);
+  CHECK_EQ(static_cast<std::uint32_t>(Kind::allocate_memory), 5u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::blob_retired), 6u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::create_context), 7u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::bind_context), 8u);
@@ -57,7 +57,10 @@ TEST(renderer_message_header, kinds_are_numbered_from_one_in_protocol_order)
   CHECK_EQ(static_cast<std::uint32_t>(Kind::interrupts_off), 11u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::reply), 12u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::export_image), 13u);
-  CHECK_EQ(static_cast<std::uint32_t>(Kind::exported_image), 14u); }
+  CHECK_EQ(static_cast<std::uint32_t>(Kind::exported_image), 14u);
+  CHECK_EQ(static_cast<std::uint32_t>(Kind::shared_released), 15u);
+  CHECK_EQ(static_cast<std::uint32_t>(Kind::allocated_memory), 16u);
+  CHECK_EQ(static_cast<std::uint32_t>(Kind::free_memory), 17u); }
 
 TEST(renderer_message_header, round_trips_a_datagram_with_its_body)
 { std::uint8_t datagram[RendererMessageHeader::encoded_size + 3u] = {};
@@ -82,9 +85,9 @@ TEST(renderer_message_header_encode, refuses_what_decode_would)
 { std::uint8_t bytes[RendererMessageHeader::encoded_size] = {};
   CHECK_STATUS(RendererMessageHeader(static_cast<Kind>(0u), 0u, 1u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(RendererMessageHeader(static_cast<Kind>(16u), 0u, 1u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(RendererMessageHeader(static_cast<Kind>(18u), 0u, 1u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(RendererMessageHeader(Kind::shared_released, 0u, 1u).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(RendererMessageHeader(Kind::free_memory, 0u, 1u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(RendererMessageHeader(Kind::hello, RendererMessageHeader::max_body_length + 1u, 1u)
                    .encode(bytes, sizeof bytes),
                Status::invalid_parameter);
@@ -101,14 +104,13 @@ TEST(renderer_message_header_encode, a_short_or_missing_destination_is_too_large
 
 /* A kind neither side knows would be dispatched nowhere; zero is a buffer
  * nobody wrote. */
-TEST(renderer_message_header_decode, refuses_kinds_zero_and_past_shared_released_and_stays_unchanged)
-{ CHECK_EQ(static_cast<std::uint32_t>(Kind::shared_released), 15u);
-  std::uint8_t last[RendererMessageHeader::encoded_size] = {};
-  CHECK_STATUS(RendererMessageHeader(Kind::shared_released, 0u, 5u).encode(last, sizeof last), Status::ok);
+TEST(renderer_message_header_decode, refuses_kinds_zero_and_past_free_memory_and_stays_unchanged)
+{ std::uint8_t last[RendererMessageHeader::encoded_size] = {};
+  CHECK_STATUS(RendererMessageHeader(Kind::free_memory, 0u, 5u).encode(last, sizeof last), Status::ok);
   RendererMessageHeader known;
   CHECK_STATUS(known.decode(last, sizeof last), Status::ok);
-  CHECK(known.kind() == Kind::shared_released);
-  const std::uint32_t kinds[] = {0u, 16u, 0xFFFFFFFFu};
+  CHECK(known.kind() == Kind::free_memory);
+  const std::uint32_t kinds[] = {0u, 18u, 0xFFFFFFFFu};
   for (std::uint32_t kind : kinds) {
       std::uint8_t bytes[RendererMessageHeader::encoded_size] = {};
       CHECK_STATUS(RendererMessageHeader(Kind::hello, 0u, 5u).encode(bytes, sizeof bytes), Status::ok);
@@ -164,9 +166,9 @@ TEST(renderer_message_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* Kind 1 flipped at bit 1, 2 or 3 is kind 3, 5 or 9, all known and with a
-   * body allowed; every other kind flip is 0 or past reply. Any body length
-   * flip claims bytes that did not arrive. The sequence is free: 64 flips.
-   * With the untouched header, 3 + 64 + 1 acceptances. */
-  const std::uint32_t acceptable = 3u + 64u + 1u;
+  /* Kind 1 flipped at bit 1, 2, 3 or 4 is kind 3, 5, 9 or 17, all known and
+   * with a body allowed; every other kind flip is 0 or past free_memory. Any
+   * body length flip claims bytes that did not arrive. The sequence is free:
+   * 64 flips. With the untouched header, 4 + 64 + 1 acceptances. */
+  const std::uint32_t acceptable = 4u + 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

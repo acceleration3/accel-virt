@@ -428,8 +428,8 @@ TEST(mock_platform_map_to_process, gives_each_range_its_own_view_until_unmapped)
 { MockPlatform platform;
   std::uint64_t first_view = 0u, second_view = 0u;
   void *first = nullptr, *second = nullptr;
-  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x2000u, first_view, first), av::Status::ok);
-  CHECK_STATUS(platform.map_to_process(0x4000002000ull, 0x1000u, second_view, second), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x2000u, av::PageCaching::write_back, first_view, first), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000002000ull, 0x1000u, av::PageCaching::write_back, second_view, second), av::Status::ok);
   CHECK(first != nullptr && second != nullptr && first != second);
   CHECK(first_view >= 0x00007FF000000000ull);
   CHECK(second_view >= first_view + 0x2000u);
@@ -445,21 +445,40 @@ TEST(mock_platform_map_to_process, gives_each_range_its_own_view_until_unmapped)
   CHECK_EQ(platform.process_mappings(), 0u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
+/* A view keeps the caching it was mapped with, so a test says a process sees
+ * device memory the way the device said it must. */
+TEST(mock_platform_map_to_process, counts_the_views_made_write_combined)
+{ MockPlatform platform;
+  std::uint64_t cached_view = 0u, combined_view = 0u;
+  void *cached = nullptr, *combined = nullptr;
+  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, av::PageCaching::write_back, cached_view, cached),
+               av::Status::ok);
+  CHECK_EQ(platform.write_combined_process_mappings(), 0u);
+  CHECK_STATUS(platform.map_to_process(0x4000001000ull, 0x1000u, av::PageCaching::write_combined, combined_view,
+                                       combined),
+               av::Status::ok);
+  CHECK_EQ(platform.write_combined_process_mappings(), 1u);
+  CHECK_EQ(platform.process_mappings(), 2u);
+  platform.unmap_from_process(combined);
+  CHECK_EQ(platform.write_combined_process_mappings(), 0u);
+  platform.unmap_from_process(cached);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
 TEST(mock_platform_map_to_process, refuses_misuse_and_fails_on_request)
 { MockPlatform platform;
   std::uint64_t view = 7u;
   void *mapping = &view;
   platform.fail_process_map_at(2u);
-  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, view, mapping), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, av::PageCaching::write_back, view, mapping), av::Status::ok);
   platform.unmap_from_process(mapping);
-  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, view, mapping), av::Status::no_memory);
+  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, av::PageCaching::write_back, view, mapping), av::Status::no_memory);
   CHECK_EQ(view, 0u);
   CHECK(mapping == nullptr);
   CHECK_EQ(platform.process_mappings(), 0u);
   /* Not whole pages, in either the address or the size, or no pages at all. */
   const std::uint64_t misuses[][2] = {{0x4000000800ull, 0x1000u}, {0x4000000000ull, 0x800u}, {0x4000000000ull, 0u}};
   for (const auto &misuse : misuses) {
-      CHECK_STATUS(platform.map_to_process(misuse[0], misuse[1], view, mapping), av::Status::ok);
+      CHECK_STATUS(platform.map_to_process(misuse[0], misuse[1], av::PageCaching::write_back, view, mapping), av::Status::ok);
       CHECK(platform.claim(Violation::frame_misuse));
       platform.unmap_from_process(mapping);
   }
@@ -469,7 +488,7 @@ TEST(mock_platform_map_to_process, refuses_misuse_and_fails_on_request)
   platform.unmap_from_process(mapping);
   CHECK(platform.claim(Violation::frame_misuse));
   platform.set_irql(Irql::apc);
-  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, view, mapping), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, av::PageCaching::write_back, view, mapping), av::Status::ok);
   platform.unmap_from_process(mapping);
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling));
@@ -497,8 +516,8 @@ TEST(mock_platform_map_to_process, a_resolver_puts_the_view_on_the_memory_behind
   platform.resolve_process_views(&backing_of, &asked);
   std::uint64_t backed = 0u, fake = 0u;
   void *first = nullptr, *second = nullptr;
-  CHECK_STATUS(platform.map_to_process(0x4000001000ull, 0x1000u, backed, first), av::Status::ok);
-  CHECK_STATUS(platform.map_to_process(0x4000002000ull, 0x1000u, fake, second), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000001000ull, 0x1000u, av::PageCaching::write_back, backed, first), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000002000ull, 0x1000u, av::PageCaching::write_back, fake, second), av::Status::ok);
   CHECK_EQ(asked, 2);
   CHECK(backed == reinterpret_cast<std::uintptr_t>(backed_page));
   CHECK(fake >= 0x00007FF000000000ull);
@@ -506,7 +525,7 @@ TEST(mock_platform_map_to_process, a_resolver_puts_the_view_on_the_memory_behind
   platform.unmap_from_process(first);
   platform.unmap_from_process(second);
   platform.resolve_process_views(nullptr, nullptr);
-  CHECK_STATUS(platform.map_to_process(0x4000001000ull, 0x1000u, backed, first), av::Status::ok);
+  CHECK_STATUS(platform.map_to_process(0x4000001000ull, 0x1000u, av::PageCaching::write_back, backed, first), av::Status::ok);
   CHECK_EQ(asked, 2);
   CHECK(backed != reinterpret_cast<std::uintptr_t>(backed_page));
   platform.unmap_from_process(first); }
@@ -627,7 +646,7 @@ TEST(mock_platform_destruction, a_process_view_left_mapped_fails_the_test)
 { { MockPlatform platform;
     std::uint64_t view = 0u;
     void *mapping = nullptr;
-    CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, view, mapping), av::Status::ok); }
+    CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, av::PageCaching::write_back, view, mapping), av::Status::ok); }
   CHECK(TestRegistry::instance().take_current_failure()); }
 
 /* DriverEntry reads its service key through the platform, which a test builds

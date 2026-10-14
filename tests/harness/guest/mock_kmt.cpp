@@ -1115,6 +1115,9 @@ Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std
         window_refusal_ = 0u;
         return refuse(code);
     }
+    /* A device with no window is STATUS_NOT_SUPPORTED, every other refusal
+     * STATUS_INVALID_PARAMETER, as the driver answers. */
+    if (window_pages_ == 0u) return refuse(not_supported);
     const std::uint64_t bytes = request.bytes();
     const std::uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
     const std::uint64_t first = bytes <= window_pages_ * page_bytes ? window_fit(pages) : window_pages_;

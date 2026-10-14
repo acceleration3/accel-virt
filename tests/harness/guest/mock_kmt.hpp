@@ -149,6 +149,10 @@ public:
      * the first one answers: a host blob id, as the driver's are. */
     static constexpr std::uint32_t max_window_chunks = 16u;
     static constexpr std::uint32_t first_window_resource = HostBlobId::first;
+    /* The window a rig's device offers unless a test says otherwise: as much
+     * as any test opens at once, and free until written, since the mock maps
+     * it unreserved. */
+    static constexpr std::uint64_t rig_window_bytes = std::uint64_t{2} << 30u;
     /* STATUS_NOT_FOUND: what a handle this mock never minted answers. */
     static constexpr std::uint32_t not_found = 0xC0000225u;
     /* The LUID the Nth adapter added answers until a test sets another:
@@ -405,9 +409,9 @@ public:
      * real one: an open is placed first fit from the window's start, in whole
      * pages, and answers the lowest host blob id no chunk holds and the
      * address of its place; a close names a chunk the same context holds;
-     * destroying a context closes what it holds, as the driver does. An open
-     * the window has no room for - or any, with no window - and one past
-     * max_window_chunks held is refused with STATUS_INVALID_PARAMETER, as the
+     * destroying a context closes what it holds, as the driver does. With no
+     * window an open is STATUS_NOT_SUPPORTED; one the window has no room for,
+     * or past max_window_chunks held, is STATUS_INVALID_PARAMETER, as the
      * driver refuses it: nothing falls back to guest RAM. */
     void                open_host_window(std::uint64_t bytes);
     /* The next window open answers `code`, whatever room there is. */

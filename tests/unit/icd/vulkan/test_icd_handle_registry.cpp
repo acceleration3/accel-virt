@@ -450,7 +450,7 @@ public:
     av::icd::DeviceMemory &make_memory()
     {
         av::icd::DeviceMemory *memory = nullptr;
-        CHECK_STATUS(memories_.create(memory, platform_, kmt_, connection_, log_), Status::ok);
+        CHECK_STATUS(memories_.create(memory, kmt_, connection_, log_), Status::ok);
         return *memory;
     }
 

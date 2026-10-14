@@ -1,6 +1,7 @@
-/* One host-visible allocation's memory on the device: created, mapped where the
- * driver placed it, and released in reverse. The device answers over a real
- * control queue, as it does at StartDevice (feature 041, US1). */
+/* One window chunk's memory on the device: a host blob of host GPU memory made
+ * for one context, mapped where the driver placed it with the caching the
+ * device answers, and released in reverse (docs/host-memory.md). The device
+ * answers over a real control queue, as it does at StartDevice. */
 #include "miniport/memory/host_visible_blob.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
@@ -8,14 +9,21 @@
 #include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
+#include "proto/resources/host_memory_request.hpp"
+#include "proto/virtio_gpu/create_blob_request.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstdint>
 #include <optional>
 
 using av::FakeVirtqueueDevice;
 using av::GpuResponse;
+using av::CreateBlobRequest;
+using av::HostMemoryRequest;
 using av::HostVisibleBlob;
+using av::PageCaching;
+using av::WireReader;
 using av::Irql;
 using av::MappedVirtioFunction;
 using av::Status;
@@ -40,7 +48,9 @@ namespace {
 
 constexpr std::uint16_t control_queue = 0u;
 constexpr std::uint64_t page = 0x1000u;
-constexpr std::uint32_t resource = 0x1000u;
+constexpr std::uint32_t resource = 0x01000000u;
+constexpr std::uint32_t context_id = 3u;
+const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
 
 /* A device that answers each control request from the stall between the
  * driver's polls, with what the test told it to say. */
@@ -125,7 +135,7 @@ TEST(host_visible_blob, is_created_mapped_and_released_in_reverse)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, 2u * page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, 2u * page), Status::ok);
   CHECK(blob.created());
   CHECK_EQ(blob.resource(), resource);
   CHECK(!blob.mapped());
@@ -154,7 +164,7 @@ TEST(host_visible_blob, a_blob_rebuilt_from_what_a_chunk_remembers_comes_down_in
   CHECK_EQ(placed.resource(), resource);
   CHECK_EQ(placed.offset(), 6u * page);
   CHECK(placed.invariants_hold());
-  CHECK_STATUS(placed.create(fixture.device(), resource, page), Status::invalid_state);
+  CHECK_STATUS(placed.create(fixture.device(), context_id, resource, upload, page), Status::invalid_state);
   CHECK_STATUS(placed.destroy(fixture.device()), Status::ok);
   CHECK(!placed.created());
   CHECK(!placed.mapped());
@@ -169,7 +179,7 @@ TEST(host_visible_blob_map, a_refused_map_leaves_it_unmapped)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::ok);
   host.refuse_next();
   CHECK_STATUS(blob.map(fixture.device(), 4u * page), Status::not_supported);
   CHECK(!blob.mapped());
@@ -184,7 +194,7 @@ TEST(host_visible_blob_map, an_answer_of_another_kind_is_refused)
   Host host(fixture.mapped());
   host.answer_map_with(0u);
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::ok);
   CHECK_STATUS(blob.map(fixture.device(), page), Status::malformed);
   CHECK(!blob.mapped()); }
 
@@ -193,7 +203,7 @@ TEST(host_visible_blob_map, a_device_that_answers_nothing_leaves_it_unmapped)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::ok);
   host.answer_nothing();
   CHECK_STATUS(blob.map(fixture.device(), page), Status::not_found);
   CHECK(!blob.mapped()); }
@@ -208,8 +218,8 @@ TEST(host_visible_blob, refuses_every_step_out_of_order)
   CHECK_STATUS(blob.map(fixture.device(), page), Status::invalid_state);
   CHECK_STATUS(blob.unmap(fixture.device()), Status::invalid_state);
   CHECK_STATUS(blob.destroy(fixture.device()), Status::invalid_state);
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::invalid_state);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::invalid_state);
   CHECK_STATUS(blob.unmap(fixture.device()), Status::invalid_state);
   CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
   CHECK_STATUS(blob.map(fixture.device(), 2u * page), Status::invalid_state);
@@ -226,11 +236,67 @@ TEST(host_visible_blob_create, refuses_what_is_not_a_page_multiple)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, page + 1u), Status::invalid_parameter);
-  CHECK_STATUS(blob.create(fixture.device(), resource, 0u), Status::invalid_parameter);
-  CHECK_STATUS(blob.create(fixture.device(), 0u, page), Status::invalid_parameter);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page + 1u), Status::invalid_parameter);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, 0u), Status::invalid_parameter);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, 0u, upload, page), Status::invalid_parameter);
   CHECK(!blob.created());
   CHECK_EQ(host.answered(), 0u); }
+
+/* A blob is made for a context, of memory a host GPU has: neither may be
+ * missing, and nothing is asked of the device when one is. */
+TEST(host_visible_blob_create, refuses_no_context_and_a_request_no_driver_makes)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create(fixture.device(), 0u, resource, upload, page), Status::invalid_parameter);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, HostMemoryRequest(), page),
+               Status::invalid_parameter);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, 32u),
+                           page),
+               Status::invalid_parameter);
+  CHECK(!blob.created());
+  CHECK_EQ(host.answered(), 0u); }
+
+/* What the device is asked to make is the context's, of the memory the
+ * process named, carried as the blob id. */
+TEST(host_visible_blob_create, asks_for_the_contexts_memory_as_the_blob_id)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob         blob(fixture.mapped().platform());
+  const HostMemoryRequest vulkan(HostMemoryRequest::Kind::vulkan, 5u);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, vulkan, 3u * page), Status::ok);
+  CHECK_EQ(host.queue().requests(), 1u);
+  WireReader        reader(host.queue().request(0u), 56u);
+  CreateBlobRequest asked;
+  CHECK_STATUS(asked.decode(reader), Status::ok);
+  CHECK_EQ(asked.context_id(), context_id);
+  CHECK_EQ(asked.resource_id(), resource);
+  CHECK_EQ(asked.memory(), CreateBlobRequest::memory_host3d);
+  CHECK(asked.blob_id() == vulkan.encoded());
+  CHECK(asked.size() == 3u * page);
+  CHECK_STATUS(blob.destroy(fixture.device()), Status::ok); }
+
+/* The device says how the host maps the memory, and a process must map it
+ * the same way: cached memory is write-back, anything else the device may
+ * say is write-combined. Until it is mapped there is nothing to say. */
+TEST(host_visible_blob_map, takes_the_caching_the_device_answers)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob cached(fixture.mapped().platform());
+  CHECK(cached.caching() == PageCaching::write_back);
+  CHECK_STATUS(cached.create(fixture.device(), context_id, resource, upload, page), Status::ok);
+  CHECK_STATUS(cached.map(fixture.device(), 0u), Status::ok);
+  CHECK(cached.caching() == PageCaching::write_back);
+  host.answer_map_with(GpuResponse::map_cache_wc);
+  HostVisibleBlob combined(fixture.mapped().platform());
+  CHECK_STATUS(combined.create(fixture.device(), context_id, resource + 1u, upload, page), Status::ok);
+  CHECK_STATUS(combined.map(fixture.device(), page), Status::ok);
+  CHECK(combined.caching() == PageCaching::write_combined);
+  CHECK_STATUS(cached.destroy(fixture.device()), Status::ok);
+  CHECK_STATUS(combined.destroy(fixture.device()), Status::ok); }
 
 TEST(host_visible_blob, is_passive_only)
 { Fixture fixture;
@@ -238,7 +304,7 @@ TEST(host_visible_blob, is_passive_only)
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
   fixture.mapped().platform().set_irql(Irql::dispatch);
-  static_cast<void>(blob.create(fixture.device(), resource, page));
+  static_cast<void>(blob.create(fixture.device(), context_id, resource, upload, page));
   fixture.mapped().platform().set_irql(Irql::passive);
   CHECK(fixture.mapped().platform().claim(Violation::irql_ceiling));
   while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {}
@@ -255,10 +321,10 @@ TEST(host_visible_blob, a_device_that_refuses_a_step_leaves_it_where_it_was)
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
   host.refuse_next();
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::not_supported);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::not_supported);
   CHECK(!blob.created());
 
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::ok);
   CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
   host.refuse_next();
   CHECK_STATUS(blob.unmap(fixture.device()), Status::not_supported);
@@ -287,7 +353,7 @@ TEST(host_visible_blob, a_silent_device_leaves_every_step_undone)
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
   host.answer_nothing();
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::not_found);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::not_found);
   CHECK(!blob.created()); }
 
 TEST(host_visible_blob_invariants, a_mapping_with_no_resource_is_caught)
@@ -304,7 +370,7 @@ TEST(host_visible_blob_abandon, forgets_a_blob_whose_device_went_away)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::ok);
   CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
   const std::uint32_t answered = host.answered();
   blob.abandon();
@@ -323,5 +389,5 @@ TEST(host_visible_blob, an_answer_that_does_not_decode_is_malformed)
   Host host(fixture.mapped());
   host.answer_garbage();
   HostVisibleBlob blob(fixture.mapped().platform());
-  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::malformed);
+  CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::malformed);
   CHECK(!blob.created()); }

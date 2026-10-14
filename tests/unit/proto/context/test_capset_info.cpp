@@ -112,25 +112,23 @@ TEST(capset_info_offers, only_the_advertised_sub_apis)
   CHECK(!capset.offers(SubApi::opengl));
   CHECK(!capset.has_feature(CapsetInfo::feature_host_visible_memory)); }
 
-/* Feature 039's answers: memory the host GPU exports and reaches the guest
- * with, and guest pages the host GPU reads directly. Each is a path a guest
- * component takes only when the bit is set. */
-TEST(capset_info_has_feature, carries_the_memory_paths_a_probe_proved)
-{ CapsetInfo capset(ProtocolVersion(1u, 0u), 0x1u, 1u, 12u, 12u,
-                    CapsetInfo::feature_gpu_exported_memory | CapsetInfo::feature_guest_memory_import,
-                    GpuIdentity());
-  CHECK(capset.has_feature(CapsetInfo::feature_gpu_exported_memory));
-  CHECK(capset.has_feature(CapsetInfo::feature_guest_memory_import));
+/* Bits 2 and 4 were feature 039's memory probes and no device sets them now;
+ * a capset that carries them still round-trips them as bits it does not know,
+ * and they say nothing about the features beside them. */
+TEST(capset_info_has_feature, carries_the_retired_memory_bits_as_unknown_ones)
+{ constexpr std::uint64_t retired = 2u | 4u;
+  CapsetInfo capset(ProtocolVersion(1u, 0u), 0x1u, 1u, 12u, 12u,
+                    retired | CapsetInfo::feature_dmabuf_scanout, GpuIdentity());
+  CHECK(capset.has_feature(retired));
+  CHECK(capset.has_feature(CapsetInfo::feature_dmabuf_scanout));
   CHECK(!capset.has_feature(CapsetInfo::feature_host_visible_memory));
   std::uint8_t bytes[CapsetInfo::encoded_size] = {};
   CHECK_STATUS(capset.encode(bytes, sizeof bytes), Status::ok);
   CapsetInfo decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
-  CHECK(decoded.has_feature(CapsetInfo::feature_gpu_exported_memory));
-  CHECK(decoded.has_feature(CapsetInfo::feature_guest_memory_import));
-  CHECK(!decoded.has_feature(CapsetInfo::feature_host_visible_memory));
-  CHECK_EQ(CapsetInfo::feature_gpu_exported_memory, 2u);
-  CHECK_EQ(CapsetInfo::feature_guest_memory_import, 4u); }
+  CHECK(decoded.has_feature(retired));
+  CHECK(decoded.has_feature(CapsetInfo::feature_dmabuf_scanout));
+  CHECK(!decoded.has_feature(CapsetInfo::feature_present_engine)); }
 
 TEST(capset_info_decode, tolerates_unknown_feature_bits)
 { Encoded encoded(sample());
@@ -235,7 +233,5 @@ TEST(capset_info_announce, adds_the_scanout_bit_without_disturbing_the_rest)
   CapsetInfo decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK(decoded.has_feature(CapsetInfo::feature_dmabuf_scanout));
-  capset.withdraw(CapsetInfo::feature_dmabuf_scanout);
-  CHECK(!capset.has_feature(CapsetInfo::feature_dmabuf_scanout));
-  CHECK(capset.has_feature(CapsetInfo::feature_host_visible_memory));
+  CHECK(decoded.has_feature(CapsetInfo::feature_host_visible_memory));
   CHECK_EQ(CapsetInfo::feature_dmabuf_scanout, 8u); }

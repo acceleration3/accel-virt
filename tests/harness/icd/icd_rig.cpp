@@ -20,6 +20,7 @@ IcdRig::IcdRig()
       root_(platform_, kmt_, lock_, send_lock_, memory_lock_, log_, icd::icd_binding, windows_, chains_)
 {
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
+    kmt_.open_host_window(MockKmt::rig_window_bytes);
     kmt_.set_adapter_luid(0u, adapter_luid);
 }
 

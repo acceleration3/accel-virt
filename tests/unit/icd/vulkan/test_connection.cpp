@@ -13,7 +13,9 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "core/support/object_storage.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "guest/transport/host_window_chunk.hpp"
+#include "guest/transport/host_allocation.hpp"
+#include "proto/resources/host_memory_request.hpp"
+#include "proto/submission/blob_import_answer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/host_channel_probe.hpp"
@@ -390,128 +392,119 @@ TEST(connection, a_batch_that_does_not_frame_is_refused_before_it_is_published)
 
 namespace {
 
-constexpr std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
+constexpr std::uint64_t memory_bytes = std::uint64_t{64} << 20u;
+constexpr std::uint64_t first_memory = 0x0000700000000001ull;
+constexpr std::uint64_t second_memory = 0x0000700000000002ull;
+const av::HostMemoryRequest vulkan_type(av::HostMemoryRequest::Kind::vulkan, 3u);
 
 }  // namespace
 
-/* A chunk is asked of the kernel on the connection's context, under the
- * connection's lock - guest RAM, with no window here - and closing it gives it
- * back. */
-TEST(connection, opens_a_chunk_under_its_lock_and_closes_it)
+/* Host memory is asked of the kernel and the host on the connection's
+ * context, under the connection's lock: a chunk of the window of the type
+ * asked, imported as the memory the host names; closing it releases the
+ * import, then the chunk, under the lock again. */
+TEST(connection_memory, opens_finds_and_closes_host_memory_under_its_lock)
 { Rig rig;
+  rig.kmt().open_host_window(2u * memory_bytes);
+  ScriptedHost host(rig.kmt());
   CHECK_STATUS(rig.connection().open(0u), Status::ok);
-  CHECK_EQ(rig.connection().adapter(), ConnectionProbe::search(rig.connection()).adapter());
-  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
-  av::ObjectStorage<av::HostWindowChunk> chunk;
-  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  const std::uint32_t allocations = rig.kmt().calls(MockKmt::Call::create_allocation);
+  av::HostAllocation *made = nullptr;
+  host.blob_import(0u, first_memory);
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::ok);
   CHECK(rig.connection().invariants_hold());
-  CHECK(chunk.constructed());
-  CHECK(chunk.object().invariants_hold());
-  CHECK(chunk.object().view() != nullptr);
-  CHECK_EQ(chunk.object().resource_id(), MockKmt::first_chunk_resource);
-  CHECK_EQ(chunk.object().bytes(), chunk_bytes);
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK(made != nullptr);
+  CHECK(made->invariants_hold());
+  CHECK_EQ(made->handle(), first_memory);
+  CHECK_EQ(made->bytes(), memory_bytes);
+  CHECK(made->view() == rig.kmt().window_base());
+  CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), vulkan_type.encoded());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), allocations);
   CHECK_EQ(rig.kmt().open_objects(), open_objects);
   CHECK(std::strcmp(rig.trace().text(), "Ss") == 0);
   CHECK(!rig.lock().held());
-
-  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
-  CHECK(!chunk.constructed());
-  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
-  CHECK_EQ(rig.kmt().open_objects(), open_objects);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 2u);
-  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0);
-  CHECK_EQ(rig.kmt().misuses(), 0u);
-  /* Closing what is not there is nothing. */
-  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
-  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0); }
-
-/* A chunk the kernel refuses is the answer, with nothing made. */
-TEST(connection, a_chunk_refused_leaves_nothing)
-{ Rig rig;
-  CHECK_STATUS(rig.connection().open(0u), Status::ok);
-  const std::uint32_t before = rig.kmt().calls(MockKmt::Call::escape);
-  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
-  av::ObjectStorage<av::HostWindowChunk> chunk;
-  CHECK(rig.connection().open_chunk(chunk, chunk_bytes) != Status::ok);
-  CHECK(!chunk.constructed());
-  CHECK(rig.connection().invariants_hold());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), before + 1u);
-  CHECK_EQ(rig.kmt().open_objects(), open_objects);
-  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
+  CHECK(rig.connection().find_memory(first_memory) == made);
+  CHECK(rig.connection().find_memory(second_memory) == nullptr);
+  CHECK(std::strcmp(rig.trace().text(), "SsSsSs") == 0);
+  host.nop();
+  CHECK_STATUS(rig.connection().close_memory(*made), Status::ok);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK(rig.connection().find_memory(first_memory) == nullptr);
+  CHECK(std::strcmp(rig.trace().text(), "SsSsSsSsSs") == 0);
   CHECK_EQ(rig.kmt().misuses(), 0u);
   CHECK(!rig.lock().held()); }
 
-/* A connection not open, or one the host has failed, makes no chunk and asks
- * the Kmt nothing; storage already holding one is not overwritten. */
-TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
+/* Memory the kernel or the host refuses is the answer, with nothing made. */
+TEST(connection_memory, memory_refused_leaves_nothing)
 { Rig rig;
-  av::ObjectStorage<av::HostWindowChunk> chunk;
-  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::invalid_state);
-  CHECK(!chunk.constructed());
+  CHECK_STATUS(rig.connection().open(0u), Status::ok);
+  av::HostAllocation *made = nullptr;
+  /* No window: the kernel's not_supported. */
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::not_supported);
+  CHECK(made == nullptr);
+  rig.kmt().open_host_window(memory_bytes);
+  ScriptedHost host(rig.kmt());
+  host.blob_import(av::BlobImportAnswer::executor_refused, 0u);
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::invalid_parameter);
+  CHECK(made == nullptr);
+  CHECK(rig.connection().invariants_hold());
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_EQ(rig.kmt().open_objects(), open_objects);
+  CHECK_EQ(rig.kmt().misuses(), 0u);
+  CHECK(!rig.lock().held()); }
+
+/* A connection not open, or one the host has failed, makes no memory and
+ * asks the Kmt nothing; what a faulted one made is abandoned - its context
+ * frees it on the host - with nothing sent. */
+TEST(connection_memory, makes_no_memory_closed_or_faulted_and_abandons_what_a_faulted_one_made)
+{ Rig rig;
+  rig.kmt().open_host_window(2u * memory_bytes);
+  ScriptedHost host(rig.kmt());
+  av::HostAllocation *made = reinterpret_cast<av::HostAllocation *>(&rig);
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::invalid_state);
+  CHECK(made == nullptr);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 0u);
+  CHECK(std::strcmp(rig.trace().text(), "") == 0);
 
   CHECK_STATUS(rig.connection().open(0u), Status::ok);
-  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  host.blob_import(0u, first_memory);
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::ok);
   const std::uint32_t asked = rig.kmt().calls(MockKmt::Call::escape);
-  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::invalid_state);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), asked);
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
-
   rig.kmt().withhold_answer_at(1u);
   std::uint64_t instance = 0u;
   CHECK_EQ(create_instance(rig.connection(), instance), VK_ERROR_DEVICE_LOST);
-  av::ObjectStorage<av::HostWindowChunk> other;
-  CHECK_STATUS(rig.connection().open_chunk(other, chunk_bytes), Status::invalid_state);
-  CHECK(!other.constructed());
+  av::HostAllocation *other = nullptr;
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, other), Status::invalid_state);
+  CHECK(other == nullptr);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), asked);
-  /* A faulted connection lets go of what it made, and leaves the close to the
-   * kernel, which closes it with the context. */
-  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
-  CHECK(!chunk.constructed());
+  const std::uint32_t commands = rig.kmt().commands();
+  CHECK_STATUS(rig.connection().close_memory(*made), Status::ok);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), asked);
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
   rig.connection().close();
-  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
   CHECK(!rig.lock().held()); }
 
-/* On a device with a host window the chunk is the window's: one escape, no
- * allocation, and one escape to close it, each under the lock. */
-TEST(connection, opens_a_window_chunk_under_its_lock_and_closes_it)
+/* The kernel's refusal to give a chunk back is reported, and the connection
+ * lets go of the memory all the same: the kernel closes it with the
+ * context. */
+TEST(connection_memory, memory_whose_release_is_refused_is_still_let_go)
 { Rig rig;
-  rig.kmt().open_host_window(2u * chunk_bytes);
+  rig.kmt().open_host_window(memory_bytes);
+  ScriptedHost host(rig.kmt());
   CHECK_STATUS(rig.connection().open(0u), Status::ok);
-  const std::uint32_t allocations = rig.kmt().calls(MockKmt::Call::create_allocation);
-  av::ObjectStorage<av::HostWindowChunk> chunk;
-  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
-  CHECK(chunk.object().invariants_hold());
-  CHECK_EQ(chunk.object().resource_id(), MockKmt::first_window_resource);
-  CHECK_EQ(chunk.object().bytes(), chunk_bytes);
-  CHECK(chunk.object().view() == rig.kmt().window_base());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), allocations);
-  CHECK_EQ(rig.kmt().window_chunks(), 1u);
-  CHECK_EQ(rig.kmt().open_objects(), open_objects);
-  CHECK(std::strcmp(rig.trace().text(), "Ss") == 0);
-  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
-  CHECK(!chunk.constructed());
-  CHECK_EQ(rig.kmt().window_chunks(), 0u);
-  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0);
-  CHECK_EQ(rig.kmt().misuses(), 0u); }
-
-/* The Kmt's refusal to give a chunk back is reported, and the connection lets
- * go of it all the same: the kernel closes it with the context. */
-TEST(connection, a_chunk_whose_release_is_refused_is_still_closed)
-{ Rig rig;
-  CHECK_STATUS(rig.connection().open(0u), Status::ok);
-  av::ObjectStorage<av::HostWindowChunk> chunk;
-  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  av::HostAllocation *made = nullptr;
+  host.blob_import(0u, first_memory);
+  CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::ok);
+  host.nop();
   rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
-  CHECK(rig.connection().close_chunk(chunk) != Status::ok);
-  CHECK(!chunk.constructed());
-  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK(rig.connection().close_memory(*made) != Status::ok);
+  CHECK(rig.connection().find_memory(first_memory) == nullptr);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
   CHECK(!rig.lock().held());
   rig.connection().close();
-  CHECK_EQ(rig.kmt().ram_chunks(), 0u); }
+  CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
 /* What the host said when it was asked for its device extensions, kept for the
  * one decision that reads it: whether a shared allocation is exported as a

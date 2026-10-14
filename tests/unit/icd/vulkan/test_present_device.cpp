@@ -15,6 +15,8 @@ struct PresentDeviceProbe {
     static void forget_image(PresentDevice &device) { device.made_[0].image_ = VK_NULL_HANDLE; }
     static void forget_memory(PresentDevice &device) { device.made_[0].memory_ = VK_NULL_HANDLE; }
     static void miscount(PresentDevice &device) { device.image_count_ = PresentDevice::max_images + 1u; }
+    /* Back to the count it had, so the teardown walks only what it made. */
+    static void count_none(PresentDevice &device) { device.image_count_ = 0u; }
     static void forget_buffer_memory(PresentDevice &device) { device.buffer_memory_ = VK_NULL_HANDLE; }
 };
 
@@ -349,6 +351,8 @@ TEST(present_device, its_invariants_refuse_an_image_without_memory_a_miscount_an
   PresentDevice miscounted(third, third.device(), third.physical());
   PresentDeviceProbe::miscount(miscounted);
   CHECK(!miscounted.invariants_hold());
+  PresentDeviceProbe::count_none(miscounted);
+  CHECK(miscounted.invariants_hold());
 
   ScriptedVulkanDevice fourth;
   PresentDevice mapped(fourth, fourth.device(), fourth.physical());
