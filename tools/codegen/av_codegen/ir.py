@@ -59,6 +59,10 @@ class Param:
     # For a non-pointer with no optional attr: ().
     optional_levels: tuple[bool, ...] = ()
     len_expr: str | None = None
+    # Neither ``optional`` nor ``noautovalidity``: a handle passed this way
+    # is never the null handle in a valid call, and a decoder refuses a frame
+    # naming it, since the driver dereferences a non-dispatchable handle too.
+    null_refused: bool = False
     # For a pointer-to-pointer array: "<sibling array>.<member>", giving
     # the length of each inner array. See profile.inner_lens.
     inner_len: str | None = None
@@ -93,6 +97,18 @@ class StructMember:
     optional_levels: tuple[bool, ...] = ()
     len_expr: str | None = None
     values: tuple[str, ...] = ()  # from ``values="VK_STRUCTURE_TYPE_..."``
+    # A pointer the API requires whenever its length is not zero: not
+    # ``optional``, not ``noautovalidity`` (valid null under conditions the
+    # registry does not spell out), in a struct the caller fills. A decoder
+    # refuses a frame that leaves one out, since the driver dereferences it.
+    required: bool = False
+    # A handle member the API requires: the same rule as ``required``, for
+    # the null handle rather than a null pointer.
+    handle_required: bool = False
+    # A pointer the registry leaves to conditions (``noautovalidity`` and not
+    # ``optional``): valid null when another member makes the driver ignore
+    # it. A decoder hands the driver zeroes rather than a null it might read.
+    conditional: bool = False
 
 
 @dataclass

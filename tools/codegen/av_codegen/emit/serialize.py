@@ -496,6 +496,46 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
     ]
 
 
+def _refuse_absent(m: StructMember, length: str) -> list[str]:
+    """A required array the frame left out while its length says it has
+    elements: the driver would read that many through a null pointer."""
+    if not m.required:
+        return []
+    return [f"        if (!present && {_expr_to_cpp(length, "out->")} != 0) {{ return false; }}"]
+
+
+def _zero_absent(m: StructMember, length: str, element: str) -> list[str]:
+    """An array the registry leaves to conditions (``noautovalidity``) - a
+    write's image infos, a create's queue family indices - that the frame
+    left out while its length says it has elements. Where the condition makes
+    the driver ignore it this is nothing; where it does not, the driver reads
+    zeroes instead of dereferencing a null pointer."""
+    if not m.conditional:
+        return []
+    count = _expr_to_cpp(length, "out->")
+    return [
+        f"        if (out->{m.name} == nullptr && {count} != 0) {{",
+        f"            auto* zeroes = arena.allocate<{element}>(static_cast<size_t>({count}));",
+        f"            for (uint32_t i = 0; i < static_cast<uint32_t>({count}); ++i) {{ zeroes[i] = {element}{{}}; }}",
+        f"            out->{m.name} = zeroes;",
+        "        }",
+    ]
+
+
+def _absent_struct(m: StructMember) -> list[str]:
+    """A structure the frame left out: refused where the API requires it,
+    zeroes where the registry leaves it to conditions, null otherwise."""
+    if m.required:
+        return ["            return false;"]
+    if m.conditional:
+        return [
+            f"            auto* zeroes = arena.allocate<{m.type.base}>();",
+            f"            *zeroes = {m.type.base}{{}};",
+            f"            out->{m.name} = zeroes;",
+        ]
+    return [f"            out->{m.name} = nullptr;"]
+
+
 def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
     kind = _classify_member(reg, m)
     if kind == "pnext":
@@ -516,8 +556,14 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"    if (!deserialize_{m.type.base}(r, &out->{m.name}, arena)) {{ return false; }}"
         ]
     if kind == "nested_handle":
+        refuse = (
+            [f"    if (out->{m.name} == VK_NULL_HANDLE) {{ return false; }}"]
+            if m.handle_required and not reg.handles[m.type.base].dispatchable
+            else []
+        )
         return [
-            f"    if (!deserialize_{m.type.base}(r, out->{m.name})) {{ return false; }}"
+            f"    if (!deserialize_{m.type.base}(r, out->{m.name})) {{ return false; }}",
+            *refuse,
         ]
     if kind == "pod":
         if _is_size_t(m):
@@ -530,12 +576,24 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             ]
         return [f"    if (!r.read_pod(out->{m.name})) {{ return false; }}"]
     if kind == "string":
+        # The wire says nothing for a null string and an empty one alike. A
+        # string the API requires is read by the driver - an entry point's
+        # name - so it is the empty one, never a null pointer.
+        absent = (
+            [
+                "            char* empty = arena.allocate_chars(1u);",
+                "            empty[0] = '\\0';",
+                f"            out->{m.name} = empty;",
+            ]
+            if m.required
+            else [f"            out->{m.name} = nullptr;"]
+        )
         return [
             "    {",
             "        uint64_t n = 0;",
             "        if (!r.read_varint(n)) { return false; }",
             "        if (n == 0) {",
-            f"            out->{m.name} = nullptr;",
+            *absent,
             "        } else {",
             "            // One byte more than the wire said, and a zero in it: the",
             "            // length is the guest's and a host API will strcmp what it",
@@ -554,7 +612,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        uint8_t present = 0;",
             "        if (!r.read_pod(present)) { return false; }",
             "        if (present == 0) {",
-            f"            out->{m.name} = nullptr;",
+            *_absent_struct(m),
             "        } else {",
             f"            auto* p = arena.allocate<{m.type.base}>();",
             f"            if (!deserialize_{m.type.base}(r, p, arena)) {{ return false; }}",
@@ -568,6 +626,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    {",
             "        uint8_t present = 0;",
             "        if (!r.read_pod(present)) { return false; }",
+            *_refuse_absent(m, count),
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
@@ -577,6 +636,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "            }",
             f"            out->{m.name} = arr;",
             "        }",
+            *_zero_absent(m, count, m.type.base),
             "    }",
         ]
     if kind == "template_blob":
@@ -600,6 +660,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    {",
             "        uint8_t present = 0;",
             "        if (!r.read_pod(present)) { return false; }",
+            *_refuse_absent(m, size),
             f"        if (!present || {_expr_to_cpp(size, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
@@ -607,6 +668,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"            if (!r.read(blob, static_cast<size_t>({_expr_to_cpp(size, "out->")}))) {{ return false; }}",
             f"            out->{m.name} = blob;",
             "        }",
+            *_zero_absent(m, size, "char"),
             "    }",
         ]
     if kind == "pod_array":
@@ -617,6 +679,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    {",
             "        uint8_t present = 0;",
             "        if (!r.read_pod(present)) { return false; }",
+            *_refuse_absent(m, count),
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
@@ -626,6 +689,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "            }",
             f"            out->{m.name} = arr;",
             "        }",
+            *_zero_absent(m, count, elem),
             "    }",
         ]
     if kind == "handle_array":
@@ -635,6 +699,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    {",
             "        uint8_t present = 0;",
             "        if (!r.read_pod(present)) { return false; }",
+            *_refuse_absent(m, count),
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
@@ -644,6 +709,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "            }",
             f"            out->{m.name} = arr;",
             "        }",
+            *_zero_absent(m, count, elem),
             "    }",
         ]
     if kind == "string_array":
@@ -652,6 +718,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    {",
             "        uint8_t present = 0;",
             "        if (!r.read_pod(present)) { return false; }",
+            *_refuse_absent(m, count),
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",

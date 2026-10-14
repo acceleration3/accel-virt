@@ -10,6 +10,8 @@
 
 #include <cstdint>
 
+#include <vulkan/vulkan_core.h>
+
 namespace av {
 
 class MockMemoryExporter final : public MemoryExporter {
@@ -27,8 +29,12 @@ public:
     /* Fails the test with any allocation still live. */
     ~MockMemoryExporter();
 
-    /* Appends memory type with `flags`, and whether it exports: its index. */
-    std::uint32_t add_type(std::uint32_t flags, bool exportable);
+    /* Appends memory type with `flags` on `heap`, and whether it exports: its
+     * index. */
+    std::uint32_t add_type(std::uint32_t flags, bool exportable, std::uint32_t heap = 0u);
+    /* Appends a heap: its index. A GPU none was added to has one, device
+     * local, which every type is on unless a test says otherwise. */
+    std::uint32_t add_heap(VkMemoryHeapFlags flags, VkDeviceSize size);
     /* The Nth allocate, or share, from now fails; and every one of the next
      * `count`. */
     void          fail_allocation_at(std::uint32_t nth);
@@ -37,16 +43,15 @@ public:
     /* Every allocation is rounded up to a multiple of `bytes`, as a driver
      * rounds one; 0 makes exactly what was asked. */
     void          round_to(std::uint64_t bytes);
-    /* memory_types() answers `count` from now on, whatever was added: a
-     * driver with more types than any caller may index. A type past those
-     * added is a misuse to ask about. */
+    /* memory_properties() claims `count` types from now on, whatever was
+     * added: a driver with more types than any caller may index. A type past
+     * those added is a misuse to ask about. */
     void          claim_types(std::uint32_t count);
     /* `type`'s dma-buf imports back only as types no importer can map, as
      * NVIDIA's BAR memory does. */
     void          hide_on_import(std::uint32_t type);
 
-    std::uint32_t memory_types() override;
-    std::uint32_t memory_flags(std::uint32_t type) override;
+    void          memory_properties(VkPhysicalDeviceMemoryProperties &answer) override;
     bool          exportable(std::uint32_t type) override;
     bool          imports_host_visible(std::uint32_t type) override;
     Status        allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory) override;
@@ -69,12 +74,17 @@ public:
     std::uint32_t misuses() const;
 
 private:
+    /* VK_MAX_MEMORY_HEAPS. */
+    static constexpr std::uint32_t max_heaps = 16u;
+    static constexpr VkDeviceSize  default_heap_bytes = 1ull << 30;
+
     struct Type {
         std::uint32_t flags;
         bool          exportable;
         bool          hidden;
         std::uint32_t questions;
         std::uint32_t import_questions;
+        std::uint32_t heap;
     };
     struct Allocation {
         std::uint64_t handle;   /* 0 for a free slot */
@@ -88,6 +98,8 @@ private:
 
     Type          types_[max_types];
     std::uint32_t type_count_;
+    VkMemoryHeap  heaps_[max_heaps];
+    std::uint32_t heap_count_;
     Allocation    allocations_[max_allocations];
     std::uint32_t fail_allocation_;
     std::uint32_t failing_;

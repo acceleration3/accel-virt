@@ -16,16 +16,11 @@ CompositorMemory::CompositorMemory(CompositorDevice &device) : device_(device)
     AV_SCOPE("CompositorMemory::CompositorMemory");
 }
 
-uint32_t CompositorMemory::memory_types()
+void CompositorMemory::memory_properties(VkPhysicalDeviceMemoryProperties &answer)
 {
-    AV_SCOPE("CompositorMemory::memory_types");
-    return device_.opened() ? device_.table().memory_type_count() : 0u;
-}
-
-uint32_t CompositorMemory::memory_flags(uint32_t type)
-{
-    AV_SCOPE("CompositorMemory::memory_flags");
-    return device_.table().memory_flags(type);
+    AV_SCOPE("CompositorMemory::memory_properties");
+    answer = VkPhysicalDeviceMemoryProperties{};
+    if (device_.opened()) device_.table().memory_properties(answer);
 }
 
 bool CompositorMemory::exportable(uint32_t type)
@@ -47,9 +42,11 @@ bool CompositorMemory::imports_host_visible(uint32_t type)
     const VulkanDeviceTable &table = device_.table();
     const uint32_t           types = table.dma_buf_types(probe.fd());
     free(probe);
-    for (uint32_t candidate = 0u; candidate < table.memory_type_count(); candidate++) {
+    VkPhysicalDeviceMemoryProperties memory = {};
+    table.memory_properties(memory);
+    for (uint32_t candidate = 0u; candidate < memory.memoryTypeCount; candidate++) {
         if (((types >> candidate) & 1u) == 0u) continue;
-        if ((table.memory_flags(candidate) & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u) return true;
+        if ((memory.memoryTypes[candidate].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u) return true;
     }
     return false;
 }

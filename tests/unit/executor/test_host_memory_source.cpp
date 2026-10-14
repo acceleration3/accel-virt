@@ -12,6 +12,7 @@
 #include "executor/source_memory.hpp"
 #include "harness/executor/host_memory_source_probe.hpp"
 #include "harness/executor/mock_memory_exporter.hpp"
+#include "executor/vulkan/guest_memory_types.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/resources/host_memory_request.hpp"
@@ -69,7 +70,15 @@ public:
 
     /* A discrete GPU: device-local memory, uncached and cached system memory,
      * the resizable BAR, memory that is not coherent, and coherent memory
-     * whose export a driver refuses. Mappable: 1, 2 and 3. */
+     * whose export a driver refuses. Mappable: 1, 2 and 3.
+     *
+     * A Vulkan guest sees 4 and 5 without host visibility, which leaves them
+     * no flags at all, so the spec puts them first: its types are the host's
+     * 4, 5, 0, 1, 2, 3. */
+    static constexpr std::uint32_t guest_uncached = 3u;
+    static constexpr std::uint32_t guest_cached = 4u;
+    static constexpr std::uint32_t guest_bar = 5u;
+
     void discrete()
     {
         exporter.add_type(local, true);
@@ -231,7 +240,7 @@ TEST(host_memory_source_choice, upload_takes_a_bar_no_importer_can_map_last)
   rig.exporter.fail_allocations(2u);
   CHECK_STATUS(rig.allocate(3u, upload, memory), Status::no_memory);
   CHECK_EQ(rig.exporter.attempts(), 5u);
-  CHECK_STATUS(rig.allocate(4u, vulkan(3u), memory), Status::ok);
+  CHECK_STATUS(rig.allocate(4u, vulkan(Rig::guest_bar), memory), Status::ok);
   CHECK_EQ(rig.exporter.last_type(), 3u);
   CHECK(rig.source.invariants_hold());
   rig.source.free_domain(domain);
@@ -315,31 +324,85 @@ TEST(host_memory_source_choice, one_type_serving_every_preference_is_tried_once)
   CHECK_EQ(rig.source.live(), 1u);
   rig.source.free(domain, 1u); }
 
-/* A Vulkan request names its type and has no other: a mappable type is
- * exactly that type, refused with no fallback when it has no room, and a
- * type the source does not map is no request this GPU answers. */
-TEST(host_memory_source_choice, a_vulkan_request_is_its_type_or_nothing)
+/* A Vulkan request names a type of the guest's view and has no other: one the
+ * source backs is exactly the host type behind it, refused with no fallback
+ * when it has no room, and one the source does not back - or past the view -
+ * is no request this GPU answers. */
+TEST(host_memory_source_choice, a_vulkan_request_is_the_host_type_behind_its_guest_type_or_nothing)
 { Rig rig;
   rig.discrete();
   AvHostMemory memory = {};
-  CHECK_STATUS(rig.allocate(1u, vulkan(2u), memory), Status::ok);
+  CHECK_STATUS(rig.allocate(1u, vulkan(Rig::guest_cached), memory), Status::ok);
   CHECK_EQ(rig.exporter.last_type(), 2u);
   CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_BACK});
-  CHECK_STATUS(rig.allocate(2u, vulkan(3u), memory), Status::ok);
+  CHECK_STATUS(rig.allocate(2u, vulkan(Rig::guest_bar), memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 3u);
   CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
-  /* The caching is the chosen type's own, as the GPU's exporter reports it. */
-  av::MemoryExporter &exporter = rig.exporter;
-  CHECK_EQ(exporter.memory_flags(3u) & cached, 0u);
-  CHECK(exporter.memory_flags(2u) & cached);
+  /* The caching is the chosen host type's own, as the GPU's exporter reports
+   * it. */
+  av::MemoryExporter              &exporter = rig.exporter;
+  VkPhysicalDeviceMemoryProperties gpu = {};
+  exporter.memory_properties(gpu);
+  CHECK_EQ(gpu.memoryTypes[3].propertyFlags & cached, 0u);
+  CHECK((gpu.memoryTypes[2].propertyFlags & cached) != 0u);
   const std::uint32_t before = rig.exporter.attempts();
   rig.exporter.fail_allocation_at(1u);
-  CHECK_STATUS(rig.allocate(3u, vulkan(1u), memory), Status::no_memory);
+  CHECK_STATUS(rig.allocate(3u, vulkan(Rig::guest_uncached), memory), Status::no_memory);
   CHECK_EQ(rig.exporter.attempts(), before + 1u);
-  constexpr std::uint32_t unmapped[] = {0u, 4u, 5u, 6u, 31u};
+  CHECK_EQ(rig.exporter.last_type(), 1u);
+  /* The guest's 0, 1 and 2 are the host's 4, 5 and 0, none of them mapped;
+   * the guest has six types. */
+  constexpr std::uint32_t unmapped[] = {0u, 1u, 2u, 6u, 31u};
   for (const std::uint32_t type : unmapped) CHECK_STATUS(rig.allocate(4u, vulkan(type), memory), Status::invalid_parameter);
   CHECK_EQ(rig.exporter.attempts(), before + 1u);
   CHECK_EQ(rig.source.live(), 2u);
   rig.source.free_domain(domain); }
+
+/* An integrated GPU's memory is all host visible: the guest's first type is
+ * device-local memory the host allocates itself, never the source's, and the
+ * two it backs follow, each its own host type. */
+TEST(host_memory_source_choice, a_vulkan_request_for_device_local_memory_the_guest_never_maps_is_refused)
+{ Rig rig;
+  rig.exporter.add_type(local | visible | coherent, true);
+  rig.exporter.add_type(local | visible | cached | coherent, true);
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, vulkan(0u), memory), Status::invalid_parameter);
+  CHECK_EQ(rig.exporter.attempts(), 0u);
+  CHECK_STATUS(rig.allocate(2u, vulkan(1u), memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 0u);
+  CHECK_STATUS(rig.allocate(3u, vulkan(2u), memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 1u);
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.exporter.live(), 0u); }
+
+/* The guest's view is the source's: what it maps is host visible, in the
+ * spec's order, on the host's heaps. A GPU with no types yet - no compositing
+ * context - has no view to give, and a type that appears later is in the
+ * next one. */
+TEST(host_memory_source_types, the_vulkan_view_is_what_the_source_maps_and_follows_new_types)
+{ Rig rig;
+  av::GuestMemoryTypes view;
+  CHECK(!rig.source.vulkan_types(view));
+  rig.exporter.add_heap(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, 1u << 20);
+  rig.exporter.add_heap(0u, 2u << 20);
+  rig.exporter.add_type(local | visible | coherent, true, 0u);
+  CHECK(rig.source.vulkan_types(view));
+  VkPhysicalDeviceMemoryProperties seen = {};
+  view.properties(seen);
+  CHECK_EQ(seen.memoryTypeCount, 2u);
+  CHECK_EQ(seen.memoryTypes[0].propertyFlags, local);
+  CHECK_EQ(seen.memoryTypes[1].propertyFlags, local | visible | coherent);
+  CHECK_EQ(seen.memoryHeapCount, 2u);
+  CHECK_EQ(seen.memoryHeaps[1].size, VkDeviceSize{2u << 20});
+  CHECK_EQ(view.source_type(1u), 0u);
+  rig.exporter.add_type(visible | coherent, false, 1u);
+  CHECK(rig.source.vulkan_types(view));
+  view.properties(seen);
+  CHECK_EQ(seen.memoryTypeCount, 3u);
+  CHECK_EQ(seen.memoryTypes[0].propertyFlags, 0u);
+  CHECK_EQ(seen.memoryTypes[0].heapIndex, 1u);
+  CHECK_EQ(view.host_type(0u), 1u);
+  CHECK(rig.source.invariants_hold()); }
 
 /* A GPU with nothing mappable answers no class at all. */
 TEST(host_memory_source_choice, a_gpu_with_nothing_mappable_answers_no_request)

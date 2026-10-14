@@ -51,7 +51,6 @@ bool HandleRegistry::knows(uint64_t handle) const
 bool HandleRegistry::knows(uint64_t handle, HandleKind kind) const
 {
     AV_SCOPE("HandleRegistry::knows");
-    if (handle == 0u) return true;
     const uint32_t slot = slot_of(handle);
     return slot != no_slot && kinds_[slot] == kind;
 }

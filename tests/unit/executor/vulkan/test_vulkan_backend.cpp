@@ -10,9 +10,13 @@
 #include "executor/source_memory.hpp"
 #include "executor/vulkan/handle_registry.hpp"
 #include "executor/host_gpu.hpp"
+#include "executor/host_memory_source.hpp"
+#include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
+#include "harness/executor/mock_memory_exporter.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -677,3 +681,39 @@ TEST(vulkan_backend, a_signal_changes_nothing_it_waits_on)
   backend.gpu_progress(marked, reached);
   CHECK_EQ(marked, 0u);
   CHECK_EQ(reached, 0u); }
+
+/* The guest's types are its GPU's memory source's view, the one the source
+ * translates the guest's requests by: learnt the first time anything needs
+ * them and kept for the context, so a type the source finds later cannot
+ * move an index the guest already holds. A context that ends forgets them. */
+TEST(vulkan_backend, the_guest_s_types_are_the_source_s_learnt_once_per_context)
+{ av::MockPlatform       platform;
+  av::MockMemoryExporter exporter;
+  av::HostMemorySource   source(exporter, platform);
+  constexpr std::uint32_t integrated = av::MockMemoryExporter::device_local | av::MockMemoryExporter::host_visible |
+                                       av::MockMemoryExporter::host_coherent;
+  exporter.add_type(integrated, true);
+  av::HostGpu   gpu;
+  VulkanBackend backend;
+  backend.initialize(gpu, &source);
+  av::VulkanBackendProbe probe(backend);
+  probe.learn_types(VK_NULL_HANDLE);
+  VkPhysicalDeviceMemoryProperties guest = {};
+  probe.types().properties(guest);
+  CHECK_EQ(guest.memoryTypeCount, 2u);
+  CHECK_EQ(guest.memoryTypes[0].propertyFlags, VkMemoryPropertyFlags{VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT});
+  CHECK_EQ(probe.types().source_type(0u), av::GuestMemoryTypes::no_type);
+  CHECK_EQ(probe.types().source_type(1u), 0u);
+
+  exporter.add_type(av::MockMemoryExporter::host_visible | av::MockMemoryExporter::host_coherent, true);
+  probe.learn_types(VK_NULL_HANDLE);
+  probe.types().properties(guest);
+  CHECK_EQ(guest.memoryTypeCount, 2u);
+
+  backend.shut_down();
+  backend.initialize(gpu, &source);
+  probe.learn_types(VK_NULL_HANDLE);
+  probe.types().properties(guest);
+  CHECK_EQ(guest.memoryTypeCount, 3u);
+  CHECK_EQ(probe.types().source_type(1u), 1u);
+  backend.shut_down(); }
