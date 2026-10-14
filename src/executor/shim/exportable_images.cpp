@@ -127,8 +127,10 @@ ID3D11Texture2D *ExportableImages::make(const D3D11_TEXTURE2D_DESC1 &desc)
     collect();
     VkImage made = VK_NULL_HANDLE;
     if (!vulkan_.table().create_image(described.info(), made)) return nullptr;
-    const VkMemoryRequirements       needs = vulkan_.table().requirements(made);
-    const uint32_t                   type = vulkan_.table().memory_type(needs.memoryTypeBits);
+    const VkMemoryRequirements needs = vulkan_.table().requirements(made);
+    /* An OpenCL that names no image over a buffer opens the texture as its
+     * bytes (OpenClBackend::image_over), so they are kept as they are. */
+    const uint32_t                   type = vulkan_.table().raw_memory_type(needs.memoryTypeBits);
     const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
                                                  VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
     VkDeviceMemory memory = VK_NULL_HANDLE;

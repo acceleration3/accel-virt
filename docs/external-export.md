@@ -273,7 +273,10 @@ is made with `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` and the one modifier
 (`ExportableImages`) - not `VK_IMAGE_TILING_LINEAR`, for which RADV from Mesa
 26.2 offers no dma-buf. The device that makes it has
 `VK_EXT_image_drm_format_modifier` enabled: the compositor's own, the guest's
-Vulkan devices, and DXVK's (`tools/dxvk-patches/0006`). It is still imported on the same GPU (§4,
+Vulkan devices, and DXVK's (`tools/dxvk-patches/0006`). A shared Direct3D 11
+texture's memory is device local and host visible where the GPU has such
+memory, which GFX12 keeps uncompressed: an OpenCL buffer over its compressed
+VRAM read the compression's bytes. It is still imported on the same GPU (§4,
 hello).
 
 - **EGL** (Qt's OpenGL, Mesa radeonsi): `eglCreateImageKHR(display,

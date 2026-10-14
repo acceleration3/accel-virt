@@ -151,6 +151,17 @@ uint32_t VulkanDeviceTable::memory_type(uint32_t allowed) const
     return VK_MAX_MEMORY_TYPES;
 }
 
+uint32_t VulkanDeviceTable::raw_memory_type(uint32_t allowed) const
+{
+    AV_SCOPE("VulkanDeviceTable::raw_memory_type");
+    constexpr VkMemoryPropertyFlags visible_vram =
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++)
+        if ((allowed & (1u << type)) != 0u && (memory_.memoryTypes[type].propertyFlags & visible_vram) == visible_vram)
+            return type;
+    return memory_type(allowed);
+}
+
 void VulkanDeviceTable::memory_properties(VkPhysicalDeviceMemoryProperties &answer) const
 {
     AV_SCOPE("VulkanDeviceTable::memory_properties");

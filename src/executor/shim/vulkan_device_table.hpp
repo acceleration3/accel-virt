@@ -33,6 +33,11 @@ public:
     /* The first memory type `allowed` permits, a device-local one first;
      * VK_MAX_MEMORY_TYPES for none. */
     uint32_t           memory_type(uint32_t allowed) const;
+    /* Of `allowed`, memory whose bytes another API may read as they are:
+     * device local and host visible first, which a GPU keeps uncompressed for
+     * the CPU's sake - GFX12 compresses the rest of its VRAM, and an OpenCL
+     * buffer over it read the compressed bytes - then as memory_type does. */
+    uint32_t           raw_memory_type(uint32_t allowed) const;
     /* The device's memory types and heaps: none before it is loaded. */
     void                  memory_properties(VkPhysicalDeviceMemoryProperties &answer) const;
     /* `size` bytes of `type`, exportable as a dma-buf and dedicated to
