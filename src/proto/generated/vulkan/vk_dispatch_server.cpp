@@ -508,7 +508,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeviceSize memoryOffset{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
+        if (memory == VK_NULL_HANDLE) return false;
         if (!r.read_pod(memoryOffset)) return false;
         VkResult result = s.on_vkBindBufferMemory(device, buffer, memory, memoryOffset);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
@@ -522,7 +524,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeviceSize memoryOffset{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
+        if (memory == VK_NULL_HANDLE) return false;
         if (!r.read_pod(memoryOffset)) return false;
         VkResult result = s.on_vkBindImageMemory(device, image, memory, memoryOffset);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
@@ -535,6 +539,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkMemoryRequirements pMemoryRequirements_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         s.on_vkGetBufferMemoryRequirements(device, buffer, &pMemoryRequirements_out);
         reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements(reply, pMemoryRequirements_out);
@@ -547,6 +552,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkMemoryRequirements pMemoryRequirements_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         s.on_vkGetImageMemoryRequirements(device, image, &pMemoryRequirements_out);
         reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements(reply, pMemoryRequirements_out);
@@ -760,6 +766,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFence(r, fence)) return false;
+        if (fence == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkGetFenceStatus(device, fence);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -797,6 +804,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkCommandPoolResetFlags flags{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
+        if (commandPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkResetCommandPool(device, commandPool, flags);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
@@ -1031,6 +1039,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pCommandBuffers_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
+        if (commandPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(commandBufferCount)) return false;
         pCommandBuffers_storage_count = static_cast<size_t>(commandBufferCount);
         if (pCommandBuffers_storage_count != 0) {
@@ -1078,6 +1087,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineBindPoint)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
+        if (pipeline == VK_NULL_HANDLE) return false;
         s.on_vkCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
         return true;
     }
@@ -1186,6 +1196,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineBindPoint)) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
+        if (layout == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstSet)) return false;
         if (!r.read_pod(descriptorSetCount)) return false;
         pDescriptorSets_storage_count = static_cast<size_t>(descriptorSetCount);
@@ -1304,7 +1315,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, srcBuffer)) return false;
+        if (srcBuffer == VK_NULL_HANDLE) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(regionCount)) return false;
         pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
@@ -1356,6 +1369,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pValues_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
+        if (layout == VK_NULL_HANDLE) return false;
         if (!r.read_pod(stageFlags)) return false;
         if (!r.read_pod(offset)) return false;
         if (!r.read_pod(size)) return false;
@@ -1498,6 +1512,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pDescriptorSets_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPool(r, descriptorPool)) return false;
+        if (descriptorPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(descriptorSetCount)) return false;
         pDescriptorSets_storage_count = static_cast<size_t>(descriptorSetCount);
         if (pDescriptorSets_storage_count != 0) {
@@ -1560,6 +1575,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDescriptorPoolResetFlags flags{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPool(r, descriptorPool)) return false;
+        if (descriptorPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkResetDescriptorPool(device, descriptorPool, flags);
         handle_children_ended(as_number(descriptorPool));
@@ -1598,6 +1614,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkGetEventStatus(device, event);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -1608,6 +1625,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkSetEvent(device, event);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -1618,6 +1636,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkResetEvent(device, event);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -1629,6 +1648,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPipelineStageFlags stageMask{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         if (!r.read_pod(stageMask)) return false;
         s.on_vkCmdSetEvent(commandBuffer, event, stageMask);
         return true;
@@ -1640,6 +1660,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPipelineStageFlags stageMask{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         if (!r.read_pod(stageMask)) return false;
         s.on_vkCmdResetEvent(commandBuffer, event, stageMask);
         return true;
@@ -1719,8 +1740,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
+        if (srcImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
+        if (dstImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
         pRegions_storage_count = static_cast<size_t>(regionCount);
@@ -1746,7 +1769,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, srcBuffer)) return false;
+        if (srcBuffer == VK_NULL_HANDLE) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
+        if (dstImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
         pRegions_storage_count = static_cast<size_t>(regionCount);
@@ -1772,8 +1797,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
+        if (srcImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(regionCount)) return false;
         pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
@@ -1800,8 +1827,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkFilter filter{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
+        if (srcImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
+        if (dstImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
         pRegions_storage_count = static_cast<size_t>(regionCount);
@@ -1828,6 +1857,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRanges_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!r.read_pod(imageLayout)) return false;
         if (!deserialize_VkClearColorValue(r, &pColor_local, arena)) return false;
         if (!r.read_pod(rangeCount)) return false;
@@ -1854,6 +1884,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRanges_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!r.read_pod(imageLayout)) return false;
         if (!deserialize_VkClearDepthStencilValue(r, &pDepthStencil_local, arena)) return false;
         if (!r.read_pod(rangeCount)) return false;
@@ -1911,6 +1942,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t data{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstOffset)) return false;
         if (!r.read_pod(size)) return false;
         if (!r.read_pod(data)) return false;
@@ -1927,6 +1959,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pData_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstOffset)) return false;
         if (!r.read_pod(dataSize)) return false;
         pData_storage_count = static_cast<size_t>(dataSize);
@@ -2035,6 +2068,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeviceSize offset{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         s.on_vkCmdDispatchIndirect(commandBuffer, buffer, offset);
         return true;
@@ -2048,6 +2082,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!r.read_pod(drawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -2063,6 +2098,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!r.read_pod(drawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -2154,6 +2190,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkQueryControlFlags flags{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         if (!r.read_pod(flags)) return false;
         s.on_vkCmdBeginQuery(commandBuffer, queryPool, query, flags);
@@ -2299,9 +2336,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkQueryResultFlags flags{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstQuery)) return false;
         if (!r.read_pod(queryCount)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstOffset)) return false;
         if (!r.read_pod(stride)) return false;
         if (!r.read_pod(flags)) return false;
@@ -2338,8 +2377,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!deserialize_VkBuffer(r, countBuffer)) return false;
+        if (countBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(countBufferOffset)) return false;
         if (!r.read_pod(maxDrawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -2357,8 +2398,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!deserialize_VkBuffer(r, countBuffer)) return false;
+        if (countBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(countBufferOffset)) return false;
         if (!r.read_pod(maxDrawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -2372,6 +2415,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t query{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         s.on_vkCmdEndQuery(commandBuffer, queryPool, query);
         return true;
@@ -2419,6 +2463,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPipelineStageFlags2 stageMask{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         if (!r.read_pod(stageMask)) return false;
         s.on_vkCmdResetEvent2(commandBuffer, event, stageMask);
         return true;
@@ -2431,6 +2476,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t queryCount{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstQuery)) return false;
         if (!r.read_pod(queryCount)) return false;
         s.on_vkCmdResetQueryPool(commandBuffer, queryPool, firstQuery, queryCount);
@@ -2448,8 +2494,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
+        if (srcImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
+        if (dstImage == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
         pRegions_storage_count = static_cast<size_t>(regionCount);
@@ -2543,6 +2591,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDependencyInfo pDependencyInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         if (!deserialize_VkDependencyInfo(r, &pDependencyInfo_local, arena)) return false;
         s.on_vkCmdSetEvent2(commandBuffer, event, &pDependencyInfo_local);
         return true;
@@ -2689,6 +2738,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineStage)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         s.on_vkCmdWriteTimestamp(commandBuffer, pipelineStage, queryPool, query);
         return true;
@@ -2702,6 +2752,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(stage)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         s.on_vkCmdWriteTimestamp2(commandBuffer, stage, queryPool, query);
         return true;
@@ -3009,6 +3060,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeviceGroupPresentModeFlagsKHR pModes_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSurfaceKHR(r, surface)) return false;
+        if (surface == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkGetDeviceGroupSurfacePresentModesKHR(device, surface, &pModes_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -3073,6 +3125,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeviceSize pCommittedMemoryInBytes_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
+        if (memory == VK_NULL_HANDLE) return false;
         s.on_vkGetDeviceMemoryCommitment(device, memory, &pCommittedMemoryInBytes_out);
         reply.write_pod<int32_t>(0);
         reply.write_pod(pCommittedMemoryInBytes_out);
@@ -3125,6 +3178,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pSparseMemoryRequirements_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pSparseMemoryRequirementCount_local)) return false;
@@ -3192,6 +3246,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSubresourceLayout pLayout_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!deserialize_VkImageSubresource(r, &pSubresource_local, arena)) return false;
         s.on_vkGetImageSubresourceLayout(device, image, &pSubresource_local, &pLayout_out);
         reply.write_pod<int32_t>(0);
@@ -3250,6 +3305,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pRects_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkSurfaceKHR(r, surface)) return false;
+        if (surface == VK_NULL_HANDLE) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pRectCount_local)) return false;
@@ -3318,6 +3374,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(objectType)) return false;
         if (!r.read_pod(objectHandle)) return false;
         if (!deserialize_VkPrivateDataSlot(r, privateDataSlot)) return false;
+        if (privateDataSlot == VK_NULL_HANDLE) return false;
         s.on_vkGetPrivateData(device, objectType, objectHandle, privateDataSlot, &pData_out);
         reply.write_pod<int32_t>(0);
         reply.write_pod(pData_out);
@@ -3336,6 +3393,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkQueryResultFlags flags{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstQuery)) return false;
         if (!r.read_pod(queryCount)) return false;
         {
@@ -3368,6 +3426,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkExtent2D pGranularity_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPass(r, renderPass)) return false;
+        if (renderPass == VK_NULL_HANDLE) return false;
         s.on_vkGetRenderAreaGranularity(device, renderPass, &pGranularity_out);
         reply.write_pod<int32_t>(0);
         serialize_VkExtent2D(reply, pGranularity_out);
@@ -3380,6 +3439,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint64_t pValue_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
+        if (semaphore == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkGetSemaphoreCounterValue(device, semaphore, &pValue_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -3418,6 +3478,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pSrcCaches_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCache(r, dstCache)) return false;
+        if (dstCache == VK_NULL_HANDLE) return false;
         if (!r.read_pod(srcCacheCount)) return false;
         pSrcCaches_storage_count = static_cast<size_t>(srcCacheCount);
         if (pSrcCaches_storage_count != 0) {
@@ -3486,6 +3547,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t queryCount{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstQuery)) return false;
         if (!r.read_pod(queryCount)) return false;
         s.on_vkResetQueryPool(device, queryPool, firstQuery, queryCount);
@@ -3502,6 +3564,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(objectType)) return false;
         if (!r.read_pod(objectHandle)) return false;
         if (!deserialize_VkPrivateDataSlot(r, privateDataSlot)) return false;
+        if (privateDataSlot == VK_NULL_HANDLE) return false;
         if (!r.read_pod(data)) return false;
         VkResult result = s.on_vkSetPrivateData(device, objectType, objectHandle, privateDataSlot, data);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
@@ -3524,6 +3587,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkCommandPoolTrimFlags flags{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
+        if (commandPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(flags)) return false;
         s.on_vkTrimCommandPool(device, commandPool, flags);
         return true;
@@ -3538,7 +3602,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint64_t av_blob = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSet(r, descriptorSet)) return false;
+        if (descriptorSet == VK_NULL_HANDLE) return false;
         if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
+        if (descriptorUpdateTemplate == VK_NULL_HANDLE) return false;
         if (!r.read_varint(av_blob)) return false;
         if (av_blob != descriptor_template_bytes(descriptorUpdateTemplate)) return false;
         pData_storage_count = static_cast<size_t>(av_blob);
@@ -3899,8 +3965,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!deserialize_VkBuffer(r, countBuffer)) return false;
+        if (countBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(countBufferOffset)) return false;
         if (!r.read_pod(maxDrawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -3918,8 +3986,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!deserialize_VkBuffer(r, countBuffer)) return false;
+        if (countBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(countBufferOffset)) return false;
         if (!r.read_pod(maxDrawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -3973,7 +4043,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint64_t av_blob = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
+        if (descriptorUpdateTemplate == VK_NULL_HANDLE) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
+        if (layout == VK_NULL_HANDLE) return false;
         if (!r.read_pod(set)) return false;
         if (!r.read_varint(av_blob)) return false;
         if (av_blob != descriptor_template_bytes(descriptorUpdateTemplate)) return false;
@@ -3993,6 +4065,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPipelineStageFlags2 stageMask{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         if (!r.read_pod(stageMask)) return false;
         s.on_vkCmdResetEvent2KHR(commandBuffer, event, stageMask);
         return true;
@@ -4022,6 +4095,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDependencyInfo pDependencyInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
+        if (event == VK_NULL_HANDLE) return false;
         if (!deserialize_VkDependencyInfo(r, &pDependencyInfo_local, arena)) return false;
         s.on_vkCmdSetEvent2KHR(commandBuffer, event, &pDependencyInfo_local);
         return true;
@@ -4066,6 +4140,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(stage)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         s.on_vkCmdWriteTimestamp2KHR(commandBuffer, stage, queryPool, query);
         return true;
@@ -4344,6 +4419,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint64_t pValue_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
+        if (semaphore == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkGetSemaphoreCounterValueKHR(device, semaphore, &pValue_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -4392,6 +4468,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkCommandPoolTrimFlags flags{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
+        if (commandPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(flags)) return false;
         s.on_vkTrimCommandPoolKHR(device, commandPool, flags);
         return true;
@@ -4406,7 +4483,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint64_t av_blob = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSet(r, descriptorSet)) return false;
+        if (descriptorSet == VK_NULL_HANDLE) return false;
         if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
+        if (descriptorUpdateTemplate == VK_NULL_HANDLE) return false;
         if (!r.read_varint(av_blob)) return false;
         if (av_blob != descriptor_template_bytes(descriptorUpdateTemplate)) return false;
         pData_storage_count = static_cast<size_t>(av_blob);
@@ -4826,8 +4905,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!deserialize_VkBuffer(r, countBuffer)) return false;
+        if (countBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(countBufferOffset)) return false;
         if (!r.read_pod(maxDrawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -4843,6 +4924,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t stride{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
+        if (buffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(offset)) return false;
         if (!r.read_pod(drawCount)) return false;
         if (!r.read_pod(stride)) return false;
@@ -4861,6 +4943,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineBindPoint)) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
+        if (layout == VK_NULL_HANDLE) return false;
         if (!r.read_pod(set)) return false;
         if (!r.read_pod(descriptorWriteCount)) return false;
         pDescriptorWrites_storage_count = static_cast<size_t>(descriptorWriteCount);
@@ -5474,6 +5557,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         if (!r.read_pod(queryType)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstQuery)) return false;
         s.on_vkCmdWriteAccelerationStructuresPropertiesKHR(commandBuffer, accelerationStructureCount, pAccelerationStructures_storage, queryType, queryPool, firstQuery);
         return true;
@@ -5656,6 +5740,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
+        if (operation == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkDeferredOperationJoinKHR(device, operation);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -5737,6 +5822,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
+        if (operation == VK_NULL_HANDLE) return false;
         uint32_t result = s.on_vkGetDeferredOperationMaxConcurrencyKHR(device, operation);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -5747,6 +5833,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
+        if (operation == VK_NULL_HANDLE) return false;
         VkResult result = s.on_vkGetDeferredOperationResultKHR(device, operation);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
@@ -5771,6 +5858,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSubresourceLayout2 pLayout_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!deserialize_VkImageSubresource2(r, &pSubresource_local, arena)) return false;
         if (!r.read_pod(pLayout_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pLayout_out), arena)) return false;
@@ -5823,6 +5911,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pData_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
+        if (pipeline == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstGroup)) return false;
         if (!r.read_pod(groupCount)) return false;
         {
@@ -5857,6 +5946,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         size_t pData_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
+        if (pipeline == VK_NULL_HANDLE) return false;
         if (!r.read_pod(firstGroup)) return false;
         if (!r.read_pod(groupCount)) return false;
         {
@@ -5888,6 +5978,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkShaderGroupShaderKHR groupShader{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
+        if (pipeline == VK_NULL_HANDLE) return false;
         if (!r.read_pod(group)) return false;
         if (!r.read_pod(groupShader)) return false;
         VkDeviceSize result = s.on_vkGetRayTracingShaderGroupStackSizeKHR(device, pipeline, group, groupShader);
@@ -6127,6 +6218,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSubresourceLayout2 pLayout_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
+        if (image == VK_NULL_HANDLE) return false;
         if (!deserialize_VkImageSubresource2(r, &pSubresource_local, arena)) return false;
         if (!r.read_pod(pLayout_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pLayout_out), arena)) return false;
@@ -6185,6 +6277,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t index{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         if (!r.read_pod(flags)) return false;
         if (!r.read_pod(index)) return false;
@@ -6289,6 +6382,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(instanceCount)) return false;
         if (!r.read_pod(firstInstance)) return false;
         if (!deserialize_VkBuffer(r, counterBuffer)) return false;
+        if (counterBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(counterBufferOffset)) return false;
         if (!r.read_pod(counterOffset)) return false;
         if (!r.read_pod(vertexStride)) return false;
@@ -6303,6 +6397,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         uint32_t index{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
+        if (queryPool == VK_NULL_HANDLE) return false;
         if (!r.read_pod(query)) return false;
         if (!r.read_pod(index)) return false;
         s.on_vkCmdEndQueryIndexedEXT(commandBuffer, queryPool, query, index);
@@ -6352,6 +6447,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         float priority{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
+        if (memory == VK_NULL_HANDLE) return false;
         if (!r.read_pod(priority)) return false;
         s.on_vkSetDeviceMemoryPriorityEXT(device, memory, priority);
         return true;
@@ -6568,6 +6664,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(stage)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstOffset)) return false;
         if (!r.read_pod(marker)) return false;
         s.on_vkCmdWriteBufferMarker2AMD(commandBuffer, stage, dstBuffer, dstOffset, marker);
@@ -6583,6 +6680,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineStage)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
+        if (dstBuffer == VK_NULL_HANDLE) return false;
         if (!r.read_pod(dstOffset)) return false;
         if (!r.read_pod(marker)) return false;
         s.on_vkCmdWriteBufferMarkerAMD(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
@@ -6726,6 +6824,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkShaderModuleIdentifierEXT pIdentifier_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkShaderModule(r, shaderModule)) return false;
+        if (shaderModule == VK_NULL_HANDLE) return false;
         if (!r.read_pod(pIdentifier_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pIdentifier_out), arena)) return false;
         s.on_vkGetShaderModuleIdentifierEXT(device, shaderModule, &pIdentifier_out);

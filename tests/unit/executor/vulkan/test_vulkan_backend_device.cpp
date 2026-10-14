@@ -546,7 +546,10 @@ TEST(vulkan_backend_device, a_device_naming_the_extensions_imports_and_a_refused
       backend.abandon(again);
       allocation.give_back(again);
 
-      const std::uint64_t unsent = made.guest().create_device(made.physical(), 3u, nullptr);
+      /* A list that fills the backend's leaves no room for the import's. */
+      const char *full[av::ExtensionList::capacity];
+      for (const char *&name : full) name = "VK_KHR_maintenance1";
+      const std::uint64_t unsent = made.guest().create_device(made.physical(), av::ExtensionList::capacity, full);
       CHECK(unsent != 0u);
       CHECK(!made.probe().memory_import());
       ImportedBlob none;
@@ -1038,8 +1041,9 @@ TEST(vulkan_backend_device, buffers_and_images_are_made_for_host_allocation_wher
 }
 
 /* A device the driver made without host import - the guest's list could not be
- * widened - and a device the context has since replaced make buffers exactly as
- * asked: nothing will ever be imported into either. */
+ * widened, since it already fills the backend's - and a device the context has
+ * since replaced make buffers exactly as asked: nothing will ever be imported
+ * into either. */
 TEST(vulkan_backend_device, a_device_that_imports_nothing_makes_buffers_as_asked)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
@@ -1049,7 +1053,10 @@ TEST(vulkan_backend_device, a_device_that_imports_nothing_makes_buffers_as_asked
       const VkBufferCreateInfo asked = storage_buffer();
 
       const std::uint64_t replaced = made.device();
-      const std::uint64_t unsent = made.guest().create_device(made.physical(), 3u, nullptr);
+      const char *full[av::ExtensionList::capacity];
+      for (const char *&name : full) name = "VK_KHR_maintenance1";
+      const std::uint64_t unsent = made.guest().create_device(made.physical(), av::ExtensionList::capacity, full);
+      CHECK(!made.probe().memory_import());
       CHECK(unsent != 0u);
       CHECK_EQ(wire_buffer_types(wire, unsent, asked), driver_buffer_types(unsent, asked));
       CHECK_EQ(wire_buffer_types(wire, replaced, asked), driver_buffer_types(replaced, asked));
@@ -1951,9 +1958,10 @@ TEST(vulkan_backend_device, an_image_made_for_the_source_keeps_the_types_the_sou
   }
 }
 
-/* A create info the wire left out names nothing to measure: no requirements,
- * and the driver - which would dereference it - is not asked. */
-TEST(vulkan_backend_device, a_requirements_query_with_no_create_info_is_answered_with_nothing)
+/* A create info the frame leaves out - or a subresource - is a frame the
+ * decoder refuses: the driver would dereference the null pointer, and every
+ * create-info query of the device took the host process down with one. */
+TEST(vulkan_backend_device, a_create_info_query_with_its_create_info_left_out_is_refused)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       GuestDevice made(host, i);
@@ -1965,15 +1973,124 @@ TEST(vulkan_backend_device, a_requirements_query_with_no_create_info_is_answered
       VkMemoryRequirements2 answer = {};
       answer.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
       vkproto::av_vkGetDeviceImageMemoryRequirements(wire, device, &image, &answer);
-      CHECK(wire.ran());
-      CHECK_EQ(answer.memoryRequirements.memoryTypeBits, 0u);
-      CHECK_EQ(answer.memoryRequirements.size, VkDeviceSize{0u});
+      CHECK(!wire.ran());
+      vkproto::av_vkGetDeviceImageMemoryRequirementsKHR(wire, device, &image, &answer);
+      CHECK(!wire.ran());
+      std::uint32_t count = 0u;
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirements(wire, device, &image, &count, nullptr);
+      CHECK(!wire.ran());
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirementsKHR(wire, device, &image, &count, nullptr);
+      CHECK(!wire.ran());
       VkDeviceBufferMemoryRequirements buffer = {};
       buffer.sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS;
       vkproto::av_vkGetDeviceBufferMemoryRequirements(wire, device, &buffer, &answer);
+      CHECK(!wire.ran());
+      vkproto::av_vkGetDeviceBufferMemoryRequirementsKHR(wire, device, &buffer, &answer);
+      CHECK(!wire.ran());
+
+      const VkImageCreateInfo create = colour_image();
+      VkImageSubresource2 subresource = {};
+      subresource.sType = VK_STRUCTURE_TYPE_IMAGE_SUBRESOURCE_2;
+      subresource.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      VkSubresourceLayout2 layout = {};
+      layout.sType = VK_STRUCTURE_TYPE_SUBRESOURCE_LAYOUT_2;
+      VkDeviceImageSubresourceInfo neither = {};
+      neither.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_SUBRESOURCE_INFO;
+      VkDeviceImageSubresourceInfo no_subresource = neither;
+      no_subresource.pCreateInfo = &create;
+      VkDeviceImageSubresourceInfo no_create = neither;
+      no_create.pSubresource = &subresource;
+      const VkDeviceImageSubresourceInfo *const refused[] = {&neither, &no_subresource, &no_create};
+      for (const VkDeviceImageSubresourceInfo *info : refused) {
+          vkproto::av_vkGetDeviceImageSubresourceLayoutKHR(wire, device, info, &layout);
+          CHECK(!wire.ran());
+      }
+      /* Nothing a refused frame did is a handle the guest could name. */
+      CHECK(!made.backend().lost());
+  }
+}
+
+/* The other create-info queries of an image answer what the made image
+ * would: its sparse requirements - none, for an image that is not sparse - and
+ * the layout of a linear image's subresource, which a driver may pitch for the
+ * dma-buf the image was made able to import. */
+TEST(vulkan_backend_device, an_image_s_create_info_queries_answer_what_the_made_image_would)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      const char *const extensions[] = {"VK_KHR_maintenance5"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice device = as_handle<VkDevice>(made.device());
+      VkImageCreateInfo create = colour_image();
+      create.tiling = VK_IMAGE_TILING_LINEAR;
+      create.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+      VkImage image = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkCreateImage(wire, device, &create, nullptr, &image), VK_SUCCESS);
+
+      VkImageSubresource whole = {};
+      whole.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      VkSubresourceLayout made_layout = {};
+      vkproto::av_vkGetImageSubresourceLayout(wire, device, image, &whole, &made_layout);
+      VkImageSubresource2 subresource = {};
+      subresource.sType = VK_STRUCTURE_TYPE_IMAGE_SUBRESOURCE_2;
+      subresource.imageSubresource = whole;
+      VkDeviceImageSubresourceInfo asked = {};
+      asked.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_SUBRESOURCE_INFO;
+      asked.pCreateInfo = &create;
+      asked.pSubresource = &subresource;
+      VkSubresourceLayout2 layout = {};
+      layout.sType = VK_STRUCTURE_TYPE_SUBRESOURCE_LAYOUT_2;
+      vkproto::av_vkGetDeviceImageSubresourceLayoutKHR(wire, device, &asked, &layout);
       CHECK(wire.ran());
-      CHECK_EQ(answer.memoryRequirements.memoryTypeBits, 0u);
-      CHECK_EQ(answer.memoryRequirements.size, VkDeviceSize{0u});
+      CHECK_EQ(layout.subresourceLayout.size, made_layout.size);
+      CHECK_EQ(layout.subresourceLayout.rowPitch, made_layout.rowPitch);
+      CHECK_EQ(layout.subresourceLayout.offset, made_layout.offset);
+
+      std::uint32_t made_count = 9u;
+      vkproto::av_vkGetImageSparseMemoryRequirements(wire, device, image, &made_count, nullptr);
+      VkDeviceImageMemoryRequirements sparse = {};
+      sparse.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
+      sparse.pCreateInfo = &create;
+      std::uint32_t count = 9u;
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirements(wire, device, &sparse, &count, nullptr);
+      CHECK(wire.ran());
+      CHECK_EQ(count, made_count);
+      CHECK_EQ(count, 0u);
+      count = 9u;
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirementsKHR(wire, device, &sparse, &count, nullptr);
+      CHECK_EQ(count, 0u);
+      vkproto::av_vkDestroyImage(wire, device, image, nullptr);
+  }
+}
+
+/* A required handle the frame names as null is refused before the driver,
+ * which dereferences a non-dispatchable handle too; and a null image is no
+ * image made for the memory source, so nothing it was asked could have
+ * answered as one. */
+TEST(vulkan_backend_device, a_required_handle_named_null_is_refused_before_the_driver)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice device = as_handle<VkDevice>(made.device());
+      VkMemoryRequirements needs = {};
+      vkproto::av_vkGetImageMemoryRequirements(wire, device, VK_NULL_HANDLE, &needs);
+      CHECK(!wire.ran());
+      VkImageMemoryRequirementsInfo2 info = {};
+      info.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+      VkMemoryRequirements2 answer = {};
+      answer.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+      vkproto::av_vkGetImageMemoryRequirements2(wire, device, &info, &answer);
+      CHECK(!wire.ran());
+      vkproto::av_vkGetBufferMemoryRequirements(wire, device, VK_NULL_HANDLE, &needs);
+      CHECK(!wire.ran());
+      CHECK(!made.backend().knows_handle(0u, av::HandleKind::external_image));
+      /* An optional handle may still be null: destroying the null image is
+       * nothing, as the API defines it. */
+      vkproto::av_vkDestroyImage(wire, device, VK_NULL_HANDLE, nullptr);
+      CHECK(wire.ran());
   }
 }
 

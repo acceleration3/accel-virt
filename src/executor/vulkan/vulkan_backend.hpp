@@ -125,8 +125,8 @@ public:
                                           VkMemoryRequirements2 *pMemoryRequirements) override;
     void on_vkGetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
                                              VkMemoryRequirements2 *pMemoryRequirements) override;
-    /* A create info the wire left out is answered with no requirements rather
-     * than handed to the driver. */
+    /* The decoder refuses a frame whose create info is left out, so every
+     * one of these has one. */
     void on_vkGetDeviceBufferMemoryRequirements(VkDevice device, const VkDeviceBufferMemoryRequirements *pInfo,
                                                 VkMemoryRequirements2 *pMemoryRequirements) override;
     void on_vkGetDeviceBufferMemoryRequirementsKHR(VkDevice device, const VkDeviceBufferMemoryRequirements *pInfo,
@@ -135,6 +135,16 @@ public:
                                                VkMemoryRequirements2 *pMemoryRequirements) override;
     void on_vkGetDeviceImageMemoryRequirementsKHR(VkDevice device, const VkDeviceImageMemoryRequirements *pInfo,
                                                   VkMemoryRequirements2 *pMemoryRequirements) override;
+    /* The other create-info queries of an image, asked of the image as
+     * on_vkCreateImage would make it. */
+    void on_vkGetDeviceImageSparseMemoryRequirements(VkDevice device, const VkDeviceImageMemoryRequirements *pInfo,
+                                                     uint32_t *pSparseMemoryRequirementCount,
+                                                     VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) override;
+    void on_vkGetDeviceImageSparseMemoryRequirementsKHR(
+        VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
+        VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements) override;
+    void on_vkGetDeviceImageSubresourceLayoutKHR(VkDevice device, const VkDeviceImageSubresourceInfo *pInfo,
+                                                 VkSubresourceLayout2 *pLayout) override;
 
     /* Memory an import made is the import's to release: freed here and again
      * when the device releases the blob would be a double free in the driver. */

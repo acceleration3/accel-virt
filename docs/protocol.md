@@ -262,6 +262,15 @@ does not have, a payload the executor cannot decode, or a lost host device stops
 the context (see Consumption) and the batch does not complete; the first four
 are fault code 5, command framing.
 
+A Vulkan payload the executor cannot decode includes one that leaves out
+something the API requires and a driver dereferences: a pointer neither
+`optional` nor `noautovalidity` in the registry while its length is not zero,
+or a non-dispatchable handle that is not `optional`, named as the null handle.
+A required string left out is the empty string. A pointer the registry leaves
+to conditions (`noautovalidity`, such as a descriptor write's image infos) is
+decoded as zeroes when it is left out with elements, so a driver that does read
+it reads zeroes rather than a null pointer (`tools/codegen`, `serialize.py`).
+
 ### Transport commands (API 0)
 
 The device answers these itself and never hands one to the executor library,

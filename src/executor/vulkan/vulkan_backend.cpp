@@ -499,7 +499,6 @@ void VulkanBackend::on_vkGetDeviceBufferMemoryRequirements(VkDevice device,
                                                            VkMemoryRequirements2 *pMemoryRequirements)
 {
     AV_SCOPE("VulkanBackend::on_vkGetDeviceBufferMemoryRequirements");
-    if (pInfo->pCreateInfo == nullptr) return;
     VkDeviceBufferMemoryRequirements asked = *pInfo;
     VkBufferCreateInfo               create = *pInfo->pCreateInfo;
     VkExternalMemoryBufferCreateInfo external;
@@ -523,7 +522,6 @@ void VulkanBackend::on_vkGetDeviceImageMemoryRequirements(VkDevice device,
                                                           VkMemoryRequirements2 *pMemoryRequirements)
 {
     AV_SCOPE("VulkanBackend::on_vkGetDeviceImageMemoryRequirements");
-    if (pInfo->pCreateInfo == nullptr) return;
     VkDeviceImageMemoryRequirements asked = *pInfo;
     VkImageCreateInfo               create = *pInfo->pCreateInfo;
     VkExternalMemoryImageCreateInfo external;
@@ -532,6 +530,45 @@ void VulkanBackend::on_vkGetDeviceImageMemoryRequirements(VkDevice device,
     RealVulkanDispatch::on_vkGetDeviceImageMemoryRequirements(device, &asked, pMemoryRequirements);
     VkMemoryRequirements &needs = pMemoryRequirements->memoryRequirements;
     needs.memoryTypeBits = image_bits(needs.memoryTypeBits, bindable);
+}
+
+/* The create info answers what on_vkCreateImage would make of it. */
+void VulkanBackend::on_vkGetDeviceImageSparseMemoryRequirements(
+    VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceImageSparseMemoryRequirements");
+    VkDeviceImageMemoryRequirements asked = *pInfo;
+    VkImageCreateInfo               create = *pInfo->pCreateInfo;
+    VkExternalMemoryImageCreateInfo external;
+    static_cast<void>(for_source(device, create, external));
+    asked.pCreateInfo = &create;
+    RealVulkanDispatch::on_vkGetDeviceImageSparseMemoryRequirements(device, &asked, pSparseMemoryRequirementCount,
+                                                                    pSparseMemoryRequirements);
+}
+
+void VulkanBackend::on_vkGetDeviceImageSparseMemoryRequirementsKHR(
+    VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
+    VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceImageSparseMemoryRequirementsKHR");
+    on_vkGetDeviceImageSparseMemoryRequirements(device, pInfo, pSparseMemoryRequirementCount,
+                                                pSparseMemoryRequirements);
+}
+
+/* A linear image made for a dma-buf may be laid out for it - a driver may
+ * pitch its rows as the import needs - so the layout asked of a create info
+ * is the made image's. */
+void VulkanBackend::on_vkGetDeviceImageSubresourceLayoutKHR(VkDevice device, const VkDeviceImageSubresourceInfo *pInfo,
+                                                            VkSubresourceLayout2 *pLayout)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceImageSubresourceLayoutKHR");
+    VkDeviceImageSubresourceInfo    asked = *pInfo;
+    VkImageCreateInfo               create = *pInfo->pCreateInfo;
+    VkExternalMemoryImageCreateInfo external;
+    static_cast<void>(for_source(device, create, external));
+    asked.pCreateInfo = &create;
+    RealVulkanDispatch::on_vkGetDeviceImageSubresourceLayoutKHR(device, &asked, pLayout);
 }
 
 void VulkanBackend::on_vkGetDeviceImageMemoryRequirementsKHR(VkDevice device,
@@ -890,13 +927,13 @@ bool answer(const VulkanBackend *backend, uint64_t raw, H &out, HandleKind kind)
         return true;
     }
     /* Null is a legitimate value for an optional handle and never for one of
-     * these five: the loader dereferences a dispatchable handle to find the
-     * table to call through, so a guest naming the null instance aborts the
-     * process rather than getting an error back. The fuzz target found that in
-     * vkCmdResetEvent2 (feature 042). And it must be this kind of handle: the
-     * table a queue is dereferenced through is not a device's, so naming one
-     * where the other belongs aborts the process the same way (T064). */
-    if (raw == 0u) return false;
+     * these five, and no kind of handle: the loader dereferences a
+     * dispatchable handle to find the table to call through, so a guest naming
+     * the null instance aborts the process rather than getting an error back.
+     * The fuzz target found that in vkCmdResetEvent2 (feature 042). And it must
+     * be this kind of handle: the table a queue is dereferenced through is not
+     * a device's, so naming one where the other belongs aborts the process the
+     * same way (T064). */
     if (!backend->knows_handle(raw, kind)) return false;
     memcpy(&out, &raw, sizeof out);
     return true;

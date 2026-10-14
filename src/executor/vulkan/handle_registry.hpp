@@ -66,7 +66,9 @@ public:
      * the API defines it and a guest may legitimately send it. */
     bool               knows(uint64_t handle) const;
     /* Whether this executor made `handle` as `kind`. A handle it made as
-     * something else is no more this one than a number it never made. */
+     * something else is no more this one than a number it never made, and
+     * the null handle is no kind of handle: no dispatchable one, and no image
+     * made for the memory source. */
     bool               knows(uint64_t handle, HandleKind kind) const;
     /* Forgets one it made, and everything made through it at any depth.
      * Nothing for one it did not. */

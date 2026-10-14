@@ -166,6 +166,13 @@ def lower(root: ET.Element, profile: Profile,
             len_expr = m_el.get("altlen") or m_el.get("len")
             values_attr = m_el.get("values") or ""
             values = tuple(s.strip() for s in values_attr.split(",") if s.strip())
+            caller_filled = s_el.get("returnedonly") != "true"
+            unconditioned = m_el.get("noautovalidity") != "true"
+            nullable = bool(optional and optional[0])
+            pointer = mtype.pointer_depth >= 1
+            required = pointer and caller_filled and unconditioned and not nullable
+            conditional = pointer and caller_filled and not unconditioned and not nullable
+            handle_required = not pointer and caller_filled and unconditioned and not nullable
             members.append(
                 StructMember(
                     name=mname,
@@ -173,6 +180,9 @@ def lower(root: ET.Element, profile: Profile,
                     optional_levels=optional,
                     len_expr=len_expr,
                     values=values,
+                    required=required,
+                    handle_required=handle_required,
+                    conditional=conditional,
                 )
             )
         extends_attr = s_el.get("structextends") or ""
@@ -546,11 +556,13 @@ def _lower_command(cmd_el: ET.Element, cmd_name: str,
         optional = parse.parse_optional(p_el.get("optional"))
         len_expr = p_el.get("altlen") or p_el.get("len")
         direction = _infer_direction(ptype, pname)
+        null_refused = p_el.get("noautovalidity") != "true" and not (optional and optional[0])
         params.append(
             Param(
                 name=pname,
                 type=ptype,
                 optional_levels=optional,
+                null_refused=null_refused,
                 len_expr=len_expr,
                 direction=direction,
                 inner_len=profile.inner_lens.get(f"{cmd_name}.{pname}"),
