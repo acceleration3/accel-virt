@@ -39,9 +39,10 @@ coherent both ways. That was measured on the RX 9070 XT, Radeon 610M, Arc
 
 `src/executor/host_memory_source.hpp`.
 
-- **Allocation.** It owns the GPU's `CompositorDevice` and opens it on the
-  first request. It allocates `VkDeviceMemory` with `VkExportMemoryAllocateInfo`
-  (dma-buf) and exports it once.
+- **Allocation.** It allocates on the GPU's `CompositorDevice`, which the
+  library opens with its GPUs; nothing is allocated before a guest asks. It
+  allocates `VkDeviceMemory` with `VkExportMemoryAllocateInfo` (dma-buf) and
+  exports it once.
 - **Where the memory goes.**
   - QEMU maps the dma-buf into the window.
   - The source keeps the export to duplicate for importers.
@@ -106,7 +107,8 @@ allocation with no offset to translate.
    that caching, and answers the resource, the bytes granted and the address.
 5. **The context imports it.** The process sends `IMPORT_BLOB` with the
    resource id. The device checks that the blob was made for this context,
-   then hands the executor an `AV_BLOB_SOURCE` handle naming the allocation.
+   then calls the executor's `import_blob(blob_id, memory_key)`, the key being
+   the resource id the memory was allocated under.
    The executor answers the wire handle the guest names it by: for Vulkan the
    `VkDeviceMemory` the backend imported, for Direct3D 12 the heap.
 6. **Release.** A `close` unmaps the process's view, then sends UNMAP_BLOB and

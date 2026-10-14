@@ -204,7 +204,7 @@ void KernelPlatform::unmap_pages(uint8_t *view, void *mapping)
  * to read, so the MDL's page array is written by hand; they never move, which
  * is what MDL_PAGES_LOCKED claims. Write-back, because the host maps the same
  * pages write-back and an alias of any other type reads stale data
- * (docs/host-window.md). */
+ * (docs/host-memory.md). */
 Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching, uint64_t &view,
                                       void *&mapping)
 {

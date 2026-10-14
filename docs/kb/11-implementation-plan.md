@@ -125,7 +125,7 @@ guest vCPU stores to doorbell[ctx]
   └ KVM ioeventfd (memory_region_add_eventfd)  — completed in the kernel, no BQL
       └ worker thread for ctx wakes
           decode   (the generated server dispatch)
-          import   (a blob, as a host pointer or a dma-buf, once per blob)
+          import   (a host blob's memory, the executor's own dma-buf, once per import)
           execute  (host Vulkan / GL / CL)
           advance fence value in the ctx's fence page
           event_notifier_set(guest notifier) → irqfd, KVM injects MSI-X, no BQL
@@ -171,12 +171,10 @@ locks pages and sends their GPA list; the device maps them once for the
 object's lifetime. Rings and fence pages live here because the device touches
 them from worker threads constantly.
 
-Importing guest-backed pages into host Vulkan with
-`VK_EXT_external_memory_host` needs one contiguous host VA range, and locked
-guest pages are scattered. With guest RAM on `memory-backend-memfd`, the device
-can build a contiguous window by `mmap`ing the memfd at each page's file
-offset into a reserved region. Treat this as an optimization with copy as the
-fallback, not as a dependency.
+Guest-backed pages are never imported into a host API. This plan once
+treated that as an optimization, and it was built and then removed: every
+byte the guest CPU and a host GPU share is host GPU memory in the hostmem BAR
+(docs/host-memory.md).
 
 ### Scanout
 
@@ -365,15 +363,16 @@ per-GPU answers are in [`04-memory.md`](04-memory.md), and the short version is:
     with `EINVAL`, so a device that tries one handle type only would conclude
     the path does not exist. Segment 2 does not have to fall back on this host.
   - Guest-backed import: **yes on both**, over guest RAM that is
-    `memory-backend-memfd,share=on`; the device refuses a window it can only
-    reach through a bounce buffer.
+    `memory-backend-memfd,share=on`. The path has since been removed
+    (docs/host-memory.md), and its capset bit with it.
   - irqfd under masking: the device counts what it injected
     (`InterruptStressProbe`) and the guest suite's `--stress-minutes` run awaits
     fences while the vertical blank's interrupt is enabled and disabled around
     them.
 
-Each answer is a capset bit the guest only sees where the probe passed, and the
-device decides it at realize on the GPU that instance is bound to.
+Each answer was a capset bit the guest only saw where the probe passed. Both
+memory probes are gone now: the executor's memory source proves each memory
+type the first time it considers it (docs/host-memory.md).
 
 **M3 — memory and execution in the KMD.** Two segments, blob creation and
 mapping, GPU-VA-as-handle, `BuildPagingBuffer` for `TRANSFER`,
@@ -470,7 +469,9 @@ has a spec. A milestone is done when its features are.
    of guessing.
 2. **Host-visible memory on NVIDIA.** Mapping exported driver memory into a
    KVM memslot is the historically fragile part of Venus-style designs. M2
-   spike; fallback is guest-backed memory plus copies.
+   spike; it works through a dma-buf export (feature 039), and every
+   host-visible byte is now that memory, with no guest-backed fallback
+   (docs/host-memory.md).
 3. **`EnumVidPnCofuncModality`.** Under-populated mode sets fail without a
    diagnostic.
 4. **TDR.** The 2-second watchdog trips on the first host stall.

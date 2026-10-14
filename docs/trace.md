@@ -149,7 +149,7 @@ copied the table.
   memories=`, then per connection `connection/<i> opened= faulted= adapter=
   luid= device= context=`, its handles numbered in the registry's order
   `connection/<i>/handle/<n> kind= host= parent=<n|none>`, and under a device
-  `memory/0 types_learnt= chunks= placements=`, under a command buffer
+  `memory/0 types_learnt= host_allocations=`, under a command buffer
   `batch/0 recorded= capacity= failed=`. `avtest`'s: `program/0 run=` and
   `report/0 program= passed= failed= last_scenario= last_step= finished=`.
 - `avinspect.exe` is `InspectProgram` (`src/guest/inspect/`, unit tested over
@@ -209,11 +209,12 @@ copied the table.
   `hw_queue_table/0` (`hw_queue/<i> handle= context=`),
   `execution_node/0 pending= last_submitted= last_completed= preemption_requested=
   preemption_fence= stopped= progress_time=` (`packet/<i> fence= owner= awaited=`),
-  `av_context_table/0 bound=` (`av_context/<slot> handle= doorbell= ring_order=
-  ring= fence_page= reply= state= context_id= completed= live= lost=`,
-  `chunk/<k> resource= allocation=`; a context being set up is counted and not
-  listed), and `display_sources/0 count= vsync=` (`source/<i> format= width=
-  height= scanout= primary= visible=`). Handles are the objects' addresses,
+  `av_context_table/0 busy= bound=` (`av_context/<slot> handle= doorbell=
+  ring_order= name= ring_view= reply_view= state= context_id= completed= live=
+  lost= wakes= raised= chunks=`, `chunks` the host window chunks its process
+  holds; a context being set up is counted and not listed), and
+  `display_sources/0 count= vsync=` (`source/<i> format= width= height=
+  scanout= primary= visible=`). Handles are the objects' addresses,
   which are what dxgkrnl holds.
 - **No size cap on the escape.** `NtGdiDdDDIEscape` (dxgkrnl.sys 10.0.26100,
   @140440d60) copies driver-private data of any `PrivateDriverDataSize` into a
@@ -301,7 +302,9 @@ copied the table.
 - **The dump**, written by the main loop:
   - `module/0 devices=`
   - per live device: `device/<slot> realized=` and, once realized,
-    `gpu= capsets= blobs= contexts= driver_ok=`
+    `gpu= capsets= blobs= scanouts= contexts= driver_ok=`
+  - its host blobs (docs/host-memory.md): `host_blobs/0 live=`, and per blob
+    `host_blob/<id> context= size= caching= mapped= offset=`
   - `contexts/0 live=`
   - per context: `context/<id> bound=` (bound: `sub_api= version= ring=
     ring_order= fence= doorbell= reply=`), then `attached= faulted= head=

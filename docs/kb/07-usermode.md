@@ -335,9 +335,9 @@ user-mode driver's redirection surface, which a process without a UMD never
 creates. A window's present therefore has no kernel path from the ICD alone.
 
 So 046's swapchain presents like this: the swapchain's images are host images,
-`vkQueuePresentKHR` copies the acquired one through a host-visible buffer into
-guest memory (the chunks of feature 045), turns it bottom-up into the window's
-channel order, and puts it on the window with `SetDIBitsToDevice` on the
+`vkQueuePresentKHR` copies the acquired one through a host-visible buffer the
+guest maps (a host window chunk, docs/host-memory.md), turns it bottom-up into
+the window's channel order, and puts it on the window with `SetDIBitsToDevice` on the
 window's own DC. FIFO then waits for the adapter's next vertical blank through
 `D3DKMTWaitForVerticalBlankEvent`. It composites correctly - the desktop owns
 the window, so the frame is where the application put it - at the cost of one

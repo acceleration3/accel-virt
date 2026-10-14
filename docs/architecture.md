@@ -74,7 +74,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `driver/` | the driver image and root, the DDI table, dxgkrnl's callbacks, interrupt notification |
 | `ddi/` | the DDI records (dxgkrnl-owned memory, layout-proven in `src/km/ddi_record_layout.cpp`) and the `DxgkDdi*` entry points |
 | `adapter/` | the `Adapter`, its capabilities, power, debug report, device identity and the capset exchange |
-| `av_context/` | av contexts as the driver drives them: setup, ring submission, fence observation, context memory |
+| `av_context/` | av contexts as the driver drives them: setup, ring submission, fence observation, context memory, and the host window chunks a context's process holds (`ContextChunk`) with their host blob ids (`ChunkIds`) |
 | `memory/` | segments, allocations, GPU virtual addresses, page tables, paging, the host window, shared objects |
 | `scheduling/` | devices, contexts, the execution node, hardware queues, doorbells, native fences |
 | `display/` | modes, EDID, scanout sources, synthetic vsync, the hardware cursor |
@@ -91,7 +91,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `client/` | guest driver -> device | the contract generated guest code is written against: `ClientTransport`, `ClientBlobArena`, `SyncCallScope`, the ICD hooks |
 | `context/` | guest <-> device | context setup, capset info, GPU identity, device UUID, protocol version, sub-API |
 | `submission/` | guest <-> device | rings, batches, command and reply headers, fence pages, blob imports, shared-object requests |
-| `resources/` | guest <-> device | allocation descriptors, shared-object records, surface and texel layouts, guest page lists |
+| `resources/` | guest <-> device | allocation descriptors, shared-object records, surface and texel layouts, guest page lists, host memory requests (`HostMemoryRequest`) and host blob ids (`HostBlobId`) |
 | `dma/` | miniport -> device | the commands in DMA buffers: present and paging |
 | `pages/` | device -> miniport | pages the device writes: the clock page, vblank records, present progress |
 | `virtio_gpu/` | miniport <-> device | virtio-gpu control-queue requests and responses, and av's own |
@@ -112,17 +112,17 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `context/` | `DeviceContext`, the context table, its ring consumer, the local and remote context planes |
 | `threading/` | per-context `Worker`, `Doorbell`, `WorkItem` |
 | `fence/` | fence pages, the fence reporter, the device interrupt line |
-| `memory/` | blobs, guest page mappings, hostmem |
+| `memory/` | guest blobs and their page mappings (`BlobTable`); host blobs (`HostBlobTable`, `HostBlob`, `HostBlobOwners`), executor memory placed in the hostmem region (docs/host-memory.md) |
 | `control/` | answers to virtio-gpu control commands |
 | `display/` | heads, modes, scanout, the display clock |
 | `present/` | the present engine, queued presents, region moves |
 | `execution/` | the device's side of `av_executor.h`: loading the executor library, the device's domain in it, and running batches - shared-object commands included, which it routes to the library - through it |
 | `export/` | the export socket's connections, their threads and revocations (docs/external-export.md) |
 | `isolation/` | the device's side of av-renderer: `RendererContextPlane`, `RemoteContext`, `RendererLink` |
-| `renderer/` | av-renderer's process service |
+| `renderer/` | av-renderer's process service, and which context each host blob was made for there (`RendererHostBlobs`) |
 | `recording/` | the wire recorder and the recording file format |
 | `replay/` | avrecord: reading, filtering, printing and replaying recordings |
-| `feasibility/` | the probes a device runs at realize time |
+| `feasibility/` | the capset's feature mask as realize decides it, and the interrupt stress probe |
 | `shim/` | the POSIX edge of the host binaries: trace and state services, the renderer channel, module loading, the avrecord and av-renderer entry points |
 | `qemu/` | the C glue and build patch installed into QEMU's tree, translation only |
 
@@ -132,22 +132,22 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 
 | Directory | Holds |
 |---|---|
-| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs, blob imports, guest regions, the GPU clock hold, `PollBudget`, `WakeSignal` |
+| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs; host memory (docs/host-memory.md): each GPU's `HostMemorySource`, its allocations (`SourceMemory`), the `MemoryExporter` contract it allocates through and what that answers (`ExportedMemory`); blob imports (`ImportedBlob`, `ImportTable`), guest regions, the imports a session names besides its region (`ImportedMemories`); the GPU clock hold, `PollBudget`, `WakeSignal` |
 | `sharing/` | `HostShares`, every shared object of one GPU of every API by (domain, id), its `Share`s, their holders and index, and `SessionShares`, what one session reaches it through (docs/shared-surfaces.md §0) |
 | `vulkan/`, `opengl/`, `opencl/` | each API's backend and its tables |
 | `d3d/` | Direct3D 9, 11 and 12 sessions, DXBC, the present surfaces and frame pools |
-| `shim/` | the host runtimes the executor loads: Vulkan imports, EGL/GL, OpenCL, DXVK and vkd3d-proton (`ExportableImages`, the Vulkan memory under shared Direct3D 11 textures), dma-buf, the heap (`HostHeap`); and `executor_ops.cpp`, the library's entry point |
+| `shim/` | the host runtimes the executor loads: each GPU's compositing context (`CompositorDevice`, docs/compositor.md) and the memory it allocates for the memory source (`CompositorMemory`), Vulkan memory imports, EGL/GL, OpenCL, DXVK and vkd3d-proton (`ExportableImages`, the Vulkan memory under shared Direct3D 11 textures), the heap (`HostHeap`); and `executor_ops.cpp`, the library's entry point |
 
 ## src/guest, src/icd, src/um - the guest's user mode
 
 | Directory | Holds |
 |---|---|
 | `guest/kmt/` | the `Kmt` contract (D3DKMT), its small value types, `AvgpuAdapters` (every avgpu adapter, the primary display's first), `AdapterSearch` (one of them, held open) and avgpu's PCI identity |
-| `guest/transport/` | the av transport over Kmt |
+| `guest/transport/` | the av transport over Kmt, and host memory as a process holds it: `HostAllocation` (a host window chunk and its import, docs/host-memory.md) and the arenas built on it |
 | `guest/suite/` | avtest's scenarios, and the step and report framework the probes use too |
 | `guest/probe/` | the probe programs' portable halves: Vulkan, GL, CL and D3D work, the `*_entry` seams, shaders |
 | `guest/inspect/` | avinspect, over its `InspectHost` seam |
-| `icd/common/` | what two or more user-mode drivers share: transports, waits, locks, handle tables, connections, window seams |
+| `icd/common/` | what two or more user-mode drivers share: transports and the host channel over them (`HostChannel`, which keeps every host allocation it opened), waits, locks, handle tables, connections, window seams |
 | `icd/vulkan/`, `icd/opengl/`, `icd/opencl/` | each ICD's logic |
 | `icd/d3d/` | the Direct3D user-mode driver's portable logic; `ddi/` mirrors the runtimes' structures |
 | `icd/vendor/` | the ADL and NVAPI libraries' portable logic (docs/vendor-libraries.md); `ddi/` mirrors their structures |

@@ -2,7 +2,7 @@
  * guest system memory, then the host GPU's local memory when the capset gives
  * it any. The device's hostmem region is not a segment: VidMm hands out the
  * aperture's staging pages when a process locks a CPU-visible allocation, so
- * the driver places chunks in that window itself (docs/host-window.md). It is
+ * the driver places chunks in that window itself (docs/host-memory.md). It is
  * the only thing that knows how many segments the adapter reports, because
  * everything else that needs the number needs the same one. */
 #ifndef AV_MEMORY_SEGMENTS_HPP

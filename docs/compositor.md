@@ -15,12 +15,20 @@ context lets the picture cross on the GPU instead.
 One `CompositorDevice` per host GPU (`src/executor/shim/compositor_device.hpp`).
 It is a `VkInstance` and `VkDevice` of the executor's own, on the GPU the
 guest's adapter stands for, with external memory (fd and dma-buf), external
-semaphore fd and timeline semaphores. `LoaderHostApis` opens it after
-Direct3D 11 and hands it to `D3d11HostDevice::use_compositor`.
+semaphore fd and timeline semaphores. `LoaderHostApis` opens one for each
+GPU as it opens the GPUs, builds the GPU's `HostMemorySource` over it, and
+hands it to `D3d11HostDevice::use_compositor`.
 
-The compositor does not draw. It owns the images the APIs hand each other and
-the timelines they order their work by:
+The compositor does not draw. It owns the memory the guest maps, the images
+the APIs hand each other, and the timelines they order their work by:
 
+- Every byte the guest CPU and the GPU share is allocated here
+  (docs/host-memory.md). `CompositorMemory` allocates exportable
+  `VkDeviceMemory` for the memory source, exports it once as a dma-buf and
+  maps it through `vkMapMemory`; QEMU maps the dma-buf into the hostmem
+  window, and each API imports it. Nothing is allocated until a guest asks,
+  and each host-visible type is proved - a small allocation made, exported
+  and mapped through the export - before it is first offered.
 - An image made here is laid out linear over memory exported as a dma-buf. It
   is built from the same `ExportableImageInfo` description on every device,
   so each device imports it as an image of its own over the same memory, and

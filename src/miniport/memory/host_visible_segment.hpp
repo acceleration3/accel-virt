@@ -1,11 +1,11 @@
 /* Where the device's hostmem region is: a BAR the guest can address and into
  * which the device places host memory, which the driver hands out as its host
- * window (docs/host-window.md). VidMm is never told of it.
+ * window (docs/host-memory.md). VidMm is never told of it.
  *
  * It is offered only where two things agree - the PCI capability walk found the
  * region, and the capset says the device has one (feature 039's
  * `feature_host_visible_memory`). A device without it has no window, and every
- * chunk falls back to guest RAM. */
+ * chunk is refused: nothing falls back to guest RAM. */
 #ifndef AV_HOST_VISIBLE_SEGMENT_HPP
 #define AV_HOST_VISIBLE_SEGMENT_HPP
 

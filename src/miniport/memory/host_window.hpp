@@ -1,4 +1,4 @@
-/* The device's host window (docs/host-window.md): which pages of its hostmem
+/* The device's host window (docs/host-memory.md): which pages of its hostmem
  * region hold a chunk. The driver places every window blob itself - VidMm is
  * never told the region exists - so this page map is the only record of what
  * is free. One per adapter. */

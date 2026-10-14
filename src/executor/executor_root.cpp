@@ -349,9 +349,11 @@ void ExecutorRoot::report(StateWriter &writer)
     /* No GPU is counted before the host is asked. */
     for (uint32_t index = 0u; index < gpus_.count(); index++) {
         writer.open("gpu_shares", index);
-        D3d11HostDevice *const device = apis_->d3d11_device(index);
+        D3d11HostDevice *const  device = apis_->d3d11_device(index);
+        HostMemorySource *const source = apis_->memory_source(index);
         apis_->shares(index)->report(writer);
         if (device != nullptr) device->report(writer);
+        if (source != nullptr) source->report(writer);
         writer.close();
     }
     writer.close();

@@ -4,6 +4,17 @@ A design for review, not yet a plan to carry out. It says what is wrong, what
 replaces it, which APIs it covers and in what order, and what is still unknown.
 Where it and the code disagree, the code is right.
 
+**Superseded in part by docs/host-memory.md.** Where this plan puts the
+memory - a span of the session's blob arena, imported by host pointer or as a
+dma-buf over its pages, or guest RAM where the window cannot hold a chunk - is
+gone. Direct3D 11's slices live in a slice store of their own: 128 MiB of
+`upload` host GPU memory per session, which the session opens and imports like
+any host allocation and DXVK's device imports from its dma-buf.
+`BindBufferSlice` names the store (`memory`) beside the slice's offset, and the
+store's bookkeeping stays in the session's 32 MiB `readback` arena, which is
+read cached. Direct3D 12's CPU-visible heaps are one host allocation each. The
+renaming, retirement and map policies below stand.
+
 ## 1. The bug that started it
 
 Subnautica (Unity 2019.4, Direct3D 11) drew "vertex explosions": whole objects
@@ -41,9 +52,9 @@ that, and the guest drivers implement it in two different ways:
 | Direct3D 11 | A private shadow; at Unmap the write-watched pages, or the whole buffer, are copied into the stream. Small dynamic constant buffers are packed again on the host (`ConstantRing`). | Yes: at Unmap |
 | Direct3D 9 | A private shadow; Unlock sends the locked range | Yes: at Unlock |
 | OpenGL | Private copies (`BufferShadows`); unmap sends the mapped range; a persistent map is sent again at flush points | Yes: at unmap and at each flush |
-| Direct3D 12 | Upload heaps carved from the host window; the GPU reads that RAM through a dma-buf | No |
-| Vulkan | `HOST_VISIBLE` chunks of the host window | No |
-| OpenCL | `ALLOC_HOST_PTR` buffers over the window | No |
+| Direct3D 12 | Upload and readback heaps, each a host allocation of its own the GPU reads in place | No |
+| Vulkan | `HOST_VISIBLE` memory, each allocation a host allocation of its own | No |
+| OpenCL | `ALLOC_HOST_PTR` buffers over the context's arena | No |
 
 The copying three share the flaw this bug exposed; the other three already
 work the way real hardware does. So the behaviours are not too different to
@@ -80,21 +91,20 @@ which it has users in two drivers (CLAUDE.md, "Keep code near its owner").
 
 ### 3.1 Guest: `BufferSlices`, one per session
 
-A slice allocator over host-window chunks (docs/host-window.md), shared by
-every buffer a session maps for writing:
+A slice allocator over host memory (docs/host-memory.md), shared by every
+buffer a session maps for writing:
 
-- **Memory.** A span of the session's blob arena, past what it lends the
-  upload ring, as Direct3D 12's heaps are (`D3d12HeapArena`): the host already
-  imports the arena once, as one region, so a slice is an offset into memory
-  both sides map, and nothing more is opened. The arena is a host-window
-  chunk, mapped write-back in the process. Where the window cannot hold one - no window, no room, a 32-bit
-  process past 4 GiB - the same open answers with guest RAM the driver owns,
-  which the host imports the same way. Nothing in this design changes with
-  the backing.
-- **A buffer's storage is a slice**: a chunk and an offset. A buffer starts
+- **Memory.** *Superseded:* the plan took a span of the session's blob arena,
+  as Direct3D 12's heaps then were, with guest RAM where the window could not
+  hold the arena. What was built is the slice store: one `upload` host
+  allocation of its own, imported once, so a slice is an offset into memory
+  both sides map, and nothing more is opened per slice. Without a window or
+  room for the store, the session copies mapped buffers instead.
+- **A buffer's storage is a slice**: the store and an offset. A buffer starts
   with one when it is created with CPU write access.
 - **Renaming.** A map that asks for fresh storage takes a new slice and sends
-  one command, `BindBufferSlice(buffer, chunk, offset)`. The command carries no
+  one command, `BindBufferSlice(resource, memory, offset, bytes)`, `memory`
+  the store's import handle. The command carries no
   bytes. The old slice is retired, tagged with the GPU serial (3.3) of the
   last batch sent before the rename.
 - **Reuse.** A retired slice is free again once the GPU serial the host
@@ -110,9 +120,9 @@ every mapped buffer it covers.
 
 ### 3.2 Host: the buffer over the slice
 
-The executor imports each chunk once, as a `VkBuffer` on the device the
-session runs on: from a dma-buf over the memfd range, as the D3D12 heap path
-already does, or from the host pointer through `VulkanMemoryImport`. A
+The executor imports the slice store once, as a `VkBuffer` on the device the
+session runs on, from the dma-buf the memory source exported (this plan's
+host-pointer and memfd routes are gone, docs/host-memory.md). A
 `BindBufferSlice` then points the API's buffer at that memory:
 
 - **Direct3D 11 and Direct3D 9 (both DXVK).** DXVK already has what is needed:
@@ -208,12 +218,11 @@ These have to be answered before or during the steps they belong to.
    stale through a udmabuf, 0 through the same memory imported by host
    pointer (`VK_EXT_external_memory_host`). No memory type of either kind
    snoops. A write-combined guest mapping does not help either: KVM maps
-   guest RAM write-back whatever the guest's page attributes say. So the
-   region is imported by host pointer (`tools/dxvk-patches/0004` enables the
-   extension on DXVK's device), from the device's own mapping of the memory,
-   which executor ABI 19 hands over beside a dma-buf; a mapping of the
-   dma-buf itself cannot be pinned. A host GPU that refuses the pointer
-   leaves the session copying, as before.
+   guest RAM write-back whatever the guest's page attributes say. *Superseded
+   by docs/host-memory.md:* the memory is now the GPU driver's own allocation,
+   exported and imported back, which is coherent both ways, and the guest maps
+   it with the caching the host maps it with (`MAP_BLOB` answers cached or
+   write-combined), so neither udmabuf nor a host-pointer import is used.
 3. **DXVK's assumptions - answered.** `importBufferResource` took an
    allocation from the allocator's pool without its lock, which every other
    path to the pool holds; DXVK only ever called it once, at D3D11On12 setup.
@@ -225,8 +234,8 @@ These have to be answered before or during the steps they belong to.
    long as the list, and a replay must bind it again rather than take a new
    one.
 5. **Window budget.** Slices in flight per buffer are bounded by how far the
-   GPU is behind. DXVK keeps a similar pool. The window is 8 GiB; how much of
-   it Subnautica keeps in use should be measured in step 4.
+   GPU is behind. DXVK keeps a similar pool. Each session's store is 128 MiB of
+   the window; whether Subnautica needs more should be measured in step 4.
 6. **Until this lands**, the committed avumd still loses Unity's late writes.
    A stopgap - checking the watch again before the next draw and at the next
    map - would rely on Unity finishing its jobs before it issues the draw,
