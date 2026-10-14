@@ -580,11 +580,17 @@ spellings) with `HOST_VISIBLE`, and `HOST_COHERENT` and `HOST_CACHED` with it,
 cleared from every type the GPU's memory source could not allocate, export as
 a dma-buf and map through the export when it first tried that type - a driver
 can claim a type exports and then refuse it - since the guest maps
-host-visible memory through the window and has no other way to reach it. The
-mask is learnt once per physical device (`ImportableTypes`). Buffers and
+host-visible memory through the window and has no other way to reach it. A
+heap whose device-local types are all host visible gains one that is
+`DEVICE_LOCAL` alone, and the types are in the spec's order, so the guest's
+indices are not the host's: the view is the GPU's `GuestMemoryTypes`, learnt
+once per context from its memory source, and every index and memoryTypeBits
+crossing the wire is translated by it (docs/host-memory.md, "The Vulkan
+guest's memory types"). `vulkan(n)` names the guest's type. Buffers and
 images made on the guest's device carry dma-buf external-memory create info
 where the driver reports the create importable, unless the guest's chain names
-its own, so any of them can bind memory the source made.
+its own, so any of them can bind memory the source made; an image that does
+not is offered no type the source backs, unless nothing else would do.
 
 ### The export socket (device <-> a host process)
 

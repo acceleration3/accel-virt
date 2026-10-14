@@ -18,8 +18,7 @@ class CompositorMemory final : public MemoryExporter {
 public:
     explicit CompositorMemory(CompositorDevice &device);
 
-    uint32_t memory_types() override;
-    uint32_t memory_flags(uint32_t type) override;
+    void     memory_properties(VkPhysicalDeviceMemoryProperties &answer) override;
     /* Proved once per type: a page of it allocated, exported, and mapped
      * through the export, which is what QEMU does with every allocation. A
      * driver can claim a type exports and then refuse it (NVIDIA's dma-buf

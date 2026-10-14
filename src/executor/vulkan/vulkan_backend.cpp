@@ -48,7 +48,7 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 
 VulkanBackend::VulkanBackend()
     : gpu_(nullptr), source_(nullptr), listed_(), extensions_(), application_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), memory_import_(false), handles_(),
-      adopted_(), import_(), importable_(), parent_(0u), ran_(0u), lost_(false)
+      adopted_(), import_(), types_(), types_learnt_(false), parent_(0u), ran_(0u), lost_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -317,26 +317,31 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
         /* Asked of the device rather than of the list: whichever create made
          * it, the loader answers the entry point only when it was enabled. */
         memory_import_ = import_.imports(device_);
+        learn_types(physicalDevice);
     }
     return result;
 }
 
 /* The guest is shown one physical device, the bound GPU's, whose source this
- * is; without a source the guest maps nothing. */
-void VulkanBackend::restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties)
+ * is. The source's view is the one its requests are translated by, so it is
+ * the guest's whenever there is one; without it the guest maps nothing. */
+void VulkanBackend::learn_types(VkPhysicalDevice physical)
 {
-    AV_SCOPE("VulkanBackend::restrict_to_importable");
-    if (!importable_.known_for(reinterpret_cast<uint64_t>(physical)))
-        importable_.learn(reinterpret_cast<uint64_t>(physical), source_ != nullptr ? source_->mappable_types() : 0u);
-    importable_.restrict(properties);
+    AV_SCOPE("VulkanBackend::learn_types");
+    if (types_learnt_) return;
+    types_learnt_ = true;
+    if (source_ != nullptr && source_->vulkan_types(types_)) return;
+    VkPhysicalDeviceMemoryProperties host = {};
+    RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physical, &host);
+    types_.learn(host, 0u);
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                            VkPhysicalDeviceMemoryProperties *pMemoryProperties)
 {
     AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties");
-    RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physicalDevice, pMemoryProperties);
-    restrict_to_importable(physicalDevice, *pMemoryProperties);
+    learn_types(physicalDevice);
+    types_.properties(*pMemoryProperties);
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
@@ -344,15 +349,15 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice phy
 {
     AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2");
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
-    restrict_to_importable(physicalDevice, pMemoryProperties->memoryProperties);
+    learn_types(physicalDevice);
+    types_.properties(pMemoryProperties->memoryProperties);
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice,
                                                                VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
 {
     AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR");
-    RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, pMemoryProperties);
-    restrict_to_importable(physicalDevice, pMemoryProperties->memoryProperties);
+    on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
 }
 
 bool VulkanBackend::backs_with_source(VkDevice device, const void *next, VkStructureType external,
@@ -367,36 +372,174 @@ bool VulkanBackend::backs_with_source(VkDevice device, const void *next, VkStruc
     return true;
 }
 
-VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
-                                          const VkAllocationCallbacks *, VkBuffer *pBuffer)
+void VulkanBackend::for_source(VkDevice device, VkBufferCreateInfo &create, VkExternalMemoryBufferCreateInfo &external)
 {
-    AV_SCOPE("VulkanBackend::on_vkCreateBuffer");
-    VkBufferCreateInfo               create = *pCreateInfo;
-    VkExternalMemoryBufferCreateInfo external = {};
+    AV_SCOPE("VulkanBackend::for_source");
+    external = {};
     external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
     external.pNext = create.pNext;
     external.handleTypes =
         import_.buffer_external_types(physical_, create, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
     if (backs_with_source(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
+}
+
+/* An image whose chain names the source's handle type - the one added here,
+ * or the guest's own - may be bound to the source's memory. An image laid out
+ * by a DRM format modifier is not asked about: the driver's query needs the
+ * modifier, and RADV dereferences the structure that would name it. */
+bool VulkanBackend::for_source(VkDevice device, VkImageCreateInfo &create, VkExternalMemoryImageCreateInfo &external)
+{
+    AV_SCOPE("VulkanBackend::for_source");
+    external = {};
+    external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    external.pNext = create.pNext;
+    if (create.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+        external.handleTypes =
+            import_.image_external_types(physical_, create, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
+    if (backs_with_source(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
+    for (auto *node = static_cast<const VkBaseInStructure *>(create.pNext); node != nullptr; node = node->pNext) {
+        if (node->sType != external.sType) continue;
+        const auto *named = reinterpret_cast<const VkExternalMemoryImageCreateInfo *>(node);
+        return (named->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT) != 0u;
+    }
+    return false;
+}
+
+VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
+                                          const VkAllocationCallbacks *, VkBuffer *pBuffer)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateBuffer");
+    VkBufferCreateInfo               create = *pCreateInfo;
+    VkExternalMemoryBufferCreateInfo external;
+    for_source(device, create, external);
     return RealVulkanDispatch::on_vkCreateBuffer(device, &create, nullptr, pBuffer);
 }
 
+/* What the image was made as is remembered with its handle, which is what its
+ * memory requirements are answered by, and goes when the handle does. Vulkan
+ * sets the handle to VK_NULL_HANDLE when a create fails, and the null handle
+ * is never remembered, so the driver's answer needs no branch of its own. */
 VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                                          const VkAllocationCallbacks *, VkImage *pImage)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateImage");
     VkImageCreateInfo               create = *pCreateInfo;
-    VkExternalMemoryImageCreateInfo external = {};
-    external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-    external.pNext = create.pNext;
-    /* An image laid out by a DRM format modifier is not asked about: the
-     * driver's query needs the modifier, and RADV dereferences the structure
-     * that would name it. */
-    if (create.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
-        external.handleTypes =
-            import_.image_external_types(physical_, create, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
-    if (backs_with_source(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
-    return RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
+    VkExternalMemoryImageCreateInfo external;
+    const bool                      bindable = for_source(device, create, external);
+    const VkResult result = RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
+    if (bindable) {
+        made_through(reinterpret_cast<uint64_t>(device));
+        made(reinterpret_cast<uint64_t>(*pImage), HandleKind::external_image);
+    }
+    return result;
+}
+
+uint32_t VulkanBackend::image_bits(uint32_t host_bits, bool external) const
+{
+    AV_SCOPE("VulkanBackend::image_bits");
+    const uint32_t bits = types_.guest_bits(host_bits);
+    return external ? bits : types_.unmapped(bits);
+}
+
+void VulkanBackend::on_vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer,
+                                                     VkMemoryRequirements *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetBufferMemoryRequirements");
+    RealVulkanDispatch::on_vkGetBufferMemoryRequirements(device, buffer, pMemoryRequirements);
+    pMemoryRequirements->memoryTypeBits = types_.guest_bits(pMemoryRequirements->memoryTypeBits);
+}
+
+void VulkanBackend::on_vkGetBufferMemoryRequirements2(VkDevice device, const VkBufferMemoryRequirementsInfo2 *pInfo,
+                                                      VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetBufferMemoryRequirements2");
+    RealVulkanDispatch::on_vkGetBufferMemoryRequirements2(device, pInfo, pMemoryRequirements);
+    VkMemoryRequirements &needs = pMemoryRequirements->memoryRequirements;
+    needs.memoryTypeBits = types_.guest_bits(needs.memoryTypeBits);
+}
+
+void VulkanBackend::on_vkGetBufferMemoryRequirements2KHR(VkDevice device,
+                                                         const VkBufferMemoryRequirementsInfo2 *pInfo,
+                                                         VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetBufferMemoryRequirements2KHR");
+    on_vkGetBufferMemoryRequirements2(device, pInfo, pMemoryRequirements);
+}
+
+void VulkanBackend::on_vkGetImageMemoryRequirements(VkDevice device, VkImage image,
+                                                    VkMemoryRequirements *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetImageMemoryRequirements");
+    RealVulkanDispatch::on_vkGetImageMemoryRequirements(device, image, pMemoryRequirements);
+    pMemoryRequirements->memoryTypeBits =
+        image_bits(pMemoryRequirements->memoryTypeBits,
+                   handles_.knows(reinterpret_cast<uint64_t>(image), HandleKind::external_image));
+}
+
+void VulkanBackend::on_vkGetImageMemoryRequirements2(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
+                                                     VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetImageMemoryRequirements2");
+    RealVulkanDispatch::on_vkGetImageMemoryRequirements2(device, pInfo, pMemoryRequirements);
+    VkMemoryRequirements &needs = pMemoryRequirements->memoryRequirements;
+    needs.memoryTypeBits = image_bits(needs.memoryTypeBits,
+                                      handles_.knows(reinterpret_cast<uint64_t>(pInfo->image),
+                                                     HandleKind::external_image));
+}
+
+void VulkanBackend::on_vkGetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
+                                                        VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetImageMemoryRequirements2KHR");
+    on_vkGetImageMemoryRequirements2(device, pInfo, pMemoryRequirements);
+}
+
+void VulkanBackend::on_vkGetDeviceBufferMemoryRequirements(VkDevice device,
+                                                           const VkDeviceBufferMemoryRequirements *pInfo,
+                                                           VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceBufferMemoryRequirements");
+    if (pInfo->pCreateInfo == nullptr) return;
+    VkDeviceBufferMemoryRequirements asked = *pInfo;
+    VkBufferCreateInfo               create = *pInfo->pCreateInfo;
+    VkExternalMemoryBufferCreateInfo external;
+    for_source(device, create, external);
+    asked.pCreateInfo = &create;
+    RealVulkanDispatch::on_vkGetDeviceBufferMemoryRequirements(device, &asked, pMemoryRequirements);
+    VkMemoryRequirements &needs = pMemoryRequirements->memoryRequirements;
+    needs.memoryTypeBits = types_.guest_bits(needs.memoryTypeBits);
+}
+
+void VulkanBackend::on_vkGetDeviceBufferMemoryRequirementsKHR(VkDevice device,
+                                                              const VkDeviceBufferMemoryRequirements *pInfo,
+                                                              VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceBufferMemoryRequirementsKHR");
+    on_vkGetDeviceBufferMemoryRequirements(device, pInfo, pMemoryRequirements);
+}
+
+void VulkanBackend::on_vkGetDeviceImageMemoryRequirements(VkDevice device,
+                                                          const VkDeviceImageMemoryRequirements *pInfo,
+                                                          VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceImageMemoryRequirements");
+    if (pInfo->pCreateInfo == nullptr) return;
+    VkDeviceImageMemoryRequirements asked = *pInfo;
+    VkImageCreateInfo               create = *pInfo->pCreateInfo;
+    VkExternalMemoryImageCreateInfo external;
+    const bool                      bindable = for_source(device, create, external);
+    asked.pCreateInfo = &create;
+    RealVulkanDispatch::on_vkGetDeviceImageMemoryRequirements(device, &asked, pMemoryRequirements);
+    VkMemoryRequirements &needs = pMemoryRequirements->memoryRequirements;
+    needs.memoryTypeBits = image_bits(needs.memoryTypeBits, bindable);
+}
+
+void VulkanBackend::on_vkGetDeviceImageMemoryRequirementsKHR(VkDevice device,
+                                                             const VkDeviceImageMemoryRequirements *pInfo,
+                                                             VkMemoryRequirements2 *pMemoryRequirements)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceImageMemoryRequirementsKHR");
+    on_vkGetDeviceImageMemoryRequirements(device, pInfo, pMemoryRequirements);
 }
 
 void VulkanBackend::on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
@@ -451,6 +594,19 @@ VkResult VulkanBackend::on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphor
     return remembered(device, RealVulkanDispatch::on_vkGetSemaphoreFdKHR(device, pGetFdInfo, pFd), pFd);
 }
 
+/* The fd is a number in this process: one this context did not export names
+ * whatever else is open here, and the driver would be asked about it. */
+VkResult VulkanBackend::on_vkGetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType,
+                                                      int fd, VkMemoryFdPropertiesKHR *pMemoryFdProperties)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetMemoryFdPropertiesKHR");
+    if (!fds_.holds(fd)) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    const VkResult answered =
+        RealVulkanDispatch::on_vkGetMemoryFdPropertiesKHR(device, handleType, fd, pMemoryFdProperties);
+    pMemoryFdProperties->memoryTypeBits = types_.guest_bits(pMemoryFdProperties->memoryTypeBits);
+    return answered;
+}
+
 VkResult VulkanBackend::remembered(VkDevice device, VkResult answered, int *fd)
 {
     AV_SCOPE("VulkanBackend::remembered");
@@ -471,7 +627,10 @@ VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAlloc
     AV_SCOPE("VulkanBackend::on_vkAllocateMemory");
     int fd = -1;
     if (!exported(pAllocateInfo->pNext, fd)) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    return imported(RealVulkanDispatch::on_vkAllocateMemory(device, pAllocateInfo, nullptr, pMemory), fd);
+    VkMemoryAllocateInfo allocate = *pAllocateInfo;
+    allocate.memoryTypeIndex = types_.host_type(pAllocateInfo->memoryTypeIndex);
+    if (allocate.memoryTypeIndex == GuestMemoryTypes::no_type) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    return imported(RealVulkanDispatch::on_vkAllocateMemory(device, &allocate, nullptr, pMemory), fd);
 }
 
 VkResult VulkanBackend::on_vkImportSemaphoreFdKHR(VkDevice device,
@@ -674,9 +833,9 @@ void VulkanBackend::shut_down()
     }
     handles_.forget_all();
     adopted_.clear();
-    /* The mask belongs to a physical device of the instance that just died,
-     * and the kind was decided with it. */
-    importable_.learn(0u, 0u);
+    /* The types were learnt of a physical device of the instance that just
+     * died. */
+    types_learnt_ = false;
     gpu_ = nullptr;
     ran_ = 0u;
     lost_ = false;

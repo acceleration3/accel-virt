@@ -33,9 +33,8 @@ public:
     /* The first memory type `allowed` permits, a device-local one first;
      * VK_MAX_MEMORY_TYPES for none. */
     uint32_t           memory_type(uint32_t allowed) const;
-    /* The device's memory types, and type `type`'s property flags. */
-    uint32_t              memory_type_count() const;
-    VkMemoryPropertyFlags memory_flags(uint32_t type) const;
+    /* The device's memory types and heaps: none before it is loaded. */
+    void                  memory_properties(VkPhysicalDeviceMemoryProperties &answer) const;
     /* `size` bytes of `type`, exportable as a dma-buf and dedicated to
      * nothing (docs/host-memory.md). */
     [[nodiscard]] bool    allocate_exportable(VkDeviceSize size, uint32_t type, VkDeviceMemory &memory) const;

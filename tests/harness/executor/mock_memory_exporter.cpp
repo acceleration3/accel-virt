@@ -10,7 +10,7 @@
 namespace av {
 
 MockMemoryExporter::MockMemoryExporter()
-    : types_{}, type_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), fail_share_(0u), rounding_(0u), claimed_(0u), attempts_(0u),
+    : types_{}, type_count_(0u), heaps_{}, heap_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), fail_share_(0u), rounding_(0u), claimed_(0u), attempts_(0u),
       next_handle_(0x1000u), made_(0u), freed_(0u), last_type_(max_types), last_size_(0u), misuses_(0u)
 {
 }
@@ -26,11 +26,18 @@ MockMemoryExporter::~MockMemoryExporter()
     }
 }
 
-std::uint32_t MockMemoryExporter::add_type(std::uint32_t flags, bool exportable)
+std::uint32_t MockMemoryExporter::add_type(std::uint32_t flags, bool exportable, std::uint32_t heap)
 {
     if (type_count_ >= max_types) return max_types;
-    types_[type_count_] = Type{flags, exportable, false, 0u, 0u};
+    types_[type_count_] = Type{flags, exportable, false, 0u, 0u, heap};
     return type_count_++;
+}
+
+std::uint32_t MockMemoryExporter::add_heap(VkMemoryHeapFlags flags, VkDeviceSize size)
+{
+    if (heap_count_ >= max_heaps) return max_heaps;
+    heaps_[heap_count_] = VkMemoryHeap{size, flags};
+    return heap_count_++;
 }
 
 void MockMemoryExporter::fail_allocation_at(std::uint32_t nth) { fail_allocation_ = nth; }
@@ -49,18 +56,15 @@ bool MockMemoryExporter::fires(std::uint32_t &countdown)
     return countdown != 0u && --countdown == 0u;
 }
 
-std::uint32_t MockMemoryExporter::memory_types()
+void MockMemoryExporter::memory_properties(VkPhysicalDeviceMemoryProperties &answer)
 {
-    return claimed_ != 0u ? claimed_ : type_count_;
-}
-
-std::uint32_t MockMemoryExporter::memory_flags(std::uint32_t type)
-{
-    if (type >= type_count_) {
-        misuses_++;
-        return 0u;
-    }
-    return types_[type].flags;
+    answer = VkPhysicalDeviceMemoryProperties{};
+    answer.memoryTypeCount = claimed_ != 0u ? claimed_ : type_count_;
+    for (std::uint32_t type = 0u; type < type_count_; type++)
+        answer.memoryTypes[type] = VkMemoryType{types_[type].flags, types_[type].heap};
+    answer.memoryHeapCount = heap_count_ != 0u ? heap_count_ : 1u;
+    answer.memoryHeaps[0] = VkMemoryHeap{default_heap_bytes, VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
+    for (std::uint32_t heap = 0u; heap < heap_count_; heap++) answer.memoryHeaps[heap] = heaps_[heap];
 }
 
 bool MockMemoryExporter::exportable(std::uint32_t type)

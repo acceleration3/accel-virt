@@ -32,15 +32,16 @@ struct VulkanBackendProbe {
     [[nodiscard]] Status  reserve_template(VkDevice device, const VkDescriptorUpdateTemplateEntry *entry);
     /* The reserved slot's handle, as a create does once the driver answered. */
     static void           name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made);
-    /* The memory types `physical`'s memory source maps, learnt as the
-     * backend learns them the first time the guest asks about the device:
-     * what a test with no source behind the backend narrows the guest's view
-     * by. */
-    void                  learn_mappable(VkPhysicalDevice physical, uint32_t mask);
-    /* The mask learnt, and whether the device imports go to was made able to
-     * import a dma-buf. */
-    bool                  mappable_known(VkPhysicalDevice physical) const;
-    bool                  memory_import() const;
+    /* The guest's memory types learnt as the guest's first question about
+     * `physical` learns them, and the view learnt. */
+    void                    learn_types(VkPhysicalDevice physical);
+    const GuestMemoryTypes &types() const;
+    /* The guest shown `host` with `backed` as the source's types, whatever
+     * the GPU's are: a real driver's types laid out as another GPU's, so a
+     * device test translates through a layout this host does not have. */
+    void                    show_types(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed);
+    /* Whether the device imports go to was made able to import a dma-buf. */
+    bool                    memory_import() const;
     /* Whether the backend still holds `fd` as one it exported: what says
      * whether an import took it (feature 047, US3). */
     bool                  holds_fd(int fd) const;

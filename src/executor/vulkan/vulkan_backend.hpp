@@ -15,7 +15,7 @@
 #include "executor/vulkan/handle_registry.hpp"
 #include "executor/vulkan/host_exported_fds.hpp"
 #include "executor/vulkan/host_template_table.hpp"
-#include "executor/vulkan/importable_types.hpp"
+#include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/shim/physical_device_list.hpp"
@@ -86,8 +86,10 @@ public:
     VkResult on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
                               VkFence fence) override;
 
-    /* The driver's memory types, host visible only where a host pointer
-     * imports (feature 045, T033): the guest maps nothing but its own RAM. */
+    /* The guest's view of the GPU's memory (GuestMemoryTypes): host visible
+     * only where the memory source backs a type, a device-local type where
+     * the GPU's are all host visible, in the spec's order. The rest of the
+     * structure - a budget's heaps - is the driver's. */
     void on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                 VkPhysicalDeviceMemoryProperties *pMemoryProperties) override;
     void on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
@@ -104,6 +106,36 @@ public:
     VkResult on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                               const VkAllocationCallbacks *pAllocator, VkImage *pImage) override;
 
+    /* The driver's memoryTypeBits as the guest's types. An image that cannot
+     * be bound to the memory source's memory - one not made with its handle
+     * type, which is how a driver keeps an optimal image compressed - is not
+     * offered the types the source backs, unless no other type would do: a
+     * compressed image in memory the guest maps is one whose metadata the
+     * guest's mapping can corrupt. The create-info spellings answer what the
+     * made object would. */
+    void on_vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer,
+                                          VkMemoryRequirements *pMemoryRequirements) override;
+    void on_vkGetBufferMemoryRequirements2(VkDevice device, const VkBufferMemoryRequirementsInfo2 *pInfo,
+                                           VkMemoryRequirements2 *pMemoryRequirements) override;
+    void on_vkGetBufferMemoryRequirements2KHR(VkDevice device, const VkBufferMemoryRequirementsInfo2 *pInfo,
+                                              VkMemoryRequirements2 *pMemoryRequirements) override;
+    void on_vkGetImageMemoryRequirements(VkDevice device, VkImage image,
+                                         VkMemoryRequirements *pMemoryRequirements) override;
+    void on_vkGetImageMemoryRequirements2(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
+                                          VkMemoryRequirements2 *pMemoryRequirements) override;
+    void on_vkGetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
+                                             VkMemoryRequirements2 *pMemoryRequirements) override;
+    /* A create info the wire left out is answered with no requirements rather
+     * than handed to the driver. */
+    void on_vkGetDeviceBufferMemoryRequirements(VkDevice device, const VkDeviceBufferMemoryRequirements *pInfo,
+                                                VkMemoryRequirements2 *pMemoryRequirements) override;
+    void on_vkGetDeviceBufferMemoryRequirementsKHR(VkDevice device, const VkDeviceBufferMemoryRequirements *pInfo,
+                                                   VkMemoryRequirements2 *pMemoryRequirements) override;
+    void on_vkGetDeviceImageMemoryRequirements(VkDevice device, const VkDeviceImageMemoryRequirements *pInfo,
+                                               VkMemoryRequirements2 *pMemoryRequirements) override;
+    void on_vkGetDeviceImageMemoryRequirementsKHR(VkDevice device, const VkDeviceImageMemoryRequirements *pInfo,
+                                                  VkMemoryRequirements2 *pMemoryRequirements) override;
+
     /* Memory an import made is the import's to release: freed here and again
      * when the device releases the blob would be a double free in the driver. */
     void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
@@ -118,6 +150,11 @@ public:
                                  int *pFd) override;
     VkResult on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *pGetFdInfo,
                                     int *pFd) override;
+    /* Of an fd this context exported only, in the guest's types. */
+    VkResult on_vkGetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, int fd,
+                                           VkMemoryFdPropertiesKHR *pMemoryFdProperties) override;
+    /* Of the host type behind the guest's: VK_ERROR_OUT_OF_DEVICE_MEMORY for
+     * a type the guest was never shown, which no driver checks. */
     VkResult on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
                                  const VkAllocationCallbacks *pAllocator,
                                  VkDeviceMemory *pMemory) override;
@@ -236,9 +273,19 @@ private:
      * chain that does not already say for itself. */
     bool backs_with_source(VkDevice device, const void *next, VkStructureType external,
                            VkExternalMemoryHandleTypeFlags types) const;
-    /* Narrows `properties` of `physical` to what the memory source maps,
-     * learning the mask the first time `physical` is asked about. */
-    void restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties);
+    /* `create` as on_vkCreateBuffer makes it, `external` added to its chain
+     * where the memory source's memory may back it. */
+    void for_source(VkDevice device, VkBufferCreateInfo &create, VkExternalMemoryBufferCreateInfo &external);
+    /* The same for an image, and whether the image as made names the
+     * source's handle type, so that the source's memory may be bound to it. */
+    bool for_source(VkDevice device, VkImageCreateInfo &create, VkExternalMemoryImageCreateInfo &external);
+    /* The guest's view of the GPU's memory types, learnt once: the memory
+     * source's, which is what the guest's requests to it are translated by;
+     * `physical`'s own, with nothing host visible, where there is no source
+     * or it has no types to show. */
+    void learn_types(VkPhysicalDevice physical);
+    /* An image's memoryTypeBits, the driver's, as the guest is answered them. */
+    uint32_t image_bits(uint32_t host_bits, bool external) const;
     /* The lowest memory type in `mask` this device has, or max_memory_types
      * when the mask is empty: a shared descriptor carries no type of its own,
      * unlike a blob, whose guest asked for one. */
@@ -273,7 +320,8 @@ private:
     HandleRegistry   handles_;
     AdoptedBlobs     adopted_;
     VulkanMemoryImport import_;
-    ImportableTypes  importable_;
+    GuestMemoryTypes types_;
+    bool             types_learnt_;
     /* AV_VK_SUBMIT_TIMING: the GPU's time in and between submissions. */
     VulkanSubmitTiming timing_;
     uint64_t parent_;

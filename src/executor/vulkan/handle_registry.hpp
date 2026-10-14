@@ -26,14 +26,19 @@ namespace av {
  * number it is, while a dispatchable one it dereferences to find the table to
  * call through - so a guest that names a queue where a device belongs aborts
  * the host process rather than getting an error back. Found by
- * tests/fuzz/fuzz_executor_vulkan.cpp in vkAllocateMemory. */
+ * tests/fuzz/fuzz_executor_vulkan.cpp in vkAllocateMemory.
+ *
+ * And an image made with the memory source's handle type, the one kind of
+ * image its memory may back (VulkanBackend::on_vkCreateImage): kept with the
+ * handle, it ends when the image does. */
 enum class HandleKind : uint8_t {
     other,
     instance,
     physical_device,
     device,
     queue,
-    command_buffer
+    command_buffer,
+    external_image
 };
 
 class HandleRegistry {
