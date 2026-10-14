@@ -220,7 +220,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 19)
+        self.assertEqual(events.count("file"), 20)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\av\\package\\avgpu.sys 900", lines)
         self.assertIn("file C:\\av\\package\\avgpu.inf", "\n".join(lines))
@@ -245,6 +245,11 @@ class GuestSuiteRun(unittest.TestCase):
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\av\\avinspect.exe 1300", lines)
+        # And the package's hashes, which provision.ps1 checks before signing
+        # and after installing; with provision.ps1 itself and avtest.exe, that
+        # is every file the run pushes.
+        self.assertIn("file C:\\av\\package\\package.sha256", "\n".join(lines))
+        self.assertIn("file C:\\av\\provision.ps1", "\n".join(lines))
         self.assertNotIn("vulkaninfo", "\n".join(lines))
         order = [line for line in lines
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "avtest" in line))]

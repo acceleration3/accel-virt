@@ -247,7 +247,7 @@ def adapter_names(gpus, sysfs=SYSFS_PCI):
         if gpu.kind == "cpu":
             continue
         vendor, device, _revision = gpu.pci_identity(sysfs)
-        lines.append(f"{vendor:04x}\t{device:04x}\t{gpu.adapter_name()}\n")
+        lines.append(f"{vendor:04x}\t{device:04x}\t{gpu.adapter_name(sysfs)}\n")
     return "".join(lines)
 
 
