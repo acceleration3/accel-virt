@@ -12,7 +12,7 @@
 namespace av {
 
 DxvkVulkanDevice::DxvkVulkanDevice()
-    : interop_(nullptr), sync_(VK_NULL_HANDLE), sync_spent_(false), written_(), writes_(0u)
+    : interop_(nullptr), sync_(VK_NULL_HANDLE), sync_spent_(false)
 {
     AV_SCOPE("DxvkVulkanDevice::DxvkVulkanDevice");
 }
@@ -57,8 +57,6 @@ void DxvkVulkanDevice::release()
         sync_ = VK_NULL_HANDLE;
     }
     work_.close();
-    written_.release();
-    writes_ = 0u;
     sync_spent_ = false;
     table_.forget();
     queue_.borrow(nullptr);

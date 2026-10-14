@@ -272,7 +272,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     forget_guest_surface(resource);
     maps_.forget(resource.id);
     destroy_object(resource.id);
-    if (resource.slice_bytes != 0u) leave_slice(resource);
+    if (resource.slice.bytes_ != 0u) leave_slice(resource);
     else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     /* Keyed or not: a presented, scanned-out or shared resource's allocation
      * was this device's to make and is its to give back. Kept, every swap

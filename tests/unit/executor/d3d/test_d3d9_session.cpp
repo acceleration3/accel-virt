@@ -10,6 +10,7 @@
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/guest_region.hpp"
+#include "harness/executor/local_import.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
@@ -47,9 +48,9 @@ public:
 
 class FreshSession {
 public:
-    FreshSession()
+    FreshSession() : import_(guest, sizeof guest)
     {
-        region_.take(guest, sizeof guest);
+        CHECK(region_.adopt(import_.blob()));
         CHECK_STATUS(table_storage.construct(), av::Status::ok);
         CHECK_STATUS(session_storage.construct(region_, table_storage.object()), av::Status::ok);
         session_storage.object().initialize(nullptr, nullptr, nullptr, nullptr);
@@ -67,7 +68,8 @@ public:
     av::D3dObjectTable &table() { return table_storage.object(); }
 
 private:
-    GuestRegion region_;
+    av::LocalImport import_;
+    GuestRegion     region_;
 };
 
 }  // namespace

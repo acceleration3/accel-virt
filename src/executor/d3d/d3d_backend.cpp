@@ -1703,7 +1703,9 @@ bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
 
 /* A buffer bound to a slice is the guest's memory from then on: whatever the
  * constant ring kept of it goes back to its own storage first, so that what
- * the guest bound last is what draws read. */
+ * the guest bound last is what draws read. Only a dynamic buffer is bound -
+ * the only kind the guest places on a slice, and the only kind DXVK can give
+ * storage of its own again when the store goes (release_slice_storage). */
 bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes)
 {
     AV_SCOPE("D3dBackend::on_BindBufferSlice");
@@ -1711,22 +1713,32 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
     const SourceMemory *const store = imported_.find(memory);
     if (!ready() || found == nullptr || store == nullptr) return false;
     if (offset > store->size() || bytes > store->size() - offset) return false;
-    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
-    found->GetType(&dimension);
-    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER || !slice_storage_for(*store)) return false;
+    if (!dynamic_buffer(found) || !slice_storage_for(*store)) return false;
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
     return device11_->bind_storage(buffer, slice_storage_, offset, bytes, store->pointer() + offset);
 }
 
+bool D3dBackend::dynamic_buffer(ID3D11Resource *resource) const
+{
+    AV_SCOPE("D3dBackend::dynamic_buffer");
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    resource->GetType(&dimension);
+    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER) return false;
+    D3D11_BUFFER_DESC desc = {};
+    static_cast<ID3D11Buffer *>(resource)->GetDesc(&desc);
+    return desc.Usage == D3D11_USAGE_DYNAMIC;
+}
+
 /* By the store's dma-buf: its memory is the GPU's own (docs/host-memory.md),
- * which DXVK's device imports as any device of the same driver does. */
+ * which DXVK's device imports as any device of the same driver does. A
+ * session has one store: another, while one is held, is refused, since
+ * letting the held one go would take storage from buffers still on it. */
 bool D3dBackend::slice_storage_for(const SourceMemory &store)
 {
     AV_SCOPE("D3dBackend::slice_storage_for");
     if (slice_memory_ == &store) return true;
-    if (slice_storage_refused_ || !device11_->slices()) return false;
-    release_slice_storage();
+    if (slice_memory_ != nullptr || slice_storage_refused_ || !device11_->slices()) return false;
     if (device11_->import_to_draw(store.share(), store.size(), slice_storage_)) {
         slice_memory_ = &store;
         return true;
@@ -1736,12 +1748,26 @@ bool D3dBackend::slice_storage_for(const SourceMemory &store)
     return false;
 }
 
-/* DXVK may still have recorded draws that read the store, or the GPU be
- * running them: they finish before the buffer they read goes. */
+/* DXVK renamed each buffer bound to a slice to the store's buffer without
+ * owning it: a buffer left on it would draw from a buffer destroyed, and a
+ * map of it on the host would write where the store's mapping was. So every
+ * dynamic buffer - which buffers are on the store is not kept - is discarded
+ * first, which renames it to storage of DXVK's own; the guest lets go of its
+ * store only as its session goes, when what they held is moot. DXVK may
+ * still have recorded draws that read the store, or the GPU be running them:
+ * they finish before the buffer they read goes. */
 void D3dBackend::release_slice_storage()
 {
     AV_SCOPE("D3dBackend::release_slice_storage");
-    if (slice_storage_.made()) device11_->vulkan().idle();
+    if (!slice_storage_.made()) return;
+    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity; slot = objects_.next_used(slot + 1u)) {
+        uint32_t      id = 0u;
+        D3dObjectKind kind = D3dObjectKind::none;
+        static_cast<void>(objects_.at(slot, id, kind));
+        ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(id, D3dObjectKind::resource);
+        if (resource != nullptr && dynamic_buffer(resource)) device11_->context()->DiscardResource(resource);
+    }
+    device11_->vulkan().idle();
     slice_storage_.release();
     slice_memory_ = nullptr;
 }

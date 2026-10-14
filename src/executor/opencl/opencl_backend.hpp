@@ -9,6 +9,7 @@
 
 #include "executor/opencl/cl_event_signals.hpp"
 #include "executor/opencl/cl_handle_registry.hpp"
+#include "executor/opencl/cl_bounced_rect.hpp"
 #include "executor/opencl/cl_read_ahead.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
@@ -280,6 +281,8 @@ private:
     GuestRegion      arena_;
     ClEventSignals   events_;
     ClReadAhead      read_ahead_;
+    /* Rectangles read into the arena where the host will not read into it. */
+    ClBouncedRect    bounced_;
     uint64_t       ran_;
     bool           lost_;
 };

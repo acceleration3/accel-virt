@@ -89,6 +89,64 @@ std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::u
   ::vkDestroyInstance(instance, nullptr);
   return flags; }
 
+/* Whether a device of GPU `index`'s driver, made as an importer makes one,
+ * may import the dma-buf `fd` as a host-visible type: what vkd3d-proton asks
+ * of a heap before it imports one. */
+bool imports_host_visible(av::LoaderHostApis &host, std::uint32_t index, int fd)
+{ std::uint8_t uuid[16] = {};
+  host.gpu_uuid(index, uuid);
+  VkApplicationInfo application = {};
+  application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  application.apiVersion = (1u << 22) | (1u << 12);
+  VkInstanceCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  create.pApplicationInfo = &application;
+  VkInstance instance = VK_NULL_HANDLE;
+  if (::vkCreateInstance(&create, nullptr, &instance) != VK_SUCCESS) return false;
+  std::uint32_t    count = 8u;
+  VkPhysicalDevice devices[8] = {};
+  bool             visible = false;
+  if (::vkEnumeratePhysicalDevices(instance, &count, devices) < VK_SUCCESS) count = 0u;
+  for (std::uint32_t device = 0u; device < count; device++) {
+      VkPhysicalDeviceIDProperties id = {};
+      id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+      VkPhysicalDeviceProperties2 properties = {};
+      properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      properties.pNext = &id;
+      ::vkGetPhysicalDeviceProperties2(devices[device], &properties);
+      bool same = true;
+      for (std::uint32_t byte = 0u; byte < 16u; byte++) same = same && id.deviceUUID[byte] == uuid[byte];
+      if (!same) continue;
+      const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+      const float       priority = 1.0f;
+      VkDeviceQueueCreateInfo queue = {};
+      queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+      queue.queueCount = 1u;
+      queue.pQueuePriorities = &priority;
+      VkDeviceCreateInfo made = {};
+      made.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+      made.queueCreateInfoCount = 1u;
+      made.pQueueCreateInfos = &queue;
+      made.enabledExtensionCount = 2u;
+      made.ppEnabledExtensionNames = extensions;
+      VkDevice importer = VK_NULL_HANDLE;
+      if (::vkCreateDevice(devices[device], &made, nullptr, &importer) != VK_SUCCESS) continue;
+      auto *const fd_properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+          ::vkGetDeviceProcAddr(importer, "vkGetMemoryFdPropertiesKHR"));
+      VkMemoryFdPropertiesKHR answered = {};
+      answered.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+      VkPhysicalDeviceMemoryProperties memory = {};
+      ::vkGetPhysicalDeviceMemoryProperties(devices[device], &memory);
+      if (fd_properties != nullptr &&
+          fd_properties(importer, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &answered) == VK_SUCCESS)
+          for (std::uint32_t type = 0u; type < memory.memoryTypeCount; type++)
+              visible = visible || ((answered.memoryTypeBits >> type & 1u) != 0u &&
+                                    (memory.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u);
+      ::vkDestroyDevice(importer, nullptr);
+  }
+  ::vkDestroyInstance(instance, nullptr);
+  return visible; }
+
 /* What the device does with an answer: maps the dma-buf, here for reading
  * and writing; null where it cannot. */
 std::uint8_t *map(const AvHostMemory &memory)
@@ -143,6 +201,28 @@ TEST(compositor_memory_device, every_class_allocates_memory_both_views_share)
       CHECK_EQ(source->live(), 0u);
   }
   if (judged == 0u) std::fprintf(stderr, "no GPU here has a memory source: nothing judged\n"); }
+
+/* An upload or readback answer is memory an importer that keeps to the
+ * driver's word may map: its dma-buf imports back as a host-visible type,
+ * which vkd3d-proton asks before it makes a heap of it. NVIDIA's BAR comes back
+ * device-local only, and every Direct3D 12 upload heap was refused over it. */
+TEST(compositor_memory_device, upload_and_readback_import_back_as_memory_a_cpu_maps)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t index = 0u; index < host.gpu_count(); index++) {
+      HostMemorySource *const source = host.memory_source(index);
+      if (source == nullptr) continue;
+      const HostMemoryRequest requests[] = {HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u),
+                                            HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u)};
+      std::uint64_t key = 300u;
+      for (const HostMemoryRequest &request : requests) {
+          AvHostMemory answered = {-1, 0u, 0u};
+          CHECK_STATUS(source->allocate(domain, key, bytes, request, answered), Status::ok);
+          CHECK(imports_host_visible(host, index, answered.fd));
+          source->free(domain, key);
+          if (answered.fd >= 0) ::close(answered.fd);
+          key++;
+      }
+  } }
 
 /* Each type the source maps is host visible and coherent on the driver, and
  * allocated as exactly itself, cached as the driver says it is: what the

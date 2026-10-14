@@ -23,6 +23,7 @@
 #include "core/log/keyed_log.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/d3d/command_recording.hpp"
+#include "icd/d3d/context_slices.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/upload_sink.hpp"
@@ -154,17 +155,16 @@ private:
     uint32_t subresource_count(const ResourceRecord &resource) const;
 
     [[nodiscard]] bool upload_written(const ResourceRecord &resource, uint32_t flags);
-    /* A dynamic buffer the CPU writes, made on a slice of the session's arena
-     * the host draws from in place; false, nothing taken, where the session
-     * has none or this is a deferred context. */
+    /* A dynamic buffer the CPU writes, made on a slice of the session's slice
+     * store the host draws from in place; false, nothing taken, where the
+     * session has none or this is a deferred context. */
     [[nodiscard]] bool place_on_slice(ResourceRecord &resource, size_t bytes);
     /* A discarding map: a fresh slice, the old retired behind what was
      * recorded so far, and the host told. */
     [[nodiscard]] bool rename_slice(ResourceRecord &resource);
     [[nodiscard]] bool bind_slice(const ResourceRecord &resource);
-    /* The slice, if any, retired behind what was recorded so far; on a
-     * deferred context only forgotten, for the record is a copy and the slice
-     * is the immediate context's to retire. */
+    /* The slice, if any, left (ContextSlices::leave): retired behind what was
+     * recorded so far, or on a deferred context only forgotten. */
     void               leave_slice(ResourceRecord &resource);
     /* A buffer on a slice moved to the copy path: its bytes in a shadow of
      * its own, the slice left (leave_slice). False, nothing changed, with no
@@ -262,6 +262,8 @@ private:
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
+    /* The session's slices on an immediate context, none on a deferred one. */
+    d3d::ContextSlices                   slices_;
     /* A deferred context's: the device it records for, and its recording,
      * which grows from its first size to its largest as a list needs. */
     static constexpr size_t recording_bytes = 4u << 20u;

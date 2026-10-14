@@ -25,6 +25,9 @@ public:
      * driver can claim a type exports and then refuse it (NVIDIA's dma-buf
      * of host-visible memory), so the claim alone is not taken. */
     bool     exportable(uint32_t type) override;
+    /* Proved as exportable is, with the driver asked which types it would
+     * import the page's dma-buf as. */
+    bool     imports_host_visible(uint32_t type) override;
     [[nodiscard]] Status allocate(uint32_t type, uint64_t size, ExportedMemory &memory) override;
     void     free(const ExportedMemory &memory) override;
     int      share(const ExportedMemory &memory) override;

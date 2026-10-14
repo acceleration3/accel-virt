@@ -41,16 +41,22 @@ public:
      * driver with more types than any caller may index. A type past those
      * added is a misuse to ask about. */
     void          claim_types(std::uint32_t count);
+    /* `type`'s dma-buf imports back only as types no importer can map, as
+     * NVIDIA's BAR memory does. */
+    void          hide_on_import(std::uint32_t type);
 
     std::uint32_t memory_types() override;
     std::uint32_t memory_flags(std::uint32_t type) override;
     bool          exportable(std::uint32_t type) override;
+    bool          imports_host_visible(std::uint32_t type) override;
     Status        allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory) override;
     void          free(const ExportedMemory &memory) override;
     int           share(const ExportedMemory &memory) override;
 
-    /* How many times each type was asked whether it exports. */
+    /* How many times each type was asked whether it exports, and whether its
+     * export imports host-visible. */
     std::uint32_t export_questions(std::uint32_t type) const;
+    std::uint32_t import_questions(std::uint32_t type) const;
     /* allocate calls, made or refused, and those made. */
     std::uint32_t attempts() const;
     std::uint32_t allocations() const;
@@ -66,7 +72,9 @@ private:
     struct Type {
         std::uint32_t flags;
         bool          exportable;
+        bool          hidden;
         std::uint32_t questions;
+        std::uint32_t import_questions;
     };
     struct Allocation {
         std::uint64_t handle;   /* 0 for a free slot */

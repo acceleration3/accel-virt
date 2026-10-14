@@ -125,6 +125,26 @@ TEST(host_memory_source_types, offers_coherent_exportable_types_and_asks_each_on
   CHECK_EQ(rig.exporter.allocations(), 0u);
   CHECK(rig.source.invariants_hold()); }
 
+/* Whether an export imports back host-visible is asked once, of the types
+ * the source maps and of no other: a type it does not map is never imported. */
+TEST(host_memory_source_types, asks_whether_each_mapped_type_imports_visible_once)
+{ Rig rig;
+  rig.discrete();
+  rig.exporter.hide_on_import(3u);
+  CHECK_EQ(rig.source.mappable_types(), 0xEu);
+  CHECK_EQ(rig.source.mappable_types(), 0xEu);
+  constexpr std::uint32_t mapped[] = {1u, 2u, 3u}, unmapped[] = {0u, 4u, 5u};
+  for (const std::uint32_t type : mapped) CHECK_EQ(rig.exporter.import_questions(type), 1u);
+  for (const std::uint32_t type : unmapped) CHECK_EQ(rig.exporter.import_questions(type), 0u);
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, readback, memory), Status::ok);
+  char            bytes[512] = {};
+  av::StateWriter writer(bytes, sizeof bytes);
+  rig.source.report(writer);
+  CHECK(std::strstr(writer.dump(), "visible_types=0x0000000000000006") != nullptr);
+  CHECK(rig.source.invariants_hold());
+  rig.source.free_domain(domain); }
+
 /* Nothing is asked before something wants to know - a device with no
  * compositing context yet has no types - and a type that appears later is
  * asked then, while one already asked is not asked again. */
@@ -188,6 +208,53 @@ TEST(host_memory_source_choice, upload_falls_back_to_uncached_then_to_any_type)
   CHECK_EQ(rig.exporter.attempts(), before + 2u);
   CHECK_EQ(rig.exporter.last_type(), 1u);
   CHECK(rig.source.invariants_hold());
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.exporter.live(), 0u); }
+
+/* A BAR whose dma-buf imports back only as device-local memory - NVIDIA's,
+ * which vkd3d-proton then refuses as an upload heap - is upload's last
+ * choice, after every type an importer can map; a Vulkan request for it is
+ * still answered with it, since the backend imports it as that type. */
+TEST(host_memory_source_choice, upload_takes_a_bar_no_importer_can_map_last)
+{ Rig rig;
+  rig.discrete();
+  rig.exporter.hide_on_import(3u);
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, upload, memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 1u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  CHECK_EQ(rig.exporter.attempts(), 1u);
+  rig.exporter.fail_allocation_at(1u);
+  CHECK_STATUS(rig.allocate(2u, upload, memory), Status::ok);
+  CHECK_EQ(rig.exporter.attempts(), 3u);
+  CHECK_EQ(rig.exporter.last_type(), 3u);
+  rig.exporter.fail_allocations(2u);
+  CHECK_STATUS(rig.allocate(3u, upload, memory), Status::no_memory);
+  CHECK_EQ(rig.exporter.attempts(), 5u);
+  CHECK_STATUS(rig.allocate(4u, vulkan(3u), memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 3u);
+  CHECK(rig.source.invariants_hold());
+  rig.source.free_domain(domain);
+  CHECK_EQ(rig.exporter.live(), 0u); }
+
+/* Readback's cached memory is passed over when it would not import mappable,
+ * for any type that would, and taken when that had no room. */
+TEST(host_memory_source_choice, readback_takes_cached_memory_no_importer_can_map_last)
+{ Rig rig;
+  rig.discrete();
+  rig.exporter.hide_on_import(2u);
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, readback, memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 1u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  rig.exporter.fail_allocation_at(1u);
+  CHECK_STATUS(rig.allocate(2u, readback, memory), Status::ok);
+  CHECK_EQ(rig.exporter.last_type(), 2u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_BACK});
+  const std::uint32_t before = rig.exporter.attempts();
+  rig.exporter.fail_allocations(2u);
+  CHECK_STATUS(rig.allocate(3u, readback, memory), Status::no_memory);
+  CHECK_EQ(rig.exporter.attempts(), before + 2u);
   rig.source.free_domain(domain);
   CHECK_EQ(rig.exporter.live(), 0u); }
 
@@ -482,6 +549,7 @@ TEST(host_memory_source, reports_what_it_maps_and_holds)
   rig.source.report(writer);
   CHECK(std::strstr(writer.dump(), "memory_source") != nullptr);
   CHECK(std::strstr(writer.dump(), "mappable_types=0x000000000000000E") != nullptr);
+  CHECK(std::strstr(writer.dump(), "visible_types=0x000000000000000E") != nullptr);
   CHECK(std::strstr(writer.dump(), "live=2") != nullptr);
   CHECK(std::strstr(writer.dump(), "bytes=12288") != nullptr);
   rig.source.free_domain(domain); }
@@ -507,6 +575,16 @@ TEST(host_memory_source_invariants, an_allocation_nobody_references_breaks_them)
   SourceMemory *const held = rig.source.acquire(domain, 1u);
   CHECK(held != nullptr);
   HostMemorySourceProbe(rig.source).drain(*held);
+  CHECK(!rig.source.invariants_hold()); }
+
+/* A type taken as importable host-visible that the source does not map is a
+ * type it would hand an upload while never having proved it exports. */
+TEST(host_memory_source_invariants, a_visible_type_the_source_does_not_map_breaks_them)
+{ Rig rig;
+  rig.discrete();
+  CHECK_EQ(rig.source.mappable_types(), 0xEu);
+  CHECK(rig.source.invariants_hold());
+  HostMemorySourceProbe(rig.source).mark_visible(0x1u);
   CHECK(!rig.source.invariants_hold()); }
 
 /* The pool the allocations live in is the source's own: a pool that has lost

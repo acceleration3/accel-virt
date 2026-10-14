@@ -1,75 +1,47 @@
-/* The slices of a session's arena that CPU-written buffers live in
- * (docs/mapped-buffers-plan.md, 3.1): a slice retired is not handed out again
- * until the GPU has finished the batch that was being recorded when it was
- * retired; small slices come from their class's stack, large ones whole from
- * the arena; and when the arena is full the oldest retired slice is waited
- * for rather than any slice reused early. */
+/* The slices of a session's slice store that CPU-written buffers live in
+ * (docs/mapped-buffers-plan.md, 3.1; docs/host-memory.md): offsets into host
+ * upload memory, with the bookkeeping kept apart from it. A slice retired is
+ * not handed out again until the GPU has finished the batch that was being
+ * recorded when it was retired; small slices come from their class's stack,
+ * large ones whole from the store; and when the store is full the oldest
+ * retired slice is waited for rather than any slice reused early. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_gpu_timeline.hpp"
 #include "icd/d3d/buffer_slices.hpp"
-#include "icd/d3d/gpu_timeline.hpp"
 
 #include <cstdint>
 
 using av::LockTrace;
+using av::ScriptedGpuTimeline;
 using av::RecordingThreadLock;
 using av::Status;
 using av::d3d::BufferSlices;
-using av::d3d::GpuTimeline;
 
 namespace {
 
 constexpr std::uint64_t kib = 1024u;
 constexpr std::uint64_t page = BufferSlices::large_alignment;
-constexpr std::uint64_t base = page;   /* past what the arena lends */
-/* Where slices begin: past the bookkeeping at the span's head. */
-constexpr std::uint64_t start = base + BufferSlices::metadata_bytes;
-constexpr std::uint64_t arena_bytes = start + 1024u * page;
-/* The session's arena, as the process maps it. */
-alignas(4096) std::uint8_t arena[arena_bytes];
-
-/* A session as the GPU runs it: batches are recorded one after another, and a
- * wait sends the one being recorded if it must, then finishes it. */
-class FakeTimeline final : public GpuTimeline {
-public:
-    std::uint64_t recording() const override { return recording_; }
-    std::uint64_t completed() const override { return completed_; }
-    bool          wait(std::uint64_t fence) override
-    {
-        waits_++;
-        if (lost_) return false;
-        if (fence >= recording_) recording_ = fence + 1u;
-        if (fence > completed_) completed_ = fence;
-        return true;
-    }
-    /* The batch being recorded goes out, and the next one starts. */
-    void send() { recording_++; }
-    /* The GPU finishes every batch up to `fence`. */
-    void finish(std::uint64_t fence) { completed_ = fence; }
-    void lose() { lost_ = true; }
-    std::uint32_t waits() const { return waits_; }
-
-private:
-    std::uint64_t recording_ = 1u;
-    std::uint64_t completed_ = 0u;
-    std::uint32_t waits_ = 0u;
-    bool          lost_ = false;
-};
+/* Slices are offsets into the store, from its first byte: the bookkeeping is
+ * elsewhere. */
+constexpr std::uint64_t start = 0u;
+/* The bookkeeping, as the session's arena holds it. */
+alignas(4096) std::uint8_t books[BufferSlices::metadata_bytes];
 
 class Rig {
 public:
     Rig() : lock_(trace_, 'S'), slices_(timeline_, lock_) {}
     BufferSlices &slices() { return slices_; }
-    /* Slices in `pages` of the arena past the bookkeeping. */
-    void          take(std::uint64_t pages) { slices_.take(arena, base, start + pages * page); }
-    FakeTimeline &timeline() { return timeline_; }
+    /* Slices in a store of `pages`. */
+    void          take(std::uint64_t pages) { slices_.take(books, pages * page); }
+    ScriptedGpuTimeline &timeline() { return timeline_; }
 
 private:
     LockTrace           trace_;
     RecordingThreadLock lock_;
-    FakeTimeline        timeline_;
+    ScriptedGpuTimeline timeline_;
     BufferSlices        slices_;
 };
 
@@ -129,7 +101,7 @@ TEST(buffer_slices, a_retired_slice_waits_for_the_gpu_to_finish_its_batch)
  * whole, where the next one that fits takes it. */
 TEST(buffer_slices, a_large_slice_is_whole_pages_and_goes_back_whole)
 { Rig rig;
-  rig.slices().take(arena, base - 1u, start + 3u * page + 100u);   /* rounded inward */
+  rig.slices().take(books, 3u * page + 100u);   /* rounded down to whole pages */
   CHECK_EQ(rig.slices().begin(), start);
   CHECK_EQ(rig.slices().end(), start + 3u * page);
   BufferSlices::Slice large = {}, rest = {}, again = {};
@@ -160,8 +132,9 @@ TEST(buffer_slices, a_full_arena_waits_for_the_oldest_retired_slice)
   CHECK_STATUS(rig.slices().take_slice(2u * page, third), Status::ok);
   CHECK_EQ(rig.timeline().waits(), 1u);
   CHECK_EQ(third.offset_, first.offset_);
-  CHECK(rig.timeline().completed() >= 1u);
-  CHECK(rig.timeline().recording() > 1u);   /* the batch was sent to be waited for */
+  const av::d3d::GpuTimeline &gpu = rig.timeline();   /* as the slices see it */
+  CHECK(gpu.completed() >= 1u);
+  CHECK(gpu.recording() > 1u);   /* the batch was sent to be waited for */
   CHECK(rig.slices().invariants_hold()); }
 
 /* A small class carves no more than max_per_class slices: past that it waits
@@ -229,19 +202,23 @@ TEST(buffer_slices, no_bytes_or_more_than_the_arena_is_refused)
   CHECK_EQ(rig.slices().retired(), 0u);
   CHECK(rig.slices().invariants_hold()); }
 
-/* The bookkeeping takes the span's head and is never handed out; a span with
- * no room past it, or no view of the arena, holds no slices. */
-TEST(buffer_slices, a_span_too_small_for_its_bookkeeping_holds_none)
+/* A store smaller than one large slice, or no bookkeeping to keep them in,
+ * holds no slices; the whole of a store that does is slices, from its first
+ * byte to its last whole page. */
+TEST(buffer_slices, a_store_under_a_page_or_without_books_holds_none)
 { Rig rig;
   BufferSlices::Slice slice = {};
-  rig.slices().take(arena, base, start);
+  rig.slices().take(books, page - 1u);
+  CHECK_EQ(rig.slices().end(), 0u);
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);
-  rig.slices().take(nullptr, base, start + page);
+  rig.slices().take(nullptr, 4u * page);
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);
   rig.slices().retire(BufferSlices::Slice{start, 256u});   /* nothing to retire into */
   CHECK_EQ(rig.slices().retired(), 0u);
   CHECK(rig.slices().invariants_hold());
-  rig.slices().take(arena, base, start + 2u * page);
+  rig.slices().take(books, 2u * page + page / 2u);
+  CHECK_EQ(rig.slices().begin(), start);
+  CHECK_EQ(rig.slices().end(), 2u * page);
   CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::no_space);       /* a block is four pages */
   CHECK_STATUS(rig.slices().take_slice(page + 1u, slice), Status::ok);      /* two pages, large */
   CHECK_EQ(slice.offset_, start);

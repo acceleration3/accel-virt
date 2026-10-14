@@ -39,10 +39,11 @@
 // create records the options it was asked for (feature 050). With
 // AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan.
 //
-// allocate_memory answers a memfd of the size asked, cached, standing in for
-// host GPU memory (docs/host-memory.md); import_blob records the memory the
-// key names, imported_handle answers blob_id | 0x4000000000000000 for one it
-// holds, and release_blob forgets it - so qtest can judge the device's side
+// allocate_memory answers a memfd of the size asked, in a domain it opened,
+// cached, standing in for host GPU memory (docs/host-memory.md); import_blob
+// records the memory the key names, imported_handle answers
+// blob_id | 0x4000000000000000 for one it holds, and release_blob forgets
+// it - so qtest can judge the device's side
 // of host blobs and IMPORT_BLOB, reading and writing what the guest sees
 // through the window, without a GPU. peek's "memory type" is the request the
 // memory was allocated for.
@@ -305,10 +306,12 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     return AV_EXECUTED;
 }
 
+/* In a domain this library opened, as create is (open_domain). */
 std::uint32_t allocate_memory(void *, std::uint32_t domain, std::uint64_t key, std::uint64_t size,
                               std::uint32_t request, AvHostMemory *memory)
 {
     if (memory == nullptr || size == 0u || size % page != 0u) return 1u;
+    if (domain == 0u || domain > __atomic_load_n(&domains, __ATOMIC_ACQUIRE)) return 1u;
     const int fd = memfd_create("av-echo-memory", MFD_CLOEXEC);
     if (fd < 0) return 1u;
     void *const mapped =

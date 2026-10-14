@@ -24,6 +24,8 @@ struct HostMemorySourceProbe {
     [[nodiscard]] Status add(uint32_t domain, uint64_t key, const ExportedMemory &memory);
     /* `memory`'s references let go of while it stays pooled. */
     void                 drain(SourceMemory &memory);
+    /* `types` taken as importable host-visible, mapped or not. */
+    void                 mark_visible(uint32_t types);
     /* The pool the allocations live in, for a test that corrupts it. */
     ObjectPool<SourceMemory> &pool();
 

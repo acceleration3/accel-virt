@@ -61,7 +61,7 @@ namespace {
 /* What the last import answered beside its handle, handed back to its release. */
 std::uint64_t detail = 0u;
 
-/* One page, which is what udmabuf and every exporter here agree on. */
+/* One page, the size every exporter here allocates in. */
 constexpr std::uint64_t page = 4096u;
 
 /* The host's GPUs, with the two things a shared object needs from each: the
@@ -101,11 +101,10 @@ private:
 /* A shared object as this device really holds one: memory a Vulkan device
  * allocated and exported as a dma-buf, with known bytes in it.
  *
- * Not av::ProbeDmaBuf, which is a udmabuf - system memory wrapped as a
- * descriptor. OpenGL imports one of those happily and rusticl then faults
- * reading it, so a test built on one would be testing a shape this device
- * never produces: every shared object here comes out of vkGetMemoryFdKHR
- * (research.md §21). */
+ * Not a udmabuf - system memory wrapped as a descriptor. OpenGL imports one
+ * of those happily and rusticl then faults reading it, so a test built on one
+ * would be testing a shape this device never produces: every shared object
+ * here comes out of vkGetMemoryFdKHR (research.md §21). */
 class Exported {
 public:
     Exported() : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE), fd_(-1) {}
@@ -238,6 +237,18 @@ cl_context guest_context(OpenClBackend &backend, const av::OpenClDevice &device)
 }
 
 }  // namespace
+
+namespace av {
+
+/* A host's refusal of the arena, recorded as Intel's runtime records it, so
+ * the bounce is reached on a host whose OpenCL reads into the arena itself. */
+struct OpenClBackendProbe {
+    OpenClBackend &backend;
+
+    bool refuse() const { return backend.bounced_.refusal(CL_OUT_OF_RESOURCES); }
+};
+
+}  // namespace av
 
 /* The whole chain, and the only claim that matters: the bytes are the same
  * bytes. A descriptor written before the import is read out of the cl_mem the
@@ -625,6 +636,62 @@ TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_
 
   ::clReleaseMemObject(image);
   ::clReleaseMemObject(busy);
+  ::clReleaseMemObject(source);
+  ::clReleaseCommandQueue(queue);
+  backend.abandon(blob);
+  backend.shut_down(); }
+
+/* A host that refused one read into the arena has every later one bounced
+ * through private memory, which lands the rows where the guest asked and
+ * leaves the gaps between them; a read anywhere else is the host's own. */
+TEST(opencl_backend_device, a_rectangle_the_host_refused_into_the_arena_is_bounced_into_it)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  alignas(4096) static std::uint8_t lent[64u * 1024u];
+  av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, lent, sizeof lent));
+  av::ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
+  CHECK(backend.adopt(blob));
+  cl_int                 error = CL_SUCCESS;
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  constexpr std::size_t bytes = 16u * 1024u;
+  static std::uint8_t   pattern[bytes];
+  for (std::size_t i = 0u; i < bytes; i++) pattern[i] = static_cast<std::uint8_t>(i % 251u);
+  cl_mem const source = ::clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, bytes, pattern, &error);
+  CHECK(source != nullptr);
+  av::OpenClBackendProbe probe{backend};
+  CHECK(probe.refuse());
+  const std::size_t from[3] = {8u, 2u, 0u}, at[3] = {4u, 1u, 0u}, region[3] = {32u, 3u, 1u};
+  std::memset(lent, 0xEE, sizeof lent);
+  void *const into = backend.lent_for(0u, sizeof lent);
+  CHECK_EQ(backend.on_clEnqueueReadBufferRect(queue, source, CL_FALSE, from, at, region, 128u, 0u, 64u, 0u, into, 0u,
+                                              nullptr, nullptr),
+           CL_SUCCESS);
+  std::size_t rows_right = 0u;
+  for (std::size_t y = 0u; y < region[1]; y++)
+      for (std::size_t x = 0u; x < region[0]; x++)
+          rows_right += lent[(at[1] + y) * 64u + at[0] + x] ==
+                                static_cast<std::uint8_t>(((from[1] + y) * 128u + from[0] + x) % 251u)
+                            ? 1u
+                            : 0u;
+  CHECK_EQ(rows_right, region[0] * region[1]);
+  CHECK_EQ(lent[at[1] * 64u + at[0] - 1u], 0xEEu);
+  CHECK_EQ(lent[at[1] * 64u + at[0] + region[0]], 0xEEu);
+  CHECK_EQ(lent[0], 0xEEu);
+
+  /* Memory of the caller's own is read into by the host, refusal or not. */
+  static std::uint8_t own[1024];
+  std::memset(own, 0xEE, sizeof own);
+  CHECK_EQ(backend.on_clEnqueueReadBufferRect(queue, source, CL_FALSE, from, at, region, 128u, 0u, 64u, 0u, own, 0u,
+                                              nullptr, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(own[at[1] * 64u + at[0]], static_cast<std::uint8_t>((from[1] * 128u + from[0]) % 251u));
+
   ::clReleaseMemObject(source);
   ::clReleaseCommandQueue(queue);
   backend.abandon(blob);

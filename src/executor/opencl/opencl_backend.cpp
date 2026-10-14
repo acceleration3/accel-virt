@@ -555,10 +555,17 @@ cl_int OpenClBackend::on_clEnqueueReadBufferRect(
 {
     AV_SCOPE("OpenClBackend::on_clEnqueueReadBufferRect");
     static_cast<void>(blocking_read);
-    return RealDispatch::on_clEnqueueReadBufferRect(command_queue, buffer, CL_TRUE, buffer_origin, host_origin,
-                                                    region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch,
-                                                    host_slice_pitch, ptr, num_events_in_wait_list,
-                                                    event_wait_list, event);
+    const bool into_arena = arena_.holds(ptr);
+    if (!into_arena || !bounced_.bounces()) {
+        const cl_int direct = RealDispatch::on_clEnqueueReadBufferRect(
+            command_queue, buffer, CL_TRUE, buffer_origin, host_origin, region, buffer_row_pitch,
+            buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list,
+            event);
+        if (!into_arena || !bounced_.refusal(direct)) return direct;
+    }
+    return bounced_.read(command_queue, buffer, buffer_origin, host_origin, region, buffer_row_pitch,
+                         buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list,
+                         event_wait_list, event);
 }
 
 cl_int OpenClBackend::on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer,

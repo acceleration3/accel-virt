@@ -29,7 +29,7 @@ MockMemoryExporter::~MockMemoryExporter()
 std::uint32_t MockMemoryExporter::add_type(std::uint32_t flags, bool exportable)
 {
     if (type_count_ >= max_types) return max_types;
-    types_[type_count_] = Type{flags, exportable, 0u};
+    types_[type_count_] = Type{flags, exportable, false, 0u, 0u};
     return type_count_++;
 }
 
@@ -38,6 +38,11 @@ void MockMemoryExporter::fail_allocations(std::uint32_t count) { failing_ = coun
 void MockMemoryExporter::fail_share_at(std::uint32_t nth) { fail_share_ = nth; }
 void MockMemoryExporter::round_to(std::uint64_t bytes) { rounding_ = bytes; }
 void MockMemoryExporter::claim_types(std::uint32_t count) { claimed_ = count; }
+
+void MockMemoryExporter::hide_on_import(std::uint32_t type)
+{
+    if (type < type_count_) types_[type].hidden = true;
+}
 
 bool MockMemoryExporter::fires(std::uint32_t &countdown)
 {
@@ -66,6 +71,16 @@ bool MockMemoryExporter::exportable(std::uint32_t type)
     }
     types_[type].questions++;
     return types_[type].exportable;
+}
+
+bool MockMemoryExporter::imports_host_visible(std::uint32_t type)
+{
+    if (type >= type_count_) {
+        misuses_++;
+        return false;
+    }
+    types_[type].import_questions++;
+    return !types_[type].hidden;
 }
 
 Status MockMemoryExporter::allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory)
@@ -132,6 +147,11 @@ int MockMemoryExporter::share(const ExportedMemory &memory)
 std::uint32_t MockMemoryExporter::export_questions(std::uint32_t type) const
 {
     return type < type_count_ ? types_[type].questions : 0u;
+}
+
+std::uint32_t MockMemoryExporter::import_questions(std::uint32_t type) const
+{
+    return type < type_count_ ? types_[type].import_questions : 0u;
 }
 
 std::uint32_t MockMemoryExporter::attempts() const { return attempts_; }

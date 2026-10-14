@@ -69,16 +69,17 @@ private:
     static constexpr uint32_t host_cached = 8u;
     static constexpr uint64_t page_bytes = 4096u;
 
-    /* How many preferences a class has, at most. */
-    static constexpr uint32_t most_choices = 3u;
+    /* How many preferences a class has, at most: three, among the types an
+     * import may map and then among the rest. */
+    static constexpr uint32_t most_choices = 6u;
 
     /* The memory types `request` may be answered with, best first, in
      * `types`: how many. A class falls back to the next when the GPU has no
      * room in the first - a VRAM BAR without resizable BAR is 256 MiB. */
     uint32_t      choices(HostMemoryRequest request, uint32_t (&types)[most_choices]);
-    /* The first mappable type whose flags hold all of `wanted` and none of
+    /* The first type of `among` whose flags hold all of `wanted` and none of
      * `refused`, or memory_types. */
-    uint32_t      first_type(uint32_t wanted, uint32_t refused);
+    uint32_t      first_type(uint32_t among, uint32_t wanted, uint32_t refused);
     SourceMemory *find(uint32_t domain, uint64_t key);
     /* One reference let go, under the lock; the memory freed with the last. */
     void          let_go(SourceMemory &memory);
@@ -86,9 +87,11 @@ private:
     MemoryExporter              &exporter_;
     ObjectPool<SourceMemory>     memories_;
     mutable pthread_mutex_t      mutex_;
-    /* Which types were asked of the exporter, and which passed. */
+    /* Which types were asked of the exporter, which passed, and which of
+     * those an importer may also map. */
     uint32_t                     asked_;
     uint32_t                     mappable_;
+    uint32_t                     visible_;
 
     friend struct HostMemorySourceProbe;
 };
