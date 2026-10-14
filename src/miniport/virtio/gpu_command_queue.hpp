@@ -15,6 +15,7 @@
 #include "core/platform/lock_rank.hpp"
 #include "core/platform/platform.hpp"
 #include "core/platform/spin_lock.hpp"
+#include "core/platform/wake_event.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virt_queue.hpp"
 
@@ -52,9 +53,12 @@ public:
     [[nodiscard]] Status send_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload);
     /* Sends `request` and waits for the device's answer to it, copying at most
      * `capacity` bytes into `response` and counting them in `written`. Passive
-     * only: it stalls between polls, and harvests the queue itself, so it
-     * answers before dxgkrnl has connected the interrupt. One exchange at a
-     * time; not_found when the device never answers. */
+     * only: it polls briefly, then sleeps until a harvest - the DPC's - finds
+     * the answer, and harvests the queue itself between sleeps, so it answers
+     * before dxgkrnl has connected the interrupt. One exchange at a time;
+     * not_found when the device has not answered within patience_ticks, and
+     * at once while a request an exchange gave up on is still unanswered:
+     * the device answers in order, so nothing asked after it can be. */
     [[nodiscard]] Status exchange(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
                                   uint32_t &written);
     /* The same, the request continuing in `payload` - memory of the caller's,
@@ -64,7 +68,7 @@ public:
                                            uint8_t *response, size_t capacity, uint32_t &written);
     /* Reclaims every used request; `refused` counts responses shorter than a
      * header or not VIRTIO_GPU_RESP_OK_NODATA. A used element the queue never
-     * published is invalid_state. */
+     * published is invalid_state. The answer an exchange waits for wakes it. */
     [[nodiscard]] Status harvest(uint32_t &completed, uint32_t &refused);
     uint32_t             in_flight() const;
 
@@ -78,10 +82,22 @@ private:
     size_t offset_of(uint32_t slot) const;
     size_t request_bytes_of(uint32_t slot) const;
     static constexpr uint32_t no_slot = slot_count + 1u;
-    /* A hundred milliseconds of polling: far longer than a control request
-     * takes, short enough that a dead device does not hang StartDevice. */
-    static constexpr uint32_t poll_microseconds = 100u;
-    static constexpr uint32_t polls = 1000u;
+    /* Times in the interrupt clock's 100 ns ticks. An answer comes within
+     * spin_ticks unless the host has work to do for it, and polling that long
+     * spares the clock tick a sleep can cost before the interrupt is
+     * connected. */
+    static constexpr uint32_t poll_microseconds = 20u;
+    static constexpr uint64_t spin_ticks = 20000u;
+    /* How often a sleeping exchange harvests for itself: the interrupt wakes
+     * it at once, except before dxgkrnl connects it. */
+    static constexpr uint64_t sleep_ticks = 100000u;
+    /* Host work behind a request takes tens of milliseconds - a RESOURCE_CREATE_BLOB
+     * of 128 MiB had an RTX 3070 Ti allocating for 73 ms, and QEMU's main loop
+     * reaches it behind whatever else it is doing - so only a device that
+     * stopped leaves one unanswered for three seconds. Not much longer: once
+     * a TDR begins, a thread still in the driver after TdrDdiDelay (5 s) is a
+     * bugcheck, and an exchange queued behind this one fails at once. */
+    static constexpr uint64_t patience_ticks = 30000000u;
 
     /* The slot a request of `length` bytes goes in, or no_slot when none is
      * free or none is wide enough. */
@@ -93,6 +109,11 @@ private:
     [[nodiscard]] Status exchange_segments(const uint8_t *request, size_t length, const VirtqSegment *payload,
                                            uint16_t payload_count, uint8_t *response, size_t capacity,
                                            uint32_t &written);
+    /* Polls, then sleeps, until the awaited answer is in or patience runs out;
+     * an answer given up on is remembered in abandoned_slot_. */
+    [[nodiscard]] Status await_answer(uint32_t &written);
+    /* harvest's work, under the lock; `answered` says the awaited answer came. */
+    [[nodiscard]] Status reclaim_used(uint32_t &completed, uint32_t &refused, bool &answered);
     void   release_slots();
 
     Platform           &platform_;
@@ -108,6 +129,10 @@ private:
     uint8_t            *awaited_response_;
     size_t              awaited_capacity_;
     uint32_t            awaited_written_;
+    /* The slot of a request an exchange stopped waiting for, until the device
+     * answers it. */
+    uint32_t            abandoned_slot_;
+    WakeEvent           answer_;
     bool                busy_[slot_count + 1u];
     uint8_t             slot_of_head_[VirtQueue::max_size];
     uint32_t            in_flight_;

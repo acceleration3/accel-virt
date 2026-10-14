@@ -1,5 +1,7 @@
 #include "harness/fullstack/ddi_kmt.hpp"
 
+#include "proto/escape/host_window_record.hpp"
+
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
 #include "miniport/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
 #include "miniport/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
@@ -112,7 +114,7 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
     : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump), host_(host),
       handles_(), fences_(), devices_{}, shared_{}, next_shared_handle_(first_shared_handle),
       allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
-      fabric_(platform), hardware_scheduling_(false), refuse_tail_publishing_(false), watching_(false), kernel_copy_{},
+      fabric_(platform), hardware_scheduling_(false), refuse_tail_publishing_(false), refuse_host_windows_(false), watching_(false), kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
       next_chunk_address_(chunk_ram_address), last_code_(0u), started_ns_(now_ns()), guest_origin_(0u)
 {
@@ -856,6 +858,8 @@ Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t
         return refuse(Status::invalid_parameter);
     if (refuse_tail_publishing_ && TailPublishRecord().decode(data, size) == Status::ok)
         return refuse(Status::not_supported);
+    if (refuse_host_windows_ && HostWindowRecord().decode(data, size) == Status::ok)
+        return refuse(Status::not_supported);
     std::memcpy(kernel_copy_, data, size);
     DxgkargEscapeRecord request = {};
     request.hDevice = owner->driver;
@@ -1265,6 +1269,8 @@ Status DdiKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 void DdiKmt::sleep_briefly() {}
 
 void DdiKmt::refuse_tail_publishing() { refuse_tail_publishing_ = true; }
+
+void DdiKmt::refuse_host_windows() { refuse_host_windows_ = true; }
 
 void DdiKmt::let_process_watch() { watching_ = true; }
 

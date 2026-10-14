@@ -179,7 +179,7 @@ Status VulkanProbe::device_step(ProbeDevice &device)
 void VulkanProbe::lost_step(ProbeDevice &device)
 {
     AV_SCOPE("VulkanProbe::lost_step");
-    const VkResult faulted = vulkan_.force_context_fault(device.instance(), device.physical_device());
+    const VkResult faulted = vulkan_.force_context_fault(device.device());
     VkResult       unexpected = faulted;
     if (faulted == VK_ERROR_DEVICE_LOST) unexpected = vulkan_.device_wait_idle(device.device());
     if (unexpected == VK_ERROR_DEVICE_LOST) {

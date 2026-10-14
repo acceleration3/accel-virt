@@ -842,13 +842,13 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   CHECK_EQ(device.function().common().status(), driver_ok_status);
   device.forget_control();
   av::FakeVirtqueueDevice &resumed = device.control();
-  /* The resume's own work: the clock's page registered again, the resource
-   * for the source that was scanning out, and the question of what device
-   * this is - nothing answers the asks here. */
-  CHECK_EQ(resumed.respond_all(0x1100u), 3u);
+  /* The resume's own work: the clock's page registered again and the
+   * resource for the source that was scanning out. Nothing answers the asks
+   * here, and the device answers in order, so the question of what device
+   * this is waits behind the unanswered page and is never sent. */
+  CHECK_EQ(resumed.respond_all(0x1100u), 2u);
   CHECK_EQ(resumed.request_type(0u), 0x02F4u);        /* DISPLAY_CLOCK */
   CHECK_EQ(resumed.request_type(1u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(resumed.request_type(2u), 0x0108u);        /* GET_CAPSET_INFO */
 
   /* What dxgkrnl sends after a resume is the address it already had, and that
    * is what puts the pages and the scanout back. */

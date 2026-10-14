@@ -691,8 +691,7 @@ TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the
   /* And once the context is faulted, the import is the loss. */
   const std::uint32_t before = rig.rig().kmt().commands();
   rig.rig().kmt().withhold_answer_at(1u);
-  CHECK_EQ(rig.entry<VkResult (*)(VkPhysicalDevice)>("vkAvForceContextFault")(rig.physical_device()),
-           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.entry<VkResult (*)(VkDevice)>("vkAvForceContextFault")(rig.device()), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
            VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.rig().kmt().commands(), before + 1u); }
@@ -776,7 +775,7 @@ TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_op
 TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outside)
 { SharingRig    rig;
   std::uint32_t status = 9u;
-  CHECK_EQ(rig.rig().root().last_kernel_status(rig.physical_device(), &status), VK_SUCCESS);
+  CHECK_EQ(rig.rig().root().last_kernel_status(rig.device(), &status), VK_SUCCESS);
   /* Nothing has refused yet. */
   CHECK_EQ(status, 0u);
 
@@ -795,23 +794,26 @@ TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outs
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &refused),
            VK_ERROR_TOO_MANY_OBJECTS);
   CHECK(rig.rig().kmt().last_code() != MockKmt::invalid_parameter);   /* the free wiped it */
-  CHECK_EQ(rig.rig().root().last_kernel_status(rig.physical_device(), &status), VK_SUCCESS);
+  CHECK_EQ(rig.rig().root().last_kernel_status(rig.device(), &status), VK_SUCCESS);
   CHECK_EQ(status, MockKmt::invalid_parameter);
 
-  /* A physical device this driver did not make, and no place to put the
-   * answer, are both refused rather than answered with somebody's number. */
-  CHECK(rig.rig().root().last_kernel_status(rig.physical_device(), nullptr) != VK_SUCCESS);
-  CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkPhysicalDevice>(0xDEADu), &status) !=
-        VK_SUCCESS);
+  /* A device this driver did not make, a handle of another kind, and no place
+   * to put the answer are all refused rather than answered with somebody's
+   * number. */
+  CHECK(rig.rig().root().last_kernel_status(rig.device(), nullptr) != VK_SUCCESS);
+  CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkDevice>(0xDEADu), &status) != VK_SUCCESS);
   CHECK_EQ(status, 0u);
+  CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkDevice>(rig.physical_device()), &status) !=
+        VK_SUCCESS);
 
-  /* And the loader finds it by name, as it finds the fault hook - with a
-   * dispatchable handle first, which is what the loader trampolines on: a hook
-   * with no arguments crashed avvkprobe.exe inside vulkan-1.dll. */
-  using LastStatus = VkResult (*)(VkPhysicalDevice, std::uint32_t *);
-  const auto entry = rig.entry<LastStatus>("vkAvLastKernelStatus");
+  /* And it is a device function, found by name on the device as the fault
+   * hook is: vkGetDeviceProcAddr answers the driver's own pointer, which no
+   * loader has to trampoline. */
+  using LastStatus = VkResult (*)(VkDevice, std::uint32_t *);
+  const auto entry = reinterpret_cast<LastStatus>(rig.rig().root().device_proc_addr(rig.device(), "vkAvLastKernelStatus"));
   CHECK(entry != nullptr);
-  CHECK_EQ(entry(rig.physical_device(), &status), VK_SUCCESS);
+  CHECK(rig.rig().root().physical_device_proc_addr("vkAvLastKernelStatus") == nullptr);
+  CHECK_EQ(entry(rig.device(), &status), VK_SUCCESS);
   CHECK_EQ(status, MockKmt::invalid_parameter); }
 
 /* A request that is the wrong structure, or names the wrong handle type, or

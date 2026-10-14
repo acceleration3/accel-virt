@@ -14,6 +14,7 @@
 #include "harness/icd/gl_context_rig.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
+#include "icd/opengl/buffer_pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
@@ -51,13 +52,18 @@ void answer_size(av::ScriptedHost &host, std::int64_t size)
 
 class Current {
 public:
-    Current()
+    /* A device whose host window is `window` bytes: one too small for an
+     * arena leaves the context without one, and its bulk data inline. */
+    explicit Current(std::uint64_t window = av::MockKmt::rig_window_bytes)
     {
+        rig_.kmt().open_host_window(window);
         rig_.load_with_format();
-        CHECK(rig_.current_context() != nullptr);
-        if (rig_.current_context() != nullptr) context().flush();
+        handle_ = rig_.current_context();
+        CHECK(handle_ != nullptr);
+        if (handle_ != nullptr) context().flush();
         commands_ = rig_.kmt().commands();
     }
+    void *handle() const { return handle_; }
     GlIcdRig                  &rig() { return rig_; }
     av::glicd::GuestGlContext &context() { return *rig_.root().current(); }
     /* The ids sent since the context was made, in order, as one comparable number list. */
@@ -93,6 +99,7 @@ public:
 
 private:
     GlIcdRig      rig_;
+    void         *handle_ = nullptr;
     std::uint32_t commands_ = 0u;
 };
 
@@ -657,8 +664,18 @@ TEST(manual_calls, with_nothing_current_nothing_is_sent_or_answered)
   calls.attribute_pointer(0u, 0x8645u, &pointer);
   calls.pointer(0x8244u, &pointer);
   CHECK(pointer == reinterpret_cast<void *>(0x1u));
-  calls.wrote_buffer(array_buffer, 0, 1, &value);
-  calls.wrote_named_buffer(1u, 0, 1, &value);
+  calls.buffer_sub_data(array_buffer, 0, 1, &value);
+  calls.named_buffer_sub_data(1u, 0, 1, &value);
+  calls.named_buffer_sub_data_ext(1u, 0, 1, &value);
+  calls.get_buffer_sub_data(array_buffer, 0, 1, &value);
+  calls.get_named_buffer_sub_data(1u, 0, 1, &value);
+  calls.get_named_buffer_sub_data_ext(1u, 0, 1, &value);
+  calls.named_buffer_data_ext(1u, 1, &value, 0x88E4u);
+  calls.named_buffer_storage_ext(1u, 1, &value, 0u);
+  CHECK(!calls.stage_upload(&value, std::size_t{1} << 20u));
+  CHECK(!calls.stage_download(&value, std::size_t{1} << 20u));
+  calls.finish_upload();
+  calls.finish_download(&value, 1u);
   calls.host_writes_target(array_buffer);
   calls.host_writes_buffer(1u);
   calls.bind_buffer_indexed(0x90D2u, 1u);
@@ -1535,3 +1552,129 @@ TEST(manual_calls, new_storage_is_fresh_and_a_deleted_buffer_has_no_copy)
   calls.bindings_restored();
   CHECK_EQ(shadows.held(), 0u);
   CHECK(shadows.trusted()); }
+
+/* ---- bulk data with no blob arena (docs/host-memory.md) ------------------ */
+
+namespace {
+
+using av::glicd::BufferPieces;
+
+/* A window of one page: no arena fits, and the context's bulk data goes
+ * inline. */
+constexpr std::uint64_t no_arena = 4096u;
+
+std::uint8_t bulk[std::size_t{1} << 20u];
+
+/* The ids sent from `first` on, compared with `expected`. */
+bool sent_as(Current &current, std::uint32_t first, const std::uint32_t *expected, std::uint32_t count)
+{
+    if (current.sent() != first + count) return false;
+    for (std::uint32_t index = 0u; index < count; index++)
+        if (current.sent_since(first + index) != expected[index]) return false;
+    return true;
+}
+
+}  // namespace
+
+/* With no arena, a buffer's bytes cross in commands each within the room: a
+ * write of a byte more than one command carries is two, storage with bytes is
+ * made empty and filled after, and a read past one reply is a reply a piece.
+ * The same write with an arena is one command, lent whole. */
+TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
+{ Current current(no_arena);
+  CHECK(!current.context().wire()->blobs().ready());
+  ManualCalls        &calls = current.rig().root().manual();
+  constexpr intptr_t  over = static_cast<intptr_t>(BufferPieces::write_room) + 1;
+  calls.buffer_sub_data(array_buffer, 0, over, bulk);
+  calls.named_buffer_sub_data(4u, 0, over, bulk);
+  calls.named_buffer_sub_data_ext(4u, 0, over, bulk);
+  const std::uint32_t writes[] = {ids::kCmd_glBufferSubData,           ids::kCmd_glBufferSubData,
+                                  ids::kCmd_glNamedBufferSubData,      ids::kCmd_glNamedBufferSubData,
+                                  ids::kCmd_glNamedBufferSubDataEXT,   ids::kCmd_glNamedBufferSubDataEXT};
+  CHECK(sent_as(current, 0u, writes, 6u));
+  CHECK_EQ(current.argument_since(1u, 1u), BufferPieces::write_room);   /* the second piece's offset */
+  CHECK_EQ(current.argument_since(1u, 2u), 1u);                         /* and its size */
+  calls.buffer_data(array_buffer, over, bulk, 0x88E4u);
+  calls.buffer_storage(array_buffer, over, bulk, 0u);
+  calls.named_buffer_data(4u, over, bulk, 0x88E4u);
+  calls.named_buffer_storage(4u, over, bulk, 0u);
+  calls.named_buffer_data_ext(4u, over, bulk, 0x88E4u);
+  calls.named_buffer_storage_ext(4u, over, bulk, 0u);
+  const std::uint32_t storage[] = {
+      ids::kCmd_glBufferData,            ids::kCmd_glBufferSubData,         ids::kCmd_glBufferSubData,
+      ids::kCmd_glBufferStorage,         ids::kCmd_glBufferSubData,         ids::kCmd_glBufferSubData,
+      ids::kCmd_glNamedBufferData,       ids::kCmd_glNamedBufferSubData,    ids::kCmd_glNamedBufferSubData,
+      ids::kCmd_glNamedBufferStorage,    ids::kCmd_glNamedBufferSubData,    ids::kCmd_glNamedBufferSubData,
+      ids::kCmd_glNamedBufferDataEXT,    ids::kCmd_glNamedBufferSubDataEXT, ids::kCmd_glNamedBufferSubDataEXT,
+      ids::kCmd_glNamedBufferStorageEXT, ids::kCmd_glNamedBufferSubDataEXT, ids::kCmd_glNamedBufferSubDataEXT};
+  CHECK(sent_as(current, 6u, storage, 18u));
+  constexpr intptr_t read = 2 * static_cast<intptr_t>(BufferPieces::read_room) + 1;
+  for (std::uint32_t answer = 0u; answer < 9u; answer++) current.rig().host().gl_bytes(nullptr, 0u);
+  calls.get_buffer_sub_data(array_buffer, 8, read, bulk);
+  calls.get_named_buffer_sub_data(4u, 0, read, bulk);
+  calls.get_named_buffer_sub_data_ext(4u, 0, read, bulk);
+  CHECK_EQ(current.sent(), 33u);
+  CHECK_EQ(current.sent_since(24u), ids::kCmd_glGetBufferSubData);
+  CHECK_EQ(current.sent_since(26u), ids::kCmd_glGetBufferSubData);
+  CHECK_EQ(current.argument_since(26u, 1u), 8u + 2u * BufferPieces::read_room);
+  CHECK_EQ(current.sent_since(27u), ids::kCmd_glGetNamedBufferSubData);
+  CHECK_EQ(current.sent_since(32u), ids::kCmd_glGetNamedBufferSubDataEXT);
+  /* What fits goes whole; a negative size is never cut, and the client
+   * drops the command that cannot hold it, as it always has. */
+  current.rig().host().gl_bytes(nullptr, 0u);
+  calls.get_buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(BufferPieces::read_room), bulk);
+  calls.buffer_sub_data(array_buffer, 0, -1, bulk);
+  CHECK_EQ(current.sent(), 34u); }
+
+TEST(manual_calls, with_an_arena_a_large_write_is_lent_whole)
+{ Current current;
+  CHECK(current.context().wire()->blobs().ready());
+  current.rig().root().manual().buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(BufferPieces::write_room) + 1,
+                                               bulk);
+  CHECK_EQ(current.sent(), 1u); }
+
+/* With no arena, a read of more pixels than a reply holds goes into a pixel
+ * buffer the context names on the host, and comes back from it in pieces; the
+ * pack binding goes back to none, the buffer stays for the next read, and the
+ * context deletes it when it goes. */
+TEST(manual_calls, without_an_arena_a_large_read_pixels_goes_through_the_staging_buffer)
+{ Current current(no_arena);
+  ManualCalls &calls = current.rig().root().manual();
+  const GLuint staged = 21u;
+  current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&staged), sizeof staged);
+  for (std::uint32_t answer = 0u; answer < 3u; answer++) current.rig().host().gl_bytes(nullptr, 0u);
+  calls.read_pixels(0, 0, 200, 100, 0x1908u, 0x1401u, bulk);   /* 80000 bytes: two replies' worth */
+  const std::uint32_t read[] = {ids::kCmd_glGenBuffers,       ids::kCmd_glBindBuffer,       ids::kCmd_glBufferData,
+                                ids::kCmd_glReadPixels,       ids::kCmd_glGetBufferSubData, ids::kCmd_glGetBufferSubData,
+                                ids::kCmd_glBindBuffer};
+  CHECK(sent_as(current, 0u, read, 7u));
+  CHECK_EQ(current.argument_since(1u, 0u), pixel_pack_buffer);
+  CHECK_EQ(current.argument_since(1u, 1u), staged);
+  CHECK_EQ(current.argument_since(6u, 1u), 0u);
+  CHECK_EQ(current.context().staging().name(), staged);
+  CHECK(!current.context().arrays().pixel_buffer_bound(true));
+  CHECK(current.context().invariants_hold());
+  CHECK(current.rig().opengl32().make_current(nullptr, nullptr));
+  CHECK(current.rig().opengl32().delete_context(current.handle()));
+  bool deleted = false;
+  for (std::uint32_t index = 7u; index < current.rig().kmt().commands() - 0u; index++)
+      deleted = deleted || current.rig().kmt().command_id(index) == ids::kCmd_glDeleteBuffers;
+  CHECK(deleted); }
+
+/* A generated pixel upload too large for its command, with no arena, is
+ * staged the same way: the bytes go into the unpack buffer in pieces and the
+ * command names offset 0 in it. One small enough crosses with its command. */
+TEST(manual_calls, without_an_arena_a_large_generated_upload_is_staged)
+{ Current current(no_arena);
+  const GLuint staged = 22u;
+  current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&staged), sizeof staged);
+  gen::Wrap_glTexSubImage2D(0x0DE1u, 0, 0, 0, 512, 256, 0x1908u, 0x1401u, bulk);   /* 512 KiB */
+  const std::uint32_t upload[] = {ids::kCmd_glGenBuffers,    ids::kCmd_glBindBuffer,    ids::kCmd_glBufferData,
+                                  ids::kCmd_glBufferSubData, ids::kCmd_glBufferSubData, ids::kCmd_glBufferSubData,
+                                  ids::kCmd_glTexSubImage2D, ids::kCmd_glBindBuffer};
+  CHECK(sent_as(current, 0u, upload, 8u));
+  CHECK_EQ(current.argument_since(1u, 0u), 0x88ECu);
+  gen::Wrap_glTexSubImage2D(0x0DE1u, 0, 0, 0, 16, 16, 0x1908u, 0x1401u, bulk);
+  CHECK_EQ(current.sent(), 9u);
+  CHECK_EQ(current.sent_since(8u), ids::kCmd_glTexSubImage2D);
+  CHECK(current.context().invariants_hold()); }

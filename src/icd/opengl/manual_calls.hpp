@@ -56,12 +56,28 @@ public:
     /* A call only a direct-state extension this ICD does not report has. */
     void  refuse();
 
-    /* What changes a buffer's bytes on the host, told to the current
-     * context's copies of them (BufferShadows). A target names the buffer the
-     * guest saw bound there; where that is not known, every copy goes.
-     * glBufferSubData and glNamedBufferSubData: the copy takes the bytes. */
-    void  wrote_buffer(uint32_t target, intptr_t offset, intptr_t size, const void *data);
-    void  wrote_named_buffer(uint32_t buffer, intptr_t offset, intptr_t size, const void *data);
+    /* What changes a buffer's bytes on the host is told to the current
+     * context's copies of them (BufferShadows): a target names the buffer the
+     * guest saw bound there, and where that is not known every copy goes.
+     *
+     * glBufferSubData and its named spellings: the copy takes the bytes, and
+     * the bytes go in pieces where one command cannot carry them
+     * (BufferPieces). */
+    void  buffer_sub_data(uint32_t target, intptr_t offset, intptr_t size, const void *data);
+    void  named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr_t size, const void *data);
+    void  named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, intptr_t size, const void *data);
+    /* glGetBufferSubData and its named spellings, in pieces where one reply
+     * cannot hold the bytes. */
+    void  get_buffer_sub_data(uint32_t target, intptr_t offset, intptr_t size, void *data);
+    void  get_named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr_t size, void *data);
+    void  get_named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, intptr_t size, void *data);
+    /* A pixel transfer of `bytes` too large to cross with its command, staged
+     * in the current context's PixelStagingBuffer around it: true when it
+     * was, and the command is to name offset 0. Nothing with nothing current. */
+    bool  stage_upload(const void *pixels, size_t bytes);
+    void  finish_upload();
+    bool  stage_download(const void *pixels, size_t bytes);
+    void  finish_download(void *pixels, size_t bytes);
     /* A command the host runs writes the buffer at `target`, or `buffer`: a
      * copy, a clear, an invalidation, a download into a pack or query
      * buffer. */
@@ -147,10 +163,15 @@ public:
     void gen_vertex_arrays(int32_t count, uint32_t *arrays);
     void bind_vertex_array(uint32_t array);
     void delete_vertex_arrays(int32_t count, const uint32_t *arrays);
+    /* Storage, and its bytes: where one command cannot carry them, the
+     * storage goes empty and the bytes after it in pieces. Storage is always
+     * made dynamic, so the pieces - and a map's write-back - may write it. */
     void buffer_data(uint32_t target, intptr_t size, const void *data, uint32_t usage);
     void buffer_storage(uint32_t target, intptr_t size, const void *data, uint32_t flags);
     void named_buffer_data(uint32_t buffer, intptr_t size, const void *data, uint32_t usage);
     void named_buffer_storage(uint32_t buffer, intptr_t size, const void *data, uint32_t flags);
+    void named_buffer_data_ext(uint32_t buffer, intptr_t size, const void *data, uint32_t usage);
+    void named_buffer_storage_ext(uint32_t buffer, intptr_t size, const void *data, uint32_t flags);
     void vertex_attrib_pointer(uint32_t index, int32_t size, uint32_t type, uint8_t normalized, int32_t stride,
                                const void *pointer);
     void enable_vertex_attrib_array(uint32_t index, bool enable);
@@ -209,6 +230,9 @@ private:
     /* glBufferData or glBufferStorage gave the buffer at `target` new
      * storage of `size` bytes. */
     void            respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data);
+    /* The bytes glBufferSubData at `target` wrote, told to the copies. */
+    void            wrote_bound(GuestGlContext &context, uint32_t target, intptr_t offset, intptr_t size,
+                                const void *data);
 
     CurrentContexts &currents_;
 };

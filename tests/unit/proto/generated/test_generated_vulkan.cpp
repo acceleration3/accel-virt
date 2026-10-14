@@ -112,3 +112,147 @@ TEST(generated_vulkan, a_decode_with_no_room_fails_instead_of_overrunning)
   VkApplicationInfo received = {};
   CHECK(!av::vkproto::deserialize_VkApplicationInfo(reader, &received, arena));
   CHECK(arena.used() <= sizeof block); }
+
+namespace {
+
+/* `sent` serialized as the guest's ICD sends it, and decoded as the host
+ * decodes it into `received` over `block`: whether the decoder took the
+ * frame. */
+template <typename T>
+bool decoded(void (*write)(WireWriter &, const T &), bool (*read)(WireReader &, T *, WireArena &), const T &sent,
+             T &received, std::uint8_t (&block)[arena_bytes])
+{ std::uint8_t frame[512] = {};
+  WireWriter writer(frame, sizeof frame);
+  write(writer, sent);
+  WireArena arena(block, sizeof block);
+  WireReader reader(frame, writer.offset());
+  return read(reader, &received, arena); }
+
+}  // namespace
+
+/* An array the API requires whenever its count is not zero, left out with a
+ * count that says it has elements, is a frame the host refuses: the driver
+ * would read that many through a null pointer. With a count of zero it is
+ * the null the API allows. */
+TEST(generated_vulkan, a_required_array_left_out_with_elements_is_refused)
+{ std::uint8_t block[arena_bytes];
+  VkSubmitInfo sent = {};
+  sent.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  sent.commandBufferCount = 1u;
+  VkSubmitInfo received = {};
+  CHECK(!decoded(av::vkproto::serialize_VkSubmitInfo, av::vkproto::deserialize_VkSubmitInfo, sent, received, block));
+  sent.commandBufferCount = 0u;
+  CHECK(decoded(av::vkproto::serialize_VkSubmitInfo, av::vkproto::deserialize_VkSubmitInfo, sent, received, block));
+  CHECK(received.pCommandBuffers == nullptr);
+  CHECK(received.pWaitDstStageMask == nullptr);
+  /* A wait with its semaphore and no stage mask is the same refusal. */
+  const VkSemaphore semaphore = reinterpret_cast<VkSemaphore>(std::uintptr_t{0x1000u});
+  sent.waitSemaphoreCount = 1u;
+  sent.pWaitSemaphores = &semaphore;
+  CHECK(!decoded(av::vkproto::serialize_VkSubmitInfo, av::vkproto::deserialize_VkSubmitInfo, sent, received, block));
+  const VkPipelineStageFlags stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+  sent.pWaitDstStageMask = &stage;
+  CHECK(decoded(av::vkproto::serialize_VkSubmitInfo, av::vkproto::deserialize_VkSubmitInfo, sent, received, block));
+  CHECK_EQ(received.pWaitDstStageMask[0], stage); }
+
+/* A structure the API requires - the create info of a create-info query - is
+ * refused when left out, and decoded when it is there. */
+TEST(generated_vulkan, a_required_structure_left_out_is_refused)
+{ std::uint8_t block[arena_bytes];
+  VkDeviceImageMemoryRequirements sent = {};
+  sent.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
+  VkDeviceImageMemoryRequirements received = {};
+  CHECK(!decoded(av::vkproto::serialize_VkDeviceImageMemoryRequirements, av::vkproto::deserialize_VkDeviceImageMemoryRequirements, sent, received, block));
+  VkImageCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  create.extent = {8u, 8u, 1u};
+  sent.pCreateInfo = &create;
+  CHECK(decoded(av::vkproto::serialize_VkDeviceImageMemoryRequirements, av::vkproto::deserialize_VkDeviceImageMemoryRequirements, sent, received, block));
+  CHECK(received.pCreateInfo != nullptr);
+  CHECK_EQ(received.pCreateInfo->extent.width, 8u); }
+
+/* The wire says nothing for a null string and an empty one alike: a string
+ * the API requires - a shader's entry point - is the empty one, which a
+ * driver can compare, and an optional one stays null. */
+TEST(generated_vulkan, a_required_string_left_out_is_empty_and_an_optional_one_null)
+{ std::uint8_t block[arena_bytes];
+  VkPipelineShaderStageCreateInfo stage = {};
+  stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  VkPipelineShaderStageCreateInfo received = {};
+  CHECK(decoded(av::vkproto::serialize_VkPipelineShaderStageCreateInfo, av::vkproto::deserialize_VkPipelineShaderStageCreateInfo, stage, received, block));
+  CHECK(received.pName != nullptr);
+  CHECK_EQ(received.pName[0], '\0');
+  VkApplicationInfo application = {};
+  application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  VkApplicationInfo answered = {};
+  answered.pApplicationName = "stale";
+  CHECK(decoded(av::vkproto::serialize_VkApplicationInfo, av::vkproto::deserialize_VkApplicationInfo, application, answered, block));
+  CHECK(answered.pApplicationName == nullptr);
+  CHECK(answered.pEngineName == nullptr); }
+
+/* An array the registry leaves to conditions - a write's image, buffer and
+ * texel infos, only one of which its type reads - is zeroes when left out
+ * with elements, never a null pointer the driver might read; an optional
+ * array stays null. */
+TEST(generated_vulkan, a_conditional_array_left_out_is_zeroes_and_an_optional_one_null)
+{ std::uint8_t block[arena_bytes];
+  VkWriteDescriptorSet write = {};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.descriptorCount = 2u;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  VkWriteDescriptorSet received = {};
+  CHECK(decoded(av::vkproto::serialize_VkWriteDescriptorSet, av::vkproto::deserialize_VkWriteDescriptorSet, write, received, block));
+  CHECK(received.pImageInfo != nullptr);
+  CHECK(received.pBufferInfo != nullptr);
+  CHECK(received.pTexelBufferView != nullptr);
+  for (std::uint32_t i = 0u; i < 2u; i++) {
+      CHECK(received.pImageInfo[i].imageView == VK_NULL_HANDLE);
+      CHECK_EQ(received.pBufferInfo[i].range, VkDeviceSize{0u});
+      CHECK(received.pTexelBufferView[i] == VK_NULL_HANDLE);
+  }
+  write.descriptorCount = 0u;
+  CHECK(decoded(av::vkproto::serialize_VkWriteDescriptorSet, av::vkproto::deserialize_VkWriteDescriptorSet, write, received, block));
+  CHECK(received.pImageInfo == nullptr);
+
+  VkAttachmentReference colour = {0u, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpass = {};
+  subpass.colorAttachmentCount = 1u;
+  subpass.pColorAttachments = &colour;
+  VkSubpassDescription unresolved = {};
+  CHECK(decoded(av::vkproto::serialize_VkSubpassDescription, av::vkproto::deserialize_VkSubpassDescription, subpass, unresolved, block));
+  CHECK(unresolved.pColorAttachments != nullptr);
+  CHECK(unresolved.pResolveAttachments == nullptr);
+  CHECK(unresolved.pDepthStencilAttachment == nullptr); }
+
+/* A conditional structure left out is a zeroed one. */
+TEST(generated_vulkan, a_conditional_structure_left_out_is_zeroes)
+{ std::uint8_t block[arena_bytes];
+  VkCommandBufferInheritanceViewportScissorInfoNV sent = {};
+  sent.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV;
+  VkCommandBufferInheritanceViewportScissorInfoNV received = {};
+  CHECK(decoded(av::vkproto::serialize_VkCommandBufferInheritanceViewportScissorInfoNV, av::vkproto::deserialize_VkCommandBufferInheritanceViewportScissorInfoNV, sent, received, block));
+  CHECK(received.pViewportDepths != nullptr);
+  CHECK_EQ(received.pViewportDepths->maxDepth, 0.0f); }
+
+/* Zeroes a frame asks for are the arena's like anything else it decodes: a
+ * count past the block is refused, never written past it. */
+TEST(generated_vulkan, zeroes_past_the_arena_are_refused_instead_of_overrunning)
+{ std::uint8_t block[arena_bytes];
+  VkWriteDescriptorSet write = {};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.descriptorCount = 1u << 20;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  VkWriteDescriptorSet received = {};
+  CHECK(!decoded(av::vkproto::serialize_VkWriteDescriptorSet, av::vkproto::deserialize_VkWriteDescriptorSet, write, received, block)); }
+
+/* A handle the API requires in a structure, named null, is refused: the
+ * driver dereferences a non-dispatchable handle as it would a pointer. */
+TEST(generated_vulkan, a_required_handle_named_null_is_refused)
+{ std::uint8_t block[arena_bytes];
+  VkImageMemoryRequirementsInfo2 sent = {};
+  sent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+  VkImageMemoryRequirementsInfo2 received = {};
+  CHECK(!decoded(av::vkproto::serialize_VkImageMemoryRequirementsInfo2, av::vkproto::deserialize_VkImageMemoryRequirementsInfo2, sent, received, block));
+  sent.image = reinterpret_cast<VkImage>(std::uintptr_t{0x2000u});
+  CHECK(decoded(av::vkproto::serialize_VkImageMemoryRequirementsInfo2, av::vkproto::deserialize_VkImageMemoryRequirementsInfo2, sent, received, block));
+  CHECK(received.image == sent.image); }

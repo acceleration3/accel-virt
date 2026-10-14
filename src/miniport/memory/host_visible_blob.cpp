@@ -33,9 +33,8 @@ Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t context_id, uin
     static_cast<void>(writer.host_blob(context_id, resource_id, memory, bytes));
     uint32_t     map_info = 0u;
     const Status status = exchange(device, writer.length(), map_info);
-    if (status != Status::ok) return status;
-    resource_ = resource_id;
-    return Status::ok;
+    if (status == Status::ok || status == Status::not_found) resource_ = resource_id;
+    return status;
 }
 
 Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)

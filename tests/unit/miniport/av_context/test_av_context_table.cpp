@@ -147,6 +147,13 @@ public:
     /* Refuses the next request of `type`. */
     void                 refuse_next(std::uint32_t type) { refuse_type_ = type; }
     void                 answer_map_with(std::uint32_t map_info) { map_info_ = map_info; }
+    /* The next request of `type` is answered only once it has waited `ticks`
+     * on the guest's clock: the host allocating, or its main loop busy. */
+    void                 delay_next(std::uint32_t type, std::uint64_t ticks)
+    {
+        delay_type_ = type;
+        delay_ = ticks;
+    }
     /* What the window and the process looked like when the device was asked
      * to unmap or release a blob: the order a teardown must keep. */
     void                 watch(const av::HostWindow &window) { window_ = &window; }
@@ -178,6 +185,14 @@ private:
         auto *const host = static_cast<Host *>(context);
         if (host->queue_.pending_type() == 0u) return;
         const std::uint32_t asked = host->queue_.pending_type();
+        if (asked == host->delay_type_) {
+            const std::uint64_t now = host->platform_->interrupt_time();
+            if (!host->delaying_) host->delayed_since_ = now;
+            host->delaying_ = true;
+            if (now - host->delayed_since_ < host->delay_) return;
+            host->delay_type_ = 0u;
+            host->delaying_ = false;
+        }
         if (asked == unref_type && host->window_ != nullptr) host->pages_when_released_ = host->window_->pages_in_use();
         if (asked == unmap_blob_type) host->views_when_unmapped_ = host->platform_->process_mappings();
         GpuResponse answer;
@@ -200,6 +215,10 @@ private:
     int                     refuse_at_ = -1;
     std::uint32_t           refuse_type_ = 0u;
     std::uint32_t           map_info_ = GpuResponse::map_cache_cached;
+    std::uint32_t           delay_type_ = 0u;
+    std::uint64_t           delay_ = 0u;
+    std::uint64_t           delayed_since_ = 0u;
+    bool                    delaying_ = false;
     std::uint32_t           pages_when_released_ = UINT32_MAX;
     std::uint32_t           views_when_unmapped_ = UINT32_MAX;
 };
@@ -1227,6 +1246,54 @@ TEST(av_context_table_window_chunk, pages_and_ids_the_device_did_not_let_go_of_a
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   CHECK_EQ(fixture.window().pages_in_use(), 2u);
   CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
+
+/* A host GPU allocates a large blob in tens of milliseconds - an RTX 3070 Ti
+ * took 73 for 128 MiB - and QEMU's main loop reaches the request later still.
+ * The driver once gave up after 100 ms and gave the id back while the device
+ * went on to make the blob, so every later open of that id was refused: the
+ * open now waits for the answer and the chunk is placed. */
+TEST(av_context_table_window_chunk, a_create_the_host_takes_long_over_is_waited_for)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  constexpr std::uint64_t quarter_second = 2500000u;
+  host.delay_next(create_blob_type, quarter_second);
+  const std::uint64_t asked = fixture.platform().interrupt_time();
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK(fixture.platform().interrupt_time() - asked >= quarter_second);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_EQ(host.count_of(unref_type), 0u);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A create unanswered for three seconds may still be made: the blob counts as
+ * created and is released, and while the device has not answered the create
+ * the release is refused without being sent, so the id and the pages stay
+ * out of use. Once the device answers at last, the next open is asked, and
+ * takes others. */
+TEST(av_context_table_window_chunk, a_create_the_device_never_answers_keeps_its_id_and_pages)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  host.delay_next(create_blob_type, ~std::uint64_t{0});
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::not_found);
+  CHECK_EQ(answer.resource_id(), 0u);
+  CHECK_EQ(host.count_of(unref_type), 0u);
+  CHECK_EQ(fixture.window().pages_in_use(), 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views);
+  CHECK(fixture.table().invariants_hold());
+  host.delay_next(0u, 0u);
+  CHECK_EQ(host.queue().respond_all(0x1100u), 1u);   /* VIRTIO_GPU_RESP_OK_NODATA, seconds late */
+  HostWindowRecord windowed;
+  CHECK_STATUS(open_window(fixture, &first_context, page, windowed), Status::ok);
+  CHECK_EQ(windowed.resource_id(), chunk_base + 1u);
+  CHECK(fixture.platform().maps_into_process(windowed.address(), window_base + page, page));
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
 /* One context may hold a quarter of the device's ids, so no process takes
  * them all; and with every id taken nothing is placed. Neither asks the

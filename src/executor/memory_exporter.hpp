@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+#include <vulkan/vulkan_core.h>
+
 namespace av {
 
 class ExportedMemory;
@@ -20,11 +22,8 @@ public:
     MemoryExporter(const MemoryExporter &) = delete;
     MemoryExporter &operator=(const MemoryExporter &) = delete;
 
-    /* How many memory types the GPU has: 0 where there is no device. */
-    virtual uint32_t memory_types() = 0;
-    /* Type `type`'s VkMemoryPropertyFlags; the caller keeps it below
-     * memory_types(). */
-    virtual uint32_t memory_flags(uint32_t type) = 0;
+    /* The GPU's memory types and heaps: none where there is no device. */
+    virtual void     memory_properties(VkPhysicalDeviceMemoryProperties &answer) = 0;
     /* Whether memory of `type` is allocated, exported as a dma-buf and mapped
      * through that dma-buf here - what the guest's mapping of it rests on. */
     virtual bool     exportable(uint32_t type) = 0;

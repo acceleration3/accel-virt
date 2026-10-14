@@ -262,6 +262,15 @@ does not have, a payload the executor cannot decode, or a lost host device stops
 the context (see Consumption) and the batch does not complete; the first four
 are fault code 5, command framing.
 
+A Vulkan payload the executor cannot decode includes one that leaves out
+something the API requires and a driver dereferences: a pointer neither
+`optional` nor `noautovalidity` in the registry while its length is not zero,
+or a non-dispatchable handle that is not `optional`, named as the null handle.
+A required string left out is the empty string. A pointer the registry leaves
+to conditions (`noautovalidity`, such as a descriptor write's image infos) is
+decoded as zeroes when it is left out with elements, so a driver that does read
+it reads zeroes rather than a null pointer (`tools/codegen`, `serialize.py`).
+
 ### Transport commands (API 0)
 
 The device answers these itself and never hands one to the executor library,
@@ -580,11 +589,17 @@ spellings) with `HOST_VISIBLE`, and `HOST_COHERENT` and `HOST_CACHED` with it,
 cleared from every type the GPU's memory source could not allocate, export as
 a dma-buf and map through the export when it first tried that type - a driver
 can claim a type exports and then refuse it - since the guest maps
-host-visible memory through the window and has no other way to reach it. The
-mask is learnt once per physical device (`ImportableTypes`). Buffers and
+host-visible memory through the window and has no other way to reach it. A
+heap whose device-local types are all host visible gains one that is
+`DEVICE_LOCAL` alone, and the types are in the spec's order, so the guest's
+indices are not the host's: the view is the GPU's `GuestMemoryTypes`, learnt
+once per context from its memory source, and every index and memoryTypeBits
+crossing the wire is translated by it (docs/host-memory.md, "The Vulkan
+guest's memory types"). `vulkan(n)` names the guest's type. Buffers and
 images made on the guest's device carry dma-buf external-memory create info
 where the driver reports the create importable, unless the guest's chain names
-its own, so any of them can bind memory the source made.
+its own, so any of them can bind memory the source made; an image that does
+not is offered no type the source backs, unless nothing else would do.
 
 ### The export socket (device <-> a host process)
 
@@ -1187,8 +1202,8 @@ A faulted context's executor is destroyed at once, on its worker; the context,
 its doorbell and its blobs stay until `CTX_DESTROY` or a reset.
 
 A guest can fault its own context on purpose, and the Vulkan ICD does so for
-its probe: `vkAvForceContextFault(VkPhysicalDevice)`, an ICD-local
-physical-device-level entry and not an extension, sends a `vkCreateInstance`
+its probe: `vkAvForceContextFault(VkDevice)`, an ICD-local device-level
+entry and not an extension, found through `vkGetDeviceProcAddr`, sends a `vkCreateInstance`
 frame cut after its structure type on the instance's own transport, which the
 executor cannot decode (fault 6). No other context is touched.
 

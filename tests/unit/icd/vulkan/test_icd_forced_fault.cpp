@@ -1,7 +1,7 @@
 /* The probe's forced fault (feature 045, T037): vkAvForceContextFault is a
- * physical-device-level entry point, so the Windows loader reaches it through
- * vk_icdGetPhysicalDeviceProcAddr and calls it with the ICD's own physical
- * device. It sends a vkCreateInstance cut after its structure type on the
+ * device-level entry point, so vkGetDeviceProcAddr answers the ICD's own
+ * pointer and no loader needs a trampoline for it. It is called with a device
+ * of the instance, and sends a vkCreateInstance cut after its structure type on the
  * instance's own transport; the host faults the context (MockKmt withholding
  * the answer), the call answers VK_ERROR_DEVICE_LOST, and every later call on
  * that instance answers the loss while a new instance works. Invariants after
@@ -27,7 +27,7 @@ using Kind = av::icd::LoaderHandle::Kind;
 
 namespace {
 
-using ForceFault = VkResult (*)(VkPhysicalDevice);
+using ForceFault = VkResult (*)(VkDevice);
 using CreateDevice = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *,
                                   VkDevice *);
 using DeviceWaitIdle = VkResult (*)(VkDevice);
@@ -84,13 +84,16 @@ private:
 
 }  // namespace
 
-/* The loader asks for it by name on a physical device, and the instance's
- * table answers the same function; before an instance exists nothing does. */
-TEST(icd_forced_fault, it_is_a_physical_device_entry_point)
+/* A device answers it by name, and the instance's table answers the same
+ * function; it is no physical-device function, and before an instance exists
+ * nothing answers it. */
+TEST(icd_forced_fault, it_is_a_device_entry_point)
 { FaultRig rig;
-  const PFN_vkVoidFunction by_device = rig.rig().root().physical_device_proc_addr(entry_name);
+  const VkDevice           device = rig.device();
+  const PFN_vkVoidFunction by_device = rig.rig().root().device_proc_addr(device, entry_name);
   CHECK(by_device != nullptr);
   CHECK(by_device == reinterpret_cast<PFN_vkVoidFunction>(rig.force()));
+  CHECK(rig.rig().root().physical_device_proc_addr(entry_name) == nullptr);
   CHECK(rig.rig().root().instance_proc_addr(VK_NULL_HANDLE, entry_name) == nullptr); }
 
 /* The host faults the context the cut frame reached: the call answers the
@@ -101,7 +104,7 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
   const VkDevice device = rig.device();
   const std::uint32_t sent = rig.kmt().commands();
   rig.kmt().withhold_answer_at(1u);
-  CHECK_EQ(rig.force()(rig.physical()), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.force()(device), VK_ERROR_DEVICE_LOST);
   CHECK(rig.rig().root().invariants_hold());
   CHECK(rig.connection()->faulted());
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
@@ -112,7 +115,7 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
   CHECK_EQ(structure, static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO));
   const std::uint32_t before = kmt_calls(rig.kmt());
   CHECK_EQ(rig.rig().entry<DeviceWaitIdle>(rig.instance(), "vkDeviceWaitIdle")(device), VK_ERROR_DEVICE_LOST);
-  CHECK_EQ(rig.force()(rig.physical()), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.force()(device), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
   CHECK(rig.rig().log().holding("vkAvForceContextFault on a lost device") == 1u); }
 
@@ -120,8 +123,9 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
  * fault leaves working. */
 TEST(icd_forced_fault, a_new_instance_is_not_lost)
 { FaultRig rig;
+  const VkDevice device = rig.device();
   rig.kmt().withhold_answer_at(1u);
-  CHECK_EQ(rig.force()(rig.physical()), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.force()(device), VK_ERROR_DEVICE_LOST);
   const VkInstance again = rig.rig().create_instance();
   CHECK(again != VK_NULL_HANDLE);
   CHECK(rig.rig().root().invariants_hold());
@@ -135,22 +139,21 @@ TEST(icd_forced_fault, a_new_instance_is_not_lost)
  * could not, logs it, and the instance goes on working. */
 TEST(icd_forced_fault, an_answered_frame_is_refused_as_not_faulting)
 { FaultRig rig;
+  const VkDevice device = rig.device();
   rig.rig().host().vk_result(VK_ERROR_INITIALIZATION_FAILED);
-  CHECK_EQ(rig.force()(rig.physical()), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(rig.force()(device), VK_ERROR_INITIALIZATION_FAILED);
   CHECK(rig.rig().root().invariants_hold());
   CHECK(!rig.connection()->faulted());
   CHECK_EQ(rig.rig().log().holding("avvk: the host answered a truncated vkCreateInstance"), 1u);
   CHECK(rig.device() != VK_NULL_HANDLE); }
 
-/* A physical device this ICD did not make is not dispatched on: nothing is
- * sent, and it is logged. */
-TEST(icd_forced_fault, a_foreign_physical_device_is_refused)
+/* A device this ICD did not make, or a handle of another kind, is not
+ * dispatched on: nothing is sent, and it is logged. */
+TEST(icd_forced_fault, a_foreign_device_is_refused)
 { FaultRig rig;
   const std::uint32_t before = kmt_calls(rig.kmt());
   std::uint64_t stack_word = 0u;
-  const VkPhysicalDevice foreign = reinterpret_cast<VkPhysicalDevice>(&stack_word);
-  CHECK_EQ(rig.force()(foreign), VK_ERROR_INITIALIZATION_FAILED);
-  CHECK_EQ(rig.force()(reinterpret_cast<VkPhysicalDevice>(rig.instance())), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(rig.force()(reinterpret_cast<VkDevice>(&stack_word)), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(rig.force()(reinterpret_cast<VkDevice>(rig.physical())), VK_ERROR_INITIALIZATION_FAILED);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  CHECK_EQ(rig.rig().log().holding("avvk: vkAvForceContextFault on a physical device this driver did not make"),
-           2u); }
+  CHECK_EQ(rig.rig().log().holding("avvk: vkAvForceContextFault on a device this driver did not make"), 2u); }

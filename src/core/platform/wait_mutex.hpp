@@ -1,5 +1,5 @@
 /* A lock for PASSIVE-level work that waits while holding it: a control request
- * sequence stalls between polls, which a fast mutex forbids by raising to APC.
+ * sequence waits for each answer, which a fast mutex forbids by raising to APC.
  * Holding it keeps the IRQL where it was (the kernel's KMUTEX); it must never be
  * taken above PASSIVE. Take it through a WaitMutexGuard. */
 #ifndef AV_WAIT_MUTEX_HPP

@@ -27,6 +27,7 @@
 #include "icd/opengl/swap_interval.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
+#include "icd/opengl/pixel_staging_buffer.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
 #include "icd/opengl/window_framebuffers.hpp"
@@ -144,6 +145,9 @@ public:
     BufferShadows         &shadows();
     /* The memory objects and semaphores imported from a Win32 handle. */
     GlExternalObjects     &externals();
+    /* The host buffer a pixel transfer too large to cross inline goes
+     * through. */
+    PixelStagingBuffer    &staging();
 
     /* The first error recorded is kept until taken. */
     void        record(uint32_t error);
@@ -238,6 +242,7 @@ private:
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
     BufferShadows                  shadows_;
+    PixelStagingBuffer             staging_;
     MappedBuffers                  mappings_;
     GlExternalObjects              externals_;
     char                           strings_[strings][string_bytes];

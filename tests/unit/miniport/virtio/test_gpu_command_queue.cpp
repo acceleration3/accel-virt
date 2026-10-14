@@ -245,7 +245,7 @@ TEST(gpu_command_queue_send, a_wide_request_uses_the_wide_slot_alone)
 namespace {
 
 /* The device answering while the driver waits: an exchange blocks, so the only
- * point a test can answer is the stall between its polls. */
+ * point a test can answer is while it stalls or sleeps. */
 class Answering {
 public:
     Answering(Fixture &fixture, std::uint32_t type, std::uint32_t after_polls)
@@ -295,15 +295,158 @@ TEST(gpu_command_queue_exchange, waits_for_the_answer_to_its_own_request)
   CHECK_EQ(fixture.control().in_flight(), 0u);
   CHECK(fixture.control().invariants_hold()); }
 
+namespace {
+
+constexpr std::uint64_t millisecond = 10000u;   /* the interrupt clock's 100 ns ticks */
+
+/* A host that answers once the request has waited `delay` on the guest's
+ * clock - the host GPU allocating, QEMU's main loop busy - and, as the
+ * interrupt would, has the DPC harvest the answer when `interrupts` says the
+ * DPC runs. */
+class LateHost {
+public:
+    LateHost(Fixture &fixture, std::uint64_t delay, bool interrupts)
+        : fixture_(fixture), device_(fixture.device(0u)), delay_(delay), interrupts_(interrupts)
+    {
+        fixture_.platform().on_stall(&LateHost::act, this);
+    }
+    ~LateHost() { fixture_.platform().on_stall(nullptr, nullptr); }
+
+    /* When the request was seen, the next one counting from now. */
+    void          again() { seen_ = false; }
+    std::uint64_t answered_at() const { return answered_at_; }
+    std::uint32_t dpc_harvests() const { return dpc_harvests_; }
+
+private:
+    static void act(void *context)
+    {
+        auto *const self = static_cast<LateHost *>(context);
+        const std::uint64_t now = self->fixture_.platform().interrupt_time();
+        if (!self->seen_) {
+            self->seen_ = true;
+            self->asked_at_ = now;
+        }
+        if (now - self->asked_at_ < self->delay_ || self->device_.respond_all(ok_nodata) == 0u) return;
+        self->answered_at_ = now;
+        if (!self->interrupts_) return;
+        self->fixture_.platform().set_irql(Irql::dispatch);
+        std::uint32_t completed = 0u, refused = 0u;
+        CHECK_STATUS(self->fixture_.control().harvest(completed, refused), Status::ok);
+        self->dpc_harvests_++;
+        self->fixture_.platform().set_irql(Irql::passive);
+    }
+
+    Fixture            &fixture_;
+    FakeVirtqueueDevice device_;
+    std::uint64_t       delay_;
+    bool                interrupts_;
+    bool                seen_ = false;
+    std::uint64_t       asked_at_ = 0u;
+    std::uint64_t       answered_at_ = 0u;
+    std::uint32_t       dpc_harvests_ = 0u;
+};
+
+Status exchange_move(Fixture &fixture, std::uint32_t &written)
+{
+    std::uint8_t answer[GpuRequestWriter::max_response_size] = {};
+    return fixture.control().exchange(request_bytes, move_request(7), answer, sizeof answer, written);
+}
+
+}  // namespace
+
+/* An RTX 3070 Ti took 73 ms to allocate the 128 MiB a RESOURCE_CREATE_BLOB
+ * asked for, and QEMU's main loop can be later still: an answer well past the
+ * hundred milliseconds the driver once gave up at is an answer. The wait
+ * spins only briefly and sleeps the rest, and the DPC's harvest of the answer
+ * is what wakes it - not the next timeout. */
+TEST(gpu_command_queue_exchange, sleeps_through_host_work_until_the_dpc_finds_the_answer)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  LateHost host(fixture, 250u * millisecond, true);
+  std::uint32_t written = 0u;
+  CHECK_STATUS(exchange_move(fixture, written), Status::ok);
+  CHECK_EQ(written, GpuRequestWriter::response_size);
+  CHECK_EQ(host.dpc_harvests(), 1u);
+  /* Woken at the answer, not a sleep later. */
+  CHECK_EQ(fixture.platform().interrupt_time(), host.answered_at());
+  CHECK(fixture.platform().stalled_ticks() <= 2u * millisecond + 200u);
+  CHECK(fixture.platform().slept_ticks() >= 240u * millisecond);
+  CHECK_EQ(fixture.control().in_flight(), 0u);
+  CHECK(fixture.control().invariants_hold());
+  /* The next exchange finds nothing left over from this one. */
+  host.again();
+  CHECK_STATUS(exchange_move(fixture, written), Status::ok);
+  CHECK(fixture.control().invariants_hold());
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u); }
+
+/* Before dxgkrnl connects the interrupt nothing wakes the sleeper: it harvests
+ * for itself after each sleep, so the answer is taken a sleep late at most. */
+TEST(gpu_command_queue_exchange, without_the_interrupt_harvests_for_itself_between_sleeps)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  LateHost host(fixture, 30u * millisecond, false);
+  std::uint32_t written = 0u;
+  CHECK_STATUS(exchange_move(fixture, written), Status::ok);
+  CHECK_EQ(written, GpuRequestWriter::response_size);
+  CHECK(fixture.platform().interrupt_time() >= host.answered_at());
+  CHECK(fixture.platform().interrupt_time() - host.answered_at() <= 10u * millisecond);
+  CHECK(fixture.platform().stalled_ticks() <= 2u * millisecond + 200u);
+  CHECK(fixture.control().invariants_hold()); }
+
+/* An answer within the spin is taken without sleeping: what nearly every
+ * control request is, and what StartDevice's exchanges are before the
+ * interrupt is connected. */
+TEST(gpu_command_queue_exchange, a_quick_answer_is_taken_without_sleeping)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  LateHost host(fixture, millisecond, false);
+  std::uint32_t written = 0u;
+  CHECK_STATUS(exchange_move(fixture, written), Status::ok);
+  CHECK_EQ(fixture.platform().slept_ticks(), 0u);
+  CHECK(fixture.platform().interrupt_time() < 2u * millisecond); }
+
+/* Three seconds unanswered is a device that stopped: the exchange says so, and
+ * logs it once. Until that request is answered every later exchange is
+ * refused at once without being sent - the device answers in order, so it
+ * could not answer one - and once the device does answer it, the next
+ * exchange is asked as any other. */
 TEST(gpu_command_queue_exchange, answers_not_found_when_the_device_never_does)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
-  std::uint8_t answer[GpuRequestWriter::max_response_size] = {};
-  std::uint32_t written = 0u;
-  CHECK_STATUS(fixture.control().exchange(request_bytes, move_request(7), answer, sizeof answer, written),
-               Status::not_found);
+  std::uint32_t written = 7u;
+  CHECK_STATUS(exchange_move(fixture, written), Status::not_found);
   CHECK_EQ(written, 0u);
+  const std::uint64_t gave_up = fixture.platform().interrupt_time();
+  CHECK(gave_up >= 3000u * millisecond);
+  CHECK(gave_up <= 3000u * millisecond + 10u * millisecond);
+  CHECK(fixture.platform().stalled_ticks() <= 2u * millisecond + 200u);
+  CHECK(fixture.platform().logged_line("left a control request unanswered"));
+  CHECK_EQ(fixture.platform().logged(), 1u);
+  CHECK(fixture.control().invariants_hold());
+  CHECK_EQ(fixture.control().in_flight(), 1u);
+
+  const std::uint16_t published = fixture.device(0u).available_index();
+  CHECK_STATUS(exchange_move(fixture, written), Status::not_found);
+  CHECK_EQ(fixture.device(0u).available_index(), published);
+  CHECK_EQ(fixture.platform().interrupt_time(), gave_up);
+  CHECK_EQ(fixture.platform().logged(), 1u);
+
+  CHECK_EQ(fixture.device(0u).respond_all(ok_nodata), 1u);
+  Answering host(fixture, ok_nodata, 0u);
+  CHECK_STATUS(exchange_move(fixture, written), Status::ok);
+  CHECK_EQ(written, GpuRequestWriter::response_size);
+  CHECK_EQ(fixture.control().in_flight(), 0u);
   CHECK(fixture.control().invariants_hold()); }
+
+/* A device that publishes a completion for nothing before the request is
+ * sent: the exchange answers the harvest's failure and sends nothing. */
+TEST(gpu_command_queue_exchange, a_harvest_that_fails_before_sending_sends_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  fixture.device(0u).set_used_index(3u);
+  std::uint32_t written = 0u;
+  CHECK_STATUS(exchange_move(fixture, written), Status::invalid_state);
+  CHECK_EQ(fixture.device(0u).available_index(), 0u); }
 
 TEST(gpu_command_queue_exchange, refuses_a_second_exchange_while_one_is_waiting)
 { Fixture fixture;
@@ -349,6 +492,9 @@ namespace av {
 struct GpuCommandQueueProbe {
     static void lose_a_completion(GpuCommandQueue &queue) { queue.in_flight_++; }
     static void wait_on_a_free_slot(GpuCommandQueue &queue) { queue.awaited_slot_ = 0u; }
+    static void abandon_a_free_slot(GpuCommandQueue &queue) { queue.abandoned_slot_ = 0u; }
+    static void abandon_the_awaited_slot(GpuCommandQueue &queue) { queue.abandoned_slot_ = queue.awaited_slot_; }
+    static void abandon_slot_none(GpuCommandQueue &queue) { queue.abandoned_slot_ = GpuCommandQueue::no_slot; }
 };
 
 }  // namespace av
@@ -362,7 +508,32 @@ TEST(gpu_command_queue_invariants, a_lost_completion_and_a_free_awaited_slot_are
   Fixture other;
   CHECK_STATUS(other.start(), Status::ok);
   av::GpuCommandQueueProbe::lose_a_completion(other.control());
-  CHECK(!other.control().invariants_hold()); }
+  CHECK(!other.control().invariants_hold());
+  Fixture abandoned;
+  CHECK_STATUS(abandoned.start(), Status::ok);
+  av::GpuCommandQueueProbe::abandon_a_free_slot(abandoned.control());
+  CHECK(!abandoned.control().invariants_hold()); }
+
+/* The request given up on is never the one being waited for. */
+TEST(gpu_command_queue_invariants, an_abandoned_slot_that_is_awaited_is_detected)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  struct Probe {
+      Fixture *fixture;
+      bool     held = false;
+  } probe{&fixture};
+  fixture.platform().on_stall([](void *context) {
+      auto *const state = static_cast<Probe *>(context);
+      if (state->held) return;
+      av::GpuCommandQueueProbe::abandon_the_awaited_slot(state->fixture->control());
+      state->held = !state->fixture->control().invariants_hold();
+      av::GpuCommandQueueProbe::abandon_slot_none(state->fixture->control());
+      state->fixture->device(0u).respond_all(ok_nodata);
+  }, &probe);
+  std::uint32_t written = 0u;
+  CHECK_STATUS(exchange_move(fixture, written), Status::ok);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK(probe.held); }
 
 /* A wide request is asked and answered like any other. */
 TEST(gpu_command_queue_exchange, carries_a_wide_request)

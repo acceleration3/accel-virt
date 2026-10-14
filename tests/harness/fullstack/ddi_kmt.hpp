@@ -148,6 +148,10 @@ public:
      * handed over: every submission then goes through the kernel, and the
      * process never stores its own ring tail. */
     void     refuse_tail_publishing();
+    /* A host window open answered as a device with no window answers it, not
+     * handed over: a context then has no blob arena, and its bulk data
+     * crosses inline (docs/host-memory.md). */
+    void     refuse_host_windows();
     /* A process that watches its own memory for its answers, as the
      * transport does before it asks the kernel to wait: its clock is the
      * machine's, and what the device finished interrupts the driver before
@@ -321,6 +325,7 @@ private:
     DoorbellFabric               fabric_;
     bool                         hardware_scheduling_;
     bool                         refuse_tail_publishing_;
+    bool                         refuse_host_windows_;
     bool                         watching_;
     std::uint8_t                 kernel_copy_[max_private_data];
     std::uint32_t                next_handle_;

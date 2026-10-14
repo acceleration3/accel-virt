@@ -143,16 +143,28 @@ bool skip_bind_sampler(GLuint unit, GLuint sampler) noexcept
     return state != nullptr && state->skip_bind_sampler(unit, sampler);
 }
 
-void wrote_buffer(GLenum target, GLintptr offset, GLsizeiptr size, const void *data) noexcept
+bool stage_upload(const void *pixels, size_t bytes) noexcept
 {
-    AV_SCOPE("wrote_buffer");
-    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().wrote_buffer(target, offset, size, data);
+    AV_SCOPE("stage_upload");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().stage_upload(pixels, bytes);
 }
 
-void wrote_named_buffer(GLuint buffer, GLintptr offset, GLsizeiptr size, const void *data) noexcept
+void finish_upload() noexcept
 {
-    AV_SCOPE("wrote_named_buffer");
-    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().wrote_named_buffer(buffer, offset, size, data);
+    AV_SCOPE("finish_upload");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().finish_upload();
+}
+
+bool stage_download(const void *pixels, size_t bytes) noexcept
+{
+    AV_SCOPE("stage_download");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().stage_download(pixels, bytes);
+}
+
+void finish_download(void *pixels, size_t bytes) noexcept
+{
+    AV_SCOPE("finish_download");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().finish_download(pixels, bytes);
 }
 
 void host_writes_target(GLenum target) noexcept

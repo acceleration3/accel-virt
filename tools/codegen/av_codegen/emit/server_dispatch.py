@@ -219,6 +219,8 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_handle":
             decl_lines.append(f"    {p.type.base} {p.name} = VK_NULL_HANDLE;")
             decode_lines.append(f"    if (!deserialize_{p.type.base}(r, {p.name})) return false;")
+            if p.null_refused and not reg.handles[p.type.base].dispatchable:
+                decode_lines.append(f"    if ({p.name} == VK_NULL_HANDLE) return false;")
             call_args.append(p.name)
         elif kind == "in_pod":
             decl_lines.append(f"    {p.type.cpp()} {p.name}{{}};")

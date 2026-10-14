@@ -324,6 +324,39 @@ TEST(mock_platform_stall, is_legal_at_dispatch_and_advances_the_clock)
   CHECK(platform.interrupt_time() - before == 10000u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
+/* A stall holds a processor and a wait does not: the two clocks are what a
+ * test of a waiter judges how it waited by. */
+TEST(mock_platform_stall, counts_the_ticks_it_held_the_processor_apart_from_sleep)
+{ MockPlatform platform;
+  platform.stall(30u);
+  platform.stall(20u);
+  CHECK_EQ(platform.stalled_ticks(), 500u);
+  CHECK_EQ(platform.slept_ticks(), 0u);
+  alignas(8) unsigned char event[32];
+  platform.initialize_wake_event(event);
+  CHECK(!platform.wait_wake_event(event, 7000u));
+  CHECK_EQ(platform.slept_ticks(), 7000u);
+  CHECK_EQ(platform.stalled_ticks(), 500u);
+  CHECK_EQ(platform.interrupt_time(), 7500u); }
+
+/* Only a wait that times out moves the clock or runs the device: a set event
+ * is consumed at once. */
+TEST(mock_platform_wake_event, a_set_event_is_taken_without_the_device_or_the_clock)
+{ MockPlatform platform;
+  std::uint32_t calls = 0u;
+  platform.on_stall([](void *context) { ++*static_cast<std::uint32_t *>(context); }, &calls);
+  alignas(8) unsigned char event[32];
+  platform.initialize_wake_event(event);
+  platform.set_wake_event(event);
+  CHECK(platform.wait_wake_event(event, 9u));
+  CHECK_EQ(calls, 0u);
+  CHECK_EQ(platform.interrupt_time(), 0u);
+  CHECK(!platform.wait_wake_event(event, 9u));
+  CHECK_EQ(calls, 1u);
+  CHECK_EQ(platform.interrupt_time(), 9u);
+  platform.on_stall(nullptr, nullptr);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
 TEST(mock_platform_register, routes_each_width_to_the_attached_window)
 { MockPlatform platform; FakeRegisterBytes window(16u);
   const auto base = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000001000u});

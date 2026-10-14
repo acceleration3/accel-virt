@@ -33,14 +33,14 @@ void VulkanBackendProbe::name_template(VulkanBackend &target, VkDescriptorUpdate
     target.templates_.name(made);
 }
 
-void VulkanBackendProbe::learn_mappable(VkPhysicalDevice physical, uint32_t mask)
-{
-    backend.importable_.learn(reinterpret_cast<uint64_t>(physical), mask);
-}
+void VulkanBackendProbe::learn_types(VkPhysicalDevice physical) { backend.learn_types(physical); }
 
-bool VulkanBackendProbe::mappable_known(VkPhysicalDevice physical) const
+const GuestMemoryTypes &VulkanBackendProbe::types() const { return backend.types_; }
+
+void VulkanBackendProbe::show_types(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed)
 {
-    return backend.importable_.known_for(reinterpret_cast<uint64_t>(physical));
+    backend.types_.learn(host, backed);
+    backend.types_learnt_ = true;
 }
 
 bool VulkanBackendProbe::memory_import() const { return backend.memory_import_; }

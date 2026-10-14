@@ -10,8 +10,11 @@
 
 namespace av {
 
+static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
+
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
-    : exporter_(exporter), memories_(blocks), mutex_(PTHREAD_MUTEX_INITIALIZER), asked_(0u), mappable_(0u), visible_(0u)
+    : exporter_(exporter), memories_(blocks), mutex_(PTHREAD_MUTEX_INITIALIZER), host_(), asked_(0u), mappable_(0u),
+      visible_(0u), vulkan_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -27,31 +30,51 @@ HostMemorySource::~HostMemorySource()
 /* A type is asked of the exporter once, the first time anything wants to
  * know: the probe allocates on the GPU, and nothing allocates before a guest
  * asks. */
+void HostMemorySource::learn()
+{
+    AV_SCOPE("HostMemorySource::learn");
+    exporter_.memory_properties(host_);
+    if (host_.memoryTypeCount > HostMemoryRequest::memory_types) host_.memoryTypeCount = HostMemoryRequest::memory_types;
+    const uint32_t before = asked_;
+    for (uint32_t type = 0u; type < host_.memoryTypeCount; type++) {
+        const uint32_t bit = 1u << type;
+        if ((asked_ & bit) != 0u) continue;
+        asked_ |= bit;
+        const VkMemoryPropertyFlags flags = host_.memoryTypes[type].propertyFlags;
+        constexpr VkMemoryPropertyFlags shared = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        if ((flags & shared) != shared || !exporter_.exportable(type)) continue;
+        mappable_ |= bit;
+        if (exporter_.imports_host_visible(type)) visible_ |= bit;
+    }
+    if (asked_ != before) vulkan_.learn(host_, mappable_);
+}
+
 uint32_t HostMemorySource::mappable_types()
 {
     AV_SCOPE("HostMemorySource::mappable_types");
     pthread_mutex_lock(&mutex_);
-    ScopeExit      unlock([this] { pthread_mutex_unlock(&mutex_); });
-    const uint32_t count = exporter_.memory_types();
-    for (uint32_t type = 0u; type < count && type < HostMemoryRequest::memory_types; type++) {
-        const uint32_t bit = 1u << type;
-        if ((asked_ & bit) != 0u) continue;
-        asked_ |= bit;
-        const uint32_t flags = exporter_.memory_flags(type);
-        const bool     shared = (flags & (host_visible | host_coherent)) == (host_visible | host_coherent);
-        if (!shared || !exporter_.exportable(type)) continue;
-        mappable_ |= bit;
-        if (exporter_.imports_host_visible(type)) visible_ |= bit;
-    }
+    ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    learn();
     return mappable_;
 }
 
-uint32_t HostMemorySource::first_type(uint32_t among, uint32_t wanted, uint32_t refused)
+bool HostMemorySource::vulkan_types(GuestMemoryTypes &answer)
+{
+    AV_SCOPE("HostMemorySource::vulkan_types");
+    pthread_mutex_lock(&mutex_);
+    ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    learn();
+    if (asked_ == 0u) return false;
+    answer = vulkan_;
+    return true;
+}
+
+uint32_t HostMemorySource::first_type(uint32_t among, VkMemoryPropertyFlags wanted, VkMemoryPropertyFlags refused) const
 {
     AV_SCOPE("HostMemorySource::first_type");
     for (uint32_t type = 0u; type < HostMemoryRequest::memory_types; type++) {
         if ((among & (1u << type)) == 0u) continue;
-        const uint32_t flags = exporter_.memory_flags(type);
+        const VkMemoryPropertyFlags flags = host_.memoryTypes[type].propertyFlags;
         if ((flags & wanted) == wanted && (flags & refused) == 0u) return type;
     }
     return HostMemoryRequest::memory_types;
@@ -63,9 +86,9 @@ uint32_t HostMemorySource::first_type(uint32_t among, uint32_t wanted, uint32_t 
  * cached memory serves at speed. Either is first sought among the types an
  * importer may map, since vkd3d-proton imports a heap only as a type the
  * driver reports for its dma-buf: NVIDIA's BAR memory would leave every upload
- * heap refused. A Vulkan request names its type, and has no other: the
- * backend imports it as that type. */
-uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[most_choices])
+ * heap refused. A Vulkan request names the guest's type, and has no other:
+ * the backend imports it as exactly the host type behind it. */
+uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[most_choices]) const
 {
     AV_SCOPE("HostMemorySource::choices");
     uint32_t found[most_choices] = {};
@@ -74,17 +97,19 @@ uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[
     const uint32_t     groups[2] = {visible_, mappable_ & ~visible_};
     /* The request was judged valid, so a kind that is neither of the first
      * two is readback. */
+    constexpr VkMemoryPropertyFlags local = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    constexpr VkMemoryPropertyFlags cached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
     if (request.kind() == HostMemoryRequest::Kind::vulkan) {
-        if ((mappable_ & (1u << request.vulkan_type())) != 0u) found[0] = request.vulkan_type();
+        found[0] = vulkan_.source_type(request.vulkan_type());
     } else if (request.kind() == HostMemoryRequest::Kind::upload) {
         for (uint32_t group = 0u; group < 2u; group++) {
-            found[group * per_group] = first_type(groups[group], device_local, host_cached);
-            found[group * per_group + 1u] = first_type(groups[group], 0u, device_local | host_cached);
+            found[group * per_group] = first_type(groups[group], local, cached);
+            found[group * per_group + 1u] = first_type(groups[group], 0u, local | cached);
             found[group * per_group + 2u] = first_type(groups[group], 0u, 0u);
         }
     } else {
         for (uint32_t group = 0u; group < 2u; group++) {
-            found[group * per_group] = first_type(groups[group], host_cached, 0u);
+            found[group * per_group] = first_type(groups[group], cached, 0u);
             found[group * per_group + 1u] = first_type(groups[group], 0u, 0u);
         }
     }
@@ -102,9 +127,9 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
 {
     AV_SCOPE("HostMemorySource::allocate");
     if (!request.valid() || size == 0u || size % page_bytes != 0u) return Status::invalid_parameter;
-    static_cast<void>(mappable_types());
     pthread_mutex_lock(&mutex_);
     ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    learn();
     if (find(domain, key) != nullptr) return Status::conflict;
     uint32_t       types[most_choices] = {};
     const uint32_t count = choices(request, types);
@@ -116,8 +141,9 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     if (type == HostMemoryRequest::memory_types) return Status::no_memory;
     const int shared = exporter_.share(exported);
     SourceMemory *made = nullptr;
-    const uint32_t caching = (exporter_.memory_flags(type) & host_cached) != 0u ? AV_MEMORY_WRITE_BACK
-                                                                               : AV_MEMORY_WRITE_COMBINED;
+    const uint32_t caching = (host_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u
+                                 ? AV_MEMORY_WRITE_BACK
+                                 : AV_MEMORY_WRITE_COMBINED;
     if (shared < 0 || memories_.create(made, domain, key, type, caching, exported) != Status::ok) {
         /* The descriptor shared for the caller is nobody's if the memory is. */
         if (shared >= 0) close(shared);

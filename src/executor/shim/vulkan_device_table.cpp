@@ -134,16 +134,10 @@ uint32_t VulkanDeviceTable::memory_type(uint32_t allowed) const
     return VK_MAX_MEMORY_TYPES;
 }
 
-uint32_t VulkanDeviceTable::memory_type_count() const
+void VulkanDeviceTable::memory_properties(VkPhysicalDeviceMemoryProperties &answer) const
 {
-    AV_SCOPE("VulkanDeviceTable::memory_type_count");
-    return loaded() ? memory_.memoryTypeCount : 0u;
-}
-
-VkMemoryPropertyFlags VulkanDeviceTable::memory_flags(uint32_t type) const
-{
-    AV_SCOPE("VulkanDeviceTable::memory_flags");
-    return type < memory_.memoryTypeCount ? memory_.memoryTypes[type].propertyFlags : 0u;
+    AV_SCOPE("VulkanDeviceTable::memory_properties");
+    answer = loaded() ? memory_ : VkPhysicalDeviceMemoryProperties{};
 }
 
 bool VulkanDeviceTable::allocate_exportable(VkDeviceSize size, uint32_t type, VkDeviceMemory &memory) const

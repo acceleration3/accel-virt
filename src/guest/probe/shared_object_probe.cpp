@@ -211,7 +211,7 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
      * them answers the application the same VK_ERROR_TOO_MANY_OBJECTS. */
     const Status judged = made == VK_SUCCESS && memory != VK_NULL_HANDLE ? Status::ok : Status::invalid_state;
     return steps_.check_kernel("exportable", judged,
-                               vulkan_.last_kernel_status(device.instance(), device.physical_device())) ==
+                               vulkan_.last_kernel_status(device.device())) ==
            Status::ok;
 }
 
@@ -240,7 +240,7 @@ bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, 
     AV_SCOPE("SharedObjectProbe::handle_step");
     const VkResult got = vulkan_.memory_win32_handle(device.device(), memory, &handle);
     const Status   status = got == VK_SUCCESS && handle != nullptr ? Status::ok : Status::invalid_state;
-    return steps_.check_kernel("handle", status, vulkan_.last_kernel_status(device.instance(), device.physical_device())) == Status::ok;
+    return steps_.check_kernel("handle", status, vulkan_.last_kernel_status(device.device())) == Status::ok;
 }
 
 void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory)
@@ -252,7 +252,7 @@ void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory
      * bound to it goes first, as Vulkan demands of anything naming memory. */
     vulkan_.destroy_buffer(device.device(), target_);
     vulkan_.free_memory(device.device(), memory);
-    const uint32_t refused = vulkan_.last_kernel_status(device.instance(), device.physical_device());
+    const uint32_t refused = vulkan_.last_kernel_status(device.device());
     steps_.check_kernel("released", refused == 0u ? Status::ok : Status::invalid_state, refused);
 }
 

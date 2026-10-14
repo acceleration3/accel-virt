@@ -132,6 +132,17 @@ public:
     virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
     /* Busy-waits; legal at any IRQL, so keep it short. */
     virtual void     stall(uint32_t microseconds) = 0;
+    /* An auto-reset event in storage of at least WakeEvent::storage_bytes:
+     * one thread waits on it at PASSIVE without holding a processor, and
+     * anything at DISPATCH or below wakes it (the kernel's synchronization
+     * KEVENT). */
+    virtual void initialize_wake_event(void *storage) = 0;
+    /* DISPATCH at most. A set no one waits for stays set for the next wait. */
+    virtual void set_wake_event(void *storage) = 0;
+    /* Blocks until the event is set or `ticks` (100 ns, below 2^63) passed:
+     * whether it was set, which unsets it. PASSIVE; a timeout is as coarse as the system's
+     * clock tick, which is 15.6 ms unless some process asked for finer. */
+    [[nodiscard]] virtual bool wait_wake_event(void *storage, uint64_t ticks) = 0;
 
     /* Registers of a device BAR mapped with DxgkCbMapMemory; legal at any
      * IRQL. The caller keeps each access inside the mapping. */

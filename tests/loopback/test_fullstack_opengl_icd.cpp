@@ -272,6 +272,67 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
+/* A context the device gives no blob arena - an RTX 3070 Ti host once refused
+ * every one - moves its bulk data inline, and inline is bounded: a request
+ * holds 256 KiB, a reply 64 KiB and the executor's decode arena 1 MiB. A 2 MiB
+ * texture upload and the 2 MiB read of it back, each larger than all three,
+ * cross through the context's pixel staging buffer in pieces, and the pixels
+ * read back are the ones sent. Before, the read faulted the context. */
+TEST(fullstack_opengl_icd, without_an_arena_a_texture_larger_than_every_room_goes_up_and_comes_back)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  rig.kmt().let_process_watch();
+  rig.kmt().refuse_host_windows();
+  CHECK_EQ(rig.started(), 0);
+  { GlProcess process(rig.kmt());
+    FakeOpengl32 &gl = process.opengl32();
+    CHECK(gl.load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);
+    CHECK(gl.set_pixel_format(process.dc(), 1));
+    void *const context = gl.create_context(process.dc());
+    CHECK(context != nullptr);
+    CHECK(gl.make_current(process.dc(), context));
+    constexpr GLsizei   wide = 1024, high = 512;
+    constexpr std::size_t bytes = std::size_t{wide} * high * 4u;
+    static std::uint8_t sent[bytes];
+    static std::uint8_t back[bytes];
+    for (std::size_t at = 0u; at < bytes; at++) sent[at] = static_cast<std::uint8_t>(at * 31u + at / 4093u);
+    std::memset(back, 0xEE, sizeof back);
+    GLuint texture = 0u, framebuffer = 0u;
+    gl.gl<void (APIENTRY *)(GLsizei, GLuint *)>(slot_gen_textures)(1, &texture);
+    gl.gl<void (APIENTRY *)(GLenum, GLuint)>(slot_bind_texture)(gl_texture_2d, texture);
+    gl.gl<void (APIENTRY *)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)>(
+        slot_tex_image_2d)(gl_texture_2d, 0, static_cast<GLint>(gl_rgba), wide, high, 0, gl_rgba, gl_unsigned_byte,
+                           sent);
+    using GenFramebuffers = void (APIENTRY *)(GLsizei, GLuint *);
+    using BindFramebuffer = void (APIENTRY *)(GLenum, GLuint);
+    using FramebufferTexture2D = void (APIENTRY *)(GLenum, GLenum, GLenum, GLuint, GLint);
+    reinterpret_cast<GenFramebuffers>(gl.get_proc_address("glGenFramebuffers"))(1, &framebuffer);
+    reinterpret_cast<BindFramebuffer>(gl.get_proc_address("glBindFramebuffer"))(gl_framebuffer, framebuffer);
+    reinterpret_cast<FramebufferTexture2D>(gl.get_proc_address("glFramebufferTexture2D"))(
+        gl_framebuffer, gl_color_attachment0, gl_texture_2d, texture, 0);
+    gl.gl<void (APIENTRY *)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *)>(slot_read_pixels)(
+        0, 0, wide, high, gl_rgba, gl_unsigned_byte, back);
+    CHECK_EQ(gl.gl<GLenum (APIENTRY *)()>(slot_get_error)(), 0u);
+    std::size_t wrong = 0u;
+    for (std::size_t at = 0u; at < bytes; at++) wrong += sent[at] != back[at] ? 1u : 0u;
+    CHECK_EQ(wrong, 0u);
+
+    char dump[4096] = {};
+    av::StateWriter writer(dump, sizeof dump);
+    process.root().report(writer);
+    CHECK(std::strstr(writer.dump(), " arena=false ") != nullptr);
+    CHECK(process.root().invariants_hold());
+    CHECK(gl.make_current(nullptr, nullptr));
+    CHECK(gl.delete_context(context));
+    for (std::uint32_t index = 0u; index < process.log().lines(); index++)
+        std::fprintf(stderr, "%s\n", process.log().line(index)); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
 /* Feature 051, US1: a context created the way every OpenGL application written
  * before profiles existed creates one - wglCreateContext, no attributes - gets
  * a compatibility context from this machine's driver, and the fixed-function

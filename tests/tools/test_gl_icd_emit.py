@@ -59,6 +59,18 @@ def registry():
         command("glGetString", [scalar("name", "GLenum")], ident=7,
                 returns="const GLubyte*"),
         command("glUniform1iv", [scalar("location", "GLint"), scalar("count", "GLsizei"), pixels], ident=8),
+        command("glTexSubImage2D", [scalar("width", "GLsizei"), scalar("height", "GLsizei"),
+                                    scalar("format", "GLenum"), scalar("type", "GLenum"),
+                                    Param(name="pixels", type=CType(base="void", pointer_depth=1, is_const=True),
+                                          role=Role.PIXELS_IN)], ident=9),
+        command("glReadnPixels", [scalar("width", "GLsizei"), scalar("height", "GLsizei"),
+                                  scalar("format", "GLenum"), scalar("type", "GLenum"),
+                                  scalar("bufSize", "GLsizei"),
+                                  Param(name="data", type=CType(base="void", pointer_depth=1),
+                                        role=Role.PIXELS_OUT)], ident=10),
+        command("glGetQueryObjectiv", [scalar("id", "GLuint"), scalar("pname", "GLenum"),
+                                       Param(name="params", type=CType(base="GLint", pointer_depth=1),
+                                             role=Role.PIXELS_OUT)], ident=11),
     ]:
         reg.commands[cmd.name] = cmd
     reg.commands["glGetString"].return_type = CType(base="GLubyte", pointer_depth=1, is_const=True)
@@ -111,6 +123,9 @@ class GeneratedGlIcd(unittest.TestCase):
             ("glIsEnabled", "Wrap_glIsEnabled"),
             ("glGetString", "Wrap_glGetString"),
             ("glUniform1iv", "Wrap_glUniform1iv"),
+            ("glTexSubImage2D", "Wrap_glTexSubImage2D"),
+            ("glReadnPixels", "Wrap_glReadnPixels"),
+            ("glGetQueryObjectiv", "Wrap_glGetQueryObjectiv"),
             ("glDrawArraysEXT", "Wrap_glDrawArrays"),
         ]))
 
@@ -145,6 +160,35 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertIn("const GLubyte* APIENTRY Wrap_glGetString(GLenum name);", self.header)
         self.assertNotIn("Wrap_glGetString(GLenum name) {", self.source)
         self.assertNotIn("Wrap_glDrawArrays(GLenum mode, GLint first, GLsizei count) {", self.source)
+
+    def test_a_pixel_transfer_is_staged_when_it_cannot_cross_with_its_command(self):
+        """With no pixel buffer of the application's bound, a transfer the ICD
+        stages names offset 0 of its staging buffer instead of its pointer, and
+        is finished once the command is sent: an upload's binding put back, a
+        download's bytes brought back."""
+        upload = body_of(self.source, "Wrap_glTexSubImage2D")
+        self.assertIn("const bool av_pixels_staged = !av_pixels_offset && "
+                      "::av::glicd::stage_upload(pixels, av_pixels_bytes);", upload)
+        self.assertIn("av_pixels_staged ? nullptr : pixels, av_pixels_staged ? 0 : av_pixels_bytes, "
+                      "av_pixels_offset || av_pixels_staged);", upload)
+        self.assertLess(upload.index("av_glTexSubImage2D("),
+                        upload.index("if (av_pixels_staged) ::av::glicd::finish_upload();"))
+        download = body_of(self.source, "Wrap_glReadnPixels")
+        self.assertIn("const size_t av_data_bytes = av_data_offset ? 0 : static_cast<size_t>(bufSize);", download)
+        self.assertIn("::av::glicd::stage_download(data, av_data_bytes);", download)
+        self.assertIn("if (av_data_staged) ::av::glicd::finish_download(data, av_data_bytes);", download)
+        # A query result's buffer is another binding: never staged.
+        self.assertNotIn("stage", body_of(self.source, "Wrap_glGetQueryObjectiv"))
+
+    def test_a_staged_transfer_that_answers_a_value_is_refused(self):
+        reg = registry()
+        reg.commands["glTexSubImage2D"].return_type = CType(base="GLboolean")
+        out = pathlib.Path(tempfile.mkdtemp())
+        try:
+            with self.assertRaises(AssertionError):
+                emit.emit_icd(reg, out, emit.read_proc_table(ORDER))
+        finally:
+            shutil.rmtree(out)
 
     def test_a_sync_call_ends_on_every_path_from_the_writer(self):
         body = body_of(self.client, "av_glIsEnabled")

@@ -1,11 +1,12 @@
 /* The memory types and heaps one physical device answers the guest with
- * (research.md §7). The types are the host's as the executor narrowed them:
- * host visible only where the GPU's memory source can allocate, export and
- * map that type (VulkanBackend, ImportableTypes), since every host-visible
- * allocation is one of the source's. None is ever added, and none is
- * changed: an allocation is mapped in the guest with the caching the host
- * maps it with, which is what the type's HOST_CACHED promises
- * (docs/host-memory.md). A device-local heap is the host's own size:
+ * (research.md §7). The types are the executor's view of the host's
+ * (GuestMemoryTypes): host visible only where the GPU's memory source can
+ * allocate, export and map that type, since every host-visible allocation is
+ * one of the source's; a device-local type added where the host's are all
+ * host visible; in the spec's order, so an index is the executor's to
+ * translate, never the host's. This table takes them as they are: an
+ * allocation is mapped in the guest with the caching the host maps it with,
+ * which is what the type's HOST_CACHED promises (docs/host-memory.md). A device-local heap is the host's own size:
  * what lives there is host GPU memory the guest never maps, which the
  * adapter's local segment only names to VidMm. Any other heap is the
  * adapter's non-local budget, as D3DKMTQueryVideoMemoryInfo answers it for

@@ -20,6 +20,7 @@ extern "C" {
 #include "miniport/driver/ddi_table.hpp"
 #include "core/platform/mutex.hpp"
 #include "core/platform/wait_mutex.hpp"
+#include "core/platform/wake_event.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 
@@ -27,6 +28,8 @@ namespace av {
 
 static_assert(sizeof(FAST_MUTEX) <= Mutex::storage_bytes, "Mutex storage too small for FAST_MUTEX");
 static_assert(sizeof(KMUTEX) <= WaitMutex::storage_bytes, "WaitMutex storage too small for KMUTEX");
+static_assert(sizeof(KEVENT) <= WakeEvent::storage_bytes && alignof(KEVENT) <= 8u,
+              "WakeEvent storage too small for KEVENT");
 static_assert(alignof(FAST_MUTEX) <= 8u, "Mutex storage alignment too weak for FAST_MUTEX");
 static_assert(sizeof(KSPIN_LOCK) == sizeof(uintptr_t), "SpinLock word is not a KSPIN_LOCK");
 static_assert(static_cast<unsigned>(Pool::non_paged) == 0u && static_cast<unsigned>(Pool::paged) == 1u,
@@ -481,6 +484,28 @@ void KernelPlatform::stall(uint32_t microseconds)
 {
     AV_SCOPE("KernelPlatform::stall");
     KeStallExecutionProcessor(microseconds);
+}
+
+void KernelPlatform::initialize_wake_event(void *storage)
+{
+    AV_SCOPE("KernelPlatform::initialize_wake_event");
+    KeInitializeEvent(static_cast<PKEVENT>(storage), SynchronizationEvent, FALSE);
+}
+
+void KernelPlatform::set_wake_event(void *storage)
+{
+    AV_SCOPE("KernelPlatform::set_wake_event");
+    static_cast<void>(KeSetEvent(static_cast<PKEVENT>(storage), IO_NO_INCREMENT, FALSE));
+}
+
+/* A negative timeout is relative, so a change of the system time cannot
+ * lengthen it. */
+bool KernelPlatform::wait_wake_event(void *storage, uint64_t ticks)
+{
+    AV_SCOPE("KernelPlatform::wait_wake_event");
+    LARGE_INTEGER timeout = {};
+    timeout.QuadPart = -static_cast<LONGLONG>(ticks);
+    return KeWaitForSingleObject(storage, Executive, KernelMode, FALSE, &timeout) == STATUS_SUCCESS;
 }
 
 uint8_t KernelPlatform::read_register_u8(void *address)

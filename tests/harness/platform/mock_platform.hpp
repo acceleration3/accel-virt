@@ -98,6 +98,12 @@ public:
     void          store_atomic(std::uint64_t &target, std::uint64_t value) override;
     std::uint64_t load_atomic(std::uint64_t &source) override;
     void     stall(std::uint32_t microseconds) override;
+    /* The first byte of the storage is whether the event is set. */
+    void     initialize_wake_event(void *storage) override;
+    void     set_wake_event(void *storage) override;
+    /* A wait is when the device acts (on_stall's callback); an event that is
+     * still not set then times the wait out, the clock moving by all of it. */
+    bool     wait_wake_event(void *storage, std::uint64_t ticks) override;
     std::uint8_t  read_register_u8(void *address) override;
     std::uint16_t read_register_u16(void *address) override;
     std::uint32_t read_register_u32(void *address) override;
@@ -148,6 +154,10 @@ public:
     void set_irql(Irql irql);
 
     void advance_time(std::uint64_t ticks);
+    /* The clock's ticks spent in stall, which holds a processor, and in timed
+     * out waits, which do not. */
+    std::uint64_t stalled_ticks() const;
+    std::uint64_t slept_ticks() const;
 
     /* Register accesses from `base` to base + window.length() reach `window`,
      * the way a mapped BAR reaches the device. Anything else is unmapped. */
@@ -405,6 +415,8 @@ private:
     const DdiTable *registered_table_;
     StallCallback  stall_callback_ = nullptr;
     void          *stall_context_ = nullptr;
+    std::uint64_t  stalled_ticks_ = 0u;
+    std::uint64_t  slept_ticks_ = 0u;
     PageFrames     page_frames_[max_page_frames];
     std::uint32_t  page_frame_count_;
     AttachedWindow register_windows_[max_register_windows];

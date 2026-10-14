@@ -31,17 +31,16 @@ public:
                                        VkPhysicalDeviceMemoryProperties *properties) = 0;
     virtual VkResult create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *info,
                                    VkDevice *device) = 0;
-    /* The ICD's vkAvForceContextFault, resolved through `instance`; a loader
-     * that answers no such function answers VK_ERROR_EXTENSION_NOT_PRESENT. */
-    virtual VkResult force_context_fault(VkInstance instance, VkPhysicalDevice physical_device) = 0;
-    /* The ICD's vkAvLastKernelStatus, resolved through `instance`: the
+    /* The ICD's vkAvForceContextFault, resolved through `device` with
+     * vkGetDeviceProcAddr, which answers the driver's own pointer whatever the
+     * loader knows; VK_ERROR_EXTENSION_NOT_PRESENT when nothing answers. */
+    virtual VkResult force_context_fault(VkDevice device) = 0;
+    /* The ICD's vkAvLastKernelStatus, resolved as the forced fault is: the
      * NTSTATUS of the last D3DKMT call the *driver* made. A probe's own Kmt
      * never made it - the driver did, in another module - so this is the only
-     * way a step can report which kernel call refused (feature 053). 0 from a
-     * loader that answers no such function. The physical device is what the
-     * loader dispatches the call on: a Vulkan entry point with no dispatchable
-     * first argument is one it trampolines into an empty slot. */
-    virtual uint32_t last_kernel_status(VkInstance instance, VkPhysicalDevice physical_device) = 0;
+     * way a step can report which kernel call refused (feature 053). 0 when
+     * nothing answers the function. */
+    virtual uint32_t last_kernel_status(VkDevice device) = 0;
 
     virtual void     destroy_device(VkDevice device) = 0;
     virtual VkResult device_wait_idle(VkDevice device) = 0;

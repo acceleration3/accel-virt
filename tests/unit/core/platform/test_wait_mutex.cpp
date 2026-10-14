@@ -1,5 +1,5 @@
 /* A lock held across waits at PASSIVE (feature 045): what serializes a control
- * request sequence, which stalls between polls at PASSIVE and so cannot sit under
+ * request sequence, which waits for each answer at PASSIVE and so cannot sit under
  * a fast mutex, which raises to APC. */
 #include "core/platform/wait_mutex.hpp"
 #include "core/platform/wait_mutex_guard.hpp"
@@ -23,7 +23,7 @@ TEST(wait_mutex_acquire, keeps_passive_so_its_holder_may_wait)
   CHECK(platform.current_irql() == Irql::passive);
   CHECK_EQ(platform.locks_held(), 1u);
   /* A wait that must be at PASSIVE is legal under it. */
-  platform.require_irql_at_most(Irql::passive, "a stall between polls");
+  platform.require_irql_at_most(Irql::passive, "a wait for an answer");
   mutex.release();
   CHECK_EQ(platform.locks_held(), 0u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }

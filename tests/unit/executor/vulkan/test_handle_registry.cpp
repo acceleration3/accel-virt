@@ -244,11 +244,20 @@ TEST(handle_registry, a_handle_is_known_only_as_the_kind_it_was_made)
   CHECK(registry.knows(0x2000u, av::HandleKind::queue));
   CHECK(registry.knows(0x3000u, av::HandleKind::other));
   CHECK(!registry.knows(0x3000u, av::HandleKind::device));
-  /* A number nobody made is no kind at all, and the null handle is every
-   * kind: the API defines it and a guest may legitimately send it. */
+  /* A number nobody made is no kind at all, and neither is the null handle:
+   * it is known - the API defines it - but no dispatchable handle, and no
+   * image made for the memory source, whatever an empty registry or one
+   * holding that kind says. */
   CHECK(!registry.knows(0x4000u, av::HandleKind::device));
-  CHECK(registry.knows(0u, av::HandleKind::device));
-  CHECK(registry.knows(0u, av::HandleKind::other));
+  CHECK(registry.knows(0u));
+  CHECK(registry.remember(0x6000u, 0u, av::HandleKind::external_image));
+  constexpr av::HandleKind kinds[] = {av::HandleKind::other, av::HandleKind::instance,
+                                      av::HandleKind::physical_device, av::HandleKind::device,
+                                      av::HandleKind::queue, av::HandleKind::command_buffer,
+                                      av::HandleKind::external_image};
+  for (const av::HandleKind kind : kinds) CHECK(!registry.knows(0u, kind));
+  HandleRegistry empty;
+  CHECK(!empty.knows(0u, av::HandleKind::external_image));
   /* And a slot reused for another handle carries the new one's kind. */
   registry.forget(0x1000u);
   CHECK(registry.remember(0x5000u, 0u, av::HandleKind::instance));

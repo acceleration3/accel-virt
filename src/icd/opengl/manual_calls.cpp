@@ -8,6 +8,7 @@
 #include "icd/opengl/granted_profile.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/opengl/buffer_pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/current_contexts.hpp"
@@ -151,24 +152,103 @@ void ManualCalls::refuse()
     record(gl_invalid_operation);
 }
 
-void ManualCalls::wrote_buffer(uint32_t target, intptr_t offset, intptr_t size, const void *data)
+void ManualCalls::buffer_sub_data(uint32_t target, intptr_t offset, intptr_t size, const void *data)
 {
-    AV_SCOPE("ManualCalls::wrote_buffer");
+    AV_SCOPE("ManualCalls::buffer_sub_data");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    const uint32_t buffer = context->arrays().bound_buffer(target);
-    if (buffer == ClientArrayState::unknown)
-        context->shadows().forget_all();
-    else if (offset >= 0 && size >= 0)
-        context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
+    wrote_bound(*context, target, offset, size, data);
+    BufferPieces pieces(*context->wire());
+    if (pieces.cuts_write(size, data))
+        return pieces.write(target, offset, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
+    glproto::av_glBufferSubData(*context->wire(), target, offset, size, data);
 }
 
-void ManualCalls::wrote_named_buffer(uint32_t buffer, intptr_t offset, intptr_t size, const void *data)
+void ManualCalls::named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr_t size, const void *data)
 {
-    AV_SCOPE("ManualCalls::wrote_named_buffer");
+    AV_SCOPE("ManualCalls::named_buffer_sub_data");
     GuestGlContext *const context = sending();
-    if (context != nullptr && offset >= 0 && size >= 0)
+    if (context == nullptr) return;
+    if (offset >= 0 && size >= 0)
         context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
+    BufferPieces pieces(*context->wire());
+    if (pieces.cuts_write(size, data))
+        return pieces.write_named(buffer, offset, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
+    glproto::av_glNamedBufferSubData(*context->wire(), buffer, offset, size, data);
+}
+
+void ManualCalls::named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, intptr_t size, const void *data)
+{
+    AV_SCOPE("ManualCalls::named_buffer_sub_data_ext");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (offset >= 0 && size >= 0)
+        context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
+    BufferPieces pieces(*context->wire());
+    if (pieces.cuts_write(size, data))
+        return pieces.write_named_ext(buffer, offset, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
+    glproto::av_glNamedBufferSubDataEXT(*context->wire(), buffer, offset, size, data);
+}
+
+void ManualCalls::get_buffer_sub_data(uint32_t target, intptr_t offset, intptr_t size, void *data)
+{
+    AV_SCOPE("ManualCalls::get_buffer_sub_data");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    BufferPieces pieces(*context->wire());
+    if (pieces.cuts_read(size, data))
+        return pieces.read(target, offset, static_cast<size_t>(size), static_cast<uint8_t *>(data));
+    glproto::av_glGetBufferSubData(*context->wire(), target, offset, size, data);
+}
+
+void ManualCalls::get_named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr_t size, void *data)
+{
+    AV_SCOPE("ManualCalls::get_named_buffer_sub_data");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    BufferPieces pieces(*context->wire());
+    if (pieces.cuts_read(size, data))
+        return pieces.read_named(buffer, offset, static_cast<size_t>(size), static_cast<uint8_t *>(data));
+    glproto::av_glGetNamedBufferSubData(*context->wire(), buffer, offset, size, data);
+}
+
+void ManualCalls::get_named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, intptr_t size, void *data)
+{
+    AV_SCOPE("ManualCalls::get_named_buffer_sub_data_ext");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    BufferPieces pieces(*context->wire());
+    if (pieces.cuts_read(size, data))
+        return pieces.read_named_ext(buffer, offset, static_cast<size_t>(size), static_cast<uint8_t *>(data));
+    glproto::av_glGetNamedBufferSubDataEXT(*context->wire(), buffer, offset, size, data);
+}
+
+bool ManualCalls::stage_upload(const void *pixels, size_t bytes)
+{
+    AV_SCOPE("ManualCalls::stage_upload");
+    GuestGlContext *const context = sending();
+    return context != nullptr && context->staging().stage_upload(*context->wire(), pixels, bytes);
+}
+
+void ManualCalls::finish_upload()
+{
+    AV_SCOPE("ManualCalls::finish_upload");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->staging().finish_upload(*context->wire());
+}
+
+bool ManualCalls::stage_download(const void *pixels, size_t bytes)
+{
+    AV_SCOPE("ManualCalls::stage_download");
+    GuestGlContext *const context = sending();
+    return context != nullptr && context->staging().stage_download(*context->wire(), pixels, bytes);
+}
+
+void ManualCalls::finish_download(void *pixels, size_t bytes)
+{
+    AV_SCOPE("ManualCalls::finish_download");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->staging().finish_download(*context->wire(), pixels, bytes);
 }
 
 void ManualCalls::host_writes_target(uint32_t target)
@@ -373,7 +453,10 @@ void ManualCalls::buffer_data(uint32_t target, intptr_t size, const void *data, 
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     respecify_bound(*context, target, size, data != nullptr);
-    glproto::av_glBufferData(*context->wire(), target, size, data, usage);
+    BufferPieces pieces(*context->wire());
+    const bool   cut = pieces.cuts_write(size, data);
+    glproto::av_glBufferData(*context->wire(), target, size, cut ? nullptr : data, usage);
+    if (cut) pieces.write(target, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 
 void ManualCalls::buffer_storage(uint32_t target, intptr_t size, const void *data, uint32_t flags)
@@ -382,7 +465,10 @@ void ManualCalls::buffer_storage(uint32_t target, intptr_t size, const void *dat
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     respecify_bound(*context, target, size, data != nullptr);
-    glproto::av_glBufferStorage(*context->wire(), target, size, data, flags | gl_dynamic_storage_bit);
+    BufferPieces pieces(*context->wire());
+    const bool   cut = pieces.cuts_write(size, data);
+    glproto::av_glBufferStorage(*context->wire(), target, size, cut ? nullptr : data, flags | gl_dynamic_storage_bit);
+    if (cut) pieces.write(target, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 
 void ManualCalls::named_buffer_data(uint32_t buffer, intptr_t size, const void *data, uint32_t usage)
@@ -391,7 +477,10 @@ void ManualCalls::named_buffer_data(uint32_t buffer, intptr_t size, const void *
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     context->shadows().respecify(buffer, size, data != nullptr);
-    glproto::av_glNamedBufferData(*context->wire(), buffer, size, data, usage);
+    BufferPieces pieces(*context->wire());
+    const bool   cut = pieces.cuts_write(size, data);
+    glproto::av_glNamedBufferData(*context->wire(), buffer, size, cut ? nullptr : data, usage);
+    if (cut) pieces.write_named(buffer, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 
 void ManualCalls::named_buffer_storage(uint32_t buffer, intptr_t size, const void *data, uint32_t flags)
@@ -400,7 +489,36 @@ void ManualCalls::named_buffer_storage(uint32_t buffer, intptr_t size, const voi
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     context->shadows().respecify(buffer, size, data != nullptr);
-    glproto::av_glNamedBufferStorage(*context->wire(), buffer, size, data, flags | gl_dynamic_storage_bit);
+    BufferPieces pieces(*context->wire());
+    const bool   cut = pieces.cuts_write(size, data);
+    glproto::av_glNamedBufferStorage(*context->wire(), buffer, size, cut ? nullptr : data,
+                                     flags | gl_dynamic_storage_bit);
+    if (cut) pieces.write_named(buffer, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
+}
+
+void ManualCalls::named_buffer_data_ext(uint32_t buffer, intptr_t size, const void *data, uint32_t usage)
+{
+    AV_SCOPE("ManualCalls::named_buffer_data_ext");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    context->shadows().respecify(buffer, size, data != nullptr);
+    BufferPieces pieces(*context->wire());
+    const bool   cut = pieces.cuts_write(size, data);
+    glproto::av_glNamedBufferDataEXT(*context->wire(), buffer, size, cut ? nullptr : data, usage);
+    if (cut) pieces.write_named_ext(buffer, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
+}
+
+void ManualCalls::named_buffer_storage_ext(uint32_t buffer, intptr_t size, const void *data, uint32_t flags)
+{
+    AV_SCOPE("ManualCalls::named_buffer_storage_ext");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    context->shadows().respecify(buffer, size, data != nullptr);
+    BufferPieces pieces(*context->wire());
+    const bool   cut = pieces.cuts_write(size, data);
+    glproto::av_glNamedBufferStorageEXT(*context->wire(), buffer, size, cut ? nullptr : data,
+                                        flags | gl_dynamic_storage_bit);
+    if (cut) pieces.write_named_ext(buffer, 0, static_cast<size_t>(size), static_cast<const uint8_t *>(data));
 }
 
 void ManualCalls::vertex_attrib_pointer(uint32_t index, int32_t size, uint32_t type, uint8_t normalized,
@@ -609,10 +727,14 @@ void ManualCalls::read_pixels(int32_t x, int32_t y, int32_t width, int32_t heigh
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     if (context->framebuffers().read_front(x, y, width, height, format, type, pixels)) return;
-    const bool offset = glicd::pixel_buffer_bound(true);
+    const bool offset = context->arrays().pixel_buffer_bound(true);
     if (offset) forget_bound(*context, ClientArrayState::pixel_pack_buffer);
-    glproto::av_glReadPixels(*context->wire(), x, y, width, height, format, type, pixels,
-                              offset ? 0u : glicd::pixel_bytes(format, type, width, height, 1, true), offset);
+    const size_t     bytes = offset ? 0u : context->arrays().pixel_bytes(format, type, width, height, 1, true);
+    ClientTransport &wire = *context->wire();
+    const bool       staged = !offset && context->staging().stage_download(wire, pixels, bytes);
+    glproto::av_glReadPixels(wire, x, y, width, height, format, type, staged ? nullptr : pixels,
+                             staged ? 0u : bytes, offset || staged);
+    if (staged) context->staging().finish_download(wire, pixels, bytes);
 }
 
 const uint8_t *ManualCalls::string(uint32_t name)
@@ -1022,6 +1144,17 @@ void ManualCalls::respecify_bound(GuestGlContext &context, uint32_t target, intp
         context.shadows().forget_all();
     else
         context.shadows().respecify(buffer, size, with_data);
+}
+
+void ManualCalls::wrote_bound(GuestGlContext &context, uint32_t target, intptr_t offset, intptr_t size,
+                              const void *data)
+{
+    AV_SCOPE("ManualCalls::wrote_bound");
+    const uint32_t buffer = context.arrays().bound_buffer(target);
+    if (buffer == ClientArrayState::unknown)
+        context.shadows().forget_all();
+    else if (offset >= 0 && size >= 0)
+        context.shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
 }
 
 bool ManualCalls::indices_cross(const void *indices)

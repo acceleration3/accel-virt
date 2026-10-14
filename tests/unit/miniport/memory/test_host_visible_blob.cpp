@@ -345,16 +345,21 @@ TEST(host_visible_blob, a_device_that_refuses_a_step_leaves_it_where_it_was)
   CHECK_STATUS(blob.destroy(fixture.device()), Status::ok);
   CHECK(!blob.created()); }
 
-/* A device that stops answering: the blob is left as it was, not as the driver
- * hoped. */
-TEST(host_visible_blob, a_silent_device_leaves_every_step_undone)
+/* A device that does not answer a create in time may still make the blob, and
+ * a blob made after the driver gave its id back has every later open of that
+ * id refused. So the blob counts as created and an unref follows; one that is
+ * not answered either leaves it so, and the id is kept. */
+TEST(host_visible_blob, a_create_the_device_did_not_answer_is_unrefed_before_its_id_goes_back)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   HostVisibleBlob blob(fixture.mapped().platform());
   host.answer_nothing();
   CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::not_found);
-  CHECK(!blob.created()); }
+  CHECK(blob.created());
+  CHECK(!blob.mapped());
+  CHECK_STATUS(blob.destroy(fixture.device()), Status::not_found);
+  CHECK(blob.created()); }
 
 TEST(host_visible_blob_invariants, a_mapping_with_no_resource_is_caught)
 { MappedVirtioFunction mapped;
