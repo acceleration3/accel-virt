@@ -12,16 +12,20 @@ namespace av::d3d11 {
 
 namespace {
 
-/* What a Direct3D 11 session's bulk data crosses through: the blob arena's
- * 24 MiB (D3dSession::lent_bytes), and the rest, short of the query results,
- * for the dynamic buffers the host draws in place. */
-constexpr uint64_t session_arena_bytes = uint64_t{160} << 20u;
+/* Cached host memory bulk data crosses through, with the slice store's
+ * bookkeeping and the query results at its end (D3dSession). The slices
+ * themselves are a host allocation of their own. */
+constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
+/* The upload memory dynamic buffers are drawn from in place: what a game's
+ * constant buffers - renamed every draw while the GPU runs a frame behind -
+ * take of it. */
+constexpr uint64_t slice_store_bytes = uint64_t{128} << 20u;
 
 }  // namespace
 
 D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : memory_(memory), log_(log), devices_(memory),
-      adapters_(kmt, memory, log, "the host answers no Direct3D 11 on this adapter", session_arena_bytes,
+      adapters_(kmt, memory, log, "the host answers no Direct3D 11 on this adapter", session_arena_bytes, slice_store_bytes,
                 d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11, d3dproto::kCmd_Flush11)
 {
     AV_SCOPE("D3d11Driver::D3d11Driver");

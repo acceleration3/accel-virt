@@ -33,7 +33,7 @@ void *D3dRuntime::open_library(const char *name) const
 
 D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), d3d9_(nullptr), create_factory_(nullptr),
-      create_device11_(nullptr), get_interface12_(nullptr), create9_(nullptr), open_host_heap_(nullptr),
+      create_device11_(nullptr), get_interface12_(nullptr), create9_(nullptr),
       open_dmabuf_heap_(nullptr),
       serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr)
 {
@@ -79,8 +79,6 @@ bool D3dRuntime::open()
     if (d3d12core_ != nullptr) d3d12_ = open_library("libvkd3d-proton-d3d12.so");
     if (d3d12_ != nullptr) {
         get_interface12_ = reinterpret_cast<GetInterface12>(dlsym(d3d12_, "D3D12GetInterface"));
-        open_host_heap_ =
-            reinterpret_cast<OpenHostHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_host_pointer"));
         open_dmabuf_heap_ =
             reinterpret_cast<OpenDmabufHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_dmabuf"));
         serialize_root_ = reinterpret_cast<SerializeRoot>(dlsym(d3d12_, "D3D12SerializeVersionedRootSignature"));
@@ -102,7 +100,6 @@ void D3dRuntime::close()
     create_device11_ = nullptr;
     get_interface12_ = nullptr;
     create9_ = nullptr;
-    open_host_heap_ = nullptr;
     open_dmabuf_heap_ = nullptr;
     serialize_root_ = nullptr;
     export_image_ = nullptr;
@@ -214,17 +211,6 @@ int32_t D3dRuntime::create_device12(const uint8_t *uuid, void *&device) const
     else unsetenv("VKD3D_VULKAN_DEVICE");
     factory->Release();
     if (FAILED(made)) device = nullptr;
-    return made;
-}
-
-int32_t D3dRuntime::open_host_heap(void *device, void *address, uint64_t size, void *&heap) const
-{
-    AV_SCOPE("D3dRuntime::open_host_heap");
-    heap = nullptr;
-    if (open_host_heap_ == nullptr || device == nullptr) return E_NOTIMPL;
-    const GUID heap_id = __uuidof(ID3D12Heap);
-    const int32_t made = open_host_heap_(device, address, size, &heap_id, &heap);
-    if (FAILED(made)) heap = nullptr;
     return made;
 }
 

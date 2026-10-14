@@ -121,25 +121,27 @@ TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
     return channel_.transport().send_batch(framed, length, unanswered);
 }
 
-Status Connection::open_memory(ObjectStorage<HostAllocation> &allocation, uint64_t bytes, HostMemoryRequest memory)
+Status Connection::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
 {
     AV_SCOPE("Connection::open_memory");
-    if (!opened() || faulted() || allocation.constructed()) return Status::invalid_state;
+    made = nullptr;
+    if (!opened() || faulted()) return Status::invalid_state;
     const icd::ThreadLockHold release(lock_);
-    static_cast<void>(allocation.construct(connection_, channel_.transport()));   /* checked empty above */
-    const Status status = allocation.object().open(bytes, memory);
-    if (status != Status::ok) allocation.destroy();
-    return status;
+    return channel_.open_memory(bytes, memory, made);
 }
 
-Status Connection::close_memory(ObjectStorage<HostAllocation> &allocation)
+Status Connection::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("Connection::close_memory");
-    if (!allocation.constructed()) return Status::ok;
     const icd::ThreadLockHold release(lock_);
-    const Status released = faulted() ? allocation.object().abandon() : allocation.object().close();
-    allocation.destroy();
-    return released;
+    return channel_.close_memory(allocation);
+}
+
+HostAllocation *Connection::find_memory(uint64_t handle)
+{
+    AV_SCOPE("Connection::find_memory");
+    const icd::ThreadLockHold release(lock_);
+    return channel_.find_memory(handle);
 }
 
 bool Connection::invariants_hold() const

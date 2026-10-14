@@ -78,7 +78,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), d3d12_(region_, objects_), d3d9_(region_, objects_), published_(), progress11_(), region_storage_(), region_storage_refused_(false),
+    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), imported_(), d3d12_(region_, imported_, objects_), d3d9_(region_, objects_), published_(), progress11_(), slice_storage_(), slice_memory_(nullptr), slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -117,13 +117,15 @@ void D3dBackend::shut_down()
         published_.unbind();
         constants_.close();
         objects_.clear();
-        release_region_storage();
+        release_slice_storage();
         progress11_.release();
         device11_->unlock();
     }
     static_cast<void>(states_.select(0u));
     device11_ = nullptr;
     shares_ = nullptr;
+    slice_storage_refused_ = false;
+    imported_.forget_all();
 }
 
 bool D3dBackend::knows(uint32_t command_id) const
@@ -230,19 +232,26 @@ bool D3dBackend::lost() const
 bool D3dBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("D3dBackend::adopt");
-    return region_.adopt(blob);
+    /* The session's region is the first memory it imports - its arena,
+     * opened with the session - and everything after is an object's own. */
+    if (region_.memory() == nullptr) return region_.adopt(blob);
+    return imported_.adopt(blob);
 }
 
 void D3dBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("D3dBackend::abandon");
     if (blob.object() == 0u) return;
-    published_.unbind();
-    if (device11_ != nullptr && region_storage_.made()) {
+    if (&blob.memory() == slice_memory_ && device11_ != nullptr) {
         device11_->lock(nullptr);
-        release_region_storage();
+        release_slice_storage();
         device11_->unlock();
     }
+    if (&blob.memory() != region_.memory()) {
+        imported_.abandon(blob);
+        return;
+    }
+    published_.unbind();
     region_.abandon(blob);
 }
 
@@ -1682,55 +1691,59 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     return true;
 }
 
-/* A host that answers 1 draws a buffer bound to a slice from the region in
+/* A host that answers 1 draws a buffer bound to a slice of a slice store in
  * place; 0 leaves the guest copying what it writes, as before. The session
  * asks once, before it has a device of its own, so none need be selected. */
 bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
 {
     AV_SCOPE("D3dBackend::on_QueryBufferSlices11");
-    supported = device11_ != nullptr && region_to_draw() ? 1u : 0u;
+    supported = device11_ != nullptr && device11_->slices() ? 1u : 0u;
     return true;
 }
 
 /* A buffer bound to a slice is the guest's memory from then on: whatever the
  * constant ring kept of it goes back to its own storage first, so that what
  * the guest bound last is what draws read. */
-bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t offset, uint64_t bytes)
+bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes)
 {
     AV_SCOPE("D3dBackend::on_BindBufferSlice");
-    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
-    if (!ready() || found == nullptr || !region_storage_.made()) return false;
+    ID3D11Resource *const     found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
+    const SourceMemory *const store = imported_.find(memory);
+    if (!ready() || found == nullptr || store == nullptr) return false;
+    if (offset > store->size() || bytes > store->size() - offset) return false;
     D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
     found->GetType(&dimension);
-    uint8_t *const host = region_.at(offset, bytes);
-    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER || host == nullptr) return false;
+    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER || !slice_storage_for(*store)) return false;
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
-    return device11_->bind_storage(buffer, region_storage_, offset, bytes, host);
+    return device11_->bind_storage(buffer, slice_storage_, offset, bytes, store->pointer() + offset);
 }
 
-/* By the region's dma-buf: its memory is the GPU's own (docs/host-memory.md),
+/* By the store's dma-buf: its memory is the GPU's own (docs/host-memory.md),
  * which DXVK's device imports as any device of the same driver does. */
-bool D3dBackend::region_to_draw()
+bool D3dBackend::slice_storage_for(const SourceMemory &store)
 {
-    AV_SCOPE("D3dBackend::region_to_draw");
-    if (region_storage_.made()) return true;
-    const SourceMemory *const memory = region_.memory();
-    if (region_storage_refused_ || memory == nullptr || !device11_->slices()) return false;
-    if (device11_->import_to_draw(memory->share(), region_.length(), region_storage_)) return true;
-    region_storage_refused_ = true;
-    lines_.write("the session's region could not be imported to draw from: mapped buffers are copied");
+    AV_SCOPE("D3dBackend::slice_storage_for");
+    if (slice_memory_ == &store) return true;
+    if (slice_storage_refused_ || !device11_->slices()) return false;
+    release_slice_storage();
+    if (device11_->import_to_draw(store.share(), store.size(), slice_storage_)) {
+        slice_memory_ = &store;
+        return true;
+    }
+    slice_storage_refused_ = true;
+    lines_.write("the slice store could not be imported to draw from: mapped buffers are copied");
     return false;
 }
 
-/* DXVK may still have recorded draws that read the region, or the GPU be
+/* DXVK may still have recorded draws that read the store, or the GPU be
  * running them: they finish before the buffer they read goes. */
-void D3dBackend::release_region_storage()
+void D3dBackend::release_slice_storage()
 {
-    AV_SCOPE("D3dBackend::release_region_storage");
-    if (region_storage_.made()) device11_->vulkan().idle();
-    region_storage_.release();
-    region_storage_refused_ = false;
+    AV_SCOPE("D3dBackend::release_slice_storage");
+    if (slice_storage_.made()) device11_->vulkan().idle();
+    slice_storage_.release();
+    slice_memory_ = nullptr;
 }
 
 /* What a read back waits for, without the device's lock: every session on the

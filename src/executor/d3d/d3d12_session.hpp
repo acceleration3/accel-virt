@@ -19,7 +19,6 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
-#include "executor/d3d/d3d12_arena_heaps.hpp"
 #include "executor/d3d/d3d12_fence_publisher.hpp"
 #include "executor/d3d/d3d12_fence_wake.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
@@ -48,6 +47,7 @@ class SessionShares;
 class SharedSurfaces;
 class D3d12HostDevice;
 class GuestRegion;
+class ImportedMemories;
 
 class D3d12Session final : public d3d12proto::ServerDispatch {
 public:
@@ -55,7 +55,9 @@ public:
      * reads upload heaps, bulk data and published fences through. */
     /* `objects` is the session's table, which the guest names every object
      * of from one id space: Direct3D 12's share it with 11's and 9's. */
-    D3d12Session(GuestRegion &region, D3dObjectTable &objects);
+    /* `imported` is the memory the session imported besides its region: a
+     * CPU-visible heap is one of them (docs/host-memory.md). */
+    D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. Swap chain buffers are
@@ -187,7 +189,7 @@ private:
     void                       drain();
 
     GuestRegion           &region_;
-    D3d12ArenaHeaps        arena_heaps_;
+    ImportedMemories      &imported_;
     D3d12HostDevice       *device_;
     SharedSurfaces        *surfaces_;
     D3dObjectTable        &objects_;

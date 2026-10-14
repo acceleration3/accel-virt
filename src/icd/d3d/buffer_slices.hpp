@@ -1,5 +1,6 @@
-/* The slices of a session's arena that buffers the CPU writes live in
- * (docs/mapped-buffers-plan.md, 3.1).
+/* The slices of a session's slice store that buffers the CPU writes live in
+ * (docs/mapped-buffers-plan.md, 3.1): host upload memory the session opened
+ * for them (docs/host-memory.md), which the host GPU reads in place.
  *
  * A buffer an application maps for writing is a slice: memory the host GPU
  * reads in place, so what the application writes - whenever it writes it -
@@ -9,15 +10,16 @@
  * free again only once the host GPU has finished that batch (GpuTimeline).
  *
  * Small slices, up to largest_small, come in power-of-two classes from
- * blocks carved out of the arena, each class a stack of free slices; a
+ * blocks carved out of the store, each class a stack of free slices; a
  * renamed buffer is a pop and a push. Larger ones are placed first fit
  * (RangeTable) and given back whole. Retired slices wait in order of their
  * tags, which never decrease, so the oldest is the first to come back.
  *
  * Its bookkeeping - each class's free stack and the retired queue, some
- * 2 MiB - is the first part of the span it is given, which no buffer is ever
- * bound to: kept in the object, every session avumd can hold carried it in
- * the DLL's image, 48 MiB of it.
+ * 2 MiB - is memory apart from the store, the session arena's: kept in the
+ * object, every session avumd can hold carried it in the DLL's image, 48 MiB
+ * of it, and kept in the store it would be read through a write-combined
+ * mapping, which reads uncached.
  *
  * Every device of the session takes slices, from whichever thread the
  * application maps on, so every call is made under the lock this is given.
@@ -41,7 +43,7 @@ class GpuTimeline;
 
 class BufferSlices {
 public:
-    /* A slice of the arena; no bytes for none. */
+    /* A slice of the store; no bytes for none. */
     struct Slice {
         uint64_t offset_;
         uint64_t bytes_;
@@ -51,7 +53,7 @@ public:
     static constexpr uint64_t smallest = 256u;
     static constexpr uint64_t largest_small = uint64_t{64} * 1024u;
     static constexpr uint32_t small_classes = 9u;   /* 256 B to 64 KiB */
-    /* What a small class carves from the arena at a time. */
+    /* What a small class carves from the store at a time. */
     static constexpr uint64_t block_bytes = uint64_t{256} * 1024u;
     /* A large slice is whole 64 KiB pages, which the host imports. */
     static constexpr uint64_t large_alignment = uint64_t{64} * 1024u;
@@ -68,11 +70,11 @@ public:
     BufferSlices(const BufferSlices &) = delete;
     BufferSlices &operator=(const BufferSlices &) = delete;
 
-    /* Takes slices from [begin, end) of the arena at `view` from now on,
-     * forgetting every slice before; both rounded inward to large_alignment,
-     * and the first metadata_bytes kept for the bookkeeping. A span too
-     * small for that, or no view, holds no slices. */
-    void                 take(uint8_t *view, uint64_t begin, uint64_t end);
+    /* Takes slices from a store of `bytes`, rounded down to
+     * large_alignment, from now on, forgetting every slice before, with its
+     * bookkeeping the metadata_bytes at `books`. No books, or a store too
+     * small for one large slice, holds no slices. */
+    void                 take(uint8_t *books, uint64_t bytes);
     /* A slice of at least `bytes`, waiting for retired ones to come back when
      * the arena has no room. invalid_parameter for no bytes; no_space when
      * none fits even with every retired slice back; invalid_state when the
@@ -106,7 +108,7 @@ private:
     static constexpr uint32_t no_class = ~0u;
 
 public:
-    /* The bookkeeping at the start of the span, in whole pages. */
+    /* The bookkeeping take() is given, in whole pages. */
     static constexpr uint64_t metadata_bytes =
         (uint64_t{small_classes} * max_per_class * sizeof(uint64_t) + uint64_t{max_retired} * sizeof(Retired) +
          large_alignment - 1u) / large_alignment * large_alignment;

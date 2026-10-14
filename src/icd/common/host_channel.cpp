@@ -19,7 +19,8 @@ ChannelShape::ChannelShape(SubApi sub_api, uint8_t ring_order, uint32_t reply_by
 HostChannel::HostChannel(BlockSource &memory, LogSink &log, const char *prefix, const ChannelShape &shape)
     : memory_(memory), lines_(log, prefix), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
-      arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_()
+      arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(),
+      device_(nullptr), memories_(memory)
 {
     AV_SCOPE("HostChannel::HostChannel");
 }
@@ -48,6 +49,7 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
         if (batch_block_ == nullptr) return Status::no_memory;
         static_cast<void>(batched_.construct(transport_.object(), batch_block_, batch_bytes_, staging_bytes_));
     }
+    device_ = &device;
     if (arena_bytes_ != 0u && open_arena(device) != Status::ok) {
         /* A device that will not import leaves the channel usable, with bulk
          * data inline; a transport that faulted while asking has taken the
@@ -81,6 +83,8 @@ void HostChannel::close(bool lost)
     AV_SCOPE("HostChannel::close");
     /* What was sent last still reaches the host before its context goes. */
     if (!lost && batched_.constructed()) static_cast<void>(batched_.object().flush());
+    close_memories(lost);
+    device_ = nullptr;
     if (arena_.constructed()) {
         /* Neither answer changes what is torn down next: a close the device
          * is not told of is one it does with the context. */
@@ -94,6 +98,60 @@ void HostChannel::close(bool lost)
     batch_block_ = nullptr;
     if (staging_ != nullptr) memory_.release(staging_);
     staging_ = nullptr;
+}
+
+Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+{
+    AV_SCOPE("HostChannel::open_memory");
+    made = nullptr;
+    if (!opened() || faulted() || device_ == nullptr) return Status::invalid_state;
+    ObjectStorage<HostAllocation> *kept = nullptr;
+    if (memories_.create(kept) != Status::ok) return Status::no_memory;
+    static_cast<void>(kept->construct(*device_, transport_.object()));   /* a fresh slot */
+    const Status opened_memory = kept->object().open(bytes, memory);
+    if (opened_memory != Status::ok) {
+        static_cast<void>(memories_.destroy(kept));
+        return opened_memory;
+    }
+    made = &kept->object();
+    return Status::ok;
+}
+
+Status HostChannel::close_memory(HostAllocation &allocation)
+{
+    AV_SCOPE("HostChannel::close_memory");
+    ObjectStorage<HostAllocation> *const kept = memories_.find_if(
+        [&allocation](const ObjectStorage<HostAllocation> &held) { return &held.object() == &allocation; });
+    if (kept == nullptr) return Status::invalid_parameter;
+    const Status released = faulted() ? allocation.abandon() : allocation.close();
+    static_cast<void>(memories_.destroy(kept));
+    return released;
+}
+
+HostAllocation *HostChannel::find_memory(uint64_t handle)
+{
+    AV_SCOPE("HostChannel::find_memory");
+    if (handle == 0u) return nullptr;
+    ObjectStorage<HostAllocation> *const kept = memories_.find_if(
+        [handle](const ObjectStorage<HostAllocation> &held) { return held.object().handle() == handle; });
+    return kept != nullptr ? &kept->object() : nullptr;
+}
+
+uint32_t HostChannel::memories() const
+{
+    AV_SCOPE("HostChannel::memories");
+    return memories_.live();
+}
+
+void HostChannel::close_memories(bool lost)
+{
+    AV_SCOPE("HostChannel::close_memories");
+    for (ObjectStorage<HostAllocation> *kept = nullptr;
+         (kept = memories_.find_if([](const ObjectStorage<HostAllocation> &) { return true; })) != nullptr;) {
+        const Status released = lost ? kept->object().abandon() : kept->object().close();
+        if (released != Status::ok) lines_.write("host memory did not close whole");
+        static_cast<void>(memories_.destroy(kept));
+    }
 }
 
 bool HostChannel::opened() const

@@ -92,7 +92,7 @@ public:
     virtual bool on_ReadSubresource(uint32_t resource, uint32_t subresource, uint32_t& hresult, uint32_t& row_pitch, uint32_t& depth_pitch, uint8_t* data, uint64_t data_capacity, uint64_t& data_size) = 0;
     virtual bool on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point) = 0;
     virtual bool on_QueryBufferSlices11(uint32_t& supported) = 0;
-    virtual bool on_BindBufferSlice(uint32_t resource, uint64_t offset, uint64_t bytes) = 0;
+    virtual bool on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes) = 0;
     virtual bool on_BeginQuery(uint32_t query) = 0;
     virtual bool on_EndQuery(uint32_t query) = 0;
     virtual bool on_BindQueryResults(uint64_t offset, uint32_t slots) = 0;

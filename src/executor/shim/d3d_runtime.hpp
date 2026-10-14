@@ -49,9 +49,6 @@ public:
     /* A vkd3d-proton device of its own on the Vulkan device with this UUID;
      * `device` is an ID3D12Device, null on failure. */
     int32_t create_device12(const uint8_t *uuid, void *&device) const;
-    /* `size` bytes of host memory at `address` as an ID3D12Heap of `device`'s
-     * that only buffers can be placed in; the HRESULT, `heap` null on failure. */
-    int32_t open_host_heap(void *device, void *address, uint64_t size, void *&heap) const;
     /* The same pages as the dma-buf `fd`, which the caller keeps. */
     int32_t open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const;
     /* A shared committed texture of vkd3d-proton's - `resource` an
@@ -72,7 +69,6 @@ private:
                                        ID3D11Device **device, uint32_t *level, ID3D11DeviceContext **context);
     using GetInterface12 = int32_t (*)(const void *clsid, const void *riid, void **object);
     using Create9 = IDirect3D9 *(*)(uint32_t sdk_version);
-    using OpenHostHeap = int32_t (*)(void *device, void *address, uint64_t size, const void *riid, void **heap);
     using OpenDmabufHeap = int32_t (*)(void *device, void *address, int fd, uint64_t size, const void *riid,
                                        void **heap);
     using SerializeRoot = int32_t (*)(const void *desc, void **blob, void **errors);
@@ -94,7 +90,6 @@ private:
     CreateDevice11 create_device11_;
     GetInterface12 get_interface12_;
     Create9        create9_;
-    OpenHostHeap   open_host_heap_;
     OpenDmabufHeap open_dmabuf_heap_;
     SerializeRoot  serialize_root_;
     ExportImage    export_image_;

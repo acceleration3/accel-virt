@@ -136,10 +136,10 @@ static bool decode_CreateHeap12(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     if (!r.read_pod(size)) return false;
     uint64_t alignment{};
     if (!r.read_pod(alignment)) return false;
-    uint64_t arena_offset{};
-    if (!r.read_pod(arena_offset)) return false;
+    uint64_t memory{};
+    if (!r.read_pod(memory)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateHeap12(heap, properties, flags, size, alignment, arena_offset)) return false;
+    if (!s.on_CreateHeap12(heap, properties, flags, size, alignment, memory)) return false;
     return true;
 }
 

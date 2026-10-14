@@ -236,7 +236,7 @@ bool D3d11Device::place_on_slice(ResourceRecord &resource, size_t bytes)
     resource.slice_offset = slice.offset_;
     resource.slice_bytes = slice.bytes_;
     resource.on_slice = 1u;
-    resource.shadow = session_.arena_view() + slice.offset_;
+    resource.shadow = session_.slice_view() + slice.offset_;
     return true;
 }
 
@@ -249,7 +249,7 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
     slices->retire(d3d::BufferSlices::Slice{resource.slice_offset, resource.slice_bytes});
     resource.slice_offset = fresh.offset_;
     resource.slice_bytes = fresh.bytes_;
-    resource.shadow = session_.arena_view() + fresh.offset_;
+    resource.shadow = session_.slice_view() + fresh.offset_;
     return bind_slice(resource);
 }
 
@@ -273,7 +273,8 @@ bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
 bool D3d11Device::bind_slice(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::bind_slice");
-    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.id, resource.slice_offset, resource.slice_bytes);
+    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.id, session_.slice_memory(), resource.slice_offset,
+                                            resource.slice_bytes);
 }
 
 void D3d11Device::leave_slice(ResourceRecord &resource)

@@ -16,6 +16,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace av {
+class HostAllocation;
+}  // namespace av
+
 namespace av::d3d12 {
 
 class D3d12Device;
@@ -29,15 +33,15 @@ struct RecordHeader {
 };
 
 /* A heap: its guest address range (placed buffers are found in it), and for a
- * CPU-visible one where in the session's arena its pages are. */
+ * CPU-visible one the host memory it is (docs/host-memory.md), which the
+ * session keeps. */
 struct HeapRecord {
     static constexpr uint32_t tag = 0x00485641u; /* "AVH" */
-    static constexpr uint64_t no_arena = ~uint64_t{0};
 
-    RecordHeader header;
-    uint64_t     size;
-    uint64_t     address;
-    uint64_t     arena_offset;
+    RecordHeader    header;
+    uint64_t        size;
+    uint64_t        address;
+    HostAllocation *memory;
     uint32_t     type; /* D3D12_HEAP_TYPE */
     uint32_t     flags;
     /* Whether the host has a heap of this id: a committed resource in the

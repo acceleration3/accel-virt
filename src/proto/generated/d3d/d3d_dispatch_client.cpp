@@ -695,10 +695,11 @@ bool av_d3d_QueryBufferSlices11(::av::ClientTransport& t, uint32_t* supported) {
     return r.remaining() == 0u;
 }
 
-bool av_d3d_BindBufferSlice(::av::ClientTransport& t, uint32_t resource, uint64_t offset, uint64_t bytes) {
+bool av_d3d_BindBufferSlice(::av::ClientTransport& t, uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes) {
     AV_SCOPE("av_d3d_BindBufferSlice");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
+    b.write_pod<uint64_t>(memory);
     b.write_pod<uint64_t>(offset);
     b.write_pod<uint64_t>(bytes);
     return t.send_async(kCmd_BindBufferSlice, b) == ::av::TransportResult::ok;

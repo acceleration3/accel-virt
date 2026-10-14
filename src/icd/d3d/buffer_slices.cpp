@@ -14,14 +14,13 @@ BufferSlices::BufferSlices(GpuTimeline &timeline, icd::ThreadLock &lock)
     AV_SCOPE("BufferSlices::BufferSlices");
 }
 
-void BufferSlices::take(uint8_t *view, uint64_t begin, uint64_t end)
+void BufferSlices::take(uint8_t *books, uint64_t bytes)
 {
     AV_SCOPE("BufferSlices::take");
     const icd::ThreadLockHold release(lock_);
-    const uint64_t head = (begin + large_alignment - 1u) & ~(large_alignment - 1u);
-    const bool     room = view != nullptr && end > head && end - head > metadata_bytes;
-    ranges_.reset(room ? head + metadata_bytes : 0u, room ? end : 0u);
-    uint8_t *const books = room ? view + head : nullptr;
+    const uint64_t end = bytes & ~(large_alignment - 1u);
+    const bool     room = books != nullptr && end != 0u;
+    ranges_.reset(0u, room ? end : 0u);
     for (uint32_t which = 0u; which < small_classes; which++)
         free_[which] = room ? reinterpret_cast<uint64_t *>(books + uint64_t{which} * max_per_class * sizeof(uint64_t))
                             : nullptr;

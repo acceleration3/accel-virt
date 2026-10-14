@@ -13,6 +13,12 @@
 #ifndef AV_ICD_HOST_CHANNEL_HPP
 #define AV_ICD_HOST_CHANNEL_HPP
 
+#include "proto/resources/host_memory_request.hpp"
+
+#include "core/support/object_pool.hpp"
+
+#include "guest/transport/host_allocation.hpp"
+
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
@@ -90,6 +96,22 @@ public:
      * without an arena. */
     uint64_t          host_errors() const;
 
+    /* `bytes` of the host memory `memory` names, opened on this channel's
+     * context and imported (docs/host-memory.md): one allocation for one
+     * object - a Vulkan allocation, a Direct3D 12 heap, Direct3D 11's slice
+     * store - which the channel keeps until close_memory or its own close.
+     * invalid_state when not open or faulted; no_memory with no room to keep
+     * it; otherwise HostAllocation's refusal, with nothing kept. The caller
+     * serializes it with every other use of the transport. */
+    [[nodiscard]] Status open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
+    /* What open_memory made, released - abandoned on a faulted channel, whose
+     * context frees it on the host. The release's refusal, if any; the
+     * allocation is gone either way. */
+    [[nodiscard]] Status close_memory(HostAllocation &allocation);
+    /* The allocation the host named `handle`, or null. */
+    HostAllocation      *find_memory(uint64_t handle);
+    uint32_t             memories() const;
+
     /* Its fields on the line `writer` has open. */
     void report(StateWriter &writer) const;
     /* Closed holds no memory; open holds the staging and a sound transport,
@@ -103,6 +125,8 @@ private:
     /* The arena at the shape's size, halved while the device refuses, down to
      * the least it is ever opened at. */
     [[nodiscard]] Status open_arena(GuestConnection &device);
+    /* Every allocation open_memory made, released or abandoned. */
+    void                 close_memories(bool lost);
 
     BlockSource                   &memory_;
     DriverLog                      lines_;
@@ -117,6 +141,10 @@ private:
     ObjectStorage<KmtTransport>     transport_;
     ObjectStorage<BatchedTransport> batched_;
     ObjectStorage<KmtBlobArena>     arena_;
+    /* The connection the channel was opened over, which an allocation is
+     * opened on too; null while closed. */
+    GuestConnection                *device_;
+    ObjectPool<ObjectStorage<HostAllocation>> memories_;
 };
 
 }  // namespace av::icd

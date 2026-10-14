@@ -10,10 +10,7 @@
 #define AV_ICD_DEVICE_MEMORY_HPP
 
 #include "core/log/driver_log.hpp"
-#include "core/support/object_pool.hpp"
-#include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "guest/transport/host_allocation.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
 #include <stdint.h>
@@ -21,7 +18,7 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
-class BlockSource;
+class HostAllocation;
 class Kmt;
 class LogSink;
 class StateWriter;
@@ -34,8 +31,7 @@ struct DeviceMemoryProbe;
 
 class DeviceMemory {
 public:
-    DeviceMemory(BlockSource &memory, Kmt &kmt, Connection &connection, LogSink &log);
-    ~DeviceMemory();
+    DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log);
     DeviceMemory(const DeviceMemory &) = delete;
     DeviceMemory &operator=(const DeviceMemory &) = delete;
 
@@ -63,19 +59,24 @@ public:
     bool invariants_hold() const;
 
 private:
-    using Visible = ObjectStorage<HostAllocation>;
+    static constexpr uint32_t max_allocations = 4096u;
 
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
     VkResult           refusal() const;
     /* The host allocation the guest names `memory`, or null. */
-    Visible           *find(VkDeviceMemory memory) const;
+    HostAllocation    *find(VkDeviceMemory memory) const;
+    /* The slot holding `allocation` - a free one for null - or max_allocations. */
+    uint32_t           slot_of(const HostAllocation *allocation) const;
 
-    Connection         &connection_;
-    LogSink            &log_;
-    DriverLog           lines_;
-    MemoryTypeTable     types_;
-    bool                learnt_;
-    ObjectPool<Visible> visible_;
+    Connection     &connection_;
+    LogSink        &log_;
+    DriverLog       lines_;
+    MemoryTypeTable types_;
+    bool            learnt_;
+    /* This device's host allocations, which the connection's channel keeps:
+     * one channel serves every device of an instance. */
+    HostAllocation *held_[max_allocations];
+    uint32_t        count_;
 
     friend struct DeviceMemoryProbe;
 };
