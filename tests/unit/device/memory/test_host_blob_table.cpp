@@ -5,6 +5,7 @@
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
+#include "device/memory/host_blob_owners.hpp"
 #include "device/memory/host_blob_table.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -18,6 +19,7 @@
 #include <cstring>
 
 using av::HostBlobId;
+using av::HostBlobOwners;
 using av::HostBlobTable;
 using av::HostMemoryRequest;
 using av::HostViolation;
@@ -269,6 +271,17 @@ TEST(host_blob_table_owns, answers_only_for_a_live_blob_of_that_context)
   CHECK(fixture.table().contains(first));
   CHECK_STATUS(fixture.table().release(first), Status::ok);
   CHECK(!fixture.table().owns(context, first)); }
+
+/* A context's imports ask through HostBlobOwners, the table's one face to
+ * them: the same answers come back through it. */
+TEST(host_blob_table_owns, answers_the_same_through_the_owners_a_context_asks)
+{ Fixture fixture;
+  HostBlobOwners &owners = fixture.table();
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+  CHECK(owners.owns(context, first));
+  CHECK(!owners.owns(context + 1u, first));
+  CHECK_STATUS(fixture.table().release(first), Status::ok);
+  CHECK(!owners.owns(context, first)); }
 
 TEST(host_blob_table_initialize, nothing_is_made_before_the_lock_exists_and_it_is_made_once)
 { MockHost host;
