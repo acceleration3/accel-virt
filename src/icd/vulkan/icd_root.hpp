@@ -178,9 +178,9 @@ public:
     /* The probe's lost step (feature 045): the instance's context is sent a
      * vkCreateInstance cut after its structure type, which the host faults it
      * for. VK_ERROR_DEVICE_LOST once it has; VK_ERROR_INITIALIZATION_FAILED
-     * when the host answered instead, or for a physical device this did not
-     * make. It faults only the caller's own context. */
-    VkResult           force_context_fault(VkPhysicalDevice physical_device);
+     * when the host answered instead, or for a device this did not make. It
+     * faults only the caller's own context. */
+    VkResult           force_context_fault(VkDevice device);
 
     /* What the generated wrappers' hooks forward to (icd_hooks.cpp). */
     Connection      *acquire_connection();
@@ -224,9 +224,9 @@ public:
      * because `last_code()` is the last call of any kind: a driver that has
      * just failed to share something goes on to free what it half-made, and
      * those calls succeed and wipe it. Two guest runs reported zero that way.
-     * `physical_device` is there for the loader to dispatch on and is checked
-     * like any other handle. */
-    VkResult last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status);
+     * `device` is there for the loader to dispatch on and is checked like any
+     * other handle. */
+    VkResult last_kernel_status(VkDevice device, uint32_t *status);
     /* What the host says of its own opaque fd, said in Win32's spelling; every
      * other handle type is answered as absent, since nothing here turns a
      * Direct3D object into a host one. */

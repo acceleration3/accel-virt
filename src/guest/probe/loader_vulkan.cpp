@@ -10,6 +10,7 @@ namespace {
 /* In LoaderVulkan::Function order. */
 constexpr const char *const names[] = {
     "vkDestroyInstance",
+    "vkGetDeviceProcAddr",
     "vkEnumeratePhysicalDevices",
     "vkGetPhysicalDeviceProperties2",
     "vkGetPhysicalDeviceQueueFamilyProperties",
@@ -102,12 +103,20 @@ VkResult LoaderVulkan::create_instance(const VkInstanceCreateInfo *info, VkInsta
     return VK_SUCCESS;
 }
 
-VkResult LoaderVulkan::force_context_fault(VkInstance instance, VkPhysicalDevice physical_device)
+VkResult LoaderVulkan::force_context_fault(VkDevice device)
 {
     AV_SCOPE("LoaderVulkan::force_context_fault");
-    using Force = VkResult (VKAPI_PTR *)(VkPhysicalDevice);
-    const auto force = reinterpret_cast<Force>(get_instance_proc_addr_(instance, force_context_fault_name));
-    return force != nullptr ? force(physical_device) : VK_ERROR_EXTENSION_NOT_PRESENT;
+    using Force = VkResult (VKAPI_PTR *)(VkDevice);
+    const auto force = reinterpret_cast<Force>(device_entry(device, force_context_fault_name));
+    return force != nullptr ? force(device) : VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+PFN_vkVoidFunction LoaderVulkan::device_entry(VkDevice device, const char *name)
+{
+    AV_SCOPE("LoaderVulkan::device_entry");
+    using Lookup = PFN_vkVoidFunction (VKAPI_PTR *)(VkDevice, const char *);
+    const auto lookup = reinterpret_cast<Lookup>(functions_[static_cast<uint32_t>(Function::device_proc_addr)]);
+    return lookup != nullptr && device != VK_NULL_HANDLE ? lookup(device, name) : nullptr;
 }
 
 void LoaderVulkan::destroy_instance(VkInstance instance)
@@ -229,13 +238,13 @@ struct MemoryGetWin32HandleInfo {
     VkFlags         handle_type;
 };
 
-uint32_t LoaderVulkan::last_kernel_status(VkInstance instance, VkPhysicalDevice physical_device)
+uint32_t LoaderVulkan::last_kernel_status(VkDevice device)
 {
     AV_SCOPE("LoaderVulkan::last_kernel_status");
-    using Ask = VkResult (VKAPI_PTR *)(VkPhysicalDevice, uint32_t *);
-    const auto ask = reinterpret_cast<Ask>(get_instance_proc_addr_(instance, "vkAvLastKernelStatus"));
+    using Ask = VkResult (VKAPI_PTR *)(VkDevice, uint32_t *);
+    const auto ask = reinterpret_cast<Ask>(device_entry(device, "vkAvLastKernelStatus"));
     uint32_t   status = 0u;
-    if (ask == nullptr || ask(physical_device, &status) != VK_SUCCESS) return 0u;
+    if (ask == nullptr || ask(device, &status) != VK_SUCCESS) return 0u;
     return status;
 }
 

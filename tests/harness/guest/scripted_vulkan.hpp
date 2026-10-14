@@ -159,7 +159,7 @@ public:
                                      VkQueueFamilyProperties *properties) override;
     void     memory_properties(VkPhysicalDevice physical_device, VkPhysicalDeviceMemoryProperties *properties) override;
     VkResult create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *info, VkDevice *device) override;
-    VkResult force_context_fault(VkInstance instance, VkPhysicalDevice physical_device) override;
+    VkResult force_context_fault(VkDevice device) override;
 
     void     destroy_device(VkDevice device) override;
     VkResult device_wait_idle(VkDevice device) override;
@@ -195,7 +195,7 @@ public:
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, std::uint32_t *count,
                                          VkExtensionProperties *properties) override;
-    std::uint32_t last_kernel_status(VkInstance instance, VkPhysicalDevice physical_device) override;
+    std::uint32_t last_kernel_status(VkDevice device) override;
     /* The NTSTATUS a scripted driver says its last kernel call answered. */
     void          set_kernel_status(std::uint32_t code);
     VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;

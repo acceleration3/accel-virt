@@ -10,6 +10,8 @@
 namespace av {
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL bound_icd_instance_proc_addr(VkInstance instance, const char *name);
+/* vkGetDeviceProcAddr as the bound IcdRoot answers it. */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL bound_icd_device_proc_addr(VkDevice device, const char *name);
 
 }  // namespace av
 

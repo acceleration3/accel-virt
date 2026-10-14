@@ -251,7 +251,7 @@ VkResult ScriptedVulkan::create_device(VkPhysicalDevice physical_device, const V
     return VK_SUCCESS;
 }
 
-VkResult ScriptedVulkan::force_context_fault(VkInstance, VkPhysicalDevice)
+VkResult ScriptedVulkan::force_context_fault(VkDevice)
 {
     const VkResult result = use(Call::force_context_fault);
     lost_ = true;
@@ -395,7 +395,7 @@ VkResult ScriptedVulkan::enumerate_device_extensions(VkPhysicalDevice, std::uint
     return room < listed ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-std::uint32_t ScriptedVulkan::last_kernel_status(VkInstance, VkPhysicalDevice)
+std::uint32_t ScriptedVulkan::last_kernel_status(VkDevice)
 {
     return kernel_status_;
 }

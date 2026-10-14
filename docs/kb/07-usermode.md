@@ -479,9 +479,18 @@ Feature 053 learned this from a guest, twice:
   has been read back from a live guest since.
 
 `vkAvForceContextFault(VkInstance, VkPhysicalDevice)` from feature 044 had the
-shape right from the start, which is why nothing had caught the rule: both of
-the project's private entry points now begin with a dispatchable handle because
-the loader requires it, not because they need one.
+shape right from the start, which is why nothing had caught the rule.
+
+A trampoline is assembly, though, and a loader built without it has none at
+all: LSW cross-builds `vulkan-1.dll` with MinGW, whose loader build wants MASM
+for the trampolines and quietly leaves them out without it, and the GAS
+spelling upstream ships for x86-64 takes the System V convention (its handle
+from `rdi`), which crashed a 64-bit guest at the first call when tried. Both
+private entry points are therefore **device-level** now -
+`vkAvForceContextFault(VkDevice)` and `vkAvLastKernelStatus(VkDevice,
+uint32_t *)` - and the probe finds them with `vkGetDeviceProcAddr`. The loader
+does not wrap a `VkDevice`, so that answers the driver's own pointer and no
+trampoline is involved, whichever loader the guest has.
 
 Two things follow for anyone adding another:
 

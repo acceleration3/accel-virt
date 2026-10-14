@@ -1,7 +1,8 @@
 /* The probe's Vulkan through a loader entry point, here the ICD's own over
  * MockKmt with the host played by ScriptedHost: vkCreateInstance comes from
- * the null instance, everything else from the instance made, and a loader
- * that names no vkAvForceContextFault is answered for. The full-stack test
+ * the null instance, everything else from the instance made, the ICD's own
+ * functions from a device through vkGetDeviceProcAddr, and a loader whose
+ * driver names no vkAvForceContextFault is answered for. The full-stack test
  * runs every other call against a real GPU. */
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
@@ -48,10 +49,18 @@ using Kind = av::icd::LoaderHandle::Kind;
 
 namespace {
 
-/* A loader that knows every Vulkan command and nothing of the ICD's own. */
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_fault(VkInstance instance, const char *name)
+/* A driver that answers every Vulkan command and nothing of the ICD's own:
+ * its devices name no vkAvForceContextFault. */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL device_without_fault(VkDevice device, const char *name)
 {
     if (std::strcmp(name, "vkAvForceContextFault") == 0) return nullptr;
+    return av::bound_icd_device_proc_addr(device, name);
+}
+
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_fault(VkInstance instance, const char *name)
+{
+    if (std::strcmp(name, "vkGetDeviceProcAddr") == 0)
+        return reinterpret_cast<PFN_vkVoidFunction>(&device_without_fault);
     return av::bound_icd_instance_proc_addr(instance, name);
 }
 
@@ -75,7 +84,7 @@ namespace {
  * makes of an answer that is not VK_SUCCESS. */
 std::uint32_t stub_calls = 0u;
 
-VKAPI_ATTR VkResult VKAPI_CALL refusing_status(VkPhysicalDevice, std::uint32_t *status)
+VKAPI_ATTR VkResult VKAPI_CALL refusing_status(VkDevice, std::uint32_t *status)
 {
     stub_calls++;
     *status = 0xDEADBEEFu;   /* written and then not to be believed */
@@ -98,11 +107,18 @@ VKAPI_ATTR VkResult VKAPI_CALL stub_memory_handle(VkDevice, const av::MemoryGetW
     return VK_SUCCESS;
 }
 
-/* A loader that has every one of them. */
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL with_sharing(VkInstance instance, const char *name)
+/* A loader that has every one of them, the driver's status on its devices. */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL device_with_sharing(VkDevice device, const char *name)
 {
     if (std::strcmp(name, "vkAvLastKernelStatus") == 0)
         return reinterpret_cast<PFN_vkVoidFunction>(&refusing_status);
+    return av::bound_icd_device_proc_addr(device, name);
+}
+
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL with_sharing(VkInstance instance, const char *name)
+{
+    if (std::strcmp(name, "vkGetDeviceProcAddr") == 0)
+        return reinterpret_cast<PFN_vkVoidFunction>(&device_with_sharing);
     if (std::strcmp(name, "vkEnumerateDeviceExtensionProperties") == 0)
         return reinterpret_cast<PFN_vkVoidFunction>(&stub_enumerate);
     if (std::strcmp(name, "vkGetMemoryWin32HandleKHR") == 0)
@@ -111,9 +127,16 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL with_sharing(VkInstance instance, const
 }
 
 /* And one that has none of them. */
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_sharing(VkInstance instance, const char *name)
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL device_without_sharing(VkDevice device, const char *name)
 {
     if (std::strcmp(name, "vkAvLastKernelStatus") == 0) return nullptr;
+    return av::bound_icd_device_proc_addr(device, name);
+}
+
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_sharing(VkInstance instance, const char *name)
+{
+    if (std::strcmp(name, "vkGetDeviceProcAddr") == 0)
+        return reinterpret_cast<PFN_vkVoidFunction>(&device_without_sharing);
     return av::bound_icd_instance_proc_addr(instance, name);
 }
 
@@ -122,6 +145,25 @@ VkInstanceCreateInfo instance_info()
     VkInstanceCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     return info;
+}
+
+/* An instance and a device of its one physical device, made through
+ * `vulkan`, so its device lookup is the one resolved. */
+VkDevice loader_device(av::ScriptedHost &host, av::LoaderVulkan &vulkan, VkInstance &instance)
+{
+    const VkInstanceCreateInfo info = instance_info();
+    host.vk_handle(0, av::ScriptedHost::vk_instance);
+    CHECK_EQ(vulkan.create_instance(&info, &instance), VK_SUCCESS);
+    std::uint32_t    count = 1u;
+    VkPhysicalDevice physical = VK_NULL_HANDLE;
+    host.vk_physical_devices(0, 1u);
+    CHECK_EQ(vulkan.enumerate_physical_devices(instance, &count, &physical), VK_SUCCESS);
+    VkDeviceCreateInfo device_info = {};
+    device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    VkDevice device = VK_NULL_HANDLE;
+    host.vk_handle(0, av::ScriptedHost::vk_device);
+    CHECK_EQ(vulkan.create_device(physical, &device_info, &device), VK_SUCCESS);
+    return device;
 }
 
 }  // namespace
@@ -158,21 +200,30 @@ TEST(loader_vulkan, a_refused_instance_is_passed_on)
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* The ICD's fault is found through the instance and faults it; a loader
- * without it is answered VK_ERROR_EXTENSION_NOT_PRESENT and nothing is sent. */
-TEST(loader_vulkan, the_forced_fault_is_found_through_the_instance_or_refused)
+/* The ICD's fault is found through a device and faults its context; a driver
+ * without it is answered VK_ERROR_EXTENSION_NOT_PRESENT and nothing is sent,
+ * and a wrapper that made no instance has no device lookup to ask. */
+TEST(loader_vulkan, the_forced_fault_is_found_through_the_device_or_refused)
 { IcdRig rig;
-  const VkInstance instance = rig.create_instance();
-  const VkPhysicalDevice physical = rig.physical_device(instance);
+  LoaderVulkan unmade(&av::bound_icd_instance_proc_addr);
+  CHECK_EQ(unmade.force_context_fault(reinterpret_cast<VkDevice>(0x1u)), VK_ERROR_EXTENSION_NOT_PRESENT);
   LoaderVulkan bare(&without_fault);
+  VkInstance   bare_instance = VK_NULL_HANDLE;
+  const VkDevice bare_device = loader_device(rig.host(), bare, bare_instance);
   const std::uint32_t sent = rig.kmt().commands();
-  CHECK_EQ(bare.force_context_fault(instance, physical), VK_ERROR_EXTENSION_NOT_PRESENT);
+  CHECK_EQ(bare.force_context_fault(bare_device), VK_ERROR_EXTENSION_NOT_PRESENT);
+  CHECK_EQ(bare.force_context_fault(VK_NULL_HANDLE), VK_ERROR_EXTENSION_NOT_PRESENT);
   CHECK_EQ(rig.kmt().commands(), sent);
+  bare.destroy_device(bare_device);
+  bare.destroy_instance(bare_instance);
   LoaderVulkan icd(&av::bound_icd_instance_proc_addr);
+  VkInstance   instance = VK_NULL_HANDLE;
+  const VkDevice device = loader_device(rig.host(), icd, instance);
   rig.kmt().withhold_answer_at(1u);
-  CHECK_EQ(icd.force_context_fault(instance, physical), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(icd.force_context_fault(device), VK_ERROR_DEVICE_LOST);
   CHECK(rig.root().connection_of(instance, Kind::instance)->faulted());
-  rig.destroy_instance(instance);
+  icd.destroy_device(device);
+  icd.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }
 
 namespace {
@@ -563,9 +614,13 @@ TEST(loader_vulkan, the_win32_memory_handle_is_found_through_the_loader_or_refus
   /* And the driver's own NTSTATUS, which a probe reports because its own Kmt
    * never made the call: 0 from a loader that has no such function, and the
    * ICD's own once it does. */
-  CHECK_EQ(bare.last_kernel_status(instance, physical), 0u);
+  CHECK_EQ(bare.last_kernel_status(VK_NULL_HANDLE), 0u);
   LoaderVulkan icd(&av::bound_icd_instance_proc_addr);
-  CHECK_EQ(icd.last_kernel_status(instance, physical), rig.kmt().last_code());
+  VkInstance   own = VK_NULL_HANDLE;
+  const VkDevice device = loader_device(rig.host(), icd, own);
+  CHECK_EQ(icd.last_kernel_status(device), rig.kmt().last_code());
+  icd.destroy_device(device);
+  icd.destroy_instance(own);
   rig.destroy_instance(instance); }
 
 /* The sharing steps' three entry points through a loader that has them and one
@@ -577,16 +632,15 @@ TEST(loader_vulkan, the_sharing_entry_points_are_answered_or_absent_and_never_ca
 { IcdRig rig;
   const VkInstance           instance = rig.create_instance();
   const VkPhysicalDevice     physical = rig.physical_device(instance);
-  const VkInstanceCreateInfo info = instance_info();
 
   /* No such function: zero, and nothing called. */
   stub_calls = 0u;
   LoaderVulkan absent(&without_sharing);
   VkInstance   bare_instance = VK_NULL_HANDLE;
-  rig.host().vk_handle(0, ScriptedHost::vk_instance);
-  CHECK_EQ(absent.create_instance(&info, &bare_instance), VK_SUCCESS);
-  CHECK_EQ(absent.last_kernel_status(bare_instance, physical), 0u);
+  const VkDevice bare_device = loader_device(rig.host(), absent, bare_instance);
+  CHECK_EQ(absent.last_kernel_status(bare_device), 0u);
   CHECK_EQ(stub_calls, 0u);
+  absent.destroy_device(bare_device);
   absent.destroy_instance(bare_instance);
 
   /* A function that fails: still zero, because a status the call refused to
@@ -594,9 +648,8 @@ TEST(loader_vulkan, the_sharing_entry_points_are_answered_or_absent_and_never_ca
    * the table the two calls below go through. */
   LoaderVulkan present(&with_sharing);
   VkInstance   own = VK_NULL_HANDLE;
-  rig.host().vk_handle(0, ScriptedHost::vk_instance);
-  CHECK_EQ(present.create_instance(&info, &own), VK_SUCCESS);
-  CHECK_EQ(present.last_kernel_status(own, physical), 0u);
+  const VkDevice own_device = loader_device(rig.host(), present, own);
+  CHECK_EQ(present.last_kernel_status(own_device), 0u);
   CHECK_EQ(stub_calls, 1u);
 
   /* And the two the probe resolves by name, which the wrapper must call rather
@@ -614,5 +667,6 @@ TEST(loader_vulkan, the_sharing_entry_points_are_answered_or_absent_and_never_ca
   CHECK_EQ(stub_calls, 3u);
   /* Neither stub went near the kernel. */
   CHECK_EQ(rig.kmt().commands(), sent);
+  present.destroy_device(own_device);
   present.destroy_instance(own);
   rig.destroy_instance(instance); }

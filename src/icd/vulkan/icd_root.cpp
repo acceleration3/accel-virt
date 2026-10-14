@@ -98,10 +98,8 @@ const Entry        local_rows[] = {
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumeratePhysicalDeviceGroups), Level::instance},
     {"vkEnumeratePhysicalDeviceGroupsKHR",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumeratePhysicalDeviceGroupsKHR), Level::instance},
-    {"vkAvForceContextFault", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAvForceContextFault),
-            Level::physical_device},
-    {"vkAvLastKernelStatus", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAvLastKernelStatus),
-            Level::physical_device},
+    {"vkAvForceContextFault", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAvForceContextFault), Level::device},
+    {"vkAvLastKernelStatus", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAvLastKernelStatus), Level::device},
     {"vkGetPhysicalDeviceMemoryProperties",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties), Level::physical_device},
     {"vkGetPhysicalDeviceMemoryProperties2",
@@ -991,12 +989,12 @@ void IcdRoot::refused(const char *what)
     lines_.note(what, kernel_refusal_);
 }
 
-VkResult IcdRoot::last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status)
+VkResult IcdRoot::last_kernel_status(VkDevice device, uint32_t *status)
 {
     AV_SCOPE("IcdRoot::last_kernel_status");
     if (status == nullptr) return VK_ERROR_INITIALIZATION_FAILED;
     *status = 0u;
-    if (connection_of(physical_device, LoaderHandle::Kind::physical_device) == nullptr)
+    if (connection_of(device, LoaderHandle::Kind::device) == nullptr)
         return VK_ERROR_INITIALIZATION_FAILED;
     *status = kernel_refusal_;
     return VK_SUCCESS;
@@ -1801,12 +1799,12 @@ VkResult IcdRoot::device_wait_idle(VkDevice device)
     }
 }
 
-VkResult IcdRoot::force_context_fault(VkPhysicalDevice physical_device)
+VkResult IcdRoot::force_context_fault(VkDevice device)
 {
     AV_SCOPE("IcdRoot::force_context_fault");
-    LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkAvForceContextFault on a physical device this driver did not make");
+        log_.write("avvk: vkAvForceContextFault on a device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     Connection &connection = *made->connection();

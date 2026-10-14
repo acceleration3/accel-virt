@@ -79,20 +79,17 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitSemaphores(VkDevice device, const VkS
                                                       uint64_t timeout);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device);
-/* Not Vulkan's: the probe's forced fault, a physical-device-level function the
- * loader dispatches to an ICD that names it (loader interface version 7). */
-VKAPI_ATTR VkResult VKAPI_CALL local_vkAvForceContextFault(VkPhysicalDevice physicalDevice);
+/* Not Vulkan's: the probe's forced fault. Device level, so vkGetDeviceProcAddr
+ * answers the driver's own pointer: a loader reaches a physical-device or
+ * instance function it does not know only through a trampoline of its own,
+ * and a loader built without its assembly has none. */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAvForceContextFault(VkDevice device);
 /* The NTSTATUS of the last D3DKMT call this driver made (feature 053): what a
  * probe reports when an entry point refused, since every one of the kernel
- * calls behind sharing answers the same VK_ERROR_TOO_MANY_OBJECTS.
- *
- * It takes a physical device it does not need, and that is not decoration: the
- * Khronos loader builds a trampoline for a function it does not know which
- * dispatches on the first argument, so an entry point with no dispatchable
- * handle is one the loader jumps into from an empty slot. A no-argument
- * version of this crashed avvkprobe.exe inside vulkan-1.dll. */
-VKAPI_ATTR VkResult VKAPI_CALL local_vkAvLastKernelStatus(VkPhysicalDevice physicalDevice,
-                                                           uint32_t *status);
+ * calls behind sharing answers the same VK_ERROR_TOO_MANY_OBJECTS. Device
+ * level, as the forced fault is, and for the same reason; the device is
+ * checked like any other handle. */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAvLastKernelStatus(VkDevice device, uint32_t *status);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
 /* Every adapter's devices and groups, through the instances it spans. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,

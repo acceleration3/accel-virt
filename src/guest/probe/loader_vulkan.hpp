@@ -3,8 +3,9 @@
  * own on the full-stack rig - answers vkCreateInstance, and each instance made
  * answers the rest, resolved once as the instance is made. The Vulkan
  * specification has vkGetInstanceProcAddr answer every core command, so those
- * are called as answered; only the ICD's vkAvForceContextFault, which no
- * loader has to know, is looked for. */
+ * are called as answered; only the ICD's own vkAvForceContextFault and
+ * vkAvLastKernelStatus, which no loader has to know, are looked for, through
+ * vkGetDeviceProcAddr. */
 #ifndef AV_LOADER_VULKAN_HPP
 #define AV_LOADER_VULKAN_HPP
 
@@ -35,7 +36,7 @@ public:
                                      VkQueueFamilyProperties *properties) override;
     void     memory_properties(VkPhysicalDevice physical_device, VkPhysicalDeviceMemoryProperties *properties) override;
     VkResult create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *info, VkDevice *device) override;
-    VkResult force_context_fault(VkInstance instance, VkPhysicalDevice physical_device) override;
+    VkResult force_context_fault(VkDevice device) override;
 
     void     destroy_device(VkDevice device) override;
     VkResult device_wait_idle(VkDevice device) override;
@@ -52,7 +53,7 @@ public:
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, uint32_t *count,
                                          VkExtensionProperties *properties) override;
-    uint32_t last_kernel_status(VkInstance instance, VkPhysicalDevice physical_device) override;
+    uint32_t last_kernel_status(VkDevice device) override;
     VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;
     VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) override;
     VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info, VkImageView *view) override;
@@ -127,6 +128,7 @@ private:
     /* One per function resolved through an instance, in `names` order. */
     enum class Function : uint32_t {
         destroy_instance,
+        device_proc_addr,
         enumerate_physical_devices,
         physical_device_properties2,
         queue_family_properties,
@@ -197,6 +199,10 @@ private:
         count
     };
     static constexpr uint32_t function_count = static_cast<uint32_t>(Function::count);
+
+    /* `name` as the driver behind `device` answers it, through
+     * vkGetDeviceProcAddr; null when nothing answers. */
+    PFN_vkVoidFunction device_entry(VkDevice device, const char *name);
 
     /* The function resolved for `function`, as the C type the caller names. */
     template <typename Pointer>

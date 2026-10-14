@@ -1178,8 +1178,8 @@ A faulted context's executor is destroyed at once, on its worker; the context,
 its doorbell and its blobs stay until `CTX_DESTROY` or a reset.
 
 A guest can fault its own context on purpose, and the Vulkan ICD does so for
-its probe: `vkAvForceContextFault(VkPhysicalDevice)`, an ICD-local
-physical-device-level entry and not an extension, sends a `vkCreateInstance`
+its probe: `vkAvForceContextFault(VkDevice)`, an ICD-local device-level
+entry and not an extension, found through `vkGetDeviceProcAddr`, sends a `vkCreateInstance`
 frame cut after its structure type on the instance's own transport, which the
 executor cannot decode (fault 6). No other context is touched.
 
