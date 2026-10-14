@@ -1211,7 +1211,7 @@ TEST(adapter_set_power_state, what_was_scanning_out_before_d3_is_scanning_out_af
    * scanning out has its resource created again; the pages follow with the
    * guest's next address, which is what dxgkrnl sends after a resume. The
    * clock's page is registered again first, and nothing answers that here. */
-  CHECK_EQ(resumed.respond_all(0x1100u), 3u);   /* the clock's page, the scanout, and the capset the resume asks for */
+  CHECK_EQ(resumed.respond_all(0x1100u), 2u);   /* the clock's page and the scanout: unanswered, the first holds back the capset */
   CHECK_EQ(resumed.request_type(0u), 0x02F4u);
   CHECK_EQ(resumed.request_type(1u), 0x0101u);
   CHECK(fixture.adapter().invariants_hold()); }
@@ -1224,10 +1224,29 @@ TEST(adapter_set_power_state, a_source_that_was_dark_stays_dark_across_power)
   CHECK_EQ(control.respond_all(0x1100u), 0u);   /* StartDevice's display info was answered */
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.forget_control();
+  const std::uint64_t resumed_at = fixture.platform().interrupt_time();
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
   /* Nothing was scanning out: the resume registered the clock's page again
-   * and asked the device what it is, and made no other request. */
-  CHECK_EQ(fixture.control().respond_all(0x1100u), 2u);
+   * and made no other request. Nothing answers here, so the device is not
+   * asked what it is either - it answers in order - and the resume waited
+   * out one request's patience, not one per request. */
+  CHECK_EQ(fixture.control().respond_all(0x1100u), 1u);
+  CHECK_EQ(fixture.control().request_type(0u), 0x02F4u);
+  const std::uint64_t waited = fixture.platform().interrupt_time() - resumed_at;
+  CHECK(waited >= 30000000u && waited < 31000000u);   /* three seconds, in 100 ns ticks */
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* With the device answering, the resume asks it what it is after the clock's
+ * page (feature 040, FR-005). */
+TEST(adapter_set_power_state, a_resume_asks_an_answering_device_what_it_is)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK(fixture.control().requests() >= 2u);
   CHECK_EQ(fixture.control().request_type(0u), 0x02F4u);
   CHECK_EQ(fixture.control().request_type(1u), 0x0108u);
   CHECK(fixture.adapter().invariants_hold()); }
@@ -2831,13 +2850,14 @@ TEST(adapter_set_pointer_shape, a_power_cycle_creates_the_cursor_resource_again)
   /* The power cycle built new rings, so the device side is new too. */
   const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
   av::FakeVirtqueueDevice device(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
-  /* The resume registers the clock's page and asks the device what it is as
-   * well (feature 040, FR-005), and nothing answers either here, so both are
-   * still published. */
-  CHECK_EQ(device.respond_all(0x1100u), 5u);
+  /* The resume registers the clock's page, and nothing answers it here: the
+   * device answers in order, so what the resume would ask it next - what it
+   * is (feature 040, FR-005) - is not even sent, and what follows is the
+   * cursor's resource made again. */
+  CHECK_EQ(device.respond_all(0x1100u), 4u);
   CHECK_EQ(device.request_type(0u), 0x02F4u);   /* the clock's page */
-  CHECK_EQ(device.request_type(1u), 0x0108u);   /* what the resume asked the device it is */
-  CHECK_EQ(device.request_type(2u), 0x0101u); }
+  CHECK_EQ(device.request_type(1u), 0x0101u);
+  for (std::uint32_t i = 0u; i < device.requests(); i++) CHECK(device.request_type(i) != 0x0108u); }
 
 TEST(adapter, the_legacy_surface_answers_not_supported)
 { Fixture fixture;

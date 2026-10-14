@@ -57,6 +57,9 @@ public:
     void     store_atomic(uint64_t &target, uint64_t value) override;
     uint64_t load_atomic(uint64_t &source) override;
     void     stall(uint32_t microseconds) override;
+    void     initialize_wake_event(void *storage) override;
+    void     set_wake_event(void *storage) override;
+    bool     wait_wake_event(void *storage, uint64_t ticks) override;
     uint8_t  read_register_u8(void *address) override;
     uint16_t read_register_u16(void *address) override;
     uint32_t read_register_u32(void *address) override;

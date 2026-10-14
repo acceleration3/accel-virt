@@ -668,8 +668,37 @@ void MockPlatform::on_stall(StallCallback callback, void *context)
 void MockPlatform::stall(std::uint32_t microseconds)
 {
     advance_time(std::uint64_t{microseconds} * 10u);
+    stalled_ticks_ += std::uint64_t{microseconds} * 10u;
     if (stall_callback_ != nullptr) stall_callback_(stall_context_);
 }
+
+void MockPlatform::initialize_wake_event(void *storage) { *static_cast<std::uint8_t *>(storage) = 0u; }
+
+void MockPlatform::set_wake_event(void *storage)
+{
+    if (irql_ > Irql::dispatch)
+        record(Violation::irql_ceiling, "set_wake_event at IRQL %u", static_cast<unsigned>(irql_));
+    *static_cast<std::uint8_t *>(storage) = 1u;
+}
+
+bool MockPlatform::wait_wake_event(void *storage, std::uint64_t ticks)
+{
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "wake event waited on at IRQL %u", static_cast<unsigned>(irql_));
+    auto *const set = static_cast<std::uint8_t *>(storage);
+    if (*set == 0u && stall_callback_ != nullptr) stall_callback_(stall_context_);
+    if (*set == 0u) {
+        advance_time(ticks);
+        slept_ticks_ += ticks;
+        return false;
+    }
+    *set = 0u;
+    return true;
+}
+
+std::uint64_t MockPlatform::stalled_ticks() const { return stalled_ticks_; }
+
+std::uint64_t MockPlatform::slept_ticks() const { return slept_ticks_; }
 
 void MockPlatform::advance_time(std::uint64_t ticks)
 {
