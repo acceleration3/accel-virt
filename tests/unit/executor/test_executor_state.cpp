@@ -31,8 +31,8 @@ constexpr std::uint8_t nvidia[16] = {0x7b, 0x7a, 0xd2, 0xc5, 0x42, 0x19, 0x8c, 0
 
 TEST(executor_root_report, names_each_gpu_and_each_live_session)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
@@ -65,8 +65,7 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
 
 TEST(executor_root_report, names_the_api_of_every_kind_of_session)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL | AV_EXECUTOR_SUB_API_OPENGL,
-               0u, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL | AV_EXECUTOR_SUB_API_OPENGL);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
@@ -90,7 +89,7 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
  * shares. */
 TEST(executor_root_report, a_gpu_s_device_reports_its_exportable_images)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   apis.give_d3d11(0u);
   RootUnderTest held;
   ExecutorRoot &root = *held;

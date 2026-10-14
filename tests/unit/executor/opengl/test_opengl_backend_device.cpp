@@ -5,10 +5,13 @@
  * lands in. A host with no OpenGL returns without judging. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "executor/exported_memory.hpp"
+#include "executor/host_memory_source.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/gl_display.hpp"
-#include "executor/shim/probe_dma_buf.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,8 +23,6 @@
 #include <cstdint>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <sys/ioctl.h>
-#include <linux/udmabuf.h>
 #include <fcntl.h>
 #include <cstdio>
 #include <cstring>
@@ -101,20 +102,56 @@ public:
         host_.open();
         for (std::uint32_t i = 0u; i < host_.gpu_count(); i++) {
             const av::GlDisplay *const display = host_.gl_display(i);
-            /* Where OpenGL runs its context imports a host pointer as its region. */
-            CHECK_EQ(host_.import_kinds(i, AV_EXECUTOR_SUB_API_OPENGL),
-                     display != nullptr ? std::uint32_t{AV_BLOB_HOST_POINTER} : 0u);
-            if (display != nullptr) displays_[count_++] = display;
+            /* The host keeps a display exactly where it says OpenGL runs. */
+            CHECK_EQ(display != nullptr, (host_.sub_apis(i) & AV_EXECUTOR_SUB_API_OPENGL) != 0u);
+            if (display == nullptr) continue;
+            sources_[count_] = host_.memory_source(i);
+            displays_[count_++] = display;
         }
     }
     ~Displays() { host_.close(); }
     std::uint32_t        count() const { return count_; }
     const av::GlDisplay *at(std::uint32_t index) const { return displays_[index]; }
+    /* The memory source of the GPU display `index` is on, or null. */
+    av::HostMemorySource *source(std::uint32_t index) const { return sources_[index]; }
 
 private:
     av::LoaderHostApis   host_;
     const av::GlDisplay *displays_[16] = {};
+    av::HostMemorySource *sources_[16] = {};
     std::uint32_t        count_;
+};
+
+/* One allocation of a GPU's memory source, of `request`, as the device asks
+ * for one: the descriptor it was answered with - what the device maps into
+ * the window, and what a shared object's import names - and the memory a
+ * context imports, held for as long as this is. */
+class SourceAllocation {
+public:
+    static constexpr std::uint64_t key = 0x77u;
+    static constexpr std::uint32_t domain = 1u;
+
+    SourceAllocation(av::HostMemorySource *source, std::uint64_t bytes)
+        : source_(source), answered_{-1, 0u, 0u}, memory_(nullptr)
+    { const av::HostMemoryRequest readback(av::HostMemoryRequest::Kind::readback, 0u);
+      if (source_ == nullptr || source_->allocate(domain, key, bytes, readback, answered_) != av::Status::ok) return;
+      memory_ = source_->acquire(domain, key); }
+    ~SourceAllocation()
+    { if (memory_ != nullptr) source_->release(*memory_);
+      if (answered_.fd >= 0) source_->free(domain, key);
+      if (answered_.fd >= 0) close(answered_.fd); }
+    SourceAllocation(const SourceAllocation &) = delete;
+    SourceAllocation &operator=(const SourceAllocation &) = delete;
+
+    bool              made() const { return memory_ != nullptr; }
+    int               descriptor() const { return answered_.fd; }
+    std::uint64_t     size() const { return answered_.size; }
+    av::SourceMemory &memory() { return *memory_; }
+
+private:
+    av::HostMemorySource *source_;
+    AvHostMemory          answered_;
+    av::SourceMemory     *memory_;
 };
 
 int integer(OpenGlBackend &backend, unsigned name)
@@ -291,16 +328,15 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
-      AvBlobHandle handle = {};
-      handle.kind = AV_BLOB_HOST_POINTER;
-      handle.pointer = region;
-      handle.fd = -1;
-      handle.size = sizeof region;
+      /* Memory with a mapping and no descriptor: what the backend reads
+       * into through the CPU. */
+      av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, region, sizeof region));
       av::ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+      CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
       CHECK(backend.adopt(blob));
+      CHECK(!OpenGlBackendProbe::packs(backend));
       av::ImportedBlob second;
-      CHECK_STATUS(second.take(2u, handle), av::Status::ok);
+      CHECK_STATUS(second.take(2u, memory), av::Status::ok);
       CHECK(!backend.adopt(second));
       {
           const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
@@ -343,41 +379,25 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
       backend.shut_down();
   } }
 
-/* A region handed over as a dma-buf - guest RAM's memfd, through udmabuf, as
- * the device hands one over - is mapped as the region and is what a pixel
- * read packs into: the GPU writes the guest's memory (GlPackBuffer), and the
- * bytes land where a pointer read would have put them. A host with no
- * udmabuf judges nothing. */
-TEST(opengl_backend_device, a_pixel_read_into_a_dma_buf_region_is_written_by_the_gpu)
+/* A region of the GPU's own memory source - host GPU memory exported as a
+ * dma-buf, as every region is - is what a pixel read packs into: the GPU
+ * writes the memory itself (GlPackBuffer), and the bytes land where the
+ * guest's window shows them, read here through the source's mapping. A GPU
+ * whose compositing context would not open judges nothing. */
+TEST(opengl_backend_device, a_pixel_read_into_a_source_region_is_written_by_the_gpu)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
-      const int memfd = memfd_create("guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-      CHECK(memfd >= 0 && ftruncate(memfd, sizeof region) == 0 && fcntl(memfd, F_ADD_SEALS, F_SEAL_SHRINK) == 0);
-      const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-      udmabuf_create request = {};
-      request.memfd = static_cast<std::uint32_t>(memfd);
-      request.flags = UDMABUF_FLAGS_CLOEXEC;
-      request.size = sizeof region;
-      const int dmabuf = device >= 0 ? ioctl(device, UDMABUF_CREATE, &request) : -1;
-      if (device >= 0) close(device);
-      auto *const guest = static_cast<std::uint8_t *>(
-          mmap(nullptr, sizeof region, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0));
-      if (dmabuf < 0 || guest == MAP_FAILED) {
-          std::fprintf(stderr, "no udmabuf here: nothing judged\n");
-          if (dmabuf >= 0) close(dmabuf);
-          close(memfd);
-          return;
+      SourceAllocation allocation(displays.source(index), sizeof region);
+      if (!allocation.made()) {
+          std::fprintf(stderr, "display %u has no memory source: nothing judged\n", index);
+          continue;
       }
+      std::uint8_t *const guest = allocation.memory().pointer();
       std::memset(guest, 0, sizeof region);
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
-      AvBlobHandle handle = {};
-      handle.kind = AV_BLOB_DMA_BUF;
-      handle.pointer = nullptr;
-      handle.fd = dmabuf;   /* the region's from here */
-      handle.size = sizeof region;
       av::ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+      CHECK_STATUS(blob.take(1u, allocation.memory()), av::Status::ok);
       CHECK(backend.adopt(blob));
       {
           const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
@@ -416,8 +436,7 @@ TEST(opengl_backend_device, a_pixel_read_into_a_dma_buf_region_is_written_by_the
       CHECK_EQ(guest[page + pixels], 0u);
       backend.abandon(blob);
       backend.shut_down();
-      munmap(guest, sizeof region);
-      close(memfd);
+      static_cast<void>(blob.give_back());
   } }
 
 /* Feature 053: a descriptor of this process's own making imported as a memory
@@ -426,14 +445,14 @@ TEST(opengl_backend_device, a_pixel_read_into_a_dma_buf_region_is_written_by_the
  * answer the device turns into status 4. */
 TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaphore)
 { Displays          displays;
-  av::ProbeDmaBuf   descriptor;
-  if (!descriptor.make()) { std::fprintf(stderr, "this host makes no dma-buf\n"); return; }
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      SourceAllocation descriptor(displays.source(index), page);
+      if (!descriptor.made()) { std::fprintf(stderr, "display %u makes no dma-buf\n", index); continue; }
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t memory = 9u;
-      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                 av::ProbeDmaBuf::page_size, av::SharedImageShape(), memory, detail)) {
+      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
+                                 page, av::SharedImageShape(), memory, detail)) {
           std::fprintf(stderr, "display %u imports no memory object from a descriptor\n", index);
           CHECK_EQ(memory, 0u);
           backend.shut_down();
@@ -444,8 +463,8 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * imported again, which is what a second context opening one object
        * does. */
       std::uint64_t again = 0u;
-      CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                  av::ProbeDmaBuf::page_size, av::SharedImageShape(), again, detail));
+      CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
+                                  page, av::SharedImageShape(), again, detail));
       CHECK(again != 0u);
       CHECK(again != memory);
 
@@ -462,14 +481,14 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * a driver told the wrong one would make a second object nobody would
        * ever release. */
       std::uint64_t fence = 0u;
-      if (backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      if (backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
                                 0u, av::SharedImageShape(), fence, detail)) {
           CHECK(fence != 0u);
           /* Either guest fence kind is the one host semaphore. */
           backend.release_object(AV_SHARED_NATIVE_FENCE, fence, detail);
       }
       std::uint64_t native = 0u;
-      if (backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+      if (backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
                                 4096u, av::SharedImageShape(), native, detail)) {
           CHECK(native != 0u);
           backend.release_object(AV_SHARED_NATIVE_FENCE, native, detail);
@@ -482,7 +501,7 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
        * depends on and no argument can force. */
       std::uint64_t after = 9u;
       CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF,
-                                   descriptor.handle(), 0u, av::SharedImageShape(), after, detail));
+                                   descriptor.descriptor(), 0u, av::SharedImageShape(), after, detail));
       CHECK_EQ(after, 0u);
   } }
 
@@ -491,21 +510,21 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
  * released by the name it was answered. */
 TEST(opengl_backend_device, a_context_imports_more_than_any_fixed_table_held)
 { Displays        displays;
-  av::ProbeDmaBuf descriptor;
-  if (!descriptor.make()) { std::fprintf(stderr, "this host makes no dma-buf\n"); return; }
   constexpr std::uint32_t many = 80u;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      SourceAllocation descriptor(displays.source(index), page);
+      if (!descriptor.made()) continue;
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t made[many] = {};
-      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                 av::ProbeDmaBuf::page_size, av::SharedImageShape(), made[0], detail)) {
+      if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
+                                 page, av::SharedImageShape(), made[0], detail)) {
           backend.shut_down();
           continue;
       }
       for (std::uint32_t i = 1u; i < many; i++)
-          CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
-                                      av::ProbeDmaBuf::page_size, av::SharedImageShape(), made[i], detail));
+          CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
+                                      page, av::SharedImageShape(), made[i], detail));
       for (std::uint32_t i = 1u; i < many; i++) CHECK(made[i] != made[i - 1u]);
       for (const std::uint64_t name : made) backend.release_object(AV_SHARED_MEMORY, name, detail);
       backend.shut_down();

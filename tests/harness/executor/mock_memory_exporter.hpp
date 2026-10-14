@@ -29,12 +29,18 @@ public:
 
     /* Appends memory type with `flags`, and whether it exports: its index. */
     std::uint32_t add_type(std::uint32_t flags, bool exportable);
-    /* The Nth allocate, or share, from now fails. */
+    /* The Nth allocate, or share, from now fails; and every one of the next
+     * `count`. */
     void          fail_allocation_at(std::uint32_t nth);
+    void          fail_allocations(std::uint32_t count);
     void          fail_share_at(std::uint32_t nth);
     /* Every allocation is rounded up to a multiple of `bytes`, as a driver
      * rounds one; 0 makes exactly what was asked. */
     void          round_to(std::uint64_t bytes);
+    /* memory_types() answers `count` from now on, whatever was added: a
+     * driver with more types than any caller may index. A type past those
+     * added is a misuse to ask about. */
+    void          claim_types(std::uint32_t count);
 
     std::uint32_t memory_types() override;
     std::uint32_t memory_flags(std::uint32_t type) override;
@@ -45,6 +51,8 @@ public:
 
     /* How many times each type was asked whether it exports. */
     std::uint32_t export_questions(std::uint32_t type) const;
+    /* allocate calls, made or refused, and those made. */
+    std::uint32_t attempts() const;
     std::uint32_t allocations() const;
     std::uint32_t frees() const;
     std::uint32_t live() const;
@@ -74,8 +82,11 @@ private:
     std::uint32_t type_count_;
     Allocation    allocations_[max_allocations];
     std::uint32_t fail_allocation_;
+    std::uint32_t failing_;
     std::uint32_t fail_share_;
     std::uint64_t rounding_;
+    std::uint32_t claimed_;
+    std::uint32_t attempts_;
     std::uint64_t next_handle_;
     std::uint32_t made_;
     std::uint32_t freed_;

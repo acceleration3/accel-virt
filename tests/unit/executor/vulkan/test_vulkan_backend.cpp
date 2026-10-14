@@ -6,11 +6,14 @@
  * machine with no GPU, where every command decodes and every VkResult says so. */
 #include "device/abi/av_executor.h"
 #include "executor/imported_blob.hpp"
+#include "executor/exported_memory.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/vulkan/handle_registry.hpp"
 #include "executor/host_gpu.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
+#include "harness/executor/vulkan_backend_probe.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -197,40 +200,24 @@ TEST(vulkan_backend, a_command_the_arena_will_not_hold_is_refused_and_counted)
   CHECK(!backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
   CHECK(arena.refusals() > 0u); }
 
-/* The import path, on whatever this machine has. A host with no GPU refuses
- * every import and that is the honest answer, so what is asserted is the rule
- * rather than the outcome: a kind this backend never offers is never adopted,
- * and abandoning what was never adopted is nothing. */
-TEST(vulkan_backend, a_kind_it_does_not_offer_is_not_adopted)
-{ VulkanBackend backend;
-  av::ImportedBlob blob;
-  AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_DMA_BUF;
-  handle.fd = 3;
-  handle.size = av::ImportedBlob::page_bytes;
-  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
-  /* A dma-buf lands in memory the host cannot map on one of the two GPUs
-   * measured, so this backend offers only the host pointer and takes only it. */
-  CHECK(!backend.adopt(blob));
-  CHECK_EQ(blob.object(), 0u); }
-
 /* No device, no import: a VkDeviceMemory belongs to a device, and a context
- * that has not made one has nowhere to put a blob. */
+ * that has not made one has nowhere to put the memory. Nothing is recorded on
+ * the blob, and its source's descriptor is never duplicated for a driver. */
 TEST(vulkan_backend, without_a_device_nothing_is_adopted)
 { VulkanBackend backend;
+  alignas(4096) static std::uint8_t page[4096];
+  av::SourceMemory memory(1u, 1u, 0u, 1u, av::ExportedMemory(0x10u, -1, page, sizeof page));
   av::ImportedBlob blob;
-  alignas(4096) static std::uint8_t page[av::ImportedBlob::page_bytes];
-  AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.pointer = page;
-  handle.fd = -1;
-  handle.size = sizeof page;
-  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
   CHECK(!backend.adopt(blob));
+  CHECK_EQ(blob.object(), 0u);
+  CHECK_EQ(blob.wire_handle(), 0u);
   /* And giving back what was never taken is nothing, which is what a session
    * being destroyed does for every blob it still holds. */
   backend.abandon(blob);
-  CHECK_EQ(blob.object(), 0u); }
+  CHECK_EQ(blob.object(), 0u);
+  CHECK(av::VulkanBackendProbe(backend).imports_held() == 0u);
+  static_cast<void>(blob.give_back()); }
 
 /* The device a context makes is the one an import belongs to, and destroying
  * it takes that away again. Driven through the wire, because that is the only
@@ -478,7 +465,7 @@ TEST(vulkan_backend, a_bound_context_lists_its_gpu_alone)
       constexpr bool versions[] = {true, false};
       for (const bool vulkan_1_1 : versions) {
           VulkanBackend backend;
-          backend.initialize(gpu);
+          backend.initialize(gpu, nullptr);
           const VkInstance instance = instance_through(backend, vulkan_1_1);
           CHECK(instance != VK_NULL_HANDLE);
           if (instance == VK_NULL_HANDLE) continue;
@@ -557,11 +544,11 @@ TEST(vulkan_backend, a_bound_context_lists_its_gpu_alone)
  * are shown nothing - an empty list and no group - rather than some other GPU. */
 TEST(vulkan_backend, a_context_whose_gpu_is_not_listed_lists_nothing)
 { av::MockHostApis apis;
-  apis.add_gpu(nobody_s_gpu, AV_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  apis.add_gpu(nobody_s_gpu, AV_EXECUTOR_SUB_API_VULKAN);
   av::HostGpu gpu;
   gpu.describe(apis, 0u);
   VulkanBackend bound;
-  bound.initialize(gpu);
+  bound.initialize(gpu, nullptr);
   VulkanBackend unbound;
   VulkanBackend *const backends[] = {&bound, &unbound};
   for (VulkanBackend *const backend : backends) {
@@ -609,7 +596,7 @@ TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
                         {3u, nullptr, false, 0u}};
   for (const Case &c : cases) {
       VulkanBackend backend;
-      backend.initialize(gpu);
+      backend.initialize(gpu, nullptr);
       const VkInstance instance = instance_through(backend, false, c.count, c.names);
       CHECK_EQ(instance != VK_NULL_HANDLE, c.made);
       if (instance != VK_NULL_HANDLE) {

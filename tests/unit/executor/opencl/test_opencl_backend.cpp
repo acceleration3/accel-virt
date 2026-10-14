@@ -1,7 +1,9 @@
 /* One guest context's OpenCL on the host's own. As with Vulkan, the driver's
  * own answer is not asserted - these pass on a machine with no OpenCL at all,
  * where every command still decodes and the platform count is zero. */
+#include "executor/exported_memory.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/opencl/cl_event_signals.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
@@ -58,14 +60,15 @@ constexpr std::size_t block_bytes = 65536u;
 alignas(4096) std::uint8_t arena_region[2u * 4096u];
 alignas(4096) std::uint8_t second_arena_region[4096];
 
-AvBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
+/* Memory of a GPU's source as a session imports it, mapped at `base`: the
+ * two regions here, each its own allocation. */
+av::SourceMemory &memory_over(std::uint8_t *base, std::uint64_t bytes)
 {
-    AvBlobHandle handle = {};
-    handle.kind = AV_BLOB_HOST_POINTER;
-    handle.pointer = base;
-    handle.fd = -1;
-    handle.size = bytes;
-    return handle;
+    static av::SourceMemory whole(1u, 1u, 0u, AV_MEMORY_WRITE_BACK,
+                                  av::ExportedMemory(1u, -1, arena_region, sizeof arena_region));
+    static av::SourceMemory other(1u, 2u, 0u, AV_MEMORY_WRITE_BACK,
+                                  av::ExportedMemory(2u, -1, second_arena_region, sizeof second_arena_region));
+    return base == arena_region && bytes == sizeof arena_region ? whole : other;
 }
 
 /* Stands in for the device's wake. Nothing here completes on another thread,
@@ -138,9 +141,6 @@ TEST(opencl_backend, a_truncated_command_is_refused_at_every_length)
   CHECK_EQ(backend.ran(), 1u);
   backend.shut_down(); }
 
-/* Importing means clCreateBufferWithProperties with a dma-buf, and whether
- * that works is a per-device question answered where it is used. Until then a
- * blob is copied at the boundary, which is what import_kinds already says. */
 /* The context's blob arena, adopted so a buffer can be made over it.
  *
  * CL_MEM_USE_HOST_PTR is core OpenCL rather than an extension, so every
@@ -153,7 +153,7 @@ TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_
   /* Nothing adopted: no offset names anything. */
   CHECK(backend.lent_for(0u, 1u) == nullptr);
   av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, memory_over(arena_region, sizeof arena_region)), av::Status::ok);
   CHECK(backend.adopt(blob));
   CHECK(blob.wire_handle() != 0u);
   CHECK(backend.lent_for(0u, sizeof arena_region) == arena_region);
@@ -166,7 +166,7 @@ TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_
   /* One at a time: a second would leave the first unreachable and its
    * buffers pointing into memory nothing owns. */
   av::ImportedBlob second;
-  CHECK_STATUS(second.take(2u, host_pointer(second_arena_region, sizeof second_arena_region)),
+  CHECK_STATUS(second.take(2u, memory_over(second_arena_region, sizeof second_arena_region)),
                av::Status::ok);
   CHECK(!backend.adopt(second));
 
@@ -178,14 +178,12 @@ TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_
   backend.abandon(second);
   backend.shut_down(); }
 
-TEST(opencl_backend, a_dma_buf_is_not_memory_a_buffer_can_be_made_over)
+/* Memory the source never mapped is no memory a buffer can be made over. */
+TEST(opencl_backend, memory_with_no_mapping_is_not_memory_a_buffer_can_be_made_over)
 { OpenClBackend backend;
+  av::SourceMemory unmapped(1u, 3u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(3u, -1, nullptr, 4096u));
   av::ImportedBlob blob;
-  AvBlobHandle    handle = {};
-  handle.kind = AV_BLOB_DMA_BUF;
-  handle.fd = 7;
-  handle.size = 4096u;
-  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, unmapped), av::Status::ok);
   CHECK(!backend.adopt(blob));
   CHECK(backend.lent_for(0u, 1u) == nullptr);
   backend.abandon(blob);
@@ -843,7 +841,7 @@ void buffer_with_properties_frame(ClCommand &command, bool named, std::uint64_t 
 TEST(opencl_backend, a_buffer_over_an_offset_outside_the_arena_is_refused)
 { OpenClBackend backend;
   av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, memory_over(arena_region, sizeof arena_region)), av::Status::ok);
   CHECK(backend.adopt(blob));
 
   /* Past the end of the arena, and a length that runs past it from a base
@@ -1164,7 +1162,7 @@ TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accep
 TEST(opencl_backend, a_buffer_over_a_bad_offset_with_nowhere_to_report_it_is_still_refused)
 { OpenClBackend backend;
   av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
+  CHECK_STATUS(blob.take(1u, memory_over(arena_region, sizeof arena_region)), av::Status::ok);
   CHECK(backend.adopt(blob));
   ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u, false);

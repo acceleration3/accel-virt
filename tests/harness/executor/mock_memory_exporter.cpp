@@ -10,7 +10,7 @@
 namespace av {
 
 MockMemoryExporter::MockMemoryExporter()
-    : types_{}, type_count_(0u), allocations_{}, fail_allocation_(0u), fail_share_(0u), rounding_(0u),
+    : types_{}, type_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), fail_share_(0u), rounding_(0u), claimed_(0u), attempts_(0u),
       next_handle_(0x1000u), made_(0u), freed_(0u), last_type_(max_types), last_size_(0u), misuses_(0u)
 {
 }
@@ -34,8 +34,10 @@ std::uint32_t MockMemoryExporter::add_type(std::uint32_t flags, bool exportable)
 }
 
 void MockMemoryExporter::fail_allocation_at(std::uint32_t nth) { fail_allocation_ = nth; }
+void MockMemoryExporter::fail_allocations(std::uint32_t count) { failing_ = count; }
 void MockMemoryExporter::fail_share_at(std::uint32_t nth) { fail_share_ = nth; }
 void MockMemoryExporter::round_to(std::uint64_t bytes) { rounding_ = bytes; }
+void MockMemoryExporter::claim_types(std::uint32_t count) { claimed_ = count; }
 
 bool MockMemoryExporter::fires(std::uint32_t &countdown)
 {
@@ -44,7 +46,7 @@ bool MockMemoryExporter::fires(std::uint32_t &countdown)
 
 std::uint32_t MockMemoryExporter::memory_types()
 {
-    return type_count_;
+    return claimed_ != 0u ? claimed_ : type_count_;
 }
 
 std::uint32_t MockMemoryExporter::memory_flags(std::uint32_t type)
@@ -68,11 +70,14 @@ bool MockMemoryExporter::exportable(std::uint32_t type)
 
 Status MockMemoryExporter::allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory)
 {
+    attempts_++;
     last_type_ = type;
     last_size_ = size;
     memory = ExportedMemory();
     if (type >= type_count_ || !types_[type].exportable) misuses_++;
-    if (fires(fail_allocation_) || size == 0u) return Status::no_memory;
+    const bool failing = failing_ != 0u;
+    if (failing) failing_--;
+    if (fires(fail_allocation_) || failing || size == 0u) return Status::no_memory;
     Allocation *slot = nullptr;
     for (Allocation &allocation : allocations_)
         if (allocation.handle == 0u && slot == nullptr) slot = &allocation;
@@ -129,6 +134,7 @@ std::uint32_t MockMemoryExporter::export_questions(std::uint32_t type) const
     return type < type_count_ ? types_[type].questions : 0u;
 }
 
+std::uint32_t MockMemoryExporter::attempts() const { return attempts_; }
 std::uint32_t MockMemoryExporter::allocations() const { return made_; }
 std::uint32_t MockMemoryExporter::frees() const { return freed_; }
 std::uint32_t MockMemoryExporter::live() const { return made_ - freed_; }

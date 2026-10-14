@@ -1,6 +1,6 @@
 /* The end of the ABI that answers. What a test asserts here is what the device
- * will act on during realize: the sub-APIs that reach the capset, and the
- * import kinds that decide whether a blob is memory or a copy. */
+ * will act on: the sub-APIs that reach the capset during realize, and the host
+ * memory each device's domain is given and lets go of. */
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "executor/executor_root.hpp"
@@ -10,12 +10,12 @@
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "harness/executor/executor_root_probe.hpp"
 #include "harness/executor/root_under_test.hpp"
 #include "harness/executor/host_gpu_probe.hpp"
 #include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
-#include "executor/d3d/frame_target.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
@@ -77,20 +77,14 @@ public:
 
 }  // namespace
 
-TEST(executor_root, offers_what_the_host_runs_and_imports_what_each_gpu_can)
+TEST(executor_root, offers_what_the_host_runs)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL,
-               AV_BLOB_HOST_POINTER | AV_BLOB_DMA_BUF, 0u, AV_BLOB_DMA_BUF);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(root.sub_apis(), AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
-
-  /* The asymmetry the design exists for, seen through the ABI: the same API
-   * imports on one GPU and copies on the other. */
-  CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_OPENCL, intel), std::uint32_t{AV_BLOB_DMA_BUF});
-  CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_OPENCL, nvidia), 0u);
   CHECK(root.invariants_hold()); }
 
 /* A host with no GPU still loads and still answers; it just offers nothing,
@@ -101,24 +95,82 @@ TEST(executor_root, a_host_with_no_gpu_offers_nothing)
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(root.sub_apis(), 0u);
-  CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_VULKAN, intel), 0u);
   CHECK(root.invariants_hold()); }
-
-TEST(executor_root, a_gpu_nobody_has_imports_nothing)
-{ MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
-  RootUnderTest held;
-  ExecutorRoot &root = *held;
-  CHECK_STATUS(root.initialize(apis), Status::ok);
-  CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_VULKAN, absent), 0u);
-  CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_VULKAN, nullptr), 0u); }
 
 /* Before it has asked, it offers nothing rather than guessing. */
 TEST(executor_root, answers_nothing_until_it_has_asked)
 { RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_EQ(root.sub_apis(), 0u);
-  CHECK_EQ(root.import_kinds(AV_EXECUTOR_SUB_API_VULKAN, intel), 0u);
+  CHECK(root.invariants_hold()); }
+
+/* Host memory comes from the memory source of the GPU a domain is on, under
+ * the key the device names it by; a domain not open, or a GPU with no source,
+ * gives none. */
+TEST(executor_root_memory, a_domain_allocates_from_its_gpu_s_source_and_frees_by_key)
+{ MockHostApis apis;
+  apis.exporter().add_type(av::MockMemoryExporter::host_visible | av::MockMemoryExporter::host_coherent |
+                               av::MockMemoryExporter::host_cached,
+                           true);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = held.domain_of(intel);
+  const std::uint32_t readback = av::HostMemoryRequest(av::HostMemoryRequest::Kind::readback, 0u).encoded();
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(root.allocate_memory(domain + 100u, 7u, 4096u, readback, memory), Status::no_memory);
+  CHECK_EQ(memory.fd, -1);
+  CHECK_STATUS(root.allocate_memory(domain, 7u, 4096u, readback, memory), Status::ok);
+  CHECK(memory.fd >= 0);
+  CHECK_EQ(memory.size, 4096u);
+  CHECK_EQ(memory.caching, std::uint32_t{AV_MEMORY_WRITE_BACK});
+  CHECK_EQ(apis.source().live(), 1u);
+  /* A key another domain names is not this one's. */
+  root.free_memory(domain + 100u, 7u);
+  CHECK_EQ(apis.source().live(), 1u);
+  root.free_memory(domain, 7u);
+  CHECK_EQ(apis.source().live(), 0u);
+  CHECK_EQ(apis.exporter().live(), 0u);
+  close(memory.fd);
+  CHECK(root.invariants_hold()); }
+
+/* A device going lets go of every key of its domain with it. */
+TEST(executor_root_memory, closing_a_domain_frees_what_it_still_held)
+{ MockHostApis apis;
+  apis.exporter().add_type(av::MockMemoryExporter::host_visible | av::MockMemoryExporter::host_coherent, true);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = held.domain_of(intel);
+  const std::uint32_t upload = av::HostMemoryRequest(av::HostMemoryRequest::Kind::upload, 0u).encoded();
+  AvHostMemory first = {-1, 0u, 0u};
+  AvHostMemory second = {-1, 0u, 0u};
+  CHECK_STATUS(root.allocate_memory(domain, 1u, 4096u, upload, first), Status::ok);
+  CHECK_STATUS(root.allocate_memory(domain, 2u, 8192u, upload, second), Status::ok);
+  CHECK_EQ(first.caching, std::uint32_t{AV_MEMORY_WRITE_COMBINED});
+  CHECK_EQ(apis.exporter().live(), 2u);
+  root.close_domain(domain);
+  CHECK_EQ(apis.exporter().live(), 0u);
+  close(first.fd);
+  close(second.fd);
+  CHECK(root.invariants_hold()); }
+
+TEST(executor_root_memory, a_gpu_with_no_memory_source_gives_none)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  apis.withhold_memory_source();
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  const std::uint32_t domain = held.domain_of(intel);
+  CHECK(domain != 0u);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(root.allocate_memory(domain, 1u, 4096u, 1u, memory), Status::no_memory);
+  CHECK_EQ(memory.fd, -1);
+  root.free_memory(domain, 1u);
+  root.close_domain(domain);
   CHECK(root.invariants_hold()); }
 
 /* A device's domain is on the GPU it named, opened once it is known and
@@ -126,7 +178,7 @@ TEST(executor_root, answers_nothing_until_it_has_asked)
  * the host, opens none. */
 TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_EQ(root.open_domain(intel), 0u);
@@ -153,8 +205,8 @@ TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
 TEST(executor_root, a_shared_release_reaches_only_the_named_domain)
 { Counted surface, other, elsewhere;
   MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   root.release_shared(1u, 7u);
@@ -193,8 +245,8 @@ TEST(executor_root, a_shared_release_reaches_only_the_named_domain)
 TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
 { Counted surface;
   MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
-  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D);
+  apis.add_gpu(nvidia, AV_EXECUTOR_SUB_API_D3D);
   apis.give_d3d11(0u);
   RootUnderTest held;
   ExecutorRoot &root = *held;
@@ -235,7 +287,7 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
  * surfaces of its GPU. */
 TEST(executor_root, frames_are_read_only_in_an_open_domain)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_D3D);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
@@ -245,22 +297,35 @@ TEST(executor_root, frames_are_read_only_in_an_open_domain)
   CHECK(!root.map_frame(on_intel, av::SurfacePoint(3u, 1u), 0u, view));   /* nothing staged */
   root.unmap_frame(on_intel + 100u, av::SurfacePoint(3u, 1u));
   root.unmap_frame(on_intel, av::SurfacePoint(3u, 1u));
-  const AvFrameRegion   region = {0u, 0u, 0u, 0u, 1u, 1u};
-  const av::FrameTarget target(5, 4096u, 64u, &region, 1u);
-  CHECK(!root.write_frame(on_intel + 100u, av::SurfacePoint(3u, 1u), 0u, target));
-  CHECK(!root.write_frame(on_intel, av::SurfacePoint(3u, 1u), 0u, target));   /* nothing staged */
   CHECK(root.invariants_hold()); }
 
 /* The host is asked once. Asking twice would mean the capset and the answer
  * could disagree. */
 TEST(executor_root, asks_the_host_once)
 { MockHostApis apis;
-  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_STATUS(root.initialize(apis), Status::invalid_state);
   CHECK_EQ(root.sub_apis(), std::uint32_t{AV_EXECUTOR_SUB_API_VULKAN}); }
+
+/* A context on a GPU with no memory source still opens - its commands run -
+ * and imports nothing, since there is no memory to import. */
+TEST(executor_root_memory, a_session_on_a_gpu_with_no_source_opens_and_imports_nothing)
+{ MockHostApis apis;
+  apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
+  apis.withhold_memory_source();
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  ContextSession *const session = held.open(AV_EXECUTOR_SUB_API_VULKAN, intel);
+  CHECK(session != nullptr);
+  if (session == nullptr) return;
+  CHECK_EQ(session->import_blob(1u, 1u), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(session->imports(), 0u);
+  root.close(session);
+  CHECK(root.invariants_hold()); }
 
 /* More GPUs than the set holds is still a host worth serving, with the ones it
  * kept. */
@@ -269,7 +334,7 @@ TEST(executor_root, a_host_with_more_gpus_than_it_holds_still_answers)
   std::uint8_t uuid[16] = {};
   for (std::uint32_t i = 0u; i < MockHostApis::max_gpus; i++) {
       uuid[0] = static_cast<std::uint8_t>(i + 1u);
-      apis.add_gpu(uuid, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+      apis.add_gpu(uuid, AV_EXECUTOR_SUB_API_VULKAN);
   }
   RootUnderTest held;
   ExecutorRoot &root = *held;
@@ -286,9 +351,8 @@ class Opened {
 public:
     Opened()
     {
-        apis_.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL,
-                      AV_BLOB_HOST_POINTER, 0u, 0u);
-        apis_.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN, AV_BLOB_HOST_POINTER, 0u, 0u);
+        apis_.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
+        apis_.add_gpu(nvidia, AV_EXECUTOR_SUB_API_VULKAN);
         status_ = held_->initialize(apis_);
     }
     Status              status() const { return status_; }
@@ -391,15 +455,15 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
   static std::uint8_t block[4096];
   MockSessionBackend backend;
   CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
-  static std::uint8_t page[4096];
-  AvBlobHandle handle = {};
-  handle.kind = AV_BLOB_HOST_POINTER;
-  handle.pointer = page;
-  handle.fd = -1;
-  handle.size = sizeof page;
+  opened.apis().exporter().add_type(av::MockMemoryExporter::host_visible | av::MockMemoryExporter::host_coherent,
+                                    true);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  AvHostMemory        memory = {-1, 0u, 0u};
+  CHECK_STATUS(opened.root().allocate_memory(domain, 0x30u, 4096u, 1u, memory), Status::ok);
+  session->draw_from(opened.apis().source(), domain);
 
   CHECK_EQ(opened.root().imported_handle(session, 9u), 0u);
-  CHECK_EQ(session->import_blob(9u, handle), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(session->import_blob(9u, 0x30u), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(opened.root().imported_handle(session, 9u), 9u + MockSessionBackend::wire_offset);
   CHECK_EQ(opened.root().imported_handle(session, 10u), 0u);
 
@@ -407,7 +471,8 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
   MockSessionBackend stranger_backend;
   ContextSession stranger;
   CHECK_STATUS(stranger.initialize(stranger_backend, stranger_block, sizeof stranger_block), Status::ok);
-  CHECK_EQ(stranger.import_blob(9u, handle), std::uint32_t{AV_EXECUTED});
+  stranger.draw_from(opened.apis().source(), domain);
+  CHECK_EQ(stranger.import_blob(9u, 0x30u), std::uint32_t{AV_EXECUTED});
   CHECK(stranger.imported_handle(9u) != 0u);
   CHECK_EQ(opened.root().imported_handle(&stranger, 9u), 0u);
   CHECK_EQ(opened.root().imported_handle(nullptr, 9u), 0u);
@@ -415,7 +480,10 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
 
   session->release_blob(9u);
   CHECK_EQ(opened.root().imported_handle(session, 9u), 0u);
-  session->release(); }
+  session->release();
+  opened.root().free_memory(domain, 0x30u);
+  CHECK_EQ(opened.apis().exporter().live(), 0u);
+  close(memory.fd); }
 
 /* Nothing is handed out before the host has been asked. */
 TEST(executor_root_open, opens_nothing_until_it_has_asked)
@@ -429,8 +497,11 @@ TEST(executor_root_invariants, a_gpu_that_breaks_its_own_breaks_them)
 { Opened opened;
   CHECK_STATUS(opened.status(), Status::ok);
   HostGpuSetProbe set(ExecutorRootProbe(opened.root()).gpus());
-  HostGpuProbe(set.gpu_at(0u)).set_sub_apis(AV_EXECUTOR_SUB_API_OPENCL);
-  CHECK(!opened.root().invariants_hold()); }
+  set.set_count(3u);
+  HostGpuProbe(set.gpu_at(2u)).set_sub_apis(AV_EXECUTOR_SUB_API_OPENCL);
+  CHECK(!opened.root().invariants_hold());
+  HostGpuProbe(set.gpu_at(2u)).set_sub_apis(0u);
+  set.set_count(2u); }
 
 /* GPUs it has not asked about are GPUs sub_apis() would hide and open() would
  * refuse, while the set says they are there. */
@@ -455,7 +526,7 @@ TEST(executor_root_open, a_value_naming_two_sub_apis_at_once_gets_no_session)
  * on the machine it came from OpenGL opens. */
 TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_back)
 { MockHostApis apis;
-  apis.add_gpu(absent, AV_EXECUTOR_SUB_API_OPENGL, 0u, 0u, 0u);
+  apis.add_gpu(absent, AV_EXECUTOR_SUB_API_OPENGL);
   RootUnderTest held;
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);

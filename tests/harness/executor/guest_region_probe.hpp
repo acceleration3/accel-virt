@@ -13,6 +13,9 @@ struct GuestRegionProbe {
     explicit GuestRegionProbe(GuestRegion &target);
 
     void set_length(uint64_t length);
+    /* The mapping forgotten while the memory is still held: a region that
+     * names memory it cannot reach. */
+    void forget_base();
 
     GuestRegion &region;
 };
