@@ -2655,6 +2655,7 @@ cl_mem ClIcdRoot::create_from_gl_buffer(cl_context context, cl_mem_flags flags, 
     ClObject *const held = gl_sharing(context, error);
     if (held == nullptr) return nullptr;
     ClientTransport &wire = *wire_of(*held);
+    gl_share_.run_held_calls();
     cl_int           host_error = CL_SUCCESS;
     const uint64_t   made = av::clproto::av_clCreateFromGLBuffer(wire, held->wire(), flags, buffer, &host_error);
     return gl_object(wire, *held, made, host_error, error);
@@ -2667,6 +2668,7 @@ cl_mem ClIcdRoot::create_from_gl_texture(cl_context context, cl_mem_flags flags,
     ClObject *const held = gl_sharing(context, error);
     if (held == nullptr) return nullptr;
     ClientTransport &wire = *wire_of(*held);
+    gl_share_.run_held_calls();
     cl_int           host_error = CL_SUCCESS;
     const uint64_t   made =
         av::clproto::av_clCreateFromGLTexture(wire, held->wire(), flags, target, level, texture, &host_error);
@@ -2680,6 +2682,7 @@ cl_mem ClIcdRoot::create_from_gl_renderbuffer(cl_context context, cl_mem_flags f
     ClObject *const held = gl_sharing(context, error);
     if (held == nullptr) return nullptr;
     ClientTransport &wire = *wire_of(*held);
+    gl_share_.run_held_calls();
     cl_int           host_error = CL_SUCCESS;
     const uint64_t   made =
         av::clproto::av_clCreateFromGLRenderbuffer(wire, held->wire(), flags, renderbuffer, &host_error);

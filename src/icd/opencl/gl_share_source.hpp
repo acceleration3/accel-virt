@@ -24,6 +24,11 @@ public:
     /* The share name of `gl_context` when it is the calling thread's current
      * context and one this process's OpenGL ICD made; 0 for any other. */
     virtual uint32_t share_name(void *gl_context) = 0;
+    /* The calls the calling thread's current OpenGL context holds - our ICD
+     * sends them a batch at a time - run by the host before this returns, so
+     * an object they made exists there when OpenCL names it. Nothing with no
+     * context of ours current. */
+    virtual void     run_held_calls() = 0;
 
 protected:
     GlShareSource() = default;

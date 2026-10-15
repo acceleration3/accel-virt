@@ -345,6 +345,7 @@ void *GlIcdRoot::get_proc_address(const char *name)
     if (__builtin_strcmp(name, "avForceContextFault") == 0)
         return reinterpret_cast<void *>(&entry::avForceContextFault);
     if (__builtin_strcmp(name, "avGetShareName") == 0) return reinterpret_cast<void *>(&entry::avGetShareName);
+    if (__builtin_strcmp(name, "avRunHeldCalls") == 0) return reinterpret_cast<void *>(&entry::avRunHeldCalls);
     /* Before the generated table on purpose: four of these the generator never
      * emitted, and the other four it did - and those must substitute the
      * host's name for the one the application holds, so this ICD's answer has
@@ -581,6 +582,13 @@ uint32_t GlIcdRoot::reset_status()
     if (context == nullptr) return 0u;
     ClientTransport *const transport = context->wire();
     return transport != nullptr ? glproto::av_glGetGraphicsResetStatus(*transport) : context->lost_reset_status();
+}
+
+int32_t GlIcdRoot::run_held_calls()
+{
+    AV_SCOPE("GlIcdRoot::run_held_calls");
+    GuestGlContext *const context = currents_.current();
+    return context != nullptr && context->run_held() == Status::ok ? 1 : 0;
 }
 
 uint32_t GlIcdRoot::current_share_name()

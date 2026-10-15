@@ -349,7 +349,15 @@ public:
      * from, named as the application names it in GL - the host resolves the
      * name in that context's share group. CL_INVALID_CONTEXT for a context not
      * made from a GL context; the host's own refusal otherwise. Every texture
-     * spelling - clCreateFromGLTexture and the 1.1 pair - is one call. */
+     * spelling - clCreateFromGLTexture and the 1.1 pair - is one call.
+     *
+     * The calling thread's GL context's held calls are run by the host first
+     * (GlShareSource::run_held_calls): our OpenGL ICD sends a context's calls
+     * a batch at a time, and the host runs each context on a worker of its
+     * own, so a texture an application named with glGenTextures and made with
+     * a bind still held did not exist there yet - DaVinci Resolve's viewer
+     * textures, made on the thread that registers them, were refused as
+     * CL_INVALID_GL_OBJECT ("Your GPU memory is full"). */
     cl_mem create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error);
     cl_mem create_from_gl_texture(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint level,
                                   cl_GLuint texture, cl_int *error);

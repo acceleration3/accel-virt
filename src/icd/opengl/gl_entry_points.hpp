@@ -52,6 +52,9 @@ int32_t   APIENTRY avForceContextFault();
 /* The OpenCL ICD's question, found only by name (cl_khr_gl_sharing): the
  * share name of the calling thread's context. */
 uint32_t  APIENTRY avGetShareName();
+/* And its other, found the same way: the calling thread's context's held
+ * calls run by the host, before OpenCL names what they made. */
+int32_t   APIENTRY avRunHeldCalls();
 /* glGetIntegerv, which answers GL_NUM_EXTENSIONS itself. */
 void      APIENTRY get_integerv(GLenum pname, GLint *data);
 

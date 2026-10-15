@@ -242,3 +242,59 @@ TEST(cl_gl_sharing, a_host_that_will_not_list_the_extensions_answers_its_error)
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, nullptr),
            CL_OUT_OF_HOST_MEMORY);
   CHECK(named == nullptr); }
+
+namespace {
+
+std::uint32_t commands_sent(void *kmt) { return static_cast<const av::MockKmt *>(kmt)->commands(); }
+
+}  // namespace
+
+/* Our OpenGL ICD holds a context's calls and sends them a batch at a time, and
+ * the host runs the GL context and the OpenCL one on workers of their own: a
+ * texture glGenTextures named and a bind still held made is nothing on the
+ * host yet. So each create from a GL object has the calling thread's GL
+ * context's held calls run first, before anything of the create is sent -
+ * DaVinci Resolve registers its viewer textures on the thread that made them,
+ * and was refused every one (CL_INVALID_GL_OBJECT). A refused context asks
+ * nothing of GL. */
+TEST(cl_gl_sharing, each_create_from_a_gl_object_runs_the_held_gl_calls_before_it_is_sent)
+{ ClIcdRig rig;
+  Found     found(rig);
+  rig.gl_share().make_current(current_gl, gl_share_name);
+  rig.gl_share().count_commands_with(&commands_sent, &rig.kmt());
+  const cl_context_properties properties[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(current_gl),
+                                              CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
+  cl_int error = CL_INVALID_VALUE;
+  const cl_context context = found.create(properties, error);
+  CHECK_EQ(error, CL_SUCCESS);
+  if (context == nullptr) return;
+  const cl_icd_dispatch *const table = rig.loader().dispatch_of(context);
+  CHECK_EQ(rig.gl_share().runs(), 0u);
+
+  std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  cl_int made = CL_INVALID_VALUE;
+  CHECK(table->clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, 7u, &made) != nullptr);
+  CHECK_EQ(made, CL_SUCCESS);
+  CHECK_EQ(rig.gl_share().runs(), 1u);
+  CHECK_EQ(rig.gl_share().commands_at_run(), sent);
+
+  sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer + 1u, CL_SUCCESS);
+  CHECK(table->clCreateFromGLTexture(context, CL_MEM_READ_WRITE, 0x0DE1u, 0, 186u, &made) != nullptr);
+  CHECK_EQ(rig.gl_share().runs(), 2u);
+  CHECK_EQ(rig.gl_share().commands_at_run(), sent);
+
+  sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
+  CHECK(table->clCreateFromGLRenderbuffer(context, CL_MEM_WRITE_ONLY, 3u, &made) != nullptr);
+  CHECK_EQ(rig.gl_share().runs(), 3u);
+  CHECK_EQ(rig.gl_share().commands_at_run(), sent);
+
+  /* A context made from no GL context is refused before GL is asked. */
+  const cl_context plain = found.create(nullptr, error);
+  CHECK_EQ(error, CL_SUCCESS);
+  if (plain == nullptr) return;
+  CHECK(table->clCreateFromGLTexture(plain, CL_MEM_READ_ONLY, 0x0DE1u, 0, 9u, &made) == nullptr);
+  CHECK_EQ(made, CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.gl_share().runs(), 3u); }

@@ -12,7 +12,9 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
+#include "proto/client/sync_call_scope.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/submission/command_header.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -187,6 +189,25 @@ void GuestGlContext::flush()
     const TransportResult sent = channel_.batched().flush();
     send_lock_.release();
     if (sent != TransportResult::ok) log_.write("avgl: the held calls could not be sent");
+}
+
+Status GuestGlContext::run_held()
+{
+    AV_SCOPE("GuestGlContext::run_held");
+    if (state_ != State::made) return Status::invalid_state;
+    send_lock_.acquire();
+    ClientTransport      &batch = channel_.batched();
+    WireWriter            request = batch.request_writer();
+    WireReader            answer(nullptr, 0u);
+    TransportResult       sent = TransportResult::failed;
+    {
+        const SyncCallScope call{batch};
+        sent = batch.send_sync(CommandHeader::nop_id, request, answer);
+    }
+    send_lock_.release();
+    if (sent == TransportResult::ok) return Status::ok;
+    log_.write("avgl: the held calls could not be run for another API");
+    return Status::invalid_state;
 }
 
 uint32_t GuestGlContext::guest_device() const

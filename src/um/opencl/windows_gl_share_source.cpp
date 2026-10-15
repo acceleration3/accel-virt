@@ -17,6 +17,14 @@ uint32_t WindowsGlShareSource::share_name(void *gl_context)
     return named != nullptr ? named() : 0u;
 }
 
+void WindowsGlShareSource::run_held_calls()
+{
+    AV_SCOPE("WindowsGlShareSource::run_held_calls");
+    if (!resolve() || current_() == nullptr) return;
+    const auto run = reinterpret_cast<RunHeldCalls>(proc_address_("avRunHeldCalls"));
+    if (run != nullptr) static_cast<void>(run());
+}
+
 bool WindowsGlShareSource::resolve()
 {
     AV_SCOPE("WindowsGlShareSource::resolve");

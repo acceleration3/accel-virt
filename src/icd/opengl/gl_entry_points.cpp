@@ -168,6 +168,12 @@ uint32_t APIENTRY avGetShareName()
     return gl_icd_binding.root().current_share_name();
 }
 
+int32_t APIENTRY avRunHeldCalls()
+{
+    AV_SCOPE("avRunHeldCalls");
+    return gl_icd_binding.root().run_held_calls();
+}
+
 void APIENTRY get_integerv(GLenum pname, GLint *data)
 {
     AV_SCOPE("get_integerv");

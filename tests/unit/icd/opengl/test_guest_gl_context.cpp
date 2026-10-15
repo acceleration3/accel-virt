@@ -13,6 +13,8 @@
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"
+#include "proto/generated/opengl/gl_protocol_ids.h"
+#include "proto/submission/command_header.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -612,6 +614,26 @@ TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
   const av::BatchMark mark = context->mark();
   CHECK(mark.waitable());
   CHECK(mark.fence() != 0u); }
+
+/* What another API is about to name was made by calls the context still
+ * holds: run_held sends them, then the transport's no-op behind them, and
+ * returns once the host answered it - after running everything before it.
+ * Nothing to run before the make. */
+TEST(guest_gl_context, run_held_has_the_host_run_the_held_calls_before_it_returns)
+{ GlContextRig rig;
+  Context      context(rig);
+  CHECK_STATUS(context->run_held(), Status::invalid_state);
+  rig.host().gl_make(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  const std::uint32_t before = rig.kmt().commands();
+  av::glproto::av_glBindTexture(*context->wire(), 0x0DE1u, 186u);
+  CHECK_EQ(rig.kmt().commands(), before);
+  rig.host().nop();
+  CHECK_STATUS(context->run_held(), Status::ok);
+  CHECK_EQ(rig.kmt().commands(), before + 2u);
+  CHECK_EQ(rig.kmt().command_id(before), av::glproto::kCmd_glBindTexture);
+  CHECK_EQ(rig.kmt().command_id(before + 1u), av::CommandHeader::nop_id);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 namespace {
 

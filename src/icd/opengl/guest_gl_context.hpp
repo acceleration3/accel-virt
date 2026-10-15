@@ -123,6 +123,13 @@ public:
     /* The calls held so far go to the host: at glFlush, and before another
      * context may depend on them. */
     void                 flush();
+    /* The calls held so far go to the host and the host has run them before
+     * this returns: a round trip of the transport's no-op behind them, which
+     * the host's worker answers only once it has run every command before it.
+     * What another API's context is about to name (cl_khr_gl_sharing) was
+     * made by them, and that context runs on a worker of its own. ok when
+     * answered; invalid_state unless made, or when the round trip failed. */
+    [[nodiscard]] Status run_held();
     /* The application ended a frame - glFlush, a swap: what is held goes to
      * the host, and the application goes on only once the host is no more
      * than FramesInFlight::latency_ms behind it. A host that never catches up

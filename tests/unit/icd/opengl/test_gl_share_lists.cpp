@@ -13,6 +13,7 @@
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"
+#include "proto/submission/command_header.hpp"
 
 #include <cstdint>
 
@@ -309,4 +310,30 @@ TEST(gl_share_lists, the_current_share_name_is_the_current_context_s_and_none_wi
   CHECK_EQ(root.current_share_name(), second->share_name());
   CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
   CHECK_EQ(root.current_share_name(), 0u);
+  CHECK(root.invariants_hold()); }
+
+/* The OpenCL ICD's other question (avRunHeldCalls): before it names a GL
+ * object, the calling thread's current context's held calls are run on the
+ * host - sent, and the transport's no-op answered behind them. 0 with nothing
+ * current, which sends nothing. */
+TEST(gl_share_lists, run_held_calls_runs_the_current_context_s_and_nothing_without_one)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  Root &root = rig.root();
+  const std::uint32_t idle = rig.kmt().commands();
+  CHECK_EQ(root.run_held_calls(), 0);
+  CHECK_EQ(rig.kmt().commands(), idle);
+  void *const a = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  CHECK(current_on(rig, a) != nullptr);
+  const std::uint32_t before = rig.kmt().commands();
+  rig.host().nop();
+  CHECK_EQ(root.run_held_calls(), 1);
+  CHECK(rig.kmt().commands() > before);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::CommandHeader::nop_id);
+  CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
+  const std::uint32_t released = rig.kmt().commands();
+  CHECK_EQ(root.run_held_calls(), 0);
+  CHECK_EQ(rig.kmt().commands(), released);
   CHECK(root.invariants_hold()); }

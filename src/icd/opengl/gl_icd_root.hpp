@@ -145,6 +145,12 @@ public:
      * names it to share its objects (cl_khr_gl_sharing); 0 with nothing
      * current or a context not yet made. */
     uint32_t         current_share_name();
+    /* The OpenCL ICD's other question (cl_khr_gl_sharing): the calling
+     * thread's context's held calls are run by the host before an OpenCL
+     * context names what they made - a texture glGenTextures named but whose
+     * bind is still held does not exist on the host yet. 1 when they ran (or
+     * nothing was held), 0 with nothing current or the context lost. */
+    int32_t          run_held_calls();
     uint64_t         mint_sync_token();
     /* A command whose encoding overflowed and was not sent. */
     void             note_dropped(const char *api, const char *command, size_t written);
