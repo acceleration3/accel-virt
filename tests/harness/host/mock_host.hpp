@@ -79,6 +79,9 @@ public:
     Status   place_in_hostmem(int fd, std::uint64_t size, std::uint64_t offset) override;
     void     remove_from_hostmem(std::uint64_t offset, std::uint64_t size) override;
     std::uint64_t monotonic_nanoseconds() override;
+    /* Lets every store hold_store kept reach its memory, in the order held,
+     * and reads the watched word as they land. */
+    void     fence_stores() override;
     Status   bind_gpu(std::uint32_t index) override;
     void     connect_doorbell(void *event, std::uint32_t index) override;
     void     disconnect_doorbell(void *event, std::uint32_t index) override;
@@ -175,6 +178,17 @@ public:
      * refuses a dma-buf it cannot map. */
     void fail_placement_at(std::uint32_t nth);
     void fail_bind_gpu_at(std::uint32_t nth);
+    /* Write-combining, as a CPU does it: the `size` bytes at `bytes` reach
+     * `at` only at the next fence_stores, so a test sees what another
+     * processor - the guest - could see before then. At most max_held_stores
+     * of at most max_held_bytes each; one past either fails the test. */
+    void          hold_store(void *at, const void *bytes, std::size_t size);
+    /* The eight bytes at `word` are read whenever held stores land: what the
+     * guest could already see when they did. */
+    void          watch(const void *word);
+    std::uint32_t store_fences();
+    /* The watched word as the last held stores landed; 0 before any have. */
+    std::uint64_t watched_when_landed();
     /* The scripted clock moves this many nanoseconds per reading, so a test
      * decides how long the work it measures took. */
     void advance_clock_per_read(std::uint64_t nanoseconds);
@@ -525,6 +539,18 @@ private:
     std::uint32_t   fail_export_send_;
     std::uint32_t   export_sends_;
     std::uint32_t   exports_closed_;
+    struct HeldStore {
+        void         *at;
+        std::size_t   size;
+        std::uint8_t  bytes[256];
+    };
+    static constexpr std::uint32_t max_held_stores = 16u;
+    static constexpr std::size_t   max_held_bytes = sizeof(HeldStore::bytes);
+    HeldStore       held_stores_[max_held_stores] = {};
+    std::uint32_t   held_count_ = 0u;
+    const void     *watched_ = nullptr;
+    std::uint64_t   watched_when_landed_ = 0u;
+    std::uint32_t   store_fences_ = 0u;
 };
 
 }  // namespace av

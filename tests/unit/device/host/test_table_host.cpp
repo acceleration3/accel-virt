@@ -267,6 +267,20 @@ TEST(table_host, forwards_the_clock_and_the_gpu_binding)
   CHECK_STATUS(host.bind_gpu(0u), Status::not_supported);
   CHECK_EQ(mock.bound_gpu(), 1u); }
 
+/* The fence orders the calling thread's own stores, so it is the instruction
+ * on whichever thread asks, never a call into the glue: the mock behind the
+ * table sees none, from the main loop or a worker. */
+TEST(table_host, fences_stores_itself_on_any_thread_without_the_glue)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  host.fence_stores();
+  void *thread = nullptr;
+  CHECK_STATUS(mock.start_thread([](void *table_host) { static_cast<TableHost *>(table_host)->fence_stores(); }, &host,
+                                 thread),
+               Status::ok);
+  mock.join_thread(thread);
+  CHECK_EQ(mock.store_fences(), 0u);
+  CHECK_EQ(mock.logged(), 0u); }
+
 TEST(table_host, forwards_doorbell_connections)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *event = nullptr;

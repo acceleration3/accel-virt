@@ -76,6 +76,14 @@ public:
     /* Any thread: a monotonic count of nanoseconds, for measuring what the
      * device did rather than for telling the time. */
     virtual uint64_t monotonic_nanoseconds() = 0;
+    /* Any thread: every store this thread made before the call reaches memory
+     * before any it makes after. x86 orders write-back stores so on its own,
+     * but not write-combined ones, which wait in the core's buffers. The
+     * executor stores into guest-visible memory through host drivers' own
+     * mappings, and ANV maps every exported allocation write-combined on a GPU
+     * sharing the CPU's last-level cache, a host-cached type included, so the
+     * guest saw an answer before the bytes it answered for. */
+    virtual void     fence_stores() = 0;
 
     /* Any thread: zeroed memory, or null. */
     virtual void *allocate(size_t bytes) = 0;

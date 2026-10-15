@@ -239,6 +239,27 @@ private:
     BatchExecutor   batches_;
 };
 
+/* Guest-visible memory the scripted command below stores its payload into
+ * write-combined, held in the host's buffers until a store fence: what a host
+ * driver's copy into a context's arena is where the driver maps it so. */
+struct WriteCombined {
+    MockHost     *host;
+    std::uint8_t  arena[64];
+};
+WriteCombined *write_combined = nullptr;
+
+std::uint32_t store_write_combined(void *, AvExecutor *, std::uint32_t, const std::uint8_t *payload, std::size_t size,
+                                   std::uint8_t *reply, std::size_t capacity, std::size_t *reply_size)
+{
+    write_combined->host->hold_store(write_combined->arena, payload, size);
+    if (reply != nullptr) std::memcpy(reply, payload, size < capacity ? size : capacity);
+    *reply_size = reply != nullptr ? size : 0u;
+    return AV_EXECUTED;
+}
+
+/* Where the reply slot carries its fence id, which the guest polls for. */
+constexpr std::size_t reply_fence_at = 8u;
+
 }  // namespace
 
 TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_rest)
@@ -396,6 +417,41 @@ TEST(batch_executor_run, an_answer_past_four_gigabytes_is_reported_as_the_larges
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK(fixture.reply_header().too_large());
   CHECK_EQ(fixture.reply_header().required(), 0xFFFFFFFFu); }
+
+/* The Iris Xe's OpenCL rectangle reads (bufferrects): the host driver copied
+ * the rows into the arena write-combined, and the guest, polling the reply
+ * slot, saw the fence id before the rows and read what the arena held before. */
+TEST(batch_executor_run, what_a_command_stored_write_combined_is_in_memory_before_its_answer_is)
+{ Fixture fixture;
+  WriteCombined stored{&fixture.host(), {}};
+  write_combined = &stored;
+  fixture.ops().editable().execute = &store_write_combined;
+  fixture.host().watch(fixture.reply() + reply_fence_at);
+  Commands commands;
+  commands.add(0x10001u, 16u, 0u, 0x11u).add(0x10002u, 24u, CommandHeader::generate_reply, 0x5Au);
+  CHECK_STATUS(fixture.run(9u, commands), Status::ok);
+  CHECK_EQ(fixture.reply_header().fence_id(), 9u);
+  CHECK_EQ(fixture.reply_header().size(), 24u);
+  for (std::uint32_t at = 0u; at < 24u; at++) CHECK_EQ(stored.arena[at], 0x5Au);
+  CHECK_EQ(stored.arena[24], 0u);
+  /* They landed while the slot still held what it held before this batch. */
+  CHECK_EQ(fixture.host().watched_when_landed(), 0xEEEEEEEEEEEEEEEEu);
+  write_combined = nullptr; }
+
+/* With no answer, the batch's completion is what the guest waits on, and the
+ * consumer publishes it as soon as run returns. */
+TEST(batch_executor_run, what_a_batch_stored_write_combined_is_in_memory_once_it_has_run)
+{ Fixture fixture;
+  WriteCombined stored{&fixture.host(), {}};
+  write_combined = &stored;
+  fixture.ops().editable().execute = &store_write_combined;
+  Commands commands;
+  commands.add(0x10001u, 40u, 0u, 0x33u);
+  CHECK_STATUS(fixture.run(2u, commands), Status::ok);
+  CHECK_EQ(fixture.reply()[0], 0xEEu);
+  for (std::uint32_t at = 0u; at < 40u; at++) CHECK_EQ(stored.arena[at], 0x33u);
+  CHECK_EQ(stored.arena[40], 0u);
+  write_combined = nullptr; }
 
 TEST(batch_executor_run, a_batch_with_no_commands_runs_nothing)
 { Fixture fixture;

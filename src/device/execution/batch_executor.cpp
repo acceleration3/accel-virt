@@ -111,6 +111,11 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
         fault_ = FaultCode::command_framing;
         return failed(batch.fence_id(), status);
     }
+    /* Before anything that says the batch ran - its answer here, then the
+     * consumer's head and fence: what its commands stored into the guest's
+     * memory, through mappings the executor's host drivers made, has to be
+     * there when the guest looks. */
+    host_.fence_stores();
     if (answered) write_reply(batch.fence_id(), answer);
     return Status::ok;
 }

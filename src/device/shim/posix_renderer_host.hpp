@@ -77,6 +77,7 @@ public:
     [[nodiscard]] Status list_directory(const char *path, char *buffer, size_t capacity, size_t &length) override;
 
     uint64_t monotonic_nanoseconds() override;
+    void     fence_stores() override;
 
     void *allocate(size_t bytes) override;
     void  release(void *block) override;
