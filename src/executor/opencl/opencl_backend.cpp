@@ -1,5 +1,6 @@
 #include "executor/opencl/opencl_backend.hpp"
 
+#include "executor/opencl/cl_extension_list.hpp"
 #include "executor/opencl/dxgi_cl_format.hpp"
 #include "device/host/stdio_log.hpp"
 #include "core/log/driver_log.hpp"
@@ -41,9 +42,10 @@ namespace {
 constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU |
                                          CL_DEVICE_TYPE_ACCELERATOR | CL_DEVICE_TYPE_CUSTOM;
 
-/* What a host says when its OpenCL can name an OpenGL object, which is the
- * only way a shared object reaches OpenCL on the hosts this runs on. */
+/* The two extension names the guest is shown as this executor finds them
+ * (ClExtensionList). */
 constexpr const char *gl_sharing = "cl_khr_gl_sharing";
+constexpr const char *external_memory = "cl_khr_external_memory";
 
 }  // namespace
 
@@ -57,9 +59,10 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
 }
 
 OpenClBackend::OpenClBackend()
-    : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), renderbuffer_textures_(), renderbuffers_(), context_(nullptr),
-      queue_(nullptr), handles_(), svm_(), events_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
-      lost_(false)
+    : bound_(nullptr), vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
+      direct_(vehicle_, renderbuffer_textures_), copied_(object_bytes_, renderbuffer_textures_), gl_(nullptr),
+      reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(), svm_(), events_(), pacer_(),
+      paced_queue_(nullptr), marker_(nullptr), ran_(0u), lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
@@ -69,45 +72,53 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     AV_SCOPE("OpenClBackend::initialize");
     bound_ = device;
     if (bound_ == nullptr) return false;
-    if (share != nullptr) return display != nullptr && share_with(*display, *share);
-    /* The vehicle is optional and its failure is not this context's: a GPU
+    /* The vehicle is optional and its failure is not a plain context's: a GPU
      * with no EGL display, or a driver that will not make a context, leaves
-     * OpenCL running everything it ran before and refusing to open a shared
-     * object (feature 053, T019). */
-    if (display == nullptr || !display->open()) return true;
-    /* The defaults: this context draws nothing and is never shown to the
+     * OpenCL running everything it ran before and sharing nothing (feature
+     * 053, T019). A context made from a GL context asked for nothing else.
+     * The defaults: the vehicle draws nothing and is never shown to the
      * guest, so it wants no version, no profile and no debug flag. */
     const GlContextAttributes plain(nullptr);
-    if (!vehicle_.open(*display, plain, nullptr)) return true;
-    display_ = display;
+    if (display == nullptr || !display->open() ||
+        !vehicle_.open(*display, plain, share != nullptr ? &share->context() : nullptr))
+        return share == nullptr;
     import_.configure(vehicle_);
     buffers_.configure(vehicle_);
     renderbuffer_textures_.configure(vehicle_, *display);
-    /* Measured before anything is claimed, and all three together because a
-     * context that cannot do every one of them cannot open a shared object at
-     * all: it then runs exactly as a context on a GPU with no display does. */
-    if (!import_.imports_memory() || !buffers_.makes_buffers() || !shares_with_gl()) { AV_UNTESTABLE("no host beside a test here refuses any of the three; one inside QEMU refuses the last");
-        display_ = nullptr;
-        vehicle_.close();
-        return true;
+    object_bytes_.configure(vehicle_);
+    direct_.configure(*display);
+    if (shares_with_gl(*display)) {
+        gl_ = &direct_;
+        imports_ = import_.imports_memory() && buffers_.makes_buffers();
+        reaches_gl_ = true;
+    } else {
+        reaches_gl_ = copy_gl_objects();
     }
+    /* A plain context keeps the vehicle only to import through. */
+    if (!reaches_gl_ || (share == nullptr && !imports_)) close_vehicle();
+    return reaches_gl_ || share == nullptr;
+}
+
+bool OpenClBackend::copy_gl_objects()
+{
+    AV_SCOPE("OpenClBackend::copy_gl_objects");
+    if (!object_bytes_.moves_bytes()) return false;
+    gl_ = &copied_;
+    imports_ = false;
     return true;
 }
 
-/* A vehicle in the guest's GL context's share group, or no context at all. */
-bool OpenClBackend::share_with(const GlDisplay &display, const OpenGlBackend &share)
+void OpenClBackend::close_vehicle()
 {
-    AV_SCOPE("OpenClBackend::share_with");
-    const GlContextAttributes plain(nullptr);
-    if (!display.open() || !vehicle_.open(display, plain, &share.context())) return false;
-    display_ = &display;
-    import_.configure(vehicle_);
-    buffers_.configure(vehicle_);
-    renderbuffer_textures_.configure(vehicle_, display);
-    if (shares_with_gl()) return true;
-    display_ = nullptr;
+    AV_SCOPE("OpenClBackend::close_vehicle");
+    if (gl_ != nullptr) gl_->forget_all();
+    gl_ = nullptr;
+    imports_ = false;
+    object_bytes_.give_back();
+    renderbuffer_textures_.give_back();
+    buffers_.give_back();
+    import_.give_back();
     vehicle_.close();
-    return false;
 }
 
 cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name,
@@ -115,64 +126,33 @@ cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info par
                                          size_t *param_value_size_ret)
 {
     AV_SCOPE("OpenClBackend::on_clGetDeviceInfo");
-    const cl_int answered = RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size,
-                                                             param_value, param_value_size_ret);
-    if (param_name != CL_DEVICE_EXTENSIONS || answered != CL_SUCCESS || param_value == nullptr ||
-        sharing())
-        return answered;
-    const size_t left = without(static_cast<char *>(param_value), param_value_size, gl_sharing);
-    /* A caller asking with no room is told the host's own size, which is never
-     * smaller than this: a list may need less room than it was promised, and
-     * one that has been read is told what it got. */
-    if (param_value_size_ret != nullptr) *param_value_size_ret = left;
-    return answered;
+    if (param_name != CL_DEVICE_EXTENSIONS)
+        return RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size, param_value,
+                                                param_value_size_ret);
+    char         host[ClExtensionList::host_bytes] = {};
+    const cl_int asked = RealDispatch::on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof host, host, nullptr);
+    if (asked != CL_SUCCESS) return asked;
+    ClExtensionList shown;
+    shown.hold(host, sizeof host);
+    if (!reaches_gl_) shown.strike(gl_sharing);
+    if (imports_) shown.add(external_memory);
+    else shown.strike(external_memory);
+    return shown.answer(param_value_size, param_value, param_value_size_ret);
 }
 
-bool OpenClBackend::names(const char *text, size_t length, const char *name) const
-{
-    AV_SCOPE("OpenClBackend::names");
-    size_t letter = 0u;
-    while (letter < length && name[letter] != '\0' && text[letter] == name[letter]) letter++;
-    return letter == length && name[letter] == '\0';
-}
-
-size_t OpenClBackend::without(char *text, size_t bytes, const char *name) const
-{
-    AV_SCOPE("OpenClBackend::without");
-    size_t length = 0u;
-    while (length < bytes && text[length] != '\0') length++;
-    size_t written = 0u;
-    size_t at = 0u;
-    while (at < length) {
-        while (at < length && text[at] == ' ') at++;
-        size_t end = at;
-        while (end < length && text[end] != ' ') end++;
-        /* Written back over what has already been read, and never past it: a
-         * word that stays moves up by however many were dropped before it. */
-        if (end != at && !names(&text[at], end - at, name)) {
-            if (written != 0u) text[written++] = ' ';
-            for (size_t letter = at; letter < end; letter++) text[written++] = text[letter];
-        }
-        at = end;
-    }
-    /* Only where it fits: a list that filled its room with no terminator gets
-     * none written past the end of that room. */
-    if (written < bytes) text[written] = '\0';
-    return written + 1u;
-}
-
-bool OpenClBackend::shares_with_gl() const
+bool OpenClBackend::shares_with_gl(const GlDisplay &display) const
 {
     AV_SCOPE("OpenClBackend::shares_with_gl");
     const cl_context_properties named[] = {
         CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(bound_->platform()),
         CL_GL_CONTEXT_KHR,   reinterpret_cast<cl_context_properties>(vehicle_.handle()),
-        CL_EGL_DISPLAY_KHR,  reinterpret_cast<cl_context_properties>(display_->handle()),
+        CL_EGL_DISPLAY_KHR,  reinterpret_cast<cl_context_properties>(display.handle()),
         0};
     cl_device_id const one = static_cast<cl_device_id>(bound_->device());
     cl_int             made = CL_SUCCESS;
     cl_context const   asked = ::clCreateContext(named, 1u, &one, nullptr, nullptr, &made);
-    if (asked == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a GL-sharing context"); return false; }
+    /* NVIDIA's OpenCL refuses every EGL context here, which is the copy path. */
+    if (asked == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a GL-sharing context; OpenClBackendProbe takes the copy path on one that shares"); return false; }
     static_cast<void>(::clReleaseContext(asked));
     return true;
 }
@@ -190,47 +170,12 @@ void *OpenClBackend::acquire_queue()
     return queue_;
 }
 
-bool OpenClBackend::sharing() const
-{
-    AV_SCOPE("OpenClBackend::sharing");
-    return display_ != nullptr;
-}
-
 cl_context OpenClBackend::on_clCreateContext(const cl_context_properties *properties, cl_uint num_devices,
                                              const cl_device_id *devices, cl_int *errcode_ret)
 {
     AV_SCOPE("OpenClBackend::on_clCreateContext");
-    if (!sharing()) return RealDispatch::on_clCreateContext(properties, num_devices, devices, errcode_ret);
-    /* The guest's list, with the two properties that let this context name a
-     * GL object appended before its terminator. The decoder has already
-     * refused anything but a CL_CONTEXT_PLATFORM naming the bound platform,
-     * so what is copied is short and known. */
-    cl_context_properties named[max_context_properties] = {};
-    uint32_t               at = 0u;
-    if (properties != nullptr) {
-        while (properties[at] != 0 && at + 4u < max_context_properties) {
-            named[at] = properties[at];
-            named[at + 1u] = properties[at + 1u];
-            at += 2u;
-        }
-        /* A list longer than this is one the guest built to overflow it. */
-        if (properties[at] != 0) {
-            if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_PROPERTY;
-            return nullptr;
-        }
-    }
-    named[at] = CL_GL_CONTEXT_KHR;
-    named[at + 1u] = reinterpret_cast<cl_context_properties>(vehicle_.handle());
-    named[at + 2u] = CL_EGL_DISPLAY_KHR;
-    named[at + 3u] = reinterpret_cast<cl_context_properties>(display_->handle());
-    named[at + 4u] = 0;
-    /* Whatever it answers is the guest's answer: a context that got this far
-     * was made on a host that made one at bind time, so a refusal here is a
-     * real one and not this driver's own arrangement failing. */
-    cl_int           made = CL_SUCCESS;
-    cl_context const shared = RealDispatch::on_clCreateContext(named, num_devices, devices, &made);
-    if (errcode_ret != nullptr) *errcode_ret = made;
-    return shared;
+    if (gl_ == nullptr) return RealDispatch::on_clCreateContext(properties, num_devices, devices, errcode_ret);
+    return gl_->make_context(properties, num_devices, devices, errcode_ret);
 }
 
 bool OpenClBackend::knows(uint32_t command_id) const
@@ -359,14 +304,11 @@ void OpenClBackend::released(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::released");
     handles_.release(kind, object);
-    /* The texture a renderbuffer's cl_mem was made over goes with the guest's
-     * last reference: the host's OpenCL holds the memory it imported itself. */
-    uint32_t texture = 0u;
-    void    *image = nullptr;
-    if (kind == clproto::HandleKind::mem &&
-        handles_.resolve(kind, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object))) == nullptr &&
-        renderbuffers_.forget(object, texture, image))
-        renderbuffer_textures_.destroy(texture, image);
+    /* What was made for a GL object's cl_mem goes with the guest's last
+     * reference: the host's OpenCL holds what it imported itself. */
+    if (kind == clproto::HandleKind::mem && gl_ != nullptr &&
+        handles_.resolve(kind, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object))) == nullptr)
+        gl_->forget(static_cast<cl_mem>(object));
 }
 
 cl_int OpenClBackend::on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
@@ -441,15 +383,10 @@ void OpenClBackend::shut_down()
      * told to stop calling them, so being called and doing nothing is what
      * they do from now on. */
     events_.shut_down();
-    uint32_t texture = 0u;
-    void    *image = nullptr;
-    while (renderbuffers_.forget_any(texture, image)) renderbuffer_textures_.destroy(texture, image);
-    /* The vehicle last: its context is what deleted the GL objects above. */
-    renderbuffer_textures_.give_back();
-    buffers_.give_back();
-    import_.give_back();
-    vehicle_.close();
-    display_ = nullptr;
+    /* The vehicle last: its context is what deletes what was made for the
+     * guest's GL objects. */
+    close_vehicle();
+    reaches_gl_ = false;
     bound_ = nullptr;
     ran_ = 0u;
     lost_ = false;
@@ -718,36 +655,44 @@ cl_int OpenClBackend::on_clEnqueueWriteBufferRect(
         event_wait_list, event);
 }
 
+cl_mem OpenClBackend::on_clCreateFromGLBuffer(cl_context context, cl_mem_flags flags, cl_GLuint bufobj,
+                                              cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateFromGLBuffer");
+    if (gl_ != nullptr) return gl_->from_buffer(context, flags, bufobj, errcode_ret);
+    if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_CONTEXT;
+    return nullptr;
+}
+
+cl_mem OpenClBackend::on_clCreateFromGLTexture(cl_context context, cl_mem_flags flags, cl_GLenum target,
+                                               cl_GLint miplevel, cl_GLuint texture, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateFromGLTexture");
+    if (gl_ != nullptr) return gl_->from_texture(context, flags, target, miplevel, texture, errcode_ret);
+    if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_CONTEXT;
+    return nullptr;
+}
+
+cl_mem OpenClBackend::on_clCreateFromGLTexture2D(cl_context context, cl_mem_flags flags, cl_GLenum target,
+                                                 cl_GLint miplevel, cl_GLuint texture, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateFromGLTexture2D");
+    return on_clCreateFromGLTexture(context, flags, target, miplevel, texture, errcode_ret);
+}
+
+cl_mem OpenClBackend::on_clCreateFromGLTexture3D(cl_context context, cl_mem_flags flags, cl_GLenum target,
+                                                 cl_GLint miplevel, cl_GLuint texture, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateFromGLTexture3D");
+    return on_clCreateFromGLTexture(context, flags, target, miplevel, texture, errcode_ret);
+}
+
 cl_mem OpenClBackend::on_clCreateFromGLRenderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
                                                     cl_int *errcode_ret)
 {
     AV_SCOPE("OpenClBackend::on_clCreateFromGLRenderbuffer");
-    cl_int       refused = CL_SUCCESS;
-    cl_mem const direct = RealDispatch::on_clCreateFromGLRenderbuffer(context, flags, renderbuffer, &refused);
-    if (errcode_ret != nullptr) *errcode_ret = refused;
-    if (direct != nullptr || refused != CL_INVALID_GL_OBJECT || !sharing()) return direct;
-    return over_texture(context, flags, renderbuffer, errcode_ret);
-}
-
-/* A renderbuffer with no image of it - none by that name, or one EGL will not
- * take - leaves the host's refusal standing; a texture the host took and this
- * could not hold is out of room. */
-cl_mem OpenClBackend::over_texture(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer, cl_int *errcode_ret)
-{
-    AV_SCOPE("OpenClBackend::over_texture");
-    uint32_t texture = 0u;
-    void    *image = nullptr;
-    if (!renderbuffer_textures_.make(renderbuffer, texture, image)) return nullptr;
-    cl_int       made = CL_SUCCESS;
-    cl_mem const over = RealDispatch::on_clCreateFromGLTexture(context, flags, GlRenderbufferTexture::texture_2d, 0,
-                                                               texture, &made);
-    if (over != nullptr && renderbuffers_.remember(over, renderbuffer, texture, image)) {
-        if (errcode_ret != nullptr) *errcode_ret = CL_SUCCESS;
-        return over;
-    }
-    if (over != nullptr) static_cast<void>(::clReleaseMemObject(over));
-    renderbuffer_textures_.destroy(texture, image);
-    if (errcode_ret != nullptr && over != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+    if (gl_ != nullptr) return gl_->from_renderbuffer(context, flags, renderbuffer, errcode_ret);
+    if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_CONTEXT;
     return nullptr;
 }
 
@@ -755,20 +700,34 @@ cl_int OpenClBackend::on_clGetGLObjectInfo(cl_mem memobj, cl_gl_object_type *gl_
                                            cl_GLuint *gl_object_name)
 {
     AV_SCOPE("OpenClBackend::on_clGetGLObjectInfo");
-    const uint32_t renderbuffer = renderbuffers_.renderbuffer_of(memobj);
-    if (renderbuffer == 0u) return RealDispatch::on_clGetGLObjectInfo(memobj, gl_object_type, gl_object_name);
-    if (gl_object_type != nullptr) *gl_object_type = CL_GL_OBJECT_RENDERBUFFER;
-    if (gl_object_name != nullptr) *gl_object_name = renderbuffer;
-    return CL_SUCCESS;
+    if (gl_ == nullptr) return CL_INVALID_GL_OBJECT;
+    return gl_->object_info(memobj, gl_object_type, gl_object_name);
 }
 
 cl_int OpenClBackend::on_clGetGLTextureInfo(cl_mem memobj, cl_gl_texture_info param_name, size_t param_value_size,
                                             void *param_value, size_t *param_value_size_ret)
 {
     AV_SCOPE("OpenClBackend::on_clGetGLTextureInfo");
-    if (renderbuffers_.renderbuffer_of(memobj) != 0u) return CL_INVALID_GL_OBJECT;
-    return RealDispatch::on_clGetGLTextureInfo(memobj, param_name, param_value_size, param_value,
-                                               param_value_size_ret);
+    if (gl_ == nullptr) return CL_INVALID_GL_OBJECT;
+    return gl_->texture_info(memobj, param_name, param_value_size, param_value, param_value_size_ret);
+}
+
+cl_int OpenClBackend::on_clEnqueueAcquireGLObjects(cl_command_queue command_queue, cl_uint num_objects,
+                                                   const cl_mem *mem_objects, cl_uint num_events_in_wait_list,
+                                                   const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueAcquireGLObjects");
+    if (gl_ == nullptr) return CL_INVALID_CONTEXT;
+    return gl_->acquire(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int OpenClBackend::on_clEnqueueReleaseGLObjects(cl_command_queue command_queue, cl_uint num_objects,
+                                                   const cl_mem *mem_objects, cl_uint num_events_in_wait_list,
+                                                   const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueReleaseGLObjects");
+    if (gl_ == nullptr) return CL_INVALID_CONTEXT;
+    return gl_->release(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
 }
 
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)
@@ -813,7 +772,7 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * (research.md §7). */
     if (kind != AV_SHARED_MEMORY || handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u)
         return false;
-    if (!sharing() || context_ == nullptr) return false;
+    if (!imports_ || context_ == nullptr) return false;
     if (acquire_queue() == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a command queue"); return false; }
     uint32_t memory = 0u;
     if (!import_.import_memory(fd, size, memory)) return false; // AV_UNTESTABLE("a descriptor this host's GL refuses; an ordinary fd is taken and then faults in the driver")

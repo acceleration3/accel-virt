@@ -18,6 +18,9 @@
 #include "executor/imported_blob.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/opencl/opencl_backend.hpp"
+#include "executor/opengl/gl_context_attributes.hpp"
+#include "executor/opengl/opengl_backend.hpp"
+#include "executor/shim/gl_context.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
@@ -241,17 +244,15 @@ cl_context guest_context(OpenClBackend &backend, const av::OpenClDevice &device)
 namespace av {
 
 /* A host's refusal of the arena, recorded as Intel's runtime records it, so
- * the bounce is reached on a host whose OpenCL reads into the arena itself. */
+ * the bounce is reached on a host whose OpenCL reads into the arena itself;
+ * and the copy path NVIDIA's OpenCL is given, taken on a host whose OpenCL
+ * would have shared. */
 struct OpenClBackendProbe {
     OpenClBackend &backend;
 
     bool refuse() const { return backend.bounced_.refusal(CL_OUT_OF_RESOURCES); }
-    /* The way a host whose GL sharing takes no renderbuffer is answered, taken
-     * on a host whose sharing would have taken it itself. */
-    cl_mem over_texture(cl_context context, cl_GLuint renderbuffer, cl_int &error) const
-    { return backend.over_texture(context, CL_MEM_READ_ONLY, renderbuffer, &error); }
-    std::uint32_t renderbuffer_images() const { return backend.renderbuffers_.count(); }
-    /* The context renderbuffers are made in: the vehicle, current. */
+    bool copy() const { return backend.copy_gl_objects(); }
+    /* The context the tests make GL objects in: the vehicle, current. */
     GlContext *vehicle() const { return backend.vehicle_.make_current() ? &backend.vehicle_ : nullptr; }
 };
 
@@ -338,9 +339,11 @@ TEST(opencl_backend_device, a_context_that_can_share_leaves_gl_sharing_in_the_de
   size_t bytes = 0u;
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, &bytes),
            CL_SUCCESS);
-  /* Untouched: what the host said is what the guest is told. */
-  CHECK_EQ(bytes, host_bytes);
-  CHECK(std::strcmp(answered, host_list) == 0);
+  /* What the host said, and the import this backend makes through the vehicle
+   * said as the extension the guest's ICD answers over it. */
+  CHECK_EQ(bytes, std::strlen(answered) + 1u);
+  CHECK(std::strncmp(answered, host_list, host_bytes - 1u) == 0);
+  CHECK(std::strstr(answered, " cl_khr_external_memory") != nullptr);
   /* And it is there only if the host has it at all - this says which of the
    * two the run proved. */
   if (std::strstr(host_list, "cl_khr_gl_sharing") == nullptr)
@@ -704,158 +707,6 @@ TEST(opencl_backend_device, a_rectangle_the_host_refused_into_the_arena_is_bounc
   backend.abandon(blob);
   backend.shut_down(); }
 
-namespace {
-
-/* A 16x16 RGBA8 renderbuffer of the vehicle's, cleared to one colour through a
- * framebuffer as an application draws into one, or 0 where GL will not. */
-GLuint cleared_renderbuffer(av::GlContext &gl, const float rgba[4])
-{
-    using Gen = void (*)(GLsizei, GLuint *);
-    using Bind = void (*)(GLenum, GLuint);
-    const auto gen_renderbuffers = reinterpret_cast<Gen>(gl.resolve("glGenRenderbuffers"));
-    const auto bind_renderbuffer = reinterpret_cast<Bind>(gl.resolve("glBindRenderbuffer"));
-    const auto storage = reinterpret_cast<void (*)(GLenum, GLenum, GLsizei, GLsizei)>(gl.resolve("glRenderbufferStorage"));
-    const auto gen_framebuffers = reinterpret_cast<Gen>(gl.resolve("glGenFramebuffers"));
-    const auto bind_framebuffer = reinterpret_cast<Bind>(gl.resolve("glBindFramebuffer"));
-    const auto attach =
-        reinterpret_cast<void (*)(GLenum, GLenum, GLenum, GLuint)>(gl.resolve("glFramebufferRenderbuffer"));
-    const auto viewport = reinterpret_cast<void (*)(GLint, GLint, GLsizei, GLsizei)>(gl.resolve("glViewport"));
-    const auto clear_color = reinterpret_cast<void (*)(GLfloat, GLfloat, GLfloat, GLfloat)>(gl.resolve("glClearColor"));
-    const auto clear = reinterpret_cast<void (*)(GLbitfield)>(gl.resolve("glClear"));
-    const auto finish = reinterpret_cast<void (*)()>(gl.resolve("glFinish"));
-    if (gen_renderbuffers == nullptr || storage == nullptr || gen_framebuffers == nullptr || attach == nullptr ||
-        clear == nullptr || finish == nullptr)
-        return 0u;
-    GLuint renderbuffer = 0u, framebuffer = 0u;
-    gen_renderbuffers(1, &renderbuffer);
-    bind_renderbuffer(0x8D41u, renderbuffer);
-    storage(0x8D41u, 0x8058u, 16, 16);
-    gen_framebuffers(1, &framebuffer);
-    bind_framebuffer(0x8D40u, framebuffer);
-    attach(0x8D40u, 0x8CE0u, 0x8D41u, renderbuffer);
-    viewport(0, 0, 16, 16);
-    clear_color(rgba[0], rgba[1], rgba[2], rgba[3]);
-    clear(0x4000u);
-    bind_framebuffer(0x8D40u, 0u);
-    finish();
-    return renderbuffer;
-}
-
-/* Pixel (5, 7) of `image`, read between an acquire and a release. */
-bool pixel_of(cl_command_queue queue, cl_mem image, std::uint8_t rgba[4])
-{
-    const std::size_t at[3] = {5u, 7u, 0u}, one[3] = {1u, 1u, 1u};
-    return ::clEnqueueAcquireGLObjects(queue, 1u, &image, 0u, nullptr, nullptr) == CL_SUCCESS &&
-           ::clEnqueueReadImage(queue, image, CL_TRUE, at, one, 0u, 0u, rgba, 0u, nullptr, nullptr) == CL_SUCCESS &&
-           ::clEnqueueReleaseGLObjects(queue, 1u, &image, 0u, nullptr, nullptr) == CL_SUCCESS &&
-           ::clFinish(queue) == CL_SUCCESS;
-}
-
-}  // namespace
-
-/* A renderbuffer the host would not name is named through a texture of its
- * own storage: OpenCL reads what GL cleared it to, and what GL clears it to
- * after; the guest is told of the renderbuffer, never of the texture; and the
- * texture goes with the guest's last reference. A name with no renderbuffer
- * behind it is still the host's refusal. */
-TEST(opencl_backend_device, a_renderbuffer_the_host_will_not_name_is_read_through_a_texture_of_its_storage)
-{ Hosts hosts;
-  if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
-  cl_context const context = guest_context(backend, *hosts.device(0u));
-  av::OpenClBackendProbe probe{backend};
-  av::GlContext *const gl = probe.vehicle();
-  if (context == nullptr || gl == nullptr) { backend.shut_down(); return; }
-  const float  red[4] = {0.8f, 0.1f, 0.3f, 1.0f};
-  const GLuint renderbuffer = cleared_renderbuffer(*gl, red);
-  CHECK(renderbuffer != 0u);
-  cl_int       error = CL_INVALID_VALUE;
-  cl_mem const shared = probe.over_texture(context, renderbuffer, error);
-  if (shared == nullptr) {
-      std::fprintf(stderr, "this host makes no texture of a renderbuffer (%d)\n", error);
-      backend.shut_down();
-      return;
-  }
-  CHECK_EQ(error, CL_SUCCESS);
-  backend.made(av::clproto::HandleKind::mem, shared);
-  CHECK_EQ(probe.renderbuffer_images(), 1u);
-  cl_gl_object_type type = 0u;
-  cl_GLuint         name = 0u;
-  CHECK_EQ(backend.on_clGetGLObjectInfo(shared, &type, &name), CL_SUCCESS);
-  CHECK_EQ(type, static_cast<cl_gl_object_type>(CL_GL_OBJECT_RENDERBUFFER));
-  CHECK_EQ(name, renderbuffer);
-  GLenum target = 0u;
-  CHECK_EQ(backend.on_clGetGLTextureInfo(shared, CL_GL_TEXTURE_TARGET, sizeof target, &target, nullptr),
-           CL_INVALID_GL_OBJECT);
-
-  cl_command_queue const queue = ::clCreateCommandQueueWithProperties(
-      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
-  std::uint8_t pixel[4] = {};
-  CHECK(pixel_of(queue, shared, pixel));
-  CHECK(pixel[0] >= 203u && pixel[0] <= 205u);
-  CHECK(pixel[1] >= 25u && pixel[1] <= 27u);
-  CHECK(pixel[2] >= 76u && pixel[2] <= 78u);
-  CHECK_EQ(pixel[3], 255u);
-  /* One allocation: GL drawing again is what OpenCL reads next. */
-  CHECK(probe.vehicle() != nullptr);
-  const float green[4] = {0.1f, 0.9f, 0.2f, 1.0f};
-  const auto  bind_framebuffer = reinterpret_cast<void (*)(GLenum, GLuint)>(gl->resolve("glBindFramebuffer"));
-  const auto  gen_framebuffers = reinterpret_cast<void (*)(GLsizei, GLuint *)>(gl->resolve("glGenFramebuffers"));
-  const auto  attach = reinterpret_cast<void (*)(GLenum, GLenum, GLenum, GLuint)>(gl->resolve("glFramebufferRenderbuffer"));
-  const auto  clear_color = reinterpret_cast<void (*)(GLfloat, GLfloat, GLfloat, GLfloat)>(gl->resolve("glClearColor"));
-  const auto  clear = reinterpret_cast<void (*)(GLbitfield)>(gl->resolve("glClear"));
-  const auto  finish = reinterpret_cast<void (*)()>(gl->resolve("glFinish"));
-  GLuint      framebuffer = 0u;
-  gen_framebuffers(1, &framebuffer);
-  bind_framebuffer(0x8D40u, framebuffer);
-  attach(0x8D40u, 0x8CE0u, 0x8D41u, renderbuffer);
-  clear_color(green[0], green[1], green[2], green[3]);
-  clear(0x4000u);
-  bind_framebuffer(0x8D40u, 0u);
-  finish();
-  CHECK(pixel_of(queue, shared, pixel));
-  CHECK(pixel[0] >= 24u && pixel[0] <= 27u);
-  CHECK(pixel[1] >= 228u && pixel[1] <= 231u);
-
-  /* A second reference keeps it; the last one takes the texture with it. */
-  CHECK_EQ(::clRetainMemObject(shared), CL_SUCCESS);
-  backend.retained(av::clproto::HandleKind::mem, shared);
-  CHECK_EQ(backend.on_clReleaseMemObject(shared), CL_SUCCESS);
-  backend.released(av::clproto::HandleKind::mem, shared);
-  CHECK_EQ(probe.renderbuffer_images(), 1u);
-  CHECK_EQ(backend.on_clReleaseMemObject(shared), CL_SUCCESS);
-  backend.released(av::clproto::HandleKind::mem, shared);
-  CHECK_EQ(probe.renderbuffer_images(), 0u);
-
-  /* No renderbuffer by that name: nothing made, the host's refusal kept. */
-  error = CL_INVALID_GL_OBJECT;
-  CHECK(probe.over_texture(context, renderbuffer + 1000u, error) == nullptr);
-  CHECK_EQ(error, CL_INVALID_GL_OBJECT);
-  CHECK_EQ(probe.renderbuffer_images(), 0u);
-  ::clReleaseCommandQueue(queue);
-  backend.shut_down(); }
-
-/* What the guest never released goes with the context, its texture too. */
-TEST(opencl_backend_device, a_renderbuffer_s_texture_left_held_goes_when_the_context_does)
-{ Hosts hosts;
-  if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
-  cl_context const context = guest_context(backend, *hosts.device(0u));
-  av::OpenClBackendProbe probe{backend};
-  av::GlContext *const gl = probe.vehicle();
-  if (context == nullptr || gl == nullptr) { backend.shut_down(); return; }
-  const float  grey[4] = {0.5f, 0.5f, 0.5f, 1.0f};
-  const GLuint renderbuffer = cleared_renderbuffer(*gl, grey);
-  cl_int       error = CL_SUCCESS;
-  cl_mem const shared = probe.over_texture(context, renderbuffer, error);
-  if (shared == nullptr) { backend.shut_down(); return; }
-  backend.made(av::clproto::HandleKind::mem, shared);
-  CHECK_EQ(probe.renderbuffer_images(), 1u);
-  backend.shut_down();
-  CHECK_EQ(probe.renderbuffer_images(), 0u); }
-
 /* A buffer the guest releases while still mapped takes its mapping with it:
  * nothing names that address again, and a session whose buffers all went
  * that way would fill the table of mappings it can judge an unmap against. A
@@ -936,3 +787,215 @@ TEST(opencl_backend_device, a_kernel_runs_without_the_guest_flushing_it)
   ::clReleaseProgram(program);
   ::clReleaseCommandQueue(queue);
   backend.shut_down(); }
+
+namespace {
+
+/* A GL buffer of `bytes` in `gl`'s share group holding `values`, made and read
+ * as the guest's application makes and reads one. */
+std::uint32_t gl_buffer(av::GlContext &gl, const void *values, std::size_t bytes)
+{
+    static_cast<void>(gl.make_current());
+    auto const gen = reinterpret_cast<void (*)(GLsizei, GLuint *)>(gl.resolve("glGenBuffers"));
+    auto const bind = reinterpret_cast<void (*)(GLenum, GLuint)>(gl.resolve("glBindBuffer"));
+    auto const data = reinterpret_cast<void (*)(GLenum, std::intptr_t, const void *, GLenum)>(gl.resolve("glBufferData"));
+    auto const finish = reinterpret_cast<void (*)()>(gl.resolve("glFinish"));
+    GLuint name = 0u;
+    gen(1, &name);
+    bind(0x8892u, name);
+    data(0x8892u, static_cast<std::intptr_t>(bytes), values, 0x88E4u);
+    bind(0x8892u, 0u);
+    finish();
+    return name;
+}
+
+void read_gl_buffer(av::GlContext &gl, std::uint32_t name, void *into, std::size_t bytes)
+{
+    static_cast<void>(gl.make_current());
+    auto const bind = reinterpret_cast<void (*)(GLenum, GLuint)>(gl.resolve("glBindBuffer"));
+    auto const get =
+        reinterpret_cast<void (*)(GLenum, std::intptr_t, std::intptr_t, void *)>(gl.resolve("glGetBufferSubData"));
+    bind(0x8892u, name);
+    get(0x8892u, 0, static_cast<std::intptr_t>(bytes), into);
+    bind(0x8892u, 0u);
+}
+
+/* Whether `name` is a whole word of `list`. */
+bool lists(const char *list, const char *name)
+{
+    const std::size_t length = std::strlen(name);
+    for (const char *at = std::strstr(list, name); at != nullptr; at = std::strstr(at + 1, name))
+        if ((at == list || at[-1] == ' ') && (at[length] == ' ' || at[length] == '\0')) return true;
+    return false;
+}
+
+}  // namespace
+
+/* Where the host's OpenCL will not share with the vehicle - NVIDIA's - the
+ * guest is still shown cl_khr_gl_sharing, since its GL objects reach OpenCL as
+ * copies; and no cl_khr_external_memory, since no descriptor can be opened
+ * there, and nothing is. */
+TEST(opencl_backend_device, the_copy_path_says_gl_sharing_and_imports_nothing)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  Exported written;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  av::OpenClBackendProbe probe{backend};
+  if (probe.vehicle() == nullptr) { backend.shut_down(); return; }
+  CHECK(probe.copy());
+  cl_device_id const device = static_cast<cl_device_id>(hosts.device(0u)->device());
+  char               answered[4096] = {};
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr), CL_SUCCESS);
+  char host_list[4096] = {};
+  CHECK_EQ(::clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof host_list, host_list, nullptr), CL_SUCCESS);
+  CHECK_EQ(lists(answered, "cl_khr_gl_sharing"), lists(host_list, "cl_khr_gl_sharing"));
+  CHECK(!lists(answered, "cl_khr_external_memory"));
+  if (guest_context(backend, *hosts.device(0u)) != nullptr && written.make(hosts.uuid(0u))) {
+      std::uint64_t made = 9u;
+      CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page,
+                                   av::SharedImageShape(), made, detail));
+      CHECK_EQ(made, 0u);
+  }
+  backend.shut_down(); }
+
+/* The copy path through the backend's own entry points, as the decoder calls
+ * them: the guest's context names no GL context, a GL buffer becomes a cl_mem
+ * the registry holds, its bytes cross at the acquire and come back at the
+ * release, the texture and renderbuffer creates are answered as copies too,
+ * and what the guest let go of is forgotten - what it kept, by the shut-down. */
+TEST(opencl_backend_device, the_copy_path_carries_gl_objects_through_the_backend)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  av::OpenClBackendProbe probe{backend};
+  av::GlContext *const   gl = probe.vehicle();
+  if (gl == nullptr || !probe.copy()) { backend.shut_down(); return; }
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  CHECK(context != nullptr);
+  cl_context_properties named[8] = {};
+  std::size_t           bytes = 0u;
+  CHECK_EQ(::clGetContextInfo(context, CL_CONTEXT_PROPERTIES, sizeof named, named, &bytes), CL_SUCCESS);
+  CHECK_EQ(bytes, 3u * sizeof(cl_context_properties));
+
+  std::uint32_t values[64];
+  for (std::uint32_t at = 0u; at < 64u; at++) values[at] = at * 3u + 1u;
+  const std::uint32_t buffer = gl_buffer(*gl, values, sizeof values);
+  cl_int              error = CL_INVALID_VALUE;
+  cl_mem const        mem = backend.on_clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, buffer, &error);
+  CHECK(mem != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  backend.made(av::clproto::HandleKind::mem, mem);
+  cl_command_queue const queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  CHECK_EQ(backend.on_clEnqueueAcquireGLObjects(queue, 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::uint32_t seen[64] = {};
+  CHECK_EQ(::clEnqueueReadBuffer(queue, mem, CL_TRUE, 0u, sizeof seen, seen, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK(std::memcmp(seen, values, sizeof values) == 0);
+  for (std::uint32_t &value : values) value += 1000u;
+  CHECK_EQ(::clEnqueueWriteBuffer(queue, mem, CL_TRUE, 0u, sizeof values, values, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(backend.on_clEnqueueReleaseGLObjects(queue, 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
+  read_gl_buffer(*gl, buffer, seen, sizeof seen);
+  CHECK(std::memcmp(seen, values, sizeof values) == 0);
+  cl_gl_object_type type = 0u;
+  cl_GLuint         name = 0u;
+  CHECK_EQ(backend.on_clGetGLObjectInfo(mem, &type, &name), CL_SUCCESS);
+  CHECK_EQ(type, static_cast<cl_gl_object_type>(CL_GL_OBJECT_BUFFER));
+  CHECK_EQ(name, buffer);
+  cl_GLenum target = 0u;
+  CHECK_EQ(backend.on_clGetGLTextureInfo(mem, CL_GL_TEXTURE_TARGET, sizeof target, &target, nullptr),
+           CL_INVALID_GL_OBJECT);
+  /* The guest's last reference: the mirror goes with it. */
+  CHECK_EQ(backend.on_clReleaseMemObject(mem), CL_SUCCESS);
+  backend.released(av::clproto::HandleKind::mem, mem);
+  CHECK_EQ(backend.on_clGetGLObjectInfo(mem, &type, &name), CL_INVALID_GL_OBJECT);
+
+  /* A texture by the 1.1 names, and a renderbuffer: copies as well. */
+  static_cast<void>(gl->make_current());
+  auto const gen_textures = reinterpret_cast<void (*)(GLsizei, GLuint *)>(gl->resolve("glGenTextures"));
+  auto const bind_texture = reinterpret_cast<void (*)(GLenum, GLuint)>(gl->resolve("glBindTexture"));
+  auto const image2 = reinterpret_cast<void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum,
+                                                const void *)>(gl->resolve("glTexImage2D"));
+  auto const image3 = reinterpret_cast<void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum,
+                                                GLenum, const void *)>(gl->resolve("glTexImage3D"));
+  GLuint textures[2] = {};
+  gen_textures(2, textures);
+  bind_texture(0x0DE1u, textures[0]);
+  image2(0x0DE1u, 0, 0x8058, 4, 4, 0, 0x1908u, 0x1401u, nullptr);
+  bind_texture(0x0DE1u, 0u);
+  bind_texture(0x806Fu, textures[1]);
+  image3(0x806Fu, 0, 0x8058, 4, 4, 2, 0, 0x1908u, 0x1401u, nullptr);
+  bind_texture(0x806Fu, 0u);
+  cl_mem const flat = backend.on_clCreateFromGLTexture2D(context, CL_MEM_READ_ONLY, 0x0DE1u, 0, textures[0], &error);
+  CHECK(flat != nullptr);
+  cl_mem const deep = backend.on_clCreateFromGLTexture3D(context, CL_MEM_READ_ONLY, 0x806Fu, 0, textures[1], &error);
+  CHECK(deep != nullptr);
+  CHECK_EQ(backend.on_clGetGLTextureInfo(deep, CL_GL_TEXTURE_TARGET, sizeof target, &target, nullptr), CL_SUCCESS);
+  CHECK_EQ(target, 0x806Fu);
+  static_cast<void>(gl->make_current());
+  auto const gen_renderbuffers = reinterpret_cast<void (*)(GLsizei, GLuint *)>(gl->resolve("glGenRenderbuffers"));
+  auto const bind_renderbuffer = reinterpret_cast<void (*)(GLenum, GLuint)>(gl->resolve("glBindRenderbuffer"));
+  auto const storage =
+      reinterpret_cast<void (*)(GLenum, GLenum, GLsizei, GLsizei)>(gl->resolve("glRenderbufferStorage"));
+  GLuint renderbuffer = 0u;
+  gen_renderbuffers(1, &renderbuffer);
+  bind_renderbuffer(0x8D41u, renderbuffer);
+  storage(0x8D41u, 0x8058u, 4, 4);
+  bind_renderbuffer(0x8D41u, 0u);
+  cl_mem const drawn = backend.on_clCreateFromGLRenderbuffer(context, CL_MEM_READ_ONLY, renderbuffer, &error);
+  if (drawn != nullptr) {
+      CHECK_EQ(backend.on_clGetGLObjectInfo(drawn, &type, &name), CL_SUCCESS);
+      CHECK_EQ(type, static_cast<cl_gl_object_type>(CL_GL_OBJECT_RENDERBUFFER));
+  }
+  /* Kept by the guest to the end: the shut-down lets the mirrors and the
+   * renderbuffer's texture go before the vehicle does. */
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down();
+  if (drawn != nullptr) ::clReleaseMemObject(drawn);
+  ::clReleaseMemObject(deep);
+  ::clReleaseMemObject(flat); }
+
+/* A context made from a GL context of the guest's: the vehicle shares that
+ * context's objects, so a buffer the guest's GL wrote is what the copy path
+ * reads, and what OpenCL wrote is what the guest's GL reads after the
+ * release. A context made from a GL context on a GPU with no display has no
+ * vehicle, and is refused. */
+TEST(opencl_backend_device, a_gl_context_s_cl_context_reaches_its_objects_by_copies)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  av::OpenGlBackend guest_gl;
+  if (!guest_gl.initialize(hosts.display(0u), nullptr, nullptr)) return;
+  { OpenClBackend refused;
+    CHECK(!refused.initialize(hosts.device(0u), nullptr, &guest_gl)); }
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), &guest_gl));
+  av::OpenClBackendProbe probe{backend};
+  CHECK(probe.copy());
+  /* The guest's application: a context of the same share group. */
+  av::GlContext                   application;
+  const av::GlContextAttributes   plain(nullptr);
+  CHECK(application.open(*hosts.display(0u), plain, &guest_gl.context()));
+  std::uint8_t values[256];
+  for (std::uint32_t at = 0u; at < sizeof values; at++) values[at] = static_cast<std::uint8_t>(at ^ 0x5Au);
+  const std::uint32_t buffer = gl_buffer(application, values, sizeof values);
+  cl_context const    context = guest_context(backend, *hosts.device(0u));
+  cl_int              error = CL_SUCCESS;
+  cl_mem const        mem = backend.on_clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, buffer, &error);
+  CHECK(mem != nullptr);
+  backend.made(av::clproto::HandleKind::mem, mem);
+  cl_command_queue const queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  CHECK_EQ(backend.on_clEnqueueAcquireGLObjects(queue, 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::uint8_t seen[256] = {};
+  CHECK_EQ(::clEnqueueReadBuffer(queue, mem, CL_TRUE, 0u, sizeof seen, seen, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK(std::memcmp(seen, values, sizeof values) == 0);
+  std::memset(values, 0x77, sizeof values);
+  CHECK_EQ(::clEnqueueWriteBuffer(queue, mem, CL_TRUE, 0u, sizeof values, values, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(backend.on_clEnqueueReleaseGLObjects(queue, 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
+  read_gl_buffer(application, buffer, seen, sizeof seen);
+  CHECK(std::memcmp(seen, values, sizeof values) == 0);
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down();
+  ::clReleaseMemObject(mem);
+  application.close();
+  guest_gl.shut_down(); }

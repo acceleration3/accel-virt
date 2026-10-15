@@ -11,7 +11,8 @@
 #include "executor/opencl/cl_handle_registry.hpp"
 #include "executor/opencl/cl_bounced_rect.hpp"
 #include "executor/opencl/cl_read_ahead.hpp"
-#include "executor/opencl/cl_renderbuffer_images.hpp"
+#include "executor/opencl/copied_gl_sharing.hpp"
+#include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
@@ -19,6 +20,7 @@
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/shim/gl_host_import.hpp"
+#include "executor/shim/gl_object_bytes.hpp"
 #include "executor/shim/gl_renderbuffer_texture.hpp"
 #include "executor/shim/gl_shared_buffer.hpp"
 #include "proto/generated/opencl/cl_real_dispatch.h"
@@ -33,9 +35,8 @@ class OpenGlBackend;
 
 class GlDisplay;
 class OpenClDevice;
-/* What the tests reach the extension-string surgery through: `without` is
- * private because nothing but `on_clGetDeviceInfo` may call it, and its cases
- * are strings no host answers. */
+/* What the tests reach the backend's private state through: the copy path
+ * taken on a host whose OpenCL would have shared, and the arena's refusal. */
 struct OpenClBackendProbe;
 
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
@@ -47,25 +48,27 @@ public:
      * found no OpenCL for runs nothing, so the context is refused at setup
      * rather than shown an empty platform list.
      *
-     * `display` is the same GPU's EGL display, or null. It is what makes
-     * sharing possible at all on a host whose OpenCL has no
-     * `cl_khr_external_memory`: a GL context on it becomes the vehicle a
-     * descriptor is imported through, and the host `cl_context` is created
-     * naming that context, so `clCreateFromGLBuffer` can reach the same
-     * allocation (feature 053, T019; research.md §21). A null display leaves
-     * this importing nothing, which the device answers as a refusal.
+     * `display` is the same GPU's EGL display, or null. A GL context on it
+     * is the vehicle: what a descriptor another API exported is imported
+     * through on a host whose OpenCL has no `cl_khr_external_memory`, the host
+     * `cl_context` then made naming it, so `clCreateFromGLBuffer` reaches the
+     * same allocation (feature 053, T019; research.md §21); and, with
+     * `share`, the context in the guest's GL share group its GL objects are
+     * reached through.
      *
-     * Whether that works is measured here and not assumed: a host whose
-     * OpenCL lists `cl_khr_gl_sharing` can still refuse every context made
-     * against a GL context of this one's - which is what happens inside QEMU
-     * on the machine this was written on, where the same calls succeed in an
-     * ordinary process (research.md §21). A context is made and released to
-     * find out, once, before the guest asks.
+     * Whether the host's OpenCL shares with the vehicle is measured here and
+     * not assumed - a context is made against it and released, once, before
+     * the guest asks. Mesa's and Intel's do, and the guest's GL objects are
+     * then the host's own (DirectGlSharing). NVIDIA's makes no context against
+     * any EGL context; there they are copies (CopiedGlSharing), and no
+     * descriptor is imported. A null display, or one with no GL context to be
+     * had, leaves this sharing and importing nothing, which the device answers
+     * as refusals.
      *
      * `share` is the OpenGL context of the guest's that this one was made to
      * share objects with (cl_khr_gl_sharing), or null. With one, the vehicle
      * shares its lists, so a GL name the guest hands clCreateFromGLBuffer is
-     * the same object here; and a context that cannot share is refused, since
+     * the same object here; and a context with no vehicle is refused, since
      * the guest asked for nothing else. */
     [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share);
 
@@ -118,21 +121,21 @@ public:
                                    cl_uint *num_platforms) override;
     cl_int     on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
                                  cl_device_id *devices, cl_uint *num_devices) override;
-    /* The host's answer, with `cl_khr_gl_sharing` struck out of the extension
-     * string when this context could not make a GL-sharing context. That name
-     * is what the guest's ICD reads as "a shared object can be opened into
-     * OpenCL here", so leaving it in on a host that refuses the context would
-     * have the ICD report an extension whose every use fails (constitution VI;
-     * feature 053, T019). Every other query is forwarded untouched. */
+    /* The host's answer, with the extension list the guest is shown in place
+     * of the host's own (ClExtensionList): `cl_khr_gl_sharing` where GL
+     * objects reach this GPU's OpenCL, `cl_khr_external_memory` where a
+     * descriptor can be opened as a cl_mem. The guest's ICD reports both as
+     * it reads them, so leaving either in where it fails would report an
+     * extension whose every use fails (constitution VI; feature 053, T019).
+     * Every other query is forwarded untouched. */
     cl_int     on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name, size_t param_value_size,
                                   void *param_value, size_t *param_value_size_ret) override;
     cl_context on_clCreateContextFromType(const cl_context_properties *properties, cl_device_type device_type,
                                           cl_int *errcode_ret) override;
-    /* The host's context is created naming this backend's GL context, so a
-     * buffer imported through OpenGL can become a `cl_mem` later. The guest
-     * never asks for that and never sees it: what it sent is forwarded with
-     * the two properties added, and a host that cannot share gets what the
-     * guest wrote (feature 053, T019). */
+    /* Made by the context's GL sharing (GlSharing::make_context): where the
+     * host shares, naming this backend's GL context, so a GL object of the
+     * guest's or a buffer imported through OpenGL can become a `cl_mem`. The
+     * guest never asks for that and never sees it (feature 053, T019). */
     cl_context on_clCreateContext(const cl_context_properties *properties, cl_uint num_devices,
                                   const cl_device_id *devices, cl_int *errcode_ret) override;
 
@@ -219,20 +222,30 @@ public:
                                        cl_uint num_events_in_wait_list,
                                        const cl_event *event_wait_list, cl_event *event) override;
 
-    /* The host's answer, or - where its GL sharing takes no renderbuffer, as
-     * Intel's compute runtime's takes none - a cl_mem over a texture of the
-     * renderbuffer's own storage (GlRenderbufferTexture), which OpenCL reads as
-     * the guest's GL draws it. The texture is the host's business: the guest
-     * is told of the renderbuffer it named, by clGetGLObjectInfo below. */
+    /* cl_khr_gl_sharing, answered by the context's GlSharing; a context that
+     * has none was made from no GL context, so a create or an acquire on it is
+     * CL_INVALID_CONTEXT and a GL object query CL_INVALID_GL_OBJECT. The 1.1
+     * texture creates are clCreateFromGLTexture's, as they are in OpenCL. */
+    cl_mem on_clCreateFromGLBuffer(cl_context context, cl_mem_flags flags, cl_GLuint bufobj,
+                                   cl_int *errcode_ret) override;
+    cl_mem on_clCreateFromGLTexture(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint miplevel,
+                                    cl_GLuint texture, cl_int *errcode_ret) override;
+    cl_mem on_clCreateFromGLTexture2D(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint miplevel,
+                                      cl_GLuint texture, cl_int *errcode_ret) override;
+    cl_mem on_clCreateFromGLTexture3D(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint miplevel,
+                                      cl_GLuint texture, cl_int *errcode_ret) override;
     cl_mem on_clCreateFromGLRenderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
                                          cl_int *errcode_ret) override;
-    /* A cl_mem made over a renderbuffer is CL_GL_OBJECT_RENDERBUFFER and its
-     * name, as the API has it, whatever the host made it through. */
     cl_int on_clGetGLObjectInfo(cl_mem memobj, cl_gl_object_type *gl_object_type,
                                 cl_GLuint *gl_object_name) override;
-    /* And no texture: CL_INVALID_GL_OBJECT, as for any renderbuffer's. */
     cl_int on_clGetGLTextureInfo(cl_mem memobj, cl_gl_texture_info param_name, size_t param_value_size,
                                  void *param_value, size_t *param_value_size_ret) override;
+    cl_int on_clEnqueueAcquireGLObjects(cl_command_queue command_queue, cl_uint num_objects,
+                                        const cl_mem *mem_objects, cl_uint num_events_in_wait_list,
+                                        const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clEnqueueReleaseGLObjects(cl_command_queue command_queue, cl_uint num_objects,
+                                        const cl_mem *mem_objects, cl_uint num_events_in_wait_list,
+                                        const cl_event *event_wait_list, cl_event *event) override;
     /* No guest function pointer crosses the wire, so the callback registered
      * here is this backend's own: it signals the device, which wakes the
      * context's worker, and the guest asks what completed. Refused when the
@@ -252,41 +265,23 @@ private:
      * buffer's reference; the buffer itself where its memory is no image
      * OpenCL names. */
     cl_mem image_over(cl_mem buffer, const SharedImageShape &shape);
-    /* A cl_mem over a texture of `renderbuffer`'s storage, remembered as the
-     * renderbuffer's; null, with the reason in `errcode_ret`, where none can
-     * be made. */
-    cl_mem over_texture(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer, cl_int *errcode_ret);
     friend struct OpenClBackendProbe;
-
-    /* A context property list this device will copy: OpenCL defines a handful
-     * and the decoder has already refused every name but one, so a list longer
-     * than this is a guest building one to overflow what copies it. Room for
-     * the two this device appends and the terminator is inside it. */
-    static constexpr uint32_t max_context_properties = 32u;
 
     /* CL_SUCCESS for a type the bound device is, which is always a GPU;
      * CL_INVALID_DEVICE_TYPE for no type or a bit OpenCL does not define;
      * CL_DEVICE_NOT_FOUND for any other. */
     cl_int answers_type(cl_device_type device_type) const;
 
-    /* The vehicle: a GL context on this GPU's display, the import that turns a
-     * descriptor into a memory object on it, and the buffer maker that puts
-     * storage OpenCL can name over that memory. Held only while the host has a
-     * display for this GPU. */
-    [[nodiscard]] bool sharing() const;
-    /* Whether this host will really make a context against `vehicle_`: one is
-     * made on the bound device and released again. What it answers is the
-     * whole of `sharing()`'s truth, since every import goes through such a
-     * context. */
-    [[nodiscard]] bool shares_with_gl() const;
-    /* `name` struck out of the space-separated list in `text`, which is read
-     * no further than `bytes`: the words that stay are written back over it,
-     * which never reaches past what has been read. Answers the bytes the list
-     * needs afterwards, terminator included. */
-    size_t             without(char *text, size_t bytes, const char *name) const;
-    /* Whether `length` letters at `text` are the whole of `name`. */
-    [[nodiscard]] bool share_with(const GlDisplay &display, const OpenGlBackend &share);
-    bool               names(const char *text, size_t length, const char *name) const;
+    /* Whether this host will really make a context against `vehicle_` on
+     * `display`: one is made on the bound device and released again. */
+    [[nodiscard]] bool shares_with_gl(const GlDisplay &display) const;
+    /* The guest's GL objects reached by copies from now on, and nothing
+     * imported: what a host whose OpenCL will not share with the vehicle
+     * gets. False, changing nothing, where the vehicle's GL cannot make the
+     * copies. */
+    [[nodiscard]] bool copy_gl_objects();
+    /* The vehicle and what works through it, let go. */
+    void               close_vehicle();
     /* The queue an acquire is enqueued on, made on the guest's context at the
      * first import: the acquire is the device's own bookkeeping and no guest
      * queue should carry it. Null when there is no context to make one on. */
@@ -300,15 +295,24 @@ private:
     void  stop_pacing();
 
     const OpenClDevice *bound_;
-    const GlDisplay    *display_;
     /* Opened only when a display was given; a context nothing opened holds
      * nothing and closes to nothing. */
-    GlContext      vehicle_;
-    GlHostImport   import_;
-    GlSharedBuffer buffers_;
+    GlContext             vehicle_;
+    GlHostImport          import_;
+    GlSharedBuffer        buffers_;
     GlRenderbufferTexture renderbuffer_textures_;
-    /* The cl_mems made over a renderbuffer through one of those textures. */
-    ClRenderbufferImages  renderbuffers_;
+    GlObjectBytes         object_bytes_;
+    DirectGlSharing       direct_;
+    CopiedGlSharing       copied_;
+    /* Which of the two this context's GL objects reach OpenCL through; null
+     * for a context made from no GL context that imports nothing either. */
+    GlSharing            *gl_;
+    /* Whether a GL context could be had on this GPU, so a context made from
+     * one of the guest's can share its objects one way or the other. */
+    bool                  reaches_gl_;
+    /* Whether a descriptor another API exported opens as a cl_mem here: the
+     * host's OpenCL shares with the vehicle, whose GL imports memory. */
+    bool                  imports_;
     /* The first context the guest made, which is the one a shared object is
      * opened into. An OpenCL application makes one; a second is a context this
      * cannot share with, and an open into it is refused rather than answered

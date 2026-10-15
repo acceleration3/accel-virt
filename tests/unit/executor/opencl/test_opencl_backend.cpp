@@ -296,55 +296,6 @@ cl_platform_id other_platform() { return reinterpret_cast<cl_platform_id>(&host_
 
 }  // namespace
 
-namespace av {
-
-/* The extension-string surgery, reached from outside because the strings that
- * exercise it are ones no host answers: a name that ends where the list's word
- * does not, a word that is only the start of the name, a list that fills its
- * room with no terminator, and one that ends in spaces. */
-struct OpenClBackendProbe {
-    OpenClBackend &backend;
-
-    std::size_t without(char *text, std::size_t bytes, const char *name) const
-    { return backend.without(text, bytes, name); }
-    bool names(const char *text, std::size_t length, const char *name) const
-    { return backend.names(text, length, name); }
-};
-
-}  // namespace av
-
-/* What is struck out, and what is not: only the whole word, wherever it is in
- * the list, and the list stays a list. */
-TEST(opencl_backend, striking_a_name_out_of_a_list_takes_the_word_and_nothing_near_it)
-{ OpenClBackend      backend;
-  av::OpenClBackendProbe probe{backend};
-  char first[] = "cl_khr_gl_sharing cl_khr_fp16 cl_khr_icd";
-  CHECK_EQ(probe.without(first, sizeof first, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16 cl_khr_icd") + 1u);
-  CHECK(std::strcmp(first, "cl_khr_fp16 cl_khr_icd") == 0);
-  char last[] = "cl_khr_fp16 cl_khr_gl_sharing";
-  CHECK_EQ(probe.without(last, sizeof last, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16") + 1u);
-  CHECK(std::strcmp(last, "cl_khr_fp16") == 0);
-  /* A word the name only starts, and a word that only starts the name: neither
-   * is the name. */
-  char longer[] = "cl_khr_gl_sharing_more cl_khr_gl";
-  CHECK_EQ(probe.without(longer, sizeof longer, "cl_khr_gl_sharing"), sizeof longer);
-  CHECK(std::strcmp(longer, "cl_khr_gl_sharing_more cl_khr_gl") == 0);
-  /* A list that ends in spaces, and one that fills its room with no
-   * terminator at all: both are read as far as they go and no further. */
-  char spaced[] = "cl_khr_fp16   ";
-  CHECK_EQ(probe.without(spaced, sizeof spaced, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16") + 1u);
-  CHECK(std::strcmp(spaced, "cl_khr_fp16") == 0);
-  char unterminated[11] = {'c', 'l', '_', 'k', 'h', 'r', '_', 'f', 'p', '1', '6'};
-  CHECK_EQ(probe.without(unterminated, 11u, "cl_khr_gl_sharing"), 12u);
-  /* An empty list stays empty. */
-  char empty[] = "";
-  CHECK_EQ(probe.without(empty, sizeof empty, "cl_khr_gl_sharing"), 1u);
-  CHECK_EQ(empty[0], '\0');
-  /* And the comparison itself, at the two ends nothing else reaches. */
-  CHECK(probe.names("cl_khr_fp16", 11u, "cl_khr_fp16"));
-  CHECK(!probe.names("cl_khr_fp16", 5u, "cl_khr_fp16"));
-  CHECK(!probe.names("cl_khr_fp16x", 12u, "cl_khr_fp16")); }
-
 /* A display that was never opened is no display: the context binds, shares
  * nothing, and runs everything else. */
 TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_nothing)
@@ -363,6 +314,47 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),
            CL_SUCCESS);
   CHECK(std::strstr(answered, "cl_khr_gl_sharing") == nullptr);
+  CHECK(std::strstr(answered, "cl_khr_external_memory ") == nullptr);
+  backend.shut_down(); }
+
+/* A context made from no GL context has no GL object to name: every
+ * cl_khr_gl_sharing call is the API's refusal for such a context, and nothing
+ * reaches the host. */
+TEST(opencl_backend, a_context_with_no_gl_names_no_gl_object)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  int    nothing = 0;
+  auto  *context = reinterpret_cast<cl_context>(&nothing);
+  auto  *mem = reinterpret_cast<cl_mem>(&nothing);
+  cl_int error = CL_SUCCESS;
+  CHECK(backend.on_clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  CHECK(backend.on_clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, 1u, nullptr) == nullptr);
+  error = CL_SUCCESS;
+  CHECK(backend.on_clCreateFromGLTexture(context, CL_MEM_READ_WRITE, 0x0DE1u, 0, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  CHECK(backend.on_clCreateFromGLTexture(context, CL_MEM_READ_WRITE, 0x0DE1u, 0, 1u, nullptr) == nullptr);
+  error = CL_SUCCESS;
+  CHECK(backend.on_clCreateFromGLTexture2D(context, CL_MEM_READ_WRITE, 0x0DE1u, 0, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = CL_SUCCESS;
+  CHECK(backend.on_clCreateFromGLTexture3D(context, CL_MEM_READ_WRITE, 0x806Fu, 0, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = CL_SUCCESS;
+  CHECK(backend.on_clCreateFromGLRenderbuffer(context, CL_MEM_READ_WRITE, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  CHECK(backend.on_clCreateFromGLRenderbuffer(context, CL_MEM_READ_WRITE, 1u, nullptr) == nullptr);
+  cl_gl_object_type type = 0u;
+  cl_GLuint         name = 0u;
+  CHECK_EQ(backend.on_clGetGLObjectInfo(mem, &type, &name), CL_INVALID_GL_OBJECT);
+  cl_GLenum target = 0u;
+  CHECK_EQ(backend.on_clGetGLTextureInfo(mem, CL_GL_TEXTURE_TARGET, sizeof target, &target, nullptr),
+           CL_INVALID_GL_OBJECT);
+  auto *queue = reinterpret_cast<cl_command_queue>(&nothing);
+  CHECK_EQ(backend.on_clEnqueueAcquireGLObjects(queue, 1u, &mem, 0u, nullptr, nullptr), CL_INVALID_CONTEXT);
+  CHECK_EQ(backend.on_clEnqueueReleaseGLObjects(queue, 1u, &mem, 0u, nullptr, nullptr), CL_INVALID_CONTEXT);
   backend.shut_down(); }
 
 /* A context the host found no device for is not one: it is refused at setup,
@@ -398,10 +390,10 @@ TEST(opencl_backend, lists_asked_for_nowhere_are_invalid_values)
   CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 0u, devices, &count), CL_INVALID_VALUE);
   CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 1u, nullptr, nullptr), CL_INVALID_VALUE); }
 
-/* A context that cannot share tells the guest so, in the one word the guest's
+/* A context that cannot share tells the guest so, in the words the guest's
  * ICD reads it from: with no display there is no vehicle, and a host that
- * lists cl_khr_gl_sharing is answered without it. Everything else in the list
- * is still there, in order. */
+ * lists cl_khr_gl_sharing or cl_khr_external_memory is answered without
+ * them. Everything else in the list is still there, in order. */
 TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_device_s_extensions)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
@@ -429,18 +421,21 @@ TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_d
   /* A word that merely contains the name is not the name. */
   CHECK(std::strstr(answered, "  ") == nullptr);
 
-  /* Every other query is the host's own, and so is a size asked with no room:
-   * a caller may be promised more than it needs. */
+  /* A size asked with no room is the list's own, and every other query is
+   * the host's. */
   size_t room = 0u;
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &room), CL_SUCCESS);
-  CHECK_EQ(room, host_bytes);
+  CHECK_EQ(room, bytes);
   cl_uint units = 0u;
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof units, &units, nullptr),
            CL_SUCCESS);
   CHECK(units != 0u);
-  /* And a query the host refuses is refused, with nothing struck out of
-   * anything. */
-  CHECK(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 1u, answered, nullptr) != CL_SUCCESS); }
+  /* Room the list does not fit is refused, nothing written; no device is the
+   * host's refusal. */
+  std::memset(answered, 'x', sizeof answered);
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 1u, answered, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(answered[0], 'x');
+  CHECK(backend.on_clGetDeviceInfo(nullptr, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr) != CL_SUCCESS); }
 
 /* Bound, a context is shown its GPU's platform and device and nothing else,
  * whatever else the host has - this host has three platforms and a CPU runtime
