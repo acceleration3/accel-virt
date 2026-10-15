@@ -140,7 +140,9 @@ D3D_SUMMARY = re.compile(rb"^avd3d(9|11|12)probe: (\d+) passed, (\d+) failed\r?$
 D3D_STEP = re.compile(rb"^ok d3d(9|11|12)\.(\w+)(?: (\S+))?\r?$", re.M)
 D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "present",
                    "wpf_device", "wpf_swap_chain", "wpf_draw", "wpf_present", "wpf_window"),
-             "11": ("device", "feature_level", "adapter_luid", "target", "readback", "pixels", "present"),
+             "11": ("device", "feature_level", "adapter_luid", "target", "readback", "pixels", "present",
+                    "deferred_device", "deferred_buffers", "deferred_contexts", "deferred_frames",
+                    "deferred_readback", "deferred_contents", "deferred_commit"),
              "12": ("device", "feature_level", "adapter_luid", "queue", "target", "clear", "fence", "readback",
                     "pixels")}
 # Which layer each probe's DLLs come from, and what the probe is called.

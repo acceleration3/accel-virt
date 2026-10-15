@@ -839,6 +839,24 @@ gives it (docs/host-memory.md, Budgets).
   buffer's first frame passes every other step and fails `wpf_window` - as the
   host did, and every WPF window, Affinity's whole UI among them, was black.
 
+  The D3D11 probe then draws Dark Souls Remastered's frames through deferred
+  contexts (`DeferredMapWork`, the `deferred_*` steps), as the game's calls
+  into avumd showed them: each frame on one of two deferred contexts in turn,
+  four dynamic constant buffers mapped with WRITE_DISCARD, a one-MiB dynamic
+  vertex-and-index buffer mapped with WRITE_DISCARD and then three times with
+  WRITE_NO_OVERWRITE a piece further each time, the list finished, executed
+  and let go of, and a present. After 30 warm frames and 300 measured ones it
+  judges the geometry buffer's head, which must be the last frame's four
+  pieces (`deferred_contents`, bytes right of 256), and what the process
+  committed over the measured frames (`deferred_commit`, KiB, at most 16 MiB).
+  The runtime destroys a deferred context's handle of every object a list
+  used once the list is made, so a driver that keeps what a deferred map took
+  commits the buffer again every frame: avumd did, the game committed 63 MB a
+  second, and the guest ran out of memory in three minutes - the game, DWM
+  and Steam's helpers all crashed. Through `gpu_matrix.py`'s probes suite,
+  which runs the probe on the system's runtime, this is avumd's path; through
+  `--d3d` it is DXVK's.
+
   **Probes from an application's calls.** With `AV_D3D11_TRACE` in a
   process's environment, avumd writes the Direct3D 11 runtime's calls into it
   to `C:\ProgramData\av\avumd-calls-<pid>.log`, one line each: microseconds,
@@ -849,10 +867,10 @@ gives it (docs/host-memory.md, Budgets).
   by its resource and format. The value is how many calls to write, after how
   many to pass over (`20000`, `300000+20000`). A call is written once it
   returns, so what it made has its id; a destroy is written before, while its
-  id is still there. That file is what an application's probe is written
-  from: set the variable for the user (`setx`), restart whatever launches the
-  application (Steam) so it inherits it, and read the frame's pattern between
-  two `Present` lines.
+  id is still there. That file is what `DeferredMapWork` was written from, and
+  is how the next application's probe should be: set the variable for the
+  user (`setx`), restart whatever launches the application (Steam) so it
+  inherits it, and read the frame's pattern between two `Present` lines.
 
   A **cleared frame, not a triangle**: a triangle through either layer needs
   DXBC and no shader compiler is pinned here. What the clear still proves is

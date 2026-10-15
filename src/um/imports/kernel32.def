@@ -38,6 +38,7 @@ InitOnceExecuteOnce
 IsWow64Process
 K32EnumProcessModules
 K32GetModuleBaseNameW
+K32GetProcessMemoryInfo
 LoadLibraryA
 LoadLibraryExA
 MapViewOfFile

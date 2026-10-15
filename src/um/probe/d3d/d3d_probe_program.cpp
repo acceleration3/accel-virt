@@ -4,6 +4,7 @@
 #include "guest/probe/d3d11_work.hpp"
 #include "guest/probe/d3d12_work.hpp"
 #include "guest/probe/d3d9_work.hpp"
+#include "guest/probe/deferred_map_work.hpp"
 #include "guest/probe/wpf_present_work.hpp"
 #include "guest/suite/scenario_steps.hpp"
 
@@ -49,7 +50,8 @@ uint32_t D3d9ProbeProgram::run()
     return report_.failed();
 }
 
-D3d11ProbeProgram::D3d11ProbeProgram() : kmt_(), report_("avd3d11probe"), images_(), window_(), d3d11_()
+D3d11ProbeProgram::D3d11ProbeProgram()
+    : kmt_(), report_("avd3d11probe"), images_(), window_(), d3d11_(), deferred_()
 {
     AV_SCOPE("D3d11ProbeProgram::D3d11ProbeProgram");
 }
@@ -59,8 +61,12 @@ uint32_t D3d11ProbeProgram::run()
     AV_SCOPE("D3d11ProbeProgram::run");
     ScenarioSteps steps(kmt_, report_, "d3d11");
     if (window_.open()) {
-        D3d11Work work(d3d11_, images_);
-        work.run(steps, window_.window());
+        {
+            D3d11Work work(d3d11_, images_);
+            work.run(steps, window_.window());
+        }
+        DeferredMapWork deferred(deferred_);
+        deferred.run(steps, window_.window());
     } else {
         report_.check("d3d11", "window", Status::not_found, window_.last_error());
     }

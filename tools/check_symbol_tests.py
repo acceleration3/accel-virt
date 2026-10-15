@@ -40,6 +40,10 @@ EXCLUDE = {
     "src/guest/probe/d3d9_entry.hpp": "the Direct3D 9 the D3D probe calls, implemented by "
                              "WindowsD3d9Entry over DXVK's d3d9.dll in src/um and by ScriptedD3d9 in "
                              "tests/harness, and exercised through every D3d9Work test",
+    "src/guest/probe/d3d11_deferred_entry.hpp": "the Direct3D 11 the D3D11 probe's deferred-map scenario "
+                             "calls, implemented by WindowsD3d11DeferredEntry over the system's d3d11.dll in "
+                             "src/um and by ScriptedD3d11Deferred in tests/harness, and exercised through "
+                             "every DeferredMapWork test",
     "src/guest/probe/d3d9ex_entry.hpp": "the Direct3D 9Ex the D3D9 probe's WPF scenario calls, implemented "
                              "by WindowsD3d9ExEntry over the system's d3d9.dll in src/um and by ScriptedD3d9Ex "
                              "in tests/harness, and exercised through every WpfPresentWork test",
