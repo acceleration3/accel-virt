@@ -843,6 +843,18 @@ gives it (docs/host-memory.md, Budgets).
   refuses a `>` in it), runs the task, waits for it to leave `Running`, takes
   the program's exit code from `Last Result`, pulls `C:\av\vulkan.txt` and
   deletes the task. A machine no one is logged into fails the run.
+- **The OpenCL probe**, `avclprobe.exe` (`--opencl`, and `gpu_matrix.py`'s
+  probes suite), ends with a program longer than every room between an
+  application and the host compiler (`ClProbe::long_program_step`, the
+  `long_*` steps): the vector add followed by 400 strings of a 4 KiB comment,
+  1600 KiB in all (`long_program`, KiB), built, its kernel run over the
+  probe's buffers with the output cleared first, and every element judged
+  (`long_sum`, elements wrong). DaVinci Resolve's image pipeline builds a
+  293 KB program, and the ICD answered it CL_OUT_OF_RESOURCES because the
+  command outgrew the 256 KiB its transport lent it; past a megabyte it would
+  also have outgrown the batch, the ring and the executor's decode block
+  (docs/protocol.md, "Long commands"). The runner requires every `long_*`
+  step.
 - **The D3D run** (feature 047) is `--d3d`, a boot on the real executor with
   the two translation layers beside the probes: DXVK's `d3d9.dll`, `d3d11.dll`
   and `dxgi.dll` and vkd3d-proton's `d3d12.dll` and `d3d12core.dll` from

@@ -363,8 +363,13 @@ void *ScriptedCl::create_buffer(void *context, std::uint64_t flags, std::size_t 
     return made;
 }
 
-void *ScriptedCl::create_program(void *context, const char *source, std::int32_t &error)
+void *ScriptedCl::create_program(void *context, const char *const *sources, std::uint32_t count,
+                                 std::int32_t &error)
 {
+    const char *const source = sources != nullptr && count != 0u ? sources[0] : nullptr;
+    program_bytes_ = 0u;
+    for (std::uint32_t index = 0u; sources != nullptr && index < count; ++index)
+        program_bytes_ += sources[index] != nullptr ? std::strlen(sources[index]) : 0u;
     error = failure(Call::create_program);
     if (error != 0) return nullptr;
     if (required(context, Kind::context) == nullptr) {
@@ -381,6 +386,8 @@ void *ScriptedCl::create_program(void *context, const char *source, std::int32_t
     if (made == nullptr) error = refused;
     return made;
 }
+
+std::size_t ScriptedCl::program_bytes() const { return program_bytes_; }
 
 std::int32_t ScriptedCl::build_program(void *program, void *device, const char *)
 {

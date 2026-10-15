@@ -123,7 +123,8 @@ CL_NOTE = re.compile(r"^note opencl\.(\w+) (.*?)\r?$", re.M)
 # summary counts.
 CL_STEPS = ("platform_count", "platforms", "platform", "device_ids", "device", "luid", "context", "queue",
             "buffers", "write", "write_second", "program", "build", "kernel", "arguments", "run", "finish",
-            "read", "sum", "map", "unmap", "svm", "user_event", "wait", "callback", "release")
+            "read", "sum", "map", "unmap", "svm", "user_event", "wait", "callback", "long_program", "long_build",
+            "long_kernel", "long_run", "long_sum", "release")
 # Renderers that are not a GPU: Mesa's software rasterizers, what opengl32.dll
 # answers itself when no ICD took the window, and what an OpenCL device that is
 # the CPU calls itself.

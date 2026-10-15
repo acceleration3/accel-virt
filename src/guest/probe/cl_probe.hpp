@@ -62,6 +62,10 @@ private:
     void                 svm_step();
     /* A callback that runs once, on a thread the ICD owns. */
     void                 callback_step();
+    /* A program longer than every room between the application and the host
+     * compiler - DaVinci Resolve's is 293 KB, past the 256 KiB a command was
+     * once lent - built, and its kernel run over the probe's buffers. */
+    void                 long_program_step();
     /* How many callbacks have arrived, waiting up to callback_seconds for the
      * first. The callback runs on a thread the ICD owns and nothing orders it
      * against the wait on its event, so a count read the moment the wait
@@ -74,6 +78,10 @@ private:
      * it, short enough that a callback that is never coming does not hold the
      * run: the delivery is one round trip behind the wait. */
     static constexpr uint32_t callback_seconds = 5u;
+    /* The long program: the kernel, then this many copies of a 4 KiB
+     * comment, past a megabyte and a half in all - the transport's room, its
+     * batch, its ring and the host's decode block. */
+    static constexpr uint32_t long_strings = 400u;
 
     ScenarioSteps steps_;
     GuestReport  &report_;
@@ -85,6 +93,8 @@ private:
     void         *queue_;
     void         *program_;
     void         *kernel_;
+    void         *long_program_;
+    void         *long_kernel_;
     void         *buffers_[3];
     /* What the inputs hold and what their sum must be. */
     float         first_[elements];

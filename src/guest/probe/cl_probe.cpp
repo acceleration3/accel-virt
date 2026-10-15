@@ -20,6 +20,31 @@ constexpr const char *vector_add =
     "    c[i] = a[i] + b[i];\n"
     "}\n";
 
+/* A 4 KiB comment, a string of its own many times over in the long program:
+ * the probe has no heap for a megabyte of source, and the API takes many
+ * strings as one program. */
+constexpr size_t padding_bytes = 4096u;
+
+struct Padding {
+    char text[padding_bytes + 1u];
+};
+
+constexpr Padding padding_text()
+{
+    constexpr char line[] = "/* avclprobe: a program longer than every room on its way to the host compiler */\n";
+    constexpr size_t line_bytes = sizeof line - 1u;
+    /* Whole comments, then blanks: a comment cut short would run on into the
+     * kernel's neighbour, and the last one off the end of the program. */
+    constexpr size_t whole = (padding_bytes - 1u) / line_bytes * line_bytes;
+    Padding padding{};
+    for (size_t at = 0u; at < padding_bytes; at++) padding.text[at] = at < whole ? line[at % line_bytes] : ' ';
+    padding.text[padding_bytes - 1u] = '\n';
+    padding.text[padding_bytes] = '\0';
+    return padding;
+}
+
+constexpr Padding padding = padding_text();
+
 /* cl.h's, spelled here because this half of the probe is portable and does not
  * include the API's headers. */
 enum : uint32_t {
@@ -47,7 +72,8 @@ void AV_RUNTIME_CALL callback_ran(void *, int32_t status, void *user_data)
 ClProbe::ClProbe(Kmt &kmt, GuestReport &report, ClEntry &cl)
     : steps_(kmt, report, "opencl"), report_(report), kmt_(kmt), cl_(cl), platform_(nullptr),
       device_(nullptr),
-      context_(nullptr), queue_(nullptr), program_(nullptr), kernel_(nullptr), buffers_{},
+      context_(nullptr), queue_(nullptr), program_(nullptr), kernel_(nullptr), long_program_(nullptr),
+      long_kernel_(nullptr), buffers_{},
       first_{}, second_{}, sum_{}, callbacks_(0u), callback_status_(0)
 {
     AV_SCOPE("ClProbe::ClProbe");
@@ -85,6 +111,7 @@ Status ClProbe::scenarios()
     map_step();
     svm_step();
     callback_step();
+    long_program_step();
     return Status::ok;
 }
 
@@ -197,7 +224,7 @@ Status ClProbe::program_step()
 {
     AV_SCOPE("ClProbe::program_step");
     int32_t error = 0;
-    program_ = cl_.create_program(context_, vector_add, error);
+    program_ = cl_.create_program(context_, &vector_add, 1u, error);
     if (steps_.check_result("program", program_ != nullptr ? 0 : error) != Status::ok) {
         return Status::not_found;
     }
@@ -326,6 +353,46 @@ void ClProbe::callback_step()
     cl_.release_event(event);
 }
 
+void ClProbe::long_program_step()
+{
+    AV_SCOPE("ClProbe::long_program_step");
+    /* The kernel first, so the comments that make the bulk follow it: the
+     * same vector add, built afresh from a program twenty thousand times its
+     * size. */
+    const char *sources[long_strings + 1u] = {};
+    sources[0] = vector_add;
+    for (uint32_t index = 1u; index <= long_strings; ++index) sources[index] = padding.text;
+    constexpr uint32_t kib = static_cast<uint32_t>(long_strings * padding_bytes / 1024u);
+    int32_t            error = 0;
+    long_program_ = cl_.create_program(context_, sources, long_strings + 1u, error);
+    if (steps_.check_measured("long_program", long_program_ != nullptr ? Status::ok : Status::invalid_state,
+                              long_program_ != nullptr ? kib : static_cast<uint32_t>(error)) != Status::ok)
+        return;
+    const int32_t built = cl_.build_program(long_program_, device_, nullptr);
+    if (steps_.check_result("long_build", built) != Status::ok) return;
+    long_kernel_ = cl_.create_kernel(long_program_, "vector_add", error);
+    if (steps_.check_result("long_kernel", long_kernel_ != nullptr ? 0 : error) != Status::ok) return;
+    int32_t set = 0;
+    for (uint32_t index = 0u; index < 3u; ++index) {
+        const int32_t one = cl_.set_kernel_buffer(long_kernel_, index, buffers_[index]);
+        if (one != 0) set = one;
+    }
+    /* The output cleared first, so a sum read back is this kernel's. */
+    float cleared[elements] = {};
+    int32_t ran = set;
+    if (ran == 0) ran = cl_.write_buffer(queue_, buffers_[2], sizeof cleared, cleared);
+    if (ran == 0) ran = cl_.run_kernel(queue_, long_kernel_, elements);
+    if (ran == 0) ran = cl_.finish(queue_);
+    float read[elements] = {};
+    if (ran == 0) ran = cl_.read_buffer(queue_, buffers_[2], sizeof read, read);
+    if (steps_.check_result("long_run", ran) != Status::ok) return;
+    uint32_t wrong = 0u;
+    for (uint32_t index = 0u; index < elements; ++index) {
+        if (read[index] != sum_[index]) ++wrong;
+    }
+    steps_.check_measured("long_sum", wrong == 0u ? Status::ok : Status::conflict, wrong);
+}
+
 /* The wait on an event says the host has reached it. It says nothing about
  * the ICD's own thread having run the callback yet - OpenCL orders neither
  * against the other, and the conformance suite waits for a callback for the
@@ -349,6 +416,8 @@ void ClProbe::release_all()
     AV_SCOPE("ClProbe::release_all");
     /* In reverse, as a program unwinds: what a run leaves behind is what a
      * process leaks. */
+    if (long_kernel_ != nullptr) cl_.release_kernel(long_kernel_);
+    if (long_program_ != nullptr) cl_.release_program(long_program_);
     if (kernel_ != nullptr) cl_.release_kernel(kernel_);
     if (program_ != nullptr) cl_.release_program(program_);
     for (uint32_t index = 0u; index < 3u; ++index) {

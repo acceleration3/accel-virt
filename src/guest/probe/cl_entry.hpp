@@ -44,7 +44,8 @@ public:
      * (feature 053). `properties` is a terminated list of name/value pairs. */
     virtual void *create_buffer_with_properties(void *context, const uint64_t *properties, uint64_t flags,
                                                 size_t bytes, int32_t &error) = 0;
-    virtual void *create_program(void *context, const char *source, int32_t &error) = 0;
+    /* clCreateProgramWithSource of `count` NUL-terminated strings. */
+    virtual void *create_program(void *context, const char *const *sources, uint32_t count, int32_t &error) = 0;
     virtual int32_t build_program(void *program, void *device, const char *options) = 0;
     virtual int32_t program_build_text(void *program, void *device, char *into, size_t room,
                                        size_t &bytes) = 0;

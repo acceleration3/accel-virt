@@ -35,7 +35,7 @@ public:
     void   *create_context(void *device, int32_t &error) override;
     void   *create_queue(void *context, void *device, int32_t &error) override;
     void   *create_buffer(void *context, uint64_t flags, size_t bytes, int32_t &error) override;
-    void   *create_program(void *context, const char *source, int32_t &error) override;
+    void   *create_program(void *context, const char *const *sources, uint32_t count, int32_t &error) override;
     int32_t build_program(void *program, void *device, const char *options) override;
     int32_t program_build_text(void *program, void *device, char *into, size_t room,
                                size_t &bytes) override;

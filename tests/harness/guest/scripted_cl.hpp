@@ -165,7 +165,10 @@ public:
     void        *create_buffer_with_properties(void *context, const std::uint64_t *properties,
                                                std::uint64_t flags, std::size_t bytes,
                                                std::int32_t &error) override;
-    void        *create_program(void *context, const char *source, std::int32_t &error) override;
+    void        *create_program(void *context, const char *const *sources, std::uint32_t count,
+                                std::int32_t &error) override;
+    /* The bytes of every string the last program was made from. */
+    std::size_t  program_bytes() const;
     std::int32_t build_program(void *program, void *device, const char *options) override;
     std::int32_t program_build_text(void *program, void *device, char *into, std::size_t room,
                                     std::size_t &bytes) override;
@@ -250,6 +253,7 @@ private:
     const char   *device_name_;
     const char   *device_extensions_;
     const char   *build_log_;
+    std::size_t   program_bytes_ = 0u;
     const char   *asked_devices_of_;
     std::uint64_t luid_;
     std::uint64_t vendor_;

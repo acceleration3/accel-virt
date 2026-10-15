@@ -962,8 +962,13 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opencl.user_event\r\n"
                  "ok opencl.wait\r\n"
                  "ok opencl.callback 1\r\n"
+                 "ok opencl.long_program 1600\r\n"
+                 "ok opencl.long_build\r\n"
+                 "ok opencl.long_kernel\r\n"
+                 "ok opencl.long_run\r\n"
+                 "ok opencl.long_sum 0\r\n"
                  "ok opencl.release\r\n"
-                 "avclprobe: 26 passed, 0 failed\r\n")
+                 "avclprobe: 31 passed, 0 failed\r\n")
     """What avclprobe.exe prints when every step of feature 052 passed, in the
     probe's own order (src/guest/probe/cl_probe.cpp)."""
 
@@ -1474,7 +1479,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("pull C:\\av\\opencl.txt", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertEqual((self.work / "opencl.txt").read_text(newline=""), self.CL_REPORT)
-        self.assertIn("guest: opencl ok: 26 passed, device av (NVIDIA GeForce RTX 4090)", result.stdout)
+        self.assertIn("guest: opencl ok: 31 passed, device av (NVIDIA GeForce RTX 4090)", result.stdout)
         self.assertIn("opencl ok", (self.work / "verdict.txt").read_text())
         self.assertTrue((self.work / "diag" / "avcl-4242.log").exists())
         # The probe renders nothing, so no picture is asked of it.
@@ -1486,11 +1491,14 @@ class GuestSuiteRun(unittest.TestCase):
         report = self.CL_REPORT
         cases = {
             "failed step": (report.replace("ok opencl.sum 0", "fail opencl.sum 64").replace(
-                "26 passed, 0 failed", "25 passed, 1 failed"), 1,
+                "31 passed, 0 failed", "30 passed, 1 failed"), 1,
                 "opencl failed: 1 step(s) failed, exit 1; see opencl.txt"),
-            "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("26 passed", "25 passed"), 0,
+            "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("31 passed", "30 passed"), 0,
                              "opencl failed: the probe reported no unmap; see opencl.txt"),
-            "no summary": (report.replace("avclprobe: 26 passed, 0 failed\r\n", ""), 0,
+            # A probe from before long programs crossed: its run is not proof.
+            "no long program": (report.replace("ok opencl.long_sum 0\r\n", "").replace("31 passed", "30 passed"),
+                                0, "opencl failed: the probe reported no long_sum; see opencl.txt"),
+            "no summary": (report.replace("avclprobe: 31 passed, 0 failed\r\n", ""), 0,
                            "opencl failed: no summary in the probe's report, exit 0; see opencl.txt"),
             "software": (report.replace("av (NVIDIA GeForce RTX 4090)", "Intel(R) Core(TM) i9, SwiftShader"), 0,
                          "opencl failed: the device Intel(R) Core(TM) i9, SwiftShader is not a host GPU"),

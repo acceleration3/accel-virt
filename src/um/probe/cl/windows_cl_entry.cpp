@@ -107,10 +107,13 @@ void *WindowsClEntry::create_buffer_with_properties(void *context, const uint64_
                                         bytes, nullptr, &error);
 }
 
-void *WindowsClEntry::create_program(void *context, const char *source, int32_t &error)
+void *WindowsClEntry::create_program(void *context, const char *const *sources, uint32_t count, int32_t &error)
 {
     AV_SCOPE("WindowsClEntry::create_program");
-    return clCreateProgramWithSource(static_cast<cl_context>(context), 1u, &source, nullptr, &error);
+    /* cl.h's own signature predates const pointers to its strings; it reads
+     * them and nothing more. */
+    return clCreateProgramWithSource(static_cast<cl_context>(context), count, const_cast<const char **>(sources),
+                                     nullptr, &error);
 }
 
 int32_t WindowsClEntry::build_program(void *program, void *device, const char *options)

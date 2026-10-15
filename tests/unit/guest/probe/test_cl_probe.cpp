@@ -121,15 +121,22 @@ TEST(cl_probe, every_step_passes_on_an_opencl_that_does_what_it_is_asked)
                                          "ok opencl.user_event\n"
                                          "ok opencl.wait\n"
                                          "ok opencl.callback 1\n"
+                                         "ok opencl.long_program 1600\n"
+                                         "ok opencl.long_build\n"
+                                         "ok opencl.long_kernel\n"
+                                         "ok opencl.long_run\n"
+                                         "ok opencl.long_sum 0\n"
                                          "ok opencl.release\n"
-                                         "avclprobe: 26 passed, 0 failed\n") == 0);
-  /* One dispatch of the vector add, the three buffers it ran over given back,
-   * and the shared allocation freed. */
-  CHECK_EQ(rig.cl().calls(Call::run_kernel), 1u);
-  CHECK_EQ(rig.cl().calls(Call::write_buffer), 2u);
+                                         "avclprobe: 31 passed, 0 failed\n") == 0);
+  /* Two dispatches of the vector add - the second from the long program,
+   * past a megabyte and a half of source - the three buffers they ran over
+   * given back, and the shared allocation freed. */
+  CHECK(rig.cl().program_bytes() > (std::size_t{3} << 19));
+  CHECK_EQ(rig.cl().calls(Call::run_kernel), 2u);
+  CHECK_EQ(rig.cl().calls(Call::write_buffer), 3u);
   CHECK_EQ(rig.cl().calls(Call::release_buffer), 3u);
-  CHECK_EQ(rig.cl().calls(Call::release_kernel), 1u);
-  CHECK_EQ(rig.cl().calls(Call::release_program), 1u);
+  CHECK_EQ(rig.cl().calls(Call::release_kernel), 2u);
+  CHECK_EQ(rig.cl().calls(Call::release_program), 2u);
   CHECK_EQ(rig.cl().calls(Call::release_queue), 1u);
   CHECK_EQ(rig.cl().calls(Call::release_event), 1u);
   CHECK_EQ(rig.cl().live_objects(), 0u); }
@@ -265,7 +272,7 @@ TEST(cl_probe, a_device_that_offers_no_shared_memory_is_noted_rather_than_failed
   CHECK(!rig.holds("FAIL opencl.svm"));
   CHECK_EQ(rig.cl().calls(Call::set_kernel_svm), 0u);
   /* Everything else still passes: the run is one step shorter, not failed. */
-  CHECK(rig.holds("avclprobe: 25 passed, 0 failed\n"));
+  CHECK(rig.holds("avclprobe: 30 passed, 0 failed\n"));
   CHECK_EQ(rig.cl().live_objects(), 0u);
   /* A device that offers shared memory and then will not allocate it, and one
    * that will not take the pointer as an argument: both fail the step, and
@@ -530,3 +537,17 @@ TEST(cl_probe, a_map_or_a_user_event_that_is_refused_says_so)
     rig.run();
     CHECK(rig.holds("FAIL opencl.callback status=7 4294967295\n"));
     CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+/* What DaVinci Resolve met: an OpenCL that will not take a long program. Its
+ * step fails with the error the API gave, nothing after it in that step is
+ * attempted, and the run still gives back everything it made. */
+TEST(cl_probe, a_long_program_the_opencl_refuses_fails_its_step_and_releases_everything)
+{ ProbeRig rig;
+  rig.cl().fail_at(Call::create_program, 2u, -5);
+  rig.run();
+  CHECK(rig.holds("ok opencl.sum 0\n"));
+  CHECK(rig.holds("FAIL opencl.long_program status=7 4294967291\n"));
+  CHECK(!rig.holds("opencl.long_build"));
+  CHECK(rig.holds("ok opencl.release\n"));
+  CHECK_EQ(rig.cl().calls(Call::run_kernel), 1u);
+  CHECK_EQ(rig.cl().live_objects(), 0u); }
