@@ -788,6 +788,48 @@ TEST(opencl_backend_device, a_kernel_runs_without_the_guest_flushing_it)
   ::clReleaseCommandQueue(queue);
   backend.shut_down(); }
 
+/* A marker the guest never flushed completes once the guest asks after it.
+ *
+ * The event a blocking read hands back is a marker behind the read, and a
+ * guest's clWaitForEvents waits by asking the status; neither flushes the
+ * host's queue, and rusticl submits at a flush and nowhere else. Asked, a
+ * still-queued event has its queue flushed, so the wait ends. A user event,
+ * which has no queue, is answered as before. */
+TEST(opencl_backend_device, an_event_the_guest_asks_after_is_flushed_on_its_way)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  cl_int                 error = CL_SUCCESS;
+  cl_device_id const     device = static_cast<cl_device_id>(hosts.device(0u)->device());
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(context, device, nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  cl_mem const       buffer = ::clCreateBuffer(context, CL_MEM_READ_WRITE, 4096u, nullptr, &error);
+  const std::uint8_t pattern = 0x3Cu;
+  CHECK_EQ(::clEnqueueFillBuffer(queue, buffer, &pattern, 1u, 0u, 4096u, 0u, nullptr, nullptr), CL_SUCCESS);
+  cl_event marker = nullptr;
+  CHECK_EQ(backend.on_clEnqueueMarkerWithWaitList(queue, 0u, nullptr, &marker), CL_SUCCESS);
+  cl_int status = CL_QUEUED;
+  for (std::uint32_t look = 0u; look < 5000u && status != CL_COMPLETE; look++) {
+      CHECK_EQ(backend.on_clGetEventInfo(marker, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr),
+               CL_SUCCESS);
+      if (status != CL_COMPLETE) ::usleep(1000u);
+  }
+  CHECK_EQ(status, CL_COMPLETE);
+  cl_event const user = ::clCreateUserEvent(context, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(backend.on_clGetEventInfo(user, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(status, CL_SUBMITTED);
+  CHECK_EQ(::clSetUserEventStatus(user, CL_COMPLETE), CL_SUCCESS);
+  ::clReleaseEvent(user);
+  ::clReleaseEvent(marker);
+  ::clReleaseMemObject(buffer);
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down(); }
+
 namespace {
 
 /* A GL buffer of `bytes` in `gl`'s share group holding `values`, made and read

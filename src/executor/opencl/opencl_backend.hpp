@@ -286,6 +286,15 @@ public:
      * device gave this library nothing to signal with - an older device - or
      * when this context is already watching as many events as it can. */
     cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) override;
+    /* An event the guest finds still CL_QUEUED has its queue flushed before
+     * the answer goes back. The guest learns of completions only by asking
+     * this and by the callback above, and neither moves a host queue along:
+     * a marker or a transfer nothing flushed - the event a blocking read
+     * hands back, or one a clWaitForEvents owes an implicit flush - stays
+     * queued on a host that submits at flushes alone (rusticl), and the
+     * guest waits forever. Kernels need no such help; pace() flushes them. */
+    cl_int on_clGetEventInfo(cl_event event, cl_event_info param_name, size_t param_value_size, void *param_value,
+                             size_t *param_value_size_ret) override;
 
     void bind_signal(void (*signal)(void *context), void *context) override;
 

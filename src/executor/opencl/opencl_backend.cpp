@@ -872,6 +872,23 @@ cl_int OpenClBackend::on_clEnqueueReleaseGLObjects(cl_command_queue command_queu
     return gl_->release(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
 }
 
+cl_int OpenClBackend::on_clGetEventInfo(cl_event event, cl_event_info param_name, size_t param_value_size,
+                                        void *param_value, size_t *param_value_size_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clGetEventInfo");
+    const cl_int asked =
+        RealDispatch::on_clGetEventInfo(event, param_name, param_value_size, param_value, param_value_size_ret);
+    if (asked != CL_SUCCESS || param_name != CL_EVENT_COMMAND_EXECUTION_STATUS || param_value == nullptr ||
+        param_value_size < sizeof(cl_int) || *static_cast<const cl_int *>(param_value) != CL_QUEUED)
+        return asked;
+    /* A user event has no queue, and its status is the guest's to set. */
+    cl_command_queue queue = nullptr;
+    if (::clGetEventInfo(event, CL_EVENT_COMMAND_QUEUE, sizeof queue, &queue, nullptr) == CL_SUCCESS &&
+        queue != nullptr)
+        static_cast<void>(on_clFlush(queue));
+    return asked;
+}
+
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)
 {
     AV_SCOPE("OpenClBackend::on_clSetEventCallback");
