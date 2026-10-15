@@ -47,6 +47,9 @@ struct ResourceRecord {
     uint32_t allocation_owned;
     uint32_t refreshed; /* the frame a guest surface was last refreshed in (refresh_bound_guest_surfaces) */
     uint32_t shadow_watched; /* the shadow is WatchedShadows' write-watched region */
+    /* A deferred context's copy whose shadow is its own (D3d11Device::own_shadow),
+     * given back when the runtime destroys the copy. */
+    uint32_t shadow_local;
     uint64_t shared_key;
     /* The presents of this surface so far: the point the last one published
      * on it (docs/shared-surfaces.md). Moves with shared_key. */
@@ -56,9 +59,9 @@ struct ResourceRecord {
     size_t   shadow_bytes;
     /* A buffer whose shadow is a slice of the session's slice store, which the host
      * GPU reads in place (docs/mapped-buffers-plan.md): where, and how much.
-     * on_slice is whether the host's buffer is bound to it; a buffer a
-     * deferred context maps falls back to being copied, its slice kept as
-     * its shadow until it goes. */
+     * on_slice is whether the host's buffer is bound to it. A deferred
+     * context's copy of the record leaves the slice at its first map, for a
+     * shadow of its own (shadow_local). */
     d3d::BufferSlices::Slice slice;
     uint32_t                 on_slice;
 };

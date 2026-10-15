@@ -266,9 +266,11 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
 VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d11Device::destroy_resource");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
-    if (parent_ != nullptr) return;
     ResourceRecord &resource = record(handle);
+    if (parent_ != nullptr) {
+        forget_copy(resource);
+        return;
+    }
     forget_guest_surface(resource);
     maps_.forget(resource.id);
     destroy_object(resource.id);

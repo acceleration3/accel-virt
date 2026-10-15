@@ -170,6 +170,13 @@ private:
      * its own, the slice left (leave_slice). False, nothing changed, with no
      * memory. */
     [[nodiscard]] bool leave_slice_for_copies(ResourceRecord &resource);
+    /* On a deferred context, the copy of a record given a shadow of this
+     * context's own to map, any slice it named forgotten. False, nothing
+     * changed, with no memory. */
+    [[nodiscard]] bool own_shadow(ResourceRecord &resource);
+    /* A deferred context's copy of a record, destroyed by the runtime: its
+     * own shadow given back. */
+    void               forget_copy(ResourceRecord &resource);
     /* `box` (or the whole subresource) of one subresource from `data` at
      * these pitches, as UpdateSubresource1 takes it, in as many pieces as one
      * command of this context carries (TextureUpload). */
