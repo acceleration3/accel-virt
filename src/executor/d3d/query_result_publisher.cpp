@@ -112,14 +112,18 @@ bool QueryResultPublisher::pending() const
     return count_ != 0u;
 }
 
-/* The count last, after a release fence: the guest takes the data as soon as
- * it sees its own count in the slot. */
+/* The count last, after a store fence: the guest takes the data as soon as it
+ * sees its own count in the slot, and the slot is the arena seen through the
+ * memory source's mapping, which a driver may have made write-combined
+ * (docs/host-memory.md) - x86 orders those stores only at a fence, and this is
+ * written between batches too, with no batch's fence behind it. */
 void QueryResultPublisher::write(uint32_t id, const uint8_t *data, uint32_t size, uint64_t end) const
 {
     AV_SCOPE("QueryResultPublisher::write");
     uint8_t *const slot = results_ + static_cast<uint64_t>(id % slots_) * slot_bytes;
     __builtin_memcpy(slot + data_at, data, size);
     __builtin_memcpy(slot + sizeof(uint64_t), &size, sizeof size);
+    __builtin_ia32_sfence();
     __atomic_store_n(reinterpret_cast<uint64_t *>(slot), end, __ATOMIC_RELEASE);
 }
 

@@ -257,6 +257,15 @@ std::uint32_t store_write_combined(void *, AvExecutor *, std::uint32_t, const st
     return AV_EXECUTED;
 }
 
+/* What a batch's end publishes, as OpenGL's error word: stored by end_batch,
+ * after the answer, and read by a guest that has seen the batch's head. */
+constexpr std::uint8_t ended_word[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+
+void store_at_end(void *, AvExecutor *)
+{
+    write_combined->host->hold_store(write_combined->arena + 32u, ended_word, sizeof ended_word);
+}
+
 /* Where the reply slot carries its fence id, which the guest polls for. */
 constexpr std::size_t reply_fence_at = 8u;
 
@@ -451,6 +460,18 @@ TEST(batch_executor_run, what_a_batch_stored_write_combined_is_in_memory_once_it
   CHECK_EQ(fixture.reply()[0], 0xEEu);
   for (std::uint32_t at = 0u; at < 40u; at++) CHECK_EQ(stored.arena[at], 0x33u);
   CHECK_EQ(stored.arena[40], 0u);
+  write_combined = nullptr; }
+
+TEST(batch_executor_run, what_the_end_of_a_batch_stored_write_combined_is_in_memory_once_it_has_run)
+{ Fixture fixture;
+  WriteCombined stored{&fixture.host(), {}};
+  write_combined = &stored;
+  fixture.ops().editable().end_batch = &store_at_end;
+  Commands commands;
+  commands.add(0x10001u, 8u, CommandHeader::generate_reply, 0x44u);
+  CHECK_STATUS(fixture.run(3u, commands), Status::ok);
+  CHECK_EQ(fixture.reply_header().fence_id(), 3u);
+  CHECK(std::memcmp(stored.arena + 32u, ended_word, sizeof ended_word) == 0);
   write_combined = nullptr; }
 
 TEST(batch_executor_run, a_batch_with_no_commands_runs_nothing)
