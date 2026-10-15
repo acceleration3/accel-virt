@@ -221,6 +221,9 @@ driver_implemented = [
     # the API keeps no count of.
     "clRetainDevice",
     "clReleaseDevice",
+    # `cl_khr_il_program`'s create: the core clCreateProgramWithIL under the
+    # extension's name, which the ICD answers by name with the core entry.
+    "clCreateProgramWithILKHR",
 ]
 
 # Commands the client does not wait for. Reference counting is the

@@ -42,6 +42,10 @@ public:
     /* A buffer released with `mappings` of it never unmapped, logged the first
      * time: what an application that runs out of mappings may be doing. */
     void     note_released_mapped(uint32_t mappings);
+    /* A call that returns before its work is done ran ahead of a user event
+     * the application had not set yet (ClIcdRoot::without_unset_user_events),
+     * logged the first time: the one place a wait list is not honoured. */
+    void     note_ran_ahead_of_user_event();
     uint32_t named() const;
 
 private:

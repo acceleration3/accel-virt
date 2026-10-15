@@ -98,3 +98,12 @@ TEST(cl_refusal_log, a_refused_map_and_a_buffer_released_mapped_say_how_many_wer
   CHECK_EQ(log.lines(), 2u);
   CHECK(std::strcmp(log.line(1u), "avcl: clReleaseMemObject: a buffer released while still mapped 3 mappings went with it") == 0); }
 
+TEST(cl_refusal_log, a_transfer_that_ran_ahead_of_a_user_event_is_said_once)
+{ av::RecordingLog log;
+  ClRefusalLog     refusals(log);
+  refusals.note_ran_ahead_of_user_event();
+  refusals.note_ran_ahead_of_user_event();
+  CHECK_EQ(log.lines(), 1u);
+  CHECK(std::strstr(log.line(0u), "a non-blocking transfer waits on a user event not yet set") != nullptr);
+  CHECK(std::strstr(log.line(0u), "it runs now") != nullptr); }
+

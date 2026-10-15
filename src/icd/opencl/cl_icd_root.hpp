@@ -674,6 +674,10 @@ private:
      * the host's call is behind nothing. The list judged as the API judges
      * it; a queue known idle with no list needs nothing. */
     [[nodiscard]] cl_int settle(ClientTransport &wire, ClObject &queue, const ClWaitList &waits);
+    /* `listed` (the host's numbers for `waits`) without the application's
+     * user events not yet set, for a call that returns before its work is
+     * done; how many are left. */
+    uint32_t             without_unset_user_events(ClientTransport &wire, const ClWaitList &waits, uint64_t *listed);
     /* The adapter's vendor, name and PCI location, to the device's report and
      * extension policy; its name into `name`. */
     void             describe_adapter(uint32_t adapter, ClDevice &device, icd::AdapterString &name);

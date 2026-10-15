@@ -196,7 +196,13 @@ TEST(cl_wait_list, a_wait_list_is_the_count_and_the_events_it_was_given)
   cl_event events[2] = {reinterpret_cast<cl_event>(std::uintptr_t{0x10}), reinterpret_cast<cl_event>(std::uintptr_t{0x20})};
   const ClWaitList two(2u, events);
   CHECK_EQ(two.count(), 2u);
-  CHECK(two.events() == events); }
+  CHECK(two.events() == events);
+  /* A call with no flag of its own returns before its work is done; a
+   * transfer's or a map's is the application's own. */
+  CHECK(!none.blocks());
+  CHECK(!two.blocks());
+  CHECK(ClWaitList(2u, events, CL_TRUE).blocks());
+  CHECK(!ClWaitList(2u, events, CL_FALSE).blocks()); }
 
 TEST(cl_enqueue_api, a_kernel_and_a_device_copy_carry_their_wait_list_to_the_host)
 { ClIcdRig rig;
@@ -328,15 +334,19 @@ TEST(cl_enqueue_api, a_transfer_the_host_blocks_on_waits_for_its_list_here_befor
   unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
 
   /* An idle queue drains nothing for a list of none, but a list is waited
-   * for: the drain's marker carries it, and the write goes behind it. */
+   * for: the drain's marker carries it, and the write goes behind it. A
+   * non-blocking write first asks whether its user event is set - one that
+   * is, is waited for as any event is. */
+  run.answers(static_cast<cl_int>(CL_COMPLETE));
   run.drains();
   std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof bytes, bytes,
                                                        1u, run.gate(), nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), sent + 4u);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
-  CHECK(carries(rig.kmt(), sent, host_gate));
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clGetEventInfo);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
 
   /* A blocking read the same way, and its drain refused ends it there. */
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
@@ -364,13 +374,53 @@ TEST(cl_enqueue_api, a_transfer_the_host_blocks_on_waits_for_its_list_here_befor
   CHECK(carries(rig.kmt(), sent, host_gate));
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueMapBuffer);
   /* And its unmap behind the list too: a read-only map writes nothing back. */
+  run.answers(static_cast<cl_int>(CL_COMPLETE));
   run.drains();
   rig.host().cl_result(CL_SUCCESS);
   sent = rig.kmt().commands();
   CHECK_EQ(table_of(run.queue())->clEnqueueUnmapMemObject(run.queue(), run.buffer(), mapped, 1u, run.gate(), nullptr),
            CL_SUCCESS);
-  CHECK(carries(rig.kmt(), sent, host_gate));
-  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueUnmapMemObject);
+  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
+  CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clEnqueueUnmapMemObject);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A non-blocking transfer may be gated on a user event its own thread sets
+ * only after the call returns, so it does not wait for one not yet set - it
+ * goes ahead, said once in the log - while a blocking one, whose gate another
+ * thread must set, waits for it as for any event. */
+TEST(cl_enqueue_api, a_non_blocking_transfer_does_not_wait_for_a_user_event_not_yet_set)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  run.answers(static_cast<cl_int>(CL_SUBMITTED));
+  std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof bytes, bytes,
+                                                       1u, run.gate(), nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clGetEventInfo);
+  /* No marker waits on the gate: the write is next. */
+  for (std::uint32_t index = sent + 1u; index < rig.kmt().commands(); ++index) {
+      CHECK(rig.kmt().command_id(index) != av::clproto::kCmd_clEnqueueMarkerWithWaitList ||
+            !carries(rig.kmt(), index, host_gate));
+  }
+  bool told = false;
+  for (std::uint32_t line = 0u; line < rig.log().lines(); ++line)
+      told = told || std::strstr(rig.log().line(line), "a user event not yet set") != nullptr;
+  CHECK(told);
+  /* The same write blocking: the gate is waited for without being asked. */
+  run.drains();
+  sent = rig.kmt().commands();
+  CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof bytes, bytes,
+                                                       1u, run.gate(), nullptr),
+           CL_SUCCESS);
+  /* The non-blocking write held from before goes ahead of it, with its
+   * batch, and then the marker that waits on the gate. */
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueWriteBuffer);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK(carries(rig.kmt(), sent + 1u, host_gate));
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 

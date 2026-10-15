@@ -1612,6 +1612,14 @@ TEST(fullstack_opencl_icd, a_program_from_spir_v_runs_its_kernels_and_says_what_
     }
     CHECK_EQ(error, CL_SUCCESS);
     if (program == nullptr) return;
+    /* A device that takes SPIR-V reports cl_khr_il_program, whose create the
+     * loader finds by name. */
+    static char extensions[8192] = {};
+    CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_EXTENSIONS, sizeof extensions, extensions, nullptr),
+             CL_SUCCESS);
+    CHECK(std::strstr(extensions, "cl_khr_il_program") != nullptr);
+    CHECK(process.root().extension_function("clCreateProgramWithILKHR") ==
+          reinterpret_cast<void *>(table_of(run.context())->clCreateProgramWithIL));
     CHECK_EQ(loader.build_program(program, nullptr), CL_SUCCESS);
     std::uint32_t module[sizeof av::vector_add_spv / sizeof av::vector_add_spv[0]] = {};
     std::size_t   module_bytes = 0u;
@@ -2379,3 +2387,50 @@ TEST(fullstack_opencl_icd, shared_memory_is_copied_in_read_by_a_kernel_filled_an
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* A non-blocking write gated on a user event this same thread sets only after
+ * the write returns: the write must return - a call that waited for the gate
+ * would wait forever - and once the gate is set the bytes are there, and a
+ * kernel gated on the same event runs after it. */
+TEST(fullstack_opencl_icd, a_non_blocking_write_gated_on_a_user_event_set_after_it_returns)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    cl_int         error = CL_INVALID_VALUE;
+    const cl_event gate = loader.create_user_event(run.context(), &error);
+    CHECK(gate != nullptr);
+    if (gate == nullptr) return;
+    float doubled[elements] = {};
+    for (std::uint32_t index = 0u; index < elements; ++index) doubled[index] = static_cast<float>(2u * index);
+    cl_event written = nullptr;
+    CHECK_EQ(table_of(run.queue())->clEnqueueWriteBuffer(run.queue(), run.input(), CL_FALSE, 0u, vector_bytes, doubled,
+                                                         1u, &gate, &written),
+             CL_SUCCESS);
+    const std::size_t global = elements;
+    CHECK_EQ(table_of(run.queue())->clEnqueueNDRangeKernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr, 1u,
+                                                           &gate, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(loader.set_user_event_status(gate, CL_COMPLETE), CL_SUCCESS);
+    CHECK_EQ(run.finish(), CL_SUCCESS);
+    if (written != nullptr) CHECK_EQ(loader.wait_for_events(1u, &written), CL_SUCCESS);
+    float read[elements] = {};
+    CHECK_EQ(run.read(read, CL_TRUE, nullptr), CL_SUCCESS);
+    float expected[elements] = {};
+    run.sum_with(doubled, expected);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < elements; ++index)
+        if (read[index] != expected[index]) ++wrong;
+    CHECK_EQ(wrong, 0u);
+    if (written != nullptr) CHECK_EQ(loader.release_event(written), CL_SUCCESS);
+    CHECK_EQ(loader.release_event(gate), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }

@@ -180,7 +180,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
    * name is a prefix of another so a match on anything but a whole word
    * shows, and no cl_khr_gl_sharing: nothing of it reaches the application,
    * which is shown only what this ICD answers alone. */
-  static const char plain[] = "cl_khr_spir cl_khr_il_program cl_khr_il cl_khr_gl_shar";
+  static const char plain[] = "cl_khr_spir cl_khr_spirv_queries cl_khr_spirv cl_khr_gl_shar";
   char              reported[256];
   std::size_t       answered = 0u;
   { ClIcdRig rig;

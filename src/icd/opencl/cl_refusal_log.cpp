@@ -67,6 +67,14 @@ void ClRefusalLog::note_released_mapped(uint32_t mappings)
     lines_.name(key, line.text());
 }
 
+void ClRefusalLog::note_ran_ahead_of_user_event()
+{
+    AV_SCOPE("ClRefusalLog::note_ran_ahead_of_user_event");
+    static const char key[] = "a non-blocking transfer waits on a user event not yet set";
+    if (!lines_.first(key, 0)) return;
+    lines_.name(key, "it runs now rather than wait for a set the same thread may make only after it returns");
+}
+
 uint32_t ClRefusalLog::named() const
 {
     AV_SCOPE("ClRefusalLog::named");

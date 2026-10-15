@@ -37,12 +37,39 @@ cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitLis
     uint64_t     listed[max_waited] = {};
     const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
     if (judged_list != CL_SUCCESS) return judged_list;
-    if (waits.count() == 0u) return drain_unless_idle(wire, queue);
+    const uint32_t kept = waits.blocks() ? waits.count() : without_unset_user_events(wire, waits, listed);
+    if (kept == 0u) return drain_unless_idle(wire, queue);
     /* Not known idle afterwards on a queue that was: the marker is work of
      * its own until the wait has seen it complete, which it then has. */
-    const cl_int drained = drain(wire, queue.wire(), context->wakes(), listed, waits.count());
+    const cl_int drained = drain(wire, queue.wire(), context->wakes(), listed, kept);
     if (drained == CL_SUCCESS) queue.idle();
     return drained;
+}
+
+/* A call that returns before its work is done may be waiting on a user event
+ * the same thread sets only after it returns, and waiting for it here would
+ * never end. So such a call does not wait for a user event the application
+ * has not set yet - it runs ahead of it, as every call did before this ICD
+ * honoured wait lists - and waits for the rest. The command's own event still
+ * completes after the transfer. */
+uint32_t ClIcdRoot::without_unset_user_events(ClientTransport &wire, const ClWaitList &waits, uint64_t *listed)
+{
+    AV_SCOPE("ClIcdRoot::without_unset_user_events");
+    uint32_t kept = 0u;
+    for (cl_uint index = 0u; index < waits.count(); ++index) {
+        ClObject *const named = judged(waits.events()[index], ClObject::Kind::event);
+        const bool      user = named != nullptr && named->parent() != nullptr &&
+                          named->parent()->kind() == ClObject::Kind::context;
+        cl_int status = CL_COMPLETE;
+        if (user && av::clproto::av_clGetEventInfo(wire, listed[index], CL_EVENT_COMMAND_EXECUTION_STATUS,
+                                                   sizeof status, &status, nullptr) == CL_SUCCESS &&
+            status > CL_COMPLETE) {
+            refusals_.note_ran_ahead_of_user_event();
+            continue;
+        }
+        listed[kept++] = listed[index];
+    }
+    return kept;
 }
 
 void ClIcdRoot::hand_over(ClientTransport &wire, ClObject &queue, uint64_t produced, cl_event *event)

@@ -69,6 +69,7 @@ inline constexpr const char* kCarriedExtensions[] = {
     "cl_khr_gl_sharing",
     "cl_khr_global_int32_base_atomics",
     "cl_khr_global_int32_extended_atomics",
+    "cl_khr_il_program",
     "cl_khr_image2d_from_buffer",
     "cl_khr_initialize_memory",
     "cl_khr_int64_base_atomics",

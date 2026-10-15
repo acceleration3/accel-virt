@@ -131,7 +131,10 @@ TEST(cl_dispatch_table, the_il_program_extension_s_create_is_the_core_slot_by_na
   CHECK(table.program_from_il() != nullptr);
   CHECK(table.program_from_il() == reinterpret_cast<void *>(table.table().clCreateProgramWithIL));
   CHECK(rig.root().extension_function("clCreateProgramWithILKHR") == table.program_from_il());
-  CHECK(table.program_from_il() != table.gl_context_info()); }
+  CHECK(table.program_from_il() != table.gl_context_info());
+  /* The 1.1 by-name slot, of no platform, answers as the ICD's own export. */
+  CHECK(table.table().clGetExtensionFunctionAddress("clCreateProgramWithILKHR") == table.program_from_il());
+  CHECK(table.table().clGetExtensionFunctionAddress("clNoSuchThing") == nullptr); }
 
 TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
 { ClDispatchTable table;

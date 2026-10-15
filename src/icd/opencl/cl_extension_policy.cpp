@@ -136,6 +136,7 @@ const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_3d_image_writes", 1u, "fullstack_opencl_icd.a_kernel_writes_a_3d_image_and_its_texels_come_back"},
     {"cl_khr_image2d_from_buffer", 1u, "fullstack_opencl_icd.a_2d_image_over_a_buffer_reads_the_buffer_s_bytes"},
     {"cl_khr_depth_images", 1u, "fullstack_opencl_icd.a_depth_image_a_kernel_writes_reads_back"},
+    {"cl_khr_il_program", 1u, "fullstack_opencl_icd.a_program_from_spir_v_runs_its_kernels_and_says_what_it_was_made_of"},
 };
 const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 

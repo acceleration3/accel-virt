@@ -283,7 +283,7 @@ cl_int CL_API_CALL enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool b
     AV_SCOPE("enqueue_read");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
     return root.noted("clEnqueueReadBuffer", root.enqueue_read(queue, buffer, blocking, offset, bytes, into, event,
-                                                               ClWaitList(waits, events)));
+                                                               ClWaitList(waits, events, blocking)));
 }
 
 cl_int CL_API_CALL enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -293,7 +293,7 @@ cl_int CL_API_CALL enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool 
     AV_SCOPE("enqueue_write");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
     return root.noted("clEnqueueWriteBuffer", root.enqueue_write(queue, buffer, blocking, offset, bytes, from, event,
-                                                                 ClWaitList(waits, events)));
+                                                                 ClWaitList(waits, events, blocking)));
 }
 
 cl_int CL_API_CALL finish_queue(cl_command_queue queue)
@@ -328,7 +328,7 @@ void *CL_API_CALL map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool bloc
     }
     ClNotedError noted(cl_icd_binding.root(), "clEnqueueMapBuffer", error);
     return cl_icd_binding.root().map_buffer(queue, buffer, blocking, flags, offset, bytes, event, noted.pointer(),
-                                            ClWaitList(waits, events));
+                                            ClWaitList(waits, events, blocking));
 }
 
 cl_int CL_API_CALL unmap_mem_object(cl_command_queue queue, cl_mem buffer, void *pointer, cl_uint waits,
@@ -361,7 +361,7 @@ cl_int CL_API_CALL enqueue_svm_map(cl_command_queue queue, cl_bool blocking, cl_
     AV_SCOPE("enqueue_svm_map");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
     return root.noted("clEnqueueSVMMap", root.svm_map(queue, blocking, flags, pointer, bytes, event,
-                                                      ClWaitList(waits, events)));
+                                                      ClWaitList(waits, events, blocking)));
 }
 
 cl_int CL_API_CALL enqueue_svm_unmap(cl_command_queue queue, void *pointer, cl_uint waits,
@@ -550,7 +550,7 @@ cl_mem CL_API_CALL create_image_3d(cl_context context, cl_mem_flags flags, const
                                                  slice_pitch, host_pointer, noted.pointer());
 }
 
-cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_bool,
+cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_bool blocking,
                                       const size_t *origin, const size_t *region, size_t row_pitch,
                                       size_t slice_pitch, void *into, cl_uint waits, const cl_event *events,
                                       cl_event *event)
@@ -558,10 +558,10 @@ cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_b
     AV_SCOPE("enqueue_read_image");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
     return root.noted("clEnqueueReadImage", root.enqueue_read_image(queue, image, origin, region, row_pitch, slice_pitch,
-                                                                    into, event, ClWaitList(waits, events)));
+                                                                    into, event, ClWaitList(waits, events, blocking)));
 }
 
-cl_int CL_API_CALL enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, cl_bool,
+cl_int CL_API_CALL enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
                                             const size_t *buffer_origin, const size_t *host_origin,
                                             const size_t *region, size_t buffer_row_pitch, size_t buffer_slice_pitch,
                                             size_t host_row_pitch, size_t host_slice_pitch, void *into, cl_uint waits,
@@ -573,10 +573,10 @@ cl_int CL_API_CALL enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffe
                       root.enqueue_read_buffer_rect(queue, buffer,
                                                     ClBufferRect(buffer_origin, host_origin, region, buffer_row_pitch,
                                                                  buffer_slice_pitch, host_row_pitch, host_slice_pitch),
-                                                    into, event, ClWaitList(waits, events)));
+                                                    into, event, ClWaitList(waits, events, blocking)));
 }
 
-cl_int CL_API_CALL enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, cl_bool,
+cl_int CL_API_CALL enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
                                              const size_t *buffer_origin, const size_t *host_origin,
                                              const size_t *region, size_t buffer_row_pitch,
                                              size_t buffer_slice_pitch, size_t host_row_pitch,
@@ -589,7 +589,7 @@ cl_int CL_API_CALL enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buff
                       root.enqueue_write_buffer_rect(queue, buffer,
                                                      ClBufferRect(buffer_origin, host_origin, region, buffer_row_pitch,
                                                                   buffer_slice_pitch, host_row_pitch, host_slice_pitch),
-                                                     from, event, ClWaitList(waits, events)));
+                                                     from, event, ClWaitList(waits, events, blocking)));
 }
 
 cl_int CL_API_CALL enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, cl_mem to,
@@ -605,7 +605,7 @@ cl_int CL_API_CALL enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from,
                                                     ClWaitList(waits, events)));
 }
 
-cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_bool,
+cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_bool blocking,
                                        const size_t *origin, const size_t *region, size_t row_pitch,
                                        size_t slice_pitch, const void *from, cl_uint waits,
                                        const cl_event *events, cl_event *event)
@@ -613,7 +613,7 @@ cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_
     AV_SCOPE("enqueue_write_image");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
     return root.noted("clEnqueueWriteImage", root.enqueue_write_image(queue, image, origin, region, row_pitch,
-                                                                      slice_pitch, from, event, ClWaitList(waits, events)));
+                                                                      slice_pitch, from, event, ClWaitList(waits, events, blocking)));
 }
 
 cl_sampler CL_API_CALL create_sampler_with_properties(cl_context context,
@@ -1013,7 +1013,7 @@ void *CL_API_CALL map_image(cl_command_queue queue, cl_mem image, cl_bool blocki
     }
     ClNotedError noted(cl_icd_binding.root(), "clEnqueueMapImage", error);
     return cl_icd_binding.root().map_image(queue, image, blocking, flags, origin, region, row_pitch, slice_pitch,
-                                           event, noted.pointer(), ClWaitList(waits, events));
+                                           event, noted.pointer(), ClWaitList(waits, events, blocking));
 }
 
 cl_mem CL_API_CALL create_image_with_properties(cl_context context, const cl_mem_properties *properties,
@@ -1055,7 +1055,7 @@ cl_int CL_API_CALL enqueue_svm_memcpy(cl_command_queue queue, cl_bool blocking, 
     AV_SCOPE("enqueue_svm_memcpy");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
     return root.noted("clEnqueueSVMMemcpy",
-                      root.svm_memcpy(queue, blocking, to, from, bytes, event, ClWaitList(waits, events)));
+                      root.svm_memcpy(queue, blocking, to, from, bytes, event, ClWaitList(waits, events, blocking)));
 }
 
 cl_int CL_API_CALL enqueue_svm_mem_fill(cl_command_queue queue, void *pointer, const void *pattern,
@@ -1306,6 +1306,14 @@ void *CL_API_CALL extension_function_for_platform(cl_platform_id platform, const
     return cl_icd_binding.root().extension_function_for(platform, name);
 }
 
+/* The 1.1 spelling of the same, of no platform: this ICD's one. */
+void *CL_API_CALL extension_function_of_any_platform(const char *name)
+{
+    AV_SCOPE("extension_function_of_any_platform");
+    if (!cl_icd_binding.bound()) return nullptr;
+    return cl_icd_binding.root().extension_function(name);
+}
+
 #undef AV_CL_ROOT_OR
 
 }  // namespace
@@ -1445,6 +1453,7 @@ void ClDispatchTable::fill()
     table_.clSetContextDestructorCallback = &set_context_destructor_callback;
     table_.clCreateSubDevices = &create_sub_devices;
     table_.clGetExtensionFunctionAddressForPlatform = &extension_function_for_platform;
+    table_.clGetExtensionFunctionAddress = &extension_function_of_any_platform;
     table_.clEnqueueTask = &enqueue_task;
     table_.clEnqueueMarker = &enqueue_marker_1_1;
     table_.clEnqueueWaitForEvents = &enqueue_wait_for_events;
@@ -1462,7 +1471,7 @@ void ClDispatchTable::fill()
     table_.clEnqueueSVMMemFill = &enqueue_svm_mem_fill;
     table_.clEnqueueSVMFree = &enqueue_svm_free;
     table_.clEnqueueSVMMigrateMem = &enqueue_svm_migrate;
-    claimed_ = 131u;
+    claimed_ = 132u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
