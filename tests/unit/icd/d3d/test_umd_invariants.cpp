@@ -167,7 +167,8 @@ TEST(device_cookie, is_written_read_and_cleared_and_refuses_a_foreign_magic)
   CHECK_EQ(runtime.open(), hr_ok);
   /* Any address will do: the cookie records what it is given and DeviceTable
    * is what decides whether the pool still holds a device there. */
-  UmdDevice *const somewhere = reinterpret_cast<UmdDevice *>(&runtime_handle);
+  alignas(UmdDevice) static unsigned char block[sizeof(UmdDevice)];
+  UmdDevice *const somewhere = reinterpret_cast<UmdDevice *>(block);
   cookie.write(*somewhere);
   CHECK(cookie.invariants_hold());
   CHECK(cookie.named() == somewhere);
