@@ -12,6 +12,7 @@ namespace {
 constexpr uint32_t flags_at = 4u;
 constexpr uint32_t completed_at = 8u;
 constexpr uint32_t progress_at = 16u;
+constexpr uint32_t fault_code_at = 24u;
 constexpr uint32_t faulted_flag = 1u;
 }  // namespace
 
@@ -55,6 +56,13 @@ bool HostWatch::faulted() const
     if (page_ == nullptr) return false;
     return (__atomic_load_n(reinterpret_cast<const uint32_t *>(page_ + flags_at), __ATOMIC_ACQUIRE) & faulted_flag) !=
            0u;
+}
+
+uint32_t HostWatch::fault_code() const
+{
+    AV_SCOPE("HostWatch::fault_code");
+    if (!faulted()) return 0u;
+    return __atomic_load_n(reinterpret_cast<const uint32_t *>(page_ + fault_code_at), __ATOMIC_ACQUIRE);
 }
 
 /* No clock is read here: most waits end at their first look, and a reading

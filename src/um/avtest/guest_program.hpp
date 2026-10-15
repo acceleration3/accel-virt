@@ -17,7 +17,7 @@ namespace av {
 class GuestProgram final : public StateReporter {
 public:
     /* What the command line asked the program to run. */
-    enum class Run : uint8_t { suite, timeout, av, round_trip };
+    enum class Run : uint8_t { suite, timeout, av, round_trip, host_loss };
 
     /* The whole suite, with the long fence run only when the command line asks
      * for it: `avtest.exe <seconds>` (feature 039, US3). With `timeout_only`

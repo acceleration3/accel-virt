@@ -1065,6 +1065,27 @@ TEST(kmt_transport, a_wait_that_times_out_on_a_faulted_fence_page_gives_up_at_on
   CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u);
   CHECK(transport.faulted()); }
 
+/* A context with nothing to wait for learns a fault from its page alone: the
+ * page says faulted, and why - 7, the host device lost - while the transport
+ * itself, which has sent nothing since, has not yet failed a call. */
+TEST(kmt_transport, an_idle_context_reads_its_fault_and_its_code_off_the_page)
+{ MockKmt kmt;
+  kmt.add_adapter(av_gpu, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::d3d, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK(!transport.host_faulted());
+  CHECK_EQ(transport.host_fault_code(), 0u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(!transport.host_faulted());
+  CHECK_EQ(transport.host_fault_code(), 0u);
+  CHECK(kmt.fault_page_of(transport.context()));
+  CHECK(transport.host_faulted());
+  CHECK_EQ(transport.host_fault_code(), 7u);
+  CHECK(!transport.faulted());
+  CHECK(transport.invariants_hold()); }
+
 /* A driver from before the fence page has no heartbeat and no fault word: a
  * wait that runs out while the host takes batches is waited again as before. */
 TEST(kmt_transport, without_a_fence_page_only_the_head_says_the_host_is_working)

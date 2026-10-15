@@ -24,6 +24,8 @@ public:
     void    clear(uint32_t target, const uint8_t *colour) override;
     int32_t read_texel(uint32_t target, uint32_t x, uint32_t y, uint8_t *texel) override;
     int32_t removed_reason() override;
+    /* Answered by DXVK's IDXGIVkInteropDevice, which only a layer's device has. */
+    bool    layered() override;
     void    release() override;
 
 private:

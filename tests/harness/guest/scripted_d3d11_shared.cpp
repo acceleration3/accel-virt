@@ -21,6 +21,11 @@ void ScriptedD3d11Shared::lose_device_below(std::uint32_t bytes)
     lose_below_ = bytes;
 }
 
+void ScriptedD3d11Shared::lose()
+{
+    lost_ = true;
+}
+
 void ScriptedD3d11Shared::misplace_rows()
 {
     misplace_ = true;
@@ -116,6 +121,16 @@ std::int32_t ScriptedD3d11Shared::removed_reason()
     const std::int32_t refused = refusal(Call::removed_reason);
     if (refused != 0) return refused;
     return lost_ ? device_hung : 0;
+}
+
+bool ScriptedD3d11Shared::layered()
+{
+    return layered_;
+}
+
+void ScriptedD3d11Shared::set_layered(bool layered)
+{
+    layered_ = layered;
 }
 
 void ScriptedD3d11Shared::release()

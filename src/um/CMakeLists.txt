@@ -20,8 +20,9 @@ file(GLOB_RECURSE AVTEST_SOURCES CONFIGURE_DEPENDS
 # targets below.
 list(FILTER AVTEST_SOURCES EXCLUDE REGEX "/um/(common|vulkan|opengl|opencl|d3d|probe|inspect|sample)/")
 # Of the generated tree, only the guest's encoders: the av scenarios send real
-# Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
-# OpenGL client does not link before its ICD helpers exist (050).
+# Vulkan and OpenCL streams (044), and the host-loss scenario Direct3D 11's.
+# The server dispatch is the host's, and the OpenGL client does not link
+# before its ICD helpers exist (050).
 file(GLOB_RECURSE AVTEST_GENERATED CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp)
 list(REMOVE_ITEM AVTEST_SOURCES ${AVTEST_GENERATED})
@@ -32,7 +33,8 @@ list(APPEND AVTEST_SOURCES
   ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatchable_handle_default.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_descriptor_template_default.cpp
-  ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
+  ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp
+  ${AVTEST_GENERATED_DIR}/d3d/d3d_dispatch_client.cpp)
 
 # The tree is built once per guest architecture (AV_GUEST_ARCH, from the
 # toolchain): x64, and x86 for the drivers a 32-bit process loads.

@@ -321,6 +321,18 @@ bool KmtTransport::faulted() const
     AV_SCOPE("KmtTransport::faulted");
     return faulted_;
 }
+bool KmtTransport::host_faulted() const
+{
+    AV_SCOPE("KmtTransport::host_faulted");
+    return watch_.faulted();
+}
+
+uint32_t KmtTransport::host_fault_code() const
+{
+    AV_SCOPE("KmtTransport::host_fault_code");
+    return watch_.fault_code();
+}
+
 uint32_t KmtTransport::context() const
 {
     AV_SCOPE("KmtTransport::context");

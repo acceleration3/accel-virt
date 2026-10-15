@@ -14,6 +14,7 @@
 #ifndef AV_D3D_PROBE_PROGRAM_HPP
 #define AV_D3D_PROBE_PROGRAM_HPP
 
+#include "guest/probe/host_loss_request.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "um/kmt/gdi_kmt.hpp"
 #include "um/probe/gdi_window_frame.hpp"
@@ -65,6 +66,10 @@ private:
     WindowsD3d11Entry         d3d11_;
     WindowsD3d11DeferredEntry deferred_;
     WindowsD3d11SharedEntry   shared_;
+    /* The device the host is asked to lose, and the one made after it. */
+    WindowsD3d11SharedEntry   lost_;
+    WindowsD3d11SharedEntry   remade_;
+    HostLossRequest           loss_;
 };
 
 class D3d12ProbeProgram {

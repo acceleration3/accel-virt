@@ -1312,6 +1312,14 @@ void MockKmt::time_out_while_beating(std::uint32_t count) { timeouts_while_beati
 
 void MockKmt::time_out_faulted() { timeout_faulted_ = true; }
 
+bool MockKmt::fault_page_of(std::uint32_t context)
+{
+    const Object *const on = find(Kind::context, context);
+    if (on == nullptr || fence_memory(*on) == nullptr) return false;
+    fault_fence_page(*on);
+    return true;
+}
+
 void MockKmt::time_out_silently(std::uint32_t count) { timeouts_silent_ = count; }
 
 void MockKmt::beat(const Object &context) const

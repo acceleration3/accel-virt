@@ -3,7 +3,8 @@
  *
  * With no C runtime there is no argv: what avtest takes - the seconds of fence
  * stress to run, 0 for none, the word `tdr` for a run of the timeout scenario
- * alone and the word `av` for the av scenarios alone - is read from the
+ * alone, the word `av` for the av scenarios alone and the word `loss` for the
+ * host device lost under the guest (HostLossScenario) - is read from the
  * command line itself, which is the last run of digits in it and whether one of
  * those words is in it. */
 #include "core/trace/function_scope.hpp"
@@ -42,6 +43,8 @@ static av::GuestProgram::Run avtest_run(const wchar_t *line)
             return av::GuestProgram::Run::av;
         if (line[0] == L' ' && line[1] == L't' && line[2] == L'r' && line[3] == L'i' && line[4] == L'p')
             return av::GuestProgram::Run::round_trip;
+        if (line[0] == L' ' && line[1] == L'l' && line[2] == L'o' && line[3] == L's' && line[4] == L's')
+            return av::GuestProgram::Run::host_loss;
     }
     return av::GuestProgram::Run::suite;
 }

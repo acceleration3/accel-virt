@@ -352,6 +352,13 @@ def arguments():
     parser.add_argument("--opencl-loader", default=str(ROOT / "third_party" / "opencl-loader"),
                         help="where tools/fetch_opencl_loader.py put the loader's source")
     parser.add_argument("--opencl-pins", default=str(ROOT / "tools" / "opencl_loader_pins.txt"))
+    parser.add_argument("--device-loss", action="store_true",
+                        help="start QEMU with the Vulkan layer that loses a host device on request and run "
+                             "avtest.exe's loss run - the GPU's Direct3D 11 device lost under the desktop - then "
+                             "judge the desktop drawn again; before any other scenario asked for, which then runs "
+                             "on the device made again. Needs --executor naming the real library")
+    parser.add_argument("--loss-layer", default=str(ROOT / "build" / "gpu_fault"),
+                        help="the directory holding VK_LAYER_AV_device_loss's manifest (tests/gpu_fault)")
     parser.add_argument("--d3d", action="store_true",
                         help="run the three D3D probes through the pinned DXVK and vkd3d-proton beside them, on "
                              "the host GPU, instead of the suite; needs the fetched layers, the fetched Vulkan "
@@ -660,6 +667,36 @@ a switch that was taken and does not move for one that was not."""
 UNOFFERED_MODE = "2560x1600"
 """Larger than the display: the driver never offers it, so it must be refused
 rather than committed and scanned out."""
+
+
+LOSS_LAYER = "VK_LAYER_AV_device_loss"
+"""The layer (tests/gpu_fault) that loses a host Vulkan device on request."""
+
+LOSS_KEPT = b"note host_loss.lose"
+"""What avtest's loss run says when the host kept its device: no layer loaded."""
+
+LOSS_RECOVERY_SECONDS = 30
+"""How long DWM is given to make its device again and draw the desktop: its
+own recovery from a TDR takes a few seconds."""
+
+LOSS_LIT_SHARE = 0.5
+"""How much of what was lit before the loss must be lit again: the desktop
+redrawn, not one cursor on black."""
+
+
+def lit_fraction(ppm):
+    """The share of a P6 PPM's pixels that are not black, read from its bytes."""
+    header = re.match(rb"P6\s+(\d+)\s+(\d+)\s+(\d+)\s", ppm)
+    if header is None:
+        return 0.0
+    pixels = ppm[header.end():]
+    count = len(pixels) // 3
+    if count == 0:
+        return 0.0
+    step = max(1, count // 65536)
+    sampled = range(0, count, step)
+    lit = sum(1 for index in sampled if pixels[3 * index] | pixels[3 * index + 1] | pixels[3 * index + 2])
+    return lit / len(sampled)
 
 
 class Screendump:
@@ -1032,6 +1069,12 @@ class GuestRun:
             environment["AV_ECHO_FAULT_AFTER"] = str(self.args.fault_after)
         if self.args.stall_ms or self.args.fault_after:
             environment["AV_ECHO_ONLY_NTH"] = str(self.args.stall_context)
+        # The layer that loses a host Vulkan device when the guest asks
+        # (LOSE_HOST_DEVICE): loaded into every instance the executor and the
+        # libraries it loads make, and into no QEMU a run did not ask for it.
+        if self.args.device_loss:
+            environment["VK_ADD_LAYER_PATH"] = os.path.abspath(self.args.loss_layer)
+            environment["VK_INSTANCE_LAYERS"] = LOSS_LAYER
         self.qemu = subprocess.Popen(qemu_command(self.args, self.work, self.disk, rescue, self.host_gpus),
                                      stdout=output, stderr=subprocess.STDOUT, env=environment)
         output.close()
@@ -1701,6 +1744,42 @@ class GuestRun:
             raise StepFailed("av", f"a no-op took {microseconds} us, past the {AV_LATENCY_LIMIT_US} us threshold")
         self.recording_cost(out)
 
+    def device_loss(self):
+        """A host device lost under the desktop (docs/protocol.md, "Losing the
+        host device"): avtest's loss run, on a QEMU started with the layer
+        that loses one, faults every Direct3D context of the guest on the GPU
+        - DWM's among them - and must see each told and none left waiting.
+        Then the desktop must be drawn again: DWM makes its device again on
+        the one the host made again, which the screen being lit again within
+        LOSS_RECOVERY_SECONDS says."""
+        before = Screendump(self.work / "loss-before.ppm").capture(self.qmp)
+        lit_before = lit_fraction(before.pixels())
+        code, out, error = self.step("loss", lambda: self.agent.run(GUEST_DIRECTORY + "\\avtest.exe", ["loss"],
+                                                                     self.args.step_timeout))
+        (self.work / "loss.txt").write_bytes(out)
+        if LOSS_KEPT in out:
+            raise StepFailed("loss", f"the host kept its device: QEMU did not load {LOSS_LAYER} from "
+                                     f"{self.args.loss_layer}")
+        summary = SUMMARY.search(out)
+        if summary is None:
+            raise StepFailed("loss", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
+        failed = int(summary.group(2))
+        if failed != 0 or code != 0:
+            raise StepFailed("loss", f"{failed} step(s) failed, exit {code}; see loss.txt")
+        self.say(f"loss ok: {int(summary.group(1))} passed, every Direct3D context removed and a new one drawn")
+        deadline = time.monotonic() + LOSS_RECOVERY_SECONDS
+        while True:
+            after = Screendump(self.work / "loss-after.ppm").capture(self.qmp, wait=SCANOUT_WAIT_SECONDS)
+            lit_after = lit_fraction(after.pixels())
+            if lit_after >= lit_before * LOSS_LIT_SHARE:
+                break
+            if time.monotonic() >= deadline:
+                raise StepFailed("loss", f"the desktop was not drawn again: {lit_after:.0%} of it is lit "
+                                         f"{LOSS_RECOVERY_SECONDS} s on, against {lit_before:.0%} before the loss; "
+                                         "see loss-before.ppm and loss-after.ppm")
+            time.sleep(1.0)
+        self.say(f"loss ok: the desktop was drawn again ({lit_after:.0%} lit, {lit_before:.0%} before)")
+
     def recording_cost(self, report):
         """SC-002: what a wire recording costs a no-op round trip. No boot can
         say it alone - one runs with --record and one without - so each keeps
@@ -2077,7 +2156,8 @@ class GuestRun:
         if self.args.opengl_discovery:
             self.opengl_discovery()
             return
-        scenarios = [scenario for chosen, scenario in ((self.args.av, self.av), (self.args.vulkan, self.vulkan),
+        scenarios = [scenario for chosen, scenario in ((self.args.device_loss, self.device_loss),
+                                                        (self.args.av, self.av), (self.args.vulkan, self.vulkan),
                                                         (self.args.opengl, self.opengl),
                                                         (self.args.opencl, self.opencl),
                                                         (self.args.d3d, self.d3d),

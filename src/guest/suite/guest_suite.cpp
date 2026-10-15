@@ -12,7 +12,7 @@ GuestSuite::GuestSuite(Kmt &kmt, GuestReport &report, uint32_t stress_seconds)
       vsync_(kmt, report, search_), transport_(kmt, report, search_, SubApi::vulkan, "transport"), stress_(kmt, report, search_, stress_seconds),
       timeout_(kmt, report, search_), opengl_(kmt, report, search_, SubApi::opengl, "opengl"),
       vulkan_(kmt, report, search_), opencl_(kmt, report, search_), host_import_(kmt, report, search_),
-      isolation_(kmt, report, search_), submit_(kmt, report, search_)
+      isolation_(kmt, report, search_), host_loss_(kmt, report, search_), submit_(kmt, report, search_)
       {
           AV_SCOPE("GuestSuite::GuestSuite");
       }
@@ -43,6 +43,16 @@ uint32_t GuestSuite::run_av()
     /* Last: the context it faults is its own, and a scenario after it would
      * be judging the recovery rather than its own work. */
     isolation_.run();
+    report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
+    report_.finish();
+    return report_.failed();
+}
+
+uint32_t GuestSuite::run_host_loss()
+{
+    AV_SCOPE("GuestSuite::run_host_loss");
+    adapter_.run();
+    host_loss_.run();
     report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
     report_.finish();
     return report_.failed();

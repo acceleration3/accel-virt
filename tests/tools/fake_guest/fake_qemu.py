@@ -500,10 +500,11 @@ def main():
     guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device, hostmem)
     guest.note("argv " + " ".join(argv))
     # What the device's executor was told to do, as the runner set it: the
-    # environment is how a test executor is steered without a rebuild.
+    # environment is how a test executor is steered without a rebuild, and
+    # how the Vulkan layer that loses a device is loaded into it.
     work = os.path.dirname(os.environ["FAKE_GUEST_JOURNAL"])
     with open(os.path.join(work, "work", "environment.json"), "w") as out:
-        json.dump({name: value for name, value in os.environ.items() if name.startswith("AV_ECHO_")}, out)
+        json.dump({name: value for name, value in os.environ.items() if name.startswith(("AV_ECHO_", "VK_INSTANCE_LAYERS", "VK_ADD_LAYER_PATH"))}, out)
     if script.get("exit_at_boot") or (not device and os.environ.get("FAKE_QEMU_RESCUE_FAILS")):
         sys.exit(1)
     agent = field(option(argv, "-chardev", "socket,id=agent"), "path")

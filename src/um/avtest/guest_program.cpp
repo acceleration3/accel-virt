@@ -25,6 +25,7 @@ uint32_t GuestProgram::run()
         if (run_ == Run::timeout) static_cast<void>(suite_.run_timeout());
         else if (run_ == Run::av) static_cast<void>(suite_.run_av());
         else if (run_ == Run::round_trip) static_cast<void>(suite_.run_round_trip());
+        else if (run_ == Run::host_loss) static_cast<void>(suite_.run_host_loss());
         else static_cast<void>(suite_.run());
     } else {
         report_.check("program", "initialize", initialized, 0u);
@@ -37,7 +38,7 @@ uint32_t GuestProgram::run()
 void GuestProgram::report(StateWriter &writer)
 {
     AV_SCOPE("GuestProgram::report");
-    constexpr const char *runs[] = {"suite", "timeout", "av", "trip"};
+    constexpr const char *runs[] = {"suite", "timeout", "av", "trip", "loss"};
     writer.open("program", 0u);
     writer.text("run", runs[static_cast<uint32_t>(run_)]);
     writer.close();

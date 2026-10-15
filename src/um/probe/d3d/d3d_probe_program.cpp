@@ -5,6 +5,7 @@
 #include "guest/probe/d3d12_work.hpp"
 #include "guest/probe/d3d9_work.hpp"
 #include "guest/probe/deferred_map_work.hpp"
+#include "guest/probe/host_loss_work.hpp"
 #include "guest/probe/shared_clear_work.hpp"
 #include "guest/probe/wpf_present_work.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -52,7 +53,8 @@ uint32_t D3d9ProbeProgram::run()
 }
 
 D3d11ProbeProgram::D3d11ProbeProgram()
-    : kmt_(), report_("avd3d11probe"), images_(), window_(), d3d11_(), deferred_(), shared_()
+    : kmt_(), report_("avd3d11probe"), images_(), window_(), d3d11_(), deferred_(), shared_(), lost_(), remade_(),
+      loss_(kmt_)
 {
     AV_SCOPE("D3d11ProbeProgram::D3d11ProbeProgram");
 }
@@ -70,8 +72,19 @@ uint32_t D3d11ProbeProgram::run()
             DeferredMapWork deferred(deferred_);
             deferred.run(steps, window_.window());
         }
-        SharedClearWork shared(shared_);
-        shared.run(steps);
+        {
+            SharedClearWork shared(shared_);
+            shared.run(steps);
+        }
+        /* Last: where the host can lose a device on request, it loses the
+         * one every Direct3D device of the guest on this GPU runs on, the
+         * desktop's among them. Its waits take the kernel's event. */
+        if (kmt_.initialize() == Status::ok) {
+            HostLossWork loss(lost_, remade_, loss_, kmt_);
+            loss.run(steps);
+        } else {
+            report_.check("d3d11", "loss_kmt", Status::no_memory, 0u);
+        }
     } else {
         report_.check("d3d11", "window", Status::not_found, window_.last_error());
     }

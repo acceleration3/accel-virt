@@ -612,6 +612,44 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("a second `off`; the record holds one of each", result.stdout)
         self.assertEqual((self.work / "recording-cost.txt").read_text(), "off 640\noff 700\n")
 
+    def test_a_device_loss_run_loads_the_layer_loses_the_device_and_sees_the_desktop_again(self):
+        """A host device lost under the desktop: QEMU starts with the layer that
+        loses one, avtest's loss run is asked for and passes, and the desktop
+        is lit again afterwards."""
+        report = ("ok host_loss.lose\nok host_loss.idle_code 7\nok host_loss.recreated\n"
+                  "avtest: 14 passed, 0 failed\n")
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": report, "collect": COLLECTED})
+        result = self.run_suite("--device-loss", "--loss-layer", "/nowhere/gpu_fault")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        environment = json.loads((self.work / "environment.json").read_text())
+        self.assertEqual(environment.get("VK_ADD_LAYER_PATH"), "/nowhere/gpu_fault")
+        self.assertEqual(environment.get("VK_INSTANCE_LAYERS"), "VK_LAYER_AV_device_loss")
+        self.assertIn("avtest.exe loss", self.journal.read_text())
+        self.assertIn("guest: loss ok: 14 passed", result.stdout)
+        self.assertIn("guest: loss ok: the desktop was drawn again", result.stdout)
+        self.assertTrue((self.work / "loss.txt").exists())
+        self.assertNotIn("guest: report ok", result.stdout)
+
+    def test_a_device_loss_run_whose_host_kept_its_device_fails_naming_the_layer(self):
+        report = ("note host_loss.lose the host keeps its devices: it was started without the device-loss layer\n"
+                  "avtest: 6 passed, 0 failed\n")
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": report, "collect": COLLECTED})
+        result = self.run_suite("--device-loss")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: loss failed: the host kept its device", result.stdout)
+        self.assertIn("VK_LAYER_AV_device_loss", result.stdout)
+
+    def test_an_ordinary_run_loads_no_loss_layer(self):
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
+                             "avtest": "ok transport.nop\navtest: 1 passed, 0 failed\n", "collect": COLLECTED})
+        result = self.run_suite("--av")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        environment = json.loads((self.work / "environment.json").read_text())
+        self.assertNotIn("VK_INSTANCE_LAYERS", environment)
+        self.assertNotIn("VK_ADD_LAYER_PATH", environment)
+
     def test_an_av_run_with_a_failed_step_fails(self):
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": "FAIL opencl.sum status=4 63\navtest: 11 passed, 1 failed\n",

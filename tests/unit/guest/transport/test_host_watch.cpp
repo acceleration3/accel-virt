@@ -111,10 +111,15 @@ TEST(host_watch, reads_the_completion_and_the_fault_from_the_page)
   device.write(FencePage(7u, 9u));
   CHECK_EQ(device.watch().completed(), 7u);
   CHECK(!device.watch().faulted());
+  CHECK_EQ(device.watch().fault_code(), 0u);
   device.write(FencePage(7u, 9u, 6u));
   CHECK(device.watch().faulted());
+  CHECK_EQ(device.watch().fault_code(), 6u);
+  device.write(FencePage(7u, 9u, 7u));
+  CHECK_EQ(device.watch().fault_code(), 7u);
   device.watch().read_page(nullptr);
   CHECK(!device.watch().faulted());
+  CHECK_EQ(device.watch().fault_code(), 0u);
   CHECK_EQ(device.watch().completed(), 0u); }
 
 /* A fault ends the wait at once, whatever else moved. */

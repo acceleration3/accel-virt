@@ -342,6 +342,10 @@ public:
      * page (device lost) and runs out its bound: a device that gave up on the
      * context while the process waited. */
     void          time_out_faulted();
+    /* The context's fence page faulted now, device lost, with no wait: a
+     * host that lost the device an idle context runs on. False for a context
+     * that is not one, or has no page. */
+    bool          fault_page_of(std::uint32_t context);
     /* The next `count` waits for a context take nothing, move nothing and run
      * out their bound: a host that has stopped, once the counts above are
      * spent. */

@@ -41,6 +41,9 @@ public:
     uint64_t completed() const;
     /* Whether the page says the device faulted the context. */
     bool     faulted() const;
+    /* Why, as the page says (docs/protocol.md, fault codes): 7 for a host
+     * device that was lost. 0 while it is not faulted, or with no page. */
+    uint32_t fault_code() const;
 
     /* A wait begins: what is published now is the baseline, and the silence
      * is counted from the first look. */

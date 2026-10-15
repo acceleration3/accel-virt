@@ -7,6 +7,8 @@ namespace av {
 namespace {
 
 constexpr HRESULT  invalid_argument = static_cast<HRESULT>(0x80070057u);
+/* DXVK's IDXGIVkInteropDevice (src/dxgi/dxgi_interfaces.h). */
+constexpr GUID     dxvk_interop_device = {0xe2ef5fa5u, 0xdc21u, 0x4af7u, {0x90u, 0xc4u, 0xf6u, 0x7eu, 0xf6u, 0xa0u, 0x93u, 0x23u}};
 constexpr uint32_t channels = 4u;
 constexpr float    full = 255.0F;
 
@@ -90,6 +92,16 @@ int32_t WindowsD3d11SharedEntry::removed_reason()
 {
     AV_SCOPE("WindowsD3d11SharedEntry::removed_reason");
     return device_->GetDeviceRemovedReason();
+}
+
+bool WindowsD3d11SharedEntry::layered()
+{
+    AV_SCOPE("WindowsD3d11SharedEntry::layered");
+    IUnknown *interop = nullptr;
+    if (device_ == nullptr || device_->QueryInterface(dxvk_interop_device, reinterpret_cast<void **>(&interop)) < 0)
+        return false;
+    interop->Release();
+    return true;
 }
 
 void WindowsD3d11SharedEntry::release()

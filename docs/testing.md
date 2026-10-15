@@ -709,6 +709,28 @@ What it cannot see, and L5 still must:
   twice - each answered with a status, the object untouched and both contexts
   still running
 
+- a host device lost under the guest (`test_fullstack_device_loss.cpp`):
+  `HostLossScenario` - what `avtest.exe loss` runs in the guest - over the
+  real driver, device core and executor root, whose Direct3D 11 device is
+  DXVK's on this machine's GPU, lost by `VK_LAYER_AV_device_loss`
+  (`tests/gpu_fault`), the Vulkan layer that loses a device when
+  `vkAvLoseDeviceAV` is called on it. It is a real loss as every library
+  above sees it - each submission and wait answers `VK_ERROR_DEVICE_LOST` -
+  with the GPU left running what it was given before, and a submission after
+  made without its command buffers, so no semaphore is left unsignalled; the
+  test alone loads it (`AV_LOSS_LAYER_ENVIRONMENT`). The context that drew
+  is refused at once, the idle one - DWM on a still desktop - reads its fault
+  and code 7 off its page within a moment without sending anything, a
+  Vulkan context on its own device runs on, and a new Direct3D context draws
+  on the device the host made again.
+  `test_d3d_device_loss_device.cpp` holds the host half to the same claims
+  without a guest: every session on the device woken once, a read back
+  answering removed at once, the scanout's reads refused, nobody joining the
+  lost device, a renewal refused while a session stays on it and made once
+  the last leaves, and the loss DXVK finds by itself - a failed submission,
+  declared by nobody - seen at the next session's command, with DXVK's own
+  Map of what that submission used returning under a watchdog.
+
 Still to come: a display path - a VidPn committed and a primary scanned out -
 through the rig.
 
@@ -871,6 +893,21 @@ gives it (docs/host-memory.md, Budgets).
   session on it, the capture delivered 0.1 frames a second and the desktop
   went black. On that host the unfixed executor hangs the probe in
   `shared_readback`, which the run reports as the probe timing out.
+
+  After those, the D3D11 probe has the host lose its GPU's Direct3D 11 device
+  under it (`HostLossWork`, the `loss_*` steps; docs/protocol.md, "Losing the
+  host device"): a device clears and reads back a target (`loss_device`), a
+  Direct3D context of the probe's own asks for LOSE_HOST_DEVICE
+  (`HostLossRequest`, `loss_lose`), the old device must say it was removed -
+  a refused read or GetDeviceRemovedReason - within 10 s (`loss_removed`,
+  milliseconds) with a removal code (`loss_reason`), and a new device, made
+  while the old one is still held as DWM makes its own, clears and reads back
+  (`loss_recreated`, `loss_texel`). A host started without the loss layer keeps
+  its device: `note d3d11.loss_lose`, and nothing else runs, so an ordinary
+  run is untouched; so does a layer's device (DXVK beside the probe under
+  `--d3d`), which runs on a host Vulkan device of its own. The steps lose the
+  device for the probe on the system's runtime - `gpu_matrix.py`'s probes
+  suite - on a QEMU whose environment loads the layer.
 
   **Probes from an application's calls.** With `AV_D3D11_TRACE` in a
   process's environment, avumd writes the Direct3D 11 runtime's calls into it
@@ -1050,6 +1087,15 @@ gives it (docs/host-memory.md, Budgets).
   043, live in 044) a held context holds nothing the guest waits on, so the
   guest half of this cannot time out yet; what the injection proves today is at
   L3 and L4.
+- **A host device lost under the desktop** is `--device-loss`: QEMU starts
+  with `VK_ADD_LAYER_PATH` naming `--loss-layer` (`build/gpu_fault`) and
+  `VK_INSTANCE_LAYERS=VK_LAYER_AV_device_loss`, and the guest is asked for
+  `avtest.exe loss` (`HostLossScenario`), which loses the GPU's Direct3D 11
+  device - DWM's with it - and fails a context not told, or told late. The
+  run then wants the desktop lit again within 30 s, from screendumps before
+  and after: DWM made its device again. It goes before any other scenario
+  the run asked for, which then runs on the device made again. A host that
+  kept its device - no layer loaded - fails the run naming the layer.
 - **The long run** is `--stress-minutes N`: the suite's `stress` scenario
   submits one fence at a time and waits for each for N minutes, waiting out a
   vertical blank between batches so the blank's interrupt is enabled and

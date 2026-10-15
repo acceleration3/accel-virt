@@ -30,6 +30,10 @@ public:
     virtual int32_t read_texel(uint32_t target, uint32_t x, uint32_t y, uint8_t *texel) = 0;
     /* GetDeviceRemovedReason: S_OK while the device stands. */
     virtual int32_t removed_reason() = 0;
+    /* Whether the device is a layer's - DXVK beside the probe, on the Vulkan
+     * ICD - rather than the system's runtime on this driver's avumd, whose
+     * devices run on the host's Direct3D 11 device. */
+    virtual bool    layered() = 0;
     /* Everything the device made, and the device. */
     virtual void    release() = 0;
 

@@ -68,6 +68,12 @@ public:
     /* A device-side failure (a refused submission, a faulted wait, a bad reply)
      * loses the context: every later send fails until it is torn down. */
     bool                 faulted() const;
+    /* What the context's fence page says now, without a wait: whether the
+     * host faulted the context - which an idle context learns only here, or
+     * by its wake event - and why (HostWatch::fault_code). False and 0 from
+     * a driver that maps no page. */
+    bool                 host_faulted() const;
+    uint32_t             host_fault_code() const;
     /* The highest fence whose batch the host GPU has finished, read from the
      * context's fence page (docs/protocol.md, "Fence page"): memory reused
      * after a batch is free once this passes the batch's fence. 0 before any,

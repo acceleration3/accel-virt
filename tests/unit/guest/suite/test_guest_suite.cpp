@@ -107,6 +107,24 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK(report.invariants_hold()); }
 
+/* The host-loss run alone: a host that answers the Direct3D context nothing
+ * it can read stops the scenario at its first step, before anything is asked
+ * to be lost, and leaves nothing open. The run itself, against a host that
+ * draws and loses a device, is test_fullstack_device_loss's. */
+TEST(guest_suite, the_host_loss_run_stops_at_a_host_that_draws_nothing)
+{ MockKmt kmt;
+  kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
+  kmt.answer_waits(nullptr, 0u);
+  GuestReport report;
+  GuestSuite suite(kmt, report, 0u);
+  CHECK_EQ(suite.run_host_loss(), 1u);
+  CHECK(has_line(report, "ok host_loss.initialize\n"));
+  CHECK(has_line(report, "FAIL host_loss.drawn"));
+  CHECK(!has_line(report, "host_loss.lose"));
+  CHECK(has_line(report, "ok suite.close_adapter\n"));
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
 TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkmt)
 { MockKmt kmt;
   kmt.add_adapter(PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u), 1300u);

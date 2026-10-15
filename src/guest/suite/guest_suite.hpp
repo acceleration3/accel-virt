@@ -8,6 +8,7 @@
 #include "guest/suite/allocation_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
+#include "guest/suite/host_loss_scenario.hpp"
 #include "guest/suite/host_visible_import_scenario.hpp"
 #include "guest/suite/isolation_scenario.hpp"
 #include "guest/suite/opencl_scenario.hpp"
@@ -44,6 +45,10 @@ public:
      * (feature 044). */
     uint32_t run_round_trip();
     uint32_t run_av();
+    /* The host device lost under the guest (HostLossScenario), for a run
+     * whose host loaded the layer that loses one on request. Alone: every
+     * Direct3D context of the guest on that GPU is faulted by it. */
+    uint32_t run_host_loss();
 
 private:
     Kmt               &kmt_;
@@ -62,6 +67,7 @@ private:
     OpenClScenario      opencl_;
     HostVisibleImportScenario host_import_;
     IsolationScenario   isolation_;
+    HostLossScenario    host_loss_;
     SubmitBenchmark     submit_;
 };
 

@@ -28,6 +28,9 @@ public:
      * loses the device: every read after it is refused, and the device says
      * it hung. */
     void          lose_device_below(std::uint32_t bytes);
+    /* The device lost now, as the host losing it under the process makes
+     * it: every read after is refused, and the device says it hung. */
+    void          lose();
     /* A read of a target's last texel finds the bytes past its tight rows. */
     void          misplace_rows();
     std::uint32_t calls(Call call) const;
@@ -43,6 +46,9 @@ public:
     void         clear(std::uint32_t target, const std::uint8_t *colour) override;
     std::int32_t read_texel(std::uint32_t target, std::uint32_t x, std::uint32_t y, std::uint8_t *texel) override;
     std::int32_t removed_reason() override;
+    /* As set_layered says: the system's runtime unless told. */
+    bool         layered() override;
+    void         set_layered(bool layered);
     void         release() override;
 
 private:
@@ -63,6 +69,7 @@ private:
     std::uint32_t last_x_;
     std::uint32_t last_y_;
     bool          misplace_;
+    bool          layered_ = false;
     bool          lost_;
     bool          live_;
 };
