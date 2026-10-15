@@ -256,7 +256,9 @@ table below defines runs in the device itself; another API's command, any other
 transport id, or one the executor does not know is skipped. The answer of the
 last command in the batch whose *generate reply* flag is set is written to the
 reply slot before head passes the batch, so a producer waiting for head reads a
-finished answer. A command framed wrong, trailing bytes too short for a header,
+finished answer; and what the batch's commands stored into guest-visible memory,
+through any mapping the host made of it, is there before either (the device
+fences its stores; docs/host-memory.md). A command framed wrong, trailing bytes too short for a header,
 a reply asked for with no reply slot, a transport command carrying a body it
 does not have, a payload the executor cannot decode, or a lost host device stops
 the context (see Consumption) and the batch does not complete; the first four
