@@ -417,7 +417,11 @@ TEST(opencl_backend_device, a_property_list_longer_than_the_drivers_own_is_refus
   cl_context const second = backend.on_clCreateContext(list, 1u, &named, nullptr);
   CHECK(second != nullptr);
   backend.made(av::clproto::HandleKind::context, second);
-  static_cast<void>(::clReleaseContext(second));
+  /* Let go of as the guest lets go of one, so the registry forgets it: a
+   * release behind its back is a second one at the shut-down, of a context
+   * already freed. */
+  CHECK_EQ(backend.on_clReleaseContext(second), CL_SUCCESS);
+  backend.released(av::clproto::HandleKind::context, second);
   backend.shut_down(); }
 
 /* What is refused before any host object is made, which is every question the
@@ -1037,7 +1041,16 @@ TEST(opencl_backend_device, a_gl_context_s_cl_context_reaches_its_objects_by_cop
   read_gl_buffer(application, buffer, seen, sizeof seen);
   CHECK(std::memcmp(seen, values, sizeof values) == 0);
   ::clReleaseCommandQueue(queue);
+  /* The guest's reference is the registry's to drop, and the shut-down drops
+   * it: a reference of the test's own is what is left to look at, and the
+   * test's to release. Releasing `mem` without one is a second release of a
+   * freed object, which rusticl writes into whatever the allocator has put
+   * there since. */
+  CHECK_EQ(::clRetainMemObject(mem), CL_SUCCESS);
   backend.shut_down();
+  cl_uint left = 0u;
+  CHECK_EQ(::clGetMemObjectInfo(mem, CL_MEM_REFERENCE_COUNT, sizeof left, &left, nullptr), CL_SUCCESS);
+  CHECK_EQ(left, 1u);
   ::clReleaseMemObject(mem);
   application.close();
   guest_gl.shut_down(); }
