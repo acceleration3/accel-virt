@@ -1481,11 +1481,15 @@ the `point` of `PresentResource12` for Direct3D 12 - and hand the point to the
 kernel in the present's private driver data (`PresentPointRecord`, 16 bytes:
 u32 magic `0x00505641`, u32 point, u64 reserved 0); the miniport adds the
 source allocation's shared id, which it minted, so no process names a surface
-it was not given. The device stages a surface's frames only once a blt has
-asked for one of them - a flip-model buffer the compositor reads itself costs
-nothing - so the first blt of a surface is refused, and each one after reads a
-frame copied where the writer presented it: what the writer draws after the
-present never reaches the destination. The device waits for the writer to
+it was not given. Direct3D 9's windowed presents and Direct3D 11's blt-model
+buffers are read by a blt every time, so the device stages each of their
+frames, from the first. A Direct3D 12 surface is staged only once a blt has
+asked for one of its frames - a flip-model buffer the compositor reads itself
+costs nothing - so its first blt is refused. Every blt after reads a frame
+copied where the writer presented it: what the writer draws after the present
+never reaches the destination. A blt that asks for a frame the device is
+still staging waits for it: refused there, an application that presents only
+once - WPF, for a window that does not change - is never shown. The device waits for the writer to
 reach the point and the GPU to copy it, up to half a second - past that the
 present is refused - and lets the frame go once read, or refused. It arrives
 in the surface's own byte order (a red-first surface arrives red-first, as its

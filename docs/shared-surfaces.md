@@ -268,6 +268,11 @@ order Windows gives implicitly, between a present and whoever shows it.
     on its queue, Vulkan to a host-visible image.
   - **A flipped surface.** No blt ever asks for it, so no stage is ever made,
     and flip-model presents cost nothing.
+  - **A writer that knows a blt reads it.** Direct3D 9's windowed presents and
+    Direct3D 11's blt-model buffers stage every present, from the first, and
+    a blt asking for a frame still being staged waits for it. Refusing it
+    there lost each buffer's first frame, and WPF presents a window that does
+    not change exactly once: its windows stayed black.
 
   The writer never waits for a reader. The staging copy is ordered on the
   writer's own queue, so no back-edge runs from the present engine into a guest

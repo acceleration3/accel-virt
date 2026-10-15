@@ -717,7 +717,7 @@ bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource, uint3
     ID3D12Resource *const     shown = objects_.find_as<ID3D12Resource>(resource, D3dObjectKind::resource12);
     if (from == nullptr || shown == nullptr || !presentation_.present(from)) return false;
     const SurfacePoint frame(SurfaceIdentity(shown).surface(), point);
-    if (surfaces_ == nullptr || !surfaces_->presented(frame)) return true;
+    if (surfaces_ == nullptr || !surfaces_->presented(frame, SharedSurfaces::Staging::once_blt_read)) return true;
     StagedFrame *const staged = device_->stage_frame(from, shown);
     surfaces_->hold(frame, staged);
     return true;

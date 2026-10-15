@@ -14,6 +14,9 @@ using av::SharedSurfaces;
 using av::StagedFrame;
 using av::SurfacePoint;
 
+constexpr SharedSurfaces::Staging when_read = SharedSurfaces::Staging::once_blt_read;
+constexpr SharedSurfaces::Staging every_present = SharedSurfaces::Staging::every_present;
+
 namespace {
 
 /* A frame whose reading is scripted: `copying` reads before it maps, or a
@@ -57,13 +60,36 @@ constexpr std::uint64_t surface = 0x51u;
  * writer passed is refused at once, and from then on the writer stages. */
 TEST(shared_surfaces, a_surface_is_staged_only_once_a_blt_has_asked_for_it)
 { SharedSurfaces surfaces;
-  CHECK(!surfaces.presented(SurfacePoint(surface, 1u)));
-  CHECK(!surfaces.presented(SurfacePoint(surface, 2u)));
+  CHECK(!surfaces.presented(SurfacePoint(surface, 1u), when_read));
+  CHECK(!surfaces.presented(SurfacePoint(surface, 2u), when_read));
   AvFrameView view = {};
   CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1000u, view));
   CHECK(view.pixels == nullptr);
-  CHECK(surfaces.presented(SurfacePoint(surface, 3u)));
-  CHECK(!surfaces.presented(SurfacePoint(surface + 1u, 1u)));   /* another surface learns for itself */
+  CHECK(surfaces.presented(SurfacePoint(surface, 3u), when_read));
+  CHECK(!surfaces.presented(SurfacePoint(surface + 1u, 1u), when_read));   /* another surface learns for itself */
+  CHECK(surfaces.invariants_hold()); }
+
+/* A writer that knows a blt reads every present - Direct3D 9's windowed
+ * presents, Direct3D 11's blt-model buffers - stages its surface's first one
+ * too, and a blt asking for it before it is kept waits rather than being
+ * refused: WPF presents a window that does not change exactly once, and a
+ * refusal there left the window black. */
+TEST(shared_surfaces, a_writer_staging_every_present_has_its_first_frame_waited_for)
+{ SharedSurfaces surfaces;
+  FakeFrame      frame;
+  AvFrameView    view = {};
+  const SurfacePoint first(surface, 1u);
+  CHECK(surfaces.presented(first, every_present));
+  CHECK(!surfaces.map(first, 0u, view));   /* pending: one look, a wait */
+  CHECK(surfaces.keep(first, frame));
+  CHECK(surfaces.map(first, 0u, view));
+  CHECK(view.pixels == frame.pixels());
+  surfaces.unmap(first);
+  CHECK(!surfaces.presented(SurfacePoint(surface, 2u), when_read));   /* the wait taught nothing */
+  const SurfacePoint third(surface, 3u);
+  CHECK(surfaces.presented(third, every_present));
+  surfaces.hold(third, nullptr);   /* staging failed: refused at once */
+  CHECK(!surfaces.map(third, 1000u, view));
   CHECK(surfaces.invariants_hold()); }
 
 /* A frame kept is mapped once, refused to a second read while mapped, and
@@ -73,7 +99,7 @@ TEST(shared_surfaces, a_kept_frame_is_read_once_and_given_back_once)
 { SharedSurfaces surfaces;
   FakeFrame      frame;
   const SurfacePoint at(surface, 4u);
-  static_cast<void>(surfaces.presented(at));
+  static_cast<void>(surfaces.presented(at, when_read));
   CHECK(surfaces.keep(at, frame));
   AvFrameView view = {};
   CHECK(surfaces.map(at, 0u, view));
@@ -96,7 +122,7 @@ TEST(shared_surfaces, a_copying_frame_is_waited_for_and_a_failed_one_given_back)
 { SharedSurfaces surfaces;
   FakeFrame      copying(3u);
   const SurfacePoint first(surface, 1u);
-  static_cast<void>(surfaces.presented(first));
+  static_cast<void>(surfaces.presented(first, when_read));
   CHECK(surfaces.keep(first, copying));
   AvFrameView view = {};
   CHECK(surfaces.map(first, 1000u, view));
@@ -105,7 +131,7 @@ TEST(shared_surfaces, a_copying_frame_is_waited_for_and_a_failed_one_given_back)
   FakeFrame          broken;
   const SurfacePoint second(surface, 2u);
   broken.fail();
-  static_cast<void>(surfaces.presented(second));
+  static_cast<void>(surfaces.presented(second, when_read));
   CHECK(surfaces.keep(second, broken));
   CHECK(!surfaces.map(second, 1000u, view));
   CHECK_EQ(broken.reads(), 1u);
@@ -118,17 +144,17 @@ TEST(shared_surfaces, a_copying_frame_is_waited_for_and_a_failed_one_given_back)
 TEST(shared_surfaces, a_point_not_reached_or_still_being_staged_is_waited_for)
 { SharedSurfaces surfaces;
   AvFrameView   view = {};
-  static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u)));
+  static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u), when_read));
   CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1u, view));   /* not reached: waits, then gives up */
-  CHECK(!surfaces.presented(SurfacePoint(surface, 2u)));        /* and learned nothing */
+  CHECK(!surfaces.presented(SurfacePoint(surface, 2u), when_read));        /* and learned nothing */
   CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1000u, view)); /* passed: learned */
-  CHECK(surfaces.presented(SurfacePoint(surface, 3u)));
+  CHECK(surfaces.presented(SurfacePoint(surface, 3u), when_read));
   CHECK(!surfaces.map(SurfacePoint(surface, 3u), 0u, view));    /* pending: one look, a wait */
   FakeFrame frame;
   CHECK(surfaces.keep(SurfacePoint(surface, 3u), frame));
   CHECK(surfaces.map(SurfacePoint(surface, 3u), 0u, view));
   surfaces.unmap(SurfacePoint(surface, 3u));
-  CHECK(surfaces.presented(SurfacePoint(surface, 4u)));
+  CHECK(surfaces.presented(SurfacePoint(surface, 4u), when_read));
   surfaces.abandon(SurfacePoint(surface, 4u));
   CHECK(!surfaces.map(SurfacePoint(surface, 4u), 1000u, view));
   surfaces.abandon(SurfacePoint());
@@ -147,9 +173,9 @@ TEST(shared_surfaces, a_staged_frame_is_held_or_given_back_and_none_abandons)
   CHECK_EQ(kept.releases(), 1u);
   surfaces.hold(SurfacePoint(), &unkept);   /* names nothing: no slot takes it */
   CHECK_EQ(unkept.releases(), 1u);
-  CHECK(!surfaces.presented(SurfacePoint(surface, 2u)));          /* no blt has asked yet */
+  CHECK(!surfaces.presented(SurfacePoint(surface, 2u), when_read));          /* no blt has asked yet */
   CHECK(!surfaces.map(SurfacePoint(surface, 2u), 1000u, view));   /* passed: learned */
-  CHECK(surfaces.presented(SurfacePoint(surface, 3u)));
+  CHECK(surfaces.presented(SurfacePoint(surface, 3u), when_read));
   surfaces.hold(SurfacePoint(surface, 3u), nullptr);
   CHECK(!surfaces.map(SurfacePoint(surface, 3u), 1000u, view));
   CHECK(surfaces.invariants_hold()); }
@@ -188,7 +214,7 @@ TEST(shared_surfaces, release_gives_back_a_surface_s_frames_and_forgets_it)
 { SharedSurfaces surfaces;
   FakeFrame      kept, reading, other;
   AvFrameView   view = {};
-  static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u)));
+  static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u), when_read));
   CHECK(!surfaces.map(SurfacePoint(surface, 1u), 0u, view));   /* learned */
   CHECK(surfaces.keep(SurfacePoint(surface, 2u), kept));
   CHECK(surfaces.keep(SurfacePoint(surface, 3u), reading));
@@ -198,7 +224,7 @@ TEST(shared_surfaces, release_gives_back_a_surface_s_frames_and_forgets_it)
   CHECK_EQ(kept.releases(), 1u);
   CHECK_EQ(reading.releases(), 0u);
   CHECK_EQ(other.releases(), 0u);
-  CHECK(!surfaces.presented(SurfacePoint(surface, 4u)));   /* forgotten: learns again */
+  CHECK(!surfaces.presented(SurfacePoint(surface, 4u), when_read));   /* forgotten: learns again */
   surfaces.unmap(SurfacePoint(surface, 3u));
   CHECK_EQ(reading.releases(), 1u);
   surfaces.release(0u);
@@ -210,15 +236,15 @@ TEST(shared_surfaces, release_gives_back_a_surface_s_frames_and_forgets_it)
 TEST(shared_surfaces, past_its_rows_the_surface_presented_longest_ago_is_forgotten)
 { SharedSurfaces surfaces;
   AvFrameView   view = {};
-  static_cast<void>(surfaces.presented(SurfacePoint(1u, 1u)));
+  static_cast<void>(surfaces.presented(SurfacePoint(1u, 1u), when_read));
   CHECK(!surfaces.map(SurfacePoint(1u, 1u), 0u, view));
-  static_cast<void>(surfaces.presented(SurfacePoint(2u, 1u)));
+  static_cast<void>(surfaces.presented(SurfacePoint(2u, 1u), when_read));
   CHECK(!surfaces.map(SurfacePoint(2u, 1u), 0u, view));
   for (std::uint64_t other = 3u; other <= SharedSurfaces::max_surfaces; other++)
-      static_cast<void>(surfaces.presented(SurfacePoint(other, 1u)));
-  static_cast<void>(surfaces.presented(SurfacePoint(SharedSurfaces::max_surfaces + 1u, 1u)));
-  CHECK(surfaces.presented(SurfacePoint(2u, 2u)));    /* still known */
-  CHECK(!surfaces.presented(SurfacePoint(1u, 2u)));   /* forgotten for the newcomer */
+      static_cast<void>(surfaces.presented(SurfacePoint(other, 1u), when_read));
+  static_cast<void>(surfaces.presented(SurfacePoint(SharedSurfaces::max_surfaces + 1u, 1u), when_read));
+  CHECK(surfaces.presented(SurfacePoint(2u, 2u), when_read));    /* still known */
+  CHECK(!surfaces.presented(SurfacePoint(1u, 2u), when_read));   /* forgotten for the newcomer */
   CHECK(surfaces.invariants_hold()); }
 
 /* Points count on past 2^32 as their difference does: a writer that wrapped
@@ -227,12 +253,12 @@ TEST(shared_surfaces, past_its_rows_the_surface_presented_longest_ago_is_forgott
 TEST(shared_surfaces, points_compare_across_the_wrap_and_nothing_names_nothing)
 { SharedSurfaces surfaces;
   AvFrameView   view = {};
-  static_cast<void>(surfaces.presented(SurfacePoint(surface, 0xFFFFFFFFu)));
-  static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u)));
+  static_cast<void>(surfaces.presented(SurfacePoint(surface, 0xFFFFFFFFu), when_read));
+  static_cast<void>(surfaces.presented(SurfacePoint(surface, 1u), when_read));
   CHECK(!surfaces.map(SurfacePoint(surface, 0xFFFFFFFFu), 1000u, view));
-  CHECK(surfaces.presented(SurfacePoint(surface, 2u)));   /* that ask was a passed point's */
-  CHECK(!surfaces.presented(SurfacePoint()));
-  CHECK(!surfaces.presented(SurfacePoint(surface, 0u)));
+  CHECK(surfaces.presented(SurfacePoint(surface, 2u), when_read));   /* that ask was a passed point's */
+  CHECK(!surfaces.presented(SurfacePoint(), when_read));
+  CHECK(!surfaces.presented(SurfacePoint(surface, 0u), when_read));
   CHECK(!surfaces.map(SurfacePoint(), 1000u, view));
   surfaces.unmap(SurfacePoint());
   CHECK(surfaces.invariants_hold()); }

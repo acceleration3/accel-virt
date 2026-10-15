@@ -30,7 +30,7 @@ SharedSurfaces::~SharedSurfaces()
     pthread_mutex_destroy(&mutex_);
 }
 
-bool SharedSurfaces::presented(const SurfacePoint &frame)
+bool SharedSurfaces::presented(const SurfacePoint &frame, Staging staging)
 {
     AV_SCOPE("SharedSurfaces::presented");
     if (!frame.names()) return false;
@@ -38,7 +38,7 @@ bool SharedSurfaces::presented(const SurfacePoint &frame)
     Surface &presenting = row(frame.surface());
     presenting.point_ = frame.point();
     presenting.presented_ = ++clock_;
-    const bool stage = presenting.blt_read_;
+    const bool stage = staging == Staging::every_present || presenting.blt_read_;
     presenting.pending_ = stage ? frame.point() : 0u;
     unlock();
     return stage;

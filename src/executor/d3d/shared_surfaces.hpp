@@ -5,12 +5,20 @@
  * and the present engine's reads go through it.
  *
  * A writer reports each present it publishes - a point on its surface - and
- * is told whether to stage that frame now, in its own order. It is told to
- * only once a blt has asked for this surface: the compositor reads a
- * flip-model buffer itself and never asks, so flips cost nothing. The first
- * blt to ask for a surface finds its point passed and nothing staged; that is
- * what teaches this table, and that frame is not shown. Direct3D 11 knows its
- * blt-model buffers and stages every one of their presents.
+ * is told whether to stage that frame now, in its own order. A writer that
+ * knows a blt reads every present - Direct3D 9's windowed presents, Direct3D
+ * 11's blt-model buffers - stages each one, from the first. One that cannot
+ * know - Direct3D 12's - is told to only once a blt has asked for this
+ * surface: the compositor reads a flip-model buffer itself and never asks, so
+ * flips cost nothing. The first blt to ask for such a surface finds its point
+ * passed and nothing staged; that is what teaches this table, and that frame
+ * is not shown.
+ *
+ * A frame a writer was told to stage is pending from the report until it is
+ * kept or abandoned: a blt asking for it in between waits for it. A frame
+ * staged with nothing pending would be refused there, and an application that
+ * presents once - WPF draws a window that does not change exactly once -
+ * would never be shown.
  *
  * Its own lock guards the table and is held around nothing else: a frame is
  * read and given back with it released, so an API's lock is never taken
@@ -42,10 +50,15 @@ public:
     SharedSurfaces(const SharedSurfaces &) = delete;
     SharedSurfaces &operator=(const SharedSurfaces &) = delete;
 
-    /* A writer published `frame`: true when a blt has read its surface
-     * before, and the writer is to stage it now (keep). A frame that names
+    /* Whether a writer stages every present of a surface, or only those of
+     * one a blt has read before. */
+    enum class Staging { every_present, once_blt_read };
+
+    /* A writer published `frame`: true when it is to stage it now (keep) -
+     * every present, or once a blt has read its surface before - and the
+     * frame is pending until it is kept or abandoned. A frame that names
      * nothing is false. */
-    bool presented(const SurfacePoint &frame);
+    bool presented(const SurfacePoint &frame, Staging staging);
     /* `staged` kept as `frame` until it is read and let go, or evicted for a
      * newer one; it replaces one already kept as `frame`. False when every
      * slot is being read, and `staged` is the caller's to give back. */

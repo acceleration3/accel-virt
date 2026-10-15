@@ -444,7 +444,7 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
         surfaces_->abandon(frame);
         return true;
     }
-    static_cast<void>(surfaces_->presented(frame));
+    static_cast<void>(surfaces_->presented(frame, SharedSurfaces::Staging::every_present));
     StagedFrame *const staged = host_->stage_frame(device(), source, desc.Width, desc.Height,
                                                    static_cast<uint32_t>(desc.Format),
                                                    desc.MultiSampleType != D3DMULTISAMPLE_NONE);

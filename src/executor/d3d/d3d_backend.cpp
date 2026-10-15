@@ -1822,7 +1822,7 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
     if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !extent_of(found, subresource, width, height, depth, format))
         return true;
     if (!DxgiFormatLayout(format).word_texels()) return true;
-    static_cast<void>(surfaces_->presented(frame));
+    static_cast<void>(surfaces_->presented(frame, SharedSurfaces::Staging::every_present));
     StagedFrame *const staged =
         device11_->stage_frame(static_cast<ID3D11Texture2D *>(found), subresource, width, height, format);
     surfaces_->hold(frame, staged);
