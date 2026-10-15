@@ -131,8 +131,13 @@ Status GuestContext::serve()
     if (observer_.failed()) state_ = State::failed;
     /* What the device has finished, where the process that submits for itself
      * reads it: the hardware queue's progress is the only thing it has to wait
-     * on, since none of its submissions passed through the driver. */
-    if (progress_ != nullptr) *progress_ = fences_.completed_fence();
+     * on, since none of its submissions passed through the driver. A context
+     * the device faulted - its host device lost - or whose page failed will
+     * finish nothing more, and its progress is the counter's end, as a removed
+     * device's monitored fences are signalled: a wait in the kernel on it
+     * would otherwise never end, as the driver's own packets already do not. */
+    const bool lost = observer_.faulted() || observer_.failed();
+    if (progress_ != nullptr) *progress_ = lost ? UINT64_MAX : fences_.completed_fence();
     return status;
 }
 

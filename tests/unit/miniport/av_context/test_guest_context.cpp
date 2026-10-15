@@ -343,6 +343,38 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   CHECK_EQ(progress, 3u);
   CHECK_EQ(fixture.context().completed(), 4u); }
 
+/* A context the device faulted - its host device lost - finishes nothing more:
+ * the progress a process submitting for itself waits on in the kernel is the
+ * counter's end, so that wait ends, as one on a removed device's fence does;
+ * and so for a page the driver could not believe. */
+TEST(guest_context, a_faulted_or_failed_context_reports_its_progress_finished)
+{ Fixture      fixture;
+  std::uint64_t progress = 0u;
+  fixture.established();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().user_mode_submits(&progress);
+  fixture.platform().set_irql(Irql::passive);
+  std::uint64_t tail = 64u;
+  std::memcpy(fixture.memory().pages().ring_view() + 8u, &tail, 8u);
+  static_cast<void>(FencePage(1u, 64u).encode(fixture.page(), av::FencePage::encoded_size));
+  CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
+  CHECK_EQ(progress, 1u);
+  static_cast<void>(FencePage(1u, 65u, 7u).encode(fixture.page(), av::FencePage::encoded_size));
+  static_cast<void>(fixture.at_dispatch(&GuestContext::serve));
+  CHECK(fixture.context().faulted());
+  CHECK_EQ(fixture.context().fault_code(), 7u);
+  CHECK_EQ(progress, UINT64_MAX);
+  Fixture       lied_to;
+  std::uint64_t lied_progress = 0u;
+  lied_to.established();
+  lied_to.platform().set_irql(Irql::dispatch);
+  lied_to.context().user_mode_submits(&lied_progress);
+  lied_to.platform().set_irql(Irql::passive);
+  std::memset(lied_to.page(), 0xFF, av::FencePage::encoded_size);   /* no magic: malformed */
+  static_cast<void>(lied_to.at_dispatch(&GuestContext::serve));
+  CHECK(lied_to.context().state() == GuestContext::State::failed);
+  CHECK_EQ(lied_progress, UINT64_MAX); }
+
 /* A hardware queue going takes its progress fence with it, and dxgkrnl frees
  * that memory: the context stops writing there only when it is that queue's
  * progress it still writes, and a stale or absent location changes nothing. */
