@@ -81,8 +81,8 @@ cl_int CL_API_CALL get_device_info(cl_device_id device, cl_device_info name, siz
 
 cl_context CL_API_CALL create_context(const cl_context_properties *properties, cl_uint num_devices,
                                       const cl_device_id *devices,
-                                      void(CL_CALLBACK *)(const char *, const void *, size_t, void *),
-                                      void *, cl_int *error)
+                                      void(CL_CALLBACK *notify)(const char *, const void *, size_t, void *),
+                                      void *user_data, cl_int *error)
 {
     AV_SCOPE("create_context");
     if (!cl_icd_binding.bound()) {
@@ -90,7 +90,8 @@ cl_context CL_API_CALL create_context(const cl_context_properties *properties, c
         return nullptr;
     }
     ClNotedError noted(cl_icd_binding.root(), "clCreateContext", error);
-    return cl_icd_binding.root().create_context(properties, devices, num_devices, noted.pointer());
+    return cl_icd_binding.root().create_context(properties, devices, num_devices, noted.pointer(),
+                                                clicd::ClContextNotify(notify, user_data));
 }
 
 cl_int CL_API_CALL retain_context(cl_context context)

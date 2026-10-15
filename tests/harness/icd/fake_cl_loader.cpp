@@ -133,6 +133,18 @@ cl_context FakeClLoader::create_context(cl_device_id device, cl_int *error)
     return table->clCreateContext(nullptr, 1u, &device, nullptr, nullptr, error);
 }
 
+cl_context FakeClLoader::create_context(cl_device_id device,
+                                        void(CL_CALLBACK *notify)(const char *, const void *, size_t, void *),
+                                        void *user_data, cl_int *error)
+{
+    const cl_icd_dispatch *const table = first_word(device);
+    if (table == nullptr) {
+        if (error != nullptr) *error = CL_INVALID_DEVICE;
+        return nullptr;
+    }
+    return table->clCreateContext(nullptr, 1u, &device, notify, user_data, error);
+}
+
 cl_int FakeClLoader::release_context(cl_context context)
 {
     const cl_icd_dispatch *const table = first_word(context);

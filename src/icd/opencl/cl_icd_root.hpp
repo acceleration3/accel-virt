@@ -145,7 +145,8 @@ public:
      * be current on the calling thread and one this process's OpenGL ICD
      * made; any other is CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR. */
     cl_context create_context(const cl_context_properties *properties, const cl_device_id *devices,
-                              cl_uint num_devices, cl_int *error);
+                              cl_uint num_devices, cl_int *error,
+                              const ClContextNotify &notify = ClContextNotify());
     cl_int     retain_context(cl_context context);
     cl_int     release_context(cl_context context);
 

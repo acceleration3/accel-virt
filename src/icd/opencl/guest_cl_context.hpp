@@ -21,6 +21,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
+#include "icd/opencl/cl_context_notify.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
@@ -118,6 +119,9 @@ public:
     /* The list clCreateContext was given, kept for CL_CONTEXT_PROPERTIES: a
      * list already judged, so it reads. */
     void                 keep_properties(const cl_context_properties *properties);
+    /* What clCreateContext was given to report the context's errors with:
+     * told once, by the call that finds the context lost (wire). */
+    void                 notify_with(const ClContextNotify &notify);
     /* That list laid out into `out`, and how many values it is; 0 for none. */
     uint32_t             properties(cl_context_properties *out, uint32_t capacity) const;
 
@@ -199,6 +203,7 @@ private:
     ClD3d11Objects                       d3d11_;
     MappedRegion                         mappings_[max_mappings];
     ClPropertyList                       properties_;
+    ClContextNotify                      notify_;
     State                                state_;
 };
 

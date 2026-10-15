@@ -19,7 +19,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       link_(connection), gl_share_(0u), wakes_(false),
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
       locked_(), blocks_(blocks_lock), staging_(blocks_lock),
-      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(), properties_(), state_(State::created)
+      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -64,6 +64,12 @@ bool GuestClContext::shares_gl() const
 {
     AV_SCOPE("GuestClContext::shares_gl");
     return state_ == State::made && gl_share_ != 0u;
+}
+
+void GuestClContext::notify_with(const ClContextNotify &notify)
+{
+    AV_SCOPE("GuestClContext::notify_with");
+    notify_ = notify;
 }
 
 void GuestClContext::keep_properties(const cl_context_properties *properties)
@@ -144,6 +150,7 @@ ClientTransport *GuestClContext::wire()
     if (link_.lost(channel_)) {
         state_ = State::lost;
         log_.write("avcl: the context's device faulted; the context is lost");
+        notify_.say("avcl: the context's device was lost: every call on it now answers CL_OUT_OF_RESOURCES");
         return nullptr;
     }
     return &locked_.object();

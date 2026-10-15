@@ -18,6 +18,7 @@
 #include <CL/cl_ext.h>
 
 #include <cstdint>
+#include <cstring>
 
 using av::ClIcdRig;
 using av::FakeClLoader;
@@ -96,6 +97,52 @@ TEST(cl_device_loss, a_fault_loses_every_context_on_the_device_and_none_of_them_
   CHECK(rig.loader().create_program(second, "__kernel void k(void) {}", &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK(rig.root().invariants_hold()); }
+
+namespace {
+
+struct Told {
+    std::uint32_t times = 0u;
+    bool          named_the_loss = false;
+    bool          private_info = false;
+};
+
+void told(const char *text, const void *info, size_t bytes, void *user_data)
+{
+    Told *const record = static_cast<Told *>(user_data);
+    record->times++;
+    record->named_the_loss = text != nullptr && std::strstr(text, "lost") != nullptr;
+    record->private_info = info != nullptr || bytes != 0u;
+}
+
+}  // namespace
+
+/* The callback clCreateContext was given is told once, by the call that finds
+ * the context lost - a host GPU fault, the device the context ran on lost - and
+ * not again; a context that registered none is told nothing. */
+TEST(cl_device_loss, a_lost_context_tells_its_callback_once)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  Told       record;
+  context_opens(rig);
+  cl_context context = rig.loader().create_context(device, &told, &record, nullptr);
+  CHECK(context != nullptr);
+  CHECK_EQ(record.times, 0u);
+  /* The call the fault met fails; the next finds the context lost, and
+   * tells. */
+  fault_next(rig);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK_EQ(record.times, 1u);
+  CHECK(record.named_the_loss);
+  CHECK(!record.private_info);
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(record.times, 1u);
+  CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_device_loss, releasing_a_lost_context_costs_no_round_trip_and_gives_everything_back)

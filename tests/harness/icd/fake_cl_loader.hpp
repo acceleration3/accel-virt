@@ -69,6 +69,10 @@ public:
     cl_int         device_info(cl_device_id device, cl_device_info name, std::size_t bytes,
                                void *value, std::size_t *size_ret);
     cl_context     create_context(cl_device_id device, cl_int *error);
+    /* The same, with the callback the application reports the context's
+     * errors to, and its data. */
+    cl_context     create_context(cl_device_id device, void(CL_CALLBACK *notify)(const char *, const void *, size_t, void *),
+                                  void *user_data, cl_int *error);
     cl_int         release_context(cl_context context);
     cl_command_queue create_queue(cl_context context, cl_device_id device, cl_int *error);
     cl_mem         create_buffer(cl_context context, cl_mem_flags flags, std::size_t bytes,

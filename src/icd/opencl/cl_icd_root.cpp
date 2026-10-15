@@ -550,7 +550,7 @@ cl_int ClIcdRoot::judge(const Property *properties, const uint64_t *allowed, uin
 }
 
 cl_context ClIcdRoot::create_context(const cl_context_properties *properties, const cl_device_id *devices,
-                                     cl_uint num_devices, cl_int *error)
+                                     cl_uint num_devices, cl_int *error, const ClContextNotify &notify)
 {
     AV_SCOPE("ClIcdRoot::create_context");
     /* CL_CONTEXT_PLATFORM must be this platform if it is named at all. The
@@ -616,6 +616,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, log_, shared_handles_);
     if (made == Status::ok) made = context->make(gl_share, watcher_.wake_handle());
     if (made == Status::ok) context->keep_properties(properties);
+    if (made == Status::ok) context->notify_with(notify);
     if (made != Status::ok) {
         if (context != nullptr) static_cast<void>(contexts_.destroy(context));
         lock_.release();

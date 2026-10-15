@@ -28,6 +28,7 @@
 #include "icd/opencl/guest_cl_context.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
+#include <cstddef>
 #include <cstdint>
 
 using av::ClContextRig;
@@ -299,6 +300,36 @@ TEST(guest_cl_context, a_faulted_transport_makes_the_context_lost_where_a_call_a
   CHECK(context.lost());
   CHECK(context.state() == GuestClContext::State::lost);
   CHECK(rig.log().holding("lost") > 0u);
+  CHECK(context.invariants_hold()); }
+
+namespace {
+
+std::uint32_t told_lost = 0u;
+
+void tell_lost(const char *, const void *, std::size_t, void *user_data)
+{
+    told_lost += user_data == &told_lost ? 1u : 100u;
+}
+
+}  // namespace
+
+/* The callback the context was made with hears of the loss once, from the
+ * call that finds it, and never again. */
+TEST(guest_cl_context, the_call_that_finds_the_context_lost_tells_its_callback_once)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  told_lost = 0u;
+  context.notify_with(av::clicd::ClContextNotify(&tell_lost, &told_lost));
+  CHECK(context.wire() != nullptr);
+  CHECK_EQ(told_lost, 0u);
+  rig.kmt().withhold_answer_at(1u);
+  static_cast<void>(av::clproto::av_clFlush(*context.wire(), 0u));
+  CHECK(context.wire() == nullptr);
+  CHECK_EQ(told_lost, 1u);
+  CHECK(context.wire() == nullptr);
+  CHECK_EQ(told_lost, 1u);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, the_svm_table_belongs_to_the_context_and_goes_with_it)
