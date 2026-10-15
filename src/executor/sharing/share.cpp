@@ -239,15 +239,10 @@ uint32_t Share::give_up_direct3d11(IUnknown **objects)
 uint32_t Share::give_up_direct3d12(IUnknown **objects)
 {
     AV_SCOPE("Share::give_up_direct3d12");
-    if (origin_ != ShareOrigin::d3d12) return 0u;
-    IUnknown **const kept[] = {&resource_, &view_};
-    uint32_t         count = 0u;
-    for (IUnknown **held : kept) {
-        if (*held == nullptr) continue;
-        objects[count++] = *held;
-        *held = nullptr;
-    }
-    return count;
+    if (origin_ != ShareOrigin::d3d12 || resource_ == nullptr) return 0u;
+    objects[0] = resource_;
+    resource_ = nullptr;
+    return 1u;
 }
 
 const SharedImageShape &Share::shape() const

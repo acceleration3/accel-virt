@@ -23,7 +23,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : runtime_(nullptr), uuid_(), tenants_(), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+    : runtime_(nullptr), uuid_(), tenants_(), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -395,16 +395,49 @@ bool D3d11HostDevice::renew(uint32_t wait_ms)
     bool made = device_ != nullptr && !tenants_.lost();
     if (!made) {
         /* What anything still holds of the old device goes before it does:
-         * the shares' textures under this lock, then everything made on it. */
+         * the shares' textures under this lock - what each is kept first, to
+         * be made again - then everything made on it. */
+        carry_shares();
         if (shares_ != nullptr) shares_->lose_direct3d11();
         if (device_ != nullptr) retire_locked();
         unmake();
         made = make();
+        const uint32_t restored = restore_shares();
         if (made) static_cast<void>(tenants_.renew());
+        LogLine(lines_)
+            .text(made ? "the lost device was made again, with " : "the lost device could not be made again; ")
+            .number(restored)
+            .text(" shared resources")
+            .write();
     }
     unlock();
-    LogLine(lines_).text(made ? "the lost device was made again" : "the lost device could not be made again").write();
     return made;
+}
+
+void D3d11HostDevice::carry_shares()
+{
+    AV_SCOPE("D3d11HostDevice::carry_shares");
+    if (shares_ == nullptr || device_ == nullptr) return;
+    shares_->each_direct3d11([this](uint32_t domain, uint64_t id, IUnknown *resource) {
+        CarriedShare *carried = nullptr;
+        if (carried_.create(carried, domain, id) != Status::ok) return;
+        if (!carried->record(resource, images_)) static_cast<void>(carried_.destroy(carried));
+    });
+}
+
+uint32_t D3d11HostDevice::restore_shares()
+{
+    AV_SCOPE("D3d11HostDevice::restore_shares");
+    uint32_t restored = 0u;
+    carried_.destroy_if([this, &restored](const CarriedShare &visited) {
+        CarriedShare &carried = const_cast<CarriedShare &>(visited);
+        IUnknown *const made = carried.remake(device_, images_);
+        if (made == nullptr) return true;
+        if (shares_->restore_resource(carried.domain(), carried.id(), made)) restored++;
+        made->Release();
+        return true;
+    });
+    return restored;
 }
 
 bool D3d11HostDevice::lose()

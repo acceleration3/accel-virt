@@ -387,6 +387,18 @@ void HostShares::lose_direct3d11()
     retire_each([](Share &share, IUnknown **objects) { return share.give_up_direct3d11(objects); });
 }
 
+bool HostShares::restore_resource(uint32_t domain, uint64_t id, IUnknown *resource)
+{
+    AV_SCOPE("HostShares::restore_resource");
+    if (resource == nullptr) return false;
+    const Lock   locked(mutex_);
+    Share *const share = index_.find(domain, id);
+    if (share == nullptr || share->origin() != ShareOrigin::d3d11 || share->resource() != nullptr) return false;
+    resource->AddRef();
+    share->keep_resource(resource);
+    return true;
+}
+
 void HostShares::lose_direct3d12()
 {
     AV_SCOPE("HostShares::lose_direct3d12");

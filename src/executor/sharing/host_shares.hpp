@@ -35,6 +35,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 #include "executor/sharing/share.hpp"
 #include "executor/sharing/share_holder.hpp"
 #include "executor/sharing/share_index.hpp"
@@ -137,6 +138,18 @@ public:
      * shared handle from before a TDR opens nothing on Windows. */
     void     lose_direct3d11();
     void     lose_direct3d12();
+    /* `visit(domain, id, resource)` for every share Direct3D 11 published
+     * whose resource it still holds, under the table's lock: what the lost
+     * device made, read before lose_direct3d11 lets it go, so it can be made
+     * again (CarriedShare). The visit must not call back into this table. */
+    template <typename Visit>
+    void     each_direct3d11(Visit visit);
+    /* `resource`, made again on the device made in place of a lost one, kept
+     * as what the share Direct3D 11 published as `id` is from now on, with a
+     * reference of the share's own: false, nothing kept, for an id no share
+     * names any more - the guest let it go meanwhile - or one that holds a
+     * resource still. */
+    [[nodiscard]] bool restore_resource(uint32_t domain, uint64_t id, IUnknown *resource);
     /* COM references of freed shares, now the caller's to release under the
      * Direct3D 11 device's lock: up to `capacity` of them, the count answered. */
     uint32_t take_retired(IUnknown **objects, uint32_t capacity);
@@ -189,6 +202,18 @@ private:
 
     friend struct HostSharesProbe;
 };
+
+template <typename Visit>
+void HostShares::each_direct3d11(Visit visit)
+{
+    AV_SCOPE("HostShares::each_direct3d11");
+    pthread_mutex_lock(&mutex_);
+    shares_.for_each([&visit](const Share &share) {
+        if (share.origin() == ShareOrigin::d3d11 && share.resource() != nullptr)
+            visit(share.domain(), share.id(), share.resource());
+    });
+    pthread_mutex_unlock(&mutex_);
+}
 
 }  // namespace av
 

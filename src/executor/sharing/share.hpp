@@ -102,7 +102,9 @@ public:
     /* What is a lost Direct3D device's, handed over and forgotten likewise:
      * of Direct3D 11's, the view and the flip copy - both always its - and
      * the resource of a share it published; of Direct3D 12's, the resource
-     * of a share it published and the view made over it. At most three. */
+     * of a share it published alone - the view made over it is Direct3D
+     * 11's, over memory the lost device's resource only shared, and goes on
+     * opening as the surface it was. At most three. */
     uint32_t  give_up_direct3d11(IUnknown **objects);
     uint32_t  give_up_direct3d12(IUnknown **objects);
 

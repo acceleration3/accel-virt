@@ -22,13 +22,19 @@
  * reads refuse from then on. The device is made again in place, when the next
  * session asks for it, once the last tenant of the old one has gone - what
  * the shares, the composer and the frames held of the old device let go of
- * first - so the guest's next devices, DWM's new one among them, run. */
+ * first - so the guest's next devices, DWM's new one among them, run. Every
+ * resource the guest shared is made again with it, under the same share
+ * (CarriedShare): the guest's allocations outlive the host device, and DWM
+ * opens each client's surface again as it makes its new device. */
 #ifndef AV_D3D11_HOST_DEVICE_HPP
 #define AV_D3D11_HOST_DEVICE_HPP
 
 #include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
+#include "core/support/object_pool.hpp"
 #include "executor/device_tenants.hpp"
+#include "executor/shim/carried_share.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/shim/d3d11_capabilities.hpp"
 #include "proto/context/device_uuid.hpp"
 #include "executor/shim/d3d11_frame_pool.hpp"
@@ -223,6 +229,12 @@ private:
     void               unmake();
     /* The device is lost, `why`: every session woken, and a line, the first time. */
     void               declare(const char *why);
+    /* Under the lock, before the lost device's objects go: what each shared
+     * resource it made is, kept in carried_. */
+    void               carry_shares();
+    /* Under the lock, on the device made again: each carried resource made
+     * again and kept by its share; how many were. carried_ is emptied. */
+    uint32_t           restore_shares();
     /* Under the lock: whether the device can be used at all. */
     bool               usable();
     /* Under the lock: the copy a present of `id` showed, or the texture
@@ -282,6 +294,10 @@ private:
     /* QEMU's stderr, where a surface the host would not share is seen. */
     StdioLog                sink_;
     DriverLog               lines_;
+    /* The shared resources a renewal carries from the lost device to the
+     * next, held only while it runs. */
+    HostHeap                carry_heap_;
+    ObjectPool<CarriedShare> carried_;
 };
 
 }  // namespace av

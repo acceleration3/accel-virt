@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/host_loss.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -23,8 +24,8 @@ constexpr uint32_t milliseconds_per_second = 1000u;
 }  // namespace
 
 HostLossScenario::HostLossScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : kmt_(kmt), steps_(kmt, report, "host_loss"), link_(kmt, search, steps_, SubApi::d3d), idle_staging_{},
-      other_staging_{}, next_staging_{}
+    : kmt_(kmt), search_(search), steps_(kmt, report, "host_loss"), link_(kmt, search, steps_, SubApi::d3d),
+      idle_staging_{}, other_staging_{}, next_staging_{}, other_connection_(kmt), next_connection_(kmt)
 {
     AV_SCOPE("HostLossScenario::HostLossScenario");
 }
@@ -96,7 +97,11 @@ Status HostLossScenario::await_fault(KmtTransport &transport, uint32_t &waited_m
 void HostLossScenario::run()
 {
     AV_SCOPE("HostLossScenario::run");
-    ScopeExit closing([&] { link_.close(); });
+    ScopeExit closing([&] {
+        link_.close();
+        other_connection_.close();
+        next_connection_.close();
+    });
     if (link_.open() != Status::ok) return;
     KmtTransport &drawing = link_.transport();
     if (steps_.check("drawn", draw(drawing, 1u)) != Status::ok) return;
@@ -105,10 +110,11 @@ void HostLossScenario::run()
     Status made = idle.initialize();
     if (made == Status::ok) made = make_device(idle, 1u);
     if (steps_.check("idle_made", made) != Status::ok) return;
-    KmtTransport other(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order,
+    KmtTransport other(other_connection_, SubApi::vulkan, ScenarioTransport::ring_order,
                        ScenarioTransport::reply_bytes, other_staging_, sizeof other_staging_);
     uint32_t answered = 0u;
-    Status   answering = other.initialize();
+    Status   answering = other_connection_.open(search_.adapter());
+    if (answering == Status::ok) answering = other.initialize();
     if (answering == Status::ok) answering = other.nop(answered);
     if (steps_.check("other_before", answering) != Status::ok) return;
 
@@ -133,9 +139,10 @@ void HostLossScenario::run()
     steps_.check_refused("idle_refused", make_device(idle, 2u));
     static_cast<void>(steps_.check("other_kept", other.nop(answered)));
 
-    KmtTransport next(link_.connection(), SubApi::d3d, ScenarioTransport::ring_order, ScenarioTransport::reply_bytes,
+    KmtTransport next(next_connection_, SubApi::d3d, ScenarioTransport::ring_order, ScenarioTransport::reply_bytes,
                       next_staging_, sizeof next_staging_);
-    Status recreated = next.initialize();
+    Status recreated = next_connection_.open(search_.adapter());
+    if (recreated == Status::ok) recreated = next.initialize();
     if (recreated == Status::ok) recreated = draw(next, 1u);
     static_cast<void>(steps_.check("recreated", recreated));
 }

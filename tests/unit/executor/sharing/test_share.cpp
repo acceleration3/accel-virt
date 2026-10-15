@@ -156,9 +156,9 @@ TEST(share, gives_up_only_what_a_lost_direct3d11_device_made)
   CHECK_EQ(object.give_up_direct3d11(objects), 0u);
   CHECK(object.resource() == &resource); }
 
-/* A lost Direct3D 12 device's: the resource it published and the Direct3D 11
- * view over it; a flip copy is Direct3D 11's, and a Direct3D 11 share none of
- * its. */
+/* A lost Direct3D 12 device's: the resource it published, alone - the
+ * Direct3D 11 view over its memory and a flip copy are Direct3D 11's - and a
+ * Direct3D 11 share none of its. */
 TEST(share, gives_up_only_what_a_lost_direct3d12_device_made)
 { CountedObject resource, view, shown;
   IUnknown     *objects[3] = {};
@@ -166,9 +166,11 @@ TEST(share, gives_up_only_what_a_lost_direct3d12_device_made)
   published12.keep_resource(&resource);
   published12.keep_view(&view);
   published12.keep_shown(&shown);
-  CHECK_EQ(published12.give_up_direct3d12(objects), 2u);
+  CHECK_EQ(published12.give_up_direct3d12(objects), 1u);
   CHECK(objects[0] == &resource);
-  CHECK(objects[1] == &view);
+  CHECK(published12.resource() == nullptr);
+  /* The view is Direct3D 11's, over memory the resource only shared. */
+  CHECK(published12.view() == &view);
   CHECK(published12.shown() == &shown);
   CHECK_EQ(published12.give_up_direct3d12(objects), 0u);
   Share published11(1u, 2u, 0u, 0u, ShareOrigin::d3d11);

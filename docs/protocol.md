@@ -360,8 +360,16 @@ makes it so. What follows is the same either way:
   longer held for the GPU;
 - the device is made again on the same GPU, in place, when a context next
   asks for one, once every context on the old one has gone - their
-  executors are destroyed as they fault - and what shares and staged frames
-  held of the old device is let go of first. Contexts on other host devices -
+  executors are destroyed as they fault - and what staged frames held of the
+  old device is let go of first. What the guest shared of it is not lost
+  with it, as an allocation shared before a TDR is not on Windows: the
+  renewal reads each Direct3D 11 share's description off it first, and a
+  2D texture's memory as a dma-buf where it can be exported, and makes each
+  again on the new device under the same key - a texture so exported with
+  its pixels, every other resource anew - so the process that opens it after
+  the loss, DWM recomposing a client's surface, finds it. A Direct3D 12
+  share keeps the Direct3D 11 view it was given and gives up only its
+  Direct3D 12 resource. Contexts on other host devices -
   another GPU, a Vulkan context's own device, an OpenGL or OpenCL context -
   run on.
 

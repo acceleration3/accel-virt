@@ -546,7 +546,7 @@ TEST(host_shares_lose_direct3d11, gives_up_the_lost_device_s_objects_and_keeps_t
 /* The Direct3D 12 device lost: a share it published lets go of its resource
  * and the view made over it, and a Direct3D 11 share and the flip copies keep
  * theirs. */
-TEST(host_shares_lose_direct3d12, gives_up_the_lost_device_s_resources_and_their_views)
+TEST(host_shares_lose_direct3d12, gives_up_the_lost_device_s_resources_and_keeps_their_views)
 { CountedObject resource11, resource12, view12, shown12;
   Fixture f;
   CHECK_STATUS(f.shares.publish_resource(domain, 0x11u, &resource11, ShareOrigin::d3d11, f.publisher), Status::ok);
@@ -554,10 +554,15 @@ TEST(host_shares_lose_direct3d12, gives_up_the_lost_device_s_resources_and_their
   CHECK(f.shares.keep_view(domain, 0x12u, &view12));
   CHECK(f.shares.keep_shown(domain, 0x12u, &shown12));
   f.shares.lose_direct3d12();
-  CHECK_EQ(f.drained(), 2u);
+  CHECK_EQ(f.drained(), 1u);
   CHECK_EQ(resource12.references(), 1u);
-  CHECK_EQ(view12.references(), 1u);
+  CHECK_EQ(view12.references(), 2u);
   CHECK_EQ(shown12.references(), 2u);
+  /* A Direct3D 11 open still finds the surface, through its view. */
+  IUnknown *const viewed = f.shares.view(domain, 0x12u);
+  CHECK(viewed == &view12);
+  viewed->Release();
+  CHECK(f.shares.resource(domain, 0x12u) == nullptr);
   CHECK_EQ(resource11.references(), 2u);
   IUnknown *found = f.shares.open_resource(domain, 0x12u);
   CHECK(found == &shown12);
@@ -567,7 +572,47 @@ TEST(host_shares_lose_direct3d12, gives_up_the_lost_device_s_resources_and_their
   found->Release();
   CHECK_EQ(f.shares.live(), 2u);
   f.shares.clear();
-  CHECK_EQ(f.drained(), 2u); }
+  CHECK_EQ(f.drained(), 3u); }
+
+/* What a lost Direct3D 11 device published is visited before it goes, and
+ * what is made again in its place is kept by the same share: an id the guest
+ * let go of meanwhile, or one already holding a resource, keeps nothing. */
+TEST(host_shares_restore_resource, a_resource_made_again_is_kept_by_the_share_it_was_published_as)
+{ CountedObject resource11, resource12, object, remade, other;
+  Fixture f;
+  CHECK_STATUS(f.shares.publish_resource(domain, 0x11u, &resource11, ShareOrigin::d3d11, f.publisher), Status::ok);
+  CHECK_STATUS(f.shares.publish_resource(domain, 0x12u, &resource12, ShareOrigin::d3d12, f.publisher), Status::ok);
+  CHECK_STATUS(f.shares.publish_resource(domain + 1u, 0x13u, &object, ShareOrigin::d3d11, f.publisher), Status::ok);
+  std::uint32_t visited = 0u;
+  bool          saw_11 = false, saw_13 = false;
+  f.shares.each_direct3d11([&](std::uint32_t in, std::uint64_t id, IUnknown *resource) {
+      visited++;
+      saw_11 = saw_11 || (in == domain && id == 0x11u && resource == &resource11);
+      saw_13 = saw_13 || (in == domain + 1u && id == 0x13u && resource == &object);
+  });
+  CHECK_EQ(visited, 2u);
+  CHECK(saw_11);
+  CHECK(saw_13);
+  /* Still holding its resource: nothing replaces it. */
+  CHECK(!f.shares.restore_resource(domain, 0x11u, &remade));
+  f.shares.lose_direct3d11();
+  CHECK(f.shares.restore_resource(domain, 0x11u, &remade));
+  CHECK_EQ(remade.references(), 2u);
+  IUnknown *const found = f.shares.open_resource(domain, 0x11u);
+  CHECK(found == &remade);
+  found->Release();
+  /* No twice, no Direct3D 12 share, no id the domain does not share, no null. */
+  CHECK(!f.shares.restore_resource(domain, 0x11u, &other));
+  CHECK(!f.shares.restore_resource(domain, 0x12u, &other));
+  CHECK(!f.shares.restore_resource(domain, 0x99u, &other));
+  CHECK(!f.shares.restore_resource(domain + 1u, 0x13u, nullptr));
+  CHECK_EQ(other.references(), 1u);
+  f.shares.release(domain + 1u, 0x13u);
+  CHECK(!f.shares.restore_resource(domain + 1u, 0x13u, &other));
+  CHECK(f.shares.invariants_hold());
+  f.shares.clear();
+  static_cast<void>(f.drained());
+  CHECK_EQ(remade.references(), 1u); }
 
 TEST(host_shares, nothing_is_kept_for_an_unknown_id_or_no_object)
 { CountedObject object;

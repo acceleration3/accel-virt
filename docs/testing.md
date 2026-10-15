@@ -722,12 +722,17 @@ What it cannot see, and L5 still must:
   is refused at once, the idle one - DWM on a still desktop - reads its fault
   and code 7 off its page within a moment without sending anything, a
   Vulkan context on its own device runs on, and a new Direct3D context draws
-  on the device the host made again.
+  on the device the host made again. The Vulkan context and the new one are
+  each on a kernel device of their own, as another process's and a session
+  opened after a fault are: dxgkrnl puts a kernel device whose submission the
+  driver refused in error (`STATUS_GRAPHICS_GPU_EXCEPTION_ON_DEVICE`), every
+  context on it with it, which the fake dxgkrnl does not.
   `test_d3d_device_loss_device.cpp` holds the host half to the same claims
   without a guest: every session on the device woken once, a read back
   answering removed at once, the scanout's reads refused, nobody joining the
   lost device, a renewal refused while a session stays on it and made once
-  the last leaves, and the loss DXVK finds by itself - a failed submission,
+  the last leaves, what was shared before the loss opening after it with its
+  texels kept (`CarriedShare`), and the loss DXVK finds by itself - a failed submission,
   declared by nobody - seen at the next session's command, with DXVK's own
   Map of what that submission used returning under a watchdog.
 

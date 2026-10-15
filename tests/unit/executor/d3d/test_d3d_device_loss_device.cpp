@@ -15,8 +15,13 @@
  * A host without DXVK, or without the layer, returns without judging. */
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
+#include "executor/shim/carried_share.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
+#include "executor/shim/dxvk_vulkan_device.hpp"
+#include "executor/shim/exportable_images.hpp"
+#include "executor/shim/surface_identity.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
@@ -102,12 +107,12 @@ void make_cleared_target(av::D3dLoopback &wire, std::uint32_t device, const Floa
 }
 
 /* The target read back: its HRESULT, and its first texel in `texel`. */
-std::uint32_t read_target(av::D3dLoopback &wire, std::uint32_t &texel)
+std::uint32_t read_target(av::D3dLoopback &wire, std::uint32_t &texel, std::uint32_t resource = 1u)
 {
     static std::uint8_t pixels[size * size * 4u];
     std::uint32_t       hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
     std::uint64_t       read = 0u;
-    CHECK(av_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
+    CHECK(av_d3d_ReadSubresource(wire, resource, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
     texel = static_cast<std::uint32_t>(pixels[0]) | static_cast<std::uint32_t>(pixels[1]) << 8u |
             static_cast<std::uint32_t>(pixels[2]) << 16u | static_cast<std::uint32_t>(pixels[3]) << 24u;
     return hresult;
@@ -287,4 +292,144 @@ TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its
     idle.shut_down();
     CHECK(device->renew(1000u));
     CHECK(!device->lost());
+}
+
+/* What the guest shared before the loss is its own still: its allocations
+ * outlive the host device, and DWM, making its device again, opens every
+ * client's surface again - a refusal it took for its new device failing,
+ * which it made again, and again, until Windows restarted it, while the
+ * taskbar stayed black. So a surface shared before the loss opens after it,
+ * as what the client drew where it was made over memory other APIs share,
+ * and a shared resource of another kind opens too, made anew. */
+TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
+{
+    av::LoaderHostApis         apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    std::uint32_t gpu = 0u;
+    while (apis.d3d11_device(gpu) != device) gpu++;
+    av::HostShares         &shares = *apis.shares(gpu);
+    constexpr std::uint64_t surface_key = 0x5100000000000011ull;
+    constexpr std::uint64_t buffer_key = 0x5100000000000012ull;
+    constexpr std::uint32_t misc_shared = 0x2u;
+    HeldBackend     held_creator(first_backend), held_opener(second_backend);
+    av::D3dBackend &creator = held_creator.backend(), &opener = held_opener.backend();
+    first_shares.bind(shares, 1u, creator);
+    CHECK(creator.initialize(first_shares, device));
+    av::D3dLoopback made(creator);
+    std::uint32_t   hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(made, 1u, 0u, 0u, &hresult, &level));
+    ResourceDesc surface = {};
+    surface.dimension = 3u;
+    surface.width = size;
+    surface.height = size;
+    surface.depth_or_array = 1u;
+    surface.mip_levels = 1u;
+    surface.format = format_b8g8r8a8;
+    surface.sample_count = 1u;
+    surface.bind_flags = bind_render_target;
+    surface.misc_flags = misc_shared;
+    CHECK(av_d3d_CreateResource(made, 1u, surface, surface_key));
+    ViewDesc rtv = {};
+    rtv.resource = 1u;
+    rtv.format = format_b8g8r8a8;
+    rtv.dimension = rtv_texture2d;
+    CHECK(av_d3d_CreateRenderTargetView(made, 2u, rtv));
+    CHECK(av_d3d_ClearRenderTargetView(made, 2u, Float4{{0.0f, 1.0f, 1.0f, 1.0f}}));
+    ResourceDesc buffer = {};
+    buffer.dimension = 1u;
+    buffer.width = 256u;
+    buffer.bind_flags = 0x8u;   /* shader resource */
+    CHECK(av_d3d_CreateResource(made, 3u, buffer, buffer_key));
+    std::uint32_t texel = 0u;
+    CHECK_EQ(read_target(made, texel), 0u);
+    CHECK_EQ(texel, 0xff00ffffu);
+    if (!creator.lose_device()) {
+        std::fprintf(stderr, "the device-loss layer is not loaded: nothing judged\n");
+        first_shares.end();
+        creator.shut_down();
+        return;
+    }
+    /* The creator's context is faulted and its session goes; the guest still
+     * holds both allocations. */
+    first_shares.end();
+    creator.shut_down();
+    CHECK(device->renew(1000u));
+    second_shares.bind(shares, 1u, opener);
+    CHECK(opener.initialize(second_shares, device));
+    av::D3dLoopback opening(opener);
+    CHECK(av_d3d_CreateDevice11(opening, 1u, 0u, 0u, &hresult, &level));
+    std::uint32_t found = 0u;
+    ResourceDesc  opened = {};
+    CHECK(av_d3d_OpenResource(opening, 5u, surface_key, &found, &opened));
+    CHECK_EQ(found, 1u);
+    CHECK_EQ(opened.width, size);
+    CHECK_EQ(read_target(opening, texel, 5u), 0u);
+    CHECK_EQ(texel, 0xff00ffffu);   /* what was drawn before the loss */
+    CHECK(av_d3d_OpenResource(opening, 6u, buffer_key, &found, &opened));
+    CHECK_EQ(found, 1u);
+    CHECK_EQ(opened.width, 256u);
+    CHECK_EQ(opening.refused(), 0u);
+    shares.release(1u, surface_key);
+    shares.release(1u, buffer_key);
+    second_shares.end();
+    opener.shut_down();
+    device->retire_shares();
+}
+
+/* What a renewal carries of a resource (CarriedShare), on this machine's
+ * DXVK: a buffer's and a texture's description read off them and made again,
+ * marked as the guest's surface; what records nothing - no resource - is
+ * refused. */
+TEST(carried_share, a_recorded_resource_is_made_again_as_it_was_and_marked_as_the_surface)
+{
+    av::LoaderHostApis         apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    av::DxvkVulkanDevice   unconnected;
+    av::ExportableImages   images(unconnected);
+    ID3D11Device5 *const   d3d11 = device->device();
+    const D3D11_BUFFER_DESC buffer_desc = {256u, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0u, 0u, 0u};
+    ID3D11Buffer           *buffer = nullptr;
+    CHECK(SUCCEEDED(d3d11->CreateBuffer(&buffer_desc, nullptr, &buffer)));
+    const D3D11_TEXTURE2D_DESC texture_desc = {size, size * 2u, 1u, 1u, DXGI_FORMAT_B8G8R8A8_UNORM, {1u, 0u},
+                                               D3D11_USAGE_DEFAULT, D3D11_BIND_RENDER_TARGET, 0u, 0u};
+    ID3D11Texture2D *texture = nullptr;
+    CHECK(SUCCEEDED(d3d11->CreateTexture2D(&texture_desc, nullptr, &texture)));
+
+    av::CarriedShare nothing(1u, 0x31u);
+    CHECK(!nothing.record(nullptr, images));
+    av::CarriedShare carried_buffer(1u, 0x32u), carried_texture(2u, 0x33u);
+    CHECK(carried_buffer.record(buffer, images));
+    CHECK(carried_texture.record(texture, images));
+    CHECK(carried_texture.invariants_hold());
+    CHECK_EQ(carried_texture.domain(), 2u);
+    CHECK_EQ(carried_texture.id(), 0x33u);
+    buffer->Release();
+    texture->Release();
+
+    IUnknown *const remade_buffer = carried_buffer.remake(d3d11, images);
+    IUnknown *const remade_texture = carried_texture.remake(d3d11, images);
+    CHECK(remade_buffer != nullptr);
+    CHECK(remade_texture != nullptr);
+    CHECK(nothing.remake(d3d11, images) == nullptr);
+    CHECK(carried_texture.remake(nullptr, images) == nullptr);
+    ID3D11Buffer *again_buffer = nullptr;
+    CHECK(SUCCEEDED(remade_buffer->QueryInterface(__uuidof(ID3D11Buffer), reinterpret_cast<void **>(&again_buffer))));
+    D3D11_BUFFER_DESC read_buffer = {};
+    again_buffer->GetDesc(&read_buffer);
+    CHECK_EQ(read_buffer.ByteWidth, 256u);
+    CHECK_EQ(read_buffer.BindFlags, static_cast<UINT>(D3D11_BIND_SHADER_RESOURCE));
+    ID3D11Texture2D *again_texture = nullptr;
+    CHECK(SUCCEEDED(remade_texture->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&again_texture))));
+    D3D11_TEXTURE2D_DESC read_texture = {};
+    again_texture->GetDesc(&read_texture);
+    CHECK_EQ(read_texture.Width, size);
+    CHECK_EQ(read_texture.Height, size * 2u);
+    CHECK_EQ(static_cast<std::uint32_t>(read_texture.Format), format_b8g8r8a8);
+    CHECK_EQ(av::SurfaceIdentity(static_cast<ID3D11DeviceChild *>(again_texture)).surface(), 0x33u);
+    again_buffer->Release();
+    again_texture->Release();
+    remade_buffer->Release();
+    remade_texture->Release();
 }
