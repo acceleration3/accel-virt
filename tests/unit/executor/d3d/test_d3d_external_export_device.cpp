@@ -1,7 +1,8 @@
 /* A Direct3D 11 texture a guest shares, handed to a process outside QEMU as
  * its own memory (docs/external-export.md): the guest's copy into it is
  * counted, a sync_file covers it, and an EGL consumer on the same GPU imports
- * the dma-buf with the layout the driver kept with the memory, waits on the
+ * the dma-buf with the layout it is told - the GPU's own tiling and its
+ * modifier, or rows for a texture the guest asked for as rows - waits on the
  * sync_file on its own GPU queue and reads every texel where Direct3D put it -
  * no copy on the host. The same frame staged into a linear image instead
  * (HostImageExport, the scanout's path) is timed beside it, which is what
@@ -17,6 +18,7 @@
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/executor/root_under_test.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/d3d/resource_misc.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
 #include <EGL/egl.h>
@@ -58,7 +60,10 @@ constexpr std::uint32_t format_b8g8r8a8 = 87u;
 constexpr std::uint32_t dimension_texture2d = 3u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
-constexpr std::uint32_t misc_shared = 0x2u;
+constexpr std::uint32_t misc_shared = av::ResourceMisc::shared_bit;
+constexpr std::uint32_t misc_shared_rows = av::ResourceMisc::shared_bit | av::ResourceMisc::rows_bit;
+constexpr std::uint64_t drm_format_mod_linear = 0u;
+constexpr std::uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
 constexpr std::uint64_t surface = 0x5100000000000077ull;
 constexpr std::uint32_t drm_argb8888 = 0x34325241u;   /* AR24 */
 constexpr std::uint32_t uuid_bytes = 16u;
@@ -158,11 +163,12 @@ public:
         return waited;
     }
 
-    /* The image as the answer described it, read back as RGBA rows. The
-     * modifier is implicit, so no modifier attribute is given: the driver
-     * reads the layout it kept with the memory. */
+    /* The image as the answer described it, read back as RGBA rows: laid out
+     * by the modifier it names, which is given whenever it is not linear,
+     * the one layout an importer may assume. */
     bool read(const AvExportedImage &image, std::uint8_t *pixels)
     {
+        const bool tiled = image.modifier != drm_format_mod_linear;
         const EGLint attributes[] = {EGL_WIDTH,
                                      static_cast<EGLint>(image.width),
                                      EGL_HEIGHT,
@@ -175,6 +181,10 @@ public:
                                      static_cast<EGLint>(image.offset),
                                      EGL_DMA_BUF_PLANE0_PITCH_EXT,
                                      static_cast<EGLint>(image.stride),
+                                     tiled ? EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT : EGL_NONE,
+                                     static_cast<EGLint>(image.modifier & 0xffffffffu),
+                                     EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
+                                     static_cast<EGLint>(image.modifier >> 32u),
                                      EGL_NONE};
         EGLImageKHR const made = create_image_(display_, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attributes);
         if (made == EGL_NO_IMAGE_KHR) {
@@ -269,6 +279,7 @@ public:
     /* The guest device the rig's session is in. */
     std::uint32_t      domain() const { return domain_; }
     av::D3dLoopback   &wire() { return wire_; }
+    av::D3dBackend    &backend() { return direct3d_; }
     void              *display() { return apis_.gl_display(gpu_)->handle(); }
 
     /* Texture `id`, `across` by `down`, filled with the pattern a strip of
@@ -361,7 +372,9 @@ TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered
     CHECK_EQ(image.width, across);
     CHECK_EQ(image.height, down);
     CHECK_EQ(image.fourcc, drm_argb8888);
-    CHECK_EQ(image.modifier, std::uint64_t{0u});   /* DRM_FORMAT_MOD_LINEAR */
+    /* Laid out by a modifier it names: the GPU's own tiling, or rows on a GPU
+     * that exports none. */
+    CHECK(image.modifier != drm_format_mod_invalid);
     CHECK(image.stride >= across * 4u);
     CHECK(lseek(image.fd, 0, SEEK_END) >= static_cast<off_t>(std::uint64_t{image.stride} * down));
     close(image.fd);
@@ -394,10 +407,10 @@ TEST(d3d_external_export_device, a_shared_surface_reads_back_as_the_session_drew
     CHECK(!root.read_image(rig.domain(), surface, pixels, across * 4u, across, down));
 }
 
-/* The consumer's whole path, at a window's odd size and a desktop's: a
- * sync_file waited for on its own GPU queue, the dma-buf imported with the
- * layout the driver kept with the memory, and every texel read back where
- * Direct3D put it - which a pitch the two drivers disagreed on would shear. */
+/* The consumer's whole path, at a window's odd size and a desktop's, tiled and
+ * as rows: a sync_file waited for on its own GPU queue, the dma-buf imported
+ * with the layout it was told, and every texel read back where Direct3D put
+ * it - which a pitch or a tiling the two drivers disagreed on would shear. */
 TEST(d3d_external_export_device, every_texel_reaches_an_egl_consumer_through_the_surface_s_own_memory)
 {
     struct Size {
@@ -414,10 +427,12 @@ TEST(d3d_external_export_device, every_texel_reaches_an_egl_consumer_through_the
     }
     static std::uint8_t pixels[largest_texels * 4u];
     std::uint32_t       id = 1u;
+    const std::uint32_t layouts[] = {misc_shared, misc_shared_rows};
+    for (const std::uint32_t misc : layouts)
     for (const Size &size : sizes) {
         const std::uint32_t shared = id++, source = id++;
         const std::uint64_t key = surface + shared;
-        CHECK(av_d3d_CreateResource(rig.wire(), shared, texture(size.across, size.down, misc_shared), key));
+        CHECK(av_d3d_CreateResource(rig.wire(), shared, texture(size.across, size.down, misc), key));
         CHECK(av_d3d_CreateResource(rig.wire(), source, texture(size.across, size.down, 0u), 0u));
         rig.fill(source, size.across, size.down);
         CHECK(av_d3d_CopyResource(rig.wire(), shared, source));
@@ -427,14 +442,47 @@ TEST(d3d_external_export_device, every_texel_reaches_an_egl_consumer_through_the
         CHECK_EQ(writes, 1u);
         AvExportedImage image = {};
         CHECK(rig.root().export_surface(rig.domain(), key, image));
-        std::fprintf(stderr, "exported %ux%u: stride %u, offset %u, %ld bytes\n", image.width, image.height,
-                     image.stride, image.offset, static_cast<long>(lseek(image.fd, 0, SEEK_END)));
+        std::fprintf(stderr, "exported %ux%u: modifier %016llx, stride %u, offset %u, %ld bytes\n", image.width,
+                     image.height, static_cast<unsigned long long>(image.modifier), image.stride, image.offset,
+                     static_cast<long>(lseek(image.fd, 0, SEEK_END)));
+        if (misc == misc_shared_rows) CHECK_EQ(image.modifier, drm_format_mod_linear);
         CHECK(consumer.wait(fence));
         std::memset(pixels, 0, std::size_t{size.across} * size.down * 4u);
         CHECK(consumer.read(image, pixels));
         close(image.fd);
         CHECK_EQ(texels_wrong(pixels, size.across, size.down), 0u);
     }
+}
+
+/* Another API opens a shared texture's memory as an image of rows it lays out
+ * itself (feature 053): a texture asked for as rows is handed over, one in the
+ * GPU's own tiling - which only an importer told its modifier reads - is not.
+ * What DWM composes from and into is tiled; a window chain's slot and an
+ * OpenCL twin are rows. */
+TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_an_api_reading_rows)
+{
+    constexpr std::uint32_t across = 614u, down = 289u;
+    ExportRig rig;
+    if (!rig.usable()) return;
+    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared_rows), surface));
+    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, misc_shared), surface + 1u));
+    std::uint32_t handle_kind = 0u;
+    int           fd = -1;
+    CHECK(rig.backend().export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
+    CHECK_EQ(handle_kind, std::uint32_t{AV_SHARED_HANDLE_DMA_BUF});
+    CHECK(fd >= 0);
+    close(fd);
+    AvExportedImage image = {};
+    CHECK(rig.root().export_surface(rig.domain(), surface + 1u, image));
+    close(image.fd);
+    fd = -1;
+    const bool handed = rig.backend().export_object(AV_SHARED_MEMORY, 2u, handle_kind, fd);
+    /* Where the GPU exports no tiling the texture is rows after all. */
+    CHECK_EQ(handed, image.modifier == drm_format_mod_linear);
+    if (handed) close(fd);
+    CHECK_EQ(fd >= 0, handed);
+    std::fprintf(stderr, "a shared %ux%u texture not asked for as rows: modifier %016llx\n", across, down,
+                 static_cast<unsigned long long>(image.modifier));
 }
 
 /* What a mirror pays per frame at 2560x1440, the guest's copy included: the

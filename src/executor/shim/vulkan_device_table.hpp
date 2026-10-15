@@ -36,6 +36,14 @@ public:
      * the layout places are not asked about: the query has no field for
      * them, and a driver that refuses them refuses the image. */
     [[nodiscard]] bool supports_exportable(const VkImageCreateInfo &info) const;
+    /* The GPU's own tilings an image like `rows` (ExportableImageInfo's rows,
+     * which it describes but for the layout) can be laid out by instead, at
+     * most `capacity` into `modifiers`: how many. None on a device that cannot
+     * say which modifier it picked. */
+    uint32_t           tiled_modifiers(const VkImageCreateInfo &rows, uint64_t *modifiers, uint32_t capacity) const;
+    /* The modifier `image`, laid out by one, was laid out by;
+     * DRM_FORMAT_MOD_INVALID when the device cannot say. */
+    uint64_t           modifier_of(VkImage image) const;
     /* The first memory type `allowed` permits, a device-local one first;
      * VK_MAX_MEMORY_TYPES for none. */
     uint32_t           memory_type(uint32_t allowed) const;
@@ -63,7 +71,7 @@ public:
     void                 free_memory(VkDeviceMemory memory) const;
     [[nodiscard]] bool   memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagBits type, int &fd) const;
     /* The first row of the only memory plane of an image laid out by a
-     * modifier - the linear one ExportableImageInfo describes. */
+     * modifier (ExportableImageInfo): where it starts and its pitch. */
     VkSubresourceLayout  row_layout(VkImage image) const;
 
     [[nodiscard]] bool create_buffer(const VkBufferCreateInfo &info, VkBuffer &buffer) const;
@@ -97,10 +105,17 @@ public:
     void               queue_idle(VkQueue queue) const;
 
 private:
+    /* Whether the image `info` describes, viewed as `views` and laid out by
+     * `modifier` (none for any other tiling), exports as a dma-buf. */
+    bool supports_layout(const VkImageCreateInfo &info, const VkImageFormatListCreateInfo *views,
+                         const uint64_t *modifier) const;
+
     VkPhysicalDevice                 physical_;
     VkDevice                         device_;
     VkPhysicalDeviceMemoryProperties memory_;
     PFN_vkGetPhysicalDeviceImageFormatProperties2 format_properties_;
+    PFN_vkGetPhysicalDeviceFormatProperties2      format_features_;
+    PFN_vkGetImageDrmFormatModifierPropertiesEXT  image_modifier_;
     PFN_vkCreateImage                create_image_;
     PFN_vkDestroyImage               destroy_image_;
     PFN_vkGetImageMemoryRequirements requirements_;

@@ -191,15 +191,19 @@ public:
      * compositor's dma-buf `fd` (ExportableImages::adopt), with a reference
      * the caller owns; the fd is taken whatever happens. */
     ID3D11Texture2D   *adopt_exportable(int fd, const D3D11_TEXTURE2D_DESC1 &desc);
-    /* Under the lock: the row pitch of the linear image make_exportable made
+    /* Under the lock: the row pitch of the linear image make_rows made
      * `texture` over (ExportableImages::row_pitch). */
     [[nodiscard]] bool exportable_pitch(ID3D11Texture2D *texture, uint32_t &pitch);
     /* Under the lock: a shared texture described as `desc`, made over memory
-     * OpenGL and Vulkan can open (ExportableImages::make), with a reference
-     * the caller owns; null for one only DXVK's own allocation can hold. */
-    ID3D11Texture2D   *make_exportable(const D3D11_TEXTURE2D_DESC1 &desc);
-    /* Under the lock: a dma-buf of the memory make_exportable made `texture`
-     * over, which the caller owns; false for any other texture. */
+     * OpenGL, Vulkan and OpenCL can open as rows (ExportableImages::make_rows),
+     * with a reference the caller owns; null for one only DXVK's own
+     * allocation can hold. */
+    ID3D11Texture2D   *make_rows(const D3D11_TEXTURE2D_DESC1 &desc);
+    /* Under the lock: the same, laid out by a tiling of the GPU's own
+     * (ExportableImages::make_tiled), for Direct3D and an importer told it. */
+    ID3D11Texture2D   *make_tiled(const D3D11_TEXTURE2D_DESC1 &desc);
+    /* Under the lock: a dma-buf of the memory make_rows made `texture` over,
+     * which the caller owns; false for any other texture. */
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
     /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
     /* Whether a buffer can be drawn from guest memory in place: DXVK renames

@@ -379,9 +379,13 @@ dma-bufs already do.
 
    Begun, Direct3D 11 to the others: a shared texture of one 2D mip, layer and
    sample (`ExportableImageInfo`) is made by `ExportableImages` over dedicated
-   memory exported as a dma-buf, wrapped for DXVK, and the UMD publishes it
-   with SHARE_OBJECT under the key the miniport minted, so OpenGL and Vulkan
-   open it by that id like any shared object. OpenGL imports memory as
+   memory exported as a dma-buf, wrapped for DXVK. One whose maker asked for
+   rows (`SharedRowsScope`: a window chain's slot, an OpenCL twin) is laid out
+   linear, and the UMD publishes it with SHARE_OBJECT under the key the
+   miniport minted, so OpenGL and Vulkan open it by that id like any shared
+   object; every other is laid out in a tiling of the GPU's own, which
+   Direct3D draws and samples at full speed and only an importer told its
+   modifier reads (docs/external-export.md §6). OpenGL imports memory as
    *dedicated*, which is what makes radeonsi read RADV's layout from the
    dma-buf (`test_d3d_gl_interop_device`). Vulkan binds an image made from the
    same `ExportableImageInfo` - it lives in `proto/vulkan/` because both sides

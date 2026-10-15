@@ -6,6 +6,8 @@
 #include "icd/d3d/ddi/d3dddiarg_open_adapter_record.hpp"
 #include "icd/d3d/umd_binding.hpp"
 
+#include <windows.h>
+
 namespace av {
 
 UmdLibrary::Seams::Seams()
@@ -44,6 +46,20 @@ d3d::Hresult UmdLibrary::open_adapter9(void *args)
     d3d::UmdRoot *const answering = driver_.root();
     if (answering == nullptr) return d3d::hr_fail;
     return answering->open_adapter9(static_cast<d3d::D3dddiargOpenAdapterRecord *>(args));
+}
+
+void UmdLibrary::ask_shared_rows()
+{
+    AV_SCOPE("UmdLibrary::ask_shared_rows");
+    Seams *const seams = driver_.seams();
+    if (seams != nullptr) static_cast<void>(seams->driver.shared_rows().ask(GetCurrentThreadId()));
+}
+
+void UmdLibrary::withdraw_shared_rows()
+{
+    AV_SCOPE("UmdLibrary::withdraw_shared_rows");
+    Seams *const seams = driver_.seams();
+    if (seams != nullptr) seams->driver.shared_rows().withdraw(GetCurrentThreadId());
 }
 
 long UmdLibrary::crashed(void *pointers)

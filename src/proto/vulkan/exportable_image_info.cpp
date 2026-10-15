@@ -72,6 +72,7 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
       list_{VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, views_}, views_{},
       plane_{}, layout_{VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT, nullptr,
                         drm_format_mod_linear, 1u, &plane_},
+      tilings_{VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT, nullptr, 0u, nullptr},
       info_{}, supported_(false)
 {
     AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
@@ -90,17 +91,17 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     info_.mipLevels = 1u;
     info_.arrayLayers = 1u;
     info_.samples = VK_SAMPLE_COUNT_1_BIT;
-    /* Linear: the memory goes to processes outside QEMU (a window mirror's
-     * import, docs/external-export.md), and only a linear layout is one every
-     * driver reads the same. An optimal image's tiling travels with its memory
-     * on some kernels' buffers (amdgpu) and on others not at all (i915, Xe),
-     * where the importer read it as linear and showed it scrambled. Linear
-     * under the modifier that names it rather than VK_IMAGE_TILING_LINEAR: a
-     * driver may export a dma-buf only for an image laid out by a modifier -
-     * RADV from Mesa 26.2 refuses the other. The rows are placed here rather
-     * than left to the driver: every device that makes this image then lays
-     * the memory out alike by construction, and no driver picks a pitch its
-     * own engines cannot draw at (row_alignment). */
+    /* Laid out by a modifier, which names the layout to every importer: the
+     * memory goes to other APIs and to processes outside QEMU (a window
+     * mirror's import, docs/external-export.md), and an optimal image's tiling
+     * travels with its memory on some kernels' buffers (amdgpu) and on others
+     * not at all (i915, Xe), where the importer read it as linear and showed
+     * it scrambled. A modifier rather than VK_IMAGE_TILING_LINEAR for rows
+     * too: a driver may export a dma-buf only for an image laid out by a
+     * modifier - RADV from Mesa 26.2 refuses the other. Rows are placed here
+     * rather than left to the driver: every device that makes this image then
+     * lays the memory out alike by construction, and no driver picks a pitch
+     * its own engines cannot draw at (row_alignment). */
     info_.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     /* Drawn and sampled whatever the binds say: another API opening the
      * memory draws into it, and a superset of what DXVK asks is an image DXVK
@@ -119,6 +120,33 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
         info_.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     }
     supported_ = true;
+}
+
+/* The rows' description with its last link - the explicit linear layout -
+ * replaced by the list the driver picks from. */
+ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32_t mips, uint32_t layers,
+                                         uint32_t samples, uint32_t format, uint32_t bind_flags,
+                                         const uint64_t *modifiers, uint32_t count)
+    : ExportableImageInfo(width, height, mips, layers, samples, format, bind_flags)
+{
+    AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
+    tilings_.drmFormatModifierCount = count;
+    tilings_.pDrmFormatModifiers = modifiers;
+    if (external_.pNext == &layout_) external_.pNext = &tilings_;
+    if (list_.pNext == &layout_) list_.pNext = &tilings_;
+    supported_ = supported_ && modifiers != nullptr && count != 0u;
+}
+
+ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32_t mips, uint32_t layers,
+                                         uint32_t samples, uint32_t format, uint32_t bind_flags, uint64_t modifier,
+                                         uint64_t offset, uint64_t pitch)
+    : ExportableImageInfo(width, height, mips, layers, samples, format, bind_flags)
+{
+    AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
+    layout_.drmFormatModifier = modifier;
+    plane_.offset = offset;
+    plane_.rowPitch = pitch;
+    supported_ = supported_ && pitch != 0u;
 }
 
 bool ExportableImageInfo::supported() const

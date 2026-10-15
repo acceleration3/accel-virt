@@ -9,6 +9,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
+#include "icd/d3d/shared_rows_request.hpp"
 #include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
@@ -42,11 +43,14 @@ public:
     d3d::Hresult build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create, uint32_t kmt_adapter);
     d3d::Hresult caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter);
     void         tear_down(void *block);
+    /* What AvAskSharedRows and AvWithdrawSharedRows change, from any thread. */
+    d3d::SharedRowsRequest &rows();
 
 private:
     BlockSource             &memory_;
     LogSink            &log_;
     D3d11CallTrace           trace_;
+    d3d::SharedRowsRequest   rows_;
     ObjectPool<D3d11Device>  devices_;
     AdapterSessions<D3d11HostCaps> adapters_;
 };

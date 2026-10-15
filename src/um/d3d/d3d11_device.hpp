@@ -53,6 +53,7 @@ class BlockSource;
 
 namespace av::d3d {
 class D3dSession;
+class SharedRowsRequest;
 }  // namespace av::d3d
 
 namespace av::d3d11 {
@@ -62,7 +63,7 @@ class D3d11HostCaps;
 class D3d11Device {
 public:
     D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
-                D3d11CallTrace &trace);
+                D3d11CallTrace &trace, const d3d::SharedRowsRequest &rows);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
@@ -308,6 +309,8 @@ private:
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
     D3d11CallTrace &trace_;
+    /* Which threads make shared textures another API reads as rows. */
+    const d3d::SharedRowsRequest &rows_;
     /* What the call trace calls this device or deferred context. */
     uint32_t        context_number_;
 };

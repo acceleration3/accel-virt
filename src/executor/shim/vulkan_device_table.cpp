@@ -6,8 +6,17 @@
 
 namespace av {
 
+namespace {
+
+/* From drm_fourcc.h. */
+constexpr uint64_t drm_format_mod_linear = 0u;
+constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
+
+}  // namespace
+
 VulkanDeviceTable::VulkanDeviceTable()
     : physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), memory_{}, format_properties_(nullptr),
+      format_features_(nullptr), image_modifier_(nullptr),
       create_image_(nullptr), destroy_image_(nullptr), requirements_(nullptr), allocate_(nullptr), free_(nullptr), map_(nullptr),
       bind_(nullptr), layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
       import_semaphore_(nullptr), semaphore_fd_(nullptr), wait_semaphores_(nullptr), create_pool_(nullptr),
@@ -26,6 +35,8 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
         vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceMemoryProperties"));
     format_properties_ = reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties2>(
         vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceImageFormatProperties2"));
+    format_features_ = reinterpret_cast<PFN_vkGetPhysicalDeviceFormatProperties2>(
+        vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceFormatProperties2"));
     if (properties == nullptr) return false;
     properties(physical, &memory_);
     const auto entry = [device](const char *name) { return vkGetDeviceProcAddr(device, name); };
@@ -37,6 +48,10 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     map_ = reinterpret_cast<PFN_vkMapMemory>(entry("vkMapMemory"));
     bind_ = reinterpret_cast<PFN_vkBindImageMemory>(entry("vkBindImageMemory"));
     layout_ = reinterpret_cast<PFN_vkGetImageSubresourceLayout>(entry("vkGetImageSubresourceLayout"));
+    /* Null where the device has no VK_EXT_image_drm_format_modifier: its
+     * shared images are then rows (ExportableImages::make_tiled). */
+    image_modifier_ = reinterpret_cast<PFN_vkGetImageDrmFormatModifierPropertiesEXT>(
+        entry("vkGetImageDrmFormatModifierPropertiesEXT"));
     memory_fd_ = reinterpret_cast<PFN_vkGetMemoryFdKHR>(entry("vkGetMemoryFdKHR"));
     create_buffer_ = reinterpret_cast<PFN_vkCreateBuffer>(entry("vkCreateBuffer"));
     destroy_buffer_ = reinterpret_cast<PFN_vkDestroyBuffer>(entry("vkDestroyBuffer"));
@@ -101,33 +116,55 @@ bool VulkanDeviceTable::supports_exportable(const VkImageCreateInfo &info) const
 {
     AV_SCOPE("VulkanDeviceTable::supports_exportable");
     if (!loaded() || format_properties_ == nullptr) return false;
+    const VkImageFormatListCreateInfo *views = nullptr;
+    const uint64_t                    *modifiers = nullptr;
+    uint32_t                           count = 0u;
+    for (auto *next = static_cast<const VkBaseInStructure *>(info.pNext); next != nullptr; next = next->pNext) {
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO)
+            views = reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT) {
+            modifiers = &reinterpret_cast<const VkImageDrmFormatModifierExplicitCreateInfoEXT *>(next)->drmFormatModifier;
+            count = 1u;
+        }
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT) {
+            const auto *listed = reinterpret_cast<const VkImageDrmFormatModifierListCreateInfoEXT *>(next);
+            modifiers = listed->pDrmFormatModifiers;
+            count = listed->drmFormatModifierCount;
+        }
+    }
+    if (info.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) return count == 0u && supports_layout(info, views, nullptr);
+    /* A listed layout is the driver's to pick, so every one must do. */
+    if (modifiers == nullptr || count == 0u) return false;
+    for (uint32_t index = 0u; index < count; index++)
+        if (!supports_layout(info, views, &modifiers[index])) return false;
+    return true;
+}
+
+bool VulkanDeviceTable::supports_layout(const VkImageCreateInfo &info, const VkImageFormatListCreateInfo *views,
+                                        const uint64_t *modifier) const
+{
+    AV_SCOPE("VulkanDeviceTable::supports_layout");
     VkPhysicalDeviceExternalImageFormatInfo external = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
                                                         nullptr, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
     /* The view formats are part of what is asked: a mutable image is
      * supported only as the formats it is viewed in are. */
-    VkImageFormatListCreateInfo views = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, nullptr};
+    VkImageFormatListCreateInfo listed = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, nullptr};
+    if (views != nullptr) {
+        listed = *views;
+        listed.pNext = external.pNext;
+        external.pNext = &listed;
+    }
     /* An image laid out by a modifier is asked about with the modifier: the
      * query is of that layout, and RADV dereferences the structure naming it
      * whether or not it was given. */
-    VkPhysicalDeviceImageDrmFormatModifierInfoEXT modifier = {
+    VkPhysicalDeviceImageDrmFormatModifierInfoEXT laid = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT, nullptr, 0u, VK_SHARING_MODE_EXCLUSIVE, 0u,
         nullptr};
-    bool modified = false;
-    for (auto *next = static_cast<const VkBaseInStructure *>(info.pNext); next != nullptr; next = next->pNext) {
-        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
-            views = *reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
-            views.pNext = external.pNext;
-            external.pNext = &views;
-        }
-        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT) {
-            const auto *laid = reinterpret_cast<const VkImageDrmFormatModifierExplicitCreateInfoEXT *>(next);
-            modifier.drmFormatModifier = laid->drmFormatModifier;
-            modifier.pNext = external.pNext;
-            external.pNext = &modifier;
-            modified = true;
-        }
+    if (modifier != nullptr) {
+        laid.drmFormatModifier = *modifier;
+        laid.pNext = external.pNext;
+        external.pNext = &laid;
     }
-    if ((info.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) != modified) return false;
     const VkPhysicalDeviceImageFormatInfo2 asked = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
                                                     &external,
                                                     info.format,
@@ -143,6 +180,56 @@ bool VulkanDeviceTable::supports_exportable(const VkImageCreateInfo &info) const
            info.mipLevels <= limits.maxMipLevels && info.arrayLayers <= limits.maxArrayLayers &&
            (limits.sampleCounts & info.samples) != 0u &&
            (exported.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) != 0u;
+}
+
+/* Of the modifiers the driver lists for the format: one plane, so the whole
+ * image is one dma-buf at one pitch an importer is told; not linear; and
+ * drawn, blended, sampled and copied wherever the format's optimal tiling is,
+ * so a Direct3D texture over it does all a texture DXVK made would. Then each
+ * is asked about as the rows' image would be, laid out by it. */
+uint32_t VulkanDeviceTable::tiled_modifiers(const VkImageCreateInfo &rows, uint64_t *modifiers, uint32_t capacity) const
+{
+    AV_SCOPE("VulkanDeviceTable::tiled_modifiers");
+    if (!loaded() || format_features_ == nullptr || image_modifier_ == nullptr) return 0u;
+    constexpr uint32_t most_listed = 64u;
+    VkDrmFormatModifierPropertiesEXT     found[most_listed] = {};
+    VkDrmFormatModifierPropertiesListEXT listed = {VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT, nullptr, 0u,
+                                                   nullptr};
+    VkFormatProperties2 properties = {VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2, &listed, {}};
+    format_features_(physical_, rows.format, &properties);
+    listed.drmFormatModifierCount = listed.drmFormatModifierCount < most_listed ? listed.drmFormatModifierCount : most_listed;
+    listed.pDrmFormatModifierProperties = found;
+    format_features_(physical_, rows.format, &properties);
+    constexpr VkFormatFeatureFlags drawn = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                                           VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                                           VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                                           VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    const VkFormatFeatureFlags wanted = properties.formatProperties.optimalTilingFeatures & drawn;
+    const VkImageFormatListCreateInfo *views = nullptr;
+    for (auto *next = static_cast<const VkBaseInStructure *>(rows.pNext); next != nullptr; next = next->pNext)
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO)
+            views = reinterpret_cast<const VkImageFormatListCreateInfo *>(next);
+    uint32_t count = 0u;
+    for (uint32_t index = 0u; index < listed.drmFormatModifierCount && count < capacity; index++) {
+        const VkDrmFormatModifierPropertiesEXT &one = found[index];
+        if (one.drmFormatModifier == drm_format_mod_linear || one.drmFormatModifierPlaneCount != 1u ||
+            (one.drmFormatModifierTilingFeatures & wanted) != wanted ||
+            !supports_layout(rows, views, &one.drmFormatModifier))
+            continue;
+        modifiers[count++] = one.drmFormatModifier;
+    }
+    return count;
+}
+
+uint64_t VulkanDeviceTable::modifier_of(VkImage image) const
+{
+    AV_SCOPE("VulkanDeviceTable::modifier_of");
+    VkImageDrmFormatModifierPropertiesEXT laid = {VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT, nullptr,
+                                                  drm_format_mod_invalid};
+    if (!loaded() || image_modifier_ == nullptr || image_modifier_(device_, image, &laid) != VK_SUCCESS)
+        return drm_format_mod_invalid;
+    return laid.drmFormatModifier;
 }
 
 /* A device-local type first: the images are drawn into and read by the GPU,
@@ -310,7 +397,7 @@ VkSubresourceLayout VulkanDeviceTable::row_layout(VkImage image) const
 {
     AV_SCOPE("VulkanDeviceTable::row_layout");
     /* Every image read here is laid out by a modifier (ExportableImageInfo),
-     * whose layout is its memory planes'. */
+     * whose layout is its memory planes' - one plane, rows or tiled. */
     const VkImageSubresource first = {VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT, 0u, 0u};
     VkSubresourceLayout      laid = {};
     if (loaded() && layout_ != nullptr) layout_(device_, image, &first, &laid);

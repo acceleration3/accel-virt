@@ -62,6 +62,11 @@ private:
     /* The memory it was made over, where ExportableImages made it; -1 for
      * none. Taken by remake, closed otherwise. */
     int       fd_;
+    /* How that memory is laid out: the modifier, and its one plane's start
+     * and pitch. */
+    uint64_t  modifier_;
+    uint64_t  offset_;
+    uint64_t  pitch_;
 };
 
 }  // namespace av

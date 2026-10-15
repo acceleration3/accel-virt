@@ -703,10 +703,16 @@ ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
     return texture;
 }
 
-ID3D11Texture2D *D3d11HostDevice::make_exportable(const D3D11_TEXTURE2D_DESC1 &desc)
+ID3D11Texture2D *D3d11HostDevice::make_rows(const D3D11_TEXTURE2D_DESC1 &desc)
 {
-    AV_SCOPE("D3d11HostDevice::make_exportable");
-    return images_.make(desc);
+    AV_SCOPE("D3d11HostDevice::make_rows");
+    return images_.make_rows(desc);
+}
+
+ID3D11Texture2D *D3d11HostDevice::make_tiled(const D3D11_TEXTURE2D_DESC1 &desc)
+{
+    AV_SCOPE("D3d11HostDevice::make_tiled");
+    return images_.make_tiled(desc);
 }
 
 bool D3d11HostDevice::export_memory(ID3D11Texture2D *texture, int &fd)

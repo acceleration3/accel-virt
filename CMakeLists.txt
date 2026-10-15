@@ -818,7 +818,8 @@ add_test(NAME avumd_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/avumd.dll --dll --only-exports
                  --require-export OpenAdapter10_2 --require-export OpenAdapter12
-                 --require-export OpenAdapter)
+                 --require-export OpenAdapter --require-export AvAskSharedRows
+                 --require-export AvWithdrawSharedRows)
 
 # The OpenCL ICD exports exactly the two names the Khronos loader may resolve
 # (feature 052, research §1); it presents nothing, so it wants no user32.
@@ -881,7 +882,8 @@ add_test(NAME avumd32_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest32/avumd32.dll --machine i386 --dll --only-exports
                  --require-export OpenAdapter10_2 --require-export OpenAdapter12
-                 --require-export OpenAdapter)
+                 --require-export OpenAdapter --require-export AvAskSharedRows
+                 --require-export AvWithdrawSharedRows)
 # The vendor libraries export exactly what their .def files name, which is
 # what an application resolves by name (docs/vendor-libraries.md): NVAPI's one
 # lookup, and ADL's ADL_ and ADL2_ calls. Neither presents anything, so neither

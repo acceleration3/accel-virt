@@ -1,8 +1,9 @@
-/* The image a shared Direct3D 11 texture is made as when another API must open
- * its memory: the formats interop shares, mutable between linear and sRGB where
- * the format has both, drawn and sampled whatever the binds, over dma-buf
- * memory laid out under the linear DRM format modifier with rows 256 bytes
- * aligned - and nothing for a texture interop does not share. */
+/* The image a shared Direct3D 11 texture is made as: the formats interop
+ * shares, mutable between linear and sRGB where the format has both, drawn and
+ * sampled whatever the binds, over dma-buf memory laid out by a DRM format
+ * modifier - linear with rows 256 bytes aligned, one of the GPU's tilings the
+ * driver picks, or a layout another image was given - and nothing for a
+ * texture interop does not share. */
 #include "proto/vulkan/exportable_image_info.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -140,3 +141,66 @@ TEST(exportable_image_info, what_interop_does_not_share_is_left_to_dxvk)
   CHECK(!ExportableImageInfo(4u, 0u, 1u, 1u, 1u, r8g8b8a8_unorm, binds).supported());
   /* The edge of each refusal: one mip, one layer, one sample are shared. */
   CHECK(ExportableImageInfo(1u, 1u, 1u, 1u, 1u, r8g8b8a8_unorm, binds).supported()); }
+
+/* Tiled: the same image, its last link the list of tilings the driver picks
+ * from, read where the caller keeps them. */
+TEST(exportable_image_info, a_tiled_texture_lists_the_tilings_the_driver_picks_from)
+{ const std::uint64_t tilings[] = {0x0100000000000002ull, 0x0100000000000001ull};
+  const ExportableImageInfo tiled(2560u, 1440u, 1u, 1u, 1u, b8g8r8a8_unorm, bind_shader_resource | bind_render_target,
+                                  tilings, 2u);
+  CHECK(tiled.supported());
+  const VkImageCreateInfo &info = tiled.info();
+  CHECK_EQ(info.tiling, VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT);
+  CHECK_EQ(info.format, VK_FORMAT_B8G8R8A8_UNORM);
+  CHECK_EQ(info.extent.width, 2560u);
+  CHECK_EQ(info.flags, static_cast<VkImageCreateFlags>(VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT));
+  const auto *external = static_cast<const VkExternalMemoryImageCreateInfo *>(info.pNext);
+  CHECK_EQ(external->handleTypes, static_cast<VkExternalMemoryHandleTypeFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
+  const auto *views = static_cast<const VkImageFormatListCreateInfo *>(external->pNext);
+  CHECK_EQ(views->viewFormatCount, 2u);
+  const auto *listed = reinterpret_cast<const VkImageDrmFormatModifierListCreateInfoEXT *>(layout_of(info));
+  CHECK(static_cast<const void *>(listed) == views->pNext);
+  CHECK_EQ(listed->sType, VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
+  CHECK_EQ(listed->drmFormatModifierCount, 2u);
+  CHECK(listed->pDrmFormatModifiers == tilings);
+  CHECK(listed->pNext == nullptr);
+
+  /* A format with no sibling lists the tilings straight after the external
+   * memory. */
+  const std::uint64_t one[] = {0x0100000000000002ull};
+  const ExportableImageInfo wide(4u, 4u, 1u, 1u, 1u, r16g16b16a16_float, bind_render_target, one, 1u);
+  CHECK(wide.supported());
+  const auto *wide_external = static_cast<const VkExternalMemoryImageCreateInfo *>(wide.info().pNext);
+  const auto *wide_listed = static_cast<const VkImageDrmFormatModifierListCreateInfoEXT *>(wide_external->pNext);
+  CHECK_EQ(wide_listed->sType, VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
+  CHECK_EQ(wide_listed->drmFormatModifierCount, 1u);
+
+  /* No tiling to pick from is no image; nor is a texture rows would refuse. */
+  CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 1u, b8g8r8a8_unorm, bind_render_target, tilings, 0u).supported());
+  CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 1u, b8g8r8a8_unorm, bind_render_target, nullptr, 2u).supported());
+  CHECK(!ExportableImageInfo(4u, 4u, 2u, 1u, 1u, b8g8r8a8_unorm, bind_render_target, tilings, 2u).supported()); }
+
+/* Laid out as told: how an image another made lays the memory out - its
+ * modifier, its plane's start and pitch - so the same GPU opens it again over
+ * the same memory (CarriedShare). */
+TEST(exportable_image_info, a_layout_another_image_was_given_is_described_as_it_was)
+{ const ExportableImageInfo carried(614u, 289u, 1u, 1u, 1u, b8g8r8a8_unorm, bind_shader_resource | bind_render_target,
+                                    std::uint64_t{0x0100000000000002ull}, std::uint64_t{0u}, std::uint64_t{2560u});
+  CHECK(carried.supported());
+  const auto *layout = layout_of(carried.info());
+  CHECK_EQ(layout->sType, VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
+  CHECK_EQ(layout->drmFormatModifier, std::uint64_t{0x0100000000000002ull});
+  CHECK_EQ(layout->drmFormatModifierPlaneCount, 1u);
+  CHECK_EQ(layout->pPlaneLayouts[0].offset, 0u);
+  CHECK_EQ(layout->pPlaneLayouts[0].rowPitch, 2560u);
+  CHECK_EQ(carried.info().tiling, VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT);
+  /* A plane placed past the start keeps its offset; rows keep their pitch. */
+  const ExportableImageInfo offset(4u, 4u, 1u, 1u, 1u, r8g8b8a8_unorm, bind_render_target, linear_modifier,
+                                   std::uint64_t{4096u}, std::uint64_t{512u});
+  CHECK(offset.supported());
+  CHECK_EQ(layout_of(offset.info())->pPlaneLayouts[0].offset, 4096u);
+  CHECK_EQ(layout_of(offset.info())->pPlaneLayouts[0].rowPitch, 512u);
+  /* No pitch is no layout. */
+  CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 1u, r8g8b8a8_unorm, bind_render_target, linear_modifier,
+                             std::uint64_t{0u}, std::uint64_t{0u})
+             .supported()); }

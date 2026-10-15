@@ -103,6 +103,24 @@ difference.
 - **2026-09-30, fixed** (dd4abbe5): each unmap of DWM's large dynamic buffers
   copied the whole buffer into the command stream, 89 ms of `memmove` a
   second; the written pages alone now go (write watch), 12 ms.
+- **2026-10-15, fixed**: a capture of the 2560x1440 monitor on an Intel Iris Xe
+  (ADL GT2) host at 51 frames a second (`remotewin-wgcbench`, D3D11 window), 59
+  on the NVIDIA GPU of the same host. With MinUpdateInterval 0 the rule above
+  skips nothing; a skip is DWM's `RENDERTARGET_RENDERSKIPPED`, in 35 of 51 with
+  the previous capture's present posted and not yet complete. A capture's post
+  to its completion took 5.3 ms at the median (2.2 on the NVIDIA GPU), and QEMU
+  held 26 to 28% of the Xe's render engine against 9 to 11% for a window
+  capture: every texture a guest shares - the capture's frame pool,
+  DirectComposition's surfaces - was laid out linear, and on the Xe a draw into
+  a linear image takes three and a half times as long as into the same image
+  tiled, and one from it six times (`tools/host/shared_image_bench.c`). Shared
+  textures are laid out in a tiling of the GPU's own now, linear only where
+  another API reads them as rows (docs/external-export.md §6): 16 to 19% of the
+  render engine, and 54 to 57 captures a second (58.4 to 59.3 of a GDI window,
+  57.7 before). What is left is DWM's render thread, which renders the whole
+  monitor into the capture every frame and is on the CPU three quarters of the
+  time on that host in its power-saver profile (cores at 0.7 to 0.9 GHz), and
+  the host desktop's own 20 to 29% of the same render engine.
 
 ## Files
 

@@ -15,6 +15,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
+#include "proto/d3d/resource_misc.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
@@ -270,13 +271,17 @@ void D3dBackend::abandon(ImportedBlob &blob)
     region_.abandon(blob);
 }
 
-/* A texture the guest shared is made over memory OpenGL and Vulkan can open
- * (feature 053), so a window those APIs draw can be presented through it;
- * null for anything else, which DXVK makes as it makes any texture. */
+/* A texture the guest shared is made over memory other APIs can open: as rows
+ * when the guest asked, for an API that reads it so (feature 053) - a window
+ * those APIs draw presented through it, an OpenCL image over it - and
+ * otherwise in the GPU's own tiling, which Direct3D draws and samples at full
+ * speed (ResourceMisc). Null for anything else, which DXVK makes as it makes
+ * any texture. */
 ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc)
 {
     AV_SCOPE("D3dBackend::shareable");
-    if ((guest_misc & D3D11_RESOURCE_MISC_SHARED) == 0u) return nullptr;
+    const ResourceMisc misc(guest_misc);
+    if (!misc.shared()) return nullptr;
     D3D11_TEXTURE2D_DESC1 described = {};
     described.Width = texture.Width;
     described.Height = texture.Height;
@@ -287,7 +292,7 @@ ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint
     described.Usage = texture.Usage;
     described.BindFlags = texture.BindFlags;
     described.MiscFlags = texture.MiscFlags;
-    return device11_->make_exportable(described);
+    return misc.rows() ? device11_->make_rows(described) : device11_->make_tiled(described);
 }
 
 /* A shared texture's memory, as the dma-buf OpenGL and Vulkan import. The

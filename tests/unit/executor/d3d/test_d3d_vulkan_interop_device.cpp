@@ -9,6 +9,7 @@
  * 256-byte rows, so the rows the description places past each row's texels
  * are where both devices must look. A host without DXVK and Vulkan on one GPU
  * returns without judging. */
+#include "proto/d3d/resource_misc.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -50,7 +51,9 @@ constexpr std::uint32_t format_r8g8b8a8 = 28u;
 constexpr std::uint32_t format_b8g8r8a8 = 87u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
-constexpr std::uint32_t misc_shared = 0x2u;
+/* Shared and asked for as rows, as the code of ours that makes a texture
+ * another API reads asks for it (SharedRowsScope). */
+constexpr std::uint32_t misc_shared = av::ResourceMisc::shared_bit | av::ResourceMisc::rows_bit;
 constexpr std::uint64_t key = 0x5100000000000041ull;
 constexpr std::uint32_t uuid_bytes = VK_UUID_SIZE;
 

@@ -253,7 +253,7 @@ bool D3d9FlipShares::make_on_cpu(Primary &made)
     AV_SCOPE("D3d9FlipShares::make_on_cpu");
     const D3D11_TEXTURE2D_DESC1 desc = shared_texture_desc(made.width_, made.height_, made.format_);
     device11_->lock(nullptr);
-    made.texture_ = device11_->make_exportable(desc);
+    made.texture_ = device11_->make_tiled(desc);
     device11_->unlock();
     if (made.texture_ == nullptr) return false;
     for (Copy &copy : made.copies_)

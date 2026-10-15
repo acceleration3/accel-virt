@@ -9,7 +9,9 @@
 #include "icd/d3d/kernel_surface.hpp"
 #include "icd/d3d/passthrough_geometry_shader.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/d3d/resource_misc.hpp"
 #include "proto/resources/shared_object_kind.hpp"
+#include "icd/d3d/shared_rows_request.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -21,7 +23,6 @@ namespace {
 constexpr uint32_t api_generate_mips = 0x1u;
 constexpr uint32_t api_texture_cube = 0x4u;
 constexpr uint32_t misc_same_bits = 0xF0u; /* draw-indirect, raw views, structured, clamp */
-constexpr uint32_t api_misc_shared = 0x2u;
 constexpr uint32_t api_bind_uav = 0x80u;
 constexpr uint32_t api_bind_pipeline = 0x7Fu;
 
@@ -118,14 +119,16 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
      * (docs/d3d-desktop.md §3.1). */
     const bool kernel_visible = args->pPrimaryDesc != nullptr || (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
                                 (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
-    /* A shared texture with no present or scanout in it is one OpenGL or
-     * Vulkan may open (feature 053): the host is told it is shared, and makes
-     * it over memory they can import. */
+    /* A shared texture with no present or scanout in it is one another API
+     * may open (feature 053): the host is told it is shared, and makes it over
+     * memory they can import - as rows when the thread making it asked
+     * (ResourceMisc), in the GPU's own tiling otherwise. */
     const bool interop = (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u && args->pPrimaryDesc == nullptr &&
                          (args->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u &&
                          resource.dimension == D3D10DDIRESOURCE_TEXTURE2D && resource.mips == 1u &&
                          resource.layers == 1u && args->SampleDesc.Count <= 1u;
-    desc.misc_flags |= interop ? api_misc_shared : 0u;
+    const bool as_rows = interop && rows_.asked_by(GetCurrentThreadId());
+    if (interop) desc.misc_flags |= ResourceMisc::shared_bit | (as_rows ? ResourceMisc::rows_bit : 0u);
     /* Allocated first: the key is the identity the miniport mints over the
      * allocation, and the host resource is made under it. */
     if (kernel_visible) {
@@ -136,7 +139,8 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         set_error(E_OUTOFMEMORY);
         return;
     }
-    if (interop && resource.shared_key != 0u) publish_shared(resource);
+    /* Only rows are memory another API can lay an image over. */
+    if (as_rows && resource.shared_key != 0u) publish_shared(resource);
 
     if (args->Usage == D3D10_DDI_USAGE_DYNAMIC || args->Usage == D3D10_DDI_USAGE_STAGING || args->MapFlags != 0u) {
         size_t bytes = 0u;

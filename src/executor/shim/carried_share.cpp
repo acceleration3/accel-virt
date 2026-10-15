@@ -11,7 +11,8 @@ namespace av {
 
 CarriedShare::CarriedShare(uint32_t domain, uint64_t id)
     : id_(id), domain_(domain), dimension_(Dimension::none), width_(0u), height_(0u), depth_or_array_(0u), mips_(0u),
-      format_(0u), samples_(0u), quality_(0u), bind_(0u), misc_(0u), stride_(0u), fd_(-1)
+      format_(0u), samples_(0u), quality_(0u), bind_(0u), misc_(0u), stride_(0u), fd_(-1), modifier_(0u),
+      offset_(0u), pitch_(0u)
 {
     AV_SCOPE("CarriedShare::CarriedShare");
 }
@@ -63,7 +64,7 @@ bool CarriedShare::record(IUnknown *resource, ExportableImages &images)
         quality_ = desc.SampleDesc.Quality;
         bind_ = desc.BindFlags;
         misc_ = desc.MiscFlags;
-        if (!images.export_memory(texture, fd_)) fd_ = -1;
+        if (!images.carry(texture, fd_, modifier_, offset_, pitch_)) fd_ = -1;
     } else if (kind == D3D11_RESOURCE_DIMENSION_TEXTURE3D) {
         D3D11_TEXTURE3D_DESC desc = {};
         static_cast<ID3D11Texture3D *>(typed)->GetDesc(&desc);
@@ -96,7 +97,7 @@ IUnknown *CarriedShare::remake_texture2d(ID3D11Device5 *device, ExportableImages
     desc.BindFlags = bind_;
     desc.MiscFlags = misc_;
     if (fd_ >= 0) {
-        ID3D11Texture2D *const adopted = images.adopt(fd_, desc);
+        ID3D11Texture2D *const adopted = images.adopt(fd_, desc, modifier_, offset_, pitch_);
         fd_ = -1;
         if (adopted != nullptr) return adopted;
     }

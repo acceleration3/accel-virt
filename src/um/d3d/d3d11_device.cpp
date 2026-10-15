@@ -33,12 +33,12 @@ constexpr uint32_t copy_discard = 0x2u;
 }  // namespace
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
-                         D3d11CallTrace &trace)
+                         D3d11CallTrace &trace, const d3d::SharedRowsRequest &rows)
     : session_(session), memory_(memory), shadows_(memory), maps_(), log_(log), lines_(log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), paging_(), follower_(), gate_(), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
-      trace_(trace), context_number_(trace.number_context())
+      trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }
@@ -575,7 +575,7 @@ VOID D3d11Device::create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEX
     }
     D3d11Device *context = nullptr;
     session_.lock().acquire();
-    const Status pooled = session_.contexts().create(context, session_, memory_, log_, caps_, trace_);
+    const Status pooled = session_.contexts().create(context, session_, memory_, log_, caps_, trace_, rows_);
     session_.lock().release();
     if (pooled != Status::ok) {
         set_error(E_OUTOFMEMORY);

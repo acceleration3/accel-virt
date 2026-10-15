@@ -35,6 +35,11 @@ public:
     d3d::Hresult open_adapter9(void *args);
     /* The process is crashing: the crash file, if tracing started. */
     long         crashed(void *pointers);
+    /* The calling thread's shared textures are made as rows from now on, or
+     * no longer (SharedRowsRequest): the two other exports. Nothing in a
+     * process the driver refuses. */
+    void         ask_shared_rows();
+    void         withdraw_shared_rows();
 
 private:
     struct Seams {

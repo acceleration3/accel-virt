@@ -4,6 +4,7 @@
  * memory object, a pattern is written into a texture over it through GL, and
  * Direct3D reads back every texel where GL put it. This is how an OpenGL window's frames reach a DXGI chain.
  * A host without DXVK or without OpenGL on one GPU returns without judging. */
+#include "proto/d3d/resource_misc.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/opengl/opengl_backend.hpp"
@@ -57,7 +58,9 @@ constexpr std::uint32_t size = 64u;
 constexpr std::uint32_t format_r8g8b8a8 = 28u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
-constexpr std::uint32_t misc_shared = 0x2u;
+/* Shared and asked for as rows, as the code of ours that makes a texture
+ * another API reads asks for it (SharedRowsScope). */
+constexpr std::uint32_t misc_shared = av::ResourceMisc::shared_bit | av::ResourceMisc::rows_bit;
 constexpr std::uint64_t key = 0x5100000000000031ull;
 constexpr std::uint64_t bytes = size * size * 4u;
 constexpr unsigned gl_texture_2d = 0x0DE1;

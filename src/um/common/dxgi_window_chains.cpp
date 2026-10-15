@@ -9,6 +9,7 @@
 #include "icd/common/thread_lock.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
+#include "um/common/shared_rows_scope.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -346,6 +347,9 @@ bool DxgiWindowChains::make_slots(Chain &chain, Device &device, uint32_t count)
     described.Usage = D3D11_USAGE_DEFAULT;
     described.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
     described.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+    /* The ICD opens each slot's memory as an image of rows (ChainedImage,
+     * OpenGL's memory object), so the host lays it out so. */
+    const SharedRowsScope rows;
     for (uint32_t slot = 0u; slot < count; slot++) {
         if (FAILED(device.device->CreateTexture2D(&described, nullptr, chain.slots[slot].receive())) ||
             FAILED(device.device->CreateShaderResourceView(chain.slots[slot].get(), nullptr,

@@ -208,8 +208,9 @@ here), 2D, one mip, one array layer, one sample,
 usage default, binds no more than `SHADER_RESOURCE | RENDER_TARGET`, in
 `B8G8R8A8_UNORM(_SRGB)`, `R8G8B8A8_UNORM(_SRGB)`, `R10G10B10A2_UNORM` or
 `R16G16B16A16_FLOAT`. avumd.dll makes such a texture on the host over memory
-other APIs can open (`ExportableImageInfo`, `ExportableImages::make`), which is
-what is exported. Any other texture is `not_found`.
+that can be exported (`ExportableImageInfo`, `ExportableImages::make_tiled`),
+in a tiling of the GPU's own, which is what is exported with its modifier
+(§6). Any other texture is `not_found`.
 
 ### 5.2 The id, from user mode
 
@@ -265,38 +266,60 @@ the miniport tells the device, and the consumer is told (§4).
 ## 6. The host side: importing
 
 The dma-buf is the texture's own memory, bound to memory of its own
-(dedicated) and laid out linear: an implicit layout is one only some drivers
-keep with the memory - RADV writes it into the buffer's metadata, Intel's i915
-and Xe do not, and an importer there read the picture scrambled - so the image
-is made with `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` and the one modifier
-`DRM_FORMAT_MOD_LINEAR` (0) listed, where the GPU can export it so
-(`ExportableImages`) - not `VK_IMAGE_TILING_LINEAR`, for which RADV from Mesa
-26.2 offers no dma-buf. The device that makes it has
-`VK_EXT_image_drm_format_modifier` enabled: the compositor's own, the guest's
-Vulkan devices, and DXVK's (`tools/dxvk-patches/0006`). A shared Direct3D 11
-texture's memory is device local and host visible where the GPU has such
-memory, which GFX12 keeps uncompressed: an OpenCL buffer over its compressed
-VRAM read the compression's bytes. It is still imported on the same GPU (§4,
-hello).
+(dedicated) and laid out by the DRM format modifier the export names: an
+implicit layout is one only some drivers keep with the memory - RADV writes it
+into the buffer's metadata, Intel's i915 and Xe do not, and an importer there
+read the picture scrambled - so the image is made with
+`VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT`, never `VK_IMAGE_TILING_LINEAR`
+(for which RADV from Mesa 26.2 offers no dma-buf) nor optimal. The device that
+makes it has `VK_EXT_image_drm_format_modifier` enabled: the compositor's own,
+the guest's Vulkan devices, and DXVK's (`tools/dxvk-patches/0006`). It is
+imported on the same GPU (§4, hello).
+
+- **Tiled**, what every shared texture is unless the guest asked for rows: the
+  driver picks among the GPU's own tilings that it exports in one plane and
+  draws, blends, samples and copies as its optimal tiling does
+  (`VulkanDeviceTable::tiled_modifiers`), and the export names the one it
+  picked, its plane's offset and its pitch. Composition draws and samples it
+  at full speed: on Intel's Xe graphics a full-screen draw into a linear image
+  takes three and a half times as long as into the same image Y-tiled, and
+  one from it six times (`tools/host/shared_image_bench.c`); DWM composing a
+  captured monitor into linear images and from them dropped one frame in six
+  there (docs/frame-pacing.md).
+  A GPU that exports no such tiling gets rows.
+- **Rows** (`DRM_FORMAT_MOD_LINEAR`, one plane at offset 0, each row the
+  width's bytes rounded up to 256), for a texture another API reads as rows:
+  a Vulkan or OpenGL window's chain slot and an OpenCL image's twin, whose
+  makers ask for rows (`SharedRowsScope`, `ResourceMisc`). Its memory is
+  device local and host visible where the GPU has such memory, which GFX12
+  keeps uncompressed: an OpenCL buffer over its compressed VRAM read the
+  compression's bytes. Only such a texture's memory is handed to another API
+  that opens it by id (feature 053); a tiled one's is refused, since that API
+  lays the image out itself.
+
+Importing:
 
 - **EGL** (Qt's OpenGL, Mesa radeonsi): `eglCreateImageKHR(display,
   EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, { EGL_WIDTH, w, EGL_HEIGHT, h,
   EGL_LINUX_DRM_FOURCC_EXT, fourcc, EGL_DMA_BUF_PLANE0_FD_EXT, fd,
   EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset, EGL_DMA_BUF_PLANE0_PITCH_EXT, stride,
-  EGL_NONE })` - with no modifier attributes, which a linear buffer needs none of - then
-  `glEGLImageTargetTexture2DOES`. The display must be the GPU hello named
-  (`EGL_EXT_platform_device` / `EGL_EXT_device_drm`).
-- **Vulkan** (same GPU): make the image exactly as `ExportableImageInfo`
-  describes it - 2D, the format, one mip, layer and sample,
-  `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` laid out explicitly as
-  `DRM_FORMAT_MOD_LINEAR` with one plane at offset 0 and the stride hello
-  named as its row pitch (the width's bytes rounded up to 256), usage
-  `TRANSFER_SRC | TRANSFER_DST | SAMPLED | COLOR_ATTACHMENT`,
+  EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier & 0xffffffff,
+  EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier >> 32, EGL_NONE })`
+  (`EGL_EXT_image_dma_buf_import_modifiers`; a linear export may leave the
+  modifier out) - then `glEGLImageTargetTexture2DOES`. The display must be the
+  GPU hello named (`EGL_EXT_platform_device` / `EGL_EXT_device_drm`).
+- **Vulkan** (same GPU): make the image as `ExportableImageInfo` describes it
+  - 2D, the format, one mip, layer and sample,
+  `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` laid out explicitly by the
+  export's modifier with one plane at its offset and its stride as the row
+  pitch, usage `TRANSFER_SRC | TRANSFER_DST | SAMPLED | COLOR_ATTACHMENT`,
   `MUTABLE_FORMAT` with the format and its sRGB sibling in a
   `VkImageFormatListCreateInfo` for the 8-bit formats, external memory
   `DMA_BUF` - and import the fd as its dedicated memory. Every driver lays
-  the image out the same from that layout; that is how the guest's own
-  Vulkan opens these textures (`test_d3d_vulkan_interop_device`).
+  the image out the same from that layout; that is how a shared texture is
+  made again over its memory after its device's loss (`CarriedShare`), and,
+  for rows, how the guest's own Vulkan opens a chain slot
+  (`test_d3d_vulkan_interop_device`).
 
 DRM fourccs: `AR24` for B8G8R8A8, `AB24` for R8G8B8A8, `AB30` for
 R10G10B10A2, `AB4H` for R16G16B16A16 float; an sRGB texture has its linear
@@ -314,14 +337,10 @@ Measured on an RX 9070 XT (RADV, Mesa 26.2.4) by
 | A copy into a linear exportable image (`HostImageExport`, the scanout's path), waited for | 0.22 - 0.24 ms |
 
 The direct export saves a copy of the whole frame on the GPU (about 0.1 ms and
-15 MB of bandwidth a frame here) and leaves the consumer reading the tiled,
-compressed layout the GPU drew in rather than a linear one. The same test
-imports the export with EGL at 256x128, at 1003x701 (a pitch of 4096 bytes -
-the driver's, not the width's) and at 2560x1440, and finds every texel where
-Direct3D put it.
-
-What the linear layout gives up is the GPU's own tiling, which composition
-reads faster; what it gains is a picture every driver reads the same.
+15 MB of bandwidth a frame here) and leaves the consumer reading the tiled
+layout the GPU drew in. The same test imports the export with EGL, tiled and
+as rows, at 256x128, at 1003x701 (a pitch of 4096 bytes - the driver's, not
+the width's) and at 2560x1440, and finds every texel where Direct3D put it.
 
 ## 8. Where it lives
 

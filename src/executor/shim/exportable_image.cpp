@@ -5,8 +5,8 @@
 
 namespace av {
 
-ExportableImage::ExportableImage(ExportableImages &owner, VkImage image, VkDeviceMemory memory)
-    : TextureHold(owner), image_(image), memory_(memory)
+ExportableImage::ExportableImage(ExportableImages &owner, VkImage image, VkDeviceMemory memory, uint64_t modifier)
+    : TextureHold(owner), image_(image), memory_(memory), modifier_(modifier)
 {
     AV_SCOPE("ExportableImage::ExportableImage");
 }
@@ -21,6 +21,19 @@ VkDeviceMemory ExportableImage::memory() const
 {
     AV_SCOPE("ExportableImage::memory");
     return memory_;
+}
+
+uint64_t ExportableImage::modifier() const
+{
+    AV_SCOPE("ExportableImage::modifier");
+    return modifier_;
+}
+
+bool ExportableImage::rows() const
+{
+    AV_SCOPE("ExportableImage::rows");
+    constexpr uint64_t drm_format_mod_linear = 0u;
+    return modifier_ == drm_format_mod_linear;
 }
 
 void ExportableImage::free(const DxvkVulkanDevice &vulkan)

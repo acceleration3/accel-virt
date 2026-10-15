@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/d3d11_resource.hpp"
 #include "icd/opencl/d3d11_rows.hpp"
+#include "um/common/shared_rows_scope.hpp"
 
 namespace av {
 
@@ -152,7 +153,8 @@ bool WindowsD3d11Bridge::made_on(ID3D11Resource &resource, ID3D11Device &device)
 
 /* One mip, one slice, shared by NT handle: avumd makes such a texture over
  * memory the host exports and publishes it under its key, which is what an
- * open of the handle names. */
+ * open of the handle names - as rows, which OpenCL's image over the memory
+ * reads (SharedRowsScope). */
 void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresource, uint64_t &handle)
 {
     AV_SCOPE("WindowsD3d11Bridge::twin");
@@ -172,6 +174,7 @@ void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresourc
         shaped.Usage = D3D11_USAGE_DEFAULT;
         shaped.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
         shaped.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+        const SharedRowsScope rows;
         if (FAILED(owner->CreateTexture2D(&shaped, nullptr, &made))) made = nullptr;
     }
     if (made != nullptr) handle = shared_handle(*made);

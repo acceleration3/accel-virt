@@ -12,6 +12,12 @@ UmdDrivers::UmdDrivers(BlockSource &memory, Kmt &kmt, LogSink &log)
     AV_SCOPE("UmdDrivers::UmdDrivers");
 }
 
+d3d::SharedRowsRequest &UmdDrivers::shared_rows()
+{
+    AV_SCOPE("UmdDrivers::shared_rows");
+    return d3d11_.rows();
+}
+
 d3d::Hresult UmdDrivers::build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create,
                                uint32_t kmt_adapter)
 {
