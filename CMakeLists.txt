@@ -914,7 +914,7 @@ add_test(NAME avd3d9probe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/avd3d9probe.exe
                  --allow-import d3d9.dll --allow-import user32.dll
-                 --require-import Direct3DCreate9)
+                 --require-import Direct3DCreate9 --require-import Direct3DCreate9Ex)
 add_test(NAME avd3d11probe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/avd3d11probe.exe

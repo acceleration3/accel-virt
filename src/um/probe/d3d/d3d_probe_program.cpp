@@ -4,6 +4,7 @@
 #include "guest/probe/d3d11_work.hpp"
 #include "guest/probe/d3d12_work.hpp"
 #include "guest/probe/d3d9_work.hpp"
+#include "guest/probe/wpf_present_work.hpp"
 #include "guest/suite/scenario_steps.hpp"
 
 #include <windows.h>
@@ -23,7 +24,8 @@ void write_report(const GuestReport &report)
 
 }  // namespace
 
-D3d9ProbeProgram::D3d9ProbeProgram() : kmt_(), report_("avd3d9probe"), images_(), window_(), d3d9_()
+D3d9ProbeProgram::D3d9ProbeProgram()
+    : kmt_(), report_("avd3d9probe"), images_(), window_(), windows_(), d3d9_(), d3d9ex_()
 {
     AV_SCOPE("D3d9ProbeProgram::D3d9ProbeProgram");
 }
@@ -33,8 +35,12 @@ uint32_t D3d9ProbeProgram::run()
     AV_SCOPE("D3d9ProbeProgram::run");
     ScenarioSteps steps(kmt_, report_, "d3d9");
     if (window_.open()) {
-        D3d9Work work(d3d9_, images_);
-        work.run(steps, window_.window());
+        {
+            D3d9Work work(d3d9_, images_);
+            work.run(steps, window_.window());
+        }
+        WpfPresentWork wpf(d3d9ex_, windows_, images_);
+        wpf.run(steps, window_.window());
     } else {
         report_.check("d3d9", "window", Status::not_found, window_.last_error());
     }

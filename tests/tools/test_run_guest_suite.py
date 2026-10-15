@@ -91,7 +91,9 @@ PROBE_REPORT = (f"ok vulkan.instance\r\nok vulkan.adapter_luid {ADAPTER_LUID}\r\
 """What avvkprobe.exe prints when every step of features 045 and 046 passed."""
 D3D_REPORTS = {
     "9": ("ok d3d9.device\r\nok d3d9.adapter_ids\r\nok d3d9.clear\r\nok d3d9.readback\r\n"
-          "ok d3d9.pixels 4096\r\nok d3d9.present\r\navd3d9probe: 6 passed, 0 failed\r\n"),
+          "ok d3d9.pixels 4096\r\nok d3d9.present\r\nok d3d9.wpf_device\r\nok d3d9.wpf_swap_chain\r\n"
+          "ok d3d9.wpf_draw\r\nok d3d9.wpf_present\r\nok d3d9.wpf_window 4096\r\n"
+          "avd3d9probe: 11 passed, 0 failed\r\n"),
     "11": ("ok d3d11.device\r\nok d3d11.feature_level 45056\r\nok d3d11.adapter_luid\r\nok d3d11.target\r\n"
            "ok d3d11.readback\r\nok d3d11.pixels 4096\r\nok d3d11.present\r\n"
            "avd3d11probe: 7 passed, 0 failed\r\n"),
@@ -100,7 +102,8 @@ D3D_REPORTS = {
            "ok d3d12.pixels 4096\r\navd3d12probe: 9 passed, 0 failed\r\n"),
 }
 """What each D3D probe prints when every step of feature 047's US1 and US2 passed."""
-D3D_PICTURES = ("C:\\av\\d3d9-clear.bmp", "C:\\av\\d3d11-clear.bmp", "C:\\av\\d3d12-clear.bmp")
+D3D_PICTURES = ("C:\\av\\d3d9-clear.bmp", "C:\\av\\d3d9-wpf.bmp", "C:\\av\\d3d11-clear.bmp",
+                "C:\\av\\d3d12-clear.bmp")
 KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or value.\r\n"
 ICD_LOG = "C:\\ProgramData\\av\\avvk-4242.log"
 
@@ -1013,14 +1016,14 @@ class GuestSuiteRun(unittest.TestCase):
             self.assertTrue(any(line.startswith(f"file C:\\av\\avd3d{api}probe.exe ") for line in lines))
             self.assertIn(f"pull C:\\av\\d3d{api}.txt", lines)
             self.assertEqual((self.work / f"d3d{api}.txt").read_text(newline=""), D3D_REPORTS[api])
-        self.assertIn("guest: d3d9 ok: 6 passed through dxvk", result.stdout)
+        self.assertIn("guest: d3d9 ok: 11 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d11 ok: 7 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d12 ok: 9 passed through vkd3d-proton", result.stdout)
         # It ran in the console session, as a window needs.
         self.assertTrue(any("schtasks.exe /create /tn avconsole" in line for line in lines))
-        for picture in ("d3d9-clear", "d3d11-clear", "d3d12-clear"):
+        for picture in ("d3d9-clear", "d3d9-wpf", "d3d11-clear", "d3d12-clear"):
             self.assertEqual((self.work / "images" / f"{picture}.bmp").read_text(), "BM d3d")
-        self.assertIn(f"guest: d3d.images ok: 3 in {self.work / 'images'}", result.stdout)
+        self.assertIn(f"guest: d3d.images ok: 4 in {self.work / 'images'}", result.stdout)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assert_clean()
 
@@ -1128,10 +1131,10 @@ class GuestSuiteRun(unittest.TestCase):
                 "9 passed", "8 passed")},
                 "d3d12 failed: the probe reported no fence; see d3d12.txt"),
             "no summary": ({"avd3d9probe": D3D_REPORTS["9"].replace(
-                "avd3d9probe: 6 passed, 0 failed\r\n", "")},
+                "avd3d9probe: 11 passed, 0 failed\r\n", "")},
                 "d3d9 failed: no summary line (exit 0); see d3d9.txt"),
             "another probe's summary": ({"avd3d9probe": D3D_REPORTS["9"].replace(
-                "avd3d9probe: 6 passed, 0 failed", "avd3d11probe: 6 passed, 0 failed")},
+                "avd3d9probe: 11 passed, 0 failed", "avd3d11probe: 11 passed, 0 failed")},
                 "d3d9 failed: no summary line (exit 0); see d3d9.txt"),
         }
         for case, (outputs, reason) in cases.items():

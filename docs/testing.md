@@ -826,9 +826,18 @@ gives it (docs/host-memory.md, Budgets).
   system's. Each probe makes a device, clears a frame to one colour, reads it
   back, judges every pixel and - where the API has one - presents; the runner
   requires every step of that API's list and `avd3dNprobe: N passed, 0
-  failed`, and pulls the three bitmaps into `images/`. The D3D9 and D3D11
+  failed`, and pulls the bitmaps into `images/`. The D3D9 and D3D11
   probes make a window, so all three run in the console session through
   `ConsoleProgram`, as the Vulkan probe does.
+
+  The D3D9 probe then presents on its window the way WPF does
+  (`WpfPresentWork`, the `wpf_*` steps and `d3d9-wpf.bmp`): Direct3D 9Ex, a
+  device on a 1x1 swap chain, the window's own COPY swap chain beside it, one
+  frame and exactly one present with a dirty region, and then the window read
+  off the desktop, blank by blank, until it shows that frame. A window that
+  does not change is presented once and never again, so a driver that loses a
+  buffer's first frame passes every other step and fails `wpf_window` - as the
+  host did, and every WPF window, Affinity's whole UI among them, was black.
 
   A **cleared frame, not a triangle**: a triangle through either layer needs
   DXBC and no shader compiler is pinned here. What the clear still proves is

@@ -328,7 +328,8 @@ file(GLOB AVD3DPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe
 foreach(probe d3d9 d3d11 d3d12)
   add_executable(av${probe}probe ${AVD3DPROBE_SOURCES}
     ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/probe/probe_window.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/probe/probe_window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/probe/gdi_window_frame.cpp)
   add_dependencies(av${probe}probe avd3dprobe_imports avglprobe_imports)
   target_link_options(av${probe}probe PRIVATE /ENTRY:av${probe}probe_entry)
   target_link_libraries(av${probe}probe PRIVATE avguest ${AVTEST_IMPORTS} ${AVD3DPROBE_IMPORTS}
