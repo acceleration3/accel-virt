@@ -109,9 +109,10 @@ HOST_TIMEOUT = 1800
 def host_run(command, environment=None):
     """A host half's output, whole or as far as it got. The guest's results are
     in hand by the time the host renders, so a native run that stops answering
-    is a host with no picture to compare (measured: DXVK's native samples on an
-    Arc host stalled after their seventh sample), not a report that is never
-    written."""
+    is a report whose samples past that point have no host picture, which
+    a judge fails, not a report that is never written.
+    A runner that writes metrics.tsv after every sample, as the D3D11 samples
+    do, keeps what finished before the stop."""
     try:
         done = subprocess.run(command, capture_output=True, text=True, env=environment, timeout=HOST_TIMEOUT)
         return done.stdout + done.stderr
