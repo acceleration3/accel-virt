@@ -55,6 +55,20 @@ void D3dSession::leave()
     if (members_ == 0u) close();
 }
 
+uint32_t D3dSession::members() const
+{
+    AV_SCOPE("D3dSession::members");
+    return members_;
+}
+
+bool D3dSession::lost() const
+{
+    AV_SCOPE("D3dSession::lost");
+    if (!stream_.constructed()) return false;
+    const KmtTransport &transport = channel_.transport();
+    return transport.faulted() || transport.host_faulted();
+}
+
 Status D3dSession::escape(uint8_t *data, uint32_t size)
 {
     AV_SCOPE("D3dSession::escape");

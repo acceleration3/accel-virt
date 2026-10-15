@@ -47,10 +47,21 @@ public:
      * `learned` says whether that was this one - or none. */
     uint32_t         slot_of(uint32_t kmt_adapter, bool &learned);
     Caps            &caps(uint32_t slot);
-    /* The slot's session, opened on its first ask. */
+    /* The session a new device on the slot joins, opened on its first ask.
+     * One the host faulted - its Direct3D device was lost - while devices of
+     * it remain is left to them, and a new device gets a session of its own:
+     * DWM makes its new device before it lets the removed one go, and that
+     * device on the faulted session would have failed to be made, and the
+     * desktop with it. */
     d3d::D3dSession &session(uint32_t slot);
 
 private:
+    /* Sessions one adapter may have at once: the one new devices join, and
+     * those faulted ones whose devices the runtime has not let go of yet. A
+     * slot whose every session still has devices gives the current one, as
+     * before a fault. */
+    static constexpr uint32_t generations = 4u;
+
     /* The channel the capabilities are asked over: one question at a time,
      * small enough answers to need no arena. */
     static constexpr uint8_t  probe_ring_order = 16u;
@@ -71,7 +82,9 @@ private:
     uint32_t                       finish_command_;
     uint32_t                       flush_command_;
     Caps                           caps_[max_adapters];
-    ObjectStorage<d3d::D3dSession> sessions_[max_adapters];
+    ObjectStorage<d3d::D3dSession> sessions_[max_adapters][generations];
+    /* Which of a slot's sessions new devices join. */
+    uint32_t                       current_[max_adapters];
     uint32_t                       adapters_[max_adapters];
 };
 
@@ -82,7 +95,7 @@ AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &l
     : kmt_(kmt), memory_(memory), log_(log), lines_(log, "avumd: "), refusal_(refusal), arena_bytes_(arena_bytes),
       slice_store_bytes_(slice_store_bytes),
       select_command_(select_command), finish_command_(finish_command), flush_command_(flush_command), caps_(),
-      sessions_(), adapters_{}
+      sessions_(), current_{}, adapters_{}
 {
     AV_SCOPE("AdapterSessions::AdapterSessions");
 }
@@ -134,10 +147,23 @@ template <typename Caps>
 d3d::D3dSession &AdapterSessions<Caps>::session(uint32_t slot)
 {
     AV_SCOPE("AdapterSessions::session");
-    if (!sessions_[slot].constructed())
-        static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, arena_bytes_, slice_store_bytes_,
-                                                    select_command_, finish_command_, flush_command_));
-    return sessions_[slot].object();
+    ObjectStorage<d3d::D3dSession> *const rows = sessions_[slot];
+    uint32_t                             &current = current_[slot];
+    /* A faulted session whose last device went is closed; it goes now. */
+    for (uint32_t row = 0u; row < generations; row++)
+        if (row != current && rows[row].constructed() && rows[row].object().members() == 0u) rows[row].destroy();
+    if (rows[current].constructed() && rows[current].object().members() != 0u && rows[current].object().lost()) {
+        for (uint32_t row = 0u; row < generations; row++) {
+            if (rows[row].constructed()) continue;
+            lines_.write("the host faulted the adapter's session: new devices open one of their own");
+            current = row;
+            break;
+        }
+    }
+    if (!rows[current].constructed())
+        static_cast<void>(rows[current].construct(kmt_, memory_, log_, arena_bytes_, slice_store_bytes_,
+                                                  select_command_, finish_command_, flush_command_));
+    return rows[current].object();
 }
 
 }  // namespace av
