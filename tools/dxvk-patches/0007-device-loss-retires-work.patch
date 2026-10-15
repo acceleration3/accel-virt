@@ -1,0 +1,72 @@
+From: accel-virt
+Subject: [PATCH] dxvk: a lost device's command lists are retired, and d3d9 says it is lost
+
+A command list whose submission failed with VK_ERROR_DEVICE_LOST - and every
+one after it, which is not submitted at all - was dropped by the submission
+thread rather than passed to the finish thread. Its destruction let go of
+what it used, but its signals were never notified, and nobody woke a thread
+already asleep in a resource wait (synchronizeUntil sleeps on the finish
+thread's condition, which no lost command list ever reached): a Map that
+began waiting on a resource before the failure slept for good, as no command
+list finishes on a lost device. The finish thread already skips the wait for
+a lost device; it now gets those command lists too, and notifies and wakes as
+for any other. accel-virt's executor runs every guest Direct3D 11 session of
+a GPU on one DXVK device, so one lost device must not leave any of them
+waiting inside DXVK.
+
+Direct3D 9 had no way to say its Vulkan device was lost: TestCooperativeLevel
+now answers D3DERR_DEVICELOST once it is, which is what accel-virt's executor
+asks of a host Direct3D 9 device that has no window.
+---
+diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
+index 9b72bb2e..8213e308 100644
+--- a/src/d3d9/d3d9_device.cpp
++++ b/src/d3d9/d3d9_device.cpp
+@@ -223,6 +223,11 @@ namespace dxvk {
+   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::TestCooperativeLevel() {
+     D3D9DeviceLock lock = LockDevice();
+ 
++    // A Vulkan device that was lost is a device lost for good: an embedder
++    // drawing with no window asks here, as an application would.
++    if (unlikely(m_dxvkDevice->getDeviceStatus() == VK_ERROR_DEVICE_LOST))
++      return D3DERR_DEVICELOST;
++
+     // Equivelant of D3D11/DXGI present tests. We can always present.
+     if (likely(m_deviceLostState == D3D9DeviceLostState::Ok)) {
+       return D3D_OK;
+diff --git a/src/dxvk/dxvk_queue.cpp b/src/dxvk/dxvk_queue.cpp
+index e705ed91..0b598817 100644
+--- a/src/dxvk/dxvk_queue.cpp
++++ b/src/dxvk/dxvk_queue.cpp
+@@ -201,12 +201,12 @@ namespace dxvk {
+       // On success, pass it on to the queue thread
+       { std::unique_lock<dxvk::mutex> lock(m_mutex);
+ 
++        bool deviceLost = entry.result == VK_ERROR_DEVICE_LOST;
++
+         bool doForward = (entry.result == VK_SUCCESS) ||
+-          (entry.present.presenter != nullptr && entry.result != VK_ERROR_DEVICE_LOST);
++          (entry.present.presenter != nullptr && !deviceLost);
+ 
+-        if (doForward) {
+-          m_finishQueue.push(std::move(entry));
+-        } else {
++        if (!doForward) {
+           Logger::err(str::format("DxvkSubmissionQueue: Command submission failed: ", entry.result));
+           m_lastError = entry.result;
+ 
+@@ -214,6 +214,14 @@ namespace dxvk {
+             m_device->waitForIdle();
+         }
+ 
++        // A command list the device lost is retired all the same: the
++        // finish thread skips its wait, since the device is lost, and
++        // releases what it used and wakes whoever waits on it. Dropped
++        // here, its resources stayed in use for good, and a Map or a
++        // resource wait on any of them never returned.
++        if (doForward || (deviceLost && entry.submit.cmdList != nullptr))
++          m_finishQueue.push(std::move(entry));
++
+         m_submitQueue.pop();
+         m_submitCond.notify_all();
+       }
