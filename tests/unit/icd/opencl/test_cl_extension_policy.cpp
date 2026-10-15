@@ -391,3 +391,29 @@ TEST(cl_extension_policy, the_invariant_catches_a_row_nothing_could_report)
   const ClExtensionPolicy::Row runs_on[] = {
       {unterminated, 1u, "cl_extension_policy.the_invariant_catches_a_row_nothing_could_report"}};
   CHECK(!refuses(runs_on, 1u)); }
+
+/* report_versions names what report names, in its order, each with its row's
+ * version as a cl_version; too little room writes nothing. */
+TEST(cl_extension_policy, report_versions_names_what_report_names_with_each_row_s_version)
+{ const ClExtensionPolicy::Row versioned[] = {
+      {"cl_khr_fp64", 1u, "cl_extension_policy.a_row_the_host_offers_is_reported"},
+      {"cl_khr_d3d10_sharing", 2u, "cl_extension_policy.a_row_answered_here_is_reported_whatever_the_host_offers",
+       ClExtensionPolicy::answered_here},
+      {"cl_khr_3d_image_writes", 1u, "cl_extension_policy.a_row_the_host_does_not_offer_is_not_reported"},
+  };
+  ClExtensionPolicy policy(versioned, 3u);
+  const char        host[] = "cl_khr_icd cl_khr_fp64";
+  CHECK_EQ(policy.report_versions(host, sizeof host, nullptr, 0u), 2u);
+  cl_name_version listed[3] = {};
+  std::memset(listed, 'z', sizeof listed);
+  CHECK_EQ(policy.report_versions(host, sizeof host, listed, 1u), 2u);
+  CHECK_EQ(listed[0].name[0], 'z');
+  CHECK_EQ(policy.report_versions(host, sizeof host, listed, 3u), 2u);
+  CHECK_EQ(std::strcmp(listed[0].name, "cl_khr_fp64"), 0);
+  CHECK_EQ(listed[0].version, CL_MAKE_VERSION(1u, 0u, 0u));
+  CHECK_EQ(std::strcmp(listed[1].name, "cl_khr_d3d10_sharing"), 0);
+  CHECK_EQ(listed[1].version, CL_MAKE_VERSION(2u, 0u, 0u));
+  /* The name is terminated and the rest of its room cleared, not left as it
+   * was. */
+  CHECK_EQ(listed[1].name[CL_NAME_VERSION_MAX_NAME_SIZE - 1u], '\0');
+  CHECK_EQ(listed[2].name[0], 'z'); }

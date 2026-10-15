@@ -1,6 +1,7 @@
 #include "executor/shim/opencl_device.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/opencl/cl_platform_choice.hpp"
 #include "proto/context/device_uuid.hpp"
 
 #include <CL/cl.h>
@@ -30,24 +31,31 @@ bool OpenClDevice::find(const uint8_t *uuid)
     if (clGetPlatformIDs(max_platforms, platforms, &found) != CL_SUCCESS) return false;
     if (found > max_platforms) found = max_platforms;
 
-    for (cl_uint p = 0u; p < found && device_ == nullptr; p++) {
+    /* Every platform is asked, not just the first that has the GPU: which
+     * one runs it is ClPlatformChoice's to say. */
+    ClPlatformChoice choice;
+    for (cl_uint p = 0u; p < found; p++) {
         cl_device_id devices[max_gpu_devices];
         cl_uint      device_count = 0u;
         if (clGetDeviceIDs(platforms[p], CL_DEVICE_TYPE_GPU, max_gpu_devices, devices, &device_count) !=
             CL_SUCCESS)
             continue;
         if (device_count > max_gpu_devices) device_count = max_gpu_devices;
-        for (cl_uint d = 0u; d < device_count && device_ == nullptr; d++) {
+        char name[ClPlatformChoice::name_bytes] = {};
+        if (clGetPlatformInfo(platforms[p], CL_PLATFORM_NAME, sizeof name, name, nullptr) != CL_SUCCESS) name[0] = '\0';
+        name[sizeof name - 1u] = '\0';
+        for (cl_uint d = 0u; d < device_count; d++) {
             uint8_t device_uuid[DeviceUuid::bytes] = {};
             /* A device whose driver does not carry cl_khr_device_uuid cannot
              * be matched to a Vulkan GPU, so it is not claimed for one. */
             if (clGetDeviceInfo(devices[d], CL_DEVICE_UUID_KHR, DeviceUuid::bytes, device_uuid, nullptr) != CL_SUCCESS)
                 continue;
             if (!DeviceUuid(device_uuid).equals(uuid)) continue;
-            platform_ = platforms[p];
-            device_ = devices[d];
+            choice.consider(platforms[p], devices[d], name);
         }
     }
+    platform_ = choice.platform();
+    device_ = choice.device();
     return device_ != nullptr;
 }
 

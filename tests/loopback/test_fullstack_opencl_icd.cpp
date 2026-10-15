@@ -1631,3 +1631,430 @@ TEST(fullstack_opencl_icd, a_program_from_spir_v_runs_its_kernels_and_says_what_
     CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+namespace {
+
+/* One device, context and queue on the host GPU, for a kernel that proves an
+ * extension the ICD reports because the host compiles: what the device
+ * offers is read through the ICD, and a host without the extension has
+ * nothing here to judge. */
+class ExtensionRun {
+public:
+    explicit ExtensionRun(FakeClLoader &loader)
+        : loader_(loader), device_(nullptr), context_(nullptr), queue_(nullptr), program_(nullptr), kernel_(nullptr),
+          extensions_{}
+    {
+    }
+    ~ExtensionRun()
+    {
+        if (kernel_ != nullptr) CHECK_EQ(table_of(kernel_)->clReleaseKernel(kernel_), CL_SUCCESS);
+        if (program_ != nullptr) CHECK_EQ(table_of(program_)->clReleaseProgram(program_), CL_SUCCESS);
+        if (queue_ != nullptr) CHECK_EQ(loader_.release_queue(queue_), CL_SUCCESS);
+        if (context_ != nullptr) CHECK_EQ(loader_.release_context(context_), CL_SUCCESS);
+    }
+    ExtensionRun(const ExtensionRun &) = delete;
+    ExtensionRun &operator=(const ExtensionRun &) = delete;
+
+    /* False, saying so, when the device does not report `extension` - a host
+     * GPU without it - or nothing could be made. */
+    bool offers(const char *extension)
+    {
+        if (device_ == nullptr) {
+            cl_uint devices = 0u;
+            CHECK_EQ(loader_.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device_, &devices), CL_SUCCESS);
+            if (device_ == nullptr) return false;
+            CHECK_EQ(loader_.device_info(device_, CL_DEVICE_EXTENSIONS, sizeof extensions_, extensions_, nullptr),
+                     CL_SUCCESS);
+        }
+        if (!named(extensions_, extension)) {
+            std::fprintf(stderr, "the host GPU has no %s; nothing to judge\n", extension);
+            return false;
+        }
+        cl_int error = CL_INVALID_VALUE;
+        if (context_ == nullptr) context_ = loader_.create_context(device_, &error);
+        if (context_ == nullptr) return false;
+        if (queue_ == nullptr) queue_ = loader_.create_queue(context_, device_, &error);
+        return queue_ != nullptr;
+    }
+
+    /* `source` built and its kernel `name` made; false, judged, otherwise. */
+    bool kernel(const char *source, const char *name)
+    {
+        cl_int error = CL_INVALID_VALUE;
+        program_ = loader_.create_program(context_, source, &error);
+        CHECK_EQ(error, CL_SUCCESS);
+        if (program_ == nullptr) return false;
+        const cl_int built = loader_.build_program(program_, nullptr);
+        CHECK_EQ(built, CL_SUCCESS);
+        if (built != CL_SUCCESS) return false;
+        kernel_ = loader_.create_kernel(program_, name, &error);
+        CHECK_EQ(error, CL_SUCCESS);
+        return kernel_ != nullptr;
+    }
+
+    /* Runs the kernel over `global` items in groups of `local` (0: the
+     * driver's choice) and waits for it. */
+    cl_int run(std::size_t global, std::size_t local)
+    {
+        const cl_int ran = table_of(queue_)->clEnqueueNDRangeKernel(queue_, kernel_, 1u, nullptr, &global,
+                                                                    local != 0u ? &local : nullptr, 0u, nullptr,
+                                                                    nullptr);
+        return ran == CL_SUCCESS ? loader_.finish(queue_) : ran;
+    }
+
+    cl_mem buffer(std::size_t bytes, const void *from)
+    {
+        cl_int       error = CL_INVALID_VALUE;
+        const cl_mem made = loader_.create_buffer(context_, CL_MEM_READ_WRITE, bytes, &error);
+        CHECK_EQ(error, CL_SUCCESS);
+        if (made != nullptr && from != nullptr)
+            CHECK_EQ(table_of(queue_)->clEnqueueWriteBuffer(queue_, made, CL_TRUE, 0u, bytes, from, 0u, nullptr,
+                                                            nullptr),
+                     CL_SUCCESS);
+        return made;
+    }
+
+    cl_int read(cl_mem from, std::size_t bytes, void *into)
+    {
+        return table_of(queue_)->clEnqueueReadBuffer(queue_, from, CL_TRUE, 0u, bytes, into, 0u, nullptr, nullptr);
+    }
+
+    cl_int argument(cl_uint index, std::size_t bytes, const void *value)
+    {
+        return table_of(kernel_)->clSetKernelArg(kernel_, index, bytes, value);
+    }
+
+    cl_device_id     device() const { return device_; }
+    cl_context       context() const { return context_; }
+    cl_command_queue queue() const { return queue_; }
+    FakeClLoader    &loader() { return loader_; }
+
+private:
+    /* Whether the space-separated `list` names `wanted` as a whole word. */
+    bool named(const char *list, const char *wanted) const
+    {
+        const std::size_t length = std::strlen(wanted);
+        for (const char *at = std::strstr(list, wanted); at != nullptr; at = std::strstr(at + 1, wanted)) {
+            const bool starts = at == list || at[-1] == ' ';
+            const bool ends = at[length] == '\0' || at[length] == ' ';
+            if (starts && ends) return true;
+        }
+        return false;
+    }
+
+    FakeClLoader    &loader_;
+    cl_device_id     device_;
+    cl_context       context_;
+    cl_command_queue queue_;
+    cl_program       program_;
+    cl_kernel        kernel_;
+    char             extensions_[4096];
+};
+
+/* Whether this host runs OpenCL, saying so when it does not. */
+bool runs_opencl(const WidestHostGpu &gpu)
+{
+    if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) != 0u) return true;
+    std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
+    return false;
+}
+
+constexpr std::uint32_t extension_items = 64u;
+
+/* A kernel that computes value * 2 + 1 in the type `scalar` stands for, over
+ * whole numbers small enough to be exact in a half, read back as floats. */
+std::uint32_t wrong_in_precision(ExtensionRun &run, const char *source)
+{
+    if (!run.kernel(source, "precise")) return extension_items;
+    float input[extension_items] = {};
+    for (std::uint32_t index = 0u; index < extension_items; ++index) input[index] = static_cast<float>(index);
+    const cl_mem in = run.buffer(sizeof input, input);
+    const cl_mem out = run.buffer(sizeof input, nullptr);
+    CHECK_EQ(run.argument(0u, sizeof in, &in), CL_SUCCESS);
+    CHECK_EQ(run.argument(1u, sizeof out, &out), CL_SUCCESS);
+    CHECK_EQ(run.run(extension_items, 0u), CL_SUCCESS);
+    float read[extension_items] = {};
+    CHECK_EQ(run.read(out, sizeof read, read), CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < extension_items; ++index)
+        if (read[index] != static_cast<float>(2u * index + 1u)) ++wrong;
+    CHECK_EQ(run.loader().release_mem(in), CL_SUCCESS);
+    CHECK_EQ(run.loader().release_mem(out), CL_SUCCESS);
+    return wrong;
+}
+
+}  // namespace
+
+/* cl_khr_fp16: a kernel computes in half precision through this ICD, and
+ * every result is exact. */
+TEST(fullstack_opencl_icd, a_kernel_computes_in_half_precision_where_the_host_has_it)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_fp16")) return;
+    CHECK_EQ(wrong_in_precision(run, "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                                     "__kernel void precise(__global const float *in, __global float *out)\n"
+                                     "{ size_t i = get_global_id(0); half h = (half)in[i];\n"
+                                     "  out[i] = (float)(h * (half)2.0f + (half)1.0f); }\n"),
+             0u); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* cl_khr_fp64: the same in double precision. */
+TEST(fullstack_opencl_icd, a_kernel_computes_in_double_precision_where_the_host_has_it)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_fp64")) return;
+    CHECK_EQ(wrong_in_precision(run, "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
+                                     "__kernel void precise(__global const float *in, __global float *out)\n"
+                                     "{ size_t i = get_global_id(0); double d = (double)in[i];\n"
+                                     "  out[i] = (float)(d * 2.0 + 1.0); }\n"),
+             0u); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* The four 32-bit atomics extensions: base and extended atomics on global
+ * and on local memory, from every work item of four groups, each landing
+ * exactly once. */
+TEST(fullstack_opencl_icd, a_kernel_s_32_bit_atomics_on_global_and_local_memory_all_land)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_global_int32_base_atomics") || !run.offers("cl_khr_global_int32_extended_atomics") ||
+        !run.offers("cl_khr_local_int32_base_atomics") || !run.offers("cl_khr_local_int32_extended_atomics"))
+        return;
+    CHECK(run.kernel("#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable\n"
+                     "#pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics : enable\n"
+                     "#pragma OPENCL EXTENSION cl_khr_local_int32_base_atomics : enable\n"
+                     "#pragma OPENCL EXTENSION cl_khr_local_int32_extended_atomics : enable\n"
+                     "__kernel void counts(__global int *g, __local int *l)\n"
+                     "{ if (get_local_id(0) == 0) { l[0] = 0; l[1] = 0; }\n"
+                     "  barrier(CLK_LOCAL_MEM_FENCE);\n"
+                     "  atom_inc(&l[0]); atom_max(&l[1], (int)get_local_id(0));\n"
+                     "  barrier(CLK_LOCAL_MEM_FENCE);\n"
+                     "  if (get_local_id(0) == 0) { atom_add(&g[0], l[0]); atom_max(&g[1], l[1]);\n"
+                     "                              atom_or(&g[2], 1 << get_group_id(0)); }\n"
+                     "  atom_inc(&g[3]); }\n",
+                     "counts"));
+    const std::int32_t cleared[4] = {};
+    const cl_mem       counts = run.buffer(sizeof cleared, cleared);
+    CHECK_EQ(run.argument(0u, sizeof counts, &counts), CL_SUCCESS);
+    CHECK_EQ(run.argument(1u, 2u * sizeof(std::int32_t), nullptr), CL_SUCCESS);
+    constexpr std::size_t local = 16u;
+    CHECK_EQ(run.run(extension_items, local), CL_SUCCESS);
+    std::int32_t read[4] = {};
+    CHECK_EQ(run.read(counts, sizeof read, read), CL_SUCCESS);
+    CHECK_EQ(read[0], static_cast<std::int32_t>(extension_items));
+    CHECK_EQ(read[1], static_cast<std::int32_t>(local - 1u));
+    CHECK_EQ(read[2], (1 << (extension_items / local)) - 1);
+    CHECK_EQ(read[3], static_cast<std::int32_t>(extension_items));
+    CHECK_EQ(run.loader().release_mem(counts), CL_SUCCESS); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* The two 64-bit atomics extensions, on global memory from every item. */
+TEST(fullstack_opencl_icd, a_kernel_s_64_bit_atomics_all_land_where_the_host_has_them)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_int64_base_atomics") || !run.offers("cl_khr_int64_extended_atomics")) return;
+    CHECK(run.kernel("#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable\n"
+                     "#pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable\n"
+                     "__kernel void counts(__global long *g)\n"
+                     "{ long i = (long)get_global_id(0);\n"
+                     "  atom_add(&g[0], (1L << 33) + i); atom_max(&g[1], i << 40); }\n",
+                     "counts"));
+    const std::int64_t cleared[2] = {};
+    const cl_mem       counts = run.buffer(sizeof cleared, cleared);
+    CHECK_EQ(run.argument(0u, sizeof counts, &counts), CL_SUCCESS);
+    CHECK_EQ(run.run(extension_items, 0u), CL_SUCCESS);
+    std::int64_t read[2] = {};
+    CHECK_EQ(run.read(counts, sizeof read, read), CL_SUCCESS);
+    const std::int64_t items = extension_items;
+    CHECK_EQ(read[0], items * (std::int64_t{1} << 33) + items * (items - 1) / 2);
+    CHECK_EQ(read[1], (items - 1) << 40);
+    CHECK_EQ(run.loader().release_mem(counts), CL_SUCCESS); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* cl_khr_3d_image_writes: a kernel writes every texel of a 3D image, each
+ * its own coordinates, and the image read back holds them all. */
+TEST(fullstack_opencl_icd, a_kernel_writes_a_3d_image_and_its_texels_come_back)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_3d_image_writes")) return;
+    CHECK(run.kernel("#pragma OPENCL EXTENSION cl_khr_3d_image_writes : enable\n"
+                     "__kernel void fill(__write_only image3d_t image)\n"
+                     "{ int i = get_global_id(0); int4 at = (int4)(i % 4, (i / 4) % 4, i / 16, 0);\n"
+                     "  write_imageui(image, at, (uint4)(at.x, at.y, at.z, 200)); }\n",
+                     "fill"));
+    const cl_image_format format = {CL_RGBA, CL_UNSIGNED_INT8};
+    cl_image_desc         desc = {};
+    desc.image_type = CL_MEM_OBJECT_IMAGE3D;
+    desc.image_width = 4u;
+    desc.image_height = 4u;
+    desc.image_depth = 4u;
+    cl_int error = CL_INVALID_VALUE;
+    const cl_mem image = table_of(run.context())->clCreateImage(run.context(), CL_MEM_WRITE_ONLY, &format, &desc,
+                                                                nullptr, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (image == nullptr) return;
+    CHECK_EQ(run.argument(0u, sizeof image, &image), CL_SUCCESS);
+    CHECK_EQ(run.run(extension_items, 0u), CL_SUCCESS);
+    std::uint8_t      texels[extension_items * 4u] = {};
+    const std::size_t origin[3] = {0u, 0u, 0u};
+    const std::size_t region[3] = {4u, 4u, 4u};
+    CHECK_EQ(table_of(run.queue())->clEnqueueReadImage(run.queue(), image, CL_TRUE, origin, region, 0u, 0u, texels,
+                                                       0u, nullptr, nullptr),
+             CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < extension_items; ++index) {
+        const std::uint8_t *const texel = &texels[index * 4u];
+        if (texel[0] != index % 4u || texel[1] != (index / 4u) % 4u || texel[2] != index / 16u || texel[3] != 200u)
+            ++wrong;
+    }
+    CHECK_EQ(wrong, 0u);
+    CHECK_EQ(run.loader().release_mem(image), CL_SUCCESS); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* cl_khr_image2d_from_buffer: a 2D image made over a buffer reads the
+ * buffer's own bytes, row by row at the pitch the device asks for. */
+TEST(fullstack_opencl_icd, a_2d_image_over_a_buffer_reads_the_buffer_s_bytes)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_image2d_from_buffer")) return;
+    cl_uint pitch_alignment = 0u;
+    CHECK_EQ(run.loader().device_info(run.device(), CL_DEVICE_IMAGE_PITCH_ALIGNMENT, sizeof pitch_alignment,
+                                      &pitch_alignment, nullptr),
+             CL_SUCCESS);
+    constexpr std::size_t width = 16u;
+    constexpr std::size_t height = 4u;
+    const std::size_t     aligned = pitch_alignment != 0u ? pitch_alignment : 1u;
+    const std::size_t     pitch = (width + aligned - 1u) / aligned * aligned * 4u;
+    std::uint8_t          bytes[4096] = {};
+    CHECK(pitch * height <= sizeof bytes);
+    for (std::size_t y = 0u; y < height; ++y)
+        for (std::size_t x = 0u; x < width * 4u; ++x) bytes[y * pitch + x] = static_cast<std::uint8_t>(x + 7u * y);
+    const cl_mem          backing = run.buffer(pitch * height, bytes);
+    const cl_image_format format = {CL_RGBA, CL_UNSIGNED_INT8};
+    cl_image_desc         desc = {};
+    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    desc.image_width = width;
+    desc.image_height = height;
+    desc.image_row_pitch = pitch;
+    desc.buffer = backing;
+    cl_int error = CL_INVALID_VALUE;
+    const cl_mem image = table_of(run.context())->clCreateImage(run.context(), CL_MEM_READ_ONLY, &format, &desc,
+                                                                nullptr, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (image == nullptr) return;
+    CHECK(run.kernel("__kernel void copy(__read_only image2d_t image, __global uchar4 *out)\n"
+                     "{ int i = get_global_id(0); int2 at = (int2)(i % 16, i / 16);\n"
+                     "  out[i] = convert_uchar4(read_imageui(image, at)); }\n",
+                     "copy"));
+    const cl_mem out = run.buffer(width * height * 4u, nullptr);
+    CHECK_EQ(run.argument(0u, sizeof image, &image), CL_SUCCESS);
+    CHECK_EQ(run.argument(1u, sizeof out, &out), CL_SUCCESS);
+    CHECK_EQ(run.run(width * height, 0u), CL_SUCCESS);
+    std::uint8_t read[width * height * 4u] = {};
+    CHECK_EQ(run.read(out, sizeof read, read), CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::size_t y = 0u; y < height; ++y)
+        for (std::size_t x = 0u; x < width * 4u; ++x)
+            if (read[y * width * 4u + x] != bytes[y * pitch + x]) ++wrong;
+    CHECK_EQ(wrong, 0u);
+    CHECK_EQ(run.loader().release_mem(out), CL_SUCCESS);
+    CHECK_EQ(run.loader().release_mem(image), CL_SUCCESS);
+    CHECK_EQ(run.loader().release_mem(backing), CL_SUCCESS); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* cl_khr_depth_images: a depth image a kernel writes reads back as the
+ * floats it wrote. */
+TEST(fullstack_opencl_icd, a_depth_image_a_kernel_writes_reads_back)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if (!runs_opencl(gpu)) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    CHECK(process.loader().load() == FakeClLoader::Load::kept);
+    ExtensionRun run(process.loader());
+    if (!run.offers("cl_khr_depth_images")) return;
+    const cl_image_format format = {CL_DEPTH, CL_FLOAT};
+    cl_image_desc         desc = {};
+    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    desc.image_width = 8u;
+    desc.image_height = 8u;
+    cl_int error = CL_INVALID_VALUE;
+    const cl_mem image = table_of(run.context())->clCreateImage(run.context(), CL_MEM_READ_WRITE, &format, &desc,
+                                                                nullptr, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (image == nullptr) return;
+    CHECK(run.kernel("__kernel void depths(__write_only image2d_depth_t image)\n"
+                     "{ int i = get_global_id(0);\n"
+                     "  write_imagef(image, (int2)(i % 8, i / 8), (float)i / 64.0f); }\n",
+                     "depths"));
+    CHECK_EQ(run.argument(0u, sizeof image, &image), CL_SUCCESS);
+    CHECK_EQ(run.run(extension_items, 0u), CL_SUCCESS);
+    float             read[extension_items] = {};
+    const std::size_t origin[3] = {0u, 0u, 0u};
+    const std::size_t region[3] = {8u, 8u, 1u};
+    CHECK_EQ(table_of(run.queue())->clEnqueueReadImage(run.queue(), image, CL_TRUE, origin, region, 0u, 0u, read, 0u,
+                                                       nullptr, nullptr),
+             CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < extension_items; ++index)
+        if (read[index] != static_cast<float>(index) / 64.0f) ++wrong;
+    CHECK_EQ(wrong, 0u);
+    CHECK_EQ(run.loader().release_mem(image), CL_SUCCESS); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }

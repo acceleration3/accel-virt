@@ -20,6 +20,8 @@
 
 #include "icd/common/extension_policy.hpp"
 
+#include <CL/cl.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -50,6 +52,12 @@ public:
      * its terminator, whether or not it fitted; nothing is written when it
      * did not fit, or when `into` is null. */
     size_t report(const char *host, size_t host_bytes, char *into, size_t into_bytes) const;
+    /* The same extensions, in the same order, as CL_DEVICE_EXTENSIONS_WITH_VERSION
+     * names them: each with its row's version, which is the version this ICD
+     * carries whatever the host's own is. Answers how many there are, whether
+     * or not they fitted in `room` entries; nothing is written when they did
+     * not, or when `into` is null. */
+    size_t report_versions(const char *host, size_t host_bytes, cl_name_version *into, size_t room) const;
 
     /* Whether the host string offers `name`, as a whole word. */
     bool offered_by(const char *host, size_t host_bytes, const char *name) const;

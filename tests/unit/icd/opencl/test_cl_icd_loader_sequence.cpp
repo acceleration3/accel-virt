@@ -127,7 +127,7 @@ TEST(cl_icd_loader_sequence, a_command_this_icd_does_not_carry_refuses_rather_th
   const cl_icd_dispatch &table = rig.root().dispatch();
   /* An application asking for something this driver does not implement is
    * told so, and the process survives it. */
-  CHECK_EQ(table.clCreateSubDevices(nullptr, nullptr, 0u, nullptr, nullptr), CL_INVALID_OPERATION);
+  CHECK_EQ(table.clGetDeviceAndHostTimer(nullptr, nullptr, nullptr), CL_INVALID_OPERATION);
   cl_int error = CL_SUCCESS;
   CHECK(table.clCreatePipe(nullptr, 0u, 4u, 16u, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_OPERATION); }

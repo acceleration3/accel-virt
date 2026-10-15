@@ -32,6 +32,14 @@
  * iGPU its canvas never saw a tile it rendered. So the answer is no, whatever
  * the GPU, and the application maps or reads.
  *
+ * Some of what a host GPU can do no guest of this ICD can reach, and those
+ * are answered as absent whatever the host says, so an application that
+ * checks before it calls is not sent to a refusal: a native kernel (a guest
+ * function the host would have to call), partitions into sub-devices (one
+ * device per adapter is all a context here spans) and device-side enqueue
+ * (no queue here is a device queue). Each has its entry points refused with
+ * the error the specification gives a device without the feature.
+ *
  * CL_DEVICE_EXTENSIONS is neither this report's answer nor the host's:
  * ClExtensionPolicy intersects the two, and the caller asks it. */
 #ifndef AV_CLICD_CL_DEVICE_REPORT_HPP
@@ -122,6 +130,10 @@ private:
      * that vendor; CL_INVALID_VALUE otherwise. */
     cl_int answer_vendor_location(cl_device_info name_asked, size_t value_bytes, void *value,
                                   size_t *size_ret) const;
+    /* The features no guest can reach, as a device without them answers;
+     * CL_INVALID_VALUE for any other query. */
+    cl_int answer_not_carried(cl_device_info name_asked, size_t value_bytes, void *value,
+                              size_t *size_ret) const;
 
     uint64_t                   luid_;
     uint32_t                   vendor_;

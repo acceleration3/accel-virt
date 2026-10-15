@@ -232,6 +232,48 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
         const cl_bool reported = CL_FALSE;
         return answer(&reported, sizeof reported, value_bytes, value, size_ret);
     }
+    default: return answer_not_carried(name_asked, value_bytes, value, size_ret);
+    }
+}
+
+cl_int ClDeviceReport::answer_not_carried(cl_device_info name_asked, size_t value_bytes, void *value,
+                                          size_t *size_ret) const
+{
+    AV_SCOPE("ClDeviceReport::answer_not_carried");
+    switch (name_asked) {
+    case CL_DEVICE_EXECUTION_CAPABILITIES: {
+        const cl_device_exec_capabilities reported = CL_EXEC_KERNEL;
+        return answer(&reported, sizeof reported, value_bytes, value, size_ret);
+    }
+    case CL_DEVICE_PARTITION_MAX_SUB_DEVICES:
+    case CL_DEVICE_MAX_ON_DEVICE_QUEUES:
+    case CL_DEVICE_MAX_ON_DEVICE_EVENTS:
+    case CL_DEVICE_QUEUE_ON_DEVICE_PREFERRED_SIZE:
+    case CL_DEVICE_QUEUE_ON_DEVICE_MAX_SIZE: {
+        const cl_uint none = 0u;
+        return answer(&none, sizeof none, value_bytes, value, size_ret);
+    }
+    /* A list of one terminator: the specification's "supports no partition
+     * type". */
+    case CL_DEVICE_PARTITION_PROPERTIES: {
+        const cl_device_partition_property none = 0;
+        return answer(&none, sizeof none, value_bytes, value, size_ret);
+    }
+    case CL_DEVICE_PARTITION_AFFINITY_DOMAIN: {
+        const cl_device_affinity_domain none = 0u;
+        return answer(&none, sizeof none, value_bytes, value, size_ret);
+    }
+    /* A root device was partitioned by nothing, which the specification lets
+     * it answer with no bytes at all. */
+    case CL_DEVICE_PARTITION_TYPE: return answer(nullptr, 0u, value_bytes, value, size_ret);
+    case CL_DEVICE_QUEUE_ON_DEVICE_PROPERTIES: {
+        const cl_command_queue_properties none = 0u;
+        return answer(&none, sizeof none, value_bytes, value, size_ret);
+    }
+    case CL_DEVICE_DEVICE_ENQUEUE_CAPABILITIES: {
+        const cl_device_device_enqueue_capabilities none = 0u;
+        return answer(&none, sizeof none, value_bytes, value, size_ret);
+    }
     default: return CL_INVALID_VALUE;
     }
 }

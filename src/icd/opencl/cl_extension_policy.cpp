@@ -94,6 +94,12 @@ bool same_word(const char *text, const char *name, size_t length)
  * extension went unreported.
  * their other queries go to the host, which answers them where its own driver
  * carries the extension and refuses them where it does not.
+ *
+ * The kernel-language and image extensions after them are the host
+ * compiler's and the host image's: a program is compiled by the host, so what
+ * its compiler accepts is what a kernel here may use, and the images are the
+ * host's own objects. Each is reported where the host has it and proven by a
+ * kernel run through this ICD.
  */
 const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory", 1u,
@@ -114,6 +120,22 @@ const ClExtensionPolicy::Row reported_extensions[] = {
      "cl_device_report.an_amd_adapter_says_where_it_sits_as_amd_s_driver_does", "-1002"},
     {"cl_nv_device_attribute_query", 1u,
      "cl_device_report.an_nvidia_adapter_says_where_it_sits_as_nvidia_s_driver_does", "-10DE"},
+    {"cl_khr_fp16", 1u, "fullstack_opencl_icd.a_kernel_computes_in_half_precision_where_the_host_has_it"},
+    {"cl_khr_fp64", 1u, "fullstack_opencl_icd.a_kernel_computes_in_double_precision_where_the_host_has_it"},
+    {"cl_khr_global_int32_base_atomics", 1u,
+     "fullstack_opencl_icd.a_kernel_s_32_bit_atomics_on_global_and_local_memory_all_land"},
+    {"cl_khr_global_int32_extended_atomics", 1u,
+     "fullstack_opencl_icd.a_kernel_s_32_bit_atomics_on_global_and_local_memory_all_land"},
+    {"cl_khr_local_int32_base_atomics", 1u,
+     "fullstack_opencl_icd.a_kernel_s_32_bit_atomics_on_global_and_local_memory_all_land"},
+    {"cl_khr_local_int32_extended_atomics", 1u,
+     "fullstack_opencl_icd.a_kernel_s_32_bit_atomics_on_global_and_local_memory_all_land"},
+    {"cl_khr_int64_base_atomics", 1u, "fullstack_opencl_icd.a_kernel_s_64_bit_atomics_all_land_where_the_host_has_them"},
+    {"cl_khr_int64_extended_atomics", 1u,
+     "fullstack_opencl_icd.a_kernel_s_64_bit_atomics_all_land_where_the_host_has_them"},
+    {"cl_khr_3d_image_writes", 1u, "fullstack_opencl_icd.a_kernel_writes_a_3d_image_and_its_texels_come_back"},
+    {"cl_khr_image2d_from_buffer", 1u, "fullstack_opencl_icd.a_2d_image_over_a_buffer_reads_the_buffer_s_bytes"},
+    {"cl_khr_depth_images", 1u, "fullstack_opencl_icd.a_depth_image_a_kernel_writes_reads_back"},
 };
 const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 
@@ -205,6 +227,28 @@ size_t ClExtensionPolicy::report(const char *host, size_t host_bytes, char *into
         }
     }
     into[at] = '\0';
+    return needed;
+}
+
+size_t ClExtensionPolicy::report_versions(const char *host, size_t host_bytes, cl_name_version *into,
+                                          size_t room) const
+{
+    AV_SCOPE("ClExtensionPolicy::report_versions");
+    size_t needed = 0u;
+    for (uint32_t index = 0u; index < count_; ++index) {
+        if (answered_by(host, host_bytes, rows_[index])) ++needed;
+    }
+    if (into == nullptr || room < needed) return needed;
+    size_t at = 0u;
+    for (uint32_t index = 0u; index < count_; ++index) {
+        if (!answered_by(host, host_bytes, rows_[index])) continue;
+        cl_name_version &entry = into[at++];
+        entry.version = CL_MAKE_VERSION(rows_[index].spec_version_, 0u, 0u);
+        size_t letter = 0u;
+        for (; rows_[index].name_[letter] != '\0' && letter + 1u < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter)
+            entry.name[letter] = rows_[index].name_[letter];
+        for (; letter < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter) entry.name[letter] = '\0';
+    }
     return needed;
 }
 

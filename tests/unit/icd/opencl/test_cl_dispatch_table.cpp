@@ -137,7 +137,7 @@ TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
 { ClDispatchTable table;
   table.fill();
   const cl_icd_dispatch &slots = table.table();
-  CHECK_EQ(slots.clCreateSubDevices(nullptr, nullptr, 0u, nullptr, nullptr), CL_INVALID_OPERATION);
+  CHECK_EQ(slots.clGetDeviceAndHostTimer(nullptr, nullptr, nullptr), CL_INVALID_OPERATION);
   cl_int error = CL_SUCCESS;
   CHECK(slots.clSVMAlloc(nullptr, 0u, 16u, 0u) == nullptr);
   CHECK(slots.clCreateSubBuffer(nullptr, 0u, CL_BUFFER_CREATE_TYPE_REGION, nullptr, &error) == nullptr);

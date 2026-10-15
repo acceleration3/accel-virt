@@ -29,6 +29,7 @@
 #include "core/trace/state_reporter.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
+#include "icd/opencl/cl_destructor_callbacks.hpp"
 #include "icd/opencl/cl_devices.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
 #include "icd/opencl/cl_event_owner.hpp"
@@ -153,6 +154,26 @@ public:
                               const ClContextNotify &notify = ClContextNotify());
     cl_int     retain_context(cl_context context);
     cl_int     release_context(cl_context context);
+    /* clCreateContextFromType: a GPU, the default device or every device is
+     * the first device - the primary display's adapter - made into a context
+     * as create_context makes one; any other type is no device of this
+     * platform's. One context spans one device here (create_context). */
+    cl_context create_context_from_type(const cl_context_properties *properties, cl_device_type type,
+                                        cl_int *error, const ClContextNotify &notify = ClContextNotify());
+    /* clSetContextDestructorCallback and clSetMemObjectDestructorCallback:
+     * kept here and run when the object's last holder lets go of it, the
+     * latest registered first. */
+    cl_int     watch_destruction(cl_context context, ClDestructorCallbacks::ContextCallback callback,
+                                 void *user_data);
+    cl_int     watch_destruction(cl_mem object, ClDestructorCallbacks::MemCallback callback, void *user_data);
+    /* clCreateSubDevices: no device here can be partitioned (ClDeviceReport
+     * says so), so every partition asked of one of its devices is the
+     * specification's unsupported one. */
+    cl_int     create_sub_devices(cl_device_id device, const cl_device_partition_property *properties,
+                                  cl_uint num_devices, cl_device_id *out_devices, cl_uint *num_devices_ret);
+    /* clGetExtensionFunctionAddressForPlatform: extension_function for this
+     * platform, nothing for any other. */
+    void      *extension_function_for(cl_platform_id platform, const char *name);
 
     /* ---- everything an object of a context is ---------------------------- */
 
@@ -308,6 +329,10 @@ public:
     /* The three sampler properties and nothing else; the deprecated
      * clCreateSampler is the same list written out. */
     cl_sampler create_sampler(cl_context context, const uint64_t *properties, cl_int *error);
+    /* clGetSamplerInfo: the count and the context this ICD's, the rest the
+     * host's answer about its sampler. */
+    cl_int     sampler_info(cl_sampler sampler, cl_sampler_info name, size_t value_bytes, void *value,
+                            size_t *size_ret);
     /* The host's formats for an image of `type`: a format holds no handle, so
      * the answer is the host's as it stands. */
     cl_int supported_image_formats(cl_context context, cl_mem_flags flags, cl_mem_object_type type,
@@ -533,6 +558,15 @@ private:
                                          size_t *size_ret);
     cl_int           device_extensions(ClDevice &device, size_t value_bytes, void *value,
                                        size_t *size_ret);
+    /* CL_DEVICE_EXTENSIONS_WITH_VERSION: the same intersection, each with the
+     * version this ICD carries. */
+    cl_int           device_extension_versions(ClDevice &device, size_t value_bytes, void *value,
+                                               size_t *size_ret);
+    /* CL_DEVICE_OPENCL_C_FEATURES: the host compiler's, less what needs a
+     * device queue, which no queue here is. */
+    cl_int           c_features(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret);
+    /* CL_PLATFORM_EXTENSIONS_WITH_VERSION: the platform-wide rows. */
+    cl_int           platform_extension_versions(size_t value_bytes, void *value, size_t *size_ret) const;
     /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD, from D3DKMTQueryVideoMemoryInfo. */
     cl_int           free_memory(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
@@ -707,6 +741,8 @@ private:
     ClInfoAnswers<device_answers, host_extensions_bytes> device_answers_;
     ClPendingReads         reads_;
     ClRefusalLog           refusals_;
+    /* Under lock_, as the object releases that make them due are. */
+    ClDestructorCallbacks  destructor_callbacks_;
 };
 
 }  // namespace av::clicd

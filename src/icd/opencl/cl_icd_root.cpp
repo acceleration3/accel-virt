@@ -77,7 +77,8 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
-      watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(), reads_(), refusals_(log)
+      watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(), reads_(), refusals_(log),
+      destructor_callbacks_()
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -135,6 +136,10 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
         }
         if (size_ret != nullptr) *size_ret = needed;
         return CL_SUCCESS;
+    }
+    if (name == CL_PLATFORM_EXTENSIONS_WITH_VERSION) {
+        if (!platform_.names_this(platform)) return CL_INVALID_PLATFORM;
+        return platform_extension_versions(value_bytes, value, size_ret);
     }
     /* Asked before any device exists, the name is found by the adapters'
      * handles alone - no device is opened for it, which every process asking
@@ -351,6 +356,9 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
      * through would offer an application every extension rusticl implements
      * over a wire that carries none of them. */
     if (name == CL_DEVICE_EXTENSIONS) return device_extensions(*shown, value_bytes, value, size_ret);
+    if (name == CL_DEVICE_EXTENSIONS_WITH_VERSION)
+        return device_extension_versions(*shown, value_bytes, value, size_ret);
+    if (name == CL_DEVICE_OPENCL_C_FEATURES) return c_features(*shown, value_bytes, value, size_ret);
     /* And the handle types an import may name, which is the question an
      * application asks before it names one: this driver takes the opaque
      * Win32 handle and nothing else, and answers so only where it reports the
@@ -750,7 +758,9 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
      * application, or the last object made on it - which may be this release
      * of a kernel as well as of the context. */
     GuestClContext *freed = nullptr;
-    static_cast<void>(objects_.release(*held, freed));
+    const void     *gone[ClDestructorCallbacks::max_gone] = {};
+    uint32_t        went = 0u;
+    static_cast<void>(objects_.release(*held, freed, gone, ClDestructorCallbacks::max_gone, went));
     if (freed != nullptr) {
         /* Callbacks registered on this context's events are dropped first:
          * their transport is about to go, and asking the host over a torn
@@ -761,7 +771,13 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
          * the host held on it go now. */
         static_cast<void>(contexts_.destroy(freed));
     }
+    ClDestructorCallbacks::Due due;
+    destructor_callbacks_.take(gone, went, due);
     lock_.release();
+    /* After the host let go and the context's transport went, as a driver
+     * calls them once the object's memory is gone, and with no lock held: a
+     * callback may release or make another object. */
+    due.run();
     return CL_SUCCESS;
 }
 
@@ -827,6 +843,19 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
     }
     uint64_t       bits = 0u;
     const bool     named = list.names(CL_QUEUE_PROPERTIES, bits);
+    /* A device queue is one no device here has (ClDeviceReport), and a size
+     * is a device queue's alone. */
+    constexpr uint64_t known = CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE | CL_QUEUE_PROFILING_ENABLE |
+                               CL_QUEUE_ON_DEVICE | CL_QUEUE_ON_DEVICE_DEFAULT;
+    uint64_t           size = 0u;
+    if ((bits & ~known) != 0u || list.names(CL_QUEUE_SIZE, size)) {
+        report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
+    if ((bits & (CL_QUEUE_ON_DEVICE | CL_QUEUE_ON_DEVICE_DEFAULT)) != 0u) {
+        report_error(error, CL_INVALID_QUEUE_PROPERTIES);
+        return nullptr;
+    }
     const uint64_t profiled[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), CL_QUEUE_PROFILING_ENABLE, 0u};
     cl_int         host_error = CL_SUCCESS;
     const uint64_t queue = av::clproto::av_clCreateCommandQueueWithProperties(

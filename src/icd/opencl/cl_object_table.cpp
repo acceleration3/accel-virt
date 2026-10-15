@@ -63,7 +63,16 @@ void ClObjectTable::destroy(ClObject &object)
 bool ClObjectTable::release(ClObject &object, GuestClContext *&freed)
 {
     AV_SCOPE("ClObjectTable::release");
+    uint32_t count = 0u;
+    return release(object, freed, nullptr, 0u, count);
+}
+
+bool ClObjectTable::release(ClObject &object, GuestClContext *&freed, const void **gone, uint32_t room,
+                            uint32_t &count)
+{
+    AV_SCOPE("ClObjectTable::release");
     freed = nullptr;
+    count = 0u;
     const icd::ThreadLockHold held(lock_);
     if (!tree_.holds(&object) || object.references() == 0u) return false;
     if (!object.release()) return true;
@@ -72,6 +81,7 @@ bool ClObjectTable::release(ClObject &object, GuestClContext *&freed)
     for (ClObject *at = &object; at != nullptr && at->unheld();) {
         ClObject *const parent = at->parent();
         if (at->kind() == ClObject::Kind::context) freed = at->context();
+        if (count < room) gone[count++] = at;
         destroy_held(*at);
         at = parent;
     }

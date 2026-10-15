@@ -5,7 +5,8 @@
  * agree on which GPU is which without a guess from a name. Found once, at
  * realize; a guest context is then shown this platform and device and no other
  * (feature 044, T034). The first live run's OpenCL scenario took the first GPU
- * any platform offered - NVIDIA's, while the device was bound to Intel's. */
+ * any platform offered - NVIDIA's, while the device was bound to Intel's.
+ * Where two platforms offer the same GPU, ClPlatformChoice says which. */
 #ifndef AV_OPENCL_DEVICE_HPP
 #define AV_OPENCL_DEVICE_HPP
 
@@ -20,7 +21,8 @@ public:
     OpenClDevice(const OpenClDevice &) = delete;
     OpenClDevice &operator=(const OpenClDevice &) = delete;
 
-    /* Finds the GPU device `uuid` names on any platform. False, holding
+    /* Finds the GPU device `uuid` names, on the platform ClPlatformChoice
+     * prefers of those that offer it. False, holding
      * nothing, for a host with no OpenCL, no such device, or a driver without
      * cl_khr_device_uuid. Always a CL_DEVICE_TYPE_GPU device. */
     [[nodiscard]] bool find(const uint8_t *uuid);

@@ -180,7 +180,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
    * name is a prefix of another so a match on anything but a whole word
    * shows, and no cl_khr_gl_sharing: nothing of it reaches the application,
    * which is shown only what this ICD answers alone. */
-  static const char plain[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_shar";
+  static const char plain[] = "cl_khr_spir cl_khr_il_program cl_khr_il cl_khr_gl_shar";
   char              reported[256];
   std::size_t       answered = 0u;
   { ClIcdRig rig;
@@ -194,7 +194,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
      * terminated string rather than untouched room. */
     CHECK_EQ(std::strcmp(reported, "cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"), 0);
     CHECK_EQ(answered, std::strlen("cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info") + 1u);
-    CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
+    CHECK(std::strstr(plain, "cl_khr_spir") != nullptr);
 
     /* The size query, which an application makes first, and room the answer
      * does not fit, which is the API's own refusal and not a truncation. A
@@ -213,7 +213,7 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
    * and still nothing else of the host's. */
   { ClIcdRig rig;
     cl_device_id device = opened_device(rig);
-    static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il cl_khr_external_memory";
+    static const char sharing[] = "cl_khr_spir cl_khr_gl_sharing cl_khr_il cl_khr_external_memory";
     rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
     std::memset(reported, 'x', sizeof reported);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
@@ -1126,8 +1126,7 @@ TEST(cl_icd_root, a_queue_takes_the_two_properties_the_api_names_and_a_buffer_ta
   CHECK(context != nullptr);
 
   const std::uint64_t known[] = {static_cast<std::uint64_t>(CL_QUEUE_PROPERTIES),
-                                 CL_QUEUE_PROFILING_ENABLE,
-                                 static_cast<std::uint64_t>(CL_QUEUE_SIZE), 16u, 0u};
+                                 CL_QUEUE_PROFILING_ENABLE | CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0u};
   rig.host().cl_handle(host_queue, CL_SUCCESS);
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().create_queue(context, device, known, &error) != nullptr);

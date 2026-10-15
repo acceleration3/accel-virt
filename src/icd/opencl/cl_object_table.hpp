@@ -63,6 +63,11 @@ public:
      * context object that went, which its owner then tears down. False for an
      * object this does not hold or that the application had let go of. */
     bool release(ClObject &object, GuestClContext *&freed);
+    /* The same, saying which objects went: the first `room` of them into
+     * `gone`, in the order they went, and how many into `count`. The
+     * addresses are the application's handles for objects that no longer
+     * exist, which only a destructor callback is handed. */
+    bool release(ClObject &object, GuestClContext *&freed, const void **gone, uint32_t room, uint32_t &count);
     /* Destroys `object` and its whole subtree, whatever its count. */
     void destroy(ClObject &object);
 

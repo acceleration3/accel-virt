@@ -138,6 +138,17 @@ cl_int ClPlatform::info(cl_platform_id platform, cl_platform_info name_asked, si
         if (size_ret != nullptr) *size_ret = sizeof(cl_version);
         return CL_SUCCESS;
     }
+    /* No clock of the guest's is the host GPU's, so the platform keeps no
+     * timer the two could be read against together: the answer for a
+     * platform without one, whose timer calls are refused. */
+    case CL_PLATFORM_HOST_TIMER_RESOLUTION: {
+        if (value != nullptr) {
+            if (value_bytes < sizeof(cl_ulong)) return CL_INVALID_VALUE;
+            *static_cast<cl_ulong *>(value) = 0u;
+        }
+        if (size_ret != nullptr) *size_ret = sizeof(cl_ulong);
+        return CL_SUCCESS;
+    }
     default: return CL_INVALID_VALUE;
     }
 }

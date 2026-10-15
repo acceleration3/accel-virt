@@ -1068,6 +1068,64 @@ cl_int CL_API_CALL set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info na
     return root.noted("clSetKernelExecInfo", root.set_kernel_exec_info(kernel, name, bytes, value));
 }
 
+/* A context from a device type, which carries its notify as clCreateContext's
+ * does. */
+cl_context CL_API_CALL create_context_from_type(const cl_context_properties *properties, cl_device_type type,
+                                                void(CL_CALLBACK *notify)(const char *, const void *, size_t, void *),
+                                                void *user_data, cl_int *error)
+{
+    AV_SCOPE("create_context_from_type");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_PLATFORM;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateContextFromType", error);
+    return cl_icd_binding.root().create_context_from_type(properties, type, noted.pointer(),
+                                                          clicd::ClContextNotify(notify, user_data));
+}
+
+cl_int CL_API_CALL get_sampler_info(cl_sampler sampler, cl_sampler_info name, size_t value_bytes, void *value,
+                                    size_t *size_ret)
+{
+    AV_SCOPE("get_sampler_info");
+    AV_CL_ROOT_OR(CL_INVALID_SAMPLER);
+    return root.noted_query("clGetSamplerInfo", name, root.sampler_info(sampler, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL set_mem_object_destructor_callback(cl_mem object, void(CL_CALLBACK *notify)(cl_mem, void *),
+                                                      void *user_data)
+{
+    AV_SCOPE("set_mem_object_destructor_callback");
+    AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
+    return root.noted("clSetMemObjectDestructorCallback", root.watch_destruction(object, notify, user_data));
+}
+
+cl_int CL_API_CALL set_context_destructor_callback(cl_context context,
+                                                   void(CL_CALLBACK *notify)(cl_context, void *), void *user_data)
+{
+    AV_SCOPE("set_context_destructor_callback");
+    AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
+    return root.noted("clSetContextDestructorCallback", root.watch_destruction(context, notify, user_data));
+}
+
+cl_int CL_API_CALL create_sub_devices(cl_device_id device, const cl_device_partition_property *properties,
+                                      cl_uint num_devices, cl_device_id *out_devices, cl_uint *num_devices_ret)
+{
+    AV_SCOPE("create_sub_devices");
+    AV_CL_ROOT_OR(CL_INVALID_DEVICE);
+    return root.noted("clCreateSubDevices",
+                      root.create_sub_devices(device, properties, num_devices, out_devices, num_devices_ret));
+}
+
+/* The loader's own clGetExtensionFunctionAddressForPlatform dispatches here
+ * through the platform. */
+void *CL_API_CALL extension_function_for_platform(cl_platform_id platform, const char *name)
+{
+    AV_SCOPE("extension_function_for_platform");
+    if (!cl_icd_binding.bound()) return nullptr;
+    return cl_icd_binding.root().extension_function_for(platform, name);
+}
+
 #undef AV_CL_ROOT_OR
 
 }  // namespace
@@ -1201,7 +1259,13 @@ void ClDispatchTable::fill()
     table_.clGetKernelSubGroupInfo = &get_kernel_sub_group_info;
     table_.clGetKernelSubGroupInfoKHR = &get_kernel_sub_group_info;
     table_.clSetKernelExecInfo = &set_kernel_exec_info;
-    claimed_ = 108u;
+    table_.clCreateContextFromType = &create_context_from_type;
+    table_.clGetSamplerInfo = &get_sampler_info;
+    table_.clSetMemObjectDestructorCallback = &set_mem_object_destructor_callback;
+    table_.clSetContextDestructorCallback = &set_context_destructor_callback;
+    table_.clCreateSubDevices = &create_sub_devices;
+    table_.clGetExtensionFunctionAddressForPlatform = &extension_function_for_platform;
+    claimed_ = 114u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
