@@ -224,6 +224,24 @@ uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t off
     return block;
 }
 
+uint8_t *GuestClContext::take_image_mapping(uint64_t image, const size_t *origin, const size_t *region,
+                                            size_t element_bytes, cl_map_flags flags)
+{
+    AV_SCOPE("GuestClContext::take_image_mapping");
+    const ClImageRegion layout(origin, region, 0u, 0u, element_bytes);
+    if (image == 0u || !layout.valid()) return nullptr;
+    const size_t bytes = layout.slice_pitch() * layout.slices();
+    uint32_t     slot = 0u;
+    while (slot < max_mappings && mappings_[slot].held()) ++slot;
+    if (slot == max_mappings) return nullptr;
+    uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    if (block == nullptr) return nullptr;
+    __builtin_memset(block, 0, bytes);
+    mappings_[slot].take(image, 0u, 0u, bytes, flags, block, MappedRegion::Memory::staged);
+    mappings_[slot].place_in_image(origin, region, element_bytes);
+    return block;
+}
+
 MappedRegion *GuestClContext::take_shared_mapping(uint64_t buffer, uint64_t host, size_t offset,
                                                   size_t bytes, uint8_t *at)
 {

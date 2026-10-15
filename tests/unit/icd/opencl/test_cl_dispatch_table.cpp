@@ -138,10 +138,12 @@ TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
   table.fill();
   const cl_icd_dispatch &slots = table.table();
   CHECK_EQ(slots.clGetDeviceAndHostTimer(nullptr, nullptr, nullptr), CL_INVALID_OPERATION);
-  cl_int error = CL_SUCCESS;
   CHECK(slots.clSVMAlloc(nullptr, 0u, 16u, 0u) == nullptr);
-  CHECK(slots.clCreateSubBuffer(nullptr, 0u, CL_BUFFER_CREATE_TYPE_REGION, nullptr, &error) == nullptr);
-  CHECK_EQ(error, CL_INVALID_OPERATION); }
+  /* A 1.0 command whose device capability this ICD reports no device
+   * having: a host function pointer of the guest's means nothing on the
+   * host. */
+  CHECK_EQ(slots.clEnqueueNativeKernel(nullptr, nullptr, nullptr, 0u, 0u, nullptr, nullptr, 0u, nullptr, nullptr),
+           CL_INVALID_OPERATION); }
 
 TEST(cl_icd_binding, a_root_binds_itself_and_unbinds_when_it_goes)
 { ClIcdBinding binding;

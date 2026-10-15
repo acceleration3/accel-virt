@@ -2058,3 +2058,324 @@ TEST(fullstack_opencl_icd, a_depth_image_a_kernel_writes_reads_back)
     CHECK_EQ(wrong, 0u);
     CHECK_EQ(run.loader().release_mem(image), CL_SUCCESS); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* A kernel and a non-blocking read of its output, each behind a wait list:
+ * the kernel behind a user event the application sets only afterwards, the
+ * read behind the kernel. Both enqueues come back with the gate outstanding -
+ * the host holds the kernel, and the read's marker behind it - nothing has
+ * run or been delivered until it is set, and then the sum arrives. */
+TEST(fullstack_opencl_icd, a_kernel_and_a_read_gated_on_a_user_event_run_only_once_it_is_set)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    const cl_icd_dispatch *const table = table_of(run.queue());
+    const float cleared[elements] = {};
+    CHECK_EQ(table->clEnqueueWriteBuffer(run.queue(), run.output(), CL_TRUE, 0u, vector_bytes, cleared, 0u,
+                                         nullptr, nullptr),
+             CL_SUCCESS);
+
+    cl_int error = CL_INVALID_VALUE;
+    cl_event gate = loader.create_user_event(run.context(), &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (gate == nullptr) return;
+    const std::size_t global = elements;
+    cl_event          ran = nullptr;
+    CHECK_EQ(table->clEnqueueNDRangeKernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr, 1u, &gate,
+                                           &ran),
+             CL_SUCCESS);
+    float read[elements];
+    std::memset(read, 0xEE, sizeof read);
+    cl_event delivered = nullptr;
+    CHECK_EQ(table->clEnqueueReadBuffer(run.queue(), run.output(), CL_FALSE, 0u, vector_bytes, read, 1u, &ran,
+                                        &delivered),
+             CL_SUCCESS);
+    CHECK_EQ(run.flush(), CL_SUCCESS);
+
+    cl_int status = CL_COMPLETE;
+    CHECK_EQ(loader.event_info(ran, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr),
+             CL_SUCCESS);
+    CHECK(status != CL_COMPLETE);
+    status = CL_COMPLETE;
+    CHECK_EQ(loader.event_info(delivered, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status, nullptr),
+             CL_SUCCESS);
+    CHECK(status != CL_COMPLETE);
+    std::uint8_t untouched[sizeof read];
+    std::memset(untouched, 0xEE, sizeof untouched);
+    CHECK_EQ(std::memcmp(read, untouched, sizeof read), 0);
+
+    CHECK_EQ(loader.set_user_event_status(gate, CL_COMPLETE), CL_SUCCESS);
+    CHECK_EQ(loader.wait_for_events(1u, &delivered), CL_SUCCESS);
+    CHECK_EQ(run.wrong(read), 0u);
+
+    CHECK_EQ(loader.release_event(delivered), CL_SUCCESS);
+    CHECK_EQ(loader.release_event(ran), CL_SUCCESS);
+    CHECK_EQ(loader.release_event(gate), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* A sub-buffer is a region of its buffer on the host: what a read of it
+ * answers is the buffer's bytes there, and a write through its map lands in
+ * the buffer - over the arena, where the buffer's memory is the guest's own,
+ * as well as staged. Released first, it gives the buffer its reference back. */
+TEST(fullstack_opencl_icd, a_sub_buffer_reads_and_maps_its_region_of_the_buffer)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    cl_device_id device = nullptr;
+    cl_uint      devices = 0u;
+    CHECK_EQ(loader.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+    if (device == nullptr) return;
+    cl_int           error = CL_INVALID_VALUE;
+    const cl_context context = loader.create_context(device, &error);
+    if (context == nullptr) return;
+    const cl_command_queue queue = loader.create_queue(context, device, &error);
+    const cl_icd_dispatch *const table = table_of(queue);
+    /* The region starts where the device says a sub-buffer may. */
+    cl_uint align_bits = 0u;
+    CHECK_EQ(loader.device_info(device, CL_DEVICE_MEM_BASE_ADDR_ALIGN, sizeof align_bits, &align_bits, nullptr),
+             CL_SUCCESS);
+    const std::size_t origin = align_bits / 8u;
+    constexpr std::size_t region_bytes = 256u;
+    const std::size_t total = origin + 2u * region_bytes;
+    std::uint8_t     *filled = static_cast<std::uint8_t *>(std::malloc(total));
+    for (std::size_t index = 0u; index < total; ++index) filled[index] = static_cast<std::uint8_t>(index * 7u);
+
+    for (const cl_mem_flags flags : {static_cast<cl_mem_flags>(CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR),
+                                     static_cast<cl_mem_flags>(CL_MEM_READ_WRITE)}) {
+        const cl_mem buffer = loader.create_buffer(context, flags, total, &error);
+        CHECK_EQ(error, CL_SUCCESS);
+        if (buffer == nullptr) break;
+        CHECK_EQ(table->clEnqueueWriteBuffer(queue, buffer, CL_TRUE, 0u, total, filled, 0u, nullptr, nullptr),
+                 CL_SUCCESS);
+        const cl_buffer_region region = {origin, region_bytes};
+        const cl_mem sub = table->clCreateSubBuffer(buffer, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region,
+                                                    &error);
+        CHECK_EQ(error, CL_SUCCESS);
+        if (sub == nullptr) break;
+        std::uint8_t read[region_bytes] = {};
+        CHECK_EQ(table->clEnqueueReadBuffer(queue, sub, CL_TRUE, 0u, region_bytes, read, 0u, nullptr, nullptr),
+                 CL_SUCCESS);
+        CHECK_EQ(std::memcmp(read, filled + origin, region_bytes), 0);
+        cl_mem associated = nullptr;
+        CHECK_EQ(table->clGetMemObjectInfo(sub, CL_MEM_ASSOCIATED_MEMOBJECT, sizeof associated, &associated, nullptr),
+                 CL_SUCCESS);
+        CHECK(associated == buffer);
+
+        std::uint8_t *const mapped = static_cast<std::uint8_t *>(table->clEnqueueMapBuffer(
+            queue, sub, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, 0u, region_bytes, 0u, nullptr, nullptr, &error));
+        CHECK_EQ(error, CL_SUCCESS);
+        if (mapped == nullptr) break;
+        CHECK_EQ(std::memcmp(mapped, filled + origin, region_bytes), 0);
+        std::memset(mapped, 0x5A, region_bytes);
+        CHECK_EQ(table->clEnqueueUnmapMemObject(queue, sub, mapped, 0u, nullptr, nullptr), CL_SUCCESS);
+        std::uint8_t *const whole = static_cast<std::uint8_t *>(std::malloc(total));
+        CHECK_EQ(table->clEnqueueReadBuffer(queue, buffer, CL_TRUE, 0u, total, whole, 0u, nullptr, nullptr),
+                 CL_SUCCESS);
+        std::uint32_t wrong = 0u;
+        for (std::size_t index = 0u; index < total; ++index) {
+            const bool inside = index >= origin && index < origin + region_bytes;
+            if (whole[index] != (inside ? 0x5Au : filled[index])) ++wrong;
+        }
+        CHECK_EQ(wrong, 0u);
+        std::free(whole);
+        CHECK_EQ(loader.release_mem(sub), CL_SUCCESS);
+        CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
+    }
+    std::free(filled);
+    CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
+    CHECK_EQ(loader.release_context(context), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* An image mapped, written through and unmapped; its region copied into a
+ * buffer and read back; a fill of part of it and a copy of the buffer back
+ * into it - each judged by the bytes the host's image ends up holding. */
+TEST(fullstack_opencl_icd, an_image_is_mapped_filled_and_copied_through_a_buffer)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    cl_device_id device = nullptr;
+    cl_uint      devices = 0u;
+    CHECK_EQ(loader.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+    if (device == nullptr) return;
+    cl_int           error = CL_INVALID_VALUE;
+    const cl_context context = loader.create_context(device, &error);
+    if (context == nullptr) return;
+    const cl_command_queue queue = loader.create_queue(context, device, &error);
+    const cl_icd_dispatch *const table = table_of(queue);
+    constexpr std::size_t width = 16u, height = 8u;
+    std::uint32_t texels[width * height];
+    for (std::uint32_t index = 0u; index < width * height; ++index) texels[index] = 0x01000000u * index + index;
+    const cl_image_format format = {CL_RGBA, CL_UNSIGNED_INT8};
+    cl_image_desc         desc = {};
+    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    desc.image_width = width;
+    desc.image_height = height;
+    const cl_mem image = table->clCreateImage(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, &format, &desc,
+                                              texels, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (image == nullptr) return;
+
+    /* The map hands back the region packed, its pitch a row of it. */
+    const size_t origin[3] = {2u, 1u, 0u}, region[3] = {4u, 3u, 1u};
+    std::size_t  row_pitch = 0u;
+    std::uint32_t *const mapped = static_cast<std::uint32_t *>(table->clEnqueueMapImage(
+        queue, image, CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, origin, region, &row_pitch, nullptr, 0u, nullptr, nullptr,
+        &error));
+    CHECK_EQ(error, CL_SUCCESS);
+    if (mapped == nullptr) return;
+    CHECK_EQ(row_pitch, 4u * sizeof(std::uint32_t));
+    std::uint32_t wrong = 0u;
+    for (std::size_t y = 0u; y < 3u; ++y)
+        for (std::size_t x = 0u; x < 4u; ++x)
+            if (mapped[y * 4u + x] != texels[(y + 1u) * width + x + 2u]) ++wrong;
+    CHECK_EQ(wrong, 0u);
+    for (std::size_t index = 0u; index < 12u; ++index) mapped[index] = 0xC0DE0000u + static_cast<std::uint32_t>(index);
+    CHECK_EQ(table->clEnqueueUnmapMemObject(queue, image, mapped, 0u, nullptr, nullptr), CL_SUCCESS);
+
+    /* The whole image into a buffer, behind the unmap's write. */
+    const cl_mem buffer = loader.create_buffer(context, CL_MEM_READ_WRITE, sizeof texels, &error);
+    const size_t whole[3] = {width, height, 1u}, corner[3] = {0u, 0u, 0u};
+    cl_event     copied = nullptr;
+    CHECK_EQ(table->clEnqueueCopyImageToBuffer(queue, image, buffer, corner, whole, 0u, 0u, nullptr, &copied),
+             CL_SUCCESS);
+    std::uint32_t read[width * height] = {};
+    CHECK_EQ(table->clEnqueueReadBuffer(queue, buffer, CL_TRUE, 0u, sizeof read, read, 1u, &copied, nullptr),
+             CL_SUCCESS);
+    wrong = 0u;
+    for (std::size_t y = 0u; y < height; ++y)
+        for (std::size_t x = 0u; x < width; ++x) {
+            const bool          inside = x >= 2u && x < 6u && y >= 1u && y < 4u;
+            const std::uint32_t wanted = inside ? 0xC0DE0000u + static_cast<std::uint32_t>((y - 1u) * 4u + x - 2u)
+                                                : texels[y * width + x];
+            if (read[y * width + x] != wanted) ++wrong;
+        }
+    CHECK_EQ(wrong, 0u);
+
+    /* A fill of the top-left corner, then the buffer copied back over the
+     * rest of the image's first row: the corner past it keeps the fill. */
+    const cl_uint4 colour = {{7u, 8u, 9u, 10u}};
+    const size_t   square[3] = {2u, 2u, 1u};
+    CHECK_EQ(table->clEnqueueFillImage(queue, image, &colour, corner, square, 0u, nullptr, nullptr), CL_SUCCESS);
+    const size_t row_rest[3] = {width - 2u, 1u, 1u}, row_origin[3] = {2u, 0u, 0u};
+    CHECK_EQ(table->clEnqueueCopyBufferToImage(queue, buffer, image, 2u * sizeof(std::uint32_t), row_origin, row_rest,
+                                               0u, nullptr, nullptr),
+             CL_SUCCESS);
+    std::uint32_t row[width] = {};
+    const size_t  one_row[3] = {width, 1u, 1u};
+    CHECK_EQ(table->clEnqueueReadImage(queue, image, CL_TRUE, corner, one_row, 0u, 0u, row, 0u, nullptr, nullptr),
+             CL_SUCCESS);
+    const std::uint32_t fill = 7u | (8u << 8u) | (9u << 16u) | (10u << 24u);
+    CHECK_EQ(row[0], fill);
+    CHECK_EQ(row[1], fill);
+    wrong = 0u;
+    for (std::size_t x = 2u; x < width; ++x)
+        if (row[x] != read[x]) ++wrong;
+    CHECK_EQ(wrong, 0u);
+
+    CHECK_EQ(loader.release_event(copied), CL_SUCCESS);
+    CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
+    CHECK_EQ(loader.release_mem(image), CL_SUCCESS);
+    CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
+    CHECK_EQ(loader.release_context(context), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* Shared memory filled from the application's memory by a queue copy, read by
+ * a kernel, filled by the host and copied back out - so every way bytes reach
+ * an allocation that has no mapping of the guest's is judged by what a kernel
+ * or the application reads - and freed behind the queue. */
+TEST(fullstack_opencl_icd, shared_memory_is_copied_in_read_by_a_kernel_filled_and_copied_out)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    const cl_icd_dispatch *const table = table_of(run.queue());
+    cl_device_svm_capabilities svm = 0u;
+    CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_SVM_CAPABILITIES, sizeof svm, &svm, nullptr), CL_SUCCESS);
+    if (svm == 0u) {
+        std::fprintf(stderr, "host device offers no shared memory; nothing to judge\n");
+        return;
+    }
+    void *const shared = table->clSVMAlloc(run.context(), CL_MEM_READ_WRITE, vector_bytes, 0u);
+    CHECK(shared != nullptr);
+    if (shared == nullptr) return;
+    float replaced[elements];
+    for (std::uint32_t index = 0u; index < elements; ++index) replaced[index] = static_cast<float>(500u + index);
+    CHECK_EQ(table->clEnqueueSVMMemcpy(run.queue(), CL_TRUE, shared, replaced, vector_bytes, 0u, nullptr, nullptr),
+             CL_SUCCESS);
+    /* The kernel's first input is the allocation. */
+    CHECK_EQ(table->clSetKernelArgSVMPointer(run.kernel(), 0u, shared), CL_SUCCESS);
+    cl_event ran = nullptr;
+    CHECK_EQ(run.enqueue(&ran), CL_SUCCESS);
+    float read[elements];
+    std::memset(read, 0xEE, sizeof read);
+    CHECK_EQ(run.read(read, CL_TRUE, nullptr), CL_SUCCESS);
+    float wanted[elements] = {};
+    run.sum_with(replaced, wanted);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < elements; ++index)
+        if (read[index] != wanted[index]) ++wrong;
+    CHECK_EQ(wrong, 0u);
+
+    /* Filled by the host, then copied back out into the application's memory. */
+    const float pattern = 2.5f;
+    CHECK_EQ(table->clEnqueueSVMMemFill(run.queue(), shared, &pattern, sizeof pattern, vector_bytes, 1u, &ran,
+                                        nullptr),
+             CL_SUCCESS);
+    float back[elements] = {};
+    CHECK_EQ(table->clEnqueueSVMMemcpy(run.queue(), CL_TRUE, back, shared, vector_bytes, 0u, nullptr, nullptr),
+             CL_SUCCESS);
+    wrong = 0u;
+    for (std::uint32_t index = 0u; index < elements; ++index)
+        if (back[index] != pattern) ++wrong;
+    CHECK_EQ(wrong, 0u);
+
+    const cl_mem input = run.input();
+    CHECK_EQ(table->clSetKernelArg(run.kernel(), 0u, sizeof(cl_mem), &input), CL_SUCCESS);
+    void *freed[1] = {shared};
+    cl_event gone = nullptr;
+    CHECK_EQ(table->clEnqueueSVMFree(run.queue(), 1u, freed, nullptr, nullptr, 0u, nullptr, &gone), CL_SUCCESS);
+    CHECK_EQ(run.flush(), CL_SUCCESS);
+    CHECK_EQ(loader.wait_for_events(1u, &gone), CL_SUCCESS);
+    CHECK_EQ(loader.release_event(gone), CL_SUCCESS);
+    CHECK_EQ(loader.release_event(ran), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }

@@ -42,6 +42,7 @@
 #include "icd/opencl/cl_platform.hpp"
 #include "icd/opencl/cl_program_notify.hpp"
 #include "icd/opencl/cl_property_list.hpp"
+#include "icd/opencl/cl_wait_list.hpp"
 #include "icd/opencl/d3d11_resource.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 
@@ -70,6 +71,7 @@ namespace av::clicd {
 
 class ClArenaBlocks;
 class ClBufferRect;
+class MappedRegion;
 
 class D3d11Bridge;
 class D3d11Object;
@@ -188,11 +190,13 @@ public:
                                          const void *value);
     cl_int           enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_uint dimensions,
                                     const size_t *offset, const size_t *global, const size_t *local,
-                                    cl_event *event);
+                                    cl_event *event, const ClWaitList &waits = ClWaitList());
     cl_int           enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
-                                  size_t offset, size_t bytes, void *into, cl_event *event);
+                                  size_t offset, size_t bytes, void *into, cl_event *event,
+                                  const ClWaitList &waits = ClWaitList());
     cl_int           enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
-                                   size_t offset, size_t bytes, const void *from, cl_event *event);
+                                   size_t offset, size_t bytes, const void *from, cl_event *event,
+                                   const ClWaitList &waits = ClWaitList());
     cl_int           finish(cl_command_queue queue);
     cl_int           flush(cl_command_queue queue);
 
@@ -276,14 +280,15 @@ public:
     /* Nothing crosses but the two handles and the offsets, so these are
      * enqueued as they are and the host's own event answered. */
     cl_int enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_mem to, size_t from_offset,
-                               size_t to_offset, size_t bytes, cl_event *event);
+                               size_t to_offset, size_t bytes, cl_event *event, const ClWaitList &waits = ClWaitList());
     /* The pattern is at most 128 bytes (the API's own bound) and crosses with
      * the command; the host copies it before it answers. */
     cl_int enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, const void *pattern,
-                               size_t pattern_bytes, size_t offset, size_t bytes, cl_event *event);
+                               size_t pattern_bytes, size_t offset, size_t bytes, cl_event *event,
+                               const ClWaitList &waits = ClWaitList());
     cl_int enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem to,
                               const size_t *from_origin, const size_t *to_origin,
-                              const size_t *region, cl_event *event);
+                              const size_t *region, cl_event *event, const ClWaitList &waits = ClWaitList());
 
     /* ---- images and samplers -------------------------------------------- */
 
@@ -309,23 +314,23 @@ public:
      * commands that fit (ClTransferChunks). */
     cl_int enqueue_read_image(cl_command_queue queue, cl_mem image, const size_t *origin,
                               const size_t *region, size_t row_pitch, size_t slice_pitch,
-                              void *into, cl_event *event);
+                              void *into, cl_event *event, const ClWaitList &waits = ClWaitList());
     cl_int enqueue_write_image(cl_command_queue queue, cl_mem image, const size_t *origin,
                                const size_t *region, size_t row_pitch, size_t slice_pitch,
-                               const void *from, cl_event *event);
+                               const void *from, cl_event *event, const ClWaitList &waits = ClWaitList());
     /* A buffer's rectangle, as an image's region is moved: the queue drained,
      * then commands that fit, so a read is complete when it returns whatever
      * the application asked for - which the API allows. */
     cl_int enqueue_read_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect, void *into,
-                                    cl_event *event);
+                                    cl_event *event, const ClWaitList &waits = ClWaitList());
     cl_int enqueue_write_buffer_rect(cl_command_queue queue, cl_mem buffer, const ClBufferRect &rect,
-                                     const void *from, cl_event *event);
+                                     const void *from, cl_event *event, const ClWaitList &waits = ClWaitList());
     /* Nothing crosses but handles and the geometry: enqueued as it is, the
      * host refusing what the API refuses. */
     cl_int enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, cl_mem to, const size_t *from_origin,
                                     const size_t *to_origin, const size_t *region, size_t from_row_pitch,
                                     size_t from_slice_pitch, size_t to_row_pitch, size_t to_slice_pitch,
-                                    cl_event *event);
+                                    cl_event *event, const ClWaitList &waits = ClWaitList());
     /* The three sampler properties and nothing else; the deprecated
      * clCreateSampler is the same list written out. */
     cl_sampler create_sampler(cl_context context, const uint64_t *properties, cl_int *error);
@@ -444,17 +449,89 @@ public:
      * one is asked for, is the queue's own place as a marker, as every other
      * enqueue of this ICD answers one (feature 053, research.md §21). */
     cl_int           enqueue_external(cl_command_queue queue, cl_uint count, const cl_mem *objects,
-                                      cl_event *event);
+                                      cl_event *event, const ClWaitList &waits = ClWaitList());
+
+    /* ---- the rest of the enqueue surface (cl_icd_root_enqueue.cpp) ------ */
+
+    /* clEnqueueTask: an NDRange of one work-item in a group of one. */
+    cl_int enqueue_task(cl_command_queue queue, cl_kernel kernel, cl_event *event,
+                        const ClWaitList &waits = ClWaitList());
+    /* The 1.1 marker, which always hands an event back: CL_INVALID_VALUE for
+     * nowhere to put it. */
+    cl_int enqueue_event_marker(cl_command_queue queue, cl_event *event);
+    /* clEnqueueWaitForEvents: a barrier behind `count` events, which must
+     * name at least one. */
+    cl_int enqueue_wait_for_events(cl_command_queue queue, cl_uint count, const cl_event *events);
+    /* An image's region into a buffer and back, and a fill of an image's
+     * region: handles and geometry, run by the host behind the wait list. A
+     * fill colour is four components of at most four bytes, which is what
+     * every format but a depth one fills with - and this ICD reports no depth
+     * images. */
+    cl_int enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem image, cl_mem buffer, const size_t *origin,
+                                        const size_t *region, size_t offset, cl_event *event,
+                                        const ClWaitList &waits = ClWaitList());
+    cl_int enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem buffer, cl_mem image, size_t offset,
+                                        const size_t *origin, const size_t *region, cl_event *event,
+                                        const ClWaitList &waits = ClWaitList());
+    cl_int enqueue_fill_image(cl_command_queue queue, cl_mem image, const void *colour, const size_t *origin,
+                              const size_t *region, cl_event *event, const ClWaitList &waits = ClWaitList());
+    /* A hint where memory should live next, which the host takes as it will:
+     * every object must be one of the queue's context. */
+    cl_int enqueue_migrate(cl_command_queue queue, cl_uint count, const cl_mem *objects,
+                           cl_mem_migration_flags flags, cl_event *event, const ClWaitList &waits = ClWaitList());
+    /* A region of a buffer, which holds one of the application's references on
+     * the buffer for its life. A buffer the arena backs, or one over the
+     * application's memory, lends its region of either to the sub-buffer, so
+     * its maps are what the buffer's are. A sub-buffer of a sub-buffer is
+     * CL_INVALID_MEM_OBJECT, as the API says. */
+    cl_mem create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer_create_type type, const void *info,
+                             cl_int *error);
+    /* An image's region staged in a block of the ICD's own, read in at the map
+     * and written back at the unmap, as a buffer's staged map is: the wire
+     * carries no host map of an image, and needs none. Its rows and slices
+     * are packed, and the pitches answered say so. Complete when it returns,
+     * which the API allows of any map. */
+    void  *map_image(cl_command_queue queue, cl_mem image, cl_bool blocking, cl_map_flags flags,
+                     const size_t *origin, const size_t *region, size_t *row_pitch, size_t *slice_pitch,
+                     cl_event *event, cl_int *error, const ClWaitList &waits = ClWaitList());
+    /* clCreateImageWithProperties: 3.0 defines no image property, so the list
+     * may only be empty, and the image is clCreateImage's. */
+    cl_mem create_image_with_properties(cl_context context, const cl_mem_properties *properties,
+                                        cl_mem_flags flags, const cl_image_format *format, const cl_image_desc *desc,
+                                        void *host_pointer, cl_int *error);
+    /* A pipe is memory the host makes, and whether a device has them at all is
+     * its own CL_DEVICE_PIPE_SUPPORT; 3.0 defines no pipe property either. */
+    cl_mem create_pipe(cl_context context, cl_mem_flags flags, cl_uint packet_bytes, cl_uint packets,
+                       const cl_pipe_properties *properties, cl_int *error);
+    cl_int pipe_info(cl_mem pipe, cl_pipe_info name, size_t value_bytes, void *value, size_t *size_ret);
+    /* Shared memory copied, filled, freed and migrated on a queue. A copy
+     * between two allocations is the host's; one with the application's own
+     * memory on either side goes through a buffer of the ICD's, mapped on the
+     * host, whose address the host takes as shared memory - no command on this
+     * wire carries bytes to a shared address otherwise. */
+    cl_int svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to, const void *from, size_t bytes,
+                      cl_event *event, const ClWaitList &waits = ClWaitList());
+    cl_int svm_mem_fill(cl_command_queue queue, void *pointer, const void *pattern, size_t pattern_bytes,
+                        size_t bytes, cl_event *event, const ClWaitList &waits = ClWaitList());
+    using SvmFreed = void(CL_CALLBACK *)(cl_command_queue queue, cl_uint count, void *pointers[], void *user_data);
+    /* Behind everything queued and the list: the allocations go then, or the
+     * application's callback is handed them to free itself. */
+    cl_int enqueue_svm_free(cl_command_queue queue, cl_uint count, void *pointers[], SvmFreed freed,
+                            void *user_data, cl_event *event, const ClWaitList &waits = ClWaitList());
+    /* Another hint, which every allocation here would ignore: a point in the
+     * queue behind the list. */
+    cl_int enqueue_svm_migrate(cl_command_queue queue, cl_uint count, const void **pointers,
+                               cl_event *event, const ClWaitList &waits = ClWaitList());
 
     /* ---- maps and shared virtual memory (US2) --------------------------- */
 
     /* A pointer the application may read and write, staged in guest memory
      * and filled from the buffer; null with the API's own error. */
     void  *map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool blocking, cl_map_flags flags,
-                      size_t offset, size_t bytes, cl_event *event, cl_int *error);
+                      size_t offset, size_t bytes, cl_event *event, cl_int *error, const ClWaitList &waits = ClWaitList());
     /* Writes a staged mapping back where the application asked to write, then
      * gives it up. CL_INVALID_VALUE for a pointer no live mapping answered. */
-    cl_int unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl_event *event);
+    cl_int unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl_event *event, const ClWaitList &waits = ClWaitList());
 
     /* Coarse-grained shared virtual memory: the application is handed a
      * mirror, and the host address it stands for is what crosses the wire. */
@@ -463,8 +540,8 @@ public:
     /* Fills the mirror from the host; an unmap writes it back. Host access to
      * a coarse-grained allocation is defined only between the two. */
     cl_int svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags flags, void *pointer,
-                   size_t bytes, cl_event *event);
-    cl_int svm_unmap(cl_command_queue queue, void *pointer, cl_event *event);
+                   size_t bytes, cl_event *event, const ClWaitList &waits = ClWaitList());
+    cl_int svm_unmap(cl_command_queue queue, void *pointer, cl_event *event, const ClWaitList &waits = ClWaitList());
     /* A kernel argument that is an address rather than an object: translated
      * before it is sent, and refused here when it is inside no allocation. */
     cl_int set_kernel_svm_argument(cl_kernel kernel, cl_uint index, const void *pointer);
@@ -586,8 +663,17 @@ private:
      * host's worker: a marker is the queue's end as an event, and this side
      * asks after it (ClBlockingWait). What a finish is, and what every
      * transfer that asks the host to block does first. `driven`: the queue's
-     * context is one the driver wakes (GuestClContext::wakes). */
-    cl_int           drain(ClientTransport &wire, uint64_t queue, bool driven);
+     * context is one the driver wakes (GuestClContext::wakes). `waits` are the
+     * host's numbers for the `count` events the command after it was told to
+     * wait for, which the marker waits for too: on an in-order queue it is
+     * reached once both have been. */
+    cl_int           drain(ClientTransport &wire, uint64_t queue, bool driven, const uint64_t *waits,
+                           uint32_t count);
+    /* What a transfer the host is made to block on does before it is sent:
+     * the drain, behind the application's wait list where it named one, so
+     * the host's call is behind nothing. The list judged as the API judges
+     * it; a queue known idle with no list needs nothing. */
+    [[nodiscard]] cl_int settle(ClientTransport &wire, ClObject &queue, const ClWaitList &waits);
     /* The adapter's vendor, name and PCI location, to the device's report and
      * extension policy; its name into `name`. */
     void             describe_adapter(uint32_t adapter, ClDevice &device, icd::AdapterString &name);
@@ -676,6 +762,20 @@ private:
     cl_int           enqueue_gl_objects(GlObjectsCommand command, cl_command_queue queue, cl_uint count,
                                         const cl_mem *objects, cl_uint waits, const cl_event *events,
                                         cl_event *event);
+    /* The write-back of an image's staged mapping, behind its queue, and the
+     * mapping given up. */
+    cl_int           unmap_image(ClientTransport &wire, ClObject &queue, uint64_t image, MappedRegion &region,
+                                 cl_event *event);
+    /* `bytes` of the application's memory at `from` copied to the host's
+     * shared address `to`, and from `from` back into `to`, through a buffer
+     * of the ICD's own mapped on the host - an address the host takes as
+     * shared memory. On `queue`, which the caller has settled. */
+    cl_int           svm_from_guest(ClientTransport &wire, ClObject &queue, uint64_t to, const void *from,
+                                    size_t bytes);
+    cl_int           svm_to_guest(ClientTransport &wire, ClObject &queue, void *to, uint64_t from, size_t bytes);
+    /* The host's event for a command that was asked for one, wrapped as the
+     * application's when it wanted one and given back when it did not. */
+    void             hand_over(ClientTransport &wire, ClObject &queue, uint64_t produced, cl_event *event);
     /* A marker or a barrier: which of the two generated calls sends it is the
      * whole difference. */
     using PointCommand = cl_int (*)(ClientTransport &, uint64_t, cl_uint, const uint64_t *, uint64_t *);

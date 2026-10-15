@@ -59,6 +59,14 @@ public:
     void     use_application_memory(void *memory);
     uint8_t *application_memory() const;
 
+    /* For a sub-buffer: the buffer it is a region of, on which the ICD holds
+     * one of the application's references for as long as the sub-buffer
+     * lives, as OpenCL keeps a buffer while a sub-buffer of it does. The
+     * buffer is not the sub-buffer's parent: a parent is of a lower kind, and
+     * both are memory. Null for every other object. */
+    void      slice_of(ClObject &buffer);
+    ClObject *sliced_from() const;
+
     /* Whether this object is `other` or is somewhere below it. */
     bool descends_from(const ClObject &other) const;
     /* This object or the closest one above it of `kind`, or null: a buffer's
@@ -115,6 +123,7 @@ private:
     uint64_t               backing_offset_;
     uint64_t               backing_bytes_;
     uint8_t               *application_memory_;
+    ClObject              *sliced_from_;
     uint32_t               references_;
     uint32_t               children_;
     Kind                   kind_;

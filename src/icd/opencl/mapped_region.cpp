@@ -5,7 +5,8 @@
 namespace av::clicd {
 
 MappedRegion::MappedRegion()
-    : buffer_(0u), host_(0u), at_(nullptr), offset_(0u), bytes_(0u), flags_(0u), memory_(Memory::shared)
+    : buffer_(0u), host_(0u), at_(nullptr), offset_(0u), bytes_(0u), flags_(0u), memory_(Memory::shared), origin_{},
+      region_{}, element_bytes_(0u)
 {
     AV_SCOPE("MappedRegion::MappedRegion");
 }
@@ -33,6 +34,33 @@ void MappedRegion::give_up()
     bytes_ = 0u;
     flags_ = 0u;
     memory_ = Memory::shared;
+    for (size_t axis = 0u; axis < 3u; ++axis) {
+        origin_[axis] = 0u;
+        region_[axis] = 0u;
+    }
+    element_bytes_ = 0u;
+}
+
+void MappedRegion::place_in_image(const size_t *origin, const size_t *region, size_t element_bytes)
+{
+    AV_SCOPE("MappedRegion::place_in_image");
+    for (size_t axis = 0u; axis < 3u; ++axis) {
+        origin_[axis] = origin[axis];
+        region_[axis] = region[axis];
+    }
+    element_bytes_ = element_bytes;
+}
+
+bool MappedRegion::image() const
+{
+    AV_SCOPE("MappedRegion::image");
+    return element_bytes_ != 0u;
+}
+
+ClImageRegion MappedRegion::image_layout() const
+{
+    AV_SCOPE("MappedRegion::image_layout");
+    return ClImageRegion(origin_, region_, 0u, 0u, element_bytes_);
 }
 
 bool MappedRegion::held() const
@@ -96,10 +124,14 @@ bool MappedRegion::writes_back() const
 bool MappedRegion::invariants_hold() const
 {
     AV_SCOPE("MappedRegion::invariants_hold");
-    if (at_ == nullptr) return buffer_ == 0u && bytes_ == 0u && offset_ == 0u && memory_ == Memory::shared;
+    if (at_ == nullptr)
+        return buffer_ == 0u && bytes_ == 0u && offset_ == 0u && memory_ == Memory::shared && element_bytes_ == 0u;
     /* A mapping of nothing is not a mapping, and one that names neither a
-     * buffer nor the host's own address could never be unmapped. */
-    return bytes_ != 0u && buffer_ != 0u && host_ != 0u;
+     * buffer nor the host's own address could never be unmapped - except an
+     * image's, which is staged and has no host map to name. */
+    if (bytes_ == 0u || buffer_ == 0u) return false;
+    if (element_bytes_ != 0u) return host_ == 0u && memory_ == Memory::staged;
+    return host_ != 0u;
 }
 
 }  // namespace av::clicd

@@ -128,6 +128,8 @@ TEST(cl_icd_loader_sequence, a_command_this_icd_does_not_carry_refuses_rather_th
   /* An application asking for something this driver does not implement is
    * told so, and the process survives it. */
   CHECK_EQ(table.clGetDeviceAndHostTimer(nullptr, nullptr, nullptr), CL_INVALID_OPERATION);
-  cl_int error = CL_SUCCESS;
-  CHECK(table.clCreatePipe(nullptr, 0u, 4u, 16u, nullptr, &error) == nullptr);
-  CHECK_EQ(error, CL_INVALID_OPERATION); }
+  /* A 1.0 command whose device capability this ICD reports no device
+   * having: a host function pointer of the guest's means nothing on the
+   * host. */
+  CHECK_EQ(table.clEnqueueNativeKernel(nullptr, nullptr, nullptr, 0u, 0u, nullptr, nullptr, 0u, nullptr, nullptr),
+           CL_INVALID_OPERATION); }

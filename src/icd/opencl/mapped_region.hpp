@@ -13,6 +13,8 @@
 #ifndef AV_CLICD_MAPPED_REGION_HPP
 #define AV_CLICD_MAPPED_REGION_HPP
 
+#include "icd/opencl/cl_image_region.hpp"
+
 #include <CL/cl.h>
 
 #include <stddef.h>
@@ -51,6 +53,14 @@ public:
     /* Whether `at` is a block of the ICD's own, freed with the mapping. */
     bool         staged() const;
 
+    /* For a mapping of an image, which no host map stands behind - the wire
+     * carries none - where in the image it is, in texels, and the image's
+     * element size: the staged block holds the region with its rows and
+     * slices packed, and the unmap writes it back as an image write. */
+    void          place_in_image(const size_t *origin, const size_t *region, size_t element_bytes);
+    bool          image() const;
+    ClImageRegion image_layout() const;
+
     /* Whether `pointer` is the one this mapping answered. An unmap names the
      * pointer the map returned, not an address inside it. */
     bool answers(const void *pointer) const;
@@ -71,6 +81,9 @@ private:
     size_t       bytes_;
     cl_map_flags flags_;
     Memory       memory_;
+    size_t       origin_[3];
+    size_t       region_[3];
+    size_t       element_bytes_;
 };
 
 }  // namespace av::clicd

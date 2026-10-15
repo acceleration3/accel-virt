@@ -523,3 +523,24 @@ TEST(cl_object_table, a_forced_destroy_lets_go_of_what_the_object_was_made_on)
   CHECK(rig.objects().release(*context, freed));
   CHECK(freed == some_context);
   CHECK_EQ(rig.objects().live(), 0u); }
+
+/* A sub-buffer names the buffer it is a region of; nothing else names one,
+ * and memory is never a region of itself or anything but memory. */
+TEST(cl_object_table, a_sub_buffer_names_the_buffer_it_is_a_region_of)
+{ Table rig;
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x6600u);
+  ClObject *const sub = rig.make(ClObject::Kind::mem, 0x6601u);
+  ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x6602u);
+  CHECK(buffer != nullptr && sub != nullptr && queue != nullptr);
+  CHECK(sub->sliced_from() == nullptr);
+  CHECK(queue->sliced_from() == nullptr);
+  sub->slice_of(*buffer);
+  CHECK(sub->sliced_from() == buffer);
+  CHECK(buffer->sliced_from() == nullptr);
+  CHECK(sub->invariants_hold());
+  /* A region of itself, or a queue that is a region of anything, is a state
+   * no create builds. */
+  buffer->slice_of(*buffer);
+  CHECK(!buffer->invariants_hold());
+  queue->slice_of(*sub);
+  CHECK(!queue->invariants_hold()); }

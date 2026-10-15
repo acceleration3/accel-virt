@@ -169,6 +169,12 @@ public:
      * is no room for another mapping. */
     uint8_t         *take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                               cl_map_flags flags, uint8_t *at);
+    /* Takes a staged mapping of the `region` of `image` at `origin`, in
+     * texels of `element_bytes`, its rows and slices packed in the block.
+     * Null when there is no room for another mapping, no memory for the
+     * block, or a region whose size does not fit; the caller fills it. */
+    uint8_t         *take_image_mapping(uint64_t image, const size_t *origin, const size_t *region,
+                                        size_t element_bytes, cl_map_flags flags);
     /* The mapping `pointer` answers, or null for a pointer no live mapping
      * returned. */
     MappedRegion    *mapping_at(const void *pointer);

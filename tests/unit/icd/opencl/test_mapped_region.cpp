@@ -36,6 +36,7 @@ struct MappedRegionProbe {
     static void stray_length(MappedRegion &region) { region.bytes_ = 1u; }
     static void stray_offset(MappedRegion &region) { region.offset_ = 1u; }
     static void stray_staging(MappedRegion &region) { region.memory_ = MappedRegion::Memory::staged; }
+    static void stray_element(MappedRegion &region) { region.element_bytes_ = 4u; }
 };
 
 }  // namespace av::clicd
@@ -227,3 +228,63 @@ TEST(mapped_region, the_invariant_catches_an_empty_mapping_that_still_names_some
   CHECK(!broken(MappedRegionProbe::stray_length));
   CHECK(!broken(MappedRegionProbe::stray_offset));
   CHECK(!broken(MappedRegionProbe::stray_staging)); }
+
+/* An image's mapping has no host map behind it: it names the image, where in
+ * it the region is and its element's size, and lays the region out packed. */
+TEST(mapped_region, an_image_mapping_names_its_region_and_lays_it_out_packed)
+{ MappedRegion region;
+  CHECK(!region.image());
+  std::uint8_t block[96] = {};
+  const size_t origin[3] = {2u, 1u, 0u}, extent[3] = {4u, 3u, 2u};
+  region.take(host_buffer, 0u, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::staged);
+  region.place_in_image(origin, extent, 4u);
+  CHECK(region.image());
+  CHECK(region.invariants_hold());
+  const av::clicd::ClImageRegion layout = region.image_layout();
+  CHECK(layout.valid());
+  CHECK_EQ(layout.width(), 4u);
+  CHECK_EQ(layout.rows(), 3u);
+  CHECK_EQ(layout.slices(), 2u);
+  CHECK_EQ(layout.row_pitch(), 16u);
+  CHECK_EQ(layout.slice_pitch(), 48u);
+  std::size_t at[3] = {};
+  layout.origin_of(1u, 2u, 1u, at);
+  CHECK_EQ(at[0], 3u);
+  CHECK_EQ(at[1], 3u);
+  CHECK_EQ(at[2], 1u);
+  CHECK(region.writes_back());
+  /* Given up, it names no image any more. */
+  region.give_up();
+  CHECK(!region.image());
+  CHECK(region.invariants_hold());
+  /* An image's mapping is staged and has no host address; one that claims
+   * either, or an empty one still naming an element size, is no state a map
+   * builds. */
+  region.take(host_buffer, 0x1000u, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::staged);
+  region.place_in_image(origin, extent, 4u);
+  CHECK(!region.invariants_hold());
+  region.give_up();
+  MappedRegionProbe::stray_element(region);
+  CHECK(!region.invariants_hold()); }
+
+TEST(guest_cl_context, an_image_mapping_is_staged_zeroed_and_refused_for_no_region)
+{ ClContextRig rig;
+  rig.host().blob_import(0u, 0x77u);
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
+  CHECK_STATUS(context.make(), Status::ok);
+  const size_t origin[3] = {0u, 0u, 0u}, extent[3] = {4u, 2u, 1u}, empty[3] = {4u, 0u, 1u};
+  std::uint8_t *const at = context.take_image_mapping(host_buffer, origin, extent, 4u, CL_MAP_READ);
+  CHECK(at != nullptr);
+  if (at == nullptr) return;
+  CHECK_EQ(at[0], 0u);
+  CHECK_EQ(at[31], 0u);
+  MappedRegion *const region = context.mapping_at(at);
+  CHECK(region != nullptr && region->image());
+  CHECK_EQ(region->bytes(), 32u);
+  CHECK(context.invariants_hold());
+  CHECK(context.take_image_mapping(host_buffer, origin, empty, 4u, CL_MAP_READ) == nullptr);
+  CHECK(context.take_image_mapping(0u, origin, extent, 4u, CL_MAP_READ) == nullptr);
+  CHECK(context.take_image_mapping(host_buffer, origin, extent, 0u, CL_MAP_READ) == nullptr);
+  context.give_back_mapping(*region);
+  CHECK_EQ(context.mappings(), 0u);
+  CHECK(context.invariants_hold()); }

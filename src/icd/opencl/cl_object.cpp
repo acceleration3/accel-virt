@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
                    ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinal_(0u), fixed_()
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), sliced_from_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinal_(0u), fixed_()
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -52,6 +52,18 @@ uint8_t *ClObject::application_memory() const
 {
     AV_SCOPE("ClObject::application_memory");
     return application_memory_;
+}
+
+void ClObject::slice_of(ClObject &buffer)
+{
+    AV_SCOPE("ClObject::slice_of");
+    sliced_from_ = &buffer;
+}
+
+ClObject *ClObject::sliced_from() const
+{
+    AV_SCOPE("ClObject::sliced_from");
+    return sliced_from_;
 }
 
 bool ClObject::backed() const
@@ -193,6 +205,8 @@ bool ClObject::invariants_hold() const
     /* A platform belongs to no context; everything else does once it is made
      * on one. */
     if (kind_ == Kind::platform && context_ != nullptr) return false;
+    /* Only memory is a region of memory, and never of itself. */
+    if (sliced_from_ != nullptr && (kind_ != Kind::mem || sliced_from_ == this)) return false;
     return true;
 }
 
