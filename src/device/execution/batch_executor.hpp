@@ -4,12 +4,15 @@
  * answered by the device, and the rest skipped, and
  * the answer of the last command that asked for one written to the reply slot
  * before the batch completes. Every command run moves the context's progress,
- * so a long batch reads as busy rather than hung. */
+ * so a long batch reads as busy rather than hung. A command that crossed in
+ * pieces, in this batch or across several, is gathered back and run whole
+ * when its last piece - the command itself - arrives. */
 #ifndef AV_BATCH_EXECUTOR_HPP
 #define AV_BATCH_EXECUTOR_HPP
 
 #include "core/support/status.hpp"
 #include "device/execution/host_poll.hpp"
+#include "device/execution/gathered_command.hpp"
 #include "device/memory/blob_window.hpp"
 #include "proto/submission/fault_code.hpp"
 
@@ -76,6 +79,9 @@ private:
 
     [[nodiscard]] Status run_command(const CommandHeader &header, const uint8_t *payload, bool &answered,
                                      size_t &answer);
+    /* The command `header` names with its whole payload, gathered or not. */
+    [[nodiscard]] Status run_whole(const CommandHeader &header, const uint8_t *payload, size_t size, bool &answered,
+                                   size_t &answer);
     /* Records the fault `fault_` now names against `fence` and answers
      * `status`, so every way a batch can fail leaves one record. */
     [[nodiscard]] Status failed(uint64_t fence, Status status);
@@ -93,6 +99,7 @@ private:
     uint64_t         batches_;
     uint64_t         commands_;
     uint64_t         skipped_;
+    GatheredCommand  gathered_;
 
     friend struct BatchExecutorProbe;
 };

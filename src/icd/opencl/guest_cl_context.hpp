@@ -65,10 +65,13 @@ public:
      * enqueues without waiting for room. */
     static constexpr uint8_t  ring_order = 20u;
     /* A read's bytes come back in the reply: a megabyte of them per round
-     * trip rather than 60 KiB (the host reads ahead, ClReadAhead). */
+     * trip rather than 60 KiB (the host reads ahead, ClReadAhead). A longer
+     * answer - a build log - is fetched in parts. */
     static constexpr uint32_t reply_bytes = 1024u * 1024u;
-    /* One command's room. A kernel's arguments and a program's source are the
-     * large ones, and anything larger crosses as a blob. */
+    /* The room a command is lent in the batch. A command that outgrows it -
+     * a program's source, a long wait list - spills into the transport's
+     * memory and crosses in pieces (docs/protocol.md, "Long commands"), so
+     * this sizes what is batched, not what can be sent. */
     static constexpr size_t   staging_bytes = 256u * 1024u;
     /* The calls held before they go as one batch (icd::BatchedTransport):
      * two of the largest a command can be, well inside the ring. */

@@ -1027,11 +1027,12 @@ cl_int ClIcdRoot::build_program(cl_program program, const char *options)
 
 /* The host compiler's own words for a program that did not build: an
  * application that reports only "a problem" leaves them nowhere else. Its
- * first lines, since a large program's log runs long. */
+ * first lines, since a large program's log runs long - however long, the
+ * whole log crosses, since an answer longer than the reply slot comes in
+ * parts. */
 void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options)
 {
     AV_SCOPE("ClIcdRoot::note_build_log");
-    constexpr size_t   most_bytes = 1u << 20;
     constexpr uint32_t most_lines = 24u;
     char       bytes[256];
     TextBuffer line(bytes, sizeof bytes);
@@ -1042,7 +1043,7 @@ void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t
     if (device == 0u ||
         av::clproto::av_clGetProgramBuildInfo(wire, program, device, CL_PROGRAM_BUILD_LOG, 0u,
                                                nullptr, &size) != CL_SUCCESS ||
-        size == 0u || size > most_bytes)
+        size == 0u)
         return;
     char *const text = static_cast<char *>(memory_.allocate(size + 1u, Pool::paged));
     if (text == nullptr) return;

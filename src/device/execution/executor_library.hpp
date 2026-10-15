@@ -65,6 +65,10 @@ public:
      * runs on made lost. not_supported for a library without the call, or a
      * host that cannot. */
     [[nodiscard]] Status lose_device(AvExecutor *executor) const;
+    /* What `executor` kept of an answer too long for its reply, from
+     * `offset` into `out`: the bytes copied, and the answer's `length`. */
+    size_t      answer_part(AvExecutor *executor, uint64_t offset, uint8_t *out, size_t capacity,
+                            uint64_t &length) const;
 
     /* Feature 053, answered as the library answered it (AV_SHARED_*): the
      * object `wire_handle` names in `executor`'s commands shared as

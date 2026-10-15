@@ -14,10 +14,12 @@
 namespace av {
 
 ContextSession::ContextSession()
-    : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), arena_(nullptr, 0u), imports_(), starved_(0u), faulted_(false),
+    : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), heap_(), arena_(nullptr, 0u), answer_(heap_),
+      answer_length_(0u), imports_(), starved_(0u), faulted_(false),
       sink_(stderr), lines_(sink_, "virtio-gpu-av: executor: ")
 {
     AV_SCOPE("ContextSession::ContextSession");
+    arena_.overflow_into(heap_);
 }
 
 Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes)
@@ -52,6 +54,8 @@ void ContextSession::release()
     /* The block goes back to the library, so the slot holds no pointer into
      * memory the next context will be given. */
     arena_.attach(nullptr, 0u);
+    answer_.release();
+    answer_length_ = 0u;
     faulted_ = false;
 }
 
@@ -118,6 +122,8 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
 {
     AV_SCOPE("ContextSession::execute");
     answer = 0u;
+    answer_.release();
+    answer_length_ = 0u;
     /* Once the host device is gone nothing more will run on it, and saying so
      * again is cheaper than finding out again. */
     if (backend_ == nullptr || faulted_) return AV_DEVICE_LOST;
@@ -126,8 +132,12 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
     arena_.reset();
     const size_t refused = arena_.refusals();
     WireReader reader(payload, size);
-    WireWriter writer(reply, reply_capacity);
+    /* Only an answer asked for is kept: the rest are measured and dropped. */
+    WireWriter writer = reply != nullptr ? WireWriter(reply, reply_capacity, answer_) : WireWriter(nullptr, 0u);
     const bool ran = backend_->run(command_id, reader, writer, arena_);
+    /* What the decode took past the block goes back now, not at the next
+     * command: a source of megabytes is not kept while the context idles. */
+    arena_.reset();
     if (!ran) {
         /* The block being too small and the frame being malformed are the same
          * answer on the wire on purpose, and two different problems here. */
@@ -141,11 +151,23 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
         faulted_ = true;
         return AV_DEVICE_LOST;
     }
-    /* What the answer wanted, not what fitted: an answer longer than the
-     * capacity writes nothing and reports its length, so the device can tell
-     * the guest what to allocate. */
+    /* What the answer wanted: one longer than the capacity spilled whole
+     * into answer_, which the device hands on in parts. */
     answer = writer.wanted();
+    if (writer.spilled()) answer_length_ = writer.offset();
+    else answer_.release();
     return AV_EXECUTED;
+}
+
+size_t ContextSession::answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length) const
+{
+    AV_SCOPE("ContextSession::answer_part");
+    length = answer_length_;
+    if (offset >= answer_length_ || out == nullptr) return 0u;
+    const size_t left = answer_length_ - static_cast<size_t>(offset);
+    const size_t copied = left < capacity ? left : capacity;
+    __builtin_memcpy(out, answer_.bytes() + offset, copied);
+    return copied;
 }
 
 uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key)

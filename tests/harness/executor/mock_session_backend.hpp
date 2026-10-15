@@ -23,10 +23,13 @@ public:
     static constexpr std::uint32_t long_answer_id = 0x10002u;
     /* Fails to decode, without touching the arena. */
     static constexpr std::uint32_t malformed_id = 0x10003u;
-    /* Asks the arena for more than the block holds, then fails. */
+    /* Asks the arena for more than any memory holds, then fails. */
     static constexpr std::uint32_t greedy_id = 0x10004u;
     /* Runs, and leaves the host device lost behind it. */
     static constexpr std::uint32_t lose_id = 0x10005u;
+    /* Takes four times the block from the arena, all of it written, and runs:
+     * what a program's source of megabytes decodes into. */
+    static constexpr std::uint32_t roomy_id = 0x10006u;
     /* An adopted blob's wire handle is its id plus this. */
     static constexpr std::uint64_t wire_offset = 0x2000u;
     /* An imported object's wire handle, which no adopted blob can be, and what

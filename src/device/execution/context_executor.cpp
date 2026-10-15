@@ -152,6 +152,15 @@ Status ContextExecutor::import(uint64_t blob_id, uint64_t memory_key, uint64_t &
     return Status::not_supported;
 }
 
+size_t ContextExecutor::answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length)
+{
+    AV_SCOPE("ContextExecutor::answer_part");
+    host_.require_worker("ContextExecutor::answer_part");
+    length = 0u;
+    if (executor_ == nullptr) return 0u;
+    return library_.answer_part(executor_, offset, out, capacity, length);
+}
+
 void ContextExecutor::release(uint64_t blob_id)
 {
     AV_SCOPE("ContextExecutor::release");

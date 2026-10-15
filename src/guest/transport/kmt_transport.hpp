@@ -10,7 +10,13 @@
  * D3DKMTSubmitCommand on the virtual context, and - for a synchronous call -
  * waits for the context and reads the reply. send_batch publishes commands the
  * caller framed itself. The record it was built with is the private data the
- * create-context carried; the miniport decoded it. */
+ * create-context carried; the miniport decoded it.
+ *
+ * Nothing the caller sends or asks for is bounded by those rooms
+ * (docs/protocol.md, "Long commands"): a writer it lends that outgrows the
+ * staging spills into memory of the transport's own, and the command crosses
+ * in pieces, each a batch; an answer longer than the reply slot is fetched in
+ * parts into memory of its own, kept until the call ends. */
 #ifndef AV_KMT_TRANSPORT_HPP
 #define AV_KMT_TRANSPORT_HPP
 
@@ -23,6 +29,7 @@
 #include "guest/transport/transport_fence.hpp"
 #include "guest/transport/transport_ring.hpp"
 #include "proto/escape/follow_record.hpp"
+#include "proto/wire/spill_block.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -35,6 +42,7 @@
 
 namespace av {
 
+class BlockSource;
 class ContextViewsRecord;
 
 class GuestConnection;
@@ -47,7 +55,14 @@ public:
 
     /* A ring of 2^ring_order data bytes, a reply slot of `reply_bytes` (whole
      * pages), and `staging_bytes` of the caller's memory at `staging`, which
-     * must outlive this: the largest command, header included, it can send. */
+     * must outlive this: the room a command is lent, header included. What
+     * outgrows it, and an answer that outgrows the slot, is held in memory
+     * from `memory`. */
+    KmtTransport(GuestConnection &connection, BlockSource &memory, SubApi sub_api, uint8_t ring_order,
+                 uint32_t reply_bytes, uint8_t *staging, size_t staging_bytes);
+    /* One whose owner bounds every command and answer by the staging and the
+     * slot - the guest suite's scenarios: past them a call fails, as it
+     * would for no memory. */
     KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order, uint32_t reply_bytes,
                  uint8_t *staging, size_t staging_bytes);
     ~KmtTransport();
@@ -133,6 +148,7 @@ public:
      * bytes, `answered` saying how many. */
     [[nodiscard]] Status nop(uint32_t &answered);
 
+    /* Lent the staging, spilling into spill() past it. */
     WireWriter      request_writer() override;
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
     TransportResult send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
@@ -167,6 +183,11 @@ public:
     TransportResult send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply);
     WireArena      &decode_arena() override;
     ClientBlobArena &blobs() override;
+    /* Where a writer a transport over this one lends spills to: such a
+     * transport frames what spilled in pieces (CommandPieces) and gives the
+     * memory back with give_back_spill once they are sent. */
+    WireSpill       &spill();
+    void             give_back_spill();
 
     bool invariants_hold() const;
 
@@ -187,6 +208,18 @@ private:
     [[nodiscard]] Status ask_views(ContextViewsRecord &views);
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,
                                           uint64_t &fence);
+    /* A command that spilled past the staging, a batch per piece. */
+    [[nodiscard]] TransportResult publish_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags,
+                                                 uint64_t &fence);
+    /* The answer for `fence` as the slot holds it: ok, too_large with the
+     * answer kept on the host, or a failure that faulted the context. */
+    [[nodiscard]] Status          await_slot(uint64_t fence, WireReader &reply);
+    /* The answer the host kept, `required` bytes as the slot said, fetched
+     * in parts into answer_. failed without faulting when there is no memory
+     * for it: the host keeps it only until the next command. */
+    [[nodiscard]] TransportResult fetch_answer(WireReader &reply);
+    /* One part of it, from `offset`. */
+    [[nodiscard]] TransportResult fetch_part(uint64_t offset, WireReader &part);
     /* Waits for everything sent so far, and retires its fences. */
     [[nodiscard]] bool drain();
     void               retire_consumed();
@@ -243,6 +276,10 @@ private:
     bool             answered_;
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;
+    /* A command longer than the staging, while it is written and sent. */
+    SpillBlock       spill_;
+    /* An answer longer than the slot, until its call ends. */
+    SpillBlock       answer_;
 
     friend struct KmtTransportProbe;
 };

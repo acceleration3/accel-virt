@@ -53,6 +53,9 @@ public:
     bool                 answers_with(const uint8_t *recorded, uint32_t length) const;
     /* The next batch starts with no answer of its own. */
     void                 forget_answer();
+    /* This batch fetched part of an answer the library kept: whatever its
+     * reply holds, it matches, since the replay keeps none to compare. */
+    void                 answer_in_parts();
 
     /* Nothing of this context is replayed from here on, and why. */
     void                 give_up();
@@ -65,6 +68,7 @@ private:
     uint32_t     context_;
     SubApi       api_;
     bool         answered_;
+    bool         in_parts_;
     /* The length the library wanted, which may pass what was kept. */
     size_t       answer_length_;
     bool         gave_up_;

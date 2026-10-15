@@ -38,7 +38,7 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
     ScopeExit undo([this] { close(true); });
     staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes_, Pool::paged));
     if (staging_ == nullptr) return Status::no_memory;
-    static_cast<void>(transport_.construct(device, sub_api_, ring_order_, reply_bytes_, staging_, staging_bytes_));
+    static_cast<void>(transport_.construct(device, memory_, sub_api_, ring_order_, reply_bytes_, staging_, staging_bytes_));
     const Status initialized = transport_.object().initialize(options);
     if (initialized != Status::ok) {
         lines_.write("the driver refused the context");

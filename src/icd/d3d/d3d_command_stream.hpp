@@ -39,8 +39,10 @@ class CommandRecording;
 
 class D3dCommandStream final : public ClientTransport {
 public:
-    /* The most one command is lent, which bounds inline data too: anything
-     * larger goes through the blob arena. */
+    /* The most one command is lent in a recording, which bounds its inline
+     * data; a sending stream's command that outgrows it spills into the
+     * transport's memory and is sent in pieces (docs/protocol.md, "Long
+     * commands"). */
     static constexpr size_t command_room = 256u * 1024u;
     /* The most data one recorded command carries: a recording has no arena,
      * so its data goes inline, and half a command's room leaves the rest for
@@ -129,6 +131,8 @@ private:
     /* A Finish round trip, its call ended: every blob lease retired. */
     [[nodiscard]] bool finished();
     [[nodiscard]] TransportResult append(uint32_t command_id, WireWriter &writer, uint8_t flags);
+    /* A writer that spilled, framed piece by piece behind what is held. */
+    [[nodiscard]] TransportResult append_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     /* The block is the recording's, which may have grown. */
     void                          adopt_recording();
     /* Room for `wanted` more bytes in the block: a sending stream sends what it

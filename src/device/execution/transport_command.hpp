@@ -3,7 +3,8 @@
  * library: a NOP runs and its answer is empty, whichever library is loaded,
  * the blob pair imports a context's guest memory into its executor, and the
  * shared-object trio gives one host object an identity the whole device
- * agrees on (feature 053). */
+ * agrees on (feature 053), and ANSWER_PIECE hands on part of an answer too
+ * long for the reply slot. PIECE never arrives here: the batch gathers it. */
 #ifndef AV_TRANSPORT_COMMAND_HPP
 #define AV_TRANSPORT_COMMAND_HPP
 

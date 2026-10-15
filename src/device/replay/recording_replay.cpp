@@ -110,7 +110,8 @@ void RecordingReplay::replay_setup(const RecordHeader &record, const uint8_t *pa
 
 /* A transport command is the device's own answer, never the library's, so it
  * is not replayed; an import is the one that leaves memory behind, and a
- * context that asked for one runs no further. */
+ * context that asked for one runs no further - nor does one that sent a
+ * command in pieces, which the replay does not gather. */
 void RecordingReplay::replay_batch(const RecordHeader &record, const uint8_t *payload,
                                    const RecordingFilter &filter)
 {
@@ -139,13 +140,18 @@ void RecordingReplay::replay_batch(const RecordHeader &record, const uint8_t *pa
         offset = command.next_offset();
         index++;
         if (command.header().api() == CommandHeader::transport_api) {
-            if (command.header().id() != CommandHeader::import_blob_id) continue;
+            const uint32_t id = command.header().id();
+            /* A part of an answer the library kept is the device's answer, so
+             * the batch's reply is not one to compare. */
+            if (id == CommandHeader::answer_piece_id) context->answer_in_parts();
+            if (id != CommandHeader::import_blob_id && id != CommandHeader::piece_id) continue;
             char       bytes[finding_bytes];
             TextBuffer text(bytes, sizeof bytes);
             open_finding(text, record);
             text.append("unreplayable: command ");
             text.append_decimal(index);
-            text.append(" imports guest memory");
+            text.append(id == CommandHeader::piece_id ? " is part of a command too long for one batch"
+                                                      : " imports guest memory");
             keep_finding(text);
             context->give_up();
             return;

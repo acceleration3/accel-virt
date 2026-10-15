@@ -188,18 +188,24 @@ TEST(connection, a_command_crosses_under_the_lock_and_its_answer_comes_back)
   CHECK(!rig.connection().faulted()); }
 
 /* A command as large as the staging: the room it lends is the 256 KiB less the
- * command's header. */
-TEST(connection, lends_a_command_all_of_its_staging)
+ * command's header, and a byte past it spills into the channel's memory and
+ * crosses as a piece and the command (docs/protocol.md, "Long commands"). */
+TEST(connection, lends_a_command_all_of_its_staging_and_spills_past_it)
 { Rig rig;
   CHECK_STATUS(rig.connection().open(0u), Status::ok);
   av::WireWriter writer = rig.connection().transport().request_writer();
   writer.write_zeros(Connection::command_bytes - 8u);
   CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(!writer.spilled());
   writer.write_u8(0u);
-  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(writer.spilled());
+  const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   CHECK(rig.connection().transport().send_async(av::vkproto::kCmd_vkCreateInstance, writer) ==
-        av::TransportResult::failed);
+        av::TransportResult::ok);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted + 2u);
   CHECK(!rig.lock().held());
+  CHECK(!rig.connection().faulted());
   CHECK(rig.connection().invariants_hold()); }
 
 TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leaves_nothing_open)

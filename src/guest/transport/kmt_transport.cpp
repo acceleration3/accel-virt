@@ -14,6 +14,7 @@
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/command_pieces.hpp"
 #include "proto/submission/command_stream.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -26,13 +27,24 @@ constexpr uint64_t page_bytes = 4096u;
 constexpr size_t   max_batch = 0xFFFFFFFFu;
 }  // namespace
 
+KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, SubApi sub_api, uint8_t ring_order,
+                           uint32_t reply_bytes, uint8_t *staging, size_t staging_bytes)
+    : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
+      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
+      dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
+      decode_arena_(nullptr, 0u), blobs_(), spill_(memory), answer_(memory)
+{
+    AV_SCOPE("KmtTransport::KmtTransport");
+}
+
 KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order, uint32_t reply_bytes,
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
-      decode_arena_(nullptr, 0u), blobs_()
+      decode_arena_(nullptr, 0u), blobs_(), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
 }
@@ -309,6 +321,9 @@ void KmtTransport::teardown()
     faulted_ = false;
     /* A gate is its device's, which a transport torn down outlives no longer. */
     held_ = nullptr;
+    answered_ = false;
+    spill_.release();
+    answer_.release();
 }
 
 bool KmtTransport::established() const
@@ -343,7 +358,7 @@ WireWriter KmtTransport::request_writer()
 {
     AV_SCOPE("KmtTransport::request_writer");
     if (staging_bytes_ <= CommandHeader::encoded_size) return WireWriter(nullptr, 0u);
-    return WireWriter(staging_ + CommandHeader::encoded_size, staging_bytes_ - CommandHeader::encoded_size);
+    return WireWriter(staging_ + CommandHeader::encoded_size, staging_bytes_ - CommandHeader::encoded_size, spill_);
 }
 
 TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, uint8_t flags, uint64_t &fence)
@@ -351,11 +366,31 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     AV_SCOPE("KmtTransport::publish");
     fence = 0u;
     if (writer.status() != Status::ok || !established()) return TransportResult::failed;
+    if (writer.spilled()) return publish_pieces(command_id, writer, flags, fence);
     const uint32_t body = static_cast<uint32_t>(writer.offset());
     const uint32_t command_size = static_cast<uint32_t>(CommandHeader::encoded_size) + body;
     static_cast<void>(CommandHeader(command_id, command_size, flags).encode(staging_,
                                                                             CommandHeader::encoded_size));
     return publish_batch(staging_, command_size, fence);
+}
+
+/* The staging is free once the command spilled out of it, so each piece is
+ * framed there and published as a batch of its own; the ring takes one at a
+ * time however long the command, and the fence of the last is the
+ * command's. */
+TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags,
+                                             uint64_t &fence)
+{
+    AV_SCOPE("KmtTransport::publish_pieces");
+    ScopeExit     given_back([this] { spill_.release(); });
+    CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
+    while (!pieces.done()) {
+        const size_t framed = pieces.frame_next(staging_, staging_bytes_);
+        if (framed == 0u) return TransportResult::failed;
+        const TransportResult sent = publish_batch(staging_, static_cast<uint32_t>(framed), fence);
+        if (sent != TransportResult::ok) return sent;
+    }
+    return TransportResult::ok;
 }
 
 /* The performance counter in 100 ns, the unit the trace timeline keeps: the
@@ -525,6 +560,19 @@ void KmtTransport::end_call()
     if (!answered_) return;
     answered_ = false;
     blobs_.retire_all();
+    answer_.release();
+}
+
+WireSpill &KmtTransport::spill()
+{
+    AV_SCOPE("KmtTransport::spill");
+    return spill_;
+}
+
+void KmtTransport::give_back_spill()
+{
+    AV_SCOPE("KmtTransport::give_back_spill");
+    spill_.release();
 }
 
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
@@ -611,6 +659,62 @@ TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, W
 TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::await");
+    const Status read = await_slot(fence, reply);
+    if (read == Status::too_large) return fetch_answer(reply);
+    return read == Status::ok ? TransportResult::ok : TransportResult::failed;
+}
+
+/* Each part is a round trip of its own, asked while the caller still holds
+ * the transport, so no command of its runs on the host in between and the
+ * answer kept there is the one asked about. */
+TransportResult KmtTransport::fetch_answer(WireReader &reply)
+{
+    AV_SCOPE("KmtTransport::fetch_answer");
+    reply = WireReader(nullptr, 0u);
+    ScopeExit dropped([this] { answer_.release(); });
+    uint64_t  total = 0u;
+    uint64_t  fetched = 0u;
+    do {
+        WireReader part(nullptr, 0u);
+        if (fetch_part(fetched, part) != TransportResult::ok) return TransportResult::failed;
+        const uint64_t length = part.read_u64();
+        const size_t   bytes = part.remaining();
+        const bool     first = fetched == 0u;
+        /* The slot said the answer was too long for it, so a host that
+         * answers with none, or with another length, or with no progress,
+         * broke the protocol. */
+        if (part.status() != Status::ok || (first && length == 0u) || (!first && length != total) ||
+            bytes > length - fetched || (bytes == 0u && fetched < length)) {
+            faulted_ = true;
+            return TransportResult::failed;
+        }
+        size_t capacity = 0u;
+        if (first && (length > ~size_t{0} ||
+                      answer_.grow(nullptr, 0u, static_cast<size_t>(length), capacity) == nullptr))
+            return TransportResult::failed;
+        total = length;
+        part.copy_bytes(answer_.bytes() + fetched, bytes);
+        fetched += bytes;
+    } while (fetched < total);
+    dropped.dismiss();
+    reply = WireReader(answer_.bytes(), static_cast<size_t>(total));
+    return TransportResult::ok;
+}
+
+TransportResult KmtTransport::fetch_part(uint64_t offset, WireReader &part)
+{
+    AV_SCOPE("KmtTransport::fetch_part");
+    WireWriter request(staging_ + CommandHeader::encoded_size, staging_bytes_ - CommandHeader::encoded_size);
+    request.write_u64(offset);
+    uint64_t fence = 0u;
+    if (publish(CommandHeader::answer_piece_id, request, CommandHeader::generate_reply, fence) != TransportResult::ok)
+        return TransportResult::failed;
+    return await_slot(fence, part) == Status::ok ? TransportResult::ok : TransportResult::failed;
+}
+
+Status KmtTransport::await_slot(uint64_t fence, WireReader &reply)
+{
+    AV_SCOPE("KmtTransport::await_slot");
     /* What a hardware-scheduled context has in flight is not in any packet the
      * kernel queued, so what it waits on is the queue's progress fence - the
      * monitored fence dxgkrnl made with the queue, which this driver writes
@@ -626,15 +730,14 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
                 return read == Status::ok || read == Status::too_large;
             })) {
             faulted_ = true;
-            return TransportResult::failed;
+            return Status::invalid_state;
         }
     }
     fences_.close(fence);
-    if (reply_.read(fence, reply) != Status::ok) {
-        faulted_ = true;
-        return TransportResult::failed;
-    }
-    return TransportResult::ok;
+    const Status read = reply_.read(fence, reply);
+    if (read == Status::ok || read == Status::too_large) return read;
+    faulted_ = true;
+    return Status::invalid_state;
 }
 
 /* No PAUSE in a guest's spin: KVM takes a run of them for a vCPU waiting on a

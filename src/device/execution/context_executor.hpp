@@ -64,6 +64,11 @@ public:
     [[nodiscard]] Status import(uint64_t blob_id, uint64_t memory_key, uint64_t &device_memory);
     /* Worker. Nothing without an executor: destroying it released every import. */
     void                 release(uint64_t blob_id);
+    /* Worker. Part of the answer the last command kept for being too long
+     * for the reply slot, from `offset` (ExecutorLibrary::answer_part): the
+     * bytes copied into `out`, and the answer's `length`, 0 for none kept or
+     * no executor. */
+    size_t               answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length);
 
     /* Worker. The object `wire_handle` names in this context's commands
      * shared as `object_id`, which the library keeps (feature 053). ok;

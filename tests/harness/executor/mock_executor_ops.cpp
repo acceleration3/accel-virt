@@ -1,5 +1,6 @@
 #include "harness/executor/mock_executor_ops.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -26,7 +27,7 @@ private:
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     : table_{}, sub_apis_(sub_apis), imported_(0u), released_blobs_(0u), lock_(), released_(),
-      held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u), executed_(0u), ids_{},
+      held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u), executed_(0u), kept_(nullptr), kept_length_(0u), ids_{},
       sizes_{}, last_sub_api_(0u), misuses_(0u), imports_{}, refuse_import_(0u), withhold_handle_(0u),
       answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr),
       last_options_{}, last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u)
@@ -291,6 +292,9 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
                 mock.sizes_[mock.executed_] = static_cast<std::uint32_t>(size);
             }
             mock.executed_++;
+            std::free(mock.kept_);
+            mock.kept_ = nullptr;
+            mock.kept_length_ = 0u;
         }
         switch (id) {
         case unknown_id: return AV_UNKNOWN;
@@ -300,16 +304,35 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         case oversized_id: *reply_size = capacity + 1u; return AV_EXECUTED;
         default: break;
         }
-        const std::size_t answer = size < capacity ? size : capacity;
-        if (answer != 0u) std::memcpy(reply, payload, answer);
         *reply_size = size;
+        if (size <= capacity) {
+            if (size != 0u) std::memcpy(reply, payload, size);
+            return AV_EXECUTED;
+        }
+        if (reply == nullptr) return AV_EXECUTED;
+        Lock lock(mock.lock_);
+        mock.kept_ = static_cast<std::uint8_t *>(std::malloc(size));
+        if (mock.kept_ != nullptr) std::memcpy(mock.kept_, payload, size);
+        mock.kept_length_ = mock.kept_ != nullptr ? size : 0u;
         return AV_EXECUTED;
+    };
+    table_.answer_part = [](void *opaque, AvExecutor *, std::uint64_t offset, std::uint8_t *out,
+                            std::size_t capacity, std::uint64_t *length) -> std::size_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        Lock             lock(mock.lock_);
+        *length = mock.kept_length_;
+        if (offset >= mock.kept_length_) return 0u;
+        const std::size_t left = mock.kept_length_ - static_cast<std::size_t>(offset);
+        const std::size_t copied = left < capacity ? left : capacity;
+        std::memcpy(out, mock.kept_ + offset, copied);
+        return copied;
     };
 }
 
 MockExecutorOps::~MockExecutorOps()
 {
     release();
+    std::free(kept_);
     for (Memory &memory : memory_) {
         if (memory.fd < 0) continue;
         ::munmap(memory.bytes, static_cast<std::size_t>(memory.size));

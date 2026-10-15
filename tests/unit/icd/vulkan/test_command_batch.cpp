@@ -264,13 +264,47 @@ TEST(command_batch, the_block_goes_with_the_batch)
     CHECK(batch.invariants_hold()); }
   CHECK_EQ(rig.platform().live_allocations(), baseline); }
 
-TEST(command_batch, lends_each_command_its_room_and_refuses_one_larger)
+TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_in_pieces)
 { BatchRig rig;
   WireWriter writer = rig.batch().request_writer();
   writer.write_zeros(CommandBatch::command_room);
   CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(!writer.spilled());
   CHECK(rig.batch().send_async(kCmd_vkCmdDraw, writer) == TransportResult::ok);
   CHECK(rig.batch().invariants_hold());
+  /* Docs/protocol.md, "Long commands": what outgrows the room - a
+   * vkCmdUpdateBuffer of 64 KiB is four rooms - spills into the batch's own
+   * memory and is recorded as pieces, then the command with the rest. */
+  constexpr std::size_t long_bytes = 4u * CommandBatch::command_room + 5u;
+  writer = rig.batch().request_writer();
+  for (std::size_t index = 0u; index < long_bytes; index++) writer.write_u8(static_cast<std::uint8_t>(index));
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(writer.spilled());
+  CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::ok);
+  CHECK(rig.batch().invariants_hold());
+  rig.draw(9u);
+  CHECK_STATUS(rig.batch().end(), Status::ok);
+  ShippedBatch shipped(rig.kmt(), rig.ring());
+  CHECK_STATUS(shipped.read(), Status::ok);
+  CHECK(shipped.commands() >= 4u);
+  const std::uint32_t last = shipped.commands() - 1u;
+  CHECK_EQ(shipped.header(last).id(), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
+  CHECK_EQ(shipped.header(last - 1u).id(), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
+  std::size_t gathered = 0u;
+  std::uint32_t wrong = 0u;
+  for (std::uint32_t index = 1u; index < last; index++) {
+      const CommandHeader &header = shipped.header(index);
+      CHECK(header.id() == (index + 1u == last ? static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer)
+                                               : CommandHeader::piece_id));
+      const std::size_t body = header.size() - CommandHeader::encoded_size;
+      for (std::size_t at = 0u; at < body; at++)
+          if (shipped.body(index)[at] != static_cast<std::uint8_t>(gathered + at)) wrong++;
+      gathered += body;
+  }
+  CHECK_EQ(gathered, long_bytes);
+  CHECK_EQ(wrong, 0u);
+  /* Memory refused for the spill fails the recording, as a full block does. */
+  rig.rig().platform().fail_allocation_at(1u);
   writer = rig.batch().request_writer();
   writer.write_zeros(CommandBatch::command_room + 1u);
   CHECK_STATUS(writer.status(), Status::too_large);

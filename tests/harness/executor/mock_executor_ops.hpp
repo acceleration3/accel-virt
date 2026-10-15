@@ -1,5 +1,6 @@
 /* The executor C table for tests: every command runs and echoes its payload as
- * its answer, except the ids a test scripts to be unknown, undecodable, lose
+ * its answer - an echo longer than the reply kept, as a library keeps one, for
+ * answer_part - except the ids a test scripts to be unknown, undecodable, lose
  * the device, answer more than the capacity, or answer a value no library may.
  * It records every executor created and destroyed, every command executed, and
  * calls that leave the thread their executor was created on. Its host memory
@@ -252,6 +253,9 @@ private:
     std::uint32_t              created_;
     std::uint32_t              destroyed_;
     std::uint32_t              executed_;
+    /* The last echo too long for its reply, malloc'd; null with none. */
+    std::uint8_t              *kept_;
+    std::size_t                kept_length_;
     std::uint32_t              ids_[journal_capacity];
     std::uint32_t              sizes_[journal_capacity];
     std::uint32_t              last_sub_api_;

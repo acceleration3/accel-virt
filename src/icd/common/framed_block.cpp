@@ -1,6 +1,7 @@
 #include "icd/common/framed_block.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/command_pieces.hpp"
 
 namespace av::icd {
 
@@ -22,6 +23,25 @@ WireWriter FramedBlock::lend(size_t room)
     const size_t left = capacity_ - used_;
     if (left < header_bytes) return WireWriter(nullptr, 0u);
     return WireWriter(block_ + used_ + header_bytes, left - header_bytes < room ? left - header_bytes : room);
+}
+
+WireWriter FramedBlock::lend(size_t room, WireSpill &spill)
+{
+    AV_SCOPE("FramedBlock::lend");
+    const size_t left = capacity_ - used_;
+    if (left < header_bytes) return WireWriter(nullptr, 0u);
+    return WireWriter(block_ + used_ + header_bytes, left - header_bytes < room ? left - header_bytes : room, spill);
+}
+
+bool FramedBlock::frame_piece(CommandPieces &pieces)
+{
+    AV_SCOPE("FramedBlock::frame_piece");
+    const size_t left = capacity_ - used_;
+    const bool   whole = left >= header_bytes && pieces.rest() <= left - header_bytes;
+    if (used_ != 0u && !whole && left < header_bytes + CommandPieces::least_piece) return false;
+    const size_t framed = pieces.frame_next(block_ + used_, left);
+    used_ += framed;
+    return framed != 0u;
 }
 
 bool FramedBlock::frame(uint32_t command_id, const WireWriter &writer, uint8_t flags)

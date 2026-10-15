@@ -4,6 +4,7 @@
  * caller owns and can release at once (feature 063). */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/wire/wire_arena.hpp"
 
 #include <cstdint>
@@ -171,4 +172,52 @@ TEST(wire_arena, no_block_refuses_everything)
   arena.attach(nullptr, 64u);
   CHECK_EQ(arena.capacity(), 0u);
   CHECK(arena.allocate<std::uint8_t>(1u) == nullptr);
+  CHECK(arena.invariants_hold()); }
+
+/* Docs/protocol.md, "Long commands": a command longer than the block decodes
+ * into chunks from the heap past it, every one aligned and zeroed, and a
+ * reset gives them all back. */
+TEST(wire_arena, overflows_past_its_block_into_chunks_reset_gives_back)
+{ av::MockPlatform platform;
+  alignas(16) std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  arena.overflow_into(platform);
+  std::uint8_t *const first = arena.allocate<std::uint8_t>(40u);
+  CHECK(first != nullptr);
+  CHECK_EQ(arena.chunks(), 0u);
+  /* Past the block: a chunk of its own. */
+  Pair *const pairs = arena.allocate<Pair>(1000u);
+  CHECK(pairs != nullptr);
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(pairs) % alignof(Pair), 0u);
+  CHECK_EQ(pairs[999u].second, 0u);
+  pairs[999u].second = 5u;
+  CHECK_EQ(arena.chunks(), 1u);
+  CHECK_EQ(arena.used(), 40u + 1000u * sizeof(Pair));
+  /* Small ones follow in the chunk's own room, then in another. */
+  CHECK(arena.allocate<std::uint8_t>(3u) != nullptr);
+  CHECK_EQ(arena.chunks(), 1u);
+  CHECK(arena.allocate<std::uint8_t>(std::size_t{1} << 21) != nullptr);
+  CHECK_EQ(arena.chunks(), 2u);
+  CHECK(arena.invariants_hold());
+  CHECK_EQ(arena.refusals(), 0u);
+  arena.reset();
+  CHECK_EQ(arena.chunks(), 0u);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.allocate<std::uint8_t>(64u) == block);
+  CHECK(arena.invariants_hold()); }
+
+/* Without the heap's memory it refuses, and counts it, as without anywhere
+ * to overflow; attach gives chunks back too. */
+TEST(wire_arena, an_overflow_the_heap_refuses_is_a_refusal)
+{ av::MockPlatform platform;
+  std::uint8_t block[16];
+  WireArena arena(block, sizeof block);
+  arena.overflow_into(platform);
+  platform.fail_allocation_at(1u);
+  CHECK(arena.allocate<std::uint8_t>(17u) == nullptr);
+  CHECK_EQ(arena.refusals(), 1u);
+  CHECK(arena.allocate<std::uint8_t>(17u) != nullptr);
+  CHECK_EQ(arena.chunks(), 1u);
+  arena.attach(block, sizeof block);
+  CHECK_EQ(arena.chunks(), 0u);
   CHECK(arena.invariants_hold()); }

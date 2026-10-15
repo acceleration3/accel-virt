@@ -25,7 +25,7 @@ std::uint32_t MockSessionBackend::ran() const { return ran_; }
 bool MockSessionBackend::knows(std::uint32_t command_id) const
 {
     return command_id == echo_id || command_id == long_answer_id || command_id == malformed_id ||
-           command_id == greedy_id || command_id == lose_id;
+           command_id == greedy_id || command_id == lose_id || command_id == roomy_id;
 }
 
 bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -34,8 +34,14 @@ bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, Wire
     ran_++;
     if (command_id == malformed_id) return false;
     if (command_id == greedy_id) {
-        /* Whatever the block is, this asks for more than it. */
-        return arena.allocate<std::uint8_t>(arena.capacity() + 1u) != nullptr;
+        /* More than an address space holds, whatever the heap behind it. */
+        return arena.allocate<std::uint64_t>(~std::size_t{0} / 4u) != nullptr;
+    }
+    if (command_id == roomy_id) {
+        std::uint8_t *const room = arena.allocate<std::uint8_t>(4u * arena.capacity());
+        if (room == nullptr) return false;
+        for (std::size_t index = 0u; index < 4u * arena.capacity(); index++) room[index] = 0x5Au;
+        return true;
     }
     if (command_id == long_answer_id) {
         reply.write_zeros(answer_bytes_);

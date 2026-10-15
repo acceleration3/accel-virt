@@ -154,6 +154,16 @@ uint32_t execute(void *, AvExecutor *executor, uint32_t command_id, const uint8_
     return result;
 }
 
+size_t answer_part(void *, AvExecutor *executor, uint64_t offset, uint8_t *out, size_t capacity, uint64_t *length)
+{
+    AV_SCOPE("answer_part");
+    av::ContextSession *const session = session_of(executor);
+    uint64_t                  kept = 0u;
+    const size_t copied = session != nullptr ? session->answer_part(offset, out, capacity, kept) : 0u;
+    if (length != nullptr) *length = kept;
+    return copied;
+}
+
 uint32_t allocate_memory(void *, uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
                          AvHostMemory *memory)
 {
@@ -330,7 +340,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               export_surface,
                               sync_surface,
                               compose_planes,
-                              lose_device};
+                              lose_device,
+                              answer_part};
 
 }  // namespace
 

@@ -63,7 +63,7 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
 /* The device and the library are built together: a table of another version,
  * or one missing any operation, is a build to fix, not one to serve. */
 TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_refused)
-{ for (std::uint32_t broken = 0u; broken <= 25u; broken++) {
+{ for (std::uint32_t broken = 0u; broken <= 26u; broken++) {
       MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
       AvExecutorOps  &table = ops.editable();
       switch (broken) {
@@ -71,6 +71,7 @@ TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_re
       case 1u: table.sub_apis = nullptr; break;
       case 2u: table.allocate_memory = nullptr; break;
       case 25u: table.free_memory = nullptr; break;
+      case 26u: table.answer_part = nullptr; break;
       case 3u: table.open_domain = nullptr; break;
       case 4u: table.close_domain = nullptr; break;
       case 5u: table.create = nullptr; break;

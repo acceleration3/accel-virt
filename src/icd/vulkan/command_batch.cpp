@@ -6,6 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/command_pieces.hpp"
 
 namespace av::icd {
 
@@ -21,7 +22,7 @@ static_assert(Connection::command_bytes % CommandBatch::first_block == 0u && (do
 
 CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
     : memory_(memory), connection_(connection), framed_(nullptr, 0u), last_(0u), failure_(Status::ok),
-      refused_(0u), decode_arena_(nullptr, 0u), blobs_()
+      refused_(0u), decode_arena_(nullptr, 0u), blobs_(), spill_(memory)
       {
           AV_SCOPE("CommandBatch::CommandBatch");
       }
@@ -100,7 +101,7 @@ WireWriter CommandBatch::request_writer()
         refused_ = 0u;
         return WireWriter(nullptr, 0u);
     }
-    return framed_.lend(command_room);
+    return framed_.lend(command_room, spill_);
 }
 
 TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer)
@@ -108,6 +109,12 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     AV_SCOPE("CommandBatch::send_async");
     if (failure_ != Status::ok) return TransportResult::failed;
     const size_t before = framed_.used();
+    if (writer.spilled()) {
+        if (record_pieces(command_id, writer)) return TransportResult::ok;
+        failure_ = Status::no_memory;
+        refused_ = command_id;
+        return TransportResult::failed;
+    }
     /* The writer was lent at most the block's room, so only one that failed
      * is not framed. */
     if (!framed_.frame(command_id, writer, 0u)) {
@@ -117,6 +124,25 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     }
     last_ = before;
     return TransportResult::ok;
+}
+
+/* Each piece where the last command recorded would be: a full block grows,
+ * and one at the command limit goes as a batch of its own first. */
+bool CommandBatch::record_pieces(uint32_t command_id, const WireWriter &writer)
+{
+    AV_SCOPE("CommandBatch::record_pieces");
+    ScopeExit given_back([this] { spill_.release(); });
+    if (writer.status() != Status::ok) return false;
+    CommandPieces pieces(command_id, 0u, writer.bytes(), writer.offset());
+    while (!pieces.done()) {
+        const size_t before = framed_.used();
+        if (framed_.frame_piece(pieces)) {
+            last_ = before;
+            continue;
+        }
+        if (framed_.capacity() == Connection::command_bytes ? !flush() : !grow()) return false;
+    }
+    return true;
 }
 
 TransportResult CommandBatch::send_sync(uint32_t, WireWriter &, WireReader &)

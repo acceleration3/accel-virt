@@ -1,6 +1,8 @@
 /* Writes little-endian fields into a destination of fixed capacity. A field
  * that does not fit is not written at all and latches `too_large`; later writes
- * are ignored, so an encoder writes every field and checks status() once. */
+ * are ignored, so an encoder writes every field and checks status() once.
+ * Given a spill, a field that does not fit moves what was written to the
+ * spill's larger room instead, and the writer goes on there (WireSpill). */
 #ifndef AV_WIRE_WRITER_HPP
 #define AV_WIRE_WRITER_HPP
 
@@ -11,12 +13,15 @@
 
 namespace av {
 
+class WireSpill;
 struct WireWriterProbe;
 
 class WireWriter {
 public:
     /* A null pointer has no capacity, whatever `capacity` says. */
     WireWriter(uint8_t *bytes, size_t capacity);
+    /* Room that grows into `spill` once `capacity` runs out. */
+    WireWriter(uint8_t *bytes, size_t capacity, WireSpill &spill);
 
     void write_u8(uint8_t value);
     void write_u16(uint16_t value);
@@ -45,6 +50,11 @@ public:
 
     Status status() const;
     size_t offset() const;
+    /* Where what was written starts: the room lent, or the spill's once it
+     * moved there. */
+    const uint8_t *bytes() const;
+    /* Whether it moved to the spill's room. */
+    bool           spilled() const;
     /* Every byte the answer asked for, whether or not it fitted. An encoder
      * writes every field and checks status() once, so this is what a refused
      * answer has to report back: the device tells the guest the length it
@@ -56,13 +66,17 @@ public:
 private:
     void     write_varint_bits(uint64_t value);
     uint8_t *claim(size_t count);
+    /* Room for `count` more in the spill's; false without one, or memory. */
+    bool     grow(size_t count);
     void     write_little_endian(uint64_t value, size_t count);
 
-    uint8_t *bytes_;
-    size_t   capacity_;
-    size_t   offset_;
-    size_t   wanted_;
-    Status   status_;
+    uint8_t   *bytes_;
+    size_t     capacity_;
+    size_t     offset_;
+    size_t     wanted_;
+    Status     status_;
+    WireSpill *spill_;
+    bool       spilled_;
 
     friend struct WireWriterProbe;
 };

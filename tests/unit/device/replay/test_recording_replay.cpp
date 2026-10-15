@@ -579,6 +579,12 @@ TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batc
   /* A batch that produced no answer matches no recorded reply, not even an
    * empty one: the recording says a command asked and the replay says none did. */
   CHECK(!context.answers_with(same, 0u));
+  /* A batch that fetched part of a kept answer matches whatever it recorded,
+   * until the next batch. */
+  context.answer_in_parts();
+  CHECK(context.answers_with(other, 3u));
+  context.forget_answer();
+  CHECK(!context.answers_with(other, 3u));
   CHECK(context.invariants_hold());
   context.destroy(library); }
 
@@ -894,3 +900,30 @@ TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have
   av::ReplayContextProbe::answer_without_a_length(third);
   CHECK(!third.invariants_hold());
   third.destroy(library); }
+
+/* Docs/protocol.md, "Long commands": the replay does not gather pieces, so a
+ * context that sent one is reported and stops there; a batch that fetched
+ * part of a kept answer has a reply that is the device's, not compared. */
+TEST(recording_replay_run, a_command_in_pieces_is_unreplayable_and_an_answer_part_is_not_compared)
+{ Written written;
+  written.set_up(3u, SubApi::vulkan);
+  Batch part;
+  part.add(CommandHeader::answer_piece_id, 8u, CommandHeader::generate_reply);
+  const std::uint8_t answer[12] = {4u};
+  written.ran(3u, 1u, part, answer, sizeof answer);
+  Batch pieces;
+  pieces.add(CommandHeader::piece_id, 32u).add(0x00010006u, 4u);
+  written.ran(3u, 2u, pieces, nullptr, 0u);
+  written.close();
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(written.bytes(), written.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(std::strstr(replay.finding(0u), "unreplayable: command 1 is part of a command too long for one batch") !=
+        nullptr);
+  CHECK_EQ(ops.executed(), 0u);
+  CHECK(replay.invariants_hold()); }

@@ -12,6 +12,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace av {
+class CommandPieces;
+class WireSpill;
+}  // namespace av
+
 namespace av::icd {
 
 struct FramedBlockProbe;
@@ -29,9 +34,17 @@ public:
     /* A writer over at most `room` bytes past a header's worth of what is
      * free; lent nothing when not even a header fits. */
     WireWriter           lend(size_t room);
+    /* The same, going on into `spill` past it: a command that does so is
+     * framed with frame_piece, not frame. */
+    WireWriter           lend(size_t room, WireSpill &spill);
     /* What the writer lent last wrote, framed as `command_id` with `flags`:
      * false, with nothing framed, when it failed or ran past the block. */
     [[nodiscard]] bool   frame(uint32_t command_id, const WireWriter &writer, uint8_t flags);
+    /* The next of `pieces` framed into what is free: false, with nothing
+     * framed, when there is no room for a byte of it, or - in a block that
+     * already holds something - for less than a least_piece of a payload
+     * whose rest does not fit; the owner then sends what it holds. */
+    [[nodiscard]] bool   frame_piece(CommandPieces &pieces);
     /* Commands framed elsewhere, copied in; false, with nothing copied, when
      * they do not fit. */
     [[nodiscard]] bool   append(const uint8_t *bytes, size_t length);

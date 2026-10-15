@@ -12,6 +12,7 @@ ReplayContext::ReplayContext()
       context_(0u),
       api_(SubApi::vulkan),
       answered_(false),
+      in_parts_(false),
       answer_length_(0u),
       gave_up_(false),
       answer_{}
@@ -103,6 +104,7 @@ size_t ReplayContext::answer_length() const
 bool ReplayContext::answers_with(const uint8_t *recorded, uint32_t length) const
 {
     AV_SCOPE("ReplayContext::answers_with");
+    if (in_parts_) return true;
     if (!answered_ || answer_length_ != length) return false;
     if (answer_length_ > sizeof answer_) return false;
     for (uint32_t index = 0u; index < length; index++)
@@ -114,7 +116,14 @@ void ReplayContext::forget_answer()
 {
     AV_SCOPE("ReplayContext::forget_answer");
     answered_ = false;
+    in_parts_ = false;
     answer_length_ = 0u;
+}
+
+void ReplayContext::answer_in_parts()
+{
+    AV_SCOPE("ReplayContext::answer_in_parts");
+    in_parts_ = true;
 }
 
 void ReplayContext::give_up()

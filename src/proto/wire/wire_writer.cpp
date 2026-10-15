@@ -1,17 +1,35 @@
 #include "proto/wire/wire_writer.hpp"
 
+#include "proto/wire/wire_spill.hpp"
+
 namespace av {
 
 WireWriter::WireWriter(uint8_t *bytes, size_t capacity)
     : bytes_(bytes), capacity_(bytes != nullptr ? capacity : 0u), offset_(0u), wanted_(0u),
-      status_(Status::ok) {}
+      status_(Status::ok), spill_(nullptr), spilled_(false) {}
+
+WireWriter::WireWriter(uint8_t *bytes, size_t capacity, WireSpill &spill)
+    : bytes_(bytes), capacity_(bytes != nullptr ? capacity : 0u), offset_(0u), wanted_(0u),
+      status_(Status::ok), spill_(&spill), spilled_(false) {}
+
+bool WireWriter::grow(size_t count)
+{
+    if (spill_ == nullptr || count > ~size_t{0} - offset_) return false;
+    size_t         capacity = 0u;
+    uint8_t *const grown = spill_->grow(bytes_, offset_, offset_ + count, capacity);
+    if (grown == nullptr || capacity < offset_ + count) return false;
+    bytes_ = grown;
+    capacity_ = capacity;
+    spilled_ = true;
+    return true;
+}
 
 uint8_t *WireWriter::claim(size_t count)
 {
     /* Counted before the room is checked, and counted whether or not this one
      * fits: the answer's length is the answer's, not the prefix that fitted. */
     wanted_ += count;
-    if (status_ != Status::ok || count > capacity_ - offset_) {
+    if (status_ != Status::ok || (count > capacity_ - offset_ && !grow(count))) {
         status_ = Status::too_large;
         return nullptr;
     }
@@ -66,11 +84,13 @@ void WireWriter::write_varint_bits(uint64_t value)
 
 Status WireWriter::status() const { return status_; }
 size_t WireWriter::offset() const { return offset_; }
+const uint8_t *WireWriter::bytes() const { return bytes_; }
+bool WireWriter::spilled() const { return spilled_; }
 size_t WireWriter::wanted() const { return wanted_; }
 
 bool WireWriter::invariants_hold() const
 {
-    return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u);
+    return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u) && (!spilled_ || spill_ != nullptr);
 }
 
 }  // namespace av

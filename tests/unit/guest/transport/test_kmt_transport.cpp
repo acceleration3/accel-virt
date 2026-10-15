@@ -12,6 +12,7 @@
 #include "guest/transport/publish_gate.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/escape/context_views_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/batch_header.hpp"
@@ -1893,3 +1894,167 @@ TEST(kmt_transport, the_marker_address_is_the_dma_buffer_of_a_made_transport)
   second.teardown();
   transport.teardown();
   CHECK_EQ(transport.marker_address(), 0u); }
+
+namespace {
+
+/* An answer part as the device frames it: the answer's u64 length, then
+ * as many of its bytes from the part's offset as `bytes` says. */
+void queue_part(MockKmt &kmt, std::uint64_t length, std::uint8_t first, std::uint32_t bytes)
+{
+    std::uint8_t part[8u + 256u] = {};
+    WireWriter   writer(part, sizeof part);
+    writer.write_u64(length);
+    for (std::uint32_t index = 0u; index < bytes; ++index) writer.write_u8(static_cast<std::uint8_t>(first + index));
+    kmt.queue_answer(part, static_cast<std::uint32_t>(writer.offset()));
+}
+
+}  // namespace
+
+/* Docs/protocol.md, "Long commands": a writer that outgrows the staging
+ * spills into the transport's memory, and the command goes as pieces, a
+ * batch each - pieces first, the command itself last with the rest of its
+ * bytes and its flags - and the memory goes back once they are sent. */
+TEST(kmt_transport, a_command_longer_than_the_staging_goes_in_pieces_a_batch_each)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     transport_staging[staging_bytes] = {};
+  KmtTransport     transport(fixture.connection(), memory, SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                             sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint32_t submitted = fixture.kmt().calls(MockKmt::Call::submit);
+  WireWriter writer = transport.request_writer();
+  for (std::uint32_t index = 0u; index < 2500u; ++index) writer.write_u8(static_cast<std::uint8_t>(index));
+  CHECK(writer.spilled());
+  CHECK(transport.send_async(0x10007u, writer) == TransportResult::ok);
+  /* 2500 bytes through 1016 a batch: two pieces and the command. */
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), submitted + 3u);
+  CHECK(!transport.faulted());
+  /* The spill went back with the send: a writer from it now is a new one. */
+  av::WireSpill &spill = transport.spill();
+  std::size_t    capacity = 0u;
+  CHECK(spill.grow(nullptr, 0u, 1u, capacity) != nullptr);
+  transport.give_back_spill();
+  transport.teardown(); }
+
+/* The last batch's commands are what the mock journals: the final piece
+ * before the command, and the command with the rest. */
+TEST(kmt_transport, the_command_closing_its_pieces_carries_the_rest_and_its_flags)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     transport_staging[staging_bytes] = {};
+  KmtTransport     transport(fixture.connection(), memory, SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                             sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint8_t answer[] = {4u, 2u};
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  WireWriter writer = transport.request_writer();
+  writer.write_zeros(1100u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x10008u, writer, reply) == TransportResult::ok);
+  CHECK_EQ(reply.remaining(), 2u);
+  transport.end_call();
+  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.kmt().command_id(0u), CommandHeader::piece_id);
+  CHECK_EQ(fixture.kmt().command_size(0u), staging_bytes);
+  CHECK_EQ(fixture.kmt().command_id(1u), 0x10008u);
+  CHECK_EQ(fixture.kmt().command_size(1u), CommandHeader::encoded_size + 1100u - (staging_bytes - 8u));
+  CommandHeader header;
+  CHECK_STATUS(header.decode(fixture.kmt().command_bytes(0u), CommandHeader::encoded_size), Status::ok);
+  CHECK(!header.generates_reply());
+  CHECK_STATUS(header.decode(fixture.kmt().command_bytes(1u), CommandHeader::encoded_size), Status::ok);
+  CHECK(header.generates_reply());
+  transport.teardown(); }
+
+/* An answer too long for the slot is fetched in parts - each an
+ * ANSWER_PIECE from the offset reached - into memory the call holds until
+ * it ends; then the transport answers as if the slot had held it. */
+TEST(kmt_transport, an_answer_too_long_for_the_slot_is_fetched_in_parts)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     transport_staging[staging_bytes] = {};
+  KmtTransport     transport(fixture.connection(), memory, SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                             sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fixture.kmt().queue_too_large(300u);
+  queue_part(fixture.kmt(), 300u, 0u, 200u);
+  queue_part(fixture.kmt(), 300u, 200u, 100u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x10009u, writer, reply) == TransportResult::ok);
+  CHECK_EQ(reply.remaining(), 300u);
+  std::uint32_t wrong = 0u;
+  for (std::uint32_t index = 0u; index < 300u; ++index)
+      if (reply.read_u8() != static_cast<std::uint8_t>(index)) wrong++;
+  CHECK_EQ(wrong, 0u);
+  /* The command, then ANSWER_PIECE from 0 and from 200. */
+  CHECK_EQ(fixture.kmt().commands(), 3u);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x10009u);
+  for (std::uint32_t part = 1u; part < 3u; ++part) {
+      CHECK_EQ(fixture.kmt().command_id(part), CommandHeader::answer_piece_id);
+      WireReader asked(fixture.kmt().command_bytes(part) + CommandHeader::encoded_size, 8u);
+      CHECK_EQ(asked.read_u64(), part == 1u ? 0u : 200u);
+  }
+  transport.end_call();
+  CHECK(!transport.faulted());
+  CHECK_EQ(fixture.kmt().queued_answers(), 0u);
+  transport.teardown(); }
+
+/* No memory for the answer is a failed call and nothing more: the host
+ * keeps the answer only until the next command, and the context is
+ * healthy. A host that answers a part with another length, or none, broke
+ * the protocol, which faults the context. */
+TEST(kmt_transport, a_long_answer_with_no_memory_fails_the_call_and_a_lying_host_faults)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     transport_staging[staging_bytes] = {};
+  KmtTransport     transport(fixture.connection(), memory, SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                             sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fixture.kmt().queue_too_large(300u);
+  queue_part(fixture.kmt(), 300u, 0u, 200u);
+  memory.fail_allocation_at(1u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x1000Au, writer, reply) == TransportResult::failed);
+  transport.end_call();
+  CHECK(!transport.faulted());
+  /* The next call is answered as ever. */
+  const std::uint8_t answer[] = {7u};
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  WireWriter next = transport.request_writer();
+  next.write_u32(2u);
+  CHECK(transport.send_sync(0x1000Bu, next, reply) == TransportResult::ok);
+  CHECK_EQ(reply.read_u8(), 7u);
+  transport.end_call();
+  /* A part of another length is a host that broke the protocol. */
+  fixture.kmt().queue_too_large(300u);
+  queue_part(fixture.kmt(), 300u, 0u, 200u);
+  queue_part(fixture.kmt(), 299u, 200u, 99u);
+  WireWriter lied = transport.request_writer();
+  lied.write_u32(3u);
+  CHECK(transport.send_sync(0x1000Cu, lied, reply) == TransportResult::failed);
+  transport.end_call();
+  CHECK(transport.faulted());
+  transport.teardown(); }
+
+/* A transport whose owner bounds its commands has no memory to spill into:
+ * past the staging a call fails, and the context does not. */
+TEST(kmt_transport, without_memory_a_command_past_the_staging_fails_alone)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  WireWriter writer = transport.request_writer();
+  writer.write_zeros(staging_bytes);
+  CHECK(!writer.spilled());
+  CHECK(transport.send_async(0x10007u, writer) == TransportResult::failed);
+  CHECK(!transport.faulted());
+  transport.teardown(); }

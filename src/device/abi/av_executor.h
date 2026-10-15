@@ -37,8 +37,10 @@ extern "C" {
  * answers into the host window, and an import names that memory. 21 made a
  * host device's loss something poll says, so an idle context is faulted
  * when the device it runs on is lost rather than at its next command, and
- * gave the device lose_device, which a test's GPU fault is made through. */
-#define AV_EXECUTOR_ABI_VERSION 21u
+ * gave the device lose_device, which a test's GPU fault is made through. 22
+ * made an answer longer than the reply capacity one the library keeps for
+ * the device to hand on in parts (answer_part), rather than one it drops. */
+#define AV_EXECUTOR_ABI_VERSION 22u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -203,7 +205,8 @@ typedef struct AvExecutorOps {
     /* Runs one command: `payload` is the `size` bytes after its 8-byte header.
      * An answer is written to `reply`, at most `reply_capacity` bytes, and its
      * length to *reply_size; an answer longer than the capacity sets
-     * *reply_size to its length and writes nothing. */
+     * *reply_size to its length, writes nothing there, and is kept until the
+     * next execute on `executor` for answer_part to hand out. */
     uint32_t (*execute)(void *opaque, AvExecutor *executor, uint32_t command_id, const uint8_t *payload,
                         size_t size, uint8_t *reply, size_t reply_capacity, size_t *reply_size);
     /* The last command of a batch has run. An executor may hold what every
@@ -329,6 +332,13 @@ typedef struct AvExecutorOps {
      * that loses devices on request is not loaded (tests/gpu_fault). Null in
      * a library that never can. Runs on the context's worker. */
     uint32_t (*lose_device)(void *opaque, AvExecutor *executor);
+    /* The answer the last execute on `executor` kept for being longer than
+     * its reply capacity, from byte `offset`: as much as `capacity` takes is
+     * copied to `out` and counted in the return, and *length is the whole
+     * answer's - 0, with nothing copied, when none is kept. Runs on the
+     * context's worker. */
+    size_t (*answer_part)(void *opaque, AvExecutor *executor, uint64_t offset, uint8_t *out, size_t capacity,
+                          uint64_t *length);
 } AvExecutorOps;
 
 typedef const AvExecutorOps *(*AvExecutorOpsFunction)(void);

@@ -2,6 +2,7 @@
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_spill.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstddef>
@@ -183,3 +184,62 @@ TEST(wire_writer, an_answer_that_fits_wanted_exactly_what_it_wrote)
   CHECK_STATUS(writer.status(), Status::ok);
   CHECK_EQ(writer.wanted(), writer.offset());
   CHECK_EQ(writer.wanted(), 12u); }
+
+namespace {
+
+/* A spill that hands out one block of its own, once, and remembers what it
+ * was asked. */
+class OneBlockSpill final : public av::WireSpill {
+public:
+    std::uint8_t *grow(const std::uint8_t *written, std::size_t used, std::size_t wanted,
+                       std::size_t &capacity) override
+    {
+        asked_++;
+        wanted_ = wanted;
+        capacity = 0u;
+        if (asked_ > 1u || wanted > sizeof block_) return nullptr;
+        for (std::size_t index = 0u; index < used; ++index) block_[index] = written[index];
+        capacity = sizeof block_;
+        return block_;
+    }
+    std::uint32_t asked_ = 0u;
+    std::size_t   wanted_ = 0u;
+    std::uint8_t  block_[32] = {};
+};
+
+}  // namespace
+
+/* A field that outgrows the room moves what was written to the spill's and
+ * goes on there: bytes() and spilled() say where it all is now. */
+TEST(wire_writer, a_writer_with_a_spill_goes_on_past_its_room)
+{ GuardedBuffer buffer(6u);
+  OneBlockSpill spill;
+  WireWriter    writer(buffer.data(), buffer.size(), spill);
+  writer.write_u32(0x04030201u);
+  CHECK(!writer.spilled());
+  CHECK(writer.bytes() == buffer.data());
+  writer.write_u64(0x0C0B0A0908070605ull);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(writer.spilled());
+  CHECK(writer.bytes() == spill.block_);
+  CHECK_EQ(spill.wanted_, 12u);
+  CHECK_EQ(writer.offset(), 12u);
+  CHECK_EQ(writer.wanted(), 12u);
+  for (std::uint8_t index = 0u; index < 12u; ++index) CHECK_EQ(spill.block_[index], index + 1u);
+  /* The lent room was left as it was, and nothing past it was touched. */
+  CHECK(buffer.guards_intact());
+  CHECK(writer.invariants_hold());
+  /* A spill that refuses is a writer that latches, as one with none does. */
+  writer.write_zeros(64u);
+  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK_EQ(writer.offset(), 12u);
+  CHECK_EQ(spill.asked_, 2u); }
+
+/* A spilled writer's invariant: it spilled into a spill it was given. */
+TEST(wire_writer, a_writer_without_a_spill_never_reads_as_spilled)
+{ GuardedBuffer buffer(2u);
+  WireWriter    writer(buffer.data(), buffer.size());
+  writer.write_u32(1u);
+  CHECK(!writer.spilled());
+  CHECK(writer.bytes() == buffer.data());
+  CHECK(writer.invariants_hold()); }

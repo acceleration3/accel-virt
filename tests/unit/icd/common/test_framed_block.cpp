@@ -7,7 +7,10 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/framed_block_probe.hpp"
 #include "icd/common/framed_block.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/command_pieces.hpp"
+#include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstddef>
@@ -163,3 +166,47 @@ TEST(framed_block, the_invariant_catches_a_count_past_the_block_and_room_without
   probe.capacity() = 0u;
   probe.used() = 0u;
   CHECK(framed.invariants_hold()); }
+
+/* A writer lent with a spill goes on past the block; framed piece by piece,
+ * the first piece fills what the block has free. */
+TEST(framed_block, a_writer_lent_with_a_spill_is_framed_in_pieces)
+{ av::MockPlatform platform;
+  av::SpillBlock   spill(platform);
+  std::uint8_t     block[64] = {};
+  FramedBlock      framed(block, sizeof block);
+  WireWriter       writer = framed.lend(16u, spill);
+  writer.write_zeros(100u);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(writer.spilled());
+  av::CommandPieces pieces(0x20001u, 0u, writer.bytes(), writer.offset());
+  CHECK(framed.frame_piece(pieces));
+  CHECK_EQ(framed.used(), sizeof block);
+  CHECK(!pieces.done());
+  /* A full block frames nothing more until it is sent. */
+  CHECK(!framed.frame_piece(pieces));
+  framed.clear();
+  CHECK(framed.frame_piece(pieces));
+  CHECK(!framed.frame_piece(pieces) || pieces.done());
+  CHECK(framed.invariants_hold());
+  /* No header's room lends nothing, spill or not. */
+  FramedBlock tiny(block, CommandHeader::encoded_size - 1u);
+  WireWriter  none = tiny.lend(8u, spill);
+  none.write_u8(1u);
+  CHECK(none.status() != Status::ok); }
+
+/* In a block that holds something, less than a least_piece of room is not
+ * worth a piece - unless the rest fits whole. */
+TEST(framed_block, a_held_block_takes_a_small_piece_only_when_it_is_the_last)
+{ std::uint8_t block[av::CommandPieces::least_piece] = {};
+  FramedBlock  framed(block, sizeof block);
+  WireWriter   first = framed.lend(8u);
+  first.write_u32(1u);
+  CHECK(framed.frame(0x20001u, first, 0u));
+  std::uint8_t      payload[av::CommandPieces::least_piece] = {};
+  av::CommandPieces long_one(0x20002u, 0u, payload, sizeof payload);
+  CHECK(!framed.frame_piece(long_one));
+  CHECK_EQ(long_one.rest(), sizeof payload);
+  av::CommandPieces short_one(0x20003u, 0u, payload, 16u);
+  CHECK(framed.frame_piece(short_one));
+  CHECK(short_one.done());
+  CHECK_EQ(framed.used(), 2u * CommandHeader::encoded_size + 4u + 16u); }

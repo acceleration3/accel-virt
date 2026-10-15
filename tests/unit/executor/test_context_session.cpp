@@ -521,3 +521,51 @@ TEST(context_session_lose_device, the_backend_loses_its_host_device_where_the_ho
   CHECK_EQ(session.lose_device(), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(session.poll(), std::uint32_t{AV_POLL_LOST});
   CHECK(session.invariants_hold()); }
+
+/* Docs/protocol.md, "Long commands": an answer longer than the device's reply
+ * is kept, whole, until the next command, and answer_part hands it on from
+ * any offset; an answer nobody asked for is not kept. */
+TEST(context_session, an_answer_longer_than_the_capacity_is_kept_for_answer_part)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  std::uint8_t big[300];
+  for (std::size_t index = 0u; index < sizeof big; index++) big[index] = static_cast<std::uint8_t>(index);
+  std::uint8_t reply[16] = {};
+  std::size_t  answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::echo_id, big, sizeof big, reply, sizeof reply, answer),
+           std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(answer, sizeof big);
+  std::uint8_t  part[100] = {};
+  std::uint64_t length = 0u;
+  CHECK_EQ(session.answer_part(250u, part, sizeof part, length), 50u);
+  CHECK_EQ(length, 300u);
+  CHECK_EQ(part[0], 250u);
+  CHECK_EQ(part[49], static_cast<std::uint8_t>(299u));
+  CHECK_EQ(session.answer_part(0u, part, sizeof part, length), 100u);
+  CHECK_EQ(part[99], 99u);
+  CHECK_EQ(session.answer_part(300u, part, sizeof part, length), 0u);
+  CHECK_EQ(session.answer_part(0u, nullptr, sizeof part, length), 0u);
+  /* The next command drops it: one that fits keeps nothing. */
+  CHECK_EQ(session.execute(MockSessionBackend::echo_id, big, 4u, reply, sizeof reply, answer),
+           std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(session.answer_part(0u, part, sizeof part, length), 0u);
+  CHECK_EQ(length, 0u);
+  /* Nor is a long answer nobody asked for. */
+  CHECK_EQ(session.execute(MockSessionBackend::echo_id, big, sizeof big, nullptr, 0u, answer),
+           std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(answer, sizeof big);
+  CHECK_EQ(session.answer_part(0u, part, sizeof part, length), 0u);
+  CHECK_EQ(length, 0u);
+  session.release();
+  CHECK_EQ(session.answer_part(0u, part, sizeof part, length), 0u); }
+
+/* A command that decodes into more than the block - a source of megabytes -
+ * takes room past it for as long as it runs, and is not starved. */
+TEST(context_session, a_command_needing_more_than_the_block_decodes_past_it)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  std::size_t answer = 0u;
+  CHECK_EQ(session.execute(MockSessionBackend::roomy_id, payload, sizeof payload, nullptr, 0u, answer),
+           std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(session.starved(), 0u);
+  CHECK(session.invariants_hold()); }

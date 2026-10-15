@@ -8,6 +8,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/common/batched_transport.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/command_header.hpp"
@@ -46,6 +47,17 @@ class Rig {
 public:
     Rig() : connection_(kmt_), staging_{}, transport_(connection_, SubApi::opengl, 12u, reply_bytes, staging_,
                                                       sizeof staging_), block_{}
+    {
+        open();
+    }
+    /* One whose transport has memory for what outgrows the rooms. */
+    explicit Rig(av::MockPlatform &memory)
+        : connection_(kmt_), staging_{},
+          transport_(connection_, memory, SubApi::opengl, 12u, reply_bytes, staging_, sizeof staging_), block_{}
+    {
+        open();
+    }
+    void open()
     {
         kmt_.add_adapter(av, 3200u);
         std::uint32_t adapter = 0u, count = 0u;
@@ -194,3 +206,42 @@ TEST(batched_transport, the_arenas_are_the_transports_under_it)
   BatchedTransport batched(rig.inner(), rig.block(), 2u * framed, largest);
   CHECK(&batched.decode_arena() == &rig.inner().decode_arena());
   CHECK(&batched.blobs() == &rig.inner().blobs()); }
+
+/* Docs/protocol.md, "Long commands": a command longer than the room it was
+ * lent spills, and is framed in pieces behind what the block holds - the
+ * block going out each time it fills - with the command itself last. */
+TEST(batched_transport, a_command_longer_than_its_room_follows_what_is_held_in_pieces)
+{ av::MockPlatform memory;
+  Rig              rig(memory);
+  BatchedTransport batched(rig.inner(), rig.block(), 2u * framed, largest);
+  CHECK(rig.send(batched, first_id, 4u) == TransportResult::ok);
+  WireWriter writer = batched.request_writer();
+  for (std::uint32_t index = 0u; index < 300u; ++index) writer.write_u8(static_cast<std::uint8_t>(index));
+  CHECK(writer.spilled());
+  CHECK(batched.send_async(first_id + 1u, writer) == TransportResult::ok);
+  CHECK(batched.flush() == TransportResult::ok);
+  /* What the last flush sent ends in the command, with its rest. */
+  const std::uint32_t last = rig.kmt().commands() - 1u;
+  CHECK_EQ(rig.kmt().command_id(last), first_id + 1u);
+  CHECK(!rig.replies(last));
+  std::uint32_t pieces = 0u;
+  for (std::uint32_t index = 0u; index < last; ++index)
+      if (rig.kmt().command_id(index) == CommandHeader::piece_id) pieces++;
+  CHECK(pieces >= 1u);
+  /* And the context goes on: an answered command after it. */
+  const std::uint8_t answer[] = {6u};
+  rig.kmt().queue_answer(answer, sizeof answer);
+  WireWriter asking = batched.request_writer();
+  for (std::uint32_t index = 0u; index < 200u; ++index) asking.write_u8(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(batched.send_sync(first_id + 2u, asking, reply) == TransportResult::ok);
+  CHECK_EQ(reply.read_u8(), 6u);
+  batched.end_call();
+  CHECK(rig.replies(rig.kmt().commands() - 1u));
+  CHECK_EQ(batched.pending(), 0u);
+  /* A writer whose spill had no memory sends nothing at all. */
+  memory.fail_allocation_at(1u);
+  WireWriter refused_writer = batched.request_writer();
+  refused_writer.write_zeros(largest + 1u);
+  CHECK(batched.send_async(first_id + 3u, refused_writer) == TransportResult::failed);
+  CHECK_EQ(batched.pending(), 0u); }

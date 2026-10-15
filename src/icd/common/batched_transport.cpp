@@ -1,7 +1,9 @@
 #include "icd/common/batched_transport.hpp"
 
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "proto/submission/command_pieces.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -19,13 +21,27 @@ WireWriter BatchedTransport::request_writer()
     const size_t command = FramedBlock::header_bytes + largest_;
     if (failed_ || framed_.capacity() < command) return WireWriter(nullptr, 0u);
     if (!framed_.fits(command) && flush() != TransportResult::ok) return WireWriter(nullptr, 0u);
-    return framed_.lend(largest_);
+    return framed_.lend(largest_, inner_.spill());
 }
 
 TransportResult BatchedTransport::append(uint32_t command_id, WireWriter &writer, uint8_t flags)
 {
     AV_SCOPE("BatchedTransport::append");
-    if (failed_ || !framed_.frame(command_id, writer, flags)) return TransportResult::failed;
+    if (failed_) return TransportResult::failed;
+    if (writer.spilled()) return append_pieces(command_id, writer, flags);
+    return framed_.frame(command_id, writer, flags) ? TransportResult::ok : TransportResult::failed;
+}
+
+TransportResult BatchedTransport::append_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags)
+{
+    AV_SCOPE("BatchedTransport::append_pieces");
+    ScopeExit given_back([this] { inner_.give_back_spill(); });
+    if (writer.status() != Status::ok) return TransportResult::failed;
+    CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
+    while (!pieces.done()) {
+        if (framed_.frame_piece(pieces)) continue;
+        if (framed_.used() == 0u || flush() != TransportResult::ok) return TransportResult::failed;
+    }
     return TransportResult::ok;
 }
 

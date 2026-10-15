@@ -37,6 +37,15 @@ public:
     static constexpr uint32_t host_device_lost         = 0u;
     static constexpr uint32_t host_device_kept         = 1u;
     static constexpr size_t   lose_host_device_answer  = 8u;
+    /* A command longer than a producer's room or its ring crosses in pieces
+     * (docs/protocol.md, "Long commands"): each piece's body is the next
+     * bytes of the command's payload, and the next command that is not a
+     * piece is the command itself, its body the payload's last bytes. */
+    static constexpr uint32_t piece_id                 = 0x00000008u;
+    /* An answer longer than the reply slot is fetched in parts: a u64
+     * offset into it, answered with the answer's u64 length and as many of
+     * its bytes from there as the slot holds. */
+    static constexpr uint32_t answer_piece_id          = 0x00000009u;
 
     CommandHeader();
     CommandHeader(uint32_t id, uint32_t size, uint8_t flags);

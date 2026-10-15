@@ -287,6 +287,8 @@ whichever library is loaded, so they behave the same under every executor.
 | `0x00000005` | OPEN_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 wire_handle |
 | `0x00000006` | RELEASE_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 zero |
 | `0x00000007` | LOSE_HOST_DEVICE | none | 8 bytes: u32 status (0 lost, 1 kept), u32 reserved |
+| `0x00000008` | PIECE | the next bytes of a long command's payload, at least 1 | none: a piece never asks for one |
+| `0x00000009` | ANSWER_PIECE | 8 bytes: u64 offset | u64 the kept answer's length, then its bytes from `offset`, as many as the slot holds |
 
 A NOP does nothing but complete, which makes it the round trip a guest times to
 measure the transport alone rather than a backend (feature 044). It moves the
@@ -332,6 +334,37 @@ NOP with a body. Every other refusal is an answer, and the context runs on:
 
 A refused import answers `device_memory` 0. RELEASE_BLOB of a handle the context
 never imported, or already released, answers empty and does nothing.
+
+#### Long commands
+
+Nothing a caller hands an API is bounded by the rooms on its way: a
+program's source, a binary, build options, a wait list, a kernel argument,
+a build log asked for. A producer lends each command a fixed room - its
+staging, the free part of a batch - and a command that outgrows it is
+written on into memory of the producer's own (`WireSpill`), then sent as
+**pieces**: PIECE commands carrying the payload's bytes in order, as many
+per piece as the producer's room holds, and last the command itself, with
+its own id and flags and the payload's remaining bytes. Pieces may fill
+several batches; nothing else of the context comes between them and their
+command, and none asks for an answer. The device gathers the pieces of a
+context in memory of its own, appends the closing command's body, and runs
+the command once with the whole payload, as if it had crossed in one
+command. A piece followed by anything but a command of the context's API,
+or a piece asking for an answer, is command framing, fault 5; no host
+memory to gather into is fault 6.
+
+An answer longer than the reply slot is not dropped: the slot says *too
+large* with the length required, and the executor keeps the answer until
+the next command it runs (ABI `answer_part`). The producer, still holding
+its transport, fetches it with ANSWER_PIECE from offset 0, then from each
+offset it has reached, each answered with the answer's u64 length and as
+many of its bytes from there as the slot holds; with nothing kept the
+length is 0 and no bytes follow. ANSWER_PIECE without *generate reply*, or
+with a body of any length but 8, is command framing.
+
+The executor decodes a command into its megabyte block, and a command that
+needs more - a source of several megabytes - takes room past it from the
+heap for as long as it decodes and runs (`WireArena`).
 
 #### Losing the host device
 
@@ -570,7 +603,7 @@ asking for no answer leaves the slot as it was.
 
 ### The executor ABI (device <-> host library)
 
-`src/device/abi/av_executor.h`, version 21, is what runs a context's commands
+`src/device/abi/av_executor.h`, version 22, is what runs a context's commands
 on the host's API, and the library behind it is where every object the
 contexts share is kept. The QEMU device loads the library its `executor`
 property names and calls `av_executor_ops` for the table; a library that does
@@ -598,6 +631,10 @@ generated server dispatch in `src/proto/generated/*/` over host API backends
   answers idle, pending (results still awaited from the GPU) or lost: the
   host device the executor runs on was lost, which the device faults the
   context for (fault 7) at that poll - see "Losing the host device".
+  An answer longer than the reply capacity `execute` is given is kept by the
+  library until the next `execute` on that executor, and
+  `answer_part(executor, offset, out, capacity, &length)` copies it out from
+  any offset (ANSWER_PIECE, "Long commands").
 - **A test's GPU fault.** `lose_device(executor)` makes the host device the
   executor runs on lost, as a fault of the host GPU would, where the host can
   do so on purpose (LOSE_HOST_DEVICE, below); it may be null.
@@ -1655,7 +1692,10 @@ A record occupies `32 + length` bytes and is not padded.
 | 7 | blob bytes | 16 bytes: u64 blob_id, u64 offset; then the snapshot | never written now: an import is host GPU memory the device keeps no copy of (docs/host-memory.md), so a replay reports a context's first import as unreplayable and gives that context up |
 
 A batch's payload is the same sequence of framed commands *Execution* above
-describes, so a reader walks it with the same header. A recording holds what the
+describes, so a reader walks it with the same header. A command that crossed in
+pieces is recorded as its pieces, which a replay does not gather: it reports
+the context's first piece as unreplayable and gives that context up, and a
+batch fetching part of a kept answer has its reply left uncompared. A recording holds what the
 executor library received, which is the guest's bytes after the device
 validated the framing around them and nothing more: the bytes inside a command
 are still the guest's, and every tool that reads a recording treats them as

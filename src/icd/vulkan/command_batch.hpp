@@ -10,10 +10,10 @@
  * command limit, and a recording past that goes as several batches: the host
  * records a command buffer's commands in the order they arrive, whichever
  * batch carried them. The generated client encodes a command before its size
- * is known, so each is lent a fixed room: a command larger than that and
- * memory refused while growing latch one failure, and end answers it rather
- * than ship a batch with a command missing. Until 050's blob arena carries
- * bulk data, those are all out of host memory. */
+ * is known, so each is lent a fixed room, and one that outgrows it spills
+ * into memory of the batch's own and is recorded in pieces (docs/protocol.md,
+ * "Long commands"). Memory refused while growing latches one failure, and end
+ * answers it rather than ship a batch with a command missing. */
 #ifndef AV_ICD_COMMAND_BATCH_HPP
 #define AV_ICD_COMMAND_BATCH_HPP
 
@@ -21,6 +21,7 @@
 #include "icd/common/framed_block.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_arena.hpp"
 
 #include <stddef.h>
@@ -80,6 +81,8 @@ private:
     [[nodiscard]] bool grow();
     /* Publishes what is recorded so far, at the command limit. */
     [[nodiscard]] bool flush();
+    /* A writer that spilled, recorded piece by piece. */
+    [[nodiscard]] bool record_pieces(uint32_t command_id, const WireWriter &writer);
 
     BlockSource    &memory_;
     Connection     &connection_;
@@ -90,6 +93,8 @@ private:
     uint32_t        refused_;
     WireArena       decode_arena_;
     ClientBlobArena blobs_;
+    /* A command longer than its room, while it is written and recorded. */
+    SpillBlock      spill_;
 
     friend struct CommandBatchProbe;
 };

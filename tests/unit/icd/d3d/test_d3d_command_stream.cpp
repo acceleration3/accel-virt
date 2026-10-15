@@ -440,3 +440,50 @@ TEST(d3d_command_stream, a_refused_batch_fails_everything_after_it)
   CHECK(!fixture.stream().speak_as(7u));
   CHECK_STATUS(fixture.stream().application_flush(), Status::invalid_state);
   CHECK(fixture.stream().invariants_hold()); }
+
+namespace {
+
+const PciIdentity &avgpu() { return av; }
+
+}  // namespace
+
+/* Docs/protocol.md, "Long commands": a sending stream's command longer than
+ * its room spills into the transport's memory and goes in pieces behind
+ * what was held, the block sent each time it fills; a recording's is lent
+ * no spill, and one longer than its room is lost from it as before. */
+TEST(d3d_command_stream, a_command_longer_than_its_room_is_sent_in_pieces)
+{ MockKmt         kmt;
+  MockPlatform    memory;
+  GuestConnection connection(kmt);
+  kmt.add_adapter(avgpu(), 3200u);
+  std::uint32_t adapters[1] = {};
+  std::uint32_t count = 0u;
+  static_cast<void>(kmt.enumerate_adapters(adapters, 1u, count));
+  CHECK_STATUS(connection.open(adapters[0]), Status::ok);
+  static std::uint8_t staging[staging_bytes];
+  KmtTransport transport(connection, memory, SubApi::d3d, ring_order, reply_bytes, staging, staging_bytes);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  static std::uint8_t block[block_bytes];
+  { D3dCommandStream stream(transport, block, block_bytes);
+    av::WireWriter held = stream.request_writer();
+    held.write_u64(1u);
+    CHECK(stream.send_async(kCmd_Draw, held) == TransportResult::ok);
+    constexpr std::size_t long_bytes = 2u * D3dCommandStream::command_room + 100u;
+    av::WireWriter writer = stream.request_writer();
+    writer.write_zeros(long_bytes);
+    CHECK(writer.spilled());
+    CHECK(stream.send_async(kCmd_Draw, writer) == TransportResult::ok);
+    CHECK_STATUS(stream.flush(), Status::ok);
+    const std::uint32_t last = kmt.commands() - 1u;
+    CHECK_EQ(kmt.command_id(last), static_cast<std::uint32_t>(kCmd_Draw));
+    CHECK_EQ(kmt.command_id(last - 1u), CommandHeader::piece_id);
+    CHECK(!stream.failed());
+    CHECK(stream.invariants_hold());
+    /* In a recording, the room is all a command has. */
+    Recorded recorded(4u * block_bytes);
+    stream.record(recorded.recording());
+    av::WireWriter recording = stream.request_writer();
+    recording.write_zeros(D3dCommandStream::command_room + 1u);
+    CHECK(!recording.spilled());
+    CHECK(stream.send_async(kCmd_Draw, recording) == TransportResult::failed); }
+  transport.teardown(); }

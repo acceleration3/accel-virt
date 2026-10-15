@@ -390,6 +390,9 @@ public:
      * this one (up to max_answer bytes), before any answer_waits answers: how a
      * test plays a device through a sequence of calls. */
     void          queue_answer(const std::uint8_t *answer, std::uint32_t size);
+    /* The next answered batch finds the slot saying its answer of `required`
+     * bytes was too long for it, as a device that kept the answer says. */
+    void          queue_too_large(std::uint32_t required);
     /* The Nth wait for a context from now (1-based) succeeds, writes nothing
      * and takes no queued answer: how a context the host faulted looks to its
      * process, since the driver completes what it queued and never reports
@@ -712,6 +715,8 @@ private:
     bool          answering_;
     std::uint8_t  queued_[max_queued][max_answer];
     std::uint32_t queued_sizes_[max_queued];
+    /* Non-zero where that queued answer is one too long for the slot. */
+    std::uint32_t queued_too_large_[max_queued];
     std::uint32_t queued_count_;
     std::uint32_t queued_taken_;
     std::uint32_t withheld_countdown_;

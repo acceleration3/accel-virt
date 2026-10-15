@@ -274,7 +274,7 @@ constexpr std::size_t reply_fence_at = 8u;
 TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_rest)
 { Fixture fixture;
   Commands commands;
-  commands.add(0x10001u, 3u).add(0x00008u, 0u).add(0x20001u, 5u).add(MockExecutorOps::unknown_id, 1u)
+  commands.add(0x10001u, 3u).add(0x0000Eu, 0u).add(0x20001u, 5u).add(MockExecutorOps::unknown_id, 1u)
           .add(0x10009u, 40u);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().created(), 1u);
@@ -384,7 +384,7 @@ TEST(batch_executor_run, another_transport_id_is_skipped_like_one_the_executor_d
 { Fixture fixture;
   Commands commands;
   commands.add(0x00000000u, 0u, CommandHeader::generate_reply)
-          .add(0x00000008u, 0u, CommandHeader::generate_reply)
+          .add(0x0000000Eu, 0u, CommandHeader::generate_reply)
           .add(0x0000FFFFu, 12u, CommandHeader::generate_reply);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().executed(), 0u);
@@ -740,3 +740,99 @@ TEST(batch_executor_run, the_batch_is_on_the_recording_while_its_first_command_i
   CHECK_STATUS(running.status, Status::ok);
   CHECK(fixture.batches().invariants_hold());
   fixture.recorder().close(); }
+
+namespace {
+
+/* An ANSWER_PIECE from `offset`, asking for its answer. */
+Commands &ask_part(Commands &commands, std::uint64_t offset)
+{
+    std::uint8_t body[8] = {};
+    std::memcpy(body, &offset, sizeof body);
+    return commands.add_body(CommandHeader::answer_piece_id, body, sizeof body, CommandHeader::generate_reply);
+}
+
+}  // namespace
+
+/* Docs/protocol.md, "Long commands": pieces in one batch and the next are
+ * gathered, and the command that closes them runs once with all of it; its
+ * answer, too long for the slot, is kept, and ANSWER_PIECE hands it on a
+ * slot at a time behind its length. */
+TEST(batch_executor_run, pieces_across_batches_run_as_one_command_and_its_answer_comes_in_parts)
+{ Fixture fixture;
+  Commands first;
+  first.add(CommandHeader::piece_id, 100u, 0u, 0x01u);
+  CHECK_STATUS(fixture.run(1u, first), Status::ok);
+  CHECK_EQ(fixture.ops().executed(), 0u);
+  Commands second;
+  second.add(CommandHeader::piece_id, 100u, 0u, 0x02u).add(0x10003u, 50u, CommandHeader::generate_reply, 0x03u);
+  CHECK_STATUS(fixture.run(2u, second), Status::ok);
+  CHECK_EQ(fixture.ops().executed(), 1u);
+  CHECK_EQ(fixture.ops().id_at(0u), 0x10003u);
+  CHECK_EQ(fixture.ops().size_at(0u), 250u);
+  CHECK(fixture.reply_header().too_large());
+  CHECK_EQ(fixture.reply_header().required(), 250u);
+  std::uint8_t  gathered[250] = {};
+  std::uint64_t fetched = 0u;
+  for (std::uint64_t fence = 3u; fetched < sizeof gathered; fence++) {
+      Commands part;
+      ask_part(part, fetched);
+      CHECK_STATUS(fixture.run(fence, part), Status::ok);
+      CHECK(!fixture.reply_header().too_large());
+      const std::uint32_t size = fixture.reply_header().size();
+      CHECK(size > 8u);
+      if (size <= 8u) break;
+      std::uint64_t length = 0u;
+      std::memcpy(&length, fixture.reply() + 32u, 8u);
+      CHECK_EQ(length, 250u);
+      std::memcpy(gathered + fetched, fixture.reply() + 40u, size - 8u);
+      fetched += size - 8u;
+  }
+  CHECK_EQ(fetched, 250u);
+  std::uint32_t wrong = 0u;
+  for (std::uint32_t index = 0u; index < 250u; ++index) {
+      const std::uint8_t expected = index < 100u ? 0x01u : (index < 200u ? 0x02u : 0x03u);
+      if (gathered[index] != expected) wrong++;
+  }
+  CHECK_EQ(wrong, 0u);
+  /* Past the end, and with nothing kept: the length alone. */
+  Commands past;
+  ask_part(past, 250u);
+  CHECK_STATUS(fixture.run(20u, past), Status::ok);
+  CHECK_EQ(fixture.reply_header().size(), 8u);
+  /* The parts never reached the executor as commands. */
+  CHECK_EQ(fixture.ops().executed(), 1u);
+  CHECK(fixture.batches().fault() == FaultCode::none); }
+
+/* A piece followed by anything but its own API's command, a piece asking for
+ * an answer, and an ANSWER_PIECE framed wrong are framing no producer does. */
+TEST(batch_executor_run, pieces_not_closed_by_their_command_fault_the_context_as_misframed)
+{ { Fixture fixture;
+    Commands commands;
+    commands.add(CommandHeader::piece_id, 10u).add(CommandHeader::nop_id, 0u);
+    CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+    CHECK(fixture.batches().fault() == FaultCode::command_framing); }
+  { Fixture fixture;
+    Commands commands;
+    commands.add(CommandHeader::piece_id, 10u).add(0x20001u, 4u);
+    CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+    CHECK_EQ(fixture.ops().executed(), 0u); }
+  { Fixture fixture;
+    Commands commands;
+    commands.add(CommandHeader::piece_id, 10u, CommandHeader::generate_reply);
+    CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+    CHECK(fixture.batches().fault() == FaultCode::command_framing); }
+  { Fixture fixture;
+    Commands commands;
+    commands.add(CommandHeader::answer_piece_id, 4u, CommandHeader::generate_reply);
+    CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+    CHECK(fixture.batches().fault() == FaultCode::command_framing); } }
+
+/* No host memory to gather into faults the context: its command cannot run. */
+TEST(batch_executor_run, pieces_the_host_has_no_memory_for_fault_the_context)
+{ Fixture fixture;
+  fixture.host().fail_allocation_at(1u);
+  Commands commands;
+  commands.add(CommandHeader::piece_id, 10u).add(0x10001u, 4u);
+  CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+  CHECK(fixture.batches().fault() == FaultCode::undecodable);
+  CHECK_EQ(fixture.ops().executed(), 0u); }

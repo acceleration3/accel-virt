@@ -395,3 +395,34 @@ TEST(context_executor_shared, shares_opens_and_closes_through_the_library)
   CHECK_EQ(fixture.ops().shared_objects(), 1u);
   CHECK_EQ(fixture.ops().opened_objects(), 1u);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
+
+/* An answer too long for the reply the library keeps (ABI 22), and
+ * answer_part hands it on from any offset; with no executor, or nothing
+ * kept, the length is 0 and nothing is copied. */
+TEST(context_executor_answer_part, hands_on_what_the_library_kept_of_a_long_answer)
+{ Fixture fixture;
+  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.on_worker([](ContextExecutor &executor) {
+      std::uint8_t  out[4] = {};
+      std::uint64_t length = 99u;
+      CHECK_EQ(executor.answer_part(0u, out, sizeof out, length), 0u);
+      CHECK_EQ(length, 0u);
+      CHECK_STATUS(executor.create(), Status::ok);
+      const std::uint8_t payload[10] = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u};
+      std::uint8_t       reply[4] = {};
+      std::size_t        reply_size = 0u;
+      CHECK_STATUS(executor.execute(0x10001u, payload, sizeof payload, reply, sizeof reply, reply_size), Status::ok);
+      CHECK_EQ(reply_size, 10u);
+      CHECK_EQ(executor.answer_part(4u, out, sizeof out, length), 4u);
+      CHECK_EQ(length, 10u);
+      CHECK_EQ(out[0], 4u);
+      CHECK_EQ(out[3], 7u);
+      CHECK_EQ(executor.answer_part(8u, out, sizeof out, length), 2u);
+      CHECK_EQ(out[1], 9u);
+      CHECK_EQ(executor.answer_part(10u, out, sizeof out, length), 0u);
+      /* The next command drops what was kept. */
+      CHECK_STATUS(executor.execute(0x10001u, payload, 2u, reply, sizeof reply, reply_size), Status::ok);
+      CHECK_EQ(executor.answer_part(0u, out, sizeof out, length), 0u);
+      CHECK_EQ(length, 0u);
+      executor.destroy();
+  }); }

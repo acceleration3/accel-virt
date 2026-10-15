@@ -135,7 +135,8 @@ TEST(fullstack_av, the_published_table_is_this_abi_and_fills_every_entry)
   CHECK(ops->map_frame != nullptr);
   CHECK(ops->unmap_frame != nullptr);
   CHECK(ops->export_surface != nullptr);
-  CHECK(ops->sync_surface != nullptr); }
+  CHECK(ops->sync_surface != nullptr);
+  CHECK(ops->answer_part != nullptr); }
 
 TEST(fullstack_av, the_vulkan_chain_runs_on_the_host_gpu)
 { const WidestHostGpu gpu;

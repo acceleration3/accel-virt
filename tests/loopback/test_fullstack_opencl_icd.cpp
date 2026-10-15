@@ -42,6 +42,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <pthread.h>
 #include <unistd.h>
@@ -1120,6 +1121,149 @@ TEST(fullstack_opencl_icd, a_kernel_stores_single_bytes_and_leaves_their_neighbo
     CHECK_EQ(table_of(kernel)->clReleaseKernel(kernel), CL_SUCCESS);
     CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
     CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
+    CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
+    CHECK_EQ(loader.release_context(context), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+namespace {
+
+/* Real code, and more of it than every room on the way: DaVinci Resolve's
+ * image pipeline builds a 293 KB source, and the ICD answered it
+ * CL_OUT_OF_RESOURCES because its command outgrew the 256 KiB the transport
+ * lent it. Helpers the kernel never calls make the bulk, so a compiler judges
+ * all of it and the build stays quick. */
+constexpr std::uint32_t long_helpers = 30000u;
+constexpr std::uint32_t long_defines = 12000u;
+
+class LongProgram {
+public:
+    LongProgram()
+        : helpers_(static_cast<char *>(std::malloc(std::size_t{long_helpers} * 72u))),
+          options_(static_cast<char *>(std::malloc(std::size_t{long_defines} * 32u + 64u))), helpers_bytes_(0u),
+          options_bytes_(0u)
+    {
+        for (std::uint32_t index = 0u; index < long_helpers; ++index)
+            helpers_bytes_ += static_cast<std::size_t>(std::snprintf(
+                helpers_ + helpers_bytes_, 72u, "inline float avcl_pad_%05u(float x) { return x + %u.0f; }\n", index,
+                index));
+        for (std::uint32_t index = 0u; index < long_defines; ++index)
+            options_bytes_ += static_cast<std::size_t>(
+                std::snprintf(options_ + options_bytes_, 32u, "-D AVCL_PAD_%06u=%u ", index, index));
+        options_bytes_ += static_cast<std::size_t>(
+            std::snprintf(options_ + options_bytes_, 64u, "-D AVCL_LAST=%u", long_defines));
+    }
+    ~LongProgram()
+    {
+        std::free(helpers_);
+        std::free(options_);
+    }
+    LongProgram(const LongProgram &) = delete;
+    LongProgram &operator=(const LongProgram &) = delete;
+
+    const char *helpers() const { return helpers_; }
+    std::size_t helpers_bytes() const { return helpers_bytes_; }
+    const char *options() const { return options_; }
+    std::size_t options_bytes() const { return options_bytes_; }
+
+    /* The kernel, as a second string: c = a + b, through a helper of the
+     * long first string and two of the long options' defines. */
+    static constexpr const char *kernel =
+        "__kernel void long_sum(__global const float *a, __global const float *b, __global float *c)\n"
+        "{\n"
+        "    const int i = get_global_id(0);\n"
+        "    c[i] = avcl_pad_00007(a[i] + b[i]) - 7.0f + (float)(AVCL_LAST - AVCL_PAD_011999 - 1);\n"
+        "}\n";
+
+private:
+    char       *helpers_;
+    char       *options_;
+    std::size_t helpers_bytes_;
+    std::size_t options_bytes_;
+};
+
+}  // namespace
+
+/* A program longer than the transport's room, the batch, the ring and the
+ * executor's decode block, in two strings, built with options longer than a
+ * room too: it builds, its kernel runs, and the context carries on - the
+ * calls before and after are the ordinary ones. */
+TEST(fullstack_opencl_icd, a_program_longer_than_every_room_builds_and_runs)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
+      std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
+      return;
+  }
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    cl_device_id device = nullptr;
+    cl_uint      devices = 0u;
+    CHECK_EQ(loader.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+    if (device == nullptr) return;
+    cl_int           error = CL_INVALID_VALUE;
+    const cl_context context = loader.create_context(device, &error);
+    if (context == nullptr) return;
+    const cl_command_queue queue = loader.create_queue(context, device, &error);
+
+    const LongProgram long_program;
+    CHECK(long_program.helpers_bytes() > (std::size_t{1} << 20) + (std::size_t{512} << 10));
+    CHECK(long_program.options_bytes() > std::size_t{256} << 10);
+    const char *strings[2] = {long_program.helpers(), LongProgram::kernel};
+    const std::size_t lengths[2] = {long_program.helpers_bytes(), 0u};
+    error = CL_INVALID_VALUE;
+    const cl_program program = table_of(context)->clCreateProgramWithSource(context, 2u, strings, lengths, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    CHECK(program != nullptr);
+    if (program == nullptr) return;
+    CHECK_EQ(table_of(program)->clBuildProgram(program, 0u, nullptr, long_program.options(), nullptr, nullptr),
+             CL_SUCCESS);
+    std::size_t logged = 0u;
+    CHECK_EQ(table_of(program)->clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0u, nullptr, &logged),
+             CL_SUCCESS);
+    const cl_kernel kernel = loader.create_kernel(program, "long_sum", &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    if (kernel == nullptr) return;
+
+    float first[elements] = {};
+    float second[elements] = {};
+    for (std::uint32_t index = 0u; index < elements; ++index) {
+        first[index] = static_cast<float>(index);
+        second[index] = static_cast<float>(3u * index + 2u);
+    }
+    cl_mem buffers[3] = {};
+    for (cl_mem &buffer : buffers) buffer = loader.create_buffer(context, CL_MEM_READ_WRITE, vector_bytes, &error);
+    CHECK_EQ(table_of(queue)->clEnqueueWriteBuffer(queue, buffers[0], CL_TRUE, 0u, vector_bytes, first, 0u, nullptr,
+                                                   nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(table_of(queue)->clEnqueueWriteBuffer(queue, buffers[1], CL_TRUE, 0u, vector_bytes, second, 0u,
+                                                   nullptr, nullptr),
+             CL_SUCCESS);
+    for (cl_uint index = 0u; index < 3u; ++index)
+        CHECK_EQ(table_of(kernel)->clSetKernelArg(kernel, index, sizeof(cl_mem), &buffers[index]), CL_SUCCESS);
+    const std::size_t global = elements;
+    CHECK_EQ(table_of(queue)->clEnqueueNDRangeKernel(queue, kernel, 1u, nullptr, &global, nullptr, 0u, nullptr,
+                                                     nullptr),
+             CL_SUCCESS);
+    float read[elements] = {};
+    CHECK_EQ(table_of(queue)->clEnqueueReadBuffer(queue, buffers[2], CL_TRUE, 0u, vector_bytes, read, 0u, nullptr,
+                                                  nullptr),
+             CL_SUCCESS);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t index = 0u; index < elements; ++index)
+        if (read[index] != first[index] + second[index]) ++wrong;
+    CHECK_EQ(wrong, 0u);
+
+    CHECK_EQ(table_of(kernel)->clReleaseKernel(kernel), CL_SUCCESS);
+    CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
+    for (cl_mem buffer : buffers) CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
     CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
     CHECK_EQ(loader.release_context(context), CL_SUCCESS);
     CHECK(process.root().invariants_hold()); }

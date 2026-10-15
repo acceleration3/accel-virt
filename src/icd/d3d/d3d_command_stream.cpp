@@ -1,5 +1,6 @@
 #include "icd/d3d/d3d_command_stream.hpp"
 
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -9,6 +10,7 @@
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/client/sync_call_scope.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/command_pieces.hpp"
 
 namespace av::d3d {
 
@@ -228,7 +230,7 @@ WireWriter D3dCommandStream::request_writer()
     if (!room_for(header_bytes + command_room) && failed_) return WireWriter(nullptr, 0u);
     if (!framed_.fits(header_bytes)) return WireWriter(nullptr, 0u);
     lent_ = true;
-    return framed_.lend(command_room);
+    return recording_ != nullptr ? framed_.lend(command_room) : framed_.lend(command_room, transport_.spill());
 }
 
 TransportResult D3dCommandStream::append(uint32_t command_id, WireWriter &writer, uint8_t flags)
@@ -236,6 +238,7 @@ TransportResult D3dCommandStream::append(uint32_t command_id, WireWriter &writer
     AV_SCOPE("D3dCommandStream::append");
     lent_ = false;
     if (failed_) return TransportResult::failed;
+    if (writer.spilled()) return append_pieces(command_id, writer, flags);
     const size_t before = framed_.used();
     /* A writer lent nothing still frames a command with no body - unless
      * not even its header fits. */
@@ -244,6 +247,23 @@ TransportResult D3dCommandStream::append(uint32_t command_id, WireWriter &writer
         return TransportResult::failed;
     }
     recorded_ += framed_.used() - before;
+    return TransportResult::ok;
+}
+
+TransportResult D3dCommandStream::append_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags)
+{
+    AV_SCOPE("D3dCommandStream::append_pieces");
+    ScopeExit given_back([this] { transport_.give_back_spill(); });
+    if (writer.status() != Status::ok) return TransportResult::failed;
+    CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
+    while (!pieces.done()) {
+        const size_t before = framed_.used();
+        if (framed_.frame_piece(pieces)) {
+            recorded_ += framed_.used() - before;
+            continue;
+        }
+        if (framed_.used() == 0u || flush() != Status::ok) return TransportResult::failed;
+    }
     return TransportResult::ok;
 }
 

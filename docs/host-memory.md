@@ -148,10 +148,11 @@ Nothing falls back to guest RAM. An `open` the window cannot hold fails:
 
 What happens next depends on the API:
 - **Arenas** (Direct3D, OpenGL, OpenCL) halve their request, down to 16 MiB.
-  With none at all, bulk data crosses inline in the ring - and inline is
-  bounded: an OpenGL command carries 256 KiB, its reply 64 KiB, and the
-  executor decodes it in a 1 MiB arena. A command larger than any of them is
-  dropped, or faults the context, so nothing sends one:
+  With none at all, bulk data crosses inline in the ring. Inline is not
+  bounded - a command longer than its room crosses in pieces and an answer
+  longer than the slot comes back in parts (docs/protocol.md, "Long
+  commands") - but every piece is a batch and a copy, so bulk data that can
+  be cut is cut into commands that fit:
   - OpenGL buffer data (`glBufferData`, `glBufferSubData`,
     `glGetBufferSubData` and their named spellings) goes in pieces each
     within the room (`BufferPieces`).

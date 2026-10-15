@@ -40,7 +40,7 @@ MockKmt::MockKmt()
       carried_next_size_(0u), carry_next_(false), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), idle_reads_(0u), clock_step_(0u), clock_reader_(nullptr),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), timeouts_while_beating_(0u), timeouts_while_pulsing_(0u), timeout_faulted_(false), timeouts_silent_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
-      answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
+      answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_too_large_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbell_page_missing_(0u), doorbells_{},
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
@@ -880,6 +880,14 @@ void MockKmt::write_answer(const Object &context)
 {
     if (queued_taken_ < queued_count_) {
         const std::uint32_t index = queued_taken_++;
+        if (queued_too_large_[index] != 0u) {
+            SubmissionDescriptor submitted;
+            if (context.reply_memory != nullptr && submitted.decode(submission_, submission_size_) == Status::ok)
+                static_cast<void>(ReplyHeader(submitted.fence_id(), queued_too_large_[index])
+                                      .within(0u)
+                                      .encode(context.reply_memory, ReplyHeader::encoded_size));
+            return;
+        }
         write_bytes(context, queued_[index], queued_sizes_[index]);
         return;
     }
@@ -1288,6 +1296,18 @@ void MockKmt::queue_answer(const std::uint8_t *answer, std::uint32_t size)
     const std::uint32_t kept = size < max_answer ? size : max_answer;
     for (std::uint32_t i = 0u; i < kept; i++) queued_[queued_count_][i] = answer[i];
     queued_sizes_[queued_count_] = kept;
+    queued_too_large_[queued_count_] = 0u;
+    queued_count_++;
+}
+
+void MockKmt::queue_too_large(std::uint32_t required)
+{
+    if (queued_count_ == max_queued) {
+        misuses_++;
+        return;
+    }
+    queued_sizes_[queued_count_] = 0u;
+    queued_too_large_[queued_count_] = required;
     queued_count_++;
 }
 

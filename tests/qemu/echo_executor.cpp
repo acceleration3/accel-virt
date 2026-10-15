@@ -127,6 +127,9 @@ struct Executor {
     /* The ordinal of the executor it shares objects with, or 0. */
     std::uint64_t     shares;
     bool              lost;
+    /* The last echo too long for its reply, kept for answer_part. */
+    std::uint8_t     *kept;
+    std::size_t       kept_length;
 };
 
 Executor *executor_of(AvExecutor *handle) { return static_cast<Executor *>(static_cast<void *>(handle)); }
@@ -257,7 +260,31 @@ AvExecutor *create(void *opaque, std::uint32_t sub_api, const AvContextOptions *
     return made;
 }
 
-void destroy(void *, AvExecutor *handle) { std::free(handle); }
+void destroy(void *, AvExecutor *handle)
+{
+    std::free(executor_of(handle)->kept);
+    std::free(handle);
+}
+
+/* An echo longer than the reply, as a library keeps an answer (answer_part). */
+void keep(Executor *executor, const std::uint8_t *payload, std::size_t size)
+{
+    executor->kept = static_cast<std::uint8_t *>(std::malloc(size));
+    if (executor->kept != nullptr) std::memcpy(executor->kept, payload, size);
+    executor->kept_length = executor->kept != nullptr ? size : 0u;
+}
+
+std::size_t answer_part(void *, AvExecutor *handle, std::uint64_t offset, std::uint8_t *out, std::size_t capacity,
+                        std::uint64_t *length)
+{
+    const Executor *const executor = executor_of(handle);
+    *length = executor->kept_length;
+    if (offset >= executor->kept_length) return 0u;
+    const std::size_t left = executor->kept_length - static_cast<std::size_t>(offset);
+    const std::size_t copied = left < capacity ? left : capacity;
+    std::memcpy(out, executor->kept + offset, copied);
+    return copied;
+}
 
 std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::uint8_t *payload, std::size_t size,
                       std::uint8_t *reply, std::size_t capacity, std::size_t *reply_size)
@@ -266,6 +293,9 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     executor->one_thread = executor->one_thread && pthread_equal(executor->thread, pthread_self()) != 0;
     *reply_size = 0u;
     if (executor->lost) return AV_DEVICE_LOST;
+    std::free(executor->kept);
+    executor->kept = nullptr;
+    executor->kept_length = 0u;
     /* The host taking too long, and the host losing the device: what a guest
      * cannot ask for and a test has to be able to produce. Either is aimed at
      * one executor where the run named one, so that what happens to a context
@@ -279,6 +309,7 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     case echo:
         *reply_size = size;
         if (size <= capacity && size != 0u) std::memcpy(reply, payload, size);
+        if (size > capacity && reply != nullptr) keep(executor, payload, size);
         break;
     case undecodable: return AV_UNDECODABLE;
     case lose_device: return AV_DEVICE_LOST;
@@ -519,7 +550,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               export_surface,
                               sync_surface,
                               nullptr,
-                              lose_executor_device};
+                              lose_executor_device,
+                              answer_part};
 
 }  // namespace
 

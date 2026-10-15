@@ -4,7 +4,12 @@
  * answer (it is the batch's last), and when the owner flushes. A command a
  * call at a time was a batch, a fence and a publish of the tail each; an
  * OpenGL application's thousands of calls a frame waited on the host taking
- * them one at a time. */
+ * them one at a time.
+ *
+ * A command longer than the room it was lent spills into the inner
+ * transport's memory and is framed in pieces behind what is held, the block
+ * going out whenever it fills (docs/protocol.md, "Long commands"), so a
+ * caller-sized argument is never refused for its size. */
 #ifndef AV_ICD_BATCHED_TRANSPORT_HPP
 #define AV_ICD_BATCHED_TRANSPORT_HPP
 
@@ -42,6 +47,8 @@ public:
 
 private:
     TransportResult append(uint32_t command_id, WireWriter &writer, uint8_t flags);
+    /* A writer that spilled, framed piece by piece. */
+    TransportResult append_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);
 
     KmtTransport &inner_;
     FramedBlock   framed_;

@@ -21,7 +21,7 @@ BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports 
                              FenceReporter &fences, WireRecorder &recorder, uint32_t context)
     : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences),
       recorder_(recorder), context_(context), fault_(FaultCode::none), reply_(),
-      batches_(0u), commands_(0u), skipped_(0u)
+      batches_(0u), commands_(0u), skipped_(0u), gathered_(host)
       {
           AV_SCOPE("BatchExecutor::BatchExecutor");
       }
@@ -52,6 +52,7 @@ void BatchExecutor::stop()
     AV_SCOPE("BatchExecutor::stop");
     host_.require_worker("BatchExecutor::stop");
     executor_.destroy();
+    gathered_.clear();
 }
 
 bool BatchExecutor::started() const
@@ -152,6 +153,37 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
         fault_ = FaultCode::command_framing;
         return Status::malformed;
     }
+    const size_t length = header.size() - CommandHeader::encoded_size;
+    const bool   transport = header.api() == CommandHeader::transport_api;
+    const bool   piece = transport && header.id() == CommandHeader::piece_id;
+    /* Pieces are followed by their own command and nothing else, and a piece
+     * asks for no answer: the command it is part of does. */
+    if ((piece && header.generates_reply()) ||
+        (gathered_.gathering() && !piece && (transport || header.api() != executor_.command_api()))) {
+        gathered_.clear();
+        fault_ = FaultCode::command_framing;
+        return Status::malformed;
+    }
+    if (piece || gathered_.gathering()) {
+        const uint8_t *whole = nullptr;
+        size_t         size = 0u;
+        const Status   held = piece ? gathered_.gather(payload, length) : gathered_.close(payload, length, whole, size);
+        if (held != Status::ok) {
+            fault_ = FaultCode::undecodable;
+            return Status::malformed;
+        }
+        if (piece) return Status::ok;
+        const Status ran = run_whole(header, whole, size, answered, answer);
+        gathered_.clear();
+        return ran;
+    }
+    return run_whole(header, payload, length, answered, answer);
+}
+
+Status BatchExecutor::run_whole(const CommandHeader &header, const uint8_t *payload, size_t size, bool &answered,
+                                size_t &answer)
+{
+    AV_SCOPE("BatchExecutor::run_whole");
     const bool transport = header.api() == CommandHeader::transport_api;
     if (!transport && header.api() != executor_.command_api()) {
         skipped_++;
@@ -163,8 +195,7 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
     size_t         produced = 0u;
     const Status   status =
         transport ? TransportCommand(imports_, executor_, header, payload).run(reply, capacity, produced)
-                  : executor_.execute(header.id(), payload, header.size() - CommandHeader::encoded_size, reply,
-                                      capacity, produced);
+                  : executor_.execute(header.id(), payload, size, reply, capacity, produced);
     if (status == Status::not_found) {
         skipped_++;
         return Status::ok;

@@ -145,7 +145,7 @@ void ExecutorConformance::check_table()
                 ops_->share_object != nullptr && ops_->open_object != nullptr && ops_->close_object != nullptr &&
                 ops_->release_shared != nullptr && ops_->read_image != nullptr && ops_->export_image != nullptr &&
                 ops_->map_frame != nullptr && ops_->unmap_frame != nullptr && ops_->export_surface != nullptr &&
-                ops_->sync_surface != nullptr,
+                ops_->sync_surface != nullptr && ops_->answer_part != nullptr,
             "the table is missing an operation");
     /* compose_planes alone may be null: a device never offers composing
      * where it is. */

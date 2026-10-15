@@ -32,7 +32,7 @@ bool ExecutorLibrary::complete(const AvExecutorOps &ops) const
            ops.imported_handle != nullptr && ops.share_object != nullptr && ops.open_object != nullptr &&
            ops.close_object != nullptr && ops.release_shared != nullptr && ops.read_image != nullptr &&
            ops.export_image != nullptr && ops.map_frame != nullptr && ops.unmap_frame != nullptr &&
-           ops.export_surface != nullptr && ops.sync_surface != nullptr;
+           ops.export_surface != nullptr && ops.sync_surface != nullptr && ops.answer_part != nullptr;
 }
 
 bool ExecutorLibrary::available() const
@@ -153,6 +153,14 @@ void ExecutorLibrary::release_blob(AvExecutor *executor, uint64_t blob_id) const
 {
     AV_SCOPE("ExecutorLibrary::release_blob");
     ops_->release_blob(ops_->opaque, executor, blob_id);
+}
+
+size_t ExecutorLibrary::answer_part(AvExecutor *executor, uint64_t offset, uint8_t *out, size_t capacity,
+                                    uint64_t &length) const
+{
+    AV_SCOPE("ExecutorLibrary::answer_part");
+    length = 0u;
+    return ops_->answer_part(ops_->opaque, executor, offset, out, capacity, &length);
 }
 
 uint64_t ExecutorLibrary::imported_handle(AvExecutor *executor, uint64_t blob_id) const
