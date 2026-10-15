@@ -44,6 +44,7 @@ public:
     Status   place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;
     void     remove_from_hostmem(uint64_t offset, uint64_t size) override;
     uint64_t monotonic_nanoseconds() override;
+    void     fence_stores() override;
     Status   bind_gpu(uint32_t index) override;
     void     connect_doorbell(void *event, uint32_t index) override;
     void     disconnect_doorbell(void *event, uint32_t index) override;

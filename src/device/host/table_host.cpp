@@ -259,6 +259,14 @@ uint64_t TableHost::monotonic_nanoseconds()
     return ops_.monotonic_nanoseconds(ops_.opaque);
 }
 
+/* The instruction, not the glue's: it orders this thread's own stores, which
+ * no call into QEMU could. */
+void TableHost::fence_stores()
+{
+    AV_SCOPE("TableHost::fence_stores");
+    __builtin_ia32_sfence();
+}
+
 Status TableHost::bind_gpu(uint32_t index)
 {
     AV_SCOPE("TableHost::bind_gpu");

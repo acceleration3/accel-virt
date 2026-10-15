@@ -390,6 +390,12 @@ uint64_t PosixRendererHost::monotonic_nanoseconds()
     return static_cast<uint64_t>(now.tv_sec) * nanoseconds_per_second + static_cast<uint64_t>(now.tv_nsec);
 }
 
+void PosixRendererHost::fence_stores()
+{
+    AV_SCOPE("PosixRendererHost::fence_stores");
+    __builtin_ia32_sfence();
+}
+
 void *PosixRendererHost::allocate(size_t bytes)
 {
     AV_SCOPE("PosixRendererHost::allocate");

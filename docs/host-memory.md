@@ -85,6 +85,18 @@ snoop they read stale data.
   writes stay in the CPU's caches while the GPU reads, or writes, the memory
   underneath.
 
+**The source's own mapping is the driver's to choose.** It maps with
+`vkMapMemory`, and ANV maps every exported allocation write-combined on a GPU
+that shares the CPU's last-level cache, a `HOST_CACHED` type included: on the
+Iris Xe the readback arena reads at 1 MiB in 26.7 ms through it, against 0.2 ms
+of private memory, while the guest maps it write-back. Whatever the executor's
+host drivers copy into the guest's memory through it is write-combined, and x86
+does not order a write-combined store before a later write-back one. So the
+device fences its stores (`Host::fence_stores`) after a batch's last command
+and before its answer, head and fence: without it the guest took an OpenCL
+rectangle read's answer while the rows were still in the host core's buffers,
+and read what the arena held before.
+
 ### One allocation per request
 
 A Vulkan allocation, a Direct3D 12 heap and an API's arena are each one

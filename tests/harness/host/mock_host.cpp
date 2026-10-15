@@ -69,6 +69,8 @@ MockHost::~MockHost()
                                     violation_names[kind]);
     if (live_threads() != 0u) registry.record_failure(__FILE__, __LINE__, "%u thread(s) never joined", live_threads());
     if (live_events() != 0u) registry.record_failure(__FILE__, __LINE__, "%u event(s) leaked", live_events());
+    if (held_count_ != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u held store(s) never fenced", held_count_);
     if (live_mutexes() != 0u) registry.record_failure(__FILE__, __LINE__, "%u mutex(es) leaked", live_mutexes());
     if (work_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u main loop routine(s) never ran", work_count_);
@@ -368,6 +370,48 @@ std::uint32_t MockHost::doorbell_of(void *event)
     for (std::uint32_t index = 0u; index < max_doorbells; index++)
         if (doorbells_[index] == event) return index;
     return max_doorbells;
+}
+
+void MockHost::fence_stores()
+{
+    StateLock lock(state_);
+    store_fences_++;
+    if (held_count_ == 0u) return;
+    for (std::uint32_t store = 0u; store < held_count_; store++)
+        std::memcpy(held_stores_[store].at, held_stores_[store].bytes, held_stores_[store].size);
+    held_count_ = 0u;
+    if (watched_ != nullptr) std::memcpy(&watched_when_landed_, watched_, sizeof watched_when_landed_);
+}
+
+void MockHost::hold_store(void *at, const void *bytes, std::size_t size)
+{
+    StateLock lock(state_);
+    if (held_count_ == max_held_stores || size > max_held_bytes) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "hold_store: %zu bytes past what is held", size);
+        return;
+    }
+    HeldStore &held = held_stores_[held_count_++];
+    held.at = at;
+    held.size = size;
+    std::memcpy(held.bytes, bytes, size);
+}
+
+void MockHost::watch(const void *word)
+{
+    StateLock lock(state_);
+    watched_ = word;
+}
+
+std::uint32_t MockHost::store_fences()
+{
+    StateLock lock(state_);
+    return store_fences_;
+}
+
+std::uint64_t MockHost::watched_when_landed()
+{
+    StateLock lock(state_);
+    return watched_when_landed_;
 }
 
 std::uint64_t MockHost::monotonic_nanoseconds()
