@@ -10,6 +10,7 @@
 #include "proto/submission/fence_page.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::CapsetQuery;
 using av::CommandHeader;
@@ -26,6 +27,18 @@ constexpr std::uint64_t head_offset = 16u;
 std::uint8_t *page_of(LoopbackRig &rig, std::uint32_t index)
 {
     return const_cast<std::uint8_t *>(rig.context(index).fence_page());
+}
+
+/* `page` written as the context's worker would write a lie: its bytes before
+ * the beat, which is the device's pulse's alone and may be moving under the
+ * test - a whole page written over it could carry a beat that went backwards,
+ * which is a different lie. */
+Status forge_page(LoopbackRig &rig, std::uint32_t index, const FencePage &page)
+{
+    std::uint8_t encoded[FencePage::encoded_size] = {};
+    const Status status = page.encode(encoded, sizeof encoded);
+    if (status == Status::ok) std::memcpy(page_of(rig, index), encoded, FencePage::beat_at);
+    return status;
 }
 
 /* A context established, one batch completed on it: the ring's tail. */
@@ -103,20 +116,20 @@ TEST(loopback_hostile_device, a_fence_page_that_lies_fails_the_context)
 { LoopbackRig rig;
   CHECK(rig.read_capset());
   static_cast<void>(completed_once(rig, 0u));
-  CHECK_STATUS(FencePage(0u, 0u).encode(page_of(rig, 0u), FencePage::encoded_size), Status::ok);   /* backwards */
+  CHECK_STATUS(forge_page(rig, 0u, FencePage(0u, 0u)), Status::ok);   /* backwards */
   CHECK(rig.serve(0u) != Status::ok);
   CHECK(rig.context(0u).state() == GuestContext::State::failed);
   CHECK(rig.retire(0u));
   static_cast<void>(completed_once(rig, 0u));
-  CHECK_STATUS(FencePage(5u, 3u).encode(page_of(rig, 0u), FencePage::encoded_size), Status::ok);   /* unsubmitted */
+  CHECK_STATUS(forge_page(rig, 0u, FencePage(5u, 3u)), Status::ok);   /* unsubmitted */
   CHECK(rig.serve(0u) != Status::ok);
   CHECK(rig.context(0u).state() == GuestContext::State::failed);
   CHECK(rig.retire(0u));
   static_cast<void>(completed_once(rig, 0u));
-  CHECK_STATUS(FencePage(1u, 2u, 3u).encode(page_of(rig, 0u), FencePage::encoded_size), Status::ok);
+  CHECK_STATUS(forge_page(rig, 0u, FencePage(1u, 2u, 3u)), Status::ok);
   CHECK_STATUS(rig.serve(0u), Status::ok);
   CHECK(rig.context(0u).faulted());
-  CHECK_STATUS(FencePage(1u, 2u).encode(page_of(rig, 0u), FencePage::encoded_size), Status::ok);   /* fault cleared */
+  CHECK_STATUS(forge_page(rig, 0u, FencePage(1u, 2u)), Status::ok);   /* fault cleared */
   CHECK(rig.serve(0u) != Status::ok);
   CHECK(rig.context(0u).state() == GuestContext::State::failed);
   CHECK(rig.context(0u).invariants_hold());
