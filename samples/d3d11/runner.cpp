@@ -98,6 +98,39 @@ bool capture(Gpu &gpu, const char *path)
     return written;
 }
 
+// What a run of frames took: how many, and the time spent recording them
+// apart from the time spent waiting for the GPU to finish them.
+struct Frames {
+    uint32_t count = 0;
+    double   recording = 0.0;
+};
+
+/* Blocks of `block` frames, each finished before the next is recorded, until
+ * at least `least` frames are drawn and `minimum` seconds have gone. A Flush
+ * alone holds nothing back: a frame records in microseconds, so a loop timed
+ * on the CPU alone queues work for minutes on a slow GPU (measured: a
+ * one-second warm-up queued 168,000 frames of triangle, 82 s of work on a
+ * Radeon 610M). Frame n is drawn at time (n % cycle) steps, or n steps for a
+ * cycle of 0. */
+Frames render_blocks(Sample &sample, Gpu &gpu, uint32_t block, uint32_t least, double minimum, uint32_t cycle)
+{
+    const float  step = 1.0f / 60.0f;
+    const double from = seconds();
+    const uint32_t size = block != 0 ? block : 1;
+    Frames frames;
+    do {
+        const double started = seconds();
+        for (uint32_t frame = 0; frame < size; frame++, frames.count++) {
+            const uint32_t at = cycle != 0 ? frames.count % cycle : frames.count;
+            sample.render(gpu, static_cast<float>(at) * step);
+            gpu.context->Flush();
+        }
+        frames.recording += seconds() - started;
+        finish(gpu);
+    } while (frames.count < least || seconds() - from < minimum);
+    return frames;
+}
+
 void report(char *metrics, size_t capacity, const char *name, const char *status, double init_ms, uint32_t frames,
             double seconds_taken)
 {
@@ -130,36 +163,18 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         sample.release();
         return;
     }
-    const float step = 1.0f / 60.0f;
     /* The GPU's clocks climb over the first few hundred milliseconds of load,
      * so the warm-up runs for a time as well as a count: otherwise whichever
      * run followed another on a warm GPU looks faster than the one that did
-     * not. */
-    const double warm_from = seconds();
-    for (uint32_t frame = 0; frame < options.warmup || seconds() - warm_from < options.warmup_seconds; frame++) {
-        sample.render(gpu, static_cast<float>(frame % (options.warmup != 0 ? options.warmup : 1)) * step);
-        gpu.context->Flush();
-    }
-    finish(gpu);
-    /* Blocks of the frames asked for, each finished, until a second has gone:
-     * a run of a few milliseconds measures whatever else the machine did
-     * then, and a Flush alone holds nothing back - a machine can queue a
-     * minute of frames in a second. */
+     * not. Its frames replay the first `warmup` frames' times. */
+    render_blocks(sample, gpu, options.warmup, options.warmup, options.warmup_seconds, options.warmup);
+    /* Blocks of the frames asked for until a second has gone: a run of a few
+     * milliseconds measures whatever else the machine did then. */
     const double timed = seconds();
-    uint32_t     frames = 0;
-    double       looped = 0.0;
-    do {
-        const double block = seconds();
-        for (uint32_t frame = 0; frame < options.frames; frame++, frames++) {
-            sample.render(gpu, static_cast<float>(frames) * step);
-            gpu.context->Flush();
-        }
-        looped += seconds() - block;
-        finish(gpu);
-    } while (seconds() - timed < options.timed_seconds);
+    const Frames frames = render_blocks(sample, gpu, options.frames, options.frames, options.timed_seconds, 0);
     const double taken = seconds() - timed;
-    log_number("loop ms", looped * 1000.0);
-    log_number("finish ms", (taken - looped) * 1000.0);
+    log_number("loop ms", frames.recording * 1000.0);
+    log_number("finish ms", (taken - frames.recording) * 1000.0);
     /* Twice: a sample that shows what its previous frame measured - the
      * occlusion counts - then shows the capture time's own, however many
      * frames each machine managed before it. */
@@ -173,10 +188,22 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     append_text(path, sizeof path, sample.name());
     append_text(path, sizeof path, ".bgra");
     const bool captured = !gpu.failed && capture(gpu, path);
-    report(metrics, capacity, sample.name(), captured ? "ok" : "capture-failed", init_ms, frames, taken);
+    report(metrics, capacity, sample.name(), captured ? "ok" : "capture-failed", init_ms, frames.count, taken);
     sample.release();
     gpu.context->ClearState();
     gpu.context->Flush();
+}
+
+// Written again after every sample: a run stopped partway still says what it
+// measured, and which sample it never finished.
+void save_metrics(const Options &options, const char *metrics)
+{
+    char path[512] = {};
+    copy_text(path, sizeof path, options.out);
+    append_text(path, sizeof path, "/metrics.tsv");
+    size_t length = 0;
+    while (metrics[length] != '\0') length++;
+    write_file(path, metrics, length);
 }
 
 }  // namespace
@@ -206,18 +233,14 @@ int run(int argc, const char *const *argv)
     const size_t capacity = 64u * 1024u;
     char *metrics = static_cast<char *>(allocate(capacity));
     copy_text(metrics, capacity, "sample\tstatus\tinit_ms\tframes\tms\tfps\n");
+    save_metrics(options, metrics);
     uint32_t count = 0;
     Sample **all = registry(count);
     for (uint32_t index = 0; index < count; index++) {
         if (options.only != nullptr && !same_text(options.only, all[index]->name())) continue;
         run_sample(*all[index], gpu, options, metrics, capacity);
+        save_metrics(options, metrics);
     }
-    char path[512] = {};
-    copy_text(path, sizeof path, options.out);
-    append_text(path, sizeof path, "/metrics.tsv");
-    size_t length = 0;
-    while (metrics[length] != '\0') length++;
-    write_file(path, metrics, length);
     release_memory(metrics);
     safe_release(gpu.target);
     safe_release(gpu.depth);
