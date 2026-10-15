@@ -12,7 +12,7 @@
 namespace av {
 
 MockSessionBackend::MockSessionBackend()
-    : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), adopts_(true),
+    : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), losable_(true), adopts_(true),
       shares_(true), exported_objects_(0u), imported_objects_(0u), released_objects_(0u),
       descriptor_(-1), signal_(nullptr), signal_context_(nullptr), during_export_(nullptr),
       during_export_context_(nullptr)
@@ -55,6 +55,17 @@ bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, Wire
 }
 
 bool MockSessionBackend::lost() const { return lost_; }
+
+bool MockSessionBackend::lose_device()
+{
+    if (!losable_) return false;
+    lost_ = true;
+    return true;
+}
+
+void MockSessionBackend::set_losable(bool losable) { losable_ = losable; }
+
+void MockSessionBackend::lose_elsewhere() { lost_ = true; }
 
 void MockSessionBackend::end_batch() {}
 

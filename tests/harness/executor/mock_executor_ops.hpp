@@ -58,6 +58,14 @@ public:
     /* Calls it, as a host API's own thread would. False when nothing is
      * bound. */
     bool              fire_signal();
+    /* The one host device every executor here runs on, lost: by lose_device,
+     * which a test's LOSE_HOST_DEVICE reaches, or by lose_host_device, as a
+     * fault another context found. Every poll answers AV_POLL_LOST from then
+     * on. With set_losable(false), lose_device answers AV_UNKNOWN, as a host
+     * without the loss layer does. */
+    void              lose_host_device();
+    void              set_losable(bool losable);
+    std::uint32_t     losses();
     AvContextOptions last_options();
     AvExecutor      *last_share();
     bool              last_share_live();
@@ -253,6 +261,9 @@ private:
     std::uint32_t              withhold_handle_;
     std::uint64_t              answered_handle_;
     std::uint32_t              option_creates_;
+    std::atomic<bool>          host_lost_{false};
+    std::atomic<bool>          losable_{true};
+    std::atomic<std::uint32_t> losses_{0u};
     std::uint32_t              signals_set_;
     void                     (*signal_)(void *context);
     void                      *signal_context_;

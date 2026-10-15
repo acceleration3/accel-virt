@@ -34,8 +34,11 @@ extern "C" {
  * domain it opens, and the library publishes, opens and releases them. 20
  * made the library the source of every byte the guest CPU and a host GPU
  * share (docs/host-memory.md): the device asks it for memory and maps what it
- * answers into the host window, and an import names that memory. */
-#define AV_EXECUTOR_ABI_VERSION 20u
+ * answers into the host window, and an import names that memory. 21 made a
+ * host device's loss something poll says, so an idle context is faulted
+ * when the device it runs on is lost rather than at its next command, and
+ * gave the device lose_device, which a test's GPU fault is made through. */
+#define AV_EXECUTOR_ABI_VERSION 21u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -49,6 +52,11 @@ extern "C" {
 #define AV_UNKNOWN 1u          /* a command id this library does not know: skipped */
 #define AV_UNDECODABLE 2u      /* the payload does not decode */
 #define AV_DEVICE_LOST 3u      /* the host API lost its device: nothing more will run */
+
+/* What poll answers. */
+#define AV_POLL_IDLE 0u        /* nothing left to publish */
+#define AV_POLL_PENDING 1u     /* still waiting on the GPU for something to publish */
+#define AV_POLL_LOST 2u        /* the host device is lost: the device faults the context, code 7 */
 
 /* How the host maps memory allocate_memory answers, which is how the guest
  * must map it too: one page seen through two cache types reads stale data
@@ -203,8 +211,12 @@ typedef struct AvExecutorOps {
      * rather than taking it per command. */
     void (*end_batch)(void *opaque, AvExecutor *executor);
     /* Between batches, on the context's worker: the executor writes what the
-     * host GPU now has for the guest to read in its own memory. 1 while it
-     * still waits on the GPU for some of it, 0 when nothing is left. */
+     * host GPU now has for the guest to read in its own memory.
+     * AV_POLL_PENDING while it still waits on the GPU for some of it,
+     * AV_POLL_IDLE when nothing is left, and AV_POLL_LOST once the host
+     * device the executor runs on is lost - whoever noticed it, this
+     * executor or another on the same device, which then woke this one
+     * through `signal` (set_signal) so an idle context hears it too. */
     uint32_t (*poll)(void *opaque, AvExecutor *executor);
     /* On the context's worker, after a batch or between batches: the mark the
      * latest GPU work was given, and the highest mark everything up to which
@@ -310,6 +322,13 @@ typedef struct AvExecutorOps {
      * cannot compose, which a device then never offers. Main loop. */
     uint32_t (*compose_planes)(void *opaque, uint32_t domain, const AvScanoutPlane *planes, uint32_t count,
                                uint32_t width, uint32_t height, AvExportedImage *image);
+    /* For tests: the host device `executor` runs on made lost, as a GPU
+     * fault would lose it - every executor on that device then answers
+     * AV_POLL_LOST and AV_DEVICE_LOST. AV_EXECUTED, or AV_UNKNOWN where the
+     * host cannot lose one on purpose, which is everywhere a Vulkan layer
+     * that loses devices on request is not loaded (tests/gpu_fault). Null in
+     * a library that never can. Runs on the context's worker. */
+    uint32_t (*lose_device)(void *opaque, AvExecutor *executor);
 } AvExecutorOps;
 
 typedef const AvExecutorOps *(*AvExecutorOpsFunction)(void);

@@ -27,6 +27,10 @@
 //
 // Anything else is AV_UNKNOWN. With AV_ECHO_FAIL_CREATE set, create fails.
 //
+// Version 21: lose_device loses the executor's device, as the loss layer
+// loses a real one (tests/gpu_fault): poll answers AV_POLL_LOST and every
+// command AV_DEVICE_LOST from then on.
+//
 // Version 15 (docs/external-export.md): every surface the guest has not
 // released is shared, so the device's export socket can be judged without a
 // GPU. export_surface answers a memfd of 64x64 B8G8R8A8 pixels, linear, whose
@@ -122,6 +126,7 @@ struct Executor {
     AvContextOptions options;
     /* The ordinal of the executor it shares objects with, or 0. */
     std::uint64_t     shares;
+    bool              lost;
 };
 
 Executor *executor_of(AvExecutor *handle) { return static_cast<Executor *>(static_cast<void *>(handle)); }
@@ -260,6 +265,7 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     auto *const executor = static_cast<Executor *>(static_cast<void *>(handle));
     executor->one_thread = executor->one_thread && pthread_equal(executor->thread, pthread_self()) != 0;
     *reply_size = 0u;
+    if (executor->lost) return AV_DEVICE_LOST;
     /* The host taking too long, and the host losing the device: what a guest
      * cannot ask for and a test has to be able to produce. Either is aimed at
      * one executor where the run named one, so that what happens to a context
@@ -383,7 +389,17 @@ std::uint32_t open_domain(void *, const std::uint8_t *) { return __atomic_add_fe
 void          close_domain(void *, std::uint32_t) {}
 
 void          end_batch(void *, AvExecutor *) {}
-std::uint32_t poll(void *, AvExecutor *) { return 0u; }
+std::uint32_t poll(void *, AvExecutor *handle)
+{
+    return handle != nullptr && executor_of(handle)->lost ? AV_POLL_LOST : AV_POLL_IDLE;
+}
+
+std::uint32_t lose_executor_device(void *, AvExecutor *handle)
+{
+    if (handle == nullptr) return AV_UNKNOWN;
+    executor_of(handle)->lost = true;
+    return AV_EXECUTED;
+}
 void          gpu_progress(void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached)
 {
     *marked = 0u;
@@ -502,7 +518,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
-                              nullptr};
+                              nullptr,
+                              lose_executor_device};
 
 }  // namespace
 

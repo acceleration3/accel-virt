@@ -223,7 +223,15 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         return AV_EXECUTED;
     };
     table_.end_batch = [](void *, AvExecutor *) {};
-    table_.poll = [](void *, AvExecutor *) -> std::uint32_t { return 0u; };
+    table_.poll = [](void *opaque, AvExecutor *) -> std::uint32_t {
+        return mock_of(opaque).host_lost_.load() ? AV_POLL_LOST : AV_POLL_IDLE;
+    };
+    table_.lose_device = [](void *opaque, AvExecutor *) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (!mock.losable_.load()) return AV_UNKNOWN;
+        mock.lose_host_device();
+        return AV_EXECUTED;
+    };
     table_.gpu_progress = [](void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached) {
         *marked = 0u;
         *reached = 0u;
@@ -533,6 +541,16 @@ std::uint32_t MockExecutorOps::signals_set()
 }
 
 bool MockExecutorOps::signal_bound() const { return signal_ != nullptr; }
+
+void MockExecutorOps::lose_host_device()
+{
+    host_lost_.store(true);
+    losses_.fetch_add(1u);
+}
+
+void MockExecutorOps::set_losable(bool losable) { losable_.store(losable); }
+
+std::uint32_t MockExecutorOps::losses() { return losses_.load(); }
 
 bool MockExecutorOps::fire_signal()
 {

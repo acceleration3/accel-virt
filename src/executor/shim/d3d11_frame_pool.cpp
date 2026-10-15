@@ -124,7 +124,9 @@ StagedFrame::Reading D3d11FramePool::Frame::read(AvFrameView &view)
 {
     AV_SCOPE("D3d11FramePool::Frame::read");
     device_->lock(nullptr);
-    if (!staged_ && !copy_to_staging()) {
+    /* A frame of a device that was lost - or lost and made again, which let
+     * its textures go - is never copied. */
+    if (held_ == nullptr || device_->lost() || (!staged_ && !copy_to_staging())) {
         device_->unlock();
         return Reading::failed;
     }

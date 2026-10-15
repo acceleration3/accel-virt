@@ -60,10 +60,10 @@ bool BatchExecutor::started() const
     return executor_.created();
 }
 
-bool BatchExecutor::poll()
+HostPoll BatchExecutor::poll()
 {
     AV_SCOPE("BatchExecutor::poll");
-    return executor_.created() && executor_.poll();
+    return executor_.poll();
 }
 
 void BatchExecutor::gpu_progress(uint64_t &marked, uint64_t &reached) const

@@ -219,6 +219,12 @@ void OpenClBackend::end_batch()
     AV_SCOPE("OpenClBackend::end_batch");
 }
 
+bool OpenClBackend::lose_device()
+{
+    AV_SCOPE("OpenClBackend::lose_device");
+    return false;
+}
+
 bool OpenClBackend::lost() const
 {
     AV_SCOPE("OpenClBackend::lost");

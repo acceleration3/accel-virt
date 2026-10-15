@@ -220,6 +220,12 @@ void OpenGlBackend::publish_errors()
     static_cast<void>(region_.publish(region_.length() - sizeof(uint64_t), errors_.word()));
 }
 
+bool OpenGlBackend::lose_device()
+{
+    AV_SCOPE("OpenGlBackend::lose_device");
+    return false;
+}
+
 bool OpenGlBackend::lost() const
 {
     AV_SCOPE("OpenGlBackend::lost");

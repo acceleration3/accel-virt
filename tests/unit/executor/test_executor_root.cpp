@@ -641,6 +641,22 @@ TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothi
   CHECK_EQ(opened.root().live(), 0u);
   CHECK(opened.root().invariants_hold()); }
 
+/* A test's GPU fault reaches the session it names, and nothing else: a
+ * stranger's or a null is not this root's to lose, and a Vulkan session that
+ * has made no device yet has no host device to lose. */
+TEST(executor_root_lose_device, only_a_session_with_a_host_device_this_root_made_loses_one)
+{ Opened opened;
+  CHECK_STATUS(opened.status(), Status::ok);
+  ContextSession stranger;
+  CHECK_EQ(opened.root().lose_device(nullptr), std::uint32_t{AV_UNKNOWN});
+  CHECK_EQ(opened.root().lose_device(&stranger), std::uint32_t{AV_UNKNOWN});
+  ContextSession *const session = opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
+  CHECK(session != nullptr);
+  CHECK_EQ(opened.root().lose_device(session), std::uint32_t{AV_UNKNOWN});
+  CHECK_EQ(session->poll(), std::uint32_t{AV_POLL_IDLE});
+  opened.root().close(session);
+  CHECK(opened.root().invariants_hold()); }
+
 /* Feature 053: share, open and close reach the domain's shares as the session
  * that asked, and only for a session this root handed out that has not
  * faulted. The device's pointer is all the ABI gives to tell them apart, so a

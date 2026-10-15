@@ -5,6 +5,7 @@
 #define AV_CONTEXT_EXECUTOR_HPP
 
 #include "core/support/status.hpp"
+#include "device/execution/host_poll.hpp"
 #include "device/abi/av_executor.h"
 #include "proto/context/device_uuid.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -51,7 +52,8 @@ public:
      * invalid_state for a lost device, an answer no library may give, or no
      * executor. */
     void                 end_batch();
-    bool                 poll();
+    /* Worker: idle without an executor. */
+    HostPoll             poll();
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
     [[nodiscard]] Status execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                                  size_t reply_capacity, size_t &reply_size);
@@ -73,6 +75,10 @@ public:
      * context's, with `wire_handle` what the guest names it by. Same answers
      * as share_object. */
     [[nodiscard]] Status open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle);
+    /* Worker. The host device this context runs on made lost, for a test
+     * (AvExecutorOps::lose_device): invalid_state without an executor,
+     * not_supported where the host cannot. */
+    [[nodiscard]] Status lose_device();
     /* Worker. What open_object made of `object_id` let go of. Nothing
      * without an executor: destroying it closed everything it opened. */
     void                 close_object(uint64_t object_id);

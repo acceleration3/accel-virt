@@ -13,13 +13,24 @@
  * running a command - a swap only when the session changes, which is rare
  * inside a batch. Made once, at realize, because DXVK's device creation
  * costs a pipeline cache load that must not land inside a guest's first
- * batch (dxgkrnl's timeout, feature 044). */
+ * batch (dxgkrnl's timeout, feature 044).
+ *
+ * Shared, it is lost for all of them at once: a GPU fault that loses DXVK's
+ * Vulkan device takes every session on it, DWM's among them. Each session is
+ * a tenant (DeviceTenants), woken the first time anyone sees the loss, so its
+ * context is faulted and the guest's devices are removed; the scanout's own
+ * reads refuse from then on. The device is made again in place, when the next
+ * session asks for it, once the last tenant of the old one has gone - what
+ * the shares, the composer and the frames held of the old device let go of
+ * first - so the guest's next devices, DWM's new one among them, run. */
 #ifndef AV_D3D11_HOST_DEVICE_HPP
 #define AV_D3D11_HOST_DEVICE_HPP
 
 #include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
+#include "executor/device_tenants.hpp"
 #include "executor/shim/d3d11_capabilities.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "executor/shim/d3d11_frame_pool.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/exportable_images.hpp"
@@ -52,6 +63,7 @@ class StateWriter;
 class CompositorDevice;
 class D3d12HostDevice;
 class Vkd3dImageExport;
+class WakeSignal;
 
 class D3d11HostDevice {
 public:
@@ -66,6 +78,31 @@ public:
     [[nodiscard]] bool open(const D3dRuntime &runtime, const uint8_t *uuid, HostShares &shares);
     void               close();
     bool               opened() const;
+    /* Whether open found the GPU: a device lost, or one renew could not
+     * make again, still stands for it. */
+    bool               placed() const;
+
+    /* A session joins the device, woken through `wake` should it be lost:
+     * false for a device lost and not yet made again (renew), or one not
+     * made. A session's own thread. */
+    [[nodiscard]] bool admit(WakeSignal &wake);
+    void               dismiss(WakeSignal &wake);
+    /* Whether the device is lost: since DXVK first said so
+     * (GetDeviceRemovedReason) - whoever looked first then woke every
+     * session on it - until renew made it again. A session's thread, or one
+     * holding the lock. */
+    bool               lost();
+    /* A lost device made again: the last session on it waited for, up to
+     * `wait_ms`, then everything of the old device let go of - what the
+     * shares held, the composer's, the export slots', the frames' - and
+     * DXVK's device made anew on the same GPU. True for a device not lost,
+     * or made again; false while a session stays on the old one, or when
+     * DXVK makes none. Takes the lock. */
+    [[nodiscard]] bool renew(uint32_t wait_ms);
+    /* For tests: DXVK's Vulkan device made lost, as a GPU fault would lose
+     * it (VulkanDeviceTable::lose), and the loss declared at once rather
+     * than when DXVK next submits. False where the host cannot. */
+    [[nodiscard]] bool lose();
 
     /* Held around every command a session runs. `state` is the session's
      * own: swapped in when it is not the one in force. */
@@ -180,6 +217,14 @@ public:
     void                  report(StateWriter &writer) const;
 
 private:
+    /* DXVK's device and everything on it made, on the GPU open found. */
+    [[nodiscard]] bool make();
+    /* Everything make made let go of, the shares' objects already gone. */
+    void               unmake();
+    /* The device is lost, `why`: every session woken, and a line, the first time. */
+    void               declare(const char *why);
+    /* Under the lock: whether the device can be used at all. */
+    bool               usable();
     /* Under the lock: the copy a present of `id` showed, or the texture
      * itself where none was taken; a reference the caller owns. */
     ID3D11Texture2D   *presented_texture(uint32_t domain, uint64_t id);
@@ -206,6 +251,9 @@ private:
     [[nodiscard]] bool drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels, uint32_t stride, uint32_t width,
                              uint32_t height);
 
+    const D3dRuntime       *runtime_;
+    DeviceUuid              uuid_;
+    DeviceTenants           tenants_;
     ID3D11Device5          *device_;
     D3d12HostDevice        *device12_;
     CompositorDevice *compositor_;

@@ -172,7 +172,7 @@ TEST(executor_library_execute, forwards_a_command_and_its_answer)
   CHECK_EQ(produced, sizeof payload);
   CHECK_EQ(reply[2], 9u);
   opened.library.end_batch(executor);
-  CHECK(!opened.library.poll(executor));
+  CHECK(opened.library.poll(executor) == av::HostPoll::idle);
   std::uint64_t marked = 5u, reached = 5u;
   opened.library.gpu_progress(executor, marked, reached);
   CHECK_EQ(marked, 0u);

@@ -282,7 +282,13 @@ uint32_t poll(void *, AvExecutor *executor)
 {
     AV_SCOPE("poll");
     av::ContextSession *const session = session_of(executor);
-    return session != nullptr && session->poll() ? 1u : 0u;
+    return session != nullptr ? session->poll() : AV_POLL_IDLE;
+}
+
+uint32_t lose_device(void *, AvExecutor *executor)
+{
+    AV_SCOPE("lose_device");
+    return library.root().lose_device(session_of(executor));
 }
 
 void gpu_progress(void *, AvExecutor *executor, uint64_t *marked, uint64_t *reached)
@@ -323,7 +329,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               unmap_frame,
                               export_surface,
                               sync_surface,
-                              compose_planes};
+                              compose_planes,
+                              lose_device};
 
 }  // namespace
 

@@ -67,10 +67,22 @@ void ContextSession::bind_signal(void (*signal)(void *context), void *context)
     if (backend_ != nullptr) backend_->bind_signal(signal, context);
 }
 
-bool ContextSession::poll()
+uint32_t ContextSession::poll()
 {
     AV_SCOPE("ContextSession::poll");
-    return backend_ != nullptr && backend_->poll();
+    if (backend_ == nullptr) return AV_POLL_IDLE;
+    if (faulted_ || backend_->lost()) {
+        if (!faulted_) lines_.write("a session's host device was lost while it was idle");
+        faulted_ = true;
+        return AV_POLL_LOST;
+    }
+    return backend_->poll() ? AV_POLL_PENDING : AV_POLL_IDLE;
+}
+
+uint32_t ContextSession::lose_device()
+{
+    AV_SCOPE("ContextSession::lose_device");
+    return backend_ != nullptr && backend_->lose_device() ? AV_EXECUTED : AV_UNKNOWN;
 }
 
 void ContextSession::gpu_progress(uint64_t &marked, uint64_t &reached) const

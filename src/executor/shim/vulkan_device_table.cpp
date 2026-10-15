@@ -12,7 +12,7 @@ VulkanDeviceTable::VulkanDeviceTable()
       bind_(nullptr), layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
       import_semaphore_(nullptr), semaphore_fd_(nullptr), wait_semaphores_(nullptr), create_pool_(nullptr),
       destroy_pool_(nullptr), allocate_buffers_(nullptr), begin_(nullptr), end_(nullptr), reset_(nullptr),
-      barrier_(nullptr), copy_image_(nullptr), submit_(nullptr), queue_idle_(nullptr)
+      barrier_(nullptr), copy_image_(nullptr), submit_(nullptr), queue_idle_(nullptr), lose_(nullptr)
 {
     AV_SCOPE("VulkanDeviceTable::VulkanDeviceTable");
 }
@@ -59,6 +59,7 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     copy_image_ = reinterpret_cast<PFN_vkCmdCopyImage>(entry("vkCmdCopyImage"));
     submit_ = reinterpret_cast<PFN_vkQueueSubmit>(entry("vkQueueSubmit"));
     queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(entry("vkQueueWaitIdle"));
+    lose_ = reinterpret_cast<void (*)(VkDevice)>(entry("vkAvLoseDeviceAV"));
     if (memory_fd_ == nullptr || import_semaphore_ == nullptr || semaphore_fd_ == nullptr ||
         wait_semaphores_ == nullptr || create_image_ == nullptr || submit_ == nullptr || create_buffer_ == nullptr) {
         forget();
@@ -74,6 +75,14 @@ void VulkanDeviceTable::forget()
     AV_SCOPE("VulkanDeviceTable::forget");
     physical_ = VK_NULL_HANDLE;
     device_ = VK_NULL_HANDLE;
+}
+
+bool VulkanDeviceTable::lose() const
+{
+    AV_SCOPE("VulkanDeviceTable::lose");
+    if (!loaded() || lose_ == nullptr) return false;
+    lose_(device_);
+    return true;
 }
 
 bool VulkanDeviceTable::loaded() const

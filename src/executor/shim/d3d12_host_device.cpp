@@ -3,6 +3,10 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
+#include "core/log/log_line.hpp"
+#include "executor/sharing/host_shares.hpp"
+#include "executor/shim/d3d11_host_device.hpp"
+#include "executor/shim/vulkan_device_table.hpp"
 
 namespace av {
 
@@ -16,26 +20,31 @@ constexpr uint32_t shader_model_6_6 = 0x66u;
 
 }  // namespace
 
-D3d12HostDevice::D3d12HostDevice() : runtime_(nullptr), device_(nullptr), caps_{}, frames_()
+D3d12HostDevice::D3d12HostDevice()
+    : runtime_(nullptr), uuid_(), tenants_(), renewing_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "),
+      device_(nullptr), caps_{}, frames_()
 {
     AV_SCOPE("D3d12HostDevice::D3d12HostDevice");
+    pthread_mutex_init(&renewing_, nullptr);
 }
 
 D3d12HostDevice::~D3d12HostDevice()
 {
     AV_SCOPE("D3d12HostDevice::~D3d12HostDevice");
     close();
+    pthread_mutex_destroy(&renewing_);
 }
 
 bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
 {
     AV_SCOPE("D3d12HostDevice::open");
-    if (device_ != nullptr) return false;
-    void *made = nullptr;
-    if (FAILED(runtime.create_device12(uuid, made)) || made == nullptr) return false;
+    if (runtime_ != nullptr) return false;
     runtime_ = &runtime;
-    device_ = static_cast<ID3D12Device *>(made);
-    frames_.bind(device_);
+    uuid_ = DeviceUuid(uuid);
+    if (!make()) {
+        runtime_ = nullptr;
+        return false;
+    }
     /* What the GPU is - its vendor, device and memory - is its DXGI adapter's
      * answer, as Direct3D 11's is: a Direct3D 12 device has no adapter
      * description of its own. No DXGI is no answer, and zeroes. */
@@ -57,6 +66,103 @@ void D3d12HostDevice::close()
     device_ = nullptr;
     runtime_ = nullptr;
     caps_ = d3d12proto::Caps12{};
+}
+
+bool D3d12HostDevice::make()
+{
+    AV_SCOPE("D3d12HostDevice::make");
+    void *made = nullptr;
+    if (FAILED(runtime_->create_device12(uuid_.raw(), made)) || made == nullptr) return false;
+    device_ = static_cast<ID3D12Device *>(made);
+    frames_.bind(device_);
+    return true;
+}
+
+bool D3d12HostDevice::placed() const
+{
+    AV_SCOPE("D3d12HostDevice::placed");
+    return runtime_ != nullptr;
+}
+
+bool D3d12HostDevice::admit(WakeSignal &wake)
+{
+    AV_SCOPE("D3d12HostDevice::admit");
+    return device_ != nullptr && tenants_.join(wake) == Status::ok;
+}
+
+void D3d12HostDevice::dismiss(WakeSignal &wake)
+{
+    AV_SCOPE("D3d12HostDevice::dismiss");
+    tenants_.leave(wake);
+}
+
+bool D3d12HostDevice::lost()
+{
+    AV_SCOPE("D3d12HostDevice::lost");
+    if (tenants_.lost()) return true;
+    if (device_ == nullptr || SUCCEEDED(device_->GetDeviceRemovedReason())) return false;
+    declare("vkd3d-proton reports it removed");
+    return true;
+}
+
+void D3d12HostDevice::declare(const char *why)
+{
+    AV_SCOPE("D3d12HostDevice::declare");
+    if (!tenants_.lose()) return;
+    LogLine(lines_)
+        .text("the device was lost (")
+        .text(why)
+        .text("): its ")
+        .number(tenants_.count())
+        .text(" sessions are faulted, and it is made again once they are gone")
+        .write();
+}
+
+/* Only a tenant reads device_ outside this lock, and there is none while it
+ * is remade. The old device's objects outlive this where something still holds
+ * them: vkd3d-proton keeps a device alive for its objects. */
+bool D3d12HostDevice::renew(uint32_t wait_ms, HostShares *shares, D3d11HostDevice *shown_by)
+{
+    AV_SCOPE("D3d12HostDevice::renew");
+    if (runtime_ == nullptr) return false;
+    pthread_mutex_lock(&renewing_);
+    bool made = device_ != nullptr && !tenants_.lost() && SUCCEEDED(device_->GetDeviceRemovedReason());
+    if (!made && !tenants_.vacate(wait_ms)) {
+        pthread_mutex_unlock(&renewing_);
+        LogLine(lines_).text("sessions are still on the lost device after ").number(wait_ms).text(" ms: not made again yet").write();
+        return false;
+    }
+    if (!made) {
+        static_cast<void>(tenants_.lose());
+        if (shares != nullptr) shares->lose_direct3d12();
+        if (shown_by != nullptr) shown_by->retire_shares();
+        ID3D12Device *const old = device_;
+        device_ = nullptr;
+        made = make();
+        if (old != nullptr) old->Release();
+        if (made) static_cast<void>(tenants_.renew());
+        LogLine(lines_).text(made ? "the lost device was made again" : "the lost device could not be made again").write();
+    }
+    pthread_mutex_unlock(&renewing_);
+    return made;
+}
+
+bool D3d12HostDevice::lose()
+{
+    AV_SCOPE("D3d12HostDevice::lose");
+    ID3D12DeviceExt *ext = nullptr;
+    if (device_ == nullptr ||
+        FAILED(device_->QueryInterface(__uuidof(ID3D12DeviceExt), reinterpret_cast<void **>(&ext))))
+        return false;
+    VkInstance        instance = VK_NULL_HANDLE;
+    VkPhysicalDevice  physical = VK_NULL_HANDLE;
+    VkDevice          vulkan = VK_NULL_HANDLE;
+    const HRESULT     asked = ext->GetVulkanHandles(&instance, &physical, &vulkan);
+    ext->Release();
+    VulkanDeviceTable table;
+    if (FAILED(asked) || !table.load(instance, physical, vulkan) || !table.lose()) return false;
+    declare("a test lost it on purpose");
+    return true;
 }
 
 bool D3d12HostDevice::opened() const

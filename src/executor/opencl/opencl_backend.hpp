@@ -76,6 +76,8 @@ public:
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    /* OpenCL has no Vulkan device underneath to lose. */
+    [[nodiscard]] bool lose_device() override;
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;

@@ -274,7 +274,7 @@ constexpr std::size_t reply_fence_at = 8u;
 TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_rest)
 { Fixture fixture;
   Commands commands;
-  commands.add(0x10001u, 3u).add(0x00007u, 0u).add(0x20001u, 5u).add(MockExecutorOps::unknown_id, 1u)
+  commands.add(0x10001u, 3u).add(0x00008u, 0u).add(0x20001u, 5u).add(MockExecutorOps::unknown_id, 1u)
           .add(0x10009u, 40u);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().created(), 1u);
@@ -384,7 +384,7 @@ TEST(batch_executor_run, another_transport_id_is_skipped_like_one_the_executor_d
 { Fixture fixture;
   Commands commands;
   commands.add(0x00000000u, 0u, CommandHeader::generate_reply)
-          .add(0x00000007u, 0u, CommandHeader::generate_reply)
+          .add(0x00000008u, 0u, CommandHeader::generate_reply)
           .add(0x0000FFFFu, 12u, CommandHeader::generate_reply);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().executed(), 0u);

@@ -248,9 +248,16 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
         return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share);
     case AV_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), &options, share);
-    case AV_EXECUTOR_SUB_API_D3D:
-        return d3d_[slot].initialize(shares_[slot], apis_->d3d11_device(gpu.index()), apis_->d3d12_device(gpu.index()),
+    case AV_EXECUTOR_SUB_API_D3D: {
+        /* A Direct3D 11 device the sessions before lost is made again for
+         * this one once they are gone; the wait is for their workers, woken
+         * by the loss, to fault their contexts. */
+        constexpr uint32_t renew_wait_ms = 2000u;
+        D3d11HostDevice *const device11 = apis_->d3d11_device(gpu.index());
+        if (device11 == nullptr || !device11->renew(renew_wait_ms)) return false;
+        return d3d_[slot].initialize(shares_[slot], device11, apis_->d3d12_device(gpu.index()),
                                      apis_->surfaces(gpu.index()), apis_->d3d9_device(gpu.index()));
+    }
     default: vulkan_[slot].initialize(gpu, apis_->memory_source(gpu.index())); return true;
     }
 }
@@ -326,6 +333,12 @@ void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *cont
 {
     AV_SCOPE("ExecutorRoot::set_signal");
     if (owns(session)) session->bind_signal(signal, context);
+}
+
+uint32_t ExecutorRoot::lose_device(ContextSession *session)
+{
+    AV_SCOPE("ExecutorRoot::lose_device");
+    return owns(session) ? session->lose_device() : AV_UNKNOWN;
 }
 
 void ExecutorRoot::report(StateWriter &writer)

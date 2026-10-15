@@ -13,6 +13,7 @@
 #include "executor/imported_memories.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/executor/local_import.hpp"
+#include "executor/wake_signal.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -46,6 +47,7 @@ constexpr std::uint32_t dxgi_error_unsupported = 0x887A0004u;
  * made fresh for each test over a region of guest memory. */
 av::ObjectStorage<D3d12Session> session_storage;
 av::D3dObjectTable              objects;
+av::WakeSignal tenant;
 alignas(64) std::uint8_t guest[8192];
 
 class FreshSession {
@@ -54,7 +56,7 @@ public:
     {
         CHECK(region_.adopt(import_.blob()));
         objects.clear();
-        CHECK_STATUS(session_storage.construct(region_, imported_, objects), av::Status::ok);
+        CHECK_STATUS(session_storage.construct(region_, imported_, objects, tenant), av::Status::ok);
         session_storage.object().initialize(nullptr);
     }
     ~FreshSession()

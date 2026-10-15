@@ -49,6 +49,8 @@ public:
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    /* OpenGL has no Vulkan device underneath to lose: a lost context is the host GL's own, GL_CONTEXT_LOST. */
+    [[nodiscard]] bool lose_device() override;
     void end_batch() override;
     bool poll() override;
     /* Its commands finish as they run: nothing to wake the worker for. */

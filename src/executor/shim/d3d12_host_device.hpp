@@ -6,13 +6,26 @@
  * costs a pipeline cache load that must not land inside a guest's first
  * batch. Unlike Direct3D 11's there is no immediate context to share: every
  * session records its own command lists and submits to its own queues, which
- * vkd3d-proton's device serializes itself, so there is no lock here. */
+ * vkd3d-proton's device serializes itself, so there is no lock here.
+ *
+ * Shared, it is lost for every session that opened it at once, as Direct3D
+ * 11's is (D3d11HostDevice): those sessions are its tenants (DeviceTenants),
+ * woken by whoever sees the loss first, and the device is made again on the
+ * same GPU once the last of them is gone and a session opens it again. What
+ * still holds the old device - a resource a share kept, a frame the present
+ * engine reads - keeps it alive, since vkd3d-proton's objects hold their
+ * device, and lets go of it in its own time. */
 #ifndef AV_D3D12_HOST_DEVICE_HPP
 #define AV_D3D12_HOST_DEVICE_HPP
 
+#include "core/log/driver_log.hpp"
+#include "device/host/stdio_log.hpp"
+#include "executor/device_tenants.hpp"
 #include "executor/shim/d3d12_frame_pool.hpp"
+#include "proto/context/device_uuid.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 
+#include <pthread.h>
 #include <stdint.h>
 
 struct ID3D12CommandQueue;
@@ -24,7 +37,10 @@ struct ID3D12RootSignature;
 
 namespace av {
 
+class D3d11HostDevice;
 class D3dRuntime;
+class HostShares;
+class WakeSignal;
 class StagedFrame;
 class Vkd3dImageExport;
 
@@ -40,6 +56,25 @@ public:
     [[nodiscard]] bool open(const D3dRuntime &runtime, const uint8_t *uuid);
     void               close();
     bool               opened() const;
+    /* Whether open found the GPU: a device lost, or one renew could not
+     * make again, still stands for it. */
+    bool               placed() const;
+
+    /* A session that opened Direct3D 12 joins the device, woken through
+     * `wake` should it be lost: false for one lost and not made again. */
+    [[nodiscard]] bool admit(WakeSignal &wake);
+    void               dismiss(WakeSignal &wake);
+    /* Whether the device is lost, as D3d11HostDevice::lost says it of its own:
+     * vkd3d-proton's GetDeviceRemovedReason. A tenant's thread. */
+    bool               lost();
+    /* A lost device made again, as D3d11HostDevice::renew: the last tenant
+     * waited for up to `wait_ms`, what `shares` held of the old device let go
+     * of through `shown_by`'s lock, which drains them, and vkd3d-proton's
+     * device made anew. True for a device not lost, or made again. */
+    [[nodiscard]] bool renew(uint32_t wait_ms, HostShares *shares, D3d11HostDevice *shown_by);
+    /* For tests: vkd3d-proton's Vulkan device made lost, as a GPU fault
+     * would lose it, and the loss declared. False where the host cannot. */
+    [[nodiscard]] bool lose();
 
     ID3D12Device              *device() const;
     const d3d12proto::Caps12 &caps() const;
@@ -62,8 +97,18 @@ public:
 
 private:
     void measure(uint32_t vendor_id, uint32_t device_id, uint64_t video_memory);
+    /* vkd3d-proton's device made on the GPU open found. */
+    [[nodiscard]] bool make();
+    void               declare(const char *why);
 
     const D3dRuntime  *runtime_;
+    DeviceUuid         uuid_;
+    DeviceTenants      tenants_;
+    /* Held by renew alone: two sessions may both find the device lost. */
+    pthread_mutex_t    renewing_;
+    /* QEMU's stderr, where a loss and a renewal are seen. */
+    StdioLog           sink_;
+    DriverLog          lines_;
     ID3D12Device      *device_;
     d3d12proto::Caps12 caps_;
     D3d12FramePool     frames_;

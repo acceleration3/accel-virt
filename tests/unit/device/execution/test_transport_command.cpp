@@ -82,7 +82,7 @@ TEST(transport_command_run, a_nop_of_any_size_but_its_header_is_malformed)
 
 TEST(transport_command_run, a_transport_id_the_device_does_not_answer_is_not_known_whatever_its_size)
 { Fixture fixture;
-  const std::uint32_t ids[] = {0x00000000u, 0x00000007u, 0x00000101u, 0x00008001u, 0x0000FFFFu};
+  const std::uint32_t ids[] = {0x00000000u, 0x00000008u, 0x00000101u, 0x00008001u, 0x0000FFFFu};
   for (const std::uint32_t id : ids) {
       CHECK_STATUS(fixture.run(CommandHeader(id, 8u, 0u)), Status::not_found);
       CHECK_STATUS(fixture.run(CommandHeader(id, 9u, CommandHeader::generate_reply)), Status::not_found);

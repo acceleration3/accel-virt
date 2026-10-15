@@ -26,6 +26,7 @@
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/session_backend.hpp"
+#include "executor/wake_signal.hpp"
 #include "device/host/stdio_log.hpp"
 #include "proto/generated/d3d/d3d_dispatch_server.h"
 
@@ -70,7 +71,13 @@ public:
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
+    /* Lost once a command found it so, or once the GPU's Direct3D 11 device
+     * is - or its Direct3D 12 device, for a session that opened one -
+     * whichever session saw it first. */
     bool lost() const override;
+    /* The GPU's Direct3D 11 device, which every session on it shares
+     * (D3d11HostDevice::lose). */
+    [[nodiscard]] bool lose_device() override;
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
@@ -244,6 +251,12 @@ private:
     /* What this session shares and opens, in its domain; null only while the
      * session is not initialized. */
     SessionShares          *shares_;
+    /* What wakes this session's worker when a device it shares is lost
+     * (DeviceTenants): bound with the session's signal, and named by its
+     * Direct3D 12 half too, before which it is made. */
+    WakeSignal              wake_;
+    /* Whether it joined its Direct3D 11 device's tenants. */
+    bool                    admitted_;
     /* The device lock, taken at a batch's first command and held to its end. */
     bool                    held_;
     /* The most devices one process runs at once. */

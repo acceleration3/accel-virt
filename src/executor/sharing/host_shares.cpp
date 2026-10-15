@@ -369,6 +369,30 @@ void HostShares::clear()
     });
 }
 
+template <typename GiveUp>
+void HostShares::retire_each(GiveUp give_up)
+{
+    AV_SCOPE("HostShares::retire_each");
+    const Lock locked(mutex_);
+    shares_.for_each([this, &give_up](const Share &visited) {
+        IUnknown *objects[3];
+        const uint32_t given = give_up(const_cast<Share &>(visited), objects);
+        for (uint32_t index = 0u; index < given; index++) retire(objects[index]);
+    });
+}
+
+void HostShares::lose_direct3d11()
+{
+    AV_SCOPE("HostShares::lose_direct3d11");
+    retire_each([](Share &share, IUnknown **objects) { return share.give_up_direct3d11(objects); });
+}
+
+void HostShares::lose_direct3d12()
+{
+    AV_SCOPE("HostShares::lose_direct3d12");
+    retire_each([](Share &share, IUnknown **objects) { return share.give_up_direct3d12(objects); });
+}
+
 uint32_t HostShares::take_retired(IUnknown **objects, uint32_t capacity)
 {
     AV_SCOPE("HostShares::take_retired");

@@ -128,6 +128,54 @@ TEST(share, gives_up_every_object_it_holds)
   CHECK(objects[1] == &view);
   CHECK_EQ(share.give_up_objects(objects), 0u); }
 
+/* A lost Direct3D 11 device's objects: the view and flip copy of any share,
+ * and the resource only of one Direct3D 11 published - an object or a
+ * Direct3D 12 resource is not its. */
+TEST(share, gives_up_only_what_a_lost_direct3d11_device_made)
+{ CountedObject resource, view, shown;
+  IUnknown     *objects[3] = {};
+  Share         published11(1u, 1u, 0u, 0u, ShareOrigin::d3d11);
+  CHECK_EQ(published11.give_up_direct3d11(objects), 0u);
+  published11.keep_resource(&resource);
+  published11.keep_shown(&shown);
+  CHECK_EQ(published11.give_up_direct3d11(objects), 2u);
+  CHECK(objects[0] == &resource);
+  CHECK(objects[1] == &shown);
+  CHECK(published11.resource() == nullptr);
+  CHECK(published11.shown() == nullptr);
+  Share published12(1u, 2u, 0u, 0u, ShareOrigin::d3d12);
+  published12.keep_resource(&resource);
+  published12.keep_view(&view);
+  published12.keep_shown(&shown);
+  CHECK_EQ(published12.give_up_direct3d11(objects), 2u);
+  CHECK(objects[0] == &view);
+  CHECK(objects[1] == &shown);
+  CHECK(published12.resource() == &resource);
+  Share object(1u, 3u, 1u, 4096u, ShareOrigin::object);
+  object.keep_resource(&resource);
+  CHECK_EQ(object.give_up_direct3d11(objects), 0u);
+  CHECK(object.resource() == &resource); }
+
+/* A lost Direct3D 12 device's: the resource it published and the Direct3D 11
+ * view over it; a flip copy is Direct3D 11's, and a Direct3D 11 share none of
+ * its. */
+TEST(share, gives_up_only_what_a_lost_direct3d12_device_made)
+{ CountedObject resource, view, shown;
+  IUnknown     *objects[3] = {};
+  Share         published12(1u, 1u, 0u, 0u, ShareOrigin::d3d12);
+  published12.keep_resource(&resource);
+  published12.keep_view(&view);
+  published12.keep_shown(&shown);
+  CHECK_EQ(published12.give_up_direct3d12(objects), 2u);
+  CHECK(objects[0] == &resource);
+  CHECK(objects[1] == &view);
+  CHECK(published12.shown() == &shown);
+  CHECK_EQ(published12.give_up_direct3d12(objects), 0u);
+  Share published11(1u, 2u, 0u, 0u, ShareOrigin::d3d11);
+  published11.keep_resource(&resource);
+  CHECK_EQ(published11.give_up_direct3d12(objects), 0u);
+  CHECK(published11.resource() == &resource); }
+
 TEST(share, counts_the_copies_written_into_it)
 { Share share(1u, 1u, 0u, 0u, ShareOrigin::d3d11);
   share.written();

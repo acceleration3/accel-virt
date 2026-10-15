@@ -53,8 +53,9 @@ public:
     virtual const OpenClDevice *opencl_device(uint32_t index) = 0;
     /* The GPU's Direct3D 11 device, made through DXVK when the host was asked
      * and shared by every Direct3D session on that GPU; null for a GPU DXVK
-     * does not run on, or a host without it. Not const: sessions take its
-     * lock and share resources through it. */
+     * does not run on, or a host without it. Kept for the GPU once made, lost
+     * or not: a lost one is made again in place (D3d11HostDevice::renew).
+     * Not const: sessions take its lock and share resources through it. */
     virtual D3d11HostDevice    *d3d11_device(uint32_t index) = 0;
     /* The GPU's Direct3D 12 device, made through vkd3d-proton alongside it;
      * null for a GPU with none. */

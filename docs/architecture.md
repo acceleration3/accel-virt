@@ -132,7 +132,7 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 
 | Directory | Holds |
 |---|---|
-| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs; host memory (docs/host-memory.md): each GPU's `HostMemorySource`, its allocations (`SourceMemory`), the `MemoryExporter` contract it allocates through and what that answers (`ExportedMemory`); blob imports (`ImportedBlob`, `ImportTable`), guest regions, the imports a session names besides its region (`ImportedMemories`); the GPU clock hold, `PollBudget`, `WakeSignal` |
+| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs; `DeviceTenants`, the sessions on one shared host device, woken when it is lost; host memory (docs/host-memory.md): each GPU's `HostMemorySource`, its allocations (`SourceMemory`), the `MemoryExporter` contract it allocates through and what that answers (`ExportedMemory`); blob imports (`ImportedBlob`, `ImportTable`), guest regions, the imports a session names besides its region (`ImportedMemories`); the GPU clock hold, `PollBudget`, `WakeSignal` |
 | `sharing/` | `HostShares`, every shared object of one GPU of every API by (domain, id), its `Share`s, their holders and index, and `SessionShares`, what one session reaches it through (docs/shared-surfaces.md §0) |
 | `vulkan/`, `opengl/`, `opencl/` | each API's backend and its tables |
 | `d3d/` | Direct3D 9, 11 and 12 sessions, DXBC, the present surfaces and frame pools |
@@ -168,6 +168,9 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
   `platform/` (MockPlatform), `dxgkrnl/`, `vidmm/`, `vidsch/`, `vidpn/`,
   `virtio/` (the virtio-gpu PCI function the miniport drives), `host/`
   (MockHost), `executor/`, `icd/`, `guest/` (MockKmt), `context/`, ...
+- `tests/gpu_fault/`: `VK_LAYER_AV_device_loss`, a Vulkan layer that loses a
+  host device on request, which the tests that lose one and a guest run with
+  `--device-loss` load, and nothing else does.
 - `tests/fuzz/`, `tests/corpus/`, `tests/loopback/`, `tests/qemu/`,
   `tests/conformance/`: the layers in `docs/testing.md`.
 - `tools/`: gates at the root (`check_*.py`, `scope_marks.py`, `gate.sh`),

@@ -1,4 +1,7 @@
 #include "executor/d3d/d3d12_session.hpp"
+
+#include "executor/sharing/session_shares.hpp"
+#include "executor/shim/d3d12_host_device.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/imported_memories.hpp"
 
@@ -107,8 +110,10 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 
 }  // namespace
 
-D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects)
-    : region_(region), imported_(imported), device_(nullptr), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
+D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects,
+                           WakeSignal &tenant)
+    : region_(region), imported_(imported), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
+      joined_(false), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -118,7 +123,10 @@ void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by
                               SessionShares *shares)
 {
     AV_SCOPE("D3d12Session::initialize");
-    device_ = device != nullptr && device->opened() ? device : nullptr;
+    device_ = device != nullptr && device->placed() ? device : nullptr;
+    shown_by_ = shown_by;
+    shares_ = shares;
+    joined_ = false;
     surfaces_ = surfaces;
     views_.bind(device_ != nullptr ? device_->device() : nullptr);
     pipelines_.bind(device_);
@@ -138,7 +146,17 @@ void D3d12Session::shut_down()
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
     views_.bind(nullptr);
     pipelines_.bind(nullptr);
+    if (joined_) device_->dismiss(tenant_);
+    joined_ = false;
     device_ = nullptr;
+    shown_by_ = nullptr;
+    shares_ = nullptr;
+}
+
+bool D3d12Session::lost() const
+{
+    AV_SCOPE("D3d12Session::lost");
+    return joined_ && device_->lost();
 }
 
 bool D3d12Session::knows(uint32_t command_id) const
@@ -253,7 +271,8 @@ bool D3d12Session::place(uint32_t id, IUnknown *made, uint64_t address, uint64_t
 void D3d12Session::drain()
 {
     AV_SCOPE("D3d12Session::drain");
-    if (device_ == nullptr) return;
+    /* A lost device finishes nothing more, and is not waited five seconds for. */
+    if (device_ == nullptr || lost()) return;
     if (!progress_.mark_all()) {
         if (removed_ == 0u)
             lines_.write("a queue refused the drain's signal; the device is removed");
@@ -301,6 +320,20 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult, d3d12proto::Caps
     if (device_ == nullptr) {
         hresult = static_cast<uint32_t>(DXGI_ERROR_UNSUPPORTED);
         return true;
+    }
+    if (!joined_) {
+        /* A device the sessions before this one lost is made again for it,
+         * once they are gone; the wait is for their workers to fault them. */
+        constexpr uint32_t renew_wait_ms = 2000u;
+        HostShares *const  host = shares_ != nullptr ? shares_->shares() : nullptr;
+        if (!device_->renew(renew_wait_ms, host, shown_by_) || !device_->admit(tenant_)) {
+            hresult = static_cast<uint32_t>(DXGI_ERROR_DEVICE_REMOVED);
+            return true;
+        }
+        joined_ = true;
+        views_.bind(device_->device());
+        pipelines_.bind(device_);
+        presentation_.bind(device_, shown_by_, shares_);
     }
     hresult = static_cast<uint32_t>(S_OK);
     caps = device_->caps();

@@ -23,7 +23,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+    : runtime_(nullptr), uuid_(), tenants_(), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -39,16 +39,26 @@ D3d11HostDevice::~D3d11HostDevice()
 bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostShares &shares)
 {
     AV_SCOPE("D3d11HostDevice::open");
-    if (device_ != nullptr) return false;
+    if (runtime_ != nullptr) return false;
     shares_ = &shares;
-    IDXGIAdapter1 *const adapter = runtime.adapter_for(uuid);
+    runtime_ = &runtime;
+    uuid_ = DeviceUuid(uuid);
+    if (make()) return true;
+    runtime_ = nullptr;
+    return false;
+}
+
+bool D3d11HostDevice::make()
+{
+    AV_SCOPE("D3d11HostDevice::make");
+    IDXGIAdapter1 *const adapter = runtime_->adapter_for(uuid_.raw());
     if (adapter == nullptr) return false;
     DXGI_ADAPTER_DESC1 description = {};
     adapter->GetDesc1(&description);
     ID3D11Device *device = nullptr;
     ID3D11DeviceContext *context = nullptr;
     uint32_t level = 0u;
-    const HRESULT made = runtime.create_device11(adapter, device, context, level);
+    const HRESULT made = runtime_->create_device11(adapter, device, context, level);
     adapter->Release();
     if (FAILED(made)) return false;
     /* DXVK's device is every revision at once; the newest is asked for so the
@@ -59,7 +69,7 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostS
     device->Release();
     context->Release();
     if (!upgraded) {
-        close();
+        unmake();
         return false;
     }
     feature_level_ = level;
@@ -79,11 +89,18 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostS
 void D3d11HostDevice::close()
 {
     AV_SCOPE("D3d11HostDevice::close");
-    composer_.release();
-    exports_.release();
     /* Every share of this GPU holds this device's textures: they go first. */
     if (shares_ != nullptr) shares_->clear();
     retire_locked();
+    unmake();
+    runtime_ = nullptr;
+}
+
+void D3d11HostDevice::unmake()
+{
+    AV_SCOPE("D3d11HostDevice::unmake");
+    composer_.release();
+    exports_.release();
     if (context_ != nullptr) frames_.clear();
     images_.release();
     if (slices_ != nullptr) slices_->Release();
@@ -108,10 +125,10 @@ bool D3d11HostDevice::read_image(uint32_t domain, uint64_t id, void *pixels, uin
                                  uint32_t height)
 {
     AV_SCOPE("D3d11HostDevice::read_image");
-    if (device_ == nullptr || pixels == nullptr) return false;
+    if (pixels == nullptr) return false;
     lock(nullptr);
     D3D11_TEXTURE2D_DESC wanted = {};
-    const bool staged = stage(domain, id, wanted);
+    const bool staged = usable() && stage(domain, id, wanted);
     unlock();
     if (!staged) return false;
     return drain(wanted, static_cast<uint8_t *>(pixels), stride, width, height);
@@ -121,9 +138,8 @@ bool D3d11HostDevice::read_image(uint32_t domain, uint64_t id, void *pixels, uin
 bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_image");
-    if (device_ == nullptr) return false;
     lock(nullptr);
-    ID3D11Texture2D *const texture = presented_texture(domain, id);
+    ID3D11Texture2D *const texture = usable() ? presented_texture(domain, id) : nullptr;
     uint32_t               slot = 0u;
     const bool             staged = texture != nullptr && exports_.stage(device_, context_, texture, slot);
     if (texture != nullptr) texture->Release();
@@ -146,9 +162,11 @@ bool D3d11HostDevice::exported(uint32_t slot)
     PollBudget         polls(poll_nanoseconds, most_polls);
     while (polls.next()) {
         lock(nullptr);
-        const bool done = exports_.copied(context_, slot);
+        const bool live = usable();
+        const bool done = live && exports_.copied(context_, slot);
         unlock();
         if (done) return true;
+        if (!live) return false;
     }
     return false;
 }
@@ -159,11 +177,11 @@ bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *plan
                                      uint32_t height, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::compose_planes");
-    if (device_ == nullptr || count > PlaneComposer::max_planes || (count != 0u && planes == nullptr)) return false;
+    if (count > PlaneComposer::max_planes || (count != 0u && planes == nullptr)) return false;
     lock(nullptr);
     ID3D11Texture2D *textures[PlaneComposer::max_planes] = {};
-    bool             found = true;
-    for (uint32_t index = 0u; index < count; index++) {
+    bool             found = usable();
+    for (uint32_t index = 0u; found && index < count; index++) {
         textures[index] = presented_texture(domain, planes[index].key);
         found = found && textures[index] != nullptr;
     }
@@ -183,9 +201,8 @@ bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, AvExport
 {
     AV_SCOPE("D3d11HostDevice::export_surface");
     image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
-    if (device_ == nullptr) return false;
     lock(nullptr);
-    ID3D11Texture2D *const texture = shared_texture(domain, surface);
+    ID3D11Texture2D *const texture = usable() ? shared_texture(domain, surface) : nullptr;
     const bool             exported = texture != nullptr && images_.export_image(texture, image);
     if (texture != nullptr) texture->Release();
     unlock();
@@ -200,9 +217,8 @@ bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint64_t &
     AV_SCOPE("D3d11HostDevice::sync_surface");
     writes = 0u;
     fd = -1;
-    if (device_ == nullptr) return false;
     lock(nullptr);
-    const bool synced = shares_->writes(domain, surface, writes) && vulkan_.sync_file(fd);
+    const bool synced = usable() && shares_->writes(domain, surface, writes) && vulkan_.sync_file(fd);
     unlock();
     return synced;
 }
@@ -217,9 +233,8 @@ StagedFrame *D3d11HostDevice::stage_frame(ID3D11Texture2D *source, uint32_t subr
 void D3d11HostDevice::retire_shares()
 {
     AV_SCOPE("D3d11HostDevice::retire_shares");
-    if (device_ == nullptr) return;
     lock(nullptr);
-    retire_locked();
+    if (device_ != nullptr) retire_locked();
     unlock();
 }
 
@@ -278,7 +293,8 @@ bool D3d11HostDevice::drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels,
     bool                     mapped_now = false;
     while (polls.next()) {
         lock(nullptr);
-        const HRESULT result = context_->Map(staging_, 0u, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+        const HRESULT result = usable() ? context_->Map(staging_, 0u, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped)
+                                        : DXGI_ERROR_DEVICE_REMOVED;
         mapped_now = SUCCEEDED(result);
         if (mapped_now) break;
         unlock();
@@ -312,6 +328,93 @@ bool D3d11HostDevice::opened() const
 {
     AV_SCOPE("D3d11HostDevice::opened");
     return device_ != nullptr;
+}
+
+bool D3d11HostDevice::placed() const
+{
+    AV_SCOPE("D3d11HostDevice::placed");
+    return runtime_ != nullptr;
+}
+
+bool D3d11HostDevice::admit(WakeSignal &wake)
+{
+    AV_SCOPE("D3d11HostDevice::admit");
+    return device_ != nullptr && tenants_.join(wake) == Status::ok;
+}
+
+void D3d11HostDevice::dismiss(WakeSignal &wake)
+{
+    AV_SCOPE("D3d11HostDevice::dismiss");
+    tenants_.leave(wake);
+}
+
+/* DXVK knows its device is lost once a submission or a wait said so, and
+ * answers it as a removed device from then on: asking costs one atomic read. */
+bool D3d11HostDevice::lost()
+{
+    AV_SCOPE("D3d11HostDevice::lost");
+    if (tenants_.lost()) return true;
+    if (device_ == nullptr || SUCCEEDED(device_->GetDeviceRemovedReason())) return false;
+    declare("DXVK reports it removed");
+    return true;
+}
+
+void D3d11HostDevice::declare(const char *why)
+{
+    AV_SCOPE("D3d11HostDevice::declare");
+    if (!tenants_.lose()) return;
+    LogLine(lines_)
+        .text("the device was lost (")
+        .text(why)
+        .text("): its ")
+        .number(tenants_.count())
+        .text(" sessions are faulted, and it is made again once they are gone")
+        .write();
+}
+
+bool D3d11HostDevice::usable()
+{
+    AV_SCOPE("D3d11HostDevice::usable");
+    return device_ != nullptr && !lost();
+}
+
+bool D3d11HostDevice::renew(uint32_t wait_ms)
+{
+    AV_SCOPE("D3d11HostDevice::renew");
+    if (runtime_ == nullptr) return false;
+    /* Looked at under the lock: another session's renew may be remaking it. */
+    lock(nullptr);
+    const bool fine = usable();
+    unlock();
+    if (fine) return true;
+    if (!tenants_.vacate(wait_ms)) {
+        LogLine(lines_).text("sessions are still on the lost device after ").number(wait_ms).text(" ms: not made again yet").write();
+        return false;
+    }
+    lock(nullptr);
+    bool made = device_ != nullptr && !tenants_.lost();
+    if (!made) {
+        /* What anything still holds of the old device goes before it does:
+         * the shares' textures under this lock, then everything made on it. */
+        if (shares_ != nullptr) shares_->lose_direct3d11();
+        if (device_ != nullptr) retire_locked();
+        unmake();
+        made = make();
+        if (made) static_cast<void>(tenants_.renew());
+    }
+    unlock();
+    LogLine(lines_).text(made ? "the lost device was made again" : "the lost device could not be made again").write();
+    return made;
+}
+
+bool D3d11HostDevice::lose()
+{
+    AV_SCOPE("D3d11HostDevice::lose");
+    lock(nullptr);
+    const bool tripped = device_ != nullptr && vulkan_.table().lose();
+    unlock();
+    if (tripped) declare("a test lost it on purpose");
+    return tripped;
 }
 
 

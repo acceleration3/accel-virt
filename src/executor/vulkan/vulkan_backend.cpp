@@ -858,6 +858,16 @@ void VulkanBackend::end_batch()
     AV_SCOPE("VulkanBackend::end_batch");
 }
 
+bool VulkanBackend::lose_device()
+{
+    AV_SCOPE("VulkanBackend::lose_device");
+    if (device_ == VK_NULL_HANDLE) return false;
+    const auto lose = reinterpret_cast<void (*)(VkDevice)>(::vkGetDeviceProcAddr(device_, "vkAvLoseDeviceAV"));
+    if (lose == nullptr) return false;
+    lose(device_);
+    return true;
+}
+
 bool VulkanBackend::lost() const
 {
     AV_SCOPE("VulkanBackend::lost");

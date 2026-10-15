@@ -49,6 +49,13 @@ public:
     [[nodiscard]] bool run(std::uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    /* Lost from then on, as a host device a GPU fault took; false - the host
+     * cannot - once set_losable(false). */
+    [[nodiscard]] bool lose_device() override;
+    void set_losable(bool losable);
+    /* Lost as another session on a shared device would find it, without a
+     * command of this one's. */
+    void lose_elsewhere();
     /* Holds nothing across a batch and waits on no GPU. */
     void end_batch() override;
     bool poll() override;
@@ -87,6 +94,7 @@ private:
     std::uint32_t adopted_;
     std::uint32_t abandoned_;
     bool          lost_;
+    bool          losable_;
     bool          adopts_;
     bool          shares_;
     std::uint32_t exported_objects_;

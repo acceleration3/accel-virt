@@ -37,8 +37,15 @@ public:
     [[nodiscard]] virtual bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                                    WireArena &arena) = 0;
     /* Whether the host API has lost the device this backend runs on. Asked
-     * after every command, because nothing else would notice. */
+     * after every command, because nothing else would notice, and at every
+     * poll, because a session on a device another one lost is woken to ask
+     * (DeviceTenants). */
     virtual bool lost() const = 0;
+    /* For tests: the host device this backend runs on made lost, as a GPU
+     * fault would lose it (AvExecutorOps::lose_device). False where the host
+     * cannot - no device, an API that is not Vulkan underneath, or no layer
+     * that loses one on request (tests/gpu_fault). */
+    [[nodiscard]] virtual bool lose_device() = 0;
     /* The batch's last command has run: what was held across it goes. */
     virtual void end_batch() = 0;
     /* Between batches, on the worker: publishes what the host now has for the

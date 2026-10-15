@@ -9,6 +9,7 @@
 #define AV_BATCH_EXECUTOR_HPP
 
 #include "core/support/status.hpp"
+#include "device/execution/host_poll.hpp"
 #include "device/memory/blob_window.hpp"
 #include "proto/submission/fault_code.hpp"
 
@@ -52,8 +53,9 @@ public:
     /* It has a host executor to run batches on: a context whose executor never
      * opened holds batches that will not run, and nothing waits on them. */
     bool                 ready() const;
-    /* Worker thread, between batches: see SessionBackend::poll. */
-    bool                 poll();
+    /* Worker thread, between batches: see AvExecutorOps::poll. Idle with no
+     * executor. */
+    HostPoll             poll();
     /* Worker: see AvExecutorOps::gpu_progress. */
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
     [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch);

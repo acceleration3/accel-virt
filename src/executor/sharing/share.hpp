@@ -99,6 +99,12 @@ public:
     /* Every COM object the share holds, handed over with its reference and
      * forgotten here: at most three. */
     uint32_t  give_up_objects(IUnknown **objects);
+    /* What is a lost Direct3D device's, handed over and forgotten likewise:
+     * of Direct3D 11's, the view and the flip copy - both always its - and
+     * the resource of a share it published; of Direct3D 12's, the resource
+     * of a share it published and the view made over it. At most three. */
+    uint32_t  give_up_direct3d11(IUnknown **objects);
+    uint32_t  give_up_direct3d12(IUnknown **objects);
 
     /* What its memory is as an image, as the publisher described it; empty
      * for memory that is none. */

@@ -45,6 +45,11 @@ public:
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    /* The device the guest made, lost through the layer that loses one on
+     * request (tests/gpu_fault): false with no device or no such layer. The
+     * guest learns it as a Vulkan application does, VK_ERROR_DEVICE_LOST
+     * from its next submission or wait. */
+    [[nodiscard]] bool lose_device() override;
     void end_batch() override;
     bool poll() override;
     /* Its commands finish as they run: nothing to wake the worker for. */

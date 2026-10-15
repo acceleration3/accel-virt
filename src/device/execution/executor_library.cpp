@@ -112,10 +112,21 @@ void ExecutorLibrary::end_batch(AvExecutor *executor) const
     ops_->end_batch(ops_->opaque, executor);
 }
 
-bool ExecutorLibrary::poll(AvExecutor *executor) const
+HostPoll ExecutorLibrary::poll(AvExecutor *executor) const
 {
     AV_SCOPE("ExecutorLibrary::poll");
-    return ops_->poll(ops_->opaque, executor) != 0u;
+    switch (ops_->poll(ops_->opaque, executor)) {
+    case AV_POLL_PENDING: return HostPoll::pending;
+    case AV_POLL_LOST: return HostPoll::lost;
+    default: return HostPoll::idle;
+    }
+}
+
+Status ExecutorLibrary::lose_device(AvExecutor *executor) const
+{
+    AV_SCOPE("ExecutorLibrary::lose_device");
+    if (ops_->lose_device == nullptr) return Status::not_supported;
+    return ops_->lose_device(ops_->opaque, executor) == AV_EXECUTED ? Status::ok : Status::not_supported;
 }
 
 void ExecutorLibrary::gpu_progress(AvExecutor *executor, uint64_t &marked, uint64_t &reached) const

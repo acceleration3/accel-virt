@@ -42,7 +42,10 @@ public:
     D3d12FramePool &operator=(const D3d12FramePool &) = delete;
 
     /* The device frames are made on; null as it closes, which releases what
-     * every frame made. */
+     * every frame made. Another device - the first one lost and made again -
+     * forsakes every frame made on the old one rather than release what it
+     * holds: one the engine is reading stays readable until it is given
+     * back, reads as failed from then on, and is remade when next claimed. */
     void         bind(ID3D12Device *device);
     /* `source`'s first subresource copied into a free frame on `queue`,
      * resolved first if it has samples. Null for a source this does not stage
@@ -76,6 +79,9 @@ private:
         bool    copy(ID3D12CommandQueue *queue, ID3D12Resource *source, const void *footprint, uint32_t width,
                      uint32_t height, bool resolve);
         void    drop();
+        /* Made on a device that was lost: idle from now on - its copy will
+         * never finish - unreadable, and dropped when next prepared. */
+        void    forsake();
         Reading read(AvFrameView &view) override;
         void    release() override;
 
@@ -99,6 +105,8 @@ private:
         /* The device prepare made the frame on; not held, the pool's own. */
         ID3D12Device              *device_;
         FrameClaim                 claim_;
+        /* Written by the thread that renews the device, read by the engine's. */
+        bool                       forsaken_;
     };
 
     /* A free, idle frame, claimed: one already holding `bytes` first. */

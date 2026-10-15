@@ -20,7 +20,7 @@ constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
 }  // namespace
 
 D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects)
-    : region_(region), host_(nullptr), surfaces_(nullptr), objects_(objects), devices_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr)
+    : region_(region), host_(nullptr), surfaces_(nullptr), objects_(objects), devices_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -37,6 +37,7 @@ void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d
     AV_SCOPE("D3d9Session::initialize");
     host_ = host != nullptr && host->opened() ? host : nullptr;
     surfaces_ = surfaces;
+    lost_ = false;
     flips_.bind(device11, shares);
 }
 
@@ -64,6 +65,10 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     arena_ = &arena;
     const bool ran = d3d9proto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
+    if (device() != nullptr && device()->TestCooperativeLevel() == D3DERR_DEVICELOST && !lost_) {
+        lines_.write("a device's host Direct3D 9 device was lost; the session is faulted");
+        lost_ = true;
+    }
     if (ran) return true;
     return devices_.refuse(refusal_, d3d9proto::command_name(command_id),
                            static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR));
@@ -237,6 +242,12 @@ IUnknown *D3d9Session::owned(uint32_t id, D3dObjectKind kind) const
     if (FAILED(asked)) return nullptr;
     made_by->Release();
     return made_by == device() ? found : nullptr;
+}
+
+bool D3d9Session::lost() const
+{
+    AV_SCOPE("D3d9Session::lost");
+    return lost_;
 }
 
 bool D3d9Session::invariants_hold() const

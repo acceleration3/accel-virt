@@ -286,6 +286,7 @@ whichever library is loaded, so they behave the same under every executor.
 | `0x00000004` | SHARE_OBJECT | 32 bytes: u64 object_id, u32 kind, u32 reserved, u64 wire_handle, u64 size | 16 bytes: u32 status, u32 reserved, u64 zero |
 | `0x00000005` | OPEN_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 wire_handle |
 | `0x00000006` | RELEASE_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 zero |
+| `0x00000007` | LOSE_HOST_DEVICE | none | 8 bytes: u32 status (0 lost, 1 kept), u32 reserved |
 
 A NOP does nothing but complete, which makes it the round trip a guest times to
 measure the transport alone rather than a backend (feature 044). It moves the
@@ -331,6 +332,51 @@ NOP with a body. Every other refusal is an answer, and the context runs on:
 
 A refused import answers `device_memory` 0. RELEASE_BLOB of a handle the context
 never imported, or already released, answers empty and does nothing.
+
+#### Losing the host device
+
+LOSE_HOST_DEVICE is for tests: the host device the context runs on is made
+lost, as a fault of the host GPU loses one - for a Direct3D context the GPU's
+Direct3D 11 device, which every Direct3D context of the guest on that GPU
+shares, and for a Vulkan context its own `VkDevice`. The host can do so only
+when its process was started with the Vulkan layer that loses a device on
+request (`tests/gpu_fault`, `VK_LAYER_AV_device_loss`); anywhere else the
+answer is 1, kept, and nothing happens. A body is command framing (fault 5).
+The asking context is not faulted by the command, which completes with its
+answer: like every other context on the lost device it is faulted at its
+worker's next poll, below.
+
+A host device is lost when a host API says so - DXVK's or vkd3d-proton's
+removed reason, `VK_ERROR_DEVICE_LOST`, `GL_CONTEXT_LOST` - or when a test
+makes it so. What follows is the same either way:
+
+- every context on the lost device is faulted with code 7, the context that
+  was running a command at once, and every other one - an idle one included -
+  as soon as its worker is woken to poll, which the first to see the loss
+  does for all of them: the guest is told by its fence page and its fence
+  interrupt, and wakes;
+- nothing a context, the display or the present engine asks of the lost
+  device waits on it: a read back answers removed, and a held batch is no
+  longer held for the GPU;
+- the device is made again on the same GPU, in place, when a context next
+  asks for one, once every context on the old one has gone - their
+  executors are destroyed as they fault - and what shares and staged frames
+  held of the old device is let go of first. Contexts on other host devices -
+  another GPU, a Vulkan context's own device, an OpenGL or OpenCL context -
+  run on.
+
+The guest learns it as Windows tells an application of a removed device,
+per device and not by a TDR: the drivers turn the fault into
+`DXGI_ERROR_DEVICE_REMOVED` (Direct3D 9, 11 and 12, through the runtime's
+`pfnSetErrorCb`), `VK_ERROR_DEVICE_LOST`, `GL_CONTEXT_LOST` and
+`CL_OUT_OF_RESOURCES`, and DWM makes its device again as it does after a
+TDR. A TDR is not used: the only fault a miniport can report,
+`DXGK_INTERRUPT_DMA_FAULTED`, bugchecks a GPU-MMU adapter (docs/kb/
+05-scheduling.md); a forced timeout would reset every engine and every
+context of the adapter, Vulkan, OpenGL and OpenCL ones whose host devices are
+whole among them, after a stall of TdrDelay, and repeated losses would run
+past TdrLimitCount into an adapter restart; and the host knows which contexts
+used the lost device, which dxgkrnl does not.
 
 #### Shared objects (feature 053)
 
@@ -516,7 +562,7 @@ asking for no answer leaves the slot as it was.
 
 ### The executor ABI (device <-> host library)
 
-`src/device/abi/av_executor.h`, version 20, is what runs a context's commands
+`src/device/abi/av_executor.h`, version 21, is what runs a context's commands
 on the host's API, and the library behind it is where every object the
 contexts share is kept. The QEMU device loads the library its `executor`
 property names and calls `av_executor_ops` for the table; a library that does
@@ -540,7 +586,13 @@ generated server dispatch in `src/proto/generated/*/` over host API backends
   until the create returns; other sub-APIs refuse options and shares. Each
   executor is created, run (`execute`, answering executed, unknown,
   undecodable or device lost; `end_batch`, `poll`, `gpu_progress`) and
-  destroyed on its context's worker, and only that thread calls it.
+  destroyed on its context's worker, and only that thread calls it. `poll`
+  answers idle, pending (results still awaited from the GPU) or lost: the
+  host device the executor runs on was lost, which the device faults the
+  context for (fault 7) at that poll - see "Losing the host device".
+- **A test's GPU fault.** `lose_device(executor)` makes the host device the
+  executor runs on lost, as a fault of the host GPU would, where the host can
+  do so on purpose (LOSE_HOST_DEVICE, below); it may be null.
 - **Signals.** `set_signal(executor, signal, context)` (feature 052) runs the
   other way: the library calls `signal(context)` when the host API finishes
   something on a thread the device never gave it - the host's OpenCL driver
@@ -1163,6 +1215,14 @@ writes the word - its whole-page writes stop at offset 40 - so the two writers
 never store each other's words, and the beat only goes forward; a faulted
 page is beaten no more (at most once after the fault, by a pulse already
 inside its pass).
+
+**A lost host device** faults every context on it with code 7, an idle one
+included: its worker is woken to poll and faults it there (see "Losing the
+host device"), so a process that waits on nothing learns it from its page,
+and one asleep on its wake event is woken. The driver finishes a faulted
+context's work as it always has, and a process that submits through its own
+doorbell reads the hardware queue's progress as `UINT64_MAX`, as a removed
+device's fences read, so a wait in the kernel on it ends too.
 
 **How long a guest waits.** Never for a fixed time. A process waiting on its
 context (`KmtTransport`, through `HostWatch`) gives up only when the page says

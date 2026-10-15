@@ -342,6 +342,21 @@ target_link_libraries(av_harness PUBLIC Threads::Threads)
 target_link_libraries(av_harness PUBLIC av_core)
 target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 
+# ---- a GPU that loses a device on request ----------------------------------
+# VK_LAYER_AV_device_loss (tests/gpu_fault): a Vulkan layer whose
+# vkAvLoseDeviceAV makes a device lost from then on, so the executor's answer
+# to a host GPU fault is tested on this machine's GPU. Nothing loads it unless
+# asked: the tests that lose a device name its directory in VK_ADD_LAYER_PATH
+# (AV_LOSS_LAYER_ENVIRONMENT), and a guest run passes --device-loss-layer.
+add_library(av_device_loss_layer SHARED tests/gpu_fault/device_loss_layer.cpp)
+set_target_properties(av_device_loss_layer PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/gpu_fault CXX_VISIBILITY_PRESET hidden)
+set(AV_LOSS_LAYER_LIBRARY ${CMAKE_BINARY_DIR}/gpu_fault/libav_device_loss_layer.so)
+configure_file(tests/gpu_fault/VkLayer_av_device_loss.json.in ${CMAKE_BINARY_DIR}/gpu_fault/VkLayer_av_device_loss.json
+               @ONLY)
+set(AV_LOSS_LAYER_ENVIRONMENT
+  "VK_ADD_LAYER_PATH=${CMAKE_BINARY_DIR}/gpu_fault;VK_INSTANCE_LAYERS=VK_LAYER_AV_device_loss")
+
 # Sanitizers, profile instrumentation and libFuzzer each need every object built
 # their way, which is why they are separate build configurations (tools/gate.sh).
 if(AV_COVERAGE AND AV_FUZZ)
@@ -504,12 +519,19 @@ foreach(src ${AV_UNIT_TESTS})
      name STREQUAL "test_frame_write_device" OR name STREQUAL "test_buffer_slice_device" OR
      name STREQUAL "test_d3d_external_export_device" OR
      name STREQUAL "test_d3d9_session_device" OR
-     name STREQUAL "test_d3d_vulkan_interop_device")
+     name STREQUAL "test_d3d_vulkan_interop_device" OR name STREQUAL "test_d3d_device_loss_device" OR
+     name STREQUAL "test_fullstack_device_loss")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;AV_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
   endif()
-  if(name STREQUAL "test_fullstack_av")
+  if(name STREQUAL "test_fullstack_av" OR name STREQUAL "test_fullstack_device_loss")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
+  endif()
+  # The tests that lose a host device on purpose load the layer that does it
+  # (tests/gpu_fault), and only they do.
+  if(name STREQUAL "test_d3d_device_loss_device" OR name STREQUAL "test_fullstack_device_loss")
+    add_dependencies(${name} av_device_loss_layer)
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT ${AV_LOSS_LAYER_ENVIRONMENT})
   endif()
   # The host makes the shader the guest's driver writes for a stream output
   # with no shader: the writer is the guest's, compiled here alone.

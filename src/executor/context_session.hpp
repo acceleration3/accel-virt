@@ -60,7 +60,10 @@ public:
      * length the answer would have been, which is what lets the device tell
      * the guest what to allocate and ask again. */
     void     end_batch();
-    bool     poll();
+    /* AV_POLL_*: lost once the backend says its host device is, and for
+     * good - the session then refuses every command, as after a command
+     * found it lost. */
+    uint32_t poll();
     /* What the device gives the library to call when a host thread finishes
      * work; nothing without a backend. */
     void     bind_signal(void (*signal)(void *context), void *context);
@@ -81,6 +84,10 @@ public:
      * freed. */
     uint64_t imported_handle(uint64_t blob_id);
     uint32_t imports() const;
+    /* For tests: the host device this session runs on made lost
+     * (SessionBackend::lose_device). AV_EXECUTED, or AV_UNKNOWN where the
+     * host cannot, or with no backend. */
+    uint32_t lose_device();
 
 
     /* Commands this session refused because the block was too small rather

@@ -30,6 +30,13 @@ public:
     static constexpr uint32_t share_object_id          = 0x00000004u;
     static constexpr uint32_t open_shared_object_id    = 0x00000005u;
     static constexpr uint32_t release_shared_object_id = 0x00000006u;
+    /* For tests: the host device the context runs on made lost, as a GPU
+     * fault would lose it, where the host was started able to (docs/protocol.md,
+     * "Losing the host device"). Its answer is 8 bytes: u32 status, u32 0. */
+    static constexpr uint32_t lose_host_device_id      = 0x00000007u;
+    static constexpr uint32_t host_device_lost         = 0u;
+    static constexpr uint32_t host_device_kept         = 1u;
+    static constexpr size_t   lose_host_device_answer  = 8u;
 
     CommandHeader();
     CommandHeader(uint32_t id, uint32_t size, uint8_t flags);

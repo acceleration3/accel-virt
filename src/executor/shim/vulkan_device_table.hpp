@@ -25,6 +25,10 @@ public:
     void               forget();
     bool               loaded() const;
     VkDevice           device() const;
+    /* For tests: the device made lost, as a GPU fault would lose it, through
+     * the layer that loses one on request (tests/gpu_fault). False where that
+     * layer is not loaded - everywhere but a test - or nothing is loaded. */
+    [[nodiscard]] bool lose() const;
 
     /* Whether the GPU makes an image as `info` describes - its format, type,
      * tiling, usage and flags, its view formats, the modifier it is laid out
@@ -126,6 +130,8 @@ private:
     PFN_vkCmdCopyImage               copy_image_;
     PFN_vkQueueSubmit                submit_;
     PFN_vkQueueWaitIdle              queue_idle_;
+    /* vkAvLoseDeviceAV, which only the loss layer answers. */
+    void (*lose_)(VkDevice device);
 };
 
 }  // namespace av

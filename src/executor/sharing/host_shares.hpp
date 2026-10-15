@@ -129,6 +129,14 @@ public:
     void     release(uint32_t domain, uint64_t id);
     /* Every share of every domain gone: the host device is closing. */
     void     clear();
+    /* The GPU's Direct3D 11 or 12 device was lost and is made again: every
+     * share lets go of what was that device's (Share::give_up_direct3d11,
+     * give_up_direct3d12) to take_retired, which the Direct3D 11 device
+     * drains under its lock before the old device goes. The shares stay the
+     * guest's until it lets go; one whose resource went opens nothing, as a
+     * shared handle from before a TDR opens nothing on Windows. */
+    void     lose_direct3d11();
+    void     lose_direct3d12();
     /* COM references of freed shares, now the caller's to release under the
      * Direct3D 11 device's lock: up to `capacity` of them, the count answered. */
     uint32_t take_retired(IUnknown **objects, uint32_t capacity);
@@ -161,6 +169,9 @@ private:
     void         milestone(uint32_t live);
     /* `object` kept for take_retired, or released now when nothing can hold it. */
     void         retire(IUnknown *object);
+    /* Every share's objects that `give_up` hands over, retired. */
+    template <typename GiveUp>
+    void         retire_each(GiveUp give_up);
 
     struct Retired {
         explicit Retired(IUnknown *object);

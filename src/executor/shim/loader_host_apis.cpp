@@ -167,7 +167,7 @@ const OpenClDevice *LoaderHostApis::opencl_device(uint32_t index)
 D3d11HostDevice *LoaderHostApis::d3d11_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d11_device");
-    return index < count_ && d3d11_devices_[index].opened() ? &d3d11_devices_[index] : nullptr;
+    return index < count_ && d3d11_devices_[index].placed() ? &d3d11_devices_[index] : nullptr;
 }
 
 D3d9HostDevice *LoaderHostApis::d3d9_device(uint32_t index)
@@ -179,7 +179,7 @@ D3d9HostDevice *LoaderHostApis::d3d9_device(uint32_t index)
 D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d12_device");
-    return index < count_ && d3d12_devices_[index].opened() ? &d3d12_devices_[index] : nullptr;
+    return index < count_ && d3d12_devices_[index].placed() ? &d3d12_devices_[index] : nullptr;
 }
 
 SharedSurfaces *LoaderHostApis::surfaces(uint32_t index)

@@ -78,7 +78,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), imported_(), d3d12_(region_, imported_, objects_), d3d9_(region_, objects_), published_(), progress11_(), slice_storage_(), slice_memory_(nullptr), slice_storage_refused_(false),
+    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), admitted_(false), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), imported_(), d3d12_(region_, imported_, objects_, wake_), d3d9_(region_, objects_), published_(), progress11_(), slice_storage_(), slice_memory_(nullptr), slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -88,7 +88,8 @@ bool D3dBackend::initialize(SessionShares &shares, D3d11HostDevice *device11, D3
                             SharedSurfaces *surfaces, D3d9HostDevice *device9)
 {
     AV_SCOPE("D3dBackend::initialize");
-    if (device11 == nullptr || !device11->opened()) return false;
+    if (device11 == nullptr || !device11->admit(wake_)) return false;
+    admitted_ = true;
     device11_ = device11;
     surfaces_ = surfaces;
     shares_ = &shares;
@@ -122,6 +123,9 @@ void D3dBackend::shut_down()
         device11_->unlock();
     }
     static_cast<void>(states_.select(0u));
+    if (admitted_) device11_->dismiss(wake_);
+    admitted_ = false;
+    wake_.clear();
     device11_ = nullptr;
     shares_ = nullptr;
     slice_storage_refused_ = false;
@@ -207,6 +211,7 @@ bool D3dBackend::poll()
 void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
 {
     AV_SCOPE("D3dBackend::bind_signal");
+    wake_.bind(signal, context);
     d3d12_.bind_signal(signal, context);
 }
 
@@ -218,15 +223,25 @@ void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("D3dBackend::gpu_progress");
     d3d12_.gpu_progress(marked, reached);
-    if (marked != 0u) return;
-    marked = progress11_.marked();
-    reached = progress11_.reached();
+    if (marked == 0u) {
+        marked = progress11_.marked();
+        reached = progress11_.reached();
+    }
+    /* A lost device finishes nothing more: what it was given is not waited
+     * for, or a ring holding its batches would never let them go. */
+    if (lost()) reached = marked;
 }
 
 bool D3dBackend::lost() const
 {
     AV_SCOPE("D3dBackend::lost");
-    return lost_;
+    return lost_ || (device11_ != nullptr && device11_->lost()) || d3d12_.lost() || d3d9_.lost();
+}
+
+bool D3dBackend::lose_device()
+{
+    AV_SCOPE("D3dBackend::lose_device");
+    return device11_ != nullptr && device11_->lose();
 }
 
 bool D3dBackend::adopt(ImportedBlob &blob)
@@ -1791,7 +1806,8 @@ void D3dBackend::await_gpu_unlocked()
     published_.flushed();
     device11_->unlock();
     const timespec pause = {0, pause_nanoseconds};
-    for (uint32_t pauses = 0u; pauses < most_pauses && progress11_.pending(); pauses++) nanosleep(&pause, nullptr);
+    for (uint32_t pauses = 0u; pauses < most_pauses && progress11_.pending() && !device11_->lost(); pauses++)
+        nanosleep(&pause, nullptr);
     device11_->lock(states_.selected());
 }
 
@@ -1846,6 +1862,13 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     if (staging == nullptr) return true;
     device11_->context()->CopySubresourceRegion(staging, 0u, 0u, 0u, 0u, found, subresource, nullptr);
     await_gpu_unlocked();
+    /* Nothing is read back from a lost device: the guest's Map answers
+     * removed, and the session is faulted after this command. */
+    if (device11_->lost()) {
+        staging->Release();
+        hresult = static_cast<uint32_t>(DXGI_ERROR_DEVICE_REMOVED);
+        return true;
+    }
     ID3D11DeviceContext4 *const context = device11_->context();
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     const HRESULT result = context->Map(staging, 0u, D3D11_MAP_READ, 0u, &mapped);

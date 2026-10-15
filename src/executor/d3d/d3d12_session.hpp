@@ -46,6 +46,7 @@ class D3d11HostDevice;
 class SessionShares;
 class SharedSurfaces;
 class D3d12HostDevice;
+class WakeSignal;
 class GuestRegion;
 class ImportedMemories;
 
@@ -57,7 +58,9 @@ public:
      * of from one id space: Direct3D 12's share it with 11's and 9's. */
     /* `imported` is the memory the session imported besides its region: a
      * CPU-visible heap is one of them (docs/host-memory.md). */
-    D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects);
+    /* `tenant` is what wakes the session's worker should the GPU's Direct3D
+     * 12 device, which it joins as it opens it, be lost (DeviceTenants). */
+    D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects, WakeSignal &tenant);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. Swap chain buffers are
@@ -81,6 +84,9 @@ public:
     void               bind_signal(void (*signal)(void *context), void *context);
     /* The reason the guest is told its device was removed; 0 while it is not. */
     uint32_t           removed_reason() const;
+    /* Whether the device this session opened is lost; false for a session
+     * that never opened one. */
+    bool               lost() const;
 
     const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
     uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
@@ -191,6 +197,11 @@ private:
     GuestRegion           &region_;
     ImportedMemories      &imported_;
     D3d12HostDevice       *device_;
+    D3d11HostDevice       *shown_by_;
+    SessionShares         *shares_;
+    WakeSignal            &tenant_;
+    /* Whether the session opened the device, which made it a tenant. */
+    bool                   joined_;
     SharedSurfaces        *surfaces_;
     D3dObjectTable        &objects_;
     D3d12AddressMap        addresses_;

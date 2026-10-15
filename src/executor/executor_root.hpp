@@ -113,6 +113,10 @@ public:
      * session of another API: neither Vulkan nor OpenGL completes anything
      * except on the thread that asked. */
     void            set_signal(ContextSession *session, void (*signal)(void *context), void *context);
+    /* For tests: the host device `session` runs on made lost
+     * (ContextSession::lose_device); AV_UNKNOWN for a session this root did
+     * not hand out. */
+    uint32_t        lose_device(ContextSession *session);
     /* Feature 053 on a session this root handed out, through its domain's
      * HostShares (publish, open, close), answered as AV_SHARED_*: refused,
      * and nothing done, for a faulted session or one it did not hand out -

@@ -80,6 +80,12 @@ public:
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
+    /* Whether a host device of the session's was lost - each guest device
+     * has one of its own, a DXVK Direct3D 9 device on its own Vulkan device -
+     * as its own command found it once it ran (TestCooperativeLevel, which
+     * tools/dxvk-patches/0007 makes say so). The session goes with it: the
+     * guest's driver removes its devices as one, from the context's fault. */
+    bool               lost() const;
 
     const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
     uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
@@ -205,6 +211,7 @@ private:
     CommandRefusal  refusal_;
     /* The decode arena of the command running; null between commands. */
     WireArena      *arena_;
+    bool            lost_;
 };
 
 template <typename T>

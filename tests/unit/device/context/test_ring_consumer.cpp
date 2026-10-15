@@ -709,6 +709,51 @@ TEST(ring_consumer_poll, a_ring_not_attached_or_faulted_polls_nothing)
   CHECK(fixture.consumer().faulted());
   CHECK(!fixture.poll()); }
 
+/* A host device lost under an idle context - another context saw it and the
+ * library woke this one to poll - faults it as device lost at that poll: the
+ * page says so with the last fence it completed, the guest is interrupted,
+ * the executor goes, and the worker is no longer at work for it. */
+TEST(ring_consumer_poll, a_device_lost_while_idle_faults_the_context_at_the_poll)
+{ Fixture fixture;
+  fixture.bind();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.page().completed_fence(), 1u);
+  CHECK(!fixture.poll());
+  CHECK(!fixture.consumer().faulted());
+  const std::uint32_t raised = fixture.host().raised(0u);
+  fixture.ops().lose_host_device();
+  CHECK(!fixture.poll());
+  CHECK(fixture.consumer().faulted());
+  CHECK(fixture.page().faulted());
+  CHECK_EQ(fixture.page().fault_code(), static_cast<std::uint32_t>(FaultCode::device_lost));
+  CHECK_EQ(fixture.page().completed_fence(), 1u);
+  CHECK(fixture.host().raised(0u) > raised);
+  CHECK(!fixture.consumer().has_work());
+  CHECK(!fixture.fences().working());
+  CHECK_EQ(fixture.ops().live(), 0u);
+  /* Faulted once: a later poll and a later batch change nothing. */
+  const std::uint32_t after = fixture.host().raised(0u);
+  CHECK(!fixture.poll());
+  fixture.ring().write_batch(2u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.page().completed_fence(), 1u);
+  CHECK_EQ(fixture.host().raised(0u), after);
+  CHECK(fixture.consumer().invariants_hold()); }
+
+/* An answer outside the ABI is idle: it neither faults nor keeps watch. */
+TEST(ring_consumer_poll, an_answer_no_library_may_give_is_idle)
+{ Fixture fixture;
+  fixture.ops().editable().poll = scripted_poll;
+  fixture.bind();
+  publishing_answer = 9u;
+  CHECK(!fixture.poll());
+  CHECK(!fixture.consumer().faulted());
+  CHECK(!fixture.fences().working());
+  publishing_answer = 0u; }
+
 /* Two Direct3D streams: a batch waits for the other stream's batches the guest
  * published before it, and a batch published first does not wait. The other
  * stream never runs here, so a wait is the ordering's whole bound: 1000 pauses

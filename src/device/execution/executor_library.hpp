@@ -6,6 +6,7 @@
 
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "device/execution/host_poll.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <stddef.h>
@@ -50,7 +51,9 @@ public:
     uint32_t    execute(AvExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                         uint8_t *reply, size_t reply_capacity, size_t &reply_size) const;
     void        end_batch(AvExecutor *executor) const;
-    bool        poll(AvExecutor *executor) const;
+    /* What AvExecutorOps::poll answered; an answer outside the ABI is
+     * idle, which holds nothing up. */
+    HostPoll    poll(AvExecutor *executor) const;
     void        gpu_progress(AvExecutor *executor, uint64_t &marked, uint64_t &reached) const;
     /* Gives `executor` something to call when a host API finishes work on a
      * thread of its own, or takes it back with a null. */
@@ -58,6 +61,10 @@ public:
     uint32_t    import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key) const;
     void        release_blob(AvExecutor *executor, uint64_t blob_id) const;
     uint64_t    imported_handle(AvExecutor *executor, uint64_t blob_id) const;
+    /* For tests (AvExecutorOps::lose_device): the host device `executor`
+     * runs on made lost. not_supported for a library without the call, or a
+     * host that cannot. */
+    [[nodiscard]] Status lose_device(AvExecutor *executor) const;
 
     /* Feature 053, answered as the library answered it (AV_SHARED_*): the
      * object `wire_handle` names in `executor`'s commands shared as

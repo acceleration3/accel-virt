@@ -99,6 +99,15 @@ ID3D12CommandQueueTileMappings : public ID3D12Pageable {
                                                       D3D12_TILE_MAPPING_FLAGS flags) = 0;
 };
 
+/* vkd3d-proton's ID3D12DeviceExt (include/vkd3d_device_vkd3d_ext.idl): a
+ * Direct3D 12 device's Vulkan device. Declared through the one slot called. */
+MIDL_INTERFACE("11ea7a1a-0f6a-49bf-b612-3e30f8e201dd")
+ID3D12DeviceExt : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetVulkanHandles(VkInstance *instance, VkPhysicalDevice *physical_device,
+                                                       VkDevice *device) = 0;
+};
+__CRT_UUID_DECL(ID3D12DeviceExt, 0x11ea7a1a, 0x0f6a, 0x49bf, 0xb6, 0x12, 0x3e, 0x30, 0xf8, 0xe2, 0x01, 0xdd);
+
 /* CLSID_D3D12DeviceFactory, what D3D12GetInterface makes a factory from. */
 constexpr GUID clsid_d3d12_device_factory = {0x114863bf, 0xc386, 0x4aee, {0xb3, 0x9d, 0x8f, 0x0b, 0xbb, 0x06, 0x29, 0x55}};
 

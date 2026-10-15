@@ -22,7 +22,10 @@ void D3d12FramePool::bind(ID3D12Device *device)
 {
     AV_SCOPE("D3d12FramePool::bind");
     if (device == device_) return;
-    frames_.each([](Frame &frame) { frame.drop(); });
+    if (device == nullptr || device_ == nullptr)
+        frames_.each([](Frame &frame) { frame.drop(); });
+    else
+        frames_.each([](Frame &frame) { frame.forsake(); });
     device_ = device;
 }
 
@@ -75,7 +78,7 @@ D3d12FramePool::Frame *D3d12FramePool::claim(uint64_t bytes)
 D3d12FramePool::Frame::Frame()
     : buffer_(nullptr), resolved_(nullptr), resolved_format_(0u), mapped_(nullptr), bytes_(0u), allocator_(nullptr), list_(nullptr), fence_(nullptr),
       value_(0u), offset_(0u), row_pitch_(0u), width_(0u), height_(0u), device_(nullptr),
-      claim_()
+      claim_(), forsaken_(false)
 {
     AV_SCOPE("D3d12FramePool::Frame::Frame");
 }
@@ -97,7 +100,7 @@ bool D3d12FramePool::Frame::claim()
 bool D3d12FramePool::Frame::idle() const
 {
     AV_SCOPE("D3d12FramePool::Frame::idle");
-    return fence_ == nullptr || fence_->GetCompletedValue() >= value_;
+    return __atomic_load_n(&forsaken_, __ATOMIC_ACQUIRE) || fence_ == nullptr || fence_->GetCompletedValue() >= value_;
 }
 
 bool D3d12FramePool::Frame::holds(uint64_t bytes) const
@@ -109,6 +112,10 @@ bool D3d12FramePool::Frame::holds(uint64_t bytes) const
 bool D3d12FramePool::Frame::prepare(ID3D12Device *device, uint64_t bytes, const void *resolved)
 {
     AV_SCOPE("D3d12FramePool::Frame::prepare");
+    if (__atomic_load_n(&forsaken_, __ATOMIC_ACQUIRE)) {
+        drop();
+        __atomic_store_n(&forsaken_, false, __ATOMIC_RELEASE);
+    }
     device_ = device;
     if (resolved != nullptr) {
         const auto &wanted = *static_cast<const D3D12_RESOURCE_DESC *>(resolved);
@@ -249,10 +256,16 @@ void D3d12FramePool::Frame::drop()
     value_ = 0u;
 }
 
+void D3d12FramePool::Frame::forsake()
+{
+    AV_SCOPE("D3d12FramePool::Frame::forsake");
+    __atomic_store_n(&forsaken_, true, __ATOMIC_RELEASE);
+}
+
 StagedFrame::Reading D3d12FramePool::Frame::read(AvFrameView &view)
 {
     AV_SCOPE("D3d12FramePool::Frame::read");
-    if (mapped_ == nullptr) return Reading::failed;
+    if (mapped_ == nullptr || __atomic_load_n(&forsaken_, __ATOMIC_ACQUIRE)) return Reading::failed;
     if (!idle()) return Reading::copying;
     view.pixels = mapped_ + offset_;
     view.row_pitch = row_pitch_;

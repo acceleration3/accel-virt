@@ -91,10 +91,18 @@ void ContextExecutor::destroy()
     executor_ = nullptr;
 }
 
-bool ContextExecutor::poll()
+HostPoll ContextExecutor::poll()
 {
     AV_SCOPE("ContextExecutor::poll");
-    return executor_ != nullptr && library_.poll(executor_);
+    return executor_ != nullptr ? library_.poll(executor_) : HostPoll::idle;
+}
+
+Status ContextExecutor::lose_device()
+{
+    AV_SCOPE("ContextExecutor::lose_device");
+    host_.require_worker("ContextExecutor::lose_device");
+    if (executor_ == nullptr) return Status::invalid_state;
+    return library_.lose_device(executor_);
 }
 
 void ContextExecutor::gpu_progress(uint64_t &marked, uint64_t &reached) const

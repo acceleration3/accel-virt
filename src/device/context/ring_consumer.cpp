@@ -184,7 +184,18 @@ bool RingConsumer::poll()
 {
     AV_SCOPE("RingConsumer::poll");
     if (!attached_ || faulted_) return false;
-    const bool publishing = executor_.poll();
+    const HostPoll polled = executor_.poll();
+    /* Asked here and not only of a batch: a context with nothing to run is
+     * woken to hear its device was lost (AvExecutorOps::poll), and told so
+     * now rather than at a next batch an idle guest may never send. */
+    if (polled == HostPoll::lost) {
+        fault(FaultCode::device_lost, "the host device was lost; last fence", last_fence_);
+        fences_.signal();
+        publishing_ = false;
+        note_work();
+        return false;
+    }
+    const bool publishing = polled == HostPoll::pending;
     if (settle()) fences_.signal();
     publishing_ = publishing;
     note_work();

@@ -490,3 +490,34 @@ TEST(context_session, a_signal_is_given_to_its_backend)
   CHECK(bound.backend().signal());
   CHECK(bound.backend().signal());
   CHECK_EQ(woken, 2u); }
+
+/* A device lost under an idle session - another session on it found the loss
+ * - is answered at the next poll, and for good: the session refuses every
+ * command after, as one a command of its own found lost. */
+TEST(context_session_poll, a_device_lost_while_idle_is_lost_from_the_next_poll_on)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  CHECK_EQ(session.poll(), std::uint32_t{AV_POLL_IDLE});
+  CHECK(!session.faulted());
+  bound.backend().lose_elsewhere();
+  CHECK_EQ(session.poll(), std::uint32_t{AV_POLL_LOST});
+  CHECK(session.faulted());
+  CHECK_EQ(session.poll(), std::uint32_t{AV_POLL_LOST});
+  std::size_t answer = 0u;
+  CHECK_EQ(session.execute(0x10001u, payload, sizeof payload, nullptr, 0u, answer), std::uint32_t{AV_DEVICE_LOST});
+  CHECK(session.invariants_hold());
+  /* A session with no backend has nothing to poll and nothing to lose. */
+  ContextSession unbound;
+  CHECK_EQ(unbound.poll(), std::uint32_t{AV_POLL_IDLE});
+  CHECK_EQ(unbound.lose_device(), std::uint32_t{AV_UNKNOWN}); }
+
+TEST(context_session_lose_device, the_backend_loses_its_host_device_where_the_host_can)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  bound.backend().set_losable(false);
+  CHECK_EQ(session.lose_device(), std::uint32_t{AV_UNKNOWN});
+  CHECK_EQ(session.poll(), std::uint32_t{AV_POLL_IDLE});
+  bound.backend().set_losable(true);
+  CHECK_EQ(session.lose_device(), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(session.poll(), std::uint32_t{AV_POLL_LOST});
+  CHECK(session.invariants_hold()); }
