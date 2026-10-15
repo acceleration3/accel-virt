@@ -564,7 +564,9 @@ TEST(copied_gl_sharing_device, a_renderbuffer_that_cannot_be_mirrored_is_refused
   rig.delete_renderbuffer(rgb);
   rig.delete_renderbuffer(rgba); }
 
-/* The guest's context is its own: no context made here names a GL one. */
+/* The guest's context is its own: no context made here names a GL one. It is
+ * made through GlSharing, as the backend makes it whichever way its GL objects
+ * reach OpenCL. */
 TEST(copied_gl_sharing_device, the_guest_s_context_is_made_as_it_asked)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -574,7 +576,8 @@ TEST(copied_gl_sharing_device, the_guest_s_context_is_made_as_it_asked)
   const cl_context_properties properties[] = {
       CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(rig.device().platform()), 0};
   cl_int           error = CL_INVALID_VALUE;
-  cl_context const made = sharing.make_context(properties, 1u, &device, &error);
+  av::GlSharing   &chosen = sharing;
+  cl_context const made = chosen.make_context(properties, 1u, &device, &error);
   CHECK(made != nullptr);
   CHECK_EQ(error, CL_SUCCESS);
   cl_context_properties named[8] = {};
