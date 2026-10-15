@@ -110,10 +110,9 @@ bool VulkanDeviceTable::supports_exportable(const VkImageCreateInfo &info) const
             views.pNext = external.pNext;
             external.pNext = &views;
         }
-        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT) {
-            const auto *listed = reinterpret_cast<const VkImageDrmFormatModifierListCreateInfoEXT *>(next);
-            if (listed->drmFormatModifierCount != 1u) return false;
-            modifier.drmFormatModifier = listed->pDrmFormatModifiers[0];
+        if (next->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT) {
+            const auto *laid = reinterpret_cast<const VkImageDrmFormatModifierExplicitCreateInfoEXT *>(next);
+            modifier.drmFormatModifier = laid->drmFormatModifier;
             modifier.pNext = external.pNext;
             external.pNext = &modifier;
             modified = true;

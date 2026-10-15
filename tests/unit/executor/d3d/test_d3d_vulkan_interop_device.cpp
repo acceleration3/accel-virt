@@ -5,8 +5,10 @@
  * and binds the image ExportableImageInfo describes to it, a pattern is copied
  * into that image, and Direct3D reads back every texel where Vulkan put it.
  * This is how a Vulkan swapchain's frames reach a DXGI chain, in both channel
- * orders a chain's slot has. A host without DXVK and Vulkan on one GPU returns
- * without judging. */
+ * orders a chain's slot has. The texture is narrower than a whole number of
+ * 256-byte rows, so the rows the description places past each row's texels
+ * are where both devices must look. A host without DXVK and Vulkan on one GPU
+ * returns without judging. */
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -38,8 +40,12 @@ namespace {
 
 using namespace av::d3dproto;
 
-constexpr std::uint32_t size = 64u;
-constexpr std::uint32_t texels = size * size;
+/* 244 bytes a row, which the description pitches 256 apart
+ * (ExportableImageInfo): Direct3D's texture and Vulkan's image agree only
+ * as both are laid out from it. */
+constexpr std::uint32_t width = 61u;
+constexpr std::uint32_t height = 64u;
+constexpr std::uint32_t texels = width * height;
 constexpr std::uint32_t format_r8g8b8a8 = 28u;
 constexpr std::uint32_t format_b8g8r8a8 = 87u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
@@ -189,7 +195,7 @@ private:
                              nullptr, 0u, nullptr, 1u, &barrier);
         VkBufferImageCopy region = {};
         region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u};
-        region.imageExtent = {size, size, 1u};
+        region.imageExtent = {width, height, 1u};
         vkCmdCopyBufferToImage(commands, staging, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = 0u;
@@ -248,8 +254,8 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
      * texels where a clear would not show it. */
     static std::uint8_t pattern[texels * 4u];
     for (std::uint32_t at = 0u; at < texels; at++) {
-        pattern[at * 4u] = static_cast<std::uint8_t>(at % size);
-        pattern[at * 4u + 1u] = static_cast<std::uint8_t>(at / size);
+        pattern[at * 4u] = static_cast<std::uint8_t>(at % width);
+        pattern[at * 4u + 1u] = static_cast<std::uint8_t>(at / width);
         pattern[at * 4u + 2u] = static_cast<std::uint8_t>(at * 7u);
         pattern[at * 4u + 3u] = static_cast<std::uint8_t>(at * 3u + 1u);
     }
@@ -258,8 +264,8 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         const std::uint32_t resource = round + 1u;
         ResourceDesc        shared = {};
         shared.dimension = 3u;
-        shared.width = size;
-        shared.height = size;
+        shared.width = width;
+        shared.height = height;
         shared.depth_or_array = 1u;
         shared.mip_levels = 1u;
         shared.format = formats[round];
@@ -275,7 +281,7 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         const off_t bytes = lseek(fd, 0, SEEK_END);
         CHECK(bytes > 0);
 
-        const av::ExportableImageInfo described(size, size, 1u, 1u, 1u, formats[round],
+        const av::ExportableImageInfo described(width, height, 1u, 1u, 1u, formats[round],
                                                 bind_shader_resource | bind_render_target);
         CHECK(described.supported());
         VkImage image = VK_NULL_HANDLE;
@@ -309,10 +315,10 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         CHECK(av_d3d_ReadSubresource(wire, resource, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof pixels,
                                       &read));
         CHECK_EQ(hresult, 0u);
-        CHECK_EQ(row_pitch, size * 4u);
+        CHECK_EQ(row_pitch, width * 4u);
         /* Bytes as Vulkan stored them, in either channel order: a slot is
          * copied into, never converted. */
-        const std::uint32_t probes[] = {0u, 1u, size - 1u, size, size * 3u + 17u, texels / 2u + 9u, texels - 1u};
+        const std::uint32_t probes[] = {0u, 1u, width - 1u, width, width * 3u + 17u, texels / 2u + 9u, texels - 1u};
         for (const std::uint32_t at : probes)
             for (std::uint32_t channel = 0u; channel < 4u; channel++)
                 CHECK_EQ(pixels[at * 4u + channel], pattern[at * 4u + channel]);

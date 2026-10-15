@@ -288,12 +288,14 @@ hello).
   (`EGL_EXT_platform_device` / `EGL_EXT_device_drm`).
 - **Vulkan** (same GPU): make the image exactly as `ExportableImageInfo`
   describes it - 2D, the format, one mip, layer and sample,
-  `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` with `DRM_FORMAT_MOD_LINEAR`
-  listed, usage `TRANSFER_SRC | TRANSFER_DST | SAMPLED |
-  COLOR_ATTACHMENT`, `MUTABLE_FORMAT` with the format and its sRGB sibling in
-  a `VkImageFormatListCreateInfo` for the 8-bit formats, external memory
-  `DMA_BUF` - and import the fd as its dedicated memory. RADV lays out an
-  image the same from the same description; that is how the guest's own
+  `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT` laid out explicitly as
+  `DRM_FORMAT_MOD_LINEAR` with one plane at offset 0 and the stride hello
+  named as its row pitch (the width's bytes rounded up to 256), usage
+  `TRANSFER_SRC | TRANSFER_DST | SAMPLED | COLOR_ATTACHMENT`,
+  `MUTABLE_FORMAT` with the format and its sRGB sibling in a
+  `VkImageFormatListCreateInfo` for the 8-bit formats, external memory
+  `DMA_BUF` - and import the fd as its dedicated memory. Every driver lays
+  the image out the same from that layout; that is how the guest's own
   Vulkan opens these textures (`test_d3d_vulkan_interop_device`).
 
 DRM fourccs: `AR24` for B8G8R8A8, `AB24` for R8G8B8A8, `AB30` for

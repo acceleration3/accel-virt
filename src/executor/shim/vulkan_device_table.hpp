@@ -27,8 +27,10 @@ public:
     VkDevice           device() const;
 
     /* Whether the GPU makes an image as `info` describes - its format, type,
-     * tiling, usage and flags, its view formats, the one modifier it lists,
-     * and its extent - over memory it can export as a dma-buf. */
+     * tiling, usage and flags, its view formats, the modifier it is laid out
+     * by, and its extent - over memory it can export as a dma-buf. The rows
+     * the layout places are not asked about: the query has no field for
+     * them, and a driver that refuses them refuses the image. */
     [[nodiscard]] bool supports_exportable(const VkImageCreateInfo &info) const;
     /* The first memory type `allowed` permits, a device-local one first;
      * VK_MAX_MEMORY_TYPES for none. */

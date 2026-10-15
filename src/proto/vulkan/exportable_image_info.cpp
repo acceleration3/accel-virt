@@ -1,5 +1,6 @@
 #include "proto/vulkan/exportable_image_info.hpp"
 
+#include "core/support/alignment.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -26,31 +27,40 @@ constexpr uint32_t bind_render_target = 0x20u;
 constexpr uint32_t shared_binds = bind_shader_resource | bind_render_target;
 /* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
+/* The bytes between the starts of two rows are a multiple of this. NVIDIA
+ * (580) lays a linear image's rows only 32 bytes apart - 2464 for 614 BGRA
+ * texels - and its 3D engine faults on clearing a target whose rows are not
+ * 128-byte aligned (Xid 69, CLEAR_SURFACE, ErrorCode 0xf): the device is lost,
+ * and with it every Direct3D 11 session on the GPU. 256 is what RADV lays
+ * linear rows at itself, and RADV, ANV and NVIDIA all take it. */
+constexpr uint32_t row_alignment = 256u;
 
-/* A format, and its sRGB or linear sibling; VK_FORMAT_UNDEFINED for none. */
+/* A format, its sRGB or linear sibling (VK_FORMAT_UNDEFINED for none), and
+ * the bytes of one texel. */
 struct ViewPair {
     uint32_t dxgi;
     VkFormat format;
     VkFormat sibling;
+    uint32_t texel_bytes;
 };
 
 constexpr ViewPair pairs[] = {
-    {dxgi_r8g8b8a8_unorm, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB},
-    {dxgi_r8g8b8a8_unorm_srgb, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM},
-    {dxgi_b8g8r8a8_unorm, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB},
-    {dxgi_b8g8r8a8_unorm_srgb, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM},
-    {dxgi_r10g10b10a2_unorm, VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_UNDEFINED},
-    {dxgi_r16g16b16a16_float, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_UNDEFINED},
+    {dxgi_r8g8b8a8_unorm, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB, 4u},
+    {dxgi_r8g8b8a8_unorm_srgb, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM, 4u},
+    {dxgi_b8g8r8a8_unorm, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB, 4u},
+    {dxgi_b8g8r8a8_unorm_srgb, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM, 4u},
+    {dxgi_r10g10b10a2_unorm, VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_UNDEFINED, 4u},
+    {dxgi_r16g16b16a16_float, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_UNDEFINED, 8u},
     /* What an OpenCL image over a shared texture reads as itself
      * (DxgiClFormat): video processing's float and single-channel planes. */
-    {dxgi_r32g32b32a32_float, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_UNDEFINED},
-    {dxgi_r16g16b16a16_unorm, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_UNDEFINED},
-    {dxgi_r32g32_float, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_UNDEFINED},
-    {dxgi_r16g16_float, VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_UNDEFINED},
-    {dxgi_r32_float, VK_FORMAT_R32_SFLOAT, VK_FORMAT_UNDEFINED},
-    {dxgi_r8g8_unorm, VK_FORMAT_R8G8_UNORM, VK_FORMAT_UNDEFINED},
-    {dxgi_r16_float, VK_FORMAT_R16_SFLOAT, VK_FORMAT_UNDEFINED},
-    {dxgi_r8_unorm, VK_FORMAT_R8_UNORM, VK_FORMAT_UNDEFINED},
+    {dxgi_r32g32b32a32_float, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_UNDEFINED, 16u},
+    {dxgi_r16g16b16a16_unorm, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_UNDEFINED, 8u},
+    {dxgi_r32g32_float, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_UNDEFINED, 8u},
+    {dxgi_r16g16_float, VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_UNDEFINED, 4u},
+    {dxgi_r32_float, VK_FORMAT_R32_SFLOAT, VK_FORMAT_UNDEFINED, 4u},
+    {dxgi_r8g8_unorm, VK_FORMAT_R8G8_UNORM, VK_FORMAT_UNDEFINED, 2u},
+    {dxgi_r16_float, VK_FORMAT_R16_SFLOAT, VK_FORMAT_UNDEFINED, 2u},
+    {dxgi_r8_unorm, VK_FORMAT_R8_UNORM, VK_FORMAT_UNDEFINED, 1u},
 };
 
 }  // namespace
@@ -60,15 +70,17 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     : external_{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO, nullptr,
                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT},
       list_{VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, views_}, views_{},
-      modifiers_{VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT, nullptr, 1u, &modifier_},
-      modifier_(drm_format_mod_linear), info_{}, supported_(false)
+      plane_{}, layout_{VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT, nullptr,
+                        drm_format_mod_linear, 1u, &plane_},
+      info_{}, supported_(false)
 {
     AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
     const ViewPair *pair = nullptr;
     for (const ViewPair &candidate : pairs)
         if (candidate.dxgi == format) pair = &candidate;
     if (pair == nullptr || width == 0u || height == 0u || mips != 1u || layers != 1u || samples > 1u ||
-        (bind_flags & ~shared_binds) != 0u)
+        (bind_flags & ~shared_binds) != 0u ||
+        !Alignment(row_alignment).align_up(static_cast<uint64_t>(width) * pair->texel_bytes, plane_.rowPitch))
         return;
     info_.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info_.pNext = &external_;
@@ -85,8 +97,10 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
      * where the importer read it as linear and showed it scrambled. Linear
      * under the modifier that names it rather than VK_IMAGE_TILING_LINEAR: a
      * driver may export a dma-buf only for an image laid out by a modifier -
-     * RADV from Mesa 26.2 refuses the other - and listing just the one leaves
-     * it no layout to choose but linear. */
+     * RADV from Mesa 26.2 refuses the other. The rows are placed here rather
+     * than left to the driver: every device that makes this image then lays
+     * the memory out alike by construction, and no driver picks a pitch its
+     * own engines cannot draw at (row_alignment). */
     info_.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     /* Drawn and sampled whatever the binds say: another API opening the
      * memory draws into it, and a superset of what DXVK asks is an image DXVK
@@ -95,12 +109,12 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     info_.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info_.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    external_.pNext = &modifiers_;
+    external_.pNext = &layout_;
     if (pair->sibling != VK_FORMAT_UNDEFINED) {
         views_[0] = pair->format;
         views_[1] = pair->sibling;
         list_.viewFormatCount = max_views;
-        list_.pNext = &modifiers_;
+        list_.pNext = &layout_;
         external_.pNext = &list_;
         info_.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     }

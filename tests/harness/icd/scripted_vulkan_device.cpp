@@ -204,17 +204,17 @@ VkResult ScriptedVulkanDevice::make_image(const VkImageCreateInfo *info, VkImage
         slot.made = true;
         slot.width = info->extent.width;
         slot.height = info->extent.height;
-        slot.described = Described{info->format, info->flags, info->tiling, info->usage, 0u, 0u, 0u, ~0ull, VK_NULL_HANDLE};
+        slot.described = Described{info->format, info->flags, info->tiling, info->usage, 0u, 0u, ~0ull, 0u, VK_NULL_HANDLE};
         for (auto *node = static_cast<const VkBaseInStructure *>(info->pNext); node != nullptr; node = node->pNext) {
             if (node->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO)
                 slot.described.external = reinterpret_cast<const VkExternalMemoryImageCreateInfo *>(node)->handleTypes;
             if (node->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO)
                 slot.described.view_formats =
                     reinterpret_cast<const VkImageFormatListCreateInfo *>(node)->viewFormatCount;
-            if (node->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT) {
-                const auto *listed = reinterpret_cast<const VkImageDrmFormatModifierListCreateInfoEXT *>(node);
-                slot.described.modifiers = listed->drmFormatModifierCount;
-                if (listed->drmFormatModifierCount != 0u) slot.described.first_modifier = listed->pDrmFormatModifiers[0];
+            if (node->sType == VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT) {
+                const auto *laid = reinterpret_cast<const VkImageDrmFormatModifierExplicitCreateInfoEXT *>(node);
+                slot.described.modifier = laid->drmFormatModifier;
+                if (laid->drmFormatModifierPlaneCount != 0u) slot.described.row_pitch = laid->pPlaneLayouts[0].rowPitch;
             }
         }
         image_count_++;
