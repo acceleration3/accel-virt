@@ -195,7 +195,11 @@ void GlProbe::compat_step()
 }
 
 /* Feature 051, US2.2: sixty swaps at interval 1 cannot have taken less time
- * than fifty-nine vertical blanks, and interval 0 waits for none. */
+ * than fifty-nine vertical blanks - the first waits for whatever was left of
+ * one - and interval 0 waits for none. Judged against fifty-eight: the period
+ * is a mean of blanks a waiter woke for a little late (VblankClock), and a
+ * swap count just past fifty-nine measured against one even a fraction long
+ * comes to less; a driver that held nothing comes to none either way. */
 void GlProbe::interval_step()
 {
     AV_SCOPE("GlProbe::interval_step");
@@ -214,7 +218,7 @@ void GlProbe::interval_step()
     const uint64_t started = clock_.now();
     for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
     const uint64_t paced = clock_.now() - started;
-    const uint64_t least = period * (paced_frames - 1u);
+    const uint64_t least = period * (paced_frames - 2u);
     static_cast<void>(steps_.check_measured("interval", paced >= least ? Status::ok : Status::conflict,
                                             static_cast<uint32_t>(paced / period)));
 }

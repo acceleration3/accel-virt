@@ -104,7 +104,9 @@ bool VulkanProbe::present_step(PresentWork &present)
 }
 
 /* FIFO holds each frame to a vertical blank: sixty frames cannot have taken
- * less time than sixty blanks, less the one a first frame need not wait for. */
+ * less time than sixty blanks, less the one a first frame need not wait for.
+ * Judged against one fewer still, as the GL probe's interval step is: the
+ * period is a mean of blanks a waiter woke for a little late (VblankClock). */
 void VulkanProbe::pacing_step()
 {
     AV_SCOPE("VulkanProbe::pacing_step");
@@ -113,7 +115,7 @@ void VulkanProbe::pacing_step()
         static_cast<void>(steps_.check_measured("pacing", Status::not_found, 0u));
         return;
     }
-    const uint64_t least = period * (frames - 1u);
+    const uint64_t least = period * (frames - 2u);
     static_cast<void>(steps_.check_measured("pacing", elapsed_ >= least ? Status::ok : Status::conflict,
                                             static_cast<uint32_t>(elapsed_ / period)));
 }
