@@ -36,12 +36,14 @@ bool same_word(const char *text, const char *name, size_t length)
  * into the object behind it and opens that on the device, and the extension's
  * acquire and release are answered by `ClIcdRoot::enqueue_external` - the
  * object was acquired on the host when the device opened it and stays
- * acquired for its life. Both are answered over the host's `cl_khr_gl_sharing`
- * rather than over an external-memory extension of its own: no OpenCL on a
- * Linux host has a Win32 handle to take, and the device reaches the descriptor
- * through OpenGL instead (research.md §18 and §21). A host that cannot really
- * make a GL-sharing context is a host whose device strikes that name out of
- * what the guest is shown, so neither row is reported there.
+ * acquired for its life. Both are answered over the device's
+ * `cl_khr_external_memory`, which is the executor's to say and not the host
+ * OpenCL's: no OpenCL on a Linux host has a Win32 handle to take, and the
+ * device reaches the descriptor through OpenGL instead (research.md §18 and
+ * §21), which needs the host's OpenCL to share with the executor's GL. The
+ * executor says the name exactly where that import is made
+ * (OpenClBackend::on_clGetDeviceInfo) - not on NVIDIA's, which shares with no
+ * EGL context - so neither row is reported where it would fail.
  *
  * `cl_khr_icd` is the loader's own contract rather than something an
  * application enables, and this ICD answers its two queries without claiming
@@ -69,12 +71,15 @@ bool same_word(const char *text, const char *name, size_t length)
  * Resolve makes its context this way and waits forever when it cannot.
  *
  * `cl_khr_gl_sharing` is reported where the host's device lists it - which
- * it does exactly when its OpenCL made a context against a GL context of the
- * device's own. The context this ICD makes from a GL context is a context of
- * the device's made in that GL context's share group: the OpenGL ICD names
- * the context by its ring (avGetShareName), the miniport resolves the name
- * for a context of the same process, and the executor makes the host's
- * context against a GL context sharing the guest one's objects. *
+ * the executor leaves it in exactly where a GL context can be had on the GPU.
+ * The context this ICD makes from a GL context is a context of the device's
+ * made in that GL context's share group: the OpenGL ICD names the context by
+ * its ring (avGetShareName), the miniport resolves the name for a context of
+ * the same process, and the executor reaches the guest one's objects through a
+ * GL context sharing them - the host's own OpenCL naming them where it shares
+ * with that context, and copies at the acquire and the release where it does
+ * not (CopiedGlSharing).
+ *
  * `cl_khr_pci_bus_info`, `cl_amd_device_attribute_query` and
  * `cl_nv_device_attribute_query` say where the device sits on the PCI bus,
  * which is how an application pairs it with a DXGI adapter or a vendor
@@ -92,11 +97,10 @@ bool same_word(const char *text, const char *name, size_t length)
  */
 const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory", 1u,
-     "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver",
-     "cl_khr_gl_sharing"},
+     "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver"},
     {"cl_khr_external_memory_win32", 1u,
      "cl_buffer_paths.a_buffer_over_a_shared_object_is_opened_and_released_as_one",
-     "cl_khr_gl_sharing"},
+     "cl_khr_external_memory"},
     {"cl_khr_gl_sharing", 1u, "cl_gl_sharing.a_context_made_from_the_current_gl_context_names_its_objects"},
     {"cl_khr_byte_addressable_store", 1u,
      "fullstack_opencl_icd.a_kernel_stores_single_bytes_and_leaves_their_neighbours"},
@@ -141,8 +145,8 @@ bool ClExtensionPolicy::answered_by(const char *host, size_t host_bytes, const R
     AV_SCOPE("ClExtensionPolicy::answered_by");
     /* The host extension the row is answered over, when it is not the host's
      * own spelling of it: cl_khr_external_memory_win32 is answered over the
-     * host's cl_khr_gl_sharing, since no Linux OpenCL has a Win32 handle to
-     * take and the device opens the object through OpenGL instead
+     * device's cl_khr_external_memory, since no Linux OpenCL has a Win32
+     * handle to take and the device opens the object through OpenGL instead
      * (research.md §21). */
     if (row.host_ != nullptr && row.host_[0] == answered_here[0]) {
         if (row.host_[1] == '\0') return true;

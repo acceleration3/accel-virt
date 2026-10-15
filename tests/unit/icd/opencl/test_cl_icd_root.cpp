@@ -168,12 +168,13 @@ TEST(cl_icd_root, a_devices_platform_is_this_icds_and_it_has_no_parent)
  * host's would offer an application every extension rusticl implements over a
  * wire that carries none of them (constitution VI).
  *
- * The two rows are the external-memory pair, and both are answered over a host
- * extension of another name: a Linux OpenCL has no Win32 handle to take, and
- * the device opens the descriptor through the host's `cl_khr_gl_sharing`
- * instead (research.md §21). So a host that lists that name is shown them, a
- * host that does not is shown nothing, and neither is ever shown the host's
- * own list. */
+ * The external-memory pair is answered over the device's own
+ * `cl_khr_external_memory`, which the executor says exactly where it can open
+ * a descriptor - a Linux OpenCL has no Win32 handle to take, and the device
+ * opens the descriptor through OpenGL instead (research.md §21) - and
+ * cl_khr_gl_sharing is its own row. So a device that lists those names is
+ * shown them, one that lists neither is shown neither, and none is ever shown
+ * the host's own list. */
 TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_the_host_s_own)
 { /* A host naming extensions this ICD has no row for, including one whose
    * name is a prefix of another so a match on anything but a whole word
@@ -207,12 +208,12 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
     CHECK_EQ(cramped[0], 'x');
     CHECK_EQ(rig.kmt().commands(), sent); }
 
-  /* A host with the one name the rows are answered over: the two
-   * external-memory rows and GL sharing itself are reported, in the policy's
-   * order, and still nothing else of the host's. */
+  /* A device with the names the rows are answered over: the two
+   * external-memory rows and GL sharing are reported, in the policy's order,
+   * and still nothing else of the host's. */
   { ClIcdRig rig;
     cl_device_id device = opened_device(rig);
-    static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il";
+    static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il cl_khr_external_memory";
     rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
     std::memset(reported, 'x', sizeof reported);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
@@ -222,6 +223,18 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
                          "cl_khr_pci_bus_info"),
              0);
     CHECK_EQ(answered, std::strlen(reported) + 1u); }
+
+  /* GL sharing alone - a device whose GL objects reach OpenCL as copies, and
+   * which opens no descriptor - is shown no external memory. */
+  { ClIcdRig rig;
+    cl_device_id device = opened_device(rig);
+    static const char copies[] = "cl_khr_gl_sharing cl_khr_external_memory_opaque_fd";
+    rig.host().cl_info(CL_SUCCESS, copies, sizeof copies);
+    std::memset(reported, 'x', sizeof reported);
+    CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported, &answered),
+             CL_SUCCESS);
+    CHECK_EQ(std::strcmp(reported, "cl_khr_gl_sharing cl_khr_d3d10_sharing cl_khr_d3d11_sharing cl_khr_pci_bus_info"),
+             0); }
 
   /* And a host that will not answer is the host's status, not an empty list:
    * an ICD that reported "no extensions" for a device it could not ask would
@@ -245,8 +258,8 @@ TEST(cl_icd_root, the_import_handle_types_are_this_drivers_own_and_only_where_it
 { { ClIcdRig rig;
     cl_device_id device = opened_device(rig);
     CHECK(device != nullptr);
-    static const char sharing[] = "cl_khr_gl_sharing";
-    rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+    static const char importing[] = "cl_khr_external_memory";
+    rig.host().cl_info(CL_SUCCESS, importing, sizeof importing);
     cl_external_memory_handle_type_khr taken = 0u;
     std::size_t                        answered = 0u;
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
@@ -275,7 +288,7 @@ TEST(cl_icd_root, the_import_handle_types_are_this_drivers_own_and_only_where_it
   cl_external_memory_handle_type_khr taken = 0u;
   { ClIcdRig rig;
     cl_device_id device = opened_device(rig);
-    static const char plain[] = "cl_khr_fp64";
+    static const char plain[] = "cl_khr_fp64 cl_khr_gl_sharing";
     rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, sizeof taken,
                                       &taken, nullptr),
