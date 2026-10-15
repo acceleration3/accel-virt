@@ -24,11 +24,12 @@ constexpr uint64_t slice_store_bytes = uint64_t{128} << 20u;
 }  // namespace
 
 D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
-    : memory_(memory), log_(log), devices_(memory),
+    : memory_(memory), log_(log), trace_(), devices_(memory),
       adapters_(kmt, memory, log, "the host answers no Direct3D 11 on this adapter", session_arena_bytes, slice_store_bytes,
                 d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11, d3dproto::kCmd_Flush11)
 {
     AV_SCOPE("D3d11Driver::D3d11Driver");
+    trace_.open();
 }
 
 d3d::Hresult D3d11Driver::caps(d3d::UmdAdapter &, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter)
@@ -50,7 +51,7 @@ d3d::Hresult D3d11Driver::build(d3d::UmdDevice &, d3d::D3d10ddiargCreateDeviceRe
     const auto &arguments = *reinterpret_cast<const D3D10DDIARG_CREATEDEVICE *>(&create);
     if (arguments.Interface != D3DWDDM3_2_DDI_INTERFACE_VERSION) return d3d::hr_no_interface;
     D3d11Device *device = nullptr;
-    if (devices_.create(device, adapters_.session(slot), memory_, log_, adapters_.caps(slot)) != Status::ok) return d3d::hr_out_of_memory;
+    if (devices_.create(device, adapters_.session(slot), memory_, log_, adapters_.caps(slot), trace_) != Status::ok) return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
         static_cast<void>(devices_.destroy(device));

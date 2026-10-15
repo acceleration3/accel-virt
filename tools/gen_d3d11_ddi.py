@@ -49,6 +49,7 @@ D3DWDDM2_6DDI_DEVICEFUNCS *probe;
     includes=["core/trace/function_scope.hpp", "icd/d3d/umd_binding.hpp", "icd/d3d/umd_root.hpp", "um/d3d/d3d11_ddi.hpp",
               "um/d3d/d3d11_device.hpp", "um/d3d/d3d11_dxgi_thunks.hpp", "um/d3d/device_call.hpp",
               "um/d3d/device_handle.hpp"],
+    trace_calls=True,
     preamble=["/* The ABI boundary C requires: the runtime calls each slot with the device",
               " * handle it was given and nothing else, so each thunk is one line into the",
               " * device the handle's block names. */"],

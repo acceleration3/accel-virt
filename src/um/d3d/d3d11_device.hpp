@@ -20,6 +20,7 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/d3d/command_recording.hpp"
@@ -30,6 +31,7 @@
 #include "icd/d3d/write_maps.hpp"
 #include "um/d3d/reentrant_call_lock.hpp"
 #include "um/common/srw_lock.hpp"
+#include "um/d3d/d3d11_call_trace.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/kernel_context_gate.hpp"
 #include "um/d3d/kernel_device.hpp"
@@ -59,7 +61,8 @@ class D3d11HostCaps;
 
 class D3d11Device {
 public:
-    D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps);
+    D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
+                D3d11CallTrace &trace);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
@@ -78,6 +81,9 @@ public:
     /* One runtime call at a time into this object (d3d::DeviceCall). */
     void    lock_calls();
     void    unlock_calls();
+    /* The runtime's call to `slot`, as the process's call trace writes it. */
+    template <typename... Arguments>
+    void    trace_call(const char *slot, const Arguments &...arguments);
 
     /* DXGI's slots, over the table the root already published. */
     HRESULT present(DXGI_DDI_ARG_PRESENT *args);
@@ -301,7 +307,17 @@ private:
     icd::OnceLatch  token_refused_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
+    D3d11CallTrace &trace_;
+    /* What the call trace calls this device or deferred context. */
+    uint32_t        context_number_;
 };
+
+template <typename... Arguments>
+void D3d11Device::trace_call(const char *slot, const Arguments &...arguments)
+{
+    AV_SCOPE("D3d11Device::trace_call");
+    trace_.call(context_number_, slot, arguments...);
+}
 
 }  // namespace av::d3d11
 

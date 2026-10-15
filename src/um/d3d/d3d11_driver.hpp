@@ -46,6 +46,7 @@ public:
 private:
     BlockSource             &memory_;
     LogSink            &log_;
+    D3d11CallTrace           trace_;
     ObjectPool<D3d11Device>  devices_;
     AdapterSessions<D3d11HostCaps> adapters_;
 };

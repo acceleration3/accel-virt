@@ -839,6 +839,21 @@ gives it (docs/host-memory.md, Budgets).
   buffer's first frame passes every other step and fails `wpf_window` - as the
   host did, and every WPF window, Affinity's whole UI among them, was black.
 
+  **Probes from an application's calls.** With `AV_D3D11_TRACE` in a
+  process's environment, avumd writes the Direct3D 11 runtime's calls into it
+  to `C:\ProgramData\av\avumd-calls-<pid>.log`, one line each: microseconds,
+  thread, context (`c0` an immediate device, then each device and deferred
+  context in the order it was made), the slot and its arguments - an object
+  by its id (`#12`), the first of an array of them, a created resource by
+  its dimension, size, format, usage, bind, CPU access and misc flags, a view
+  by its resource and format. The value is how many calls to write, after how
+  many to pass over (`20000`, `300000+20000`). A call is written once it
+  returns, so what it made has its id; a destroy is written before, while its
+  id is still there. That file is what an application's probe is written
+  from: set the variable for the user (`setx`), restart whatever launches the
+  application (Steam) so it inherits it, and read the frame's pattern between
+  two `Present` lines.
+
   A **cleared frame, not a triangle**: a triangle through either layer needs
   DXBC and no shader compiler is pinned here. What the clear still proves is
   the device, the swap chain or render target, the command list and fence, the

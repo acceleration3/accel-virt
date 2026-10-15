@@ -24,6 +24,13 @@ public:
      * before the arguments the call is one of. */
     template <typename Result>
     Result noted(const char *call, Result result) const;
+    /* `method` called with `arguments`, then the call to `slot` traced
+     * (D3d11Device::trace_call): after it, so what it made has its id. */
+    template <typename Result, typename... Parameters, typename... Arguments>
+    Result traced(const char *slot, Result (Device::*method)(Parameters...), const Arguments &...arguments) const;
+    /* The same traced before the call: a destroy forgets the id it names. */
+    template <typename... Parameters, typename... Arguments>
+    void   announced(const char *slot, void (Device::*method)(Parameters...), const Arguments &...arguments) const;
 
 private:
     Device &device_;
@@ -57,6 +64,32 @@ Result DeviceCall<Device>::noted(const char *call, Result result) const
     AV_SCOPE("DeviceCall::noted");
     if (result < 0) device_.note_failure(call, static_cast<uint32_t>(result));
     return result;
+}
+
+template <typename Device>
+template <typename Result, typename... Parameters, typename... Arguments>
+Result DeviceCall<Device>::traced(const char *slot, Result (Device::*method)(Parameters...),
+                                  const Arguments &...arguments) const
+{
+    AV_SCOPE("DeviceCall::traced");
+    if constexpr (__is_same(Result, void)) {
+        (device_.*method)(arguments...);
+        device_.trace_call(slot, arguments...);
+    } else {
+        const Result result = (device_.*method)(arguments...);
+        device_.trace_call(slot, arguments...);
+        return result;
+    }
+}
+
+template <typename Device>
+template <typename... Parameters, typename... Arguments>
+void DeviceCall<Device>::announced(const char *slot, void (Device::*method)(Parameters...),
+                                   const Arguments &...arguments) const
+{
+    AV_SCOPE("DeviceCall::announced");
+    device_.trace_call(slot, arguments...);
+    (device_.*method)(arguments...);
 }
 
 }  // namespace av::d3d
