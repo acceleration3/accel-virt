@@ -142,7 +142,8 @@ D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "pres
                    "wpf_device", "wpf_swap_chain", "wpf_draw", "wpf_present", "wpf_window"),
              "11": ("device", "feature_level", "adapter_luid", "target", "readback", "pixels", "present",
                     "deferred_device", "deferred_buffers", "deferred_contexts", "deferred_frames",
-                    "deferred_readback", "deferred_contents", "deferred_commit"),
+                    "deferred_readback", "deferred_contents", "deferred_commit", "shared_device",
+                    "shared_targets", "shared_readback", "shared_texels", "shared_device_kept"),
              "12": ("device", "feature_level", "adapter_luid", "queue", "target", "clear", "fence", "readback",
                     "pixels")}
 # Which layer each probe's DLLs come from, and what the probe is called.

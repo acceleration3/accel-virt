@@ -857,6 +857,21 @@ gives it (docs/host-memory.md, Budgets).
   which runs the probe on the system's runtime, this is avumd's path; through
   `--d3d` it is DXVK's.
 
+  Last, the D3D11 probe clears render targets shared between processes
+  (`SharedClearWork`, the `shared_*` steps), as DWM does to the surfaces of a
+  Windows.Graphics.Capture window capture: BGRA, `D3D11_RESOURCE_MISC_SHARED`,
+  614x289 (the captured window), 33x7 and 1x1 - sizes whose tight rows are no
+  multiple of 128 bytes. Each is cleared to a colour of its own, its last
+  texel read back (`shared_texels`, targets right of 3), and the device must
+  still stand (`shared_device_kept`, GetDeviceRemovedReason). The host makes
+  a shared texture over linear memory other APIs open
+  (`ExportableImageInfo`); NVIDIA's driver (580), left to place the rows, put
+  them 32 bytes apart, and its 3D engine faulted clearing such a target (Xid
+  69, `CLEAR_SURFACE`): the host's Direct3D 11 device was lost with every
+  session on it, the capture delivered 0.1 frames a second and the desktop
+  went black. On that host the unfixed executor hangs the probe in
+  `shared_readback`, which the run reports as the probe timing out.
+
   **Probes from an application's calls.** With `AV_D3D11_TRACE` in a
   process's environment, avumd writes the Direct3D 11 runtime's calls into it
   to `C:\ProgramData\av\avumd-calls-<pid>.log`, one line each: microseconds,

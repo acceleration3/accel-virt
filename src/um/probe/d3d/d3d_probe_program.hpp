@@ -8,7 +8,9 @@
  * and the window that API needs, and D3D12 needs none. The D3D9 probe runs
  * WPF's presentation on its window after the clear (WpfPresentWork), reading
  * the window back through GDI; the D3D11 probe runs Dark Souls Remastered's
- * deferred-context frames on its window after the clear (DeferredMapWork). */
+ * deferred-context frames on its window after the clear (DeferredMapWork),
+ * then clears render targets shared between processes the size of a captured
+ * window (SharedClearWork). */
 #ifndef AV_D3D_PROBE_PROGRAM_HPP
 #define AV_D3D_PROBE_PROGRAM_HPP
 
@@ -17,6 +19,7 @@
 #include "um/probe/gdi_window_frame.hpp"
 #include "um/probe/d3d/windows_d3d11_deferred_entry.hpp"
 #include "um/probe/d3d/windows_d3d11_entry.hpp"
+#include "um/probe/d3d/windows_d3d11_shared_entry.hpp"
 #include "um/probe/d3d/windows_d3d12_entry.hpp"
 #include "um/probe/d3d/windows_d3d9_entry.hpp"
 #include "um/probe/d3d/windows_d3d9ex_entry.hpp"
@@ -61,6 +64,7 @@ private:
     ProbeWindow               window_;
     WindowsD3d11Entry         d3d11_;
     WindowsD3d11DeferredEntry deferred_;
+    WindowsD3d11SharedEntry   shared_;
 };
 
 class D3d12ProbeProgram {
