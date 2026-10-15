@@ -967,8 +967,17 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opencl.long_kernel\r\n"
                  "ok opencl.long_run\r\n"
                  "ok opencl.long_sum 0\r\n"
+                 "ok opencl.binary 1600\r\n"
+                 "ok opencl.binary_build\r\n"
+                 "ok opencl.binary_sum 0\r\n"
+                 "ok opencl.binary_refused 4294967254\r\n"
+                 "ok opencl.compile\r\n"
+                 "ok opencl.link\r\n"
+                 "ok opencl.link_sum 0\r\n"
+                 "note opencl.il_version not offered\r\n"
+                 "ok opencl.il 4294967237\r\n"
                  "ok opencl.release\r\n"
-                 "avclprobe: 31 passed, 0 failed\r\n")
+                 "avclprobe: 39 passed, 0 failed\r\n")
     """What avclprobe.exe prints when every step of feature 052 passed, in the
     probe's own order (src/guest/probe/cl_probe.cpp)."""
 
@@ -1479,7 +1488,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("pull C:\\av\\opencl.txt", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertEqual((self.work / "opencl.txt").read_text(newline=""), self.CL_REPORT)
-        self.assertIn("guest: opencl ok: 31 passed, device av (NVIDIA GeForce RTX 4090)", result.stdout)
+        self.assertIn("guest: opencl ok: 39 passed, device av (NVIDIA GeForce RTX 4090)", result.stdout)
         self.assertIn("opencl ok", (self.work / "verdict.txt").read_text())
         self.assertTrue((self.work / "diag" / "avcl-4242.log").exists())
         # The probe renders nothing, so no picture is asked of it.
@@ -1491,14 +1500,23 @@ class GuestSuiteRun(unittest.TestCase):
         report = self.CL_REPORT
         cases = {
             "failed step": (report.replace("ok opencl.sum 0", "fail opencl.sum 64").replace(
-                "31 passed, 0 failed", "30 passed, 1 failed"), 1,
+                "39 passed, 0 failed", "38 passed, 1 failed"), 1,
                 "opencl failed: 1 step(s) failed, exit 1; see opencl.txt"),
-            "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("31 passed", "30 passed"), 0,
+            "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("39 passed", "38 passed"), 0,
                              "opencl failed: the probe reported no unmap; see opencl.txt"),
             # A probe from before long programs crossed: its run is not proof.
-            "no long program": (report.replace("ok opencl.long_sum 0\r\n", "").replace("31 passed", "30 passed"),
+            "no long program": (report.replace("ok opencl.long_sum 0\r\n", "").replace("39 passed", "38 passed"),
                                 0, "opencl failed: the probe reported no long_sum; see opencl.txt"),
-            "no summary": (report.replace("avclprobe: 31 passed, 0 failed\r\n", ""), 0,
+            # A probe from before binaries, linking and IL crossed.
+            "no binary": (report.replace("ok opencl.binary_refused 4294967254\r\n", "").replace(
+                "39 passed", "38 passed"), 0, "opencl failed: the probe reported no binary_refused; see opencl.txt"),
+            "no link": (report.replace("ok opencl.link_sum 0\r\n", "").replace("39 passed", "38 passed"), 0,
+                        "opencl failed: the probe reported no link_sum; see opencl.txt"),
+            # A device that takes SPIR-V has to run it, not only say so.
+            "il not run": (report.replace("not offered", "SPIR-V_1.0 SPIR-V_1.2").replace(
+                "ok opencl.il 4294967237", "ok opencl.il"), 0,
+                "opencl failed: the probe reported no il_sum; see opencl.txt"),
+            "no summary": (report.replace("avclprobe: 39 passed, 0 failed\r\n", ""), 0,
                            "opencl failed: no summary in the probe's report, exit 0; see opencl.txt"),
             "software": (report.replace("av (NVIDIA GeForce RTX 4090)", "Intel(R) Core(TM) i9, SwiftShader"), 0,
                          "opencl failed: the device Intel(R) Core(TM) i9, SwiftShader is not a host GPU"),

@@ -39,6 +39,7 @@
 #include "icd/opencl/cl_pending_reads.hpp"
 #include "icd/opencl/cl_refusal_log.hpp"
 #include "icd/opencl/cl_platform.hpp"
+#include "icd/opencl/cl_program_notify.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/d3d11_resource.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
@@ -81,6 +82,9 @@ public:
      * handles live on its stack and this is what bounds them; an application
      * asking for more is told, which is a refusal it can see. */
     static constexpr cl_uint max_waited = 64u;
+    /* Programs one clLinkProgram may name, and headers one clCompileProgram
+     * may: their host numbers live on the calling thread's stack. */
+    static constexpr cl_uint max_linked = 64u;
     /* Room for the host's CL_DEVICE_EXTENSIONS while it is intersected with
      * the policy. It lives on the asking thread's stack, so it is bounded
      * here rather than allocated; the longest list any host driver answers is
@@ -159,7 +163,6 @@ public:
     cl_program       create_program(cl_context context, cl_uint count, const char **sources,
                                     const size_t *lengths, cl_int *error);
     cl_kernel        create_kernel(cl_program program, const char *name, cl_int *error);
-    cl_int           build_program(cl_program program, const char *options);
     cl_int           set_kernel_argument(cl_kernel kernel, cl_uint index, size_t bytes,
                                          const void *value);
     cl_int           enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_uint dimensions,
@@ -171,6 +174,71 @@ public:
                                    size_t offset, size_t bytes, const void *from, cl_event *event);
     cl_int           finish(cl_command_queue queue);
     cl_int           flush(cl_command_queue queue);
+
+    /* ---- programs (cl_icd_root_programs.cpp) ------------------------------ */
+
+    /* A device list names the context's one device or nothing at all, which
+     * the API takes for every device of the context: the same device. */
+    cl_int     build_program(cl_program program, cl_uint num_devices, const cl_device_id *device_list,
+                             const char *options, const ClProgramNotify &notify = ClProgramNotify());
+    /* A binary is what CL_PROGRAM_BINARIES answered: the host's own behind an
+     * envelope the host opens (docs/protocol.md, "OpenCL program binaries").
+     * One from another GPU or driver, or damaged, is CL_INVALID_BINARY in
+     * `binary_status` and in `error`, and the application builds its source
+     * again. */
+    cl_program create_program_with_binary(cl_context context, cl_uint num_devices, const cl_device_id *device_list,
+                                          const size_t *lengths, const unsigned char **binaries,
+                                          cl_int *binary_status, cl_int *error);
+    /* SPIR-V, which the host compiles; a host with no IL answers
+     * CL_INVALID_OPERATION as its CL_DEVICE_IL_VERSION says it would. */
+    cl_program create_program_with_il(cl_context context, const void *il, size_t length, cl_int *error);
+    cl_program create_program_with_built_in_kernels(cl_context context, cl_uint num_devices,
+                                                    const cl_device_id *device_list, const char *kernel_names,
+                                                    cl_int *error);
+    /* Separate compilation: the headers are programs of the same context,
+     * named in the program by their include names. */
+    cl_int     compile_program(cl_program program, cl_uint num_devices, const cl_device_id *device_list,
+                               const char *options, cl_uint num_headers, const cl_program *headers,
+                               const char **header_names, const ClProgramNotify &notify);
+    /* A new program of `inputs`, which must be programs of `context`. A link
+     * that failed still answers the program the host made, whose log says
+     * why, as the API has it. */
+    cl_program link_program(cl_context context, cl_uint num_devices, const cl_device_id *device_list,
+                            const char *options, cl_uint num_inputs, const cl_program *inputs,
+                            const ClProgramNotify &notify, cl_int *error);
+    /* The reference count, the context and the devices are this ICD's;
+     * CL_PROGRAM_BINARIES is fetched into the application's own pointers;
+     * the rest is the host's answer. */
+    cl_int     program_info(cl_program program, cl_program_info name, size_t value_bytes, void *value,
+                            size_t *size_ret);
+    cl_int     set_specialization_constant(cl_program program, cl_uint id, size_t bytes, const void *value);
+    /* No device here runs a program's global destructors (its
+     * CL_PROGRAM_SCOPE_GLOBAL_DTORS_PRESENT is the host's, and no host GPU
+     * driver has them), which is the API's CL_INVALID_OPERATION once the
+     * arguments are judged. */
+    cl_int     set_program_release_callback(cl_program program, void(CL_CALLBACK *notify)(cl_program, void *));
+    /* A hint the API lets a driver ignore: the host's compiler is the host's. */
+    cl_int     unload_platform_compiler(cl_platform_id platform);
+
+    /* ---- kernels (cl_icd_root_programs.cpp) ------------------------------- */
+
+    /* Every kernel of a built program, each an object of this ICD's. */
+    cl_int    create_kernels_in_program(cl_program program, cl_uint num_kernels, cl_kernel *kernels,
+                                        cl_uint *num_kernels_ret);
+    /* A kernel of the same program, with the arguments set so far. */
+    cl_kernel clone_kernel(cl_kernel kernel, cl_int *error);
+    /* The reference count, the context and the program are this ICD's; the
+     * rest is the host's. */
+    cl_int    kernel_info(cl_kernel kernel, cl_kernel_info name, size_t value_bytes, void *value, size_t *size_ret);
+    cl_int    kernel_arg_info(cl_kernel kernel, cl_uint index, cl_kernel_arg_info name, size_t value_bytes,
+                              void *value, size_t *size_ret);
+    cl_int    kernel_sub_group_info(cl_kernel kernel, cl_device_id device, cl_kernel_sub_group_info name,
+                                    size_t input_bytes, const void *input, size_t value_bytes, void *value,
+                                    size_t *size_ret);
+    /* The SVM pointers a kernel reaches through other memory, translated as a
+     * pointer argument is; fine-grained system SVM, which no device here has,
+     * only turned off. */
+    cl_int    set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info name, size_t bytes, const void *value);
 
     /* ---- what a program and a kernel say about themselves on a device --- */
 
@@ -555,6 +623,17 @@ private:
      * and can still send; null with the error set otherwise. */
     ClObject        *gl_sharing(cl_context context, cl_int *error);
     void             note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options);
+    /* The API's judgement of a program's device list on `context`: none, or
+     * the context's one device; CL_INVALID_VALUE or CL_INVALID_DEVICE
+     * otherwise. */
+    cl_int           program_devices(ClObject &context, cl_uint num_devices, const cl_device_id *device_list);
+    /* The host's numbers for `count` programs of `context`, into `into` (room
+     * for max_linked): CL_INVALID_VALUE for a list the API refuses,
+     * CL_INVALID_PROGRAM for one not a program of `context`. */
+    cl_int           program_list(ClObject &context, cl_uint count, const cl_program *programs, uint64_t *into);
+    /* CL_PROGRAM_BINARIES into the application's pointers. */
+    cl_int           program_binaries(ClientTransport &wire, ClObject &program, size_t value_bytes, void *value,
+                                      size_t *size_ret);
     /* What a host create over a GL object answered, wrapped as a mem object. */
     cl_mem           gl_object(ClientTransport &wire, ClObject &context, uint64_t made, cl_int host_error,
                                cl_int *error);

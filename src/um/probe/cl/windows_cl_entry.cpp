@@ -16,9 +16,15 @@ constexpr const wchar_t *loader_module = L"OpenCL.dll";
 
 }  // namespace
 
-WindowsClEntry::WindowsClEntry() : loader_(GetModuleHandleW(loader_module))
+WindowsClEntry::WindowsClEntry() : loader_(GetModuleHandleW(loader_module)), binary_(nullptr)
 {
     AV_SCOPE("WindowsClEntry::WindowsClEntry");
+}
+
+WindowsClEntry::~WindowsClEntry()
+{
+    AV_SCOPE("WindowsClEntry::~WindowsClEntry");
+    if (binary_ != nullptr) static_cast<void>(HeapFree(GetProcessHeap(), 0u, binary_));
 }
 
 template <typename Function>
@@ -135,6 +141,57 @@ void *WindowsClEntry::create_kernel(void *program, const char *name, int32_t &er
 {
     AV_SCOPE("WindowsClEntry::create_kernel");
     return clCreateKernel(static_cast<cl_program>(program), name, &error);
+}
+
+uint8_t *WindowsClEntry::program_binary(void *program, size_t &bytes, int32_t &error)
+{
+    AV_SCOPE("WindowsClEntry::program_binary");
+    bytes = 0u;
+    error = clGetProgramInfo(static_cast<cl_program>(program), CL_PROGRAM_BINARY_SIZES, sizeof bytes, &bytes,
+                             nullptr);
+    if (error != CL_SUCCESS || bytes == 0u) return nullptr;
+    if (binary_ != nullptr) static_cast<void>(HeapFree(GetProcessHeap(), 0u, binary_));
+    binary_ = static_cast<uint8_t *>(HeapAlloc(GetProcessHeap(), 0u, bytes));
+    if (binary_ == nullptr) {
+        error = CL_OUT_OF_HOST_MEMORY;
+        return nullptr;
+    }
+    unsigned char *into = binary_;
+    error = clGetProgramInfo(static_cast<cl_program>(program), CL_PROGRAM_BINARIES, sizeof into, &into, nullptr);
+    return error == CL_SUCCESS ? binary_ : nullptr;
+}
+
+void *WindowsClEntry::create_program_with_binary(void *context, void *device, const uint8_t *binary, size_t bytes,
+                                                 int32_t &status, int32_t &error)
+{
+    AV_SCOPE("WindowsClEntry::create_program_with_binary");
+    const cl_device_id   one = static_cast<cl_device_id>(device);
+    const unsigned char *from = binary;
+    return clCreateProgramWithBinary(static_cast<cl_context>(context), 1u, &one, &bytes, &from, &status, &error);
+}
+
+void *WindowsClEntry::create_program_with_il(void *context, const void *il, size_t bytes, int32_t &error)
+{
+    AV_SCOPE("WindowsClEntry::create_program_with_il");
+    return clCreateProgramWithIL(static_cast<cl_context>(context), il, bytes, &error);
+}
+
+int32_t WindowsClEntry::compile_program(void *program, void *device, void *header, const char *header_name)
+{
+    AV_SCOPE("WindowsClEntry::compile_program");
+    const cl_device_id one = static_cast<cl_device_id>(device);
+    const cl_program   headers[1] = {static_cast<cl_program>(header)};
+    const char        *names[1] = {header_name};
+    const cl_uint      count = header != nullptr ? 1u : 0u;
+    return clCompileProgram(static_cast<cl_program>(program), 1u, &one, nullptr, count,
+                            count != 0u ? headers : nullptr, count != 0u ? names : nullptr, nullptr, nullptr);
+}
+
+void *WindowsClEntry::link_program(void *context, void *const *programs, uint32_t count, int32_t &error)
+{
+    AV_SCOPE("WindowsClEntry::link_program");
+    return clLinkProgram(static_cast<cl_context>(context), 0u, nullptr, nullptr, count,
+                         reinterpret_cast<const cl_program *>(programs), nullptr, nullptr, &error);
 }
 
 int32_t WindowsClEntry::set_kernel_buffer(void *kernel, uint32_t index, void *buffer)

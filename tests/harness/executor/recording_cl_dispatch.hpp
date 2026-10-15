@@ -41,9 +41,13 @@ public:
 
     /* What the kernel at an index declares, repeating every
      * `declared_arguments` indices. */
+    /* `untyped_global` says its address space and no more, as a host keeps
+     * of a program from IL; `untyped_private` the same of a private one,
+     * which declared_argument then says is a sampler - what the server
+     * reads off a module. */
     enum class Declared : std::uint8_t { buffer, image, sampler, scalar, local, undeclared, pipe,
-                                         constant };
-    static constexpr std::uint32_t declared_arguments = 8u;
+                                         constant, untyped_global, untyped_private };
+    static constexpr std::uint32_t declared_arguments = 10u;
 
     /* What a careless ICD leaves in an output it did not write. */
     static constexpr std::uint8_t garbage = 0xA5u;
@@ -58,6 +62,8 @@ public:
     void answer_next_with(cl_int result, std::size_t reported);
 
     void *handle_for(clproto::HandleKind kind, std::uint64_t wire) const override;
+    /* A sampler for untyped_private, nothing for any other. */
+    bool  declared_argument(cl_kernel kernel, cl_uint index, clproto::KernelArgument &argument) override;
     /* As handle_for, for an address: a pointer only for one inside something
      * this dispatch allocated, with room for `bytes` after it, and null
      * otherwise - which the decoder reads as a refusal. An address that
@@ -105,6 +111,9 @@ public:
                                   cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
                                   cl_event *event) override;
     cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void *arg_value) override;
+    /* Each SVM pointer the call is handed is one this dispatch allocated. */
+    cl_int on_clSetKernelExecInfo(cl_kernel kernel, cl_kernel_exec_info param_name, std::size_t param_value_size,
+                                  const void *param_value) override;
     cl_int on_clSetKernelArg(cl_kernel kernel, cl_uint arg_index, std::size_t arg_size,
                              const void *arg_value) override;
     cl_int on_clBuildProgram(cl_program program, cl_uint num_devices, const cl_device_id *device_list,

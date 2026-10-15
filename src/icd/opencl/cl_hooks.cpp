@@ -15,6 +15,7 @@
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/cl_noted_error.hpp"
+#include "icd/opencl/cl_program_notify.hpp"
 #include "proto/generated/opencl/cl_icd_stubs.h"
 #include "proto/client/icd_stub_report.hpp"
 
@@ -210,13 +211,13 @@ cl_program CL_API_CALL create_program_with_source(cl_context context, cl_uint co
     return cl_icd_binding.root().create_program(context, count, sources, lengths, noted.pointer());
 }
 
-cl_int CL_API_CALL build_program(cl_program program, cl_uint, const cl_device_id *,
-                                 const char *options,
-                                 void(CL_CALLBACK *)(cl_program, void *), void *)
+cl_int CL_API_CALL build_program(cl_program program, cl_uint num_devices, const cl_device_id *device_list,
+                                 const char *options, void(CL_CALLBACK *notify)(cl_program, void *), void *user_data)
 {
     AV_SCOPE("build_program");
     AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
-    return root.noted("clBuildProgram", root.build_program(program, options));
+    return root.noted("clBuildProgram", root.build_program(program, num_devices, device_list, options,
+                                                           ClProgramNotify(notify, user_data)));
 }
 
 cl_int CL_API_CALL retain_program(cl_program program)
@@ -906,6 +907,167 @@ cl_int CL_API_CALL release_external_objects(cl_command_queue queue, cl_uint num_
     return root.enqueue_external(queue, num_mem_objects, mem_objects, event);
 }
 
+/* Programs and kernels beyond the one-source build (cl_icd_root_programs.cpp). */
+cl_program CL_API_CALL create_program_with_binary(cl_context context, cl_uint num_devices,
+                                                  const cl_device_id *device_list, const size_t *lengths,
+                                                  const unsigned char **binaries, cl_int *binary_status,
+                                                  cl_int *error)
+{
+    AV_SCOPE("create_program_with_binary");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateProgramWithBinary", error);
+    return cl_icd_binding.root().create_program_with_binary(context, num_devices, device_list, lengths, binaries,
+                                                            binary_status, noted.pointer());
+}
+
+cl_program CL_API_CALL create_program_with_il(cl_context context, const void *il, size_t length, cl_int *error)
+{
+    AV_SCOPE("create_program_with_il");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateProgramWithIL", error);
+    return cl_icd_binding.root().create_program_with_il(context, il, length, noted.pointer());
+}
+
+cl_program CL_API_CALL create_program_with_built_in_kernels(cl_context context, cl_uint num_devices,
+                                                            const cl_device_id *device_list,
+                                                            const char *kernel_names, cl_int *error)
+{
+    AV_SCOPE("create_program_with_built_in_kernels");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateProgramWithBuiltInKernels", error);
+    return cl_icd_binding.root().create_program_with_built_in_kernels(context, num_devices, device_list, kernel_names,
+                                                                      noted.pointer());
+}
+
+cl_int CL_API_CALL compile_program(cl_program program, cl_uint num_devices, const cl_device_id *device_list,
+                                   const char *options, cl_uint num_headers, const cl_program *headers,
+                                   const char **header_names, void(CL_CALLBACK *notify)(cl_program, void *),
+                                   void *user_data)
+{
+    AV_SCOPE("compile_program");
+    AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
+    return root.noted("clCompileProgram",
+                      root.compile_program(program, num_devices, device_list, options, num_headers, headers,
+                                           header_names, ClProgramNotify(notify, user_data)));
+}
+
+cl_program CL_API_CALL link_program(cl_context context, cl_uint num_devices, const cl_device_id *device_list,
+                                    const char *options, cl_uint num_inputs, const cl_program *inputs,
+                                    void(CL_CALLBACK *notify)(cl_program, void *), void *user_data, cl_int *error)
+{
+    AV_SCOPE("link_program");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clLinkProgram", error);
+    return cl_icd_binding.root().link_program(context, num_devices, device_list, options, num_inputs, inputs,
+                                              ClProgramNotify(notify, user_data), noted.pointer());
+}
+
+cl_int CL_API_CALL get_program_info(cl_program program, cl_program_info name, size_t value_bytes, void *value,
+                                    size_t *size_ret)
+{
+    AV_SCOPE("get_program_info");
+    AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
+    return root.noted_query("clGetProgramInfo", name, root.program_info(program, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL set_program_specialization_constant(cl_program program, cl_uint id, size_t bytes,
+                                                       const void *value)
+{
+    AV_SCOPE("set_program_specialization_constant");
+    AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
+    return root.noted("clSetProgramSpecializationConstant", root.set_specialization_constant(program, id, bytes, value));
+}
+
+cl_int CL_API_CALL set_program_release_callback(cl_program program, void(CL_CALLBACK *notify)(cl_program, void *),
+                                                void *)
+{
+    AV_SCOPE("set_program_release_callback");
+    AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
+    return root.noted("clSetProgramReleaseCallback", root.set_program_release_callback(program, notify));
+}
+
+cl_int CL_API_CALL unload_platform_compiler(cl_platform_id platform)
+{
+    AV_SCOPE("unload_platform_compiler");
+    AV_CL_ROOT_OR(CL_INVALID_PLATFORM);
+    return root.noted("clUnloadPlatformCompiler", root.unload_platform_compiler(platform));
+}
+
+/* The 1.1 spelling, of no platform: a hint, as the 1.2 one is. */
+cl_int CL_API_CALL unload_compiler()
+{
+    AV_SCOPE("unload_compiler");
+    return CL_SUCCESS;
+}
+
+cl_int CL_API_CALL create_kernels_in_program(cl_program program, cl_uint num_kernels, cl_kernel *kernels,
+                                             cl_uint *num_kernels_ret)
+{
+    AV_SCOPE("create_kernels_in_program");
+    AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
+    return root.noted("clCreateKernelsInProgram",
+                      root.create_kernels_in_program(program, num_kernels, kernels, num_kernels_ret));
+}
+
+cl_kernel CL_API_CALL clone_kernel(cl_kernel kernel, cl_int *error)
+{
+    AV_SCOPE("clone_kernel");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_KERNEL;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCloneKernel", error);
+    return cl_icd_binding.root().clone_kernel(kernel, noted.pointer());
+}
+
+cl_int CL_API_CALL get_kernel_info(cl_kernel kernel, cl_kernel_info name, size_t value_bytes, void *value,
+                                   size_t *size_ret)
+{
+    AV_SCOPE("get_kernel_info");
+    AV_CL_ROOT_OR(CL_INVALID_KERNEL);
+    return root.noted_query("clGetKernelInfo", name, root.kernel_info(kernel, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL get_kernel_arg_info(cl_kernel kernel, cl_uint index, cl_kernel_arg_info name, size_t value_bytes,
+                                       void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_kernel_arg_info");
+    AV_CL_ROOT_OR(CL_INVALID_KERNEL);
+    return root.noted_query("clGetKernelArgInfo", name,
+                            root.kernel_arg_info(kernel, index, name, value_bytes, value, size_ret));
+}
+
+/* The core call and cl_khr_subgroups' slot, which take the same arguments. */
+cl_int CL_API_CALL get_kernel_sub_group_info(cl_kernel kernel, cl_device_id device, cl_kernel_sub_group_info name,
+                                             size_t input_bytes, const void *input, size_t value_bytes, void *value,
+                                             size_t *size_ret)
+{
+    AV_SCOPE("get_kernel_sub_group_info");
+    AV_CL_ROOT_OR(CL_INVALID_KERNEL);
+    return root.noted_query("clGetKernelSubGroupInfo", name,
+                            root.kernel_sub_group_info(kernel, device, name, input_bytes, input, value_bytes, value,
+                                                       size_ret));
+}
+
+cl_int CL_API_CALL set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info name, size_t bytes, const void *value)
+{
+    AV_SCOPE("set_kernel_exec_info");
+    AV_CL_ROOT_OR(CL_INVALID_KERNEL);
+    return root.noted("clSetKernelExecInfo", root.set_kernel_exec_info(kernel, name, bytes, value));
+}
+
 #undef AV_CL_ROOT_OR
 
 }  // namespace
@@ -1022,7 +1184,24 @@ void ClDispatchTable::fill()
     table_.clRetainDevice = &retain_device;
     table_.clReleaseDevice = &release_device;
     table_.clGetCommandQueueInfo = &get_command_queue_info;
-    claimed_ = 91u;
+    table_.clCreateProgramWithBinary = &create_program_with_binary;
+    table_.clCreateProgramWithIL = &create_program_with_il;
+    table_.clCreateProgramWithBuiltInKernels = &create_program_with_built_in_kernels;
+    table_.clCompileProgram = &compile_program;
+    table_.clLinkProgram = &link_program;
+    table_.clGetProgramInfo = &get_program_info;
+    table_.clSetProgramSpecializationConstant = &set_program_specialization_constant;
+    table_.clSetProgramReleaseCallback = &set_program_release_callback;
+    table_.clUnloadPlatformCompiler = &unload_platform_compiler;
+    table_.clUnloadCompiler = &unload_compiler;
+    table_.clCreateKernelsInProgram = &create_kernels_in_program;
+    table_.clCloneKernel = &clone_kernel;
+    table_.clGetKernelInfo = &get_kernel_info;
+    table_.clGetKernelArgInfo = &get_kernel_arg_info;
+    table_.clGetKernelSubGroupInfo = &get_kernel_sub_group_info;
+    table_.clGetKernelSubGroupInfoKHR = &get_kernel_sub_group_info;
+    table_.clSetKernelExecInfo = &set_kernel_exec_info;
+    claimed_ = 108u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
@@ -1059,6 +1238,12 @@ void *ClDispatchTable::gl_context_info() const
 {
     AV_SCOPE("ClDispatchTable::gl_context_info");
     return reinterpret_cast<void *>(&get_gl_context_info);
+}
+
+void *ClDispatchTable::program_from_il() const
+{
+    AV_SCOPE("ClDispatchTable::program_from_il");
+    return reinterpret_cast<void *>(&create_program_with_il);
 }
 
 void *ClDispatchTable::external_mem_release() const

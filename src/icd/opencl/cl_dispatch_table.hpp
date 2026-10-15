@@ -46,6 +46,9 @@ public:
     void *external_mem_release() const;
     /* clGetGLContextInfoKHR, which an application may also ask for by name. */
     void *gl_context_info() const;
+    /* cl_khr_il_program's clCreateProgramWithILKHR, by name: the core call
+     * under the extension's spelling. */
+    void *program_from_il() const;
 
     /* How many slots this ICD claims itself, which is what a test counts to
      * know the table did not quietly shrink. */

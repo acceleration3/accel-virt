@@ -209,6 +209,7 @@ void *ClIcdRoot::extension_function(const char *name)
     if (spells(name, "clEnqueueReleaseExternalMemObjectsKHR"))
         return dispatch_.external_mem_release();
     if (spells(name, "clGetGLContextInfoKHR")) return dispatch_.gl_context_info();
+    if (spells(name, "clCreateProgramWithILKHR")) return dispatch_.program_from_il();
     return nullptr;
 }
 
@@ -1009,65 +1010,6 @@ cl_program ClIcdRoot::create_program(cl_context context, cl_uint count, const ch
         return nullptr;
     }
     return static_cast<cl_program>(wrap(*wire, ClObject::Kind::program, program, held->context(), held, error));
-}
-
-cl_int ClIcdRoot::build_program(cl_program program, const char *options)
-{
-    AV_SCOPE("ClIcdRoot::build_program");
-    ClObject *const held = judged(program, ClObject::Kind::program);
-    if (held == nullptr) return CL_INVALID_PROGRAM;
-    ClientTransport *const wire = wire_of(*held);
-    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* Built for the context's one device; a null list is what the API means
-     * by "every device of the context", which is that device. */
-    const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, options);
-    if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
-    return built;
-}
-
-/* The host compiler's own words for a program that did not build: an
- * application that reports only "a problem" leaves them nowhere else. Its
- * first lines, since a large program's log runs long - however long, the
- * whole log crosses, since an answer longer than the reply slot comes in
- * parts. */
-void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options)
-{
-    AV_SCOPE("ClIcdRoot::note_build_log");
-    constexpr uint32_t most_lines = 24u;
-    char       bytes[256];
-    TextBuffer line(bytes, sizeof bytes);
-    line.append("avcl: a program did not build; its options: ");
-    line.append(options != nullptr ? options : "");
-    log_.write(line.text());
-    size_t size = 0u;
-    if (device == 0u ||
-        av::clproto::av_clGetProgramBuildInfo(wire, program, device, CL_PROGRAM_BUILD_LOG, 0u,
-                                               nullptr, &size) != CL_SUCCESS ||
-        size == 0u)
-        return;
-    char *const text = static_cast<char *>(memory_.allocate(size + 1u, Pool::paged));
-    if (text == nullptr) return;
-    ScopeExit given_back([&] { memory_.release(text); });
-    if (av::clproto::av_clGetProgramBuildInfo(wire, program, device, CL_PROGRAM_BUILD_LOG, size,
-                                               text, nullptr) != CL_SUCCESS)
-        return;
-    text[size] = '\0';
-    uint32_t written = 0u;
-    for (char *start = text; *start != '\0' && written < most_lines;) {
-        char *end = start;
-        while (*end != '\0' && *end != '\n') end++;
-        const bool last = *end == '\0';
-        *end = '\0';
-        if (end != start) {
-            TextBuffer said(bytes, sizeof bytes);
-            said.append("avcl: build: ");
-            said.append(start);
-            log_.write(said.text());
-            written++;
-        }
-        if (last) break;
-        start = end + 1;
-    }
 }
 
 cl_kernel ClIcdRoot::create_kernel(cl_program program, const char *name, cl_int *error)

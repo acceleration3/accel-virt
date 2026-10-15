@@ -122,6 +122,17 @@ TEST(cl_dispatch_table, the_gl_context_query_is_answered_by_name_and_by_its_slot
   CHECK(table.gl_context_info() != table.external_mem_acquire());
   CHECK(table.gl_context_info() != table.icd_get_platform_ids()); }
 
+/* cl_khr_il_program's clCreateProgramWithILKHR is the core call under the
+ * extension's name, asked for by name: the same entry as the slot. */
+TEST(cl_dispatch_table, the_il_program_extension_s_create_is_the_core_slot_by_name)
+{ ClIcdRig        rig;
+  ClDispatchTable table;
+  table.fill();
+  CHECK(table.program_from_il() != nullptr);
+  CHECK(table.program_from_il() == reinterpret_cast<void *>(table.table().clCreateProgramWithIL));
+  CHECK(rig.root().extension_function("clCreateProgramWithILKHR") == table.program_from_il());
+  CHECK(table.program_from_il() != table.gl_context_info()); }
+
 TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
 { ClDispatchTable table;
   table.fill();

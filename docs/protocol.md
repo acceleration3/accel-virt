@@ -250,6 +250,63 @@ something the host can call, so the command says only which event and which
 status, the device registers a callback of its own with the host, and the guest
 is told through the fence page's out-of-band raise and asks what completed.
 
+#### OpenCL programs and kernels
+
+A context's programs are its one device's, so the wire's program commands
+name that device or none: `clCreateProgramWithBinary` carries one device and
+one binary, and the one `binary_status` its answer carries is that device's
+(the generated decoder has room for one; the executor refuses any other count
+before the host is handed an array to write).
+
+**Program binaries.** What crosses as a program's binary is never the host
+driver's own bytes alone: `CL_PROGRAM_BINARY_SIZES` answers each host binary's
+size plus an envelope's, and `CL_PROGRAM_BINARIES`' value on the wire is the
+sealed binaries back to back in the program's device order - the bytes, not the
+API's array of pointers, which would be guest bytes the host wrote through. The
+guest ICD fetches them straight into the application's pointers. The envelope
+(`ClBinaryEnvelope`), little-endian at fixed places:
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 8 | `avgpu-cl` |
+| 8 | 4 | version, 1 |
+| 12 | 4 | reserved, 0 |
+| 16 | 16 | the device's `CL_DEVICE_UUID_KHR` |
+| 32 | 16 | its driver's `CL_DRIVER_UUID_KHR` |
+| 48 | 8 | FNV-1a 64 of the platform's name and version and the device's name, version and driver version, each with its terminator |
+| 56 | 8 | the host binary's length, which is the rest of the bytes exactly |
+| 64 | 8 | FNV-1a 64 of the host binary |
+
+`clCreateProgramWithBinary` opens a binary before the host sees it: one this
+device and driver did not seal, cut short, run on or damaged answers
+`CL_INVALID_BINARY` as the binary's status and the call's error, which an
+application caching binaries answers by building its source again. So does
+every binary on a host whose drivers lose a kernel's argument types through
+their own binaries (`ClArgumentRetention`, measured once on the context): the
+server could set none of its kernels' buffers. The digests catch damage, not
+malice; a guest may as well hand the host's compiler any source it likes.
+
+**Kernel arguments.** Every build and compile asks the host to keep argument
+information (`-cl-kernel-arg-info` appended), and every `clSetKernelArg` is
+judged by what the kernel declared: eight bytes for a buffer, an image or a
+pipe must be a `cl_mem` this context made, for a sampler a `cl_sampler`, and
+are handed over resolved. Global and constant space say an argument is memory
+by its address space alone; a private argument needs its type's name, which a
+host need not keep for a program made from IL - rusticl does not - and the
+server then reads the parameter's type off the program's own SPIR-V
+(`SpirvArgumentKinds`, `ServerDispatch::declared_argument`). An argument
+neither can name, set with an object's width of bytes, is answered
+`CL_INVALID_ARG_VALUE` without reaching the host; the command was well formed,
+so the context goes on.
+
+**Execution info.** `CL_KERNEL_EXEC_INFO_SVM_PTRS`' value is a whole number of
+`uint64_t` addresses, each inside an allocation or mapping the context was
+answered, resolved as an SVM argument is; any other count, or an address
+outside them, does not decode. `CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM`
+reaches the host only as `CL_FALSE` (the guest's device has coarse-grained
+buffers alone); ARM's and Intel's pointer lists, and any other name, are
+refused.
+
 The device copies the payload once, then walks it: a command of the
 context's sub-API runs through the context's executor; a transport command the
 table below defines runs in the device itself; another API's command, any other

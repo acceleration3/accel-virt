@@ -124,7 +124,12 @@ CL_NOTE = re.compile(r"^note opencl\.(\w+) (.*?)\r?$", re.M)
 CL_STEPS = ("platform_count", "platforms", "platform", "device_ids", "device", "luid", "context", "queue",
             "buffers", "write", "write_second", "program", "build", "kernel", "arguments", "run", "finish",
             "read", "sum", "map", "unmap", "svm", "user_event", "wait", "callback", "long_program", "long_build",
-            "long_kernel", "long_run", "long_sum", "release")
+            "long_kernel", "long_run", "long_sum", "binary", "binary_build", "binary_sum", "binary_refused",
+            "compile", "link", "link_sum", "il", "release")
+# What a device that takes SPIR-V must show beyond its refusal by one that does
+# not: its IL program run. The probe names the device's IL versions, or that it
+# offers none, as the il_version note.
+CL_IL_STEPS = ("il_sum",)
 # Renderers that are not a GPU: Mesa's software rasterizers, what opengl32.dll
 # answers itself when no ICD took the window, and what an OpenCL device that is
 # the CPU calls itself.
@@ -2265,10 +2270,11 @@ class GuestRun:
         if failed != 0 or code != 0:
             raise StepFailed("opencl", f"{failed} step(s) failed, exit {code}; see opencl.txt")
         steps = dict(CL_STEP.findall(text))
-        missing = [name for name in CL_STEPS if name not in steps]
+        notes = dict(CL_NOTE.findall(text))
+        takes_il = "SPIR-V" in notes.get("il_version", "")
+        missing = [name for name in CL_STEPS + (CL_IL_STEPS if takes_il else ()) if name not in steps]
         if missing:
             raise StepFailed("opencl", f"the probe reported no {', '.join(missing)}; see opencl.txt")
-        notes = dict(CL_NOTE.findall(text))
         device = notes.get("device_name", "")
         if not device or device == "(none)":
             raise StepFailed("opencl", "the probe named no device")

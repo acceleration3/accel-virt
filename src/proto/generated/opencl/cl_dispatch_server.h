@@ -39,6 +39,12 @@ enum class HandleKind : uint8_t {
     sampler,
 };
 
+// What a kernel argument's bytes are to the ICD, as the kernel declared
+// it: a pointer in global or constant space, an image or a pipe is a
+// cl_mem, a sampler_t is a cl_sampler, a pointer in local space carries no
+// value at all, and anything else is data.
+enum class KernelArgument : uint8_t { data, memory, image, sampler, local, unknown };
+
 // Implemented by the server; the table below calls into it.
 class ServerDispatch {
 public:
@@ -66,6 +72,10 @@ public:
     // wholly inside it. A lent parameter names this instead of carrying
     // its bytes, and the call reads or writes it in place.
     virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;
+    // What argument `index` of `kernel` is where the host's OpenCL
+    // will not say - a program from IL, whose argument types a host
+    // need not keep: false when the server knows no better either.
+    virtual bool declared_argument(cl_kernel kernel, cl_uint index, KernelArgument& argument) = 0;
 
     virtual cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) = 0;
     virtual cl_int on_clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) = 0;

@@ -277,15 +277,29 @@ class CommittedTreeCarriesThem(unittest.TestCase):
         self.assertIn('"cl_khr_external_memory_win32",', header)
         self.assertIn("extension_is_carried(const char* name)", header)
 
-    def test_exec_info_still_refuses_an_array_of_svm_pointers(self):
-        """The wire carries SVM allocations now, and still not this.
-
-        CL_KERNEL_EXEC_INFO_SVM_PTRS passes an untyped blob of addresses: only
-        its byte count says how many, and each would have to be resolved and
-        rewritten in place. A role could say so; none does, so it is refused
-        rather than passed through with addresses the host cannot use."""
+    def test_exec_info_resolves_svm_pointers_and_refuses_the_ones_nothing_carries(self):
+        """CL_KERNEL_EXEC_INFO_SVM_PTRS passes an untyped blob of addresses:
+        each is resolved by svm_for and rewritten in place before the host
+        sees it, and a blob that is not whole addresses, or names one outside
+        every allocation, is refused. ARM's spelling and Intel's USM are
+        carried by nothing, so they are refused outright."""
         server = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_server.cpp").read_text()
-        self.assertIn("if (param_name == CL_KERNEL_EXEC_INFO_SVM_PTRS) return false;", server)
+        self.assertNotIn("if (param_name == CL_KERNEL_EXEC_INFO_SVM_PTRS) return false;", server)
+        self.assertIn("!resolve_svm_pointers(s, arena, param_value_size, param_value)) return false;", server)
+        self.assertIn("resolved[i] = s.svm_for(address, 1);", server)
+        self.assertIn("if (param_name == 0x40B8) return false;  // CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM", server)
+        self.assertIn("if (param_name == 0x4203) return false;  // CL_KERNEL_EXEC_INFO_USM_PTRS_INTEL", server)
+
+    def test_an_argument_the_server_cannot_vouch_for_is_answered_not_faulted(self):
+        """A kernel argument whose kind neither the host nor the server can
+        say is refused with CL_INVALID_ARG_VALUE - the command was well formed
+        - and an address space alone is enough to say global memory."""
+        server = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_server.cpp").read_text()
+        self.assertIn("reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(CL_INVALID_ARG_VALUE)));", server)
+        self.assertIn("if (!s.declared_argument(kernel, index, argument)) argument = KernelArgument::unknown;", server)
+        header = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_server.h").read_text()
+        self.assertIn("virtual bool declared_argument(cl_kernel kernel, cl_uint index, KernelArgument& argument) = 0;",
+                      header)
 
 
 if __name__ == "__main__":

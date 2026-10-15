@@ -103,6 +103,11 @@ public:
      * name, as the call asked for both. */
     void cl_gl_object(std::int32_t result, std::uint32_t type, std::uint32_t name);
     void cl_handle(std::uint64_t handle, std::int32_t error);
+    /* clCreateProgramWithBinary's answer: the program, its binary's status,
+     * then the error. */
+    void cl_from_binary(std::uint64_t handle, std::int32_t status, std::int32_t error);
+    /* A query that asked for a count alone: the result and the count. */
+    void cl_count(std::int32_t result, std::uint32_t count);
     /* What a map answers when an event was asked for as well: the address,
      * then the event, then the error - which is the order the emitter writes
      * an address-returning command's outputs in. */

@@ -59,7 +59,8 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
 }
 
 OpenClBackend::OpenClBackend()
-    : bound_(nullptr), vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
+    : bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
+      vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(vehicle_, renderbuffer_textures_), copied_(object_bytes_, renderbuffer_textures_), gl_(nullptr),
       reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(), svm_(), events_(), pacer_(),
       paced_queue_(nullptr), marker_(nullptr), ran_(0u), lost_(false)
@@ -72,6 +73,10 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     AV_SCOPE("OpenClBackend::initialize");
     bound_ = device;
     if (bound_ == nullptr) return false;
+    /* A device that will not describe itself seals no binary and opens
+     * none; it runs everything else as before. */
+    static_cast<void>(envelope_.identify(static_cast<cl_platform_id>(bound_->platform()),
+                                         static_cast<cl_device_id>(bound_->device())));
     /* The vehicle is optional and its failure is not a plain context's: a GPU
      * with no EGL display, or a driver that will not make a context, leaves
      * OpenCL running everything it ran before and sharing nothing (feature
@@ -138,6 +143,134 @@ cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info par
     if (imports_) shown.add(external_memory);
     else shown.strike(external_memory);
     return shown.answer(param_value_size, param_value, param_value_size_ret);
+}
+
+cl_int OpenClBackend::on_clGetProgramInfo(cl_program program, cl_program_info param_name, size_t param_value_size,
+                                          void *param_value, size_t *param_value_size_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clGetProgramInfo");
+    if (param_name == CL_PROGRAM_BINARIES)
+        return sealed_binaries(program, param_value_size, param_value, param_value_size_ret);
+    if (param_name != CL_PROGRAM_BINARY_SIZES)
+        return RealDispatch::on_clGetProgramInfo(program, param_name, param_value_size, param_value,
+                                                 param_value_size_ret);
+    size_t        sizes[max_program_devices] = {};
+    const cl_uint devices = program_binary_sizes(program, sizes);
+    if (devices == 0u) return CL_INVALID_PROGRAM;
+    for (cl_uint index = 0u; index < devices; ++index) sizes[index] = envelope_.sealed_bytes(sizes[index]);
+    const size_t answer = devices * sizeof(size_t);
+    if (param_value_size_ret != nullptr) *param_value_size_ret = answer;
+    if (param_value == nullptr) return CL_SUCCESS;
+    if (param_value_size < answer) return CL_INVALID_VALUE;
+    __builtin_memcpy(param_value, sizes, answer);
+    return CL_SUCCESS;
+}
+
+cl_uint OpenClBackend::program_binary_sizes(cl_program program, size_t *sizes)
+{
+    AV_SCOPE("OpenClBackend::program_binary_sizes");
+    cl_uint devices = 0u;
+    if (::clGetProgramInfo(program, CL_PROGRAM_NUM_DEVICES, sizeof devices, &devices, nullptr) != CL_SUCCESS ||
+        devices == 0u || devices > max_program_devices)
+        return 0u;
+    if (::clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, devices * sizeof(size_t), sizes, nullptr) != CL_SUCCESS)
+        return 0u;
+    /* A device that will not describe itself has nothing it can seal, and
+     * an answer of no binary is the API's own for that. */
+    if (!envelope_.identified())
+        for (cl_uint index = 0u; index < devices; ++index) sizes[index] = 0u;
+    return devices;
+}
+
+cl_int OpenClBackend::sealed_binaries(cl_program program, size_t param_value_size, void *param_value,
+                                      size_t *param_value_size_ret)
+{
+    AV_SCOPE("OpenClBackend::sealed_binaries");
+    size_t        sizes[max_program_devices] = {};
+    const cl_uint devices = program_binary_sizes(program, sizes);
+    if (devices == 0u) return CL_INVALID_PROGRAM;
+    size_t host_total = 0u;
+    size_t sealed_total = 0u;
+    for (cl_uint index = 0u; index < devices; ++index) {
+        if (__builtin_add_overflow(host_total, sizes[index], &host_total) ||
+            __builtin_add_overflow(sealed_total, envelope_.sealed_bytes(sizes[index]), &sealed_total))
+            return CL_OUT_OF_RESOURCES;
+    }
+    if (param_value_size_ret != nullptr) *param_value_size_ret = sealed_total;
+    if (param_value == nullptr || sealed_total == 0u) return CL_SUCCESS;
+    if (param_value_size < sealed_total) return CL_INVALID_VALUE;
+    if (!binaries_.reserve(host_total)) return CL_OUT_OF_HOST_MEMORY;
+    unsigned char *host[max_program_devices] = {};
+    size_t         at = 0u;
+    for (cl_uint index = 0u; index < devices; ++index) {
+        host[index] = sizes[index] != 0u ? binaries_.bytes() + at : nullptr;
+        at += sizes[index];
+    }
+    const cl_int fetched = ::clGetProgramInfo(program, CL_PROGRAM_BINARIES, devices * sizeof host[0], host, nullptr);
+    if (fetched != CL_SUCCESS) return fetched;
+    uint8_t *into = static_cast<uint8_t *>(param_value);
+    for (cl_uint index = 0u; index < devices; ++index) {
+        envelope_.seal(host[index], sizes[index], into);
+        into += envelope_.sealed_bytes(sizes[index]);
+    }
+    return CL_SUCCESS;
+}
+
+cl_program OpenClBackend::on_clCreateProgramWithBinary(cl_context context, cl_uint num_devices,
+                                                       const cl_device_id *device_list, const size_t *lengths,
+                                                       const unsigned char **binaries, cl_int *binary_status,
+                                                       cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateProgramWithBinary");
+    cl_int refusal = CL_SUCCESS;
+    if (num_devices == 0u || device_list == nullptr || lengths == nullptr || binaries == nullptr)
+        refusal = CL_INVALID_VALUE;
+    else if (num_devices != 1u || bound_ == nullptr || device_list[0] != bound_->device())
+        refusal = CL_INVALID_DEVICE;
+    const uint8_t *host = nullptr;
+    size_t         host_bytes = 0u;
+    if (refusal == CL_SUCCESS &&
+        (!envelope_.open(binaries[0], lengths[0], host, host_bytes) || !arguments_.kept(context, device_list[0])))
+        refusal = CL_INVALID_BINARY;
+    if (refusal != CL_SUCCESS) {
+        if (binary_status != nullptr && refusal == CL_INVALID_BINARY) *binary_status = CL_INVALID_BINARY;
+        if (errcode_ret != nullptr) *errcode_ret = refusal;
+        return nullptr;
+    }
+    const unsigned char *opened = host;
+    cl_int               status = CL_SUCCESS;
+    cl_program const     made =
+        RealDispatch::on_clCreateProgramWithBinary(context, 1u, device_list, &host_bytes, &opened, &status, errcode_ret);
+    if (binary_status != nullptr) *binary_status = status;
+    return made;
+}
+
+cl_int OpenClBackend::on_clSetKernelExecInfo(cl_kernel kernel, cl_kernel_exec_info param_name, size_t param_value_size,
+                                             const void *param_value)
+{
+    AV_SCOPE("OpenClBackend::on_clSetKernelExecInfo");
+    if (param_name == CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM) {
+        cl_bool wanted = CL_FALSE;
+        if (param_value == nullptr || param_value_size != sizeof wanted) return CL_INVALID_VALUE;
+        __builtin_memcpy(&wanted, param_value, sizeof wanted);
+        if (wanted != CL_FALSE) return CL_INVALID_OPERATION;
+    } else if (param_name != CL_KERNEL_EXEC_INFO_SVM_PTRS) {
+        return CL_INVALID_VALUE;
+    }
+    return RealDispatch::on_clSetKernelExecInfo(kernel, param_name, param_value_size, param_value);
+}
+
+bool OpenClBackend::declared_argument(cl_kernel kernel, cl_uint index, clproto::KernelArgument &argument)
+{
+    AV_SCOPE("OpenClBackend::declared_argument");
+    cl_program program = nullptr;
+    char       name[max_kernel_name] = {};
+    if (::clGetKernelInfo(kernel, CL_KERNEL_PROGRAM, sizeof program, &program, nullptr) != CL_SUCCESS ||
+        ::clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, sizeof name, name, nullptr) != CL_SUCCESS)
+        return false;
+    size_t                count = 0u;
+    const uint32_t *const module = il_.words(program, count);
+    return module != nullptr && argument_kinds_.kind(module, count, name, index, argument);
 }
 
 bool OpenClBackend::shares_with_gl(const GlDisplay &display) const
@@ -375,6 +508,9 @@ void OpenClBackend::shut_down()
     /* What this context imported is released by HostShares as the session
      * ends, before this: the registry holds no shared cl_mem by now. */
     stop_pacing();
+    /* The module kept is of a program the guest may have released already;
+     * its last reference goes with the guest's objects. */
+    il_.forget();
     handles_.release_all(*this);
     /* Before the ranges go: a release may free an allocation, and nothing
      * afterwards may resolve one. */

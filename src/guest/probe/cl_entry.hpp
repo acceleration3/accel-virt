@@ -50,6 +50,22 @@ public:
     virtual int32_t program_build_text(void *program, void *device, char *into, size_t room,
                                        size_t &bytes) = 0;
     virtual void *create_kernel(void *program, const char *name, int32_t &error) = 0;
+    /* The program's one binary as an application caching it fetches it -
+     * CL_PROGRAM_BINARY_SIZES, then CL_PROGRAM_BINARIES - held by this entry
+     * and the caller's to change until the next call of this; null with the
+     * error. */
+    virtual uint8_t *program_binary(void *program, size_t &bytes, int32_t &error) = 0;
+    /* clCreateProgramWithBinary of one binary for `device`, `status` the
+     * binary's own. */
+    virtual void *create_program_with_binary(void *context, void *device, const uint8_t *binary, size_t bytes,
+                                             int32_t &status, int32_t &error) = 0;
+    /* clCreateProgramWithIL. */
+    virtual void *create_program_with_il(void *context, const void *il, size_t bytes, int32_t &error) = 0;
+    /* clCompileProgram for `device`, with `header` (a program) included by the
+     * name `header_name`, or with no header when it is null. */
+    virtual int32_t compile_program(void *program, void *device, void *header, const char *header_name) = 0;
+    /* clLinkProgram of `count` compiled programs into a new one. */
+    virtual void *link_program(void *context, void *const *programs, uint32_t count, int32_t &error) = 0;
 
     /* What a run does with them. */
     virtual int32_t set_kernel_buffer(void *kernel, uint32_t index, void *buffer) = 0;

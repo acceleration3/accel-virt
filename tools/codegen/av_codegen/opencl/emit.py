@@ -118,17 +118,15 @@ MEM_PROPERTY_REFUSED = (("0x2051", "CL_MEM_DEVICE_HANDLE_LIST_KHR"),)
 # host simply reports its errors nowhere.
 CALLBACK_COMMANDS = ("clSetEventCallback",)
 
-# clSetKernelExecInfo names that pass an array of SVM or USM pointers.
-#
-# The wire does carry SVM allocations (feature 052), but this value is an
-# untyped blob of addresses rather than a parameter the profile can give a
-# role: nothing tells the decoder how many pointers are in it but its byte
-# count, and each would have to be resolved and rewritten in place. Until a
-# role says so, the refusal stands - and it is a refusal, not a silent pass:
-# a kernel told nothing about its indirect allocations is a kernel that
-# reads the wrong memory. USM is not carried at all.
-EXEC_INFO_POINTERS = (("CL_KERNEL_EXEC_INFO_SVM_PTRS", ""),
-                      ("0x40B8", "CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM"),
+# clSetKernelExecInfo names that pass an array of pointers the wire does not
+# carry. CL_KERNEL_EXEC_INFO_SVM_PTRS is not among them: its value is a
+# whole number of addresses the guest was answered (feature 052), and each
+# is judged by svm_for and rewritten as the pointer it resolves to before the
+# host sees it (resolve_svm_pointers). ARM's spelling of it and Intel's USM
+# are carried by nothing, so a guest naming them is refused - not passed on,
+# because a kernel told nothing about its indirect allocations reads the
+# wrong memory.
+EXEC_INFO_POINTERS = (("0x40B8", "CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM"),
                       ("0x4203", "CL_KERNEL_EXEC_INFO_USM_PTRS_INTEL"))
 
 # The implicit transfer sizes the server works out itself, from the
@@ -250,7 +248,13 @@ def _refusals(cmd: Command) -> list[str]:
         elif p.role == Role.BYTES_IN:
             raise ValueError(f"{cmd.name}.{n}: bytes in with no size the server can check")
     if cmd.name == "clSetKernelArg":
-        out.append("    if (!resolve_kernel_argument(s, arena, kernel, arg_index, arg_size, arg_value)) return false;")
+        out.append("    bool accepted = false;")
+        out.append("    if (!resolve_kernel_argument(s, arena, kernel, arg_index, arg_size, arg_value, accepted)) "
+                   "return false;")
+        out.append("    if (!accepted) {")
+        out.append("        reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(CL_INVALID_ARG_VALUE)));")
+        out.append("        return true;")
+        out.append("    }")
     if cmd.name in KERNEL_ARG_INFO_BUILDS:
         out.append("    options = with_kernel_arg_info(arena, options);")
         out.append("    if (options == nullptr) return false;")
@@ -261,8 +265,9 @@ def _refusals(cmd: Command) -> list[str]:
         out.append("    if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;")
     if cmd.name == "clSetKernelExecInfo":
         for value, name in EXEC_INFO_POINTERS:
-            spelled = f"  // {name}" if name else ""
-            out.append(f"    if (param_name == {value}) return false;{spelled}")
+            out.append(f"    if (param_name == {value}) return false;  // {name}")
+        out.append("    if (param_name == CL_KERNEL_EXEC_INFO_SVM_PTRS &&")
+        out.append("        !resolve_svm_pointers(s, arena, param_value_size, param_value)) return false;")
     return out
 
 
@@ -407,11 +412,24 @@ SIZE_HELPERS = [
     "    return joined;",
     "}",
     "",
-    "// What a kernel argument's bytes are to the ICD, as the kernel declared",
-    "// it: a pointer in global or constant space, an image or a pipe is a",
-    "// cl_mem, a sampler_t is a cl_sampler, a pointer in local space carries no",
-    "// value at all, and anything else is data.",
-    "enum class KernelArgument : uint8_t { data, memory, image, sampler, local, unknown };",
+    "// CL_KERNEL_EXEC_INFO_SVM_PTRS' value: a whole number of addresses, each",
+    "// inside an allocation or a mapping this server answered, handed on as",
+    "// the pointers they resolve to, in the arena.",
+    "static bool resolve_svm_pointers(ServerDispatch& s, ::av::WireArena& arena, size_t size,",
+    "                                 const void*& value) {",
+    "    if (value == nullptr || size == 0 || size % sizeof(uint64_t) != 0) return false;",
+    "    const size_t count = size / sizeof(uint64_t);",
+    "    auto* resolved = arena.allocate<void*>(count);",
+    "    if (resolved == nullptr) return false;",
+    "    for (size_t i = 0; i < count; ++i) {",
+    "        uint64_t address = 0;",
+    "        __builtin_memcpy(&address, static_cast<const uint8_t*>(value) + i * sizeof address, sizeof address);",
+    "        resolved[i] = s.svm_for(address, 1);",
+    "        if (resolved[i] == nullptr) return false;",
+    "    }",
+    "    value = resolved;",
+    "    return true;",
+    "}",
     "",
     "static bool ends_with(const char* text, size_t length, const char* suffix) {",
     "    const size_t tail = __builtin_strlen(suffix);",
@@ -437,50 +455,78 @@ SIZE_HELPERS = [
     "}",
     "",
     "// Asked of the ICD, into the arena like every answer it writes; false only",
-    "// when the arena has no room to ask. unknown when the ICD cannot say - a",
-    "// program from a binary or IL, or an ICD that keeps no argument information.",
+    "// when the arena has no room to ask. Local, global and constant space say",
+    "// what an argument is alone; a private one needs its type's name, which a",
+    "// host need not keep for a program from IL or from a binary. What the host",
+    "// cannot say the server may know otherwise (declared_argument), and what",
+    "// neither can say is unknown.",
     "static bool kernel_argument(ServerDispatch& s, ::av::WireArena& arena, cl_kernel kernel,",
     "                            cl_uint index, KernelArgument& argument) {",
     "    argument = KernelArgument::unknown;",
     "    auto* address = arena.allocate<cl_kernel_arg_address_qualifier>(1);",
     "    auto* qualifier = arena.allocate<cl_kernel_arg_type_qualifier>(1);",
     "    auto* length = arena.allocate<size_t>(1);",
-    "    if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_ADDRESS_QUALIFIER, sizeof *address,",
-    "                                address, nullptr) != CL_SUCCESS ||",
+    "    const bool addressed = s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_ADDRESS_QUALIFIER,",
+    "                                                   sizeof *address, address, nullptr) == CL_SUCCESS;",
+    "    if (addressed && *address == CL_KERNEL_ARG_ADDRESS_LOCAL) {",
+    "        argument = KernelArgument::local;",
+    "        return true;",
+    "    }",
+    "    if (addressed && (*address == CL_KERNEL_ARG_ADDRESS_GLOBAL || *address == CL_KERNEL_ARG_ADDRESS_CONSTANT)) {",
+    "        argument = KernelArgument::memory;",
+    "        return true;",
+    "    }",
+    "    if (addressed &&",
     "        s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_QUALIFIER, sizeof *qualifier,",
-    "                                qualifier, nullptr) != CL_SUCCESS ||",
+    "                                qualifier, nullptr) == CL_SUCCESS &&",
     "        s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, 0, nullptr,",
-    "                                length) != CL_SUCCESS) return true;",
-    "    char* name = arena.allocate_chars(*length + 1);",
-    "    if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, *length, name,",
-    "                                nullptr) != CL_SUCCESS) return true;",
-    "    name[*length] = '\\0';",
-    "    argument = classified(*address, *qualifier, name);",
+    "                                length) == CL_SUCCESS) {",
+    "        char* name = arena.allocate_chars(*length + 1);",
+    "        if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, *length, name,",
+    "                                    nullptr) == CL_SUCCESS) {",
+    "            name[*length] = '\\0';",
+    "            argument = classified(*address, *qualifier, name);",
+    "            return true;",
+    "        }",
+    "    }",
+    "    if (!s.declared_argument(kernel, index, argument)) argument = KernelArgument::unknown;",
     "    return true;",
     "}",
     "",
     "// A kernel argument the ICD will read as an object must be one this",
     "// server made, of that kind, and is handed over as the object resolved;",
     "// one it cannot classify may not be the width of an object at all. A",
-    "// null buffer is the API's own, and a local argument has no value.",
+    "// null buffer is the API's own, and a local argument has no value. False",
+    "// only when the arena has no room; `accepted` says whether the host may be",
+    "// handed the argument, and one that may not is answered CL_INVALID_ARG_VALUE",
+    "// - a well-formed command naming an argument this server cannot vouch for.",
     "static bool resolve_kernel_argument(ServerDispatch& s, ::av::WireArena& arena, cl_kernel kernel,",
-    "                                    cl_uint index, size_t size, const void*& value) {",
+    "                                    cl_uint index, size_t size, const void*& value, bool& accepted) {",
     "    KernelArgument argument = KernelArgument::unknown;",
+    "    accepted = false;",
     "    if (!kernel_argument(s, arena, kernel, index, argument)) return false;",
-    "    if (argument == KernelArgument::data) return true;",
-    "    if (argument == KernelArgument::local) return value == nullptr;",
-    "    if (argument == KernelArgument::unknown) return value == nullptr || size != sizeof(cl_mem);",
-    "    if (value == nullptr) return argument == KernelArgument::memory;",
-    "    if (size != sizeof(void*)) return false;",
+    "    if (argument == KernelArgument::data) accepted = true;",
+    "    if (argument == KernelArgument::local) accepted = value == nullptr;",
+    "    if (argument == KernelArgument::unknown) accepted = value == nullptr || size != sizeof(cl_mem);",
+    "    if (argument == KernelArgument::data || argument == KernelArgument::local ||",
+    "        argument == KernelArgument::unknown) return true;",
+    "    if (value == nullptr || size != sizeof(void*)) {",
+    "        accepted = value == nullptr && argument == KernelArgument::memory;",
+    "        return true;",
+    "    }",
     "    uint64_t wire_handle = 0;",
     "    __builtin_memcpy(&wire_handle, value, sizeof wire_handle);",
-    "    if (wire_handle == 0) return argument == KernelArgument::memory;",
+    "    if (wire_handle == 0) {",
+    "        accepted = argument == KernelArgument::memory;",
+    "        return true;",
+    "    }",
     "    void* object = s.handle_for(argument == KernelArgument::sampler ? HandleKind::sampler : HandleKind::mem,",
     "                                wire_handle);",
     "    auto* resolved = arena.allocate<void*>(1);",
-    "    if (object == nullptr || resolved == nullptr) return false;",
+    "    if (object == nullptr) return true;",
     "    *resolved = object;",
     "    value = resolved;",
+    "    accepted = true;",
     "    return true;",
     "}",
     "",
@@ -1163,6 +1209,11 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "enum class HandleKind : uint8_t {"]
     h += [f"    {_kind(base)}," for base in _kinds(reg)]
     h += ["};", "",
+          "// What a kernel argument's bytes are to the ICD, as the kernel declared",
+          "// it: a pointer in global or constant space, an image or a pipe is a",
+          "// cl_mem, a sampler_t is a cl_sampler, a pointer in local space carries no",
+          "// value at all, and anything else is data.",
+          "enum class KernelArgument : uint8_t { data, memory, image, sampler, local, unknown };", "",
           "// Implemented by the server; the table below calls into it.",
           "class ServerDispatch {", "public:",
           "    virtual ~ServerDispatch() = default;", "",
@@ -1187,7 +1238,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "    // arena, `bytes` long, as a pointer, or null for a span that is not",
           "    // wholly inside it. A lent parameter names this instead of carrying",
           "    // its bytes, and the call reads or writes it in place.",
-          "    virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;", ""]
+          "    virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;",
+          "    // What argument `index` of `kernel` is where the host's OpenCL",
+          "    // will not say - a program from IL, whose argument types a host",
+          "    // need not keep: false when the server knows no better either.",
+          "    virtual bool declared_argument(cl_kernel kernel, cl_uint index, KernelArgument& argument) = 0;",
+          ""]
     c = [HEADER, '#include "cl_dispatch_server.h"', "",
          "#include <stddef.h>", "#include <stdint.h>", "",
          '#include "cl_protocol_ids.h"',
@@ -1485,7 +1541,8 @@ def emit_default_dispatch(reg: Registry, out_dir: Path) -> None:
         out.append(f"    {_server_signature2(reg, cmd)} override {{")
         out.extend(_default_body(reg, cmd))
         out.append("    }")
-    out += ["", "protected:",
+    out += ["    bool declared_argument(cl_kernel, cl_uint, KernelArgument&) override { return false; }",
+            "", "protected:",
             "    virtual void called(uint32_t command_id) = 0;",
             "    virtual void handed(HandleKind kind, void* object) = 0;",
             "    virtual void touched(const void* bytes, size_t length) = 0;",
@@ -1562,6 +1619,8 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
         else:
             out.append(f"        return {call};")
         out.append("    }")
+    # The host's own answers are all this class knows of an argument.
+    out.append("    bool declared_argument(cl_kernel, cl_uint, KernelArgument&) override { return false; }")
     out += ["", "private:"] + members
     out += ["};", "", "}  // namespace av::clproto", ""]
     write(out_dir / "cl_real_dispatch.h", "\n".join(out))

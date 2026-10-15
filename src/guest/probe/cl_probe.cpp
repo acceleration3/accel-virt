@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/probe/cl_entry.hpp"
+#include "guest/probe/shaders/vector_add_spv.hpp"
 #include "guest/suite/guest_report.hpp"
 
 namespace av {
@@ -45,6 +46,20 @@ constexpr Padding padding_text()
 
 constexpr Padding padding = padding_text();
 
+/* The link step's two halves: a helper alone, and the vector add calling it
+ * through a header program it includes by name. */
+constexpr const char *added_helper = "float added(float a, float b) { return a + b; }\n";
+constexpr const char *added_header = "float added(float a, float b);\n";
+constexpr const char *added_header_name = "added.h";
+constexpr const char *added_kernel =
+    "#include \"added.h\"\n"
+    "__kernel void vector_add(__global const float *a, __global const float *b,\n"
+    "                        __global float *c)\n"
+    "{\n"
+    "    const int i = get_global_id(0);\n"
+    "    c[i] = added(a[i], b[i]);\n"
+    "}\n";
+
 /* cl.h's, spelled here because this half of the probe is portable and does not
  * include the API's headers. */
 enum : uint32_t {
@@ -54,7 +69,9 @@ enum : uint32_t {
     device_vendor_id = 0x1001u,
     device_luid = 0x106Cu,
     device_svm_capabilities = 0x1053u,
+    device_il_version = 0x105Bu,
 };
+enum : int32_t { invalid_binary = -42, invalid_operation = -59 };
 enum : uint64_t { mem_read_only = 4u, mem_write_only = 2u, mem_read_write = 1u };
 enum : uint64_t { map_read = 1u, map_write = 2u };
 enum : int32_t { complete = 0 };
@@ -73,7 +90,7 @@ ClProbe::ClProbe(Kmt &kmt, GuestReport &report, ClEntry &cl)
     : steps_(kmt, report, "opencl"), report_(report), kmt_(kmt), cl_(cl), platform_(nullptr),
       device_(nullptr),
       context_(nullptr), queue_(nullptr), program_(nullptr), kernel_(nullptr), long_program_(nullptr),
-      long_kernel_(nullptr), buffers_{},
+      long_kernel_(nullptr), buffers_{}, kept_programs_{}, kept_kernels_{}, programs_kept_(0u), kernels_kept_(0u),
       first_{}, second_{}, sum_{}, callbacks_(0u), callback_status_(0)
 {
     AV_SCOPE("ClProbe::ClProbe");
@@ -112,6 +129,9 @@ Status ClProbe::scenarios()
     svm_step();
     callback_step();
     long_program_step();
+    binary_step();
+    link_step();
+    il_step();
     return Status::ok;
 }
 
@@ -372,25 +392,130 @@ void ClProbe::long_program_step()
     if (steps_.check_result("long_build", built) != Status::ok) return;
     long_kernel_ = cl_.create_kernel(long_program_, "vector_add", error);
     if (steps_.check_result("long_kernel", long_kernel_ != nullptr ? 0 : error) != Status::ok) return;
-    int32_t set = 0;
+    int32_t        ran = 0;
+    const uint32_t wrong = wrong_from(long_kernel_, ran);
+    if (steps_.check_result("long_run", ran) != Status::ok) return;
+    steps_.check_measured("long_sum", wrong == 0u ? Status::ok : Status::conflict, wrong);
+}
+
+uint32_t ClProbe::wrong_from(void *kernel, int32_t &ran)
+{
+    AV_SCOPE("ClProbe::wrong_from");
+    ran = 0;
     for (uint32_t index = 0u; index < 3u; ++index) {
-        const int32_t one = cl_.set_kernel_buffer(long_kernel_, index, buffers_[index]);
-        if (one != 0) set = one;
+        const int32_t one = cl_.set_kernel_buffer(kernel, index, buffers_[index]);
+        if (one != 0) ran = one;
     }
     /* The output cleared first, so a sum read back is this kernel's. */
     float cleared[elements] = {};
-    int32_t ran = set;
     if (ran == 0) ran = cl_.write_buffer(queue_, buffers_[2], sizeof cleared, cleared);
-    if (ran == 0) ran = cl_.run_kernel(queue_, long_kernel_, elements);
+    if (ran == 0) ran = cl_.run_kernel(queue_, kernel, elements);
     if (ran == 0) ran = cl_.finish(queue_);
     float read[elements] = {};
     if (ran == 0) ran = cl_.read_buffer(queue_, buffers_[2], sizeof read, read);
-    if (steps_.check_result("long_run", ran) != Status::ok) return;
+    if (ran != 0) return elements;
     uint32_t wrong = 0u;
     for (uint32_t index = 0u; index < elements; ++index) {
         if (read[index] != sum_[index]) ++wrong;
     }
-    steps_.check_measured("long_sum", wrong == 0u ? Status::ok : Status::conflict, wrong);
+    return wrong;
+}
+
+void ClProbe::keep(void *program, void *kernel)
+{
+    AV_SCOPE("ClProbe::keep");
+    if (program != nullptr && programs_kept_ < most_kept) kept_programs_[programs_kept_++] = program;
+    if (kernel != nullptr && kernels_kept_ < most_kept) kept_kernels_[kernels_kept_++] = kernel;
+}
+
+void ClProbe::binary_step()
+{
+    AV_SCOPE("ClProbe::binary_step");
+    size_t         bytes = 0u;
+    int32_t        error = 0;
+    uint8_t *const binary = cl_.program_binary(program_, bytes, error);
+    if (steps_.check_measured("binary", binary != nullptr && bytes != 0u ? Status::ok : Status::invalid_state,
+                              binary != nullptr ? static_cast<uint32_t>(bytes) : static_cast<uint32_t>(error)) !=
+        Status::ok)
+        return;
+    int32_t     status = 0;
+    void *const loaded = cl_.create_program_with_binary(context_, device_, binary, bytes, status, error);
+    keep(loaded, nullptr);
+    int32_t built = loaded != nullptr ? cl_.build_program(loaded, device_, nullptr) : (error != 0 ? error : status);
+    void *kernel = built == 0 ? cl_.create_kernel(loaded, "vector_add", error) : nullptr;
+    keep(nullptr, kernel);
+    if (built == 0 && kernel == nullptr) built = error != 0 ? error : -1;
+    if (steps_.check_result("binary_build", built) != Status::ok) return;
+    int32_t        ran = 0;
+    const uint32_t wrong = wrong_from(kernel, ran);
+    steps_.check_measured("binary_sum", ran == 0 && wrong == 0u ? Status::ok : Status::conflict,
+                          ran == 0 ? wrong : static_cast<uint32_t>(ran));
+    /* Its last byte flipped, as a cache damaged on disk would have it: what
+     * a driver must not run, and what the application rebuilds its source
+     * for. */
+    binary[bytes - 1u] = static_cast<uint8_t>(binary[bytes - 1u] ^ 0x5Au);
+    void *const refused = cl_.create_program_with_binary(context_, device_, binary, bytes, status, error);
+    keep(refused, nullptr);
+    const bool clean = refused == nullptr && error == invalid_binary && status == invalid_binary;
+    steps_.check_measured("binary_refused", clean ? Status::ok : Status::conflict, static_cast<uint32_t>(error));
+}
+
+void ClProbe::link_step()
+{
+    AV_SCOPE("ClProbe::link_step");
+    int32_t     error = 0;
+    void *const helper = cl_.create_program(context_, &added_helper, 1u, error);
+    keep(helper, nullptr);
+    void *const header = helper != nullptr ? cl_.create_program(context_, &added_header, 1u, error) : nullptr;
+    keep(header, nullptr);
+    void *const caller = header != nullptr ? cl_.create_program(context_, &added_kernel, 1u, error) : nullptr;
+    keep(caller, nullptr);
+    int32_t compiled = caller != nullptr ? cl_.compile_program(helper, device_, nullptr, nullptr) : error;
+    if (compiled == 0) compiled = cl_.compile_program(caller, device_, header, added_header_name);
+    if (steps_.check_result("compile", compiled) != Status::ok) return;
+    void *const inputs[2] = {helper, caller};
+    void *const linked = cl_.link_program(context_, inputs, 2u, error);
+    keep(linked, nullptr);
+    void *const kernel = linked != nullptr ? cl_.create_kernel(linked, "vector_add", error) : nullptr;
+    keep(nullptr, kernel);
+    if (steps_.check_result("link", kernel != nullptr ? 0 : (error != 0 ? error : -1)) != Status::ok) return;
+    int32_t        ran = 0;
+    const uint32_t wrong = wrong_from(kernel, ran);
+    steps_.check_measured("link_sum", ran == 0 && wrong == 0u ? Status::ok : Status::conflict,
+                          ran == 0 ? wrong : static_cast<uint32_t>(ran));
+}
+
+void ClProbe::il_step()
+{
+    AV_SCOPE("ClProbe::il_step");
+    char   versions[256] = {};
+    size_t bytes = 0u;
+    bool   offered = false;
+    if (cl_.device_text(device_, device_il_version, versions, sizeof versions, bytes) == 0) {
+        for (size_t at = 0u; at + 6u <= sizeof versions && versions[at] != '\0' && !offered; ++at)
+            offered = versions[at] == 'S' && versions[at + 1u] == 'P' && versions[at + 2u] == 'I' &&
+                      versions[at + 3u] == 'R' && versions[at + 4u] == '-' && versions[at + 5u] == 'V';
+    }
+    report_.note("opencl", "il_version", offered ? versions : "not offered");
+    int32_t     error = 0;
+    void *const program = cl_.create_program_with_il(context_, vector_add_spv, sizeof vector_add_spv, error);
+    keep(program, nullptr);
+    if (!offered) {
+        /* A device without IL refuses it as the API says it must, and the
+         * run says which. */
+        const bool refused = program == nullptr && error == invalid_operation;
+        steps_.check_measured("il", refused ? Status::ok : Status::conflict, static_cast<uint32_t>(error));
+        return;
+    }
+    int32_t built = program != nullptr ? cl_.build_program(program, device_, nullptr) : (error != 0 ? error : -1);
+    void *kernel = built == 0 ? cl_.create_kernel(program, "vector_add", error) : nullptr;
+    keep(nullptr, kernel);
+    if (built == 0 && kernel == nullptr) built = error != 0 ? error : -1;
+    if (steps_.check_result("il", built) != Status::ok) return;
+    int32_t        ran = 0;
+    const uint32_t wrong = wrong_from(kernel, ran);
+    steps_.check_measured("il_sum", ran == 0 && wrong == 0u ? Status::ok : Status::conflict,
+                          ran == 0 ? wrong : static_cast<uint32_t>(ran));
 }
 
 /* The wait on an event says the host has reached it. It says nothing about
@@ -416,6 +541,8 @@ void ClProbe::release_all()
     AV_SCOPE("ClProbe::release_all");
     /* In reverse, as a program unwinds: what a run leaves behind is what a
      * process leaks. */
+    while (kernels_kept_ != 0u) cl_.release_kernel(kept_kernels_[--kernels_kept_]);
+    while (programs_kept_ != 0u) cl_.release_program(kept_programs_[--programs_kept_]);
     if (long_kernel_ != nullptr) cl_.release_kernel(long_kernel_);
     if (long_program_ != nullptr) cl_.release_program(long_program_);
     if (kernel_ != nullptr) cl_.release_kernel(kernel_);

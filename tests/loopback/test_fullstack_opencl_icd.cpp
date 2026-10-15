@@ -31,6 +31,7 @@
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "guest/probe/shaders/vector_add_spv.hpp"
 #include "icd/opencl/d3d11_resource.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -439,7 +440,39 @@ public:
     cl_device_id     device() const { return device_; }
     cl_context       context() const { return context_; }
     cl_command_queue queue() const { return queue_; }
+    cl_program       program() const { return program_; }
     cl_kernel        kernel() const { return kernel_; }
+
+    /* How many elements of the sum `kernel` gets wrong, run over the three
+     * buffers with the output cleared first - so a kernel that never ran is
+     * every element wrong rather than the last run's right answer. `extra`,
+     * when not null, is a fourth argument of eight bytes. */
+    std::uint32_t wrong_from(cl_kernel kernel, const std::uint64_t *extra = nullptr)
+    {
+        if (kernel == nullptr) return elements;
+        for (cl_uint index = 0u; index < 3u; ++index) {
+            if (table_of(kernel)->clSetKernelArg(kernel, index, sizeof(cl_mem), &buffers_[index]) != CL_SUCCESS)
+                return elements;
+        }
+        if (extra != nullptr && table_of(kernel)->clSetKernelArg(kernel, 3u, sizeof *extra, extra) != CL_SUCCESS)
+            return elements;
+        const float cleared[elements] = {};
+        if (table_of(queue_)->clEnqueueWriteBuffer(queue_, buffers_[2], CL_TRUE, 0u, vector_bytes, cleared, 0u,
+                                                   nullptr, nullptr) != CL_SUCCESS)
+            return elements;
+        const std::size_t global = elements;
+        if (table_of(queue_)->clEnqueueNDRangeKernel(queue_, kernel, 1u, nullptr, &global, nullptr, 0u, nullptr,
+                                                     nullptr) != CL_SUCCESS)
+            return elements;
+        float read_back[elements] = {};
+        if (read(read_back, CL_TRUE, nullptr) != CL_SUCCESS) return elements;
+        std::uint32_t count = 0u;
+        const float   offset = extra != nullptr ? static_cast<float>(*extra) : 0.0f;
+        for (std::uint32_t index = 0u; index < elements; ++index) {
+            if (read_back[index] != sum_[index] + offset) ++count;
+        }
+        return count;
+    }
     cl_mem           input() const { return buffers_[0]; }
     cl_mem           output() const { return buffers_[2]; }
 
@@ -1266,5 +1299,335 @@ TEST(fullstack_opencl_icd, a_program_longer_than_every_room_builds_and_runs)
     for (cl_mem buffer : buffers) CHECK_EQ(loader.release_mem(buffer), CL_SUCCESS);
     CHECK_EQ(loader.release_queue(queue), CL_SUCCESS);
     CHECK_EQ(loader.release_context(context), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+
+namespace {
+
+/* What a program says of itself that is the same however it was made. */
+std::uint32_t program_answers_wrong(const cl_program program, const cl_context context, const cl_device_id device)
+{
+    std::uint32_t wrong = 0u;
+    cl_uint       devices = 0u;
+    cl_device_id  named = nullptr;
+    cl_context    owner = nullptr;
+    cl_uint       references = 0u;
+    std::size_t   kernels = 0u;
+    char          names[64] = {};
+    const cl_icd_dispatch &table = *table_of(program);
+    if (table.clGetProgramInfo(program, CL_PROGRAM_NUM_DEVICES, sizeof devices, &devices, nullptr) != CL_SUCCESS ||
+        devices != 1u)
+        ++wrong;
+    if (table.clGetProgramInfo(program, CL_PROGRAM_DEVICES, sizeof named, &named, nullptr) != CL_SUCCESS ||
+        named != device)
+        ++wrong;
+    if (table.clGetProgramInfo(program, CL_PROGRAM_CONTEXT, sizeof owner, &owner, nullptr) != CL_SUCCESS ||
+        owner != context)
+        ++wrong;
+    if (table.clGetProgramInfo(program, CL_PROGRAM_REFERENCE_COUNT, sizeof references, &references, nullptr) !=
+            CL_SUCCESS ||
+        references != 1u)
+        ++wrong;
+    if (table.clGetProgramInfo(program, CL_PROGRAM_NUM_KERNELS, sizeof kernels, &kernels, nullptr) != CL_SUCCESS ||
+        kernels != 1u)
+        ++wrong;
+    if (table.clGetProgramInfo(program, CL_PROGRAM_KERNEL_NAMES, sizeof names, names, nullptr) != CL_SUCCESS ||
+        std::strcmp(names, "vector_add") != 0)
+        ++wrong;
+    return wrong;
+}
+
+/* A program's one binary, as an application caching it fetches it: the size,
+ * then the bytes into memory of its own. Empty on any refusal. */
+class FetchedBinary {
+public:
+    explicit FetchedBinary(cl_program program) : bytes_(nullptr), size_(0u)
+    {
+        if (table_of(program)->clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof size_, &size_, nullptr) !=
+                CL_SUCCESS ||
+            size_ == 0u)
+            return;
+        bytes_ = static_cast<unsigned char *>(std::malloc(size_));
+        std::size_t pointers = 0u;
+        if (bytes_ == nullptr ||
+            table_of(program)->clGetProgramInfo(program, CL_PROGRAM_BINARIES, sizeof bytes_, &bytes_, &pointers) !=
+                CL_SUCCESS ||
+            pointers != sizeof bytes_)
+            size_ = 0u;
+    }
+    ~FetchedBinary() { std::free(bytes_); }
+    FetchedBinary(const FetchedBinary &) = delete;
+    FetchedBinary &operator=(const FetchedBinary &) = delete;
+
+    unsigned char *bytes() const { return bytes_; }
+    std::size_t    size() const { return size_; }
+
+private:
+    unsigned char *bytes_;
+    std::size_t    size_;
+};
+
+/* What a program made from `bytes` answers, and the status it gives them. */
+cl_int from_binary(cl_context context, cl_device_id device, const unsigned char *bytes, std::size_t size,
+                   cl_int &status, cl_program &made)
+{
+    cl_int error = CL_SUCCESS;
+    status = CL_SUCCESS;
+    made = table_of(context)->clCreateProgramWithBinary(context, 1u, &device, &size, &bytes, &status, &error);
+    return error;
+}
+
+/* Counts pfn_notify's calls and keeps what it was told, as an application
+ * waiting on a build would. */
+class BuildNotices {
+public:
+    BuildNotices() : calls_(0u), last_(nullptr) {}
+    void heard(cl_program program)
+    {
+        ++calls_;
+        last_ = program;
+    }
+    std::uint32_t calls() const { return calls_; }
+    cl_program    last() const { return last_; }
+
+private:
+    std::uint32_t calls_;
+    cl_program    last_;
+};
+
+/* An ABI boundary C requires: pfn_notify is a bare function with one
+ * argument, so the object is the argument and this forwards into it. */
+void CL_CALLBACK build_heard(cl_program program, void *user_data)
+{
+    static_cast<BuildNotices *>(user_data)->heard(program);
+}
+
+}  // namespace
+
+/* An application that caches binaries (DaVinci Resolve, Affinity): the
+ * program's binary fetched, made into a program again, built, and its kernel
+ * run - and a binary damaged in its cache, cut short or another device's is
+ * CL_INVALID_BINARY, which the application answers by building its source. */
+TEST(fullstack_opencl_icd, a_program_s_binary_made_into_a_program_again_runs_and_a_damaged_one_is_refused)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    CHECK_EQ(program_answers_wrong(run.program(), run.context(), run.device()), 0u);
+    char        source[512] = {};
+    std::size_t source_bytes = 0u;
+    CHECK_EQ(table_of(run.program())->clGetProgramInfo(run.program(), CL_PROGRAM_SOURCE, sizeof source, source,
+                                                       &source_bytes),
+             CL_SUCCESS);
+    CHECK_EQ(std::strcmp(source, vector_add), 0);
+
+    const FetchedBinary binary(run.program());
+    CHECK(binary.size() > 72u);
+    if (binary.size() <= 72u) return;
+    cl_int     status = CL_INVALID_VALUE;
+    cl_program loaded = nullptr;
+    CHECK_EQ(from_binary(run.context(), run.device(), binary.bytes(), binary.size(), status, loaded), CL_SUCCESS);
+    CHECK_EQ(status, CL_SUCCESS);
+    CHECK(loaded != nullptr);
+    if (loaded == nullptr) return;
+    BuildNotices       notices;
+    const cl_device_id device = run.device();
+    CHECK_EQ(table_of(loaded)->clBuildProgram(loaded, 1u, &device, nullptr, &build_heard, &notices),
+             CL_SUCCESS);
+    CHECK_EQ(notices.calls(), 1u);
+    CHECK(notices.last() == loaded);
+    cl_program_binary_type type = CL_PROGRAM_BINARY_TYPE_NONE;
+    CHECK_EQ(table_of(loaded)->clGetProgramBuildInfo(loaded, run.device(), CL_PROGRAM_BINARY_TYPE, sizeof type, &type,
+                                                     nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(type, static_cast<cl_program_binary_type>(CL_PROGRAM_BINARY_TYPE_EXECUTABLE));
+
+    /* Every kernel of it at once, which is how Resolve takes them, and what
+     * each says of itself. */
+    cl_kernel kernel = nullptr;
+    cl_uint   kernels = 0u;
+    CHECK_EQ(table_of(loaded)->clCreateKernelsInProgram(loaded, 1u, &kernel, &kernels), CL_SUCCESS);
+    CHECK_EQ(kernels, 1u);
+    if (kernel == nullptr) return;
+    char    name[32] = {};
+    cl_uint arguments = 0u;
+    cl_program owner = nullptr;
+    CHECK_EQ(table_of(kernel)->clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, sizeof name, name, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(std::strcmp(name, "vector_add"), 0);
+    CHECK_EQ(table_of(kernel)->clGetKernelInfo(kernel, CL_KERNEL_NUM_ARGS, sizeof arguments, &arguments, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(arguments, 3u);
+    CHECK_EQ(table_of(kernel)->clGetKernelInfo(kernel, CL_KERNEL_PROGRAM, sizeof owner, &owner, nullptr), CL_SUCCESS);
+    CHECK(owner == loaded);
+    cl_kernel_arg_address_qualifier address = 0u;
+    CHECK_EQ(table_of(kernel)->clGetKernelArgInfo(kernel, 2u, CL_KERNEL_ARG_ADDRESS_QUALIFIER, sizeof address,
+                                                  &address, nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(address, static_cast<cl_kernel_arg_address_qualifier>(CL_KERNEL_ARG_ADDRESS_GLOBAL));
+    CHECK_EQ(run.wrong_from(kernel), 0u);
+
+    /* A clone carries the arguments set so far, and runs as its original. */
+    cl_int    error = CL_INVALID_VALUE;
+    cl_kernel clone = table_of(kernel)->clCloneKernel(kernel, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    CHECK_EQ(run.wrong_from(clone), 0u);
+
+    /* Damaged: a byte of the payload flipped, the envelope's device changed,
+     * a byte short, and bytes that were never a binary. */
+    unsigned char *const bytes = binary.bytes();
+    cl_program refused = nullptr;
+    bytes[binary.size() - 1u] ^= 0x5Au;
+    CHECK_EQ(from_binary(run.context(), run.device(), bytes, binary.size(), status, refused), CL_INVALID_BINARY);
+    CHECK_EQ(status, CL_INVALID_BINARY);
+    CHECK(refused == nullptr);
+    bytes[binary.size() - 1u] ^= 0x5Au;
+    bytes[16] ^= 0x01u;
+    CHECK_EQ(from_binary(run.context(), run.device(), bytes, binary.size(), status, refused), CL_INVALID_BINARY);
+    bytes[16] ^= 0x01u;
+    CHECK_EQ(from_binary(run.context(), run.device(), bytes, binary.size() - 1u, status, refused), CL_INVALID_BINARY);
+    static const unsigned char never[] = "not a binary any driver made";
+    CHECK_EQ(from_binary(run.context(), run.device(), never, sizeof never, status, refused), CL_INVALID_BINARY);
+    /* And whole again, it is taken again. */
+    cl_program again = nullptr;
+    CHECK_EQ(from_binary(run.context(), run.device(), bytes, binary.size(), status, again), CL_SUCCESS);
+
+    if (again != nullptr) CHECK_EQ(table_of(again)->clReleaseProgram(again), CL_SUCCESS);
+    if (clone != nullptr) CHECK_EQ(table_of(clone)->clReleaseKernel(clone), CL_SUCCESS);
+    CHECK_EQ(table_of(kernel)->clReleaseKernel(kernel), CL_SUCCESS);
+    CHECK_EQ(table_of(loaded)->clReleaseProgram(loaded), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* Separate compilation: a helper compiled alone, a kernel compiled against a
+ * header program naming it, and the two linked into a program whose kernel
+ * runs - each step telling its pfn_notify once it is done. */
+TEST(fullstack_opencl_icd, two_programs_compiled_apart_and_linked_run_as_one)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    cl_int error = CL_INVALID_VALUE;
+    const cl_program helper = loader.create_program(run.context(), "float added(float a, float b) { return a + b; }\n",
+                                                    &error);
+    const cl_program declared = loader.create_program(run.context(), "float added(float a, float b);\n", &error);
+    const cl_program kernel_source = loader.create_program(
+        run.context(),
+        "#include \"added.h\"\n"
+        "__kernel void vector_add(__global const float *a, __global const float *b, __global float *c)\n"
+        "{\n"
+        "    const int i = get_global_id(0);\n"
+        "    c[i] = added(a[i], b[i]);\n"
+        "}\n",
+        &error);
+    CHECK(helper != nullptr && declared != nullptr && kernel_source != nullptr);
+    if (helper == nullptr || declared == nullptr || kernel_source == nullptr) return;
+    BuildNotices notices;
+    CHECK_EQ(table_of(helper)->clCompileProgram(helper, 0u, nullptr, nullptr, 0u, nullptr, nullptr, &build_heard,
+                                                &notices),
+             CL_SUCCESS);
+    const char        *header_name = "added.h";
+    const cl_device_id device = run.device();
+    CHECK_EQ(table_of(kernel_source)->clCompileProgram(kernel_source, 1u, &device, nullptr, 1u, &declared,
+                                                       &header_name, &build_heard, &notices),
+             CL_SUCCESS);
+    CHECK_EQ(notices.calls(), 2u);
+    CHECK(notices.last() == kernel_source);
+    cl_program_binary_type type = CL_PROGRAM_BINARY_TYPE_NONE;
+    CHECK_EQ(table_of(helper)->clGetProgramBuildInfo(helper, run.device(), CL_PROGRAM_BINARY_TYPE, sizeof type, &type,
+                                                     nullptr),
+             CL_SUCCESS);
+    CHECK_EQ(type, static_cast<cl_program_binary_type>(CL_PROGRAM_BINARY_TYPE_COMPILED_OBJECT));
+
+    const cl_program inputs[2] = {helper, kernel_source};
+    const cl_program linked = table_of(run.context())->clLinkProgram(run.context(), 0u, nullptr, nullptr, 2u, inputs,
+                                                                    &build_heard, &notices, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    CHECK(linked != nullptr);
+    CHECK_EQ(notices.calls(), 3u);
+    CHECK(notices.last() == linked);
+    if (linked == nullptr) return;
+    CHECK_EQ(program_answers_wrong(linked, run.context(), run.device()), 0u);
+    const cl_kernel kernel = loader.create_kernel(linked, "vector_add", &error);
+    CHECK_EQ(run.wrong_from(kernel), 0u);
+
+    /* A link of nothing, and of something that is not a program. */
+    CHECK(table_of(run.context())->clLinkProgram(run.context(), 0u, nullptr, nullptr, 0u, nullptr, nullptr, nullptr,
+                                                 &error) == nullptr);
+    CHECK_EQ(error, CL_INVALID_VALUE);
+    const cl_program not_a_program[1] = {reinterpret_cast<cl_program>(run.queue())};
+    CHECK(table_of(run.context())->clLinkProgram(run.context(), 0u, nullptr, nullptr, 1u, not_a_program, nullptr,
+                                                 nullptr, &error) == nullptr);
+    CHECK_EQ(error, CL_INVALID_PROGRAM);
+
+    if (kernel != nullptr) CHECK_EQ(table_of(kernel)->clReleaseKernel(kernel), CL_SUCCESS);
+    for (const cl_program program : {linked, kernel_source, declared, helper})
+        CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* SPIR-V on a host that takes it: the probe's own module, its vector add run
+ * over buffers, and offset_add's eight private bytes - which a host keeping no
+ * type names for IL cannot tell from a sampler - set as the ulong they are,
+ * read off the module. Its binary goes round as any program's does. */
+TEST(fullstack_opencl_icd, a_program_from_spir_v_runs_its_kernels_and_says_what_it_was_made_of)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+    char versions[256] = {};
+    CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_IL_VERSION, sizeof versions, versions, nullptr), CL_SUCCESS);
+    cl_int           error = CL_INVALID_VALUE;
+    const cl_program program = table_of(run.context())->clCreateProgramWithIL(
+        run.context(), av::vector_add_spv, sizeof av::vector_add_spv, &error);
+    if (std::strstr(versions, "SPIR-V") == nullptr) {
+        std::fprintf(stderr, "the host takes no SPIR-V (%s); nothing more to judge\n", versions);
+        CHECK(program == nullptr);
+        return;
+    }
+    CHECK_EQ(error, CL_SUCCESS);
+    if (program == nullptr) return;
+    CHECK_EQ(loader.build_program(program, nullptr), CL_SUCCESS);
+    std::uint32_t module[sizeof av::vector_add_spv / sizeof av::vector_add_spv[0]] = {};
+    std::size_t   module_bytes = 0u;
+    CHECK_EQ(table_of(program)->clGetProgramInfo(program, CL_PROGRAM_IL, sizeof module, module, &module_bytes),
+             CL_SUCCESS);
+    CHECK_EQ(module_bytes, sizeof module);
+    CHECK_EQ(std::memcmp(module, av::vector_add_spv, sizeof module), 0);
+
+    const cl_kernel added = loader.create_kernel(program, "vector_add", &error);
+    CHECK_EQ(run.wrong_from(added), 0u);
+    const cl_kernel offset = loader.create_kernel(program, "offset_add", &error);
+    const std::uint64_t by = 1000u;
+    CHECK_EQ(run.wrong_from(offset, &by), 0u);
+
+    if (offset != nullptr) CHECK_EQ(table_of(offset)->clReleaseKernel(offset), CL_SUCCESS);
+    if (added != nullptr) CHECK_EQ(table_of(added)->clReleaseKernel(added), CL_SUCCESS);
+    CHECK_EQ(table_of(program)->clReleaseProgram(program), CL_SUCCESS);
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }

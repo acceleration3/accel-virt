@@ -284,7 +284,7 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().set_kernel_argument(kernel, 0u, sizeof buffer, &buffer),
            CL_OUT_OF_RESOURCES);
-  CHECK_EQ(rig.root().build_program(program, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().build_program(program, 0u, nullptr, nullptr), CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().wait_for_events(1u, &user), CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().event_info(user, CL_EVENT_COMMAND_EXECUTION_STATUS, 0u, nullptr, nullptr),
            CL_OUT_OF_RESOURCES);

@@ -1,0 +1,58 @@
+; The probe's vector add as an OpenCL kernel in SPIR-V, for clCreateProgramWithIL:
+; c[i] = a[i] + b[i] over three global float buffers, i the work-item's first
+; global id. offset_add adds a ulong argument too: eight private bytes, which a
+; host that keeps no type names for IL cannot tell from a sampler's handle. Written by hand: what a compiler writes carries linkage and
+; helper functions a driver need not take, and this is the least a device
+; that takes SPIR-V 1.0 must run.
+               OpCapability Addresses
+               OpCapability Kernel
+               OpCapability Int64
+               OpMemoryModel Physical64 OpenCL
+               OpEntryPoint Kernel %main "vector_add" %gid
+               OpEntryPoint Kernel %offset "offset_add" %gid
+               OpDecorate %gid BuiltIn GlobalInvocationId
+               OpDecorate %gid Constant
+       %void = OpTypeVoid
+      %float = OpTypeFloat 32
+      %ulong = OpTypeInt 64 0
+    %v3ulong = OpTypeVector %ulong 3
+%ptr_in_v3ulong = OpTypePointer Input %v3ulong
+%ptr_g_float = OpTypePointer CrossWorkgroup %float
+         %fn = OpTypeFunction %void %ptr_g_float %ptr_g_float %ptr_g_float
+     %fn_off = OpTypeFunction %void %ptr_g_float %ptr_g_float %ptr_g_float %ulong
+        %gid = OpVariable %ptr_in_v3ulong Input
+       %main = OpFunction %void None %fn
+          %a = OpFunctionParameter %ptr_g_float
+          %b = OpFunctionParameter %ptr_g_float
+          %c = OpFunctionParameter %ptr_g_float
+      %entry = OpLabel
+        %ids = OpLoad %v3ulong %gid Aligned 32
+          %i = OpCompositeExtract %ulong %ids 0
+         %pa = OpInBoundsPtrAccessChain %ptr_g_float %a %i
+         %pb = OpInBoundsPtrAccessChain %ptr_g_float %b %i
+         %pc = OpInBoundsPtrAccessChain %ptr_g_float %c %i
+         %va = OpLoad %float %pa Aligned 4
+         %vb = OpLoad %float %pb Aligned 4
+        %sum = OpFAdd %float %va %vb
+               OpStore %pc %sum Aligned 4
+               OpReturn
+               OpFunctionEnd
+     %offset = OpFunction %void None %fn_off
+         %oa = OpFunctionParameter %ptr_g_float
+         %ob = OpFunctionParameter %ptr_g_float
+         %oc = OpFunctionParameter %ptr_g_float
+          %k = OpFunctionParameter %ulong
+     %oentry = OpLabel
+       %oids = OpLoad %v3ulong %gid Aligned 32
+         %oi = OpCompositeExtract %ulong %oids 0
+        %opa = OpInBoundsPtrAccessChain %ptr_g_float %oa %oi
+        %opb = OpInBoundsPtrAccessChain %ptr_g_float %ob %oi
+        %opc = OpInBoundsPtrAccessChain %ptr_g_float %oc %oi
+        %ova = OpLoad %float %opa Aligned 4
+        %ovb = OpLoad %float %opb Aligned 4
+       %osum = OpFAdd %float %ova %ovb
+         %kf = OpConvertUToF %float %k
+     %ototal = OpFAdd %float %osum %kf
+               OpStore %opc %ototal Aligned 4
+               OpReturn
+               OpFunctionEnd

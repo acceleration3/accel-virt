@@ -28,6 +28,8 @@ constexpr Declaration declarations[RecordingClDispatch::declared_arguments] = {
     {CL_KERNEL_ARG_ADDRESS_PRIVATE, CL_KERNEL_ARG_TYPE_NONE, ""},
     {CL_KERNEL_ARG_ADDRESS_PRIVATE, CL_KERNEL_ARG_TYPE_PIPE, "int"},
     {CL_KERNEL_ARG_ADDRESS_CONSTANT, CL_KERNEL_ARG_TYPE_CONST, "table_t"},
+    {CL_KERNEL_ARG_ADDRESS_GLOBAL, CL_KERNEL_ARG_TYPE_NONE, ""},
+    {CL_KERNEL_ARG_ADDRESS_PRIVATE, CL_KERNEL_ARG_TYPE_NONE, ""},
 };
 
 /* The ICD's answer to an info query: `bytes` of `answer`, or the size alone. */
@@ -217,6 +219,16 @@ cl_int RecordingClDispatch::on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uin
     return DefaultDispatch::on_clSetKernelArgSVMPointer(kernel, arg_index, arg_value);
 }
 
+cl_int RecordingClDispatch::on_clSetKernelExecInfo(cl_kernel kernel, cl_kernel_exec_info param_name,
+                                                   std::size_t param_value_size, const void *param_value)
+{
+    if (param_name == CL_KERNEL_EXEC_INFO_SVM_PTRS && param_value != nullptr) {
+        const void *const *const pointers = static_cast<const void *const *>(param_value);
+        for (std::size_t index = 0u; index < param_value_size / sizeof(void *); ++index) from_svm(pointers[index], 0u);
+    }
+    return DefaultDispatch::on_clSetKernelExecInfo(kernel, param_name, param_value_size, param_value);
+}
+
 std::uint64_t RecordingClDispatch::make_svm(std::size_t bytes)
 {
     if (bytes == 0u || bytes > max_shared - shared_used_) return 0u;
@@ -233,8 +245,11 @@ cl_int RecordingClDispatch::on_clGetKernelArgInfo(cl_kernel kernel, cl_uint arg_
 {
     (void)DefaultDispatch::on_clGetKernelArgInfo(kernel, arg_index, param_name, param_value_size,
                                                  param_value, param_value_size_ret);
-    if (argument_declared(arg_index) == Declared::undeclared) return CL_KERNEL_ARG_INFO_NOT_AVAILABLE;
+    const Declared declared = argument_declared(arg_index);
+    if (declared == Declared::undeclared) return CL_KERNEL_ARG_INFO_NOT_AVAILABLE;
     const Declaration &declaration = declarations[arg_index % declared_arguments];
+    const bool untyped = declared == Declared::untyped_global || declared == Declared::untyped_private;
+    if (untyped && param_name != CL_KERNEL_ARG_ADDRESS_QUALIFIER) return CL_KERNEL_ARG_INFO_NOT_AVAILABLE;
     switch (param_name) {
     case CL_KERNEL_ARG_ADDRESS_QUALIFIER:
         return answer_info(&declaration.address, sizeof declaration.address, param_value_size,
@@ -266,8 +281,9 @@ cl_int RecordingClDispatch::on_clSetKernelArg(cl_kernel kernel, cl_uint arg_inde
         return CL_SUCCESS;
     }
     if (object == 0u) return CL_SUCCESS;
-    const clproto::HandleKind kind =
-        declared == Declared::sampler ? clproto::HandleKind::sampler : clproto::HandleKind::mem;
+    const clproto::HandleKind kind = declared == Declared::sampler || declared == Declared::untyped_private
+                                         ? clproto::HandleKind::sampler
+                                         : clproto::HandleKind::mem;
     if (handles_.resolve(kind, object) == nullptr) strangers_++;
     return CL_SUCCESS;
 }
@@ -295,6 +311,13 @@ void RecordingClDispatch::built(const char *options)
 {
     if (options == nullptr || std::strstr(options, kernel_arg_info_flag) == nullptr)
         builds_without_argument_info_++;
+}
+
+bool RecordingClDispatch::declared_argument(cl_kernel, cl_uint index, clproto::KernelArgument &argument)
+{
+    if (argument_declared(index) != Declared::untyped_private) return false;
+    argument = clproto::KernelArgument::sampler;
+    return true;
 }
 
 RecordingClDispatch::Declared RecordingClDispatch::argument_declared(cl_uint index) const

@@ -382,7 +382,8 @@ TEST(opencl_dispatch, a_rectangle_read_that_overflows_or_outgrows_its_room_is_re
   }
   CHECK_EQ(session.dispatch().calls(), before + ran); }
 
-/* SVM and USM pointers: this wire makes neither, so every one is invented. */
+/* ARM's SVM pointers and Intel's USM: this wire makes neither, so every one
+ * is invented; and SVM pointers this host never allocated. */
 TEST(opencl_dispatch, kernel_exec_info_naming_host_pointers_is_refused)
 { ClSession session;
   constexpr std::uint64_t names[] = {CL_KERNEL_EXEC_INFO_SVM_PTRS, 0x40B8u, 0x4203u};
@@ -398,6 +399,37 @@ TEST(opencl_dispatch, kernel_exec_info_naming_host_pointers_is_refused)
       CHECK(!session.run(av::clproto::kCmd_clSetKernelExecInfo, frame, bytes));
   }
   CHECK_EQ(session.dispatch().calls(), 0u); }
+
+/* CL_KERNEL_EXEC_INFO_SVM_PTRS: a whole number of addresses this host
+ * allocated, each resolved before the host sees it; one outside every
+ * allocation, a count that is not whole addresses, or none, is refused. */
+TEST(opencl_dispatch, kernel_exec_info_svm_pointers_resolve_only_what_this_host_allocated)
+{ ClSession session;
+  const std::uint64_t allocated = session.dispatch().make_svm(256u);
+  CHECK(allocated != 0u);
+  struct Case { std::uint64_t first; std::uint64_t second; std::uint64_t size; bool runs; };
+  const Case cases[] = {
+      {allocated, allocated + 16u, 16u, true},
+      {allocated + 255u, 0u, 8u, true},
+      {allocated, 0x7F0000001000u, 16u, false},
+      {allocated, 0u, 12u, false},
+      {allocated, 0u, 0u, false},
+  };
+  for (const Case &item : cases) {
+      const std::uint32_t before = session.dispatch().calls();
+      std::uint8_t bytes[frame_bytes];
+      WireWriter frame(bytes, sizeof bytes);
+      frame.write_pod<std::uint64_t>(0u);
+      frame.write_varint(CL_KERNEL_EXEC_INFO_SVM_PTRS);
+      frame.write_varint(item.size);
+      frame.write_pod<std::uint8_t>(1u);
+      frame.write_varint(item.size);
+      const std::uint64_t pair[2] = {item.first, item.second};
+      frame.write(pair, static_cast<std::size_t>(item.size));
+      CHECK_EQ(session.run(av::clproto::kCmd_clSetKernelExecInfo, frame, bytes), item.runs);
+      CHECK_EQ(session.dispatch().calls(), before + (item.runs ? 1u : 0u));
+      CHECK_EQ(session.dispatch().strangers(), 0u);
+  } }
 
 /* An event a call made is one a later wait may name; one it did not is not. */
 TEST(opencl_dispatch, an_event_the_host_made_may_be_waited_on_and_no_other)
@@ -582,7 +614,17 @@ bool set_argument(ClSession &session, std::uint64_t kernel, std::uint32_t index,
         frame.write_varint(size);
         frame.write(&value, static_cast<std::size_t>(size));
     }
-    return session.run(av::clproto::kCmd_clSetKernelArg, frame, bytes);
+    if (!session.run(av::clproto::kCmd_clSetKernelArg, frame, bytes)) return false;
+    /* The host's own answer is CL_SUCCESS; one refused before the host is a
+     * well-formed command answered with the API's error for an argument it
+     * cannot take, and nothing called. */
+    WireReader    answer = session.answer();
+    std::uint64_t result = 0u;
+    CHECK(answer.read_varint(result));
+    const cl_int answered = static_cast<cl_int>(static_cast<std::int64_t>(result));
+    CHECK(answered == CL_SUCCESS || answered == CL_INVALID_ARG_VALUE);
+    if (answered == CL_INVALID_ARG_VALUE) CHECK(session.dispatch().last_called() != av::clproto::kCmd_clSetKernelArg);
+    return answered == CL_SUCCESS;
 }
 
 }  // namespace
@@ -650,11 +692,18 @@ TEST(opencl_dispatch, a_kernel_argument_reaches_the_icd_only_as_what_the_kernel_
       {Declared::pipe, 8u, true, invented, false},
       {Declared::constant, 8u, true, invented, false},
       {Declared::constant, 8u, true, buffer, true},
+      /* Its address space alone says a global argument is memory. */
+      {Declared::untyped_global, 8u, true, buffer, true},
+      {Declared::untyped_global, 8u, true, invented, false},
+      {Declared::untyped_global, 8u, false, 0u, true},
+      /* A private one is what the server declares it, a sampler here. */
+      {Declared::untyped_private, 8u, true, sampler, true},
+      {Declared::untyped_private, 8u, true, buffer, false},
+      {Declared::untyped_private, 8u, true, invented, false},
   };
   for (const Case &item : cases) {
       const std::uint32_t index = index_declared(session.dispatch(), item.declared);
       CHECK_EQ(set_argument(session, kernel, index, item.size, item.present, item.value), item.runs);
-      CHECK_EQ(session.dispatch().last_called() == av::clproto::kCmd_clSetKernelArg, item.runs);
       CHECK_EQ(session.dispatch().strangers(), 0u);
       CHECK_EQ(session.dispatch().strays(), 0u);
   } }

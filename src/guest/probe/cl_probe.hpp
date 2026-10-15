@@ -66,6 +66,22 @@ private:
      * compiler - DaVinci Resolve's is 293 KB, past the 256 KiB a command was
      * once lent - built, and its kernel run over the probe's buffers. */
     void                 long_program_step();
+    /* What an application caching programs does (DaVinci Resolve, Affinity):
+     * the vector add's binary fetched, made into a program, built and run -
+     * and the same binary damaged refused as CL_INVALID_BINARY. */
+    void                 binary_step();
+    /* Separate compilation: a helper and a kernel compiled apart, the kernel
+     * against a header program, linked and run. */
+    void                 link_step();
+    /* The vector add from SPIR-V, where the device takes it; where it does
+     * not, the refusal the API gives for it. */
+    void                 il_step();
+    /* How many elements of the sum `kernel` gets wrong over the three buffers,
+     * the output cleared first; `ran` is the first error on the way, and every
+     * element is wrong when there is one. */
+    uint32_t             wrong_from(void *kernel, int32_t &ran);
+    /* What a step made, released by release_all in reverse. */
+    void                 keep(void *program, void *kernel);
     /* How many callbacks have arrived, waiting up to callback_seconds for the
      * first. The callback runs on a thread the ICD owns and nothing orders it
      * against the wait on its event, so a count read the moment the wait
@@ -82,6 +98,8 @@ private:
      * comment, past a megabyte and a half in all - the transport's room, its
      * batch, its ring and the host's decode block. */
     static constexpr uint32_t long_strings = 400u;
+    /* The programs and kernels the binary, link and IL steps make. */
+    static constexpr uint32_t most_kept = 8u;
 
     ScenarioSteps steps_;
     GuestReport  &report_;
@@ -96,6 +114,10 @@ private:
     void         *long_program_;
     void         *long_kernel_;
     void         *buffers_[3];
+    void         *kept_programs_[most_kept];
+    void         *kept_kernels_[most_kept];
+    uint32_t      programs_kept_;
+    uint32_t      kernels_kept_;
     /* What the inputs hold and what their sum must be. */
     float         first_[elements];
     float         second_[elements];

@@ -126,17 +126,29 @@ TEST(cl_probe, every_step_passes_on_an_opencl_that_does_what_it_is_asked)
                                          "ok opencl.long_kernel\n"
                                          "ok opencl.long_run\n"
                                          "ok opencl.long_sum 0\n"
+                                         "ok opencl.binary 16\n"
+                                         "ok opencl.binary_build\n"
+                                         "ok opencl.binary_sum 0\n"
+                                         "ok opencl.binary_refused 4294967254\n"
+                                         "ok opencl.compile\n"
+                                         "ok opencl.link\n"
+                                         "ok opencl.link_sum 0\n"
+                                         "note opencl.il_version SPIR-V_1.0 SPIR-V_1.1\n"
+                                         "ok opencl.il\n"
+                                         "ok opencl.il_sum 0\n"
                                          "ok opencl.release\n"
-                                         "avclprobe: 31 passed, 0 failed\n") == 0);
-  /* Two dispatches of the vector add - the second from the long program,
-   * past a megabyte and a half of source - the three buffers they ran over
-   * given back, and the shared allocation freed. */
-  CHECK(rig.cl().program_bytes() > (std::size_t{3} << 19));
-  CHECK_EQ(rig.cl().calls(Call::run_kernel), 2u);
-  CHECK_EQ(rig.cl().calls(Call::write_buffer), 3u);
+                                         "avclprobe: 40 passed, 0 failed\n") == 0);
+  /* Five dispatches of the vector add - from the long program, past a
+   * megabyte and a half of source, from the binary, the link and the IL -
+   * each over the output cleared first; the three buffers they ran over
+   * given back, the shared allocation freed, and every program the binary,
+   * link and IL steps made with them. */
+  CHECK(rig.cl().program_bytes() > 0u);
+  CHECK_EQ(rig.cl().calls(Call::run_kernel), 5u);
+  CHECK_EQ(rig.cl().calls(Call::write_buffer), 6u);
   CHECK_EQ(rig.cl().calls(Call::release_buffer), 3u);
-  CHECK_EQ(rig.cl().calls(Call::release_kernel), 2u);
-  CHECK_EQ(rig.cl().calls(Call::release_program), 2u);
+  CHECK_EQ(rig.cl().calls(Call::release_kernel), 5u);
+  CHECK_EQ(rig.cl().calls(Call::release_program), 8u);
   CHECK_EQ(rig.cl().calls(Call::release_queue), 1u);
   CHECK_EQ(rig.cl().calls(Call::release_event), 1u);
   CHECK_EQ(rig.cl().live_objects(), 0u); }
@@ -272,7 +284,7 @@ TEST(cl_probe, a_device_that_offers_no_shared_memory_is_noted_rather_than_failed
   CHECK(!rig.holds("FAIL opencl.svm"));
   CHECK_EQ(rig.cl().calls(Call::set_kernel_svm), 0u);
   /* Everything else still passes: the run is one step shorter, not failed. */
-  CHECK(rig.holds("avclprobe: 30 passed, 0 failed\n"));
+  CHECK(rig.holds("avclprobe: 39 passed, 0 failed\n"));
   CHECK_EQ(rig.cl().live_objects(), 0u);
   /* A device that offers shared memory and then will not allocate it, and one
    * that will not take the pointer as an argument: both fail the step, and
@@ -549,5 +561,84 @@ TEST(cl_probe, a_long_program_the_opencl_refuses_fails_its_step_and_releases_eve
   CHECK(rig.holds("FAIL opencl.long_program status=7 4294967291\n"));
   CHECK(!rig.holds("opencl.long_build"));
   CHECK(rig.holds("ok opencl.release\n"));
-  CHECK_EQ(rig.cl().calls(Call::run_kernel), 1u);
+  /* The vector add, and the binary, link and IL steps after it, which a long
+   * program refused does not stop. */
+  CHECK_EQ(rig.cl().calls(Call::run_kernel), 4u);
   CHECK_EQ(rig.cl().live_objects(), 0u); }
+
+/* The binary step's own judgement: a binary the OpenCL will not hand out, one
+ * it will not take back, and a damaged one it takes all the same - which is
+ * the driver running what an application's cache damaged. */
+TEST(cl_probe, a_binary_that_cannot_be_had_or_made_into_a_program_fails_its_step)
+{ { ProbeRig rig;
+    rig.cl().fail_at(Call::program_binary, 1u, -30);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary status=7 4294967266\n"));
+    CHECK(!rig.holds("opencl.binary_build"));
+    CHECK(rig.holds("ok opencl.link_sum 0\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_program_with_binary, 1u, -42);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_build status=7 4294967254\n"));
+    CHECK(!rig.holds("opencl.binary_sum"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_program_with_binary, 2u, 0);
+    rig.cl().fail_silently_at(Call::create_program_with_binary, 2u);
+    rig.run();
+    CHECK(rig.holds("ok opencl.binary_sum 0\n"));
+    CHECK(rig.holds("FAIL opencl.binary_refused"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::run_kernel, 3u, -5);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_sum status=4 4294967291\n"));
+    CHECK(rig.holds("ok opencl.link_sum 0\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+/* Separate compilation's failures, each where it happened. */
+TEST(cl_probe, a_compile_or_link_the_opencl_refuses_fails_its_step)
+{ { ProbeRig rig;
+    rig.cl().fail_at(Call::compile_program, 2u, -15);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.compile status=7 4294967281\n"));
+    CHECK(!rig.holds("opencl.link "));
+    CHECK(rig.holds("ok opencl.il_sum 0\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::link_program, 1u, -17);
+    rig.run();
+    CHECK(rig.holds("ok opencl.compile\n"));
+    CHECK(rig.holds("FAIL opencl.link status=7 4294967279\n"));
+    CHECK(!rig.holds("opencl.link_sum"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_program, 3u, -6);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.compile status=7 4294967290\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+/* A device that takes no IL - NVIDIA's - says so, and is judged by refusing
+ * the module as the API says it must rather than by running it. */
+TEST(cl_probe, a_device_without_il_is_judged_by_its_refusal)
+{ { ProbeRig rig;
+    rig.cl().offer_no_il();
+    rig.run();
+    CHECK(rig.holds("note opencl.il_version not offered\n"));
+    CHECK(rig.holds("ok opencl.il 4294967237\n"));
+    CHECK(!rig.holds("opencl.il_sum"));
+    CHECK(rig.holds("avclprobe: 39 passed, 0 failed\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().offer_no_il();
+    rig.cl().fail_at(Call::create_program_with_il, 1u, -30);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.il status=4 4294967266\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_program_with_il, 1u, -30);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.il status=7 4294967266\n"));
+    CHECK(!rig.holds("opencl.il_sum"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }

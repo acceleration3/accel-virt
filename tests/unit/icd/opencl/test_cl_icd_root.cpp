@@ -551,7 +551,7 @@ TEST(cl_icd_root, enqueues_and_waits_are_refused_for_anything_that_is_not_their_
   CHECK_EQ(rig.root().flush(static_cast<cl_command_queue>(nothing)), CL_INVALID_COMMAND_QUEUE);
   CHECK_EQ(rig.root().set_kernel_argument(static_cast<cl_kernel>(nothing), 0u, 4u, &elsewhere),
            CL_INVALID_KERNEL);
-  CHECK_EQ(rig.root().build_program(static_cast<cl_program>(nothing), nullptr), CL_INVALID_PROGRAM); }
+  CHECK_EQ(rig.root().build_program(static_cast<cl_program>(nothing), 0u, nullptr, nullptr), CL_INVALID_PROGRAM); }
 
 TEST(cl_icd_root, a_state_dump_says_what_the_process_holds)
 { ClIcdRig rig;

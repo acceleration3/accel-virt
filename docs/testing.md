@@ -854,7 +854,18 @@ gives it (docs/host-memory.md, Budgets).
   command outgrew the 256 KiB its transport lent it; past a megabyte it would
   also have outgrown the batch, the ring and the executor's decode block
   (docs/protocol.md, "Long commands"). The runner requires every `long_*`
-  step.
+  step. After it, what an application caching programs does (DaVinci
+  Resolve, Affinity): the vector add's binary fetched (`binary`, bytes), made
+  into a program, built and run (`binary_build`, `binary_sum`), and the same
+  binary with its last byte flipped refused as `CL_INVALID_BINARY`
+  (`binary_refused`); separate compilation, a helper and the kernel compiled
+  apart against a header program and linked (`compile`, `link`, `link_sum`);
+  and the vector add from the probe's own SPIR-V
+  (`src/guest/probe/shaders/vector_add.spvasm`, assembled by
+  `tools/gen_spirv.py`) where the device's `CL_DEVICE_IL_VERSION` names SPIR-V
+  (`il`, `il_sum`), or its refusal as `CL_INVALID_OPERATION` where it does not
+  (`il` alone; NVIDIA's takes no IL). The probe notes `il_version`, and the
+  runner requires `il_sum` where that names SPIR-V.
 - **The D3D run** (feature 047) is `--d3d`, a boot on the real executor with
   the two translation layers beside the probes: DXVK's `d3d9.dll`, `d3d11.dll`
   and `dxgi.dll` and vkd3d-proton's `d3d12.dll` and `d3d12core.dll` from

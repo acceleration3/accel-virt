@@ -16,6 +16,15 @@ constexpr std::uint32_t device_extensions = 0x1030u;
 constexpr std::uint32_t device_vendor_id = 0x1001u;
 constexpr std::uint32_t device_luid = 0x106Cu;
 constexpr std::uint32_t device_svm_capabilities = 0x1053u;
+constexpr std::uint32_t device_il_version = 0x105Bu;
+/* CL_INVALID_BINARY and CL_INVALID_OPERATION. */
+constexpr std::int32_t  invalid_binary = -42;
+constexpr std::int32_t  invalid_operation = -59;
+/* What every binary this hands out holds, and what a binary handed back must
+ * hold to be one of its. */
+constexpr char          binary_text[] = "scripted binary";
+static_assert(sizeof binary_text == ScriptedCl::binary_bytes);
+constexpr std::uint32_t spirv_magic = 0x07230203u;
 /* CL_DEVICE_SVM_COARSE_GRAIN_BUFFER: what a device that has shared memory
  * offers at least. */
 constexpr std::uint64_t coarse_grain_buffer = 1u;
@@ -93,6 +102,8 @@ void ScriptedCl::set_device_extensions(const char *names) { device_extensions_ =
 void ScriptedCl::set_luid(std::uint64_t luid) { luid_ = luid; }
 void ScriptedCl::set_vendor(std::uint64_t vendor) { vendor_ = vendor; }
 void ScriptedCl::offer_no_svm() { svm_capabilities_ = 0u; }
+
+void ScriptedCl::offer_no_il() { il_ = false; }
 void ScriptedCl::set_build_log(const char *log) { build_log_ = log; }
 void ScriptedCl::miscompute(std::uint32_t wrong) { wrong_ = wrong; }
 void ScriptedCl::stale_mappings(std::uint32_t wrong) { stale_ = wrong; }
@@ -256,6 +267,7 @@ std::int32_t ScriptedCl::device_text(void *device, std::uint32_t name, char *int
         return refused;
     }
     if (name == device_extensions) return answer_text(device_extensions_, into, room, bytes);
+    if (name == device_il_version) return answer_text(il_ ? "SPIR-V_1.0 SPIR-V_1.1" : "", into, room, bytes);
     if (name != device_name) return refused;
     return answer_text(device_name_, into, room, bytes);
 }
@@ -376,8 +388,8 @@ void *ScriptedCl::create_program(void *context, const char *const *sources, std:
         error = refused;
         return nullptr;
     }
-    /* Anything that is not a kernel is a caller that lost its source. */
-    if (source == nullptr || std::strncmp(source, "__kernel", 8u) != 0) {
+    /* No source at all is a caller that lost it. */
+    if (source == nullptr || source[0] == '\0') {
         misuses_++;
         error = refused;
         return nullptr;
@@ -423,6 +435,100 @@ void *ScriptedCl::create_kernel(void *program, const char *name, std::int32_t &e
     }
     void *const made = make(Kind::kernel);
     if (made == nullptr) error = refused;
+    return made;
+}
+
+std::uint8_t *ScriptedCl::program_binary(void *program, std::size_t &bytes, std::int32_t &error)
+{
+    bytes = 0u;
+    error = failure(Call::program_binary);
+    if (error != 0) return nullptr;
+    const Object *const built = required(program, Kind::program);
+    if (built == nullptr || !built->built) {
+        error = refused;
+        return nullptr;
+    }
+    std::memcpy(binary_, binary_text, binary_bytes);
+    bytes = binary_bytes;
+    return binary_;
+}
+
+void *ScriptedCl::create_program_with_binary(void *context, void *device, const std::uint8_t *binary,
+                                             std::size_t bytes, std::int32_t &status, std::int32_t &error)
+{
+    status = 0;
+    error = failure(Call::create_program_with_binary);
+    if (error != 0) return nullptr;
+    if (required(context, Kind::context) == nullptr || !is_device(device) || binary == nullptr) {
+        error = refused;
+        return nullptr;
+    }
+    /* A binary that is not one this made, byte for byte, is another's. */
+    if (bytes != binary_bytes || std::memcmp(binary, binary_text, binary_bytes) != 0) {
+        status = invalid_binary;
+        error = invalid_binary;
+        return nullptr;
+    }
+    void *const made = make(Kind::program);
+    if (made == nullptr) error = refused;
+    return made;
+}
+
+void *ScriptedCl::create_program_with_il(void *context, const void *il, std::size_t bytes, std::int32_t &error)
+{
+    error = failure(Call::create_program_with_il);
+    if (error != 0) return nullptr;
+    if (required(context, Kind::context) == nullptr || il == nullptr || bytes < sizeof spirv_magic) {
+        error = refused;
+        return nullptr;
+    }
+    if (!il_) {
+        error = invalid_operation;
+        return nullptr;
+    }
+    std::uint32_t magic = 0u;
+    std::memcpy(&magic, il, sizeof magic);
+    if (magic != spirv_magic) {
+        error = refused;
+        return nullptr;
+    }
+    void *const made = make(Kind::program);
+    if (made == nullptr) error = refused;
+    return made;
+}
+
+std::int32_t ScriptedCl::compile_program(void *program, void *device, void *header, const char *header_name)
+{
+    const std::int32_t failed = failure(Call::compile_program);
+    Object *const      compiled = required(program, Kind::program);
+    if (compiled == nullptr || !is_device(device)) return refused;
+    if (header != nullptr && (required(header, Kind::program) == nullptr || header_name == nullptr)) return refused;
+    if (failed != 0) return failed;
+    compiled->compiled = true;
+    return 0;
+}
+
+void *ScriptedCl::link_program(void *context, void *const *programs, std::uint32_t count, std::int32_t &error)
+{
+    error = failure(Call::link_program);
+    if (error != 0) return nullptr;
+    if (required(context, Kind::context) == nullptr || programs == nullptr || count == 0u) {
+        error = refused;
+        return nullptr;
+    }
+    for (std::uint32_t index = 0u; index < count; ++index) {
+        const Object *const input = required(programs[index], Kind::program);
+        if (input == nullptr || !input->compiled) {
+            error = refused;
+            return nullptr;
+        }
+    }
+    void *const made = make(Kind::program);
+    if (made == nullptr) {
+        error = refused;
+        return nullptr;
+    }
+    required(made, Kind::program)->built = true;
     return made;
 }
 

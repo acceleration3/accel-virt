@@ -382,6 +382,7 @@ public:
         return ::clSetKernelArgSVMPointer(kernel, arg_index, arg_value);
     }
     cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) override = 0;
+    bool declared_argument(cl_kernel, cl_uint, KernelArgument&) override { return false; }
 
 private:
     clGetGLContextInfoKHR_fn pfn_clGetGLContextInfoKHR_ = nullptr;

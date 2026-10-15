@@ -18,6 +18,7 @@ namespace av {
 class WindowsClEntry final : public ClEntry {
 public:
     WindowsClEntry();
+    ~WindowsClEntry();
     WindowsClEntry(const WindowsClEntry &) = delete;
     WindowsClEntry &operator=(const WindowsClEntry &) = delete;
 
@@ -40,6 +41,12 @@ public:
     int32_t program_build_text(void *program, void *device, char *into, size_t room,
                                size_t &bytes) override;
     void   *create_kernel(void *program, const char *name, int32_t &error) override;
+    uint8_t *program_binary(void *program, size_t &bytes, int32_t &error) override;
+    void   *create_program_with_binary(void *context, void *device, const uint8_t *binary, size_t bytes,
+                                       int32_t &status, int32_t &error) override;
+    void   *create_program_with_il(void *context, const void *il, size_t bytes, int32_t &error) override;
+    int32_t compile_program(void *program, void *device, void *header, const char *header_name) override;
+    void   *link_program(void *context, void *const *programs, uint32_t count, int32_t &error) override;
 
     int32_t set_kernel_buffer(void *kernel, uint32_t index, void *buffer) override;
     int32_t write_buffer(void *queue, void *buffer, size_t bytes, const void *from) override;
@@ -78,6 +85,8 @@ private:
     /* The loader this process already bound to, which is where the names the
      * import library leaves out are found. */
     void *loader_;
+    /* The last binary program_binary fetched, from the process heap. */
+    uint8_t *binary_;
 };
 
 }  // namespace av

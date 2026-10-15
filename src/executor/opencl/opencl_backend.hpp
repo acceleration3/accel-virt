@@ -8,7 +8,13 @@
 #define AV_OPENCL_BACKEND_HPP
 
 #include "executor/opencl/cl_event_signals.hpp"
+/* The generated server defines what OpenCL's headers are included with, so it
+ * comes before anything else that includes them. */
 #include "executor/opencl/cl_handle_registry.hpp"
+#include "executor/opencl/cl_argument_retention.hpp"
+#include "executor/opencl/cl_binary_envelope.hpp"
+#include "executor/opencl/cl_program_il.hpp"
+#include "executor/opencl/spirv_argument_kinds.hpp"
 #include "executor/opencl/cl_bounced_rect.hpp"
 #include "executor/opencl/cl_read_ahead.hpp"
 #include "executor/opencl/copied_gl_sharing.hpp"
@@ -16,6 +22,7 @@
 #include "executor/guest_region.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
+#include "executor/opencl/staging_bytes.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -224,6 +231,31 @@ public:
                                        cl_uint num_events_in_wait_list,
                                        const cl_event *event_wait_list, cl_event *event) override;
 
+    /* A program's binaries cross sealed (ClBinaryEnvelope): their sizes are
+     * the sealed sizes, and CL_PROGRAM_BINARIES' value on the wire is the
+     * sealed binaries back to back in the program's device order - never the
+     * array of pointers the API's own value is, which would be guest bytes
+     * the host wrote through. Every other query is the host's. */
+    cl_int     on_clGetProgramInfo(cl_program program, cl_program_info param_name, size_t param_value_size,
+                                   void *param_value, size_t *param_value_size_ret) override;
+    /* A binary is opened before the host sees it, and one this device and
+     * driver did not seal, or one whose kernels would not say what their
+     * arguments are (ClArgumentRetention), is CL_INVALID_BINARY. One device,
+     * the bound one, so the one status the wire carries is that device's. */
+    cl_program on_clCreateProgramWithBinary(cl_context context, cl_uint num_devices, const cl_device_id *device_list,
+                                            const size_t *lengths, const unsigned char **binaries,
+                                            cl_int *binary_status, cl_int *errcode_ret) override;
+    /* The two names this carries: the SVM pointers, which the decoder
+     * resolved, and fine-grained system SVM, which the guest's device does
+     * not have (its CL_DEVICE_SVM_CAPABILITIES is coarse buffers alone), so
+     * only turning it off reaches the host. Any other name is a value the
+     * host would read as it pleases, and is refused. */
+    cl_int     on_clSetKernelExecInfo(cl_kernel kernel, cl_kernel_exec_info param_name, size_t param_value_size,
+                                      const void *param_value) override;
+    /* A kernel of a program made from IL: what its module declares the
+     * argument to be, where the host keeps less (SpirvArgumentKinds). */
+    bool       declared_argument(cl_kernel kernel, cl_uint index, clproto::KernelArgument &argument) override;
+
     /* cl_khr_gl_sharing, answered by the context's GlSharing; a context that
      * has none was made from no GL context, so a create or an acquire on it is
      * CL_INVALID_CONTEXT and a GL object query CL_INVALID_GL_OBJECT. The 1.1
@@ -269,6 +301,13 @@ private:
     cl_mem image_over(cl_mem buffer, const SharedImageShape &shape);
     friend struct OpenClBackendProbe;
 
+    /* The program's devices and each one's host binary size, at most
+     * max_program_devices; 0 for a program the host will not describe. */
+    cl_uint program_binary_sizes(cl_program program, size_t *sizes);
+    /* CL_PROGRAM_BINARIES as the wire carries it (on_clGetProgramInfo). */
+    cl_int  sealed_binaries(cl_program program, size_t param_value_size, void *param_value,
+                            size_t *param_value_size_ret);
+
     /* CL_SUCCESS for a type the bound device is, which is always a GPU;
      * CL_INVALID_DEVICE_TYPE for no type or a bit OpenCL does not define;
      * CL_DEVICE_NOT_FOUND for any other. */
@@ -296,7 +335,19 @@ private:
     /* The queue and the marker the pacing holds, let go. */
     void  stop_pacing();
 
+    /* A program here is the bound device's, but a binary's sizes are an
+     * array per device, so they are bounded rather than assumed one. */
+    static constexpr cl_uint max_program_devices = 16u;
+    /* Longer than any kernel's name a compiler takes. */
+    static constexpr size_t  max_kernel_name = 1024u;
+
     const OpenClDevice *bound_;
+    ClBinaryEnvelope    envelope_;
+    ClArgumentRetention arguments_;
+    /* The host's binaries on their way into their envelopes. */
+    StagingBytes        binaries_;
+    ClProgramIl         il_;
+    SpirvArgumentKinds  argument_kinds_;
     /* Opened only when a display was given; a context nothing opened holds
      * nothing and closes to nothing. */
     GlContext             vehicle_;

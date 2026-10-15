@@ -273,6 +273,23 @@ void ScriptedHost::cl_handle(std::uint64_t handle, std::int32_t error)
     queue(writer);
 }
 
+void ScriptedHost::cl_from_binary(std::uint64_t handle, std::int32_t status, std::int32_t error)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod(handle);
+    writer.write_varint(static_cast<std::int64_t>(status));
+    writer.write_varint(static_cast<std::int64_t>(error));
+    queue(writer);
+}
+
+void ScriptedHost::cl_count(std::int32_t result, std::uint32_t count)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(count);
+    queue(writer);
+}
+
 void ScriptedHost::cl_mapped(std::uint64_t address, std::uint64_t event, std::int32_t error)
 {
     WireWriter writer(answer_, sizeof answer_);

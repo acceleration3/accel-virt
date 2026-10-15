@@ -1360,6 +1360,7 @@ public:
         handed(HandleKind::event, event);
         return CL_SUCCESS;
     }
+    bool declared_argument(cl_kernel, cl_uint, KernelArgument&) override { return false; }
 
 protected:
     virtual void called(uint32_t command_id) = 0;

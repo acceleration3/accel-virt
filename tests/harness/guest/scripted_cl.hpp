@@ -37,6 +37,11 @@ public:
         build_program,
         program_build_text,
         create_kernel,
+        program_binary,
+        create_program_with_binary,
+        create_program_with_il,
+        compile_program,
+        link_program,
         set_kernel_buffer,
         write_buffer,
         read_buffer,
@@ -63,7 +68,10 @@ public:
      * that bound is what keeps it inside its array whatever a loader lists. */
     static constexpr std::uint32_t max_platforms = 12u;
     static constexpr std::uint32_t max_devices = 4u;
-    static constexpr std::uint32_t max_objects = 16u;
+    static constexpr std::uint32_t max_objects = 32u;
+    /* The bytes every built program's binary is, as a host driver's would be
+     * the same for the same program. */
+    static constexpr std::size_t   binary_bytes = 16u;
     /* As many as ClProbe's vector add has. */
     static constexpr std::uint32_t max_elements = 64u;
     /* As many words of an exported allocation as the shared-object probe reads
@@ -114,6 +122,9 @@ public:
     /* A device with no shared virtual memory, which is a device rather than a
      * failure. */
     void          offer_no_svm();
+    /* A device that takes no IL, which answers CL_DEVICE_IL_VERSION with
+     * nothing and refuses clCreateProgramWithIL as the API says. */
+    void          offer_no_il();
     /* What a build that failed says it failed for. */
     void          set_build_log(const char *log);
     /* The kernel writes the wrong answer into its first `wrong` elements: a
@@ -173,6 +184,14 @@ public:
     std::int32_t program_build_text(void *program, void *device, char *into, std::size_t room,
                                     std::size_t &bytes) override;
     void        *create_kernel(void *program, const char *name, std::int32_t &error) override;
+    std::uint8_t *program_binary(void *program, std::size_t &bytes, std::int32_t &error) override;
+    void        *create_program_with_binary(void *context, void *device, const std::uint8_t *binary,
+                                            std::size_t bytes, std::int32_t &status, std::int32_t &error) override;
+    void        *create_program_with_il(void *context, const void *il, std::size_t bytes,
+                                        std::int32_t &error) override;
+    std::int32_t compile_program(void *program, void *device, void *header, const char *header_name) override;
+    void        *link_program(void *context, void *const *programs, std::uint32_t count,
+                              std::int32_t &error) override;
 
     std::int32_t set_kernel_buffer(void *kernel, std::uint32_t index, void *buffer) override;
     std::int32_t write_buffer(void *queue, void *buffer, std::size_t bytes,
@@ -215,8 +234,10 @@ private:
          * them, and whether one of them is mapped right now. */
         float         values[max_elements] = {};
         bool          mapped = false;
-        /* A program that built, and a kernel's bound arguments. */
+        /* A program that built, one compiled to be linked, and a kernel's
+         * bound arguments. */
         bool          built = false;
+        bool          compiled = false;
         void         *arguments[3] = {};
         /* An event's status, and what waits on it. */
         std::int32_t  status = 0;
@@ -258,6 +279,8 @@ private:
     std::uint64_t luid_;
     std::uint64_t vendor_;
     std::uint64_t svm_capabilities_;
+    bool          il_ = true;
+    std::uint8_t  binary_[binary_bytes] = {};
     std::uint32_t wrong_;
     std::uint32_t stale_;
     bool          forgets_callbacks_;

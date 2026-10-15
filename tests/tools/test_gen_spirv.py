@@ -61,6 +61,22 @@ def expected_header(stem, source, length):
             f"#endif\n")
 
 
+# The assembler: the same module for assembly, logged beside the compiler's
+# calls, its own failure spelled as spirv-as spells one.
+FAKE_ASSEMBLER = f"""#!{sys.executable}
+import pathlib, struct, sys
+arguments = sys.argv[1:]
+with (pathlib.Path(__file__).parent / "calls.log").open("a") as log:
+    log.write("spirv-as " + " ".join(arguments) + "\\n")
+output = pathlib.Path(arguments[arguments.index("-o") + 1])
+source = pathlib.Path(arguments[-1]).read_bytes()
+if b"FAIL" in source:
+    print(arguments[-1] + ":1:1: error: Expected operand")
+    sys.exit(1)
+output.write_bytes(struct.pack("<13I", 0x07230203, 0x00010000, len(source), *range(10)))
+"""
+
+
 class GenSpirv(unittest.TestCase):
     def setUp(self):
         self.scratch = pathlib.Path(tempfile.mkdtemp())
@@ -175,6 +191,42 @@ class GenSpirv(unittest.TestCase):
         self.assertIn("solid.frag: glslangValidator wrote magic 0x12345678, not SPIR-V", result.stderr)
         self.assertEqual(self.headers(), [])
 
+    def assembler(self):
+        assembler = self.bin / "spirv-as"
+        assembler.write_text(FAKE_ASSEMBLER)
+        assembler.chmod(0o755)
+
+    def test_an_opencl_kernel_s_assembly_becomes_a_header_said_to_be_assembled(self):
+        self.assembler()
+        self.write("vector_add.spvasm", "OpCapability Kernel\n")
+        result = self.generate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        header = (self.shaders / "vector_add_spv.hpp").read_text()
+        expected = expected_header("vector_add", "vector_add.spvasm", len("OpCapability Kernel\n"))
+        made = ("/* SPIR-V assembled from vector_add.spvasm by spirv-as --target-env spv1.0. Generated\n"
+                " * by tools/gen_spirv.py; edit the assembly and regenerate, never this file. */\n")
+        self.assertEqual(header, made + expected.split("\n", 2)[2])
+        calls = [call for call in (self.bin / "calls.log").read_text().splitlines() if call.startswith("spirv-as")]
+        self.assertEqual(len(calls), 1)
+        self.assertRegex(calls[0], r"^spirv-as --target-env spv1\.0 -o \S+\.spv vector_add\.spvasm$")
+        self.assertEqual(self.generate("--check").returncode, 0)
+
+    def test_without_spirv_as_assembly_fails_saying_so_and_glsl_alone_does_not_need_it(self):
+        self.assertEqual(self.generate().returncode, 0)
+        self.write("vector_add.spvasm", "OpCapability Kernel\n")
+        result = self.generate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("spirv-as not found on PATH", result.stderr)
+        self.assertNotIn("vector_add_spv.hpp", self.headers())
+
+    def test_assembly_that_does_not_assemble_is_named(self):
+        self.assembler()
+        self.write("vector_add.spvasm", "FAIL\n")
+        result = self.generate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("vector_add.spvasm: spirv-as failed", result.stderr)
+        self.assertIn("Expected operand", result.stderr)
+
     def test_two_stages_that_would_write_one_header_are_refused(self):
         self.write("solid.vert", "void main() {}\n")
         result = self.generate()
@@ -203,3 +255,17 @@ class RealCompiler(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("glslangValidator") and shutil.which("spirv-as"), "spirv-as is not installed")
+class RealAssembler(unittest.TestCase):
+    def test_the_committed_kernel_header_is_what_the_real_assembler_makes_of_its_assembly(self):
+        scratch = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, scratch)
+        shutil.copy(SHADERS / "vector_add.spvasm", scratch / "vector_add.spvasm")
+        result = subprocess.run([sys.executable, "-B", str(GEN), "--shaders", str(scratch)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        header = (scratch / "vector_add_spv.hpp").read_text()
+        self.assertEqual(header, (SHADERS / "vector_add_spv.hpp").read_text())
+        self.assertEqual(re.findall(r"0x[0-9a-f]{8}", header)[0], "0x07230203")
