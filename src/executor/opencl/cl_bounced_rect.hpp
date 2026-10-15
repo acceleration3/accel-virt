@@ -11,6 +11,8 @@
 #ifndef AV_DEVICE_EXECUTOR_CL_BOUNCED_RECT_HPP
 #define AV_DEVICE_EXECUTOR_CL_BOUNCED_RECT_HPP
 
+#include "executor/opencl/staging_bytes.hpp"
+
 #include <CL/cl.h>
 
 #include <stddef.h>
@@ -21,7 +23,6 @@ namespace av {
 class ClBouncedRect {
 public:
     ClBouncedRect();
-    ~ClBouncedRect();
     ClBouncedRect(const ClBouncedRect &) = delete;
     ClBouncedRect &operator=(const ClBouncedRect &) = delete;
 
@@ -42,12 +43,9 @@ public:
                               cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event);
 
 private:
-    /* At least `bytes` of private memory, kept for the next read. */
-    [[nodiscard]] bool reserve(size_t bytes);
-
-    uint8_t *bytes_;
-    size_t   held_;
-    bool     refused_;
+    /* The private memory, kept for the next read. */
+    StagingBytes staging_;
+    bool         refused_;
 };
 
 }  // namespace av

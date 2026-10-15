@@ -2,25 +2,11 @@
 
 #include "core/trace/function_scope.hpp"
 
-#include <sys/mman.h>
-
 namespace av {
 
-namespace {
-
-constexpr size_t page_bytes = 4096u;
-
-}  // namespace
-
-ClBouncedRect::ClBouncedRect() : bytes_(nullptr), held_(0u), refused_(false)
+ClBouncedRect::ClBouncedRect() : staging_(), refused_(false)
 {
     AV_SCOPE("ClBouncedRect::ClBouncedRect");
-}
-
-ClBouncedRect::~ClBouncedRect()
-{
-    AV_SCOPE("ClBouncedRect::~ClBouncedRect");
-    if (bytes_ != nullptr) static_cast<void>(munmap(bytes_, held_));
 }
 
 bool ClBouncedRect::refusal(cl_int answer)
@@ -36,20 +22,6 @@ bool ClBouncedRect::bounces() const
 {
     AV_SCOPE("ClBouncedRect::bounces");
     return refused_;
-}
-
-bool ClBouncedRect::reserve(size_t bytes)
-{
-    AV_SCOPE("ClBouncedRect::reserve");
-    if (bytes <= held_) return true;
-    if (bytes > SIZE_MAX - page_bytes) return false;
-    const size_t whole = (bytes + page_bytes - 1u) / page_bytes * page_bytes;
-    void *const  mapped = mmap(nullptr, whole, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (mapped == MAP_FAILED) return false;
-    if (bytes_ != nullptr) static_cast<void>(munmap(bytes_, held_));
-    bytes_ = static_cast<uint8_t *>(mapped);
-    held_ = whole;
-    return true;
 }
 
 /* The host lays the rows out in the private memory exactly as it would have in
@@ -76,16 +48,16 @@ cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *
         __builtin_add_overflow(reach, (region[1] - 1u) * row, &reach) ||
         __builtin_add_overflow(reach, region[0], &reach))
         return CL_INVALID_VALUE;
-    if (!reserve(reach)) return CL_OUT_OF_HOST_MEMORY;
+    if (!staging_.reserve(reach)) return CL_OUT_OF_HOST_MEMORY;
     const cl_int read = ::clEnqueueReadBufferRect(queue, buffer, CL_TRUE, buffer_origin, host_origin, region,
-                                                  buffer_row_pitch, buffer_slice_pitch, row, slice, bytes_,
+                                                  buffer_row_pitch, buffer_slice_pitch, row, slice, staging_.bytes(),
                                                   num_events_in_wait_list, event_wait_list, event);
     if (read != CL_SUCCESS) return read;
     uint8_t *const to = static_cast<uint8_t *>(ptr);
     for (size_t z = 0u; z < region[2]; z++)
         for (size_t y = 0u; y < region[1]; y++) {
             const size_t at = first + z * slice + y * row;
-            __builtin_memcpy(to + at, bytes_ + at, region[0]);
+            __builtin_memcpy(to + at, staging_.bytes() + at, region[0]);
         }
     return CL_SUCCESS;
 }
