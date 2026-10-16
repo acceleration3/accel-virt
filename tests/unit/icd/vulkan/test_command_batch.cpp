@@ -8,7 +8,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "harness/icd/framed_block_probe.hpp"
+#include "harness/guest/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
@@ -264,7 +264,7 @@ TEST(command_batch, the_block_goes_with_the_batch)
     CHECK(batch.invariants_hold()); }
   CHECK_EQ(rig.platform().live_allocations(), baseline); }
 
-TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_in_pieces)
+TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_whole)
 { BatchRig rig;
   WireWriter writer = rig.batch().request_writer();
   writer.write_zeros(CommandBatch::command_room);
@@ -274,7 +274,8 @@ TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_in_piec
   CHECK(rig.batch().invariants_hold());
   /* Docs/protocol.md, "Long commands": what outgrows the room - a
    * vkCmdUpdateBuffer of 64 KiB is four rooms - spills into the batch's own
-   * memory and is recorded as pieces, then the command with the rest. */
+   * memory, and the block grows to record it whole between the commands
+   * around it. */
   constexpr std::size_t long_bytes = 4u * CommandBatch::command_room + 5u;
   writer = rig.batch().request_writer();
   for (std::size_t index = 0u; index < long_bytes; index++) writer.write_u8(static_cast<std::uint8_t>(index));
@@ -286,22 +287,13 @@ TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_in_piec
   CHECK_STATUS(rig.batch().end(), Status::ok);
   ShippedBatch shipped(rig.kmt(), rig.ring());
   CHECK_STATUS(shipped.read(), Status::ok);
-  CHECK(shipped.commands() >= 4u);
-  const std::uint32_t last = shipped.commands() - 1u;
-  CHECK_EQ(shipped.header(last).id(), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
-  CHECK_EQ(shipped.header(last - 1u).id(), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
-  std::size_t gathered = 0u;
+  CHECK_EQ(shipped.commands(), 3u);
+  CHECK_EQ(shipped.header(1u).id(), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
+  CHECK_EQ(shipped.header(1u).size(), CommandHeader::encoded_size + long_bytes);
+  CHECK_EQ(shipped.header(2u).id(), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
   std::uint32_t wrong = 0u;
-  for (std::uint32_t index = 1u; index < last; index++) {
-      const CommandHeader &header = shipped.header(index);
-      CHECK(header.id() == (index + 1u == last ? static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer)
-                                               : CommandHeader::piece_id));
-      const std::size_t body = header.size() - CommandHeader::encoded_size;
-      for (std::size_t at = 0u; at < body; at++)
-          if (shipped.body(index)[at] != static_cast<std::uint8_t>(gathered + at)) wrong++;
-      gathered += body;
-  }
-  CHECK_EQ(gathered, long_bytes);
+  for (std::size_t at = 0u; at < long_bytes; at++)
+      if (shipped.body(1u)[at] != static_cast<std::uint8_t>(at)) wrong++;
   CHECK_EQ(wrong, 0u);
   /* Memory refused for the spill fails the recording, as a full block does. */
   rig.rig().platform().fail_allocation_at(1u);
@@ -310,6 +302,41 @@ TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_in_piec
   CHECK_STATUS(writer.status(), Status::too_large);
   CHECK(rig.batch().send_async(kCmd_vkCmdDraw, writer) == TransportResult::failed);
   CHECK(rig.batch().invariants_hold());
+  CHECK_STATUS(rig.batch().end(), Status::no_memory); }
+
+/* A command longer than any batch - a vkCmdPipelineBarrier with thousands of
+ * barriers - goes alone, after what was recorded before it, as one run of
+ * pieces under one hold of the send lock. Pieces the batch published a batch
+ * at a time let the lock go between them: another thread's command sent then
+ * came between them, and the device took it for the one they belonged to. */
+TEST(command_batch, a_command_longer_than_any_batch_goes_alone_as_one_run_under_the_lock)
+{ BatchRig rig;
+  rig.draw(1u);
+  constexpr std::size_t longest = Connection::command_bytes + 100u;
+  WireWriter writer = rig.batch().request_writer();
+  writer.write_zeros(longest);
+  CHECK(writer.spilled());
+  const std::uint32_t before = rig.kmt().commands();
+  const std::uint32_t held = rig.rig().send_lock().acquisitions();
+  CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::ok);
+  /* The draw recorded before it, a batch of its own, then the command. */
+  CHECK_EQ(rig.rig().send_lock().acquisitions(), held + 2u);
+  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
+  const std::uint32_t last = rig.kmt().commands() - 1u;
+  CHECK(last > before + 1u);
+  for (std::uint32_t index = before + 1u; index < last; index++)
+      CHECK_EQ(rig.kmt().command_id(index), CommandHeader::piece_id);
+  CHECK_EQ(rig.kmt().command_id(last), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
+  rig.draw(2u);
+  CHECK_STATUS(rig.batch().end(), Status::ok);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
+  /* The spill went back; the block is kept for the next recording. */
+  CHECK_EQ(rig.rig().platform().live_allocations(), rig.baseline() + 1u);
+  /* A connection that refuses it fails the recording. */
+  rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  writer = rig.batch().request_writer();
+  writer.write_zeros(longest);
+  CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::failed);
   CHECK_STATUS(rig.batch().end(), Status::no_memory); }
 
 TEST(command_batch, a_connection_refusing_the_batch_answers_invalid_state_and_drops_it)

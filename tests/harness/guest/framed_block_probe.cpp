@@ -1,6 +1,6 @@
-#include "harness/icd/framed_block_probe.hpp"
+#include "harness/guest/framed_block_probe.hpp"
 
-namespace av::icd {
+namespace av {
 
 FramedBlockProbe::FramedBlockProbe(FramedBlock &target) : framed(target) {}
 
@@ -10,4 +10,4 @@ size_t &FramedBlockProbe::capacity() { return framed.capacity_; }
 
 uint8_t *&FramedBlockProbe::block() { return framed.block_; }
 
-}  // namespace av::icd
+}  // namespace av

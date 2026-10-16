@@ -1,6 +1,5 @@
 #include "icd/d3d/d3d_command_stream.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -8,23 +7,20 @@
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
-#include "proto/client/sync_call_scope.hpp"
 #include "proto/submission/command_header.hpp"
-#include "proto/submission/command_pieces.hpp"
 
 namespace av::d3d {
 
 namespace {
 
-constexpr size_t header_bytes = icd::FramedBlock::header_bytes;
+constexpr size_t header_bytes = FramedBlock::header_bytes;
 
 }  // namespace
 
-D3dCommandStream::D3dCommandStream(KmtTransport &transport, uint8_t *block, size_t capacity)
-    : transport_(transport), framed_(block, capacity), batches_(0u),
-      recorded_(0u), flushed_at_(0u), no_arena_(), recording_(nullptr), lent_(false), incomplete_(false), speaking_(0u),
-      select_command_(d3dproto::kCmd_SelectDevice11), finish_command_(d3dproto::kCmd_Finish11),
-      flush_command_(d3dproto::kCmd_Flush11), failed_(false)
+D3dCommandStream::D3dCommandStream(KmtTransport &transport)
+    : transport_(transport), framed_(nullptr, 0u), batches_(0u), recorded_(0u), flushed_at_(0u), no_arena_(),
+      recording_(nullptr), lent_(false), incomplete_(false), speaking_(0u),
+      select_command_(d3dproto::kCmd_SelectDevice11), flush_command_(d3dproto::kCmd_Flush11), failed_(false)
 {
     AV_SCOPE("D3dCommandStream::D3dCommandStream");
 }
@@ -33,9 +29,8 @@ Status D3dCommandStream::flush()
 {
     AV_SCOPE("D3dCommandStream::flush");
     if (failed_) return Status::invalid_state;
-    if (framed_.used() == 0u || recording_ != nullptr) return Status::ok;
-    const TransportResult sent = transport_.send_async_batch(framed_.bytes(), framed_.used());
-    framed_.clear();
+    if (recording_ != nullptr || transport_.held() == 0u) return Status::ok;
+    const TransportResult sent = transport_.flush();
     batches_++;
     if (sent == TransportResult::ok) return Status::ok;
     failed_ = true;
@@ -46,7 +41,7 @@ Status D3dCommandStream::flush_hint()
 {
     AV_SCOPE("D3dCommandStream::flush_hint");
     if (failed_) return Status::invalid_state;
-    if (framed_.used() == 0u || !transport_.ready_for_batch()) return Status::ok;
+    if (recorded_bytes() == 0u || !transport_.ready_for_batch()) return Status::ok;
     return flush();
 }
 
@@ -65,7 +60,16 @@ Status D3dCommandStream::application_flush()
         flushed_at_ = recorded_;
     }
     if (failed_) return Status::invalid_state;
-    return framed_.used() == 0u ? Status::ok : flush();
+    return recorded_bytes() == 0u ? Status::ok : flush();
+}
+
+Status D3dCommandStream::run_held()
+{
+    AV_SCOPE("D3dCommandStream::run_held");
+    if (failed_ || recording_ != nullptr) return Status::invalid_state;
+    const Status ran = transport_.run_held();
+    failed_ = ran != Status::ok;
+    return ran;
 }
 
 void D3dCommandStream::record(CommandRecording &recording)
@@ -102,7 +106,7 @@ Status D3dCommandStream::take_recorded(uint8_t *out, size_t capacity, size_t &le
 size_t D3dCommandStream::recorded_bytes() const
 {
     AV_SCOPE("D3dCommandStream::recorded_bytes");
-    return framed_.used();
+    return recording_ != nullptr ? framed_.used() : transport_.held();
 }
 
 uint64_t D3dCommandStream::recorded_total() const
@@ -121,12 +125,18 @@ Status D3dCommandStream::append_recorded(const uint8_t *bytes, size_t length)
     for (size_t done = 0u; done < length;) {
         const size_t run = whole_commands(bytes + done, length - done);
         if (run == 0u) return Status::malformed;
-        if (!room_for(run)) {
-            incomplete_ = incomplete_ || recording_ != nullptr;
-            return failed_ ? Status::invalid_state : Status::no_space;
+        if (recording_ == nullptr) {
+            if (transport_.hold_framed(bytes + done, run) != TransportResult::ok) {
+                failed_ = true;
+                return Status::invalid_state;
+            }
+        } else if (room_for(run)) {
+            /* room_for made the room. */
+            static_cast<void>(framed_.append(bytes + done, run));
+        } else {
+            incomplete_ = true;
+            return Status::no_space;
         }
-        /* room_for made the room. */
-        static_cast<void>(framed_.append(bytes + done, run));
         recorded_ += run;
         done += run;
     }
@@ -136,11 +146,12 @@ Status D3dCommandStream::append_recorded(const uint8_t *bytes, size_t length)
 size_t D3dCommandStream::whole_commands(const uint8_t *bytes, size_t length) const
 {
     AV_SCOPE("D3dCommandStream::whole_commands");
-    size_t run = 0u;
+    const size_t  capacity = recording_ != nullptr ? framed_.capacity() : transport_.holding_capacity();
+    size_t        run = 0u;
     CommandHeader header;
     while (run < length && header.decode(bytes + run, length - run) == Status::ok) {
         const size_t size = header.size();
-        if (size < header_bytes || size > length - run || run + size > framed_.capacity()) break;
+        if (size < header_bytes || size > length - run || run + size > capacity) break;
         run += size;
     }
     return run;
@@ -150,7 +161,6 @@ bool D3dCommandStream::room_for(size_t wanted)
 {
     AV_SCOPE("D3dCommandStream::room_for");
     if (framed_.fits(wanted)) return true;
-    if (recording_ == nullptr) return flush() == Status::ok && framed_.fits(wanted);
     if (!recording_->hold(framed_.used(), wanted)) return false;
     adopt_recording();
     return true;
@@ -160,33 +170,13 @@ bool D3dCommandStream::make_room_for(size_t bytes)
 {
     AV_SCOPE("D3dCommandStream::make_room_for");
     if (recording_ != nullptr) return bytes <= recorded_data;
-    ClientBlobArena &arena = blobs();
-    if (!arena.ready()) return false;
-    if (arena.room() >= bytes) return true;
-    /* The batches already published come back oldest first while the host
-     * runs the rest; only room the unsent commands hold needs them sent and
-     * answered. */
-    if (transport_.make_room_for_blobs(bytes)) return true;
-    return finished() && arena.room() >= bytes;
+    return transport_.blobs().ready() && transport_.make_room_for_blobs(bytes);
 }
 
-/* Every lease handed out so far is read once the host answers a command sent
- * after all of them; Finish is that command. The leases are retired as the
- * call ends - when this returns, not before - so the room is asked after. */
-bool D3dCommandStream::finished()
-{
-    AV_SCOPE("D3dCommandStream::finished");
-    WireWriter          finish = request_writer();
-    const SyncCallScope call{*this};
-    WireReader          reply{nullptr, 0u};
-    return send_sync(finish_command_, finish, reply) == TransportResult::ok;
-}
-
-void D3dCommandStream::speak_with(uint32_t select_command, uint32_t finish_command, uint32_t flush_command)
+void D3dCommandStream::speak_with(uint32_t select_command, uint32_t flush_command)
 {
     AV_SCOPE("D3dCommandStream::speak_with");
     select_command_ = select_command;
-    finish_command_ = finish_command;
     flush_command_ = flush_command;
 }
 
@@ -221,57 +211,52 @@ bool D3dCommandStream::failed() const
     return failed_;
 }
 
+/* A recording that cannot grow is lent only what is left: a command that
+ * does not fit is lost (append), and the recording with it. */
 WireWriter D3dCommandStream::request_writer()
 {
     AV_SCOPE("D3dCommandStream::request_writer");
-    if (failed_ || framed_.capacity() < header_bytes + command_room) return WireWriter(nullptr, 0u);
-    /* A recording that cannot grow is lent only what is left: a command that
-     * does not fit is lost (append), and the recording with it. */
-    if (!room_for(header_bytes + command_room) && failed_) return WireWriter(nullptr, 0u);
+    if (failed_) return WireWriter(nullptr, 0u);
+    if (recording_ == nullptr) {
+        /* The room is made by sending what is held, which may be refused. */
+        const WireWriter writer = transport_.request_writer();
+        failed_ = transport_.faulted();
+        return writer;
+    }
+    if (framed_.capacity() < header_bytes + command_room) return WireWriter(nullptr, 0u);
+    static_cast<void>(room_for(header_bytes + command_room));
     if (!framed_.fits(header_bytes)) return WireWriter(nullptr, 0u);
     lent_ = true;
-    return recording_ != nullptr ? framed_.lend(command_room) : framed_.lend(command_room, transport_.spill());
+    return framed_.lend(command_room);
 }
 
-TransportResult D3dCommandStream::append(uint32_t command_id, WireWriter &writer, uint8_t flags)
+TransportResult D3dCommandStream::append(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("D3dCommandStream::append");
     lent_ = false;
     if (failed_) return TransportResult::failed;
-    if (writer.spilled()) return append_pieces(command_id, writer, flags);
+    if (recording_ == nullptr) {
+        const TransportResult held = transport_.send_async(command_id, writer);
+        if (held == TransportResult::ok) recorded_ += header_bytes + writer.offset();
+        failed_ = transport_.faulted();
+        return held;
+    }
     const size_t before = framed_.used();
     /* A writer lent nothing still frames a command with no body - unless
      * not even its header fits. */
-    if (!framed_.frame(command_id, writer, flags)) {
-        incomplete_ = incomplete_ || recording_ != nullptr;
+    if (!framed_.frame(command_id, writer, 0u)) {
+        incomplete_ = true;
         return TransportResult::failed;
     }
     recorded_ += framed_.used() - before;
     return TransportResult::ok;
 }
 
-TransportResult D3dCommandStream::append_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags)
-{
-    AV_SCOPE("D3dCommandStream::append_pieces");
-    ScopeExit given_back([this] { transport_.give_back_spill(); });
-    if (writer.status() != Status::ok) return TransportResult::failed;
-    CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
-    while (!pieces.done()) {
-        const size_t before = framed_.used();
-        if (framed_.frame_piece(pieces)) {
-            recorded_ += framed_.used() - before;
-            continue;
-        }
-        if (framed_.used() == 0u || flush() != Status::ok) return TransportResult::failed;
-    }
-    return TransportResult::ok;
-}
-
 TransportResult D3dCommandStream::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("D3dCommandStream::send_async");
-    const TransportResult appended = append(command_id, writer, 0u);
-    if (appended != TransportResult::ok || framed_.used() < stream_bytes) return appended;
+    const TransportResult appended = append(command_id, writer);
+    if (appended != TransportResult::ok || recorded_bytes() < stream_bytes) return appended;
     /* The host replays a batch only once it arrives, and the application waits
      * on what it replays: a host with nothing to do is given what is recorded
      * so far, so its replay runs beside the recording instead of after it. A
@@ -285,19 +270,17 @@ TransportResult D3dCommandStream::send_sync(uint32_t command_id, WireWriter &wri
     reply = WireReader(nullptr, 0u);
     /* A recording answers nothing, and leaves nothing out by not answering. */
     lent_ = false;
-    if (recording_ != nullptr) return TransportResult::failed;
-    if (append(command_id, writer, CommandHeader::generate_reply) != TransportResult::ok) return TransportResult::failed;
-    const TransportResult sent = transport_.send_answered_batch(framed_.bytes(), framed_.used(), reply);
-    framed_.clear();
+    if (recording_ != nullptr || failed_) return TransportResult::failed;
+    const TransportResult sent = transport_.send_sync(command_id, writer, reply);
     batches_++;
-    if (sent != TransportResult::ok) failed_ = true;
+    failed_ = transport_.faulted();
     return sent;
 }
 
 void D3dCommandStream::end_call()
 {
     AV_SCOPE("D3dCommandStream::end_call");
-    incomplete_ = incomplete_ || (lent_ && recording_ != nullptr);
+    incomplete_ = incomplete_ || lent_;
     lent_ = false;
     transport_.end_call();
 }
@@ -319,15 +302,16 @@ void D3dCommandStream::report(StateWriter &writer) const
     AV_SCOPE("D3dCommandStream::report");
     writer.number("batches", batches_);
     writer.number("recorded", recorded_);
-    writer.number("pending", framed_.used());
+    writer.number("pending", recorded_bytes());
     writer.number("speaking", speaking_);
     writer.flag("failed", failed_);
 }
 
+/* A sending stream frames nothing of its own: the transport holds it. */
 bool D3dCommandStream::invariants_hold() const
 {
     AV_SCOPE("D3dCommandStream::invariants_hold");
-    return framed_.invariants_hold();
+    return framed_.invariants_hold() && (recording_ != nullptr || framed_.capacity() == 0u);
 }
 
 }  // namespace av::d3d

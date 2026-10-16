@@ -22,7 +22,6 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/adapter_string.hpp"
 #include "icd/common/host_channel.hpp"
-#include "icd/common/locked_transport.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -49,7 +48,7 @@ public:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   command_bytes = 256u * 1024u;
 
-    /* `log` takes the lines the channel writes. */
+    /* `log` takes the lines the channel writes, and `lock` is its send lock. */
     Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log);
     ~Connection();
     Connection(const Connection &) = delete;
@@ -91,6 +90,9 @@ public:
      * transport refuses whole or a faulted transport. None of them asks for an
      * answer, so none is waited for. */
     [[nodiscard]] TransportResult send_batch(const uint8_t *framed, size_t length);
+    /* A recorded command too long for any batch, sent alone under the lock
+     * (HostChannel::send_command), only while open. */
+    [[nodiscard]] TransportResult send_command(uint32_t command_id, WireWriter &writer);
 
     /* `bytes` of the host memory `memory` names, opened on this connection's
      * context and imported, under the lock (HostChannel::open_memory).
@@ -111,11 +113,12 @@ public:
 
 private:
     Kmt                           &kmt_;
-    ThreadLock                    &lock_;
     AdapterSearch                  search_;
     GuestConnection                connection_;
     HostChannel                    channel_;
-    ObjectStorage<LockedTransport> locked_;
+    /* Open from a whole open to the close: the channel opened alone is a
+     * connection that was not. */
+    bool                           opened_;
     uint64_t                       luid_;
     AdapterString                  name_;
     bool                           host_dma_buf_;

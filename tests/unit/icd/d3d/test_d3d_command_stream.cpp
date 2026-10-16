@@ -53,7 +53,7 @@ class Fixture {
 public:
     Fixture()
         : connection_(kmt_), transport_(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes),
-          stream_(transport_, block_, block_bytes)
+          stream_(transport_)
     {
         kmt_.add_adapter(av, 3200u);
         std::uint32_t adapters[1] = {};
@@ -61,6 +61,7 @@ public:
         static_cast<void>(kmt_.enumerate_adapters(adapters, 1u, count));
         CHECK_STATUS(connection_.open(adapters[0]), Status::ok);
         CHECK_STATUS(transport_.initialize(), Status::ok);
+        transport_.hold_in(block_, block_bytes);
     }
     ~Fixture() { transport_.teardown(); }
 
@@ -471,7 +472,8 @@ TEST(d3d_command_stream, a_command_longer_than_its_room_is_sent_in_pieces)
   KmtTransport transport(connection, memory, SubApi::d3d, ring_order, reply_bytes, staging, staging_bytes);
   CHECK_STATUS(transport.initialize(), Status::ok);
   static std::uint8_t block[block_bytes];
-  { D3dCommandStream stream(transport, block, block_bytes);
+  transport.hold_in(block, block_bytes);
+  { D3dCommandStream stream(transport);
     av::WireWriter held = stream.request_writer();
     held.write_u64(1u);
     CHECK(stream.send_async(kCmd_Draw, held) == TransportResult::ok);
@@ -500,15 +502,14 @@ TEST(d3d_command_stream, a_command_longer_than_its_room_is_sent_in_pieces)
  * builds, whose code the stream holds in blob leases until its batch goes.
  * The import, sent ahead and answered, retired those leases; the next shader
  * was copied over the first while its command waited in the stream, and the
- * host refused what it read and removed the device. A transport sending after
- * the stream publishes the shaders first, each lease still holding its own
- * code when the batch carrying it goes. */
+ * host refused what it read and removed the device. The transport holds the
+ * stream's commands itself, so the import goes behind the shaders, each lease
+ * still holding its own code when the batch carrying it goes. */
 TEST(d3d_command_stream, a_blob_import_goes_after_the_shaders_the_stream_holds)
 { Fixture fixture;
   constexpr std::size_t code_bytes = 8u * 1024u;
   std::uint8_t room[3u * code_bytes] = {};
   fixture.transport().blobs().lend(room, sizeof room);
-  fixture.transport().send_after(fixture.stream());
   std::uint8_t first[code_bytes];
   std::uint8_t second[code_bytes];
   for (std::size_t at = 0u; at < code_bytes; at++) {
@@ -533,20 +534,3 @@ TEST(d3d_command_stream, a_blob_import_goes_after_the_shaders_the_stream_holds)
   CHECK_EQ(fixture.kmt().commands(), 3u);
   CHECK_EQ(fixture.id(2u), av::d3d12proto::kCmd_CreateComputePipeline12);
   CHECK(fixture.stream().invariants_hold()); }
-
-/* A stream the transport is told to send after, then dropped, is not sent
- * ahead of the import: its command keeps waiting for its own flush. */
-TEST(d3d_command_stream, a_dropped_stream_keeps_its_commands_until_it_flushes)
-{ Fixture fixture;
-  fixture.transport().send_after(fixture.stream());
-  fixture.transport().drop(fixture.stream());
-  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
-  std::uint8_t answer[BlobImportAnswer::encoded_size] = {};
-  CHECK_STATUS(BlobImportAnswer(BlobImportAnswer::imported, 0x77u).encode(answer, sizeof answer), Status::ok);
-  fixture.kmt().queue_answer(answer, sizeof answer);
-  BlobImport heap(fixture.transport());
-  CHECK_STATUS(heap.import(5u), Status::ok);
-  CHECK_EQ(fixture.kmt().commands(), 1u);
-  CHECK_EQ(fixture.id(0u), CommandHeader::import_blob_id);
-  CHECK_STATUS(fixture.stream().flush(), Status::ok);
-  CHECK_EQ(fixture.id(1u), kCmd_Draw); }

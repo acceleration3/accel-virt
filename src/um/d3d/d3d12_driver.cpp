@@ -21,7 +21,7 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : log_(log), lines_(log, "avumd: "), devices_(memory),
       adapters_(kmt, memory, log, "the host answers no Direct3D 12 on this adapter", session_arena_bytes, 0u,
-                d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11, d3dproto::kCmd_Flush11),
+                d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Flush11),
       list_table_(nullptr)
 {
     AV_SCOPE("D3d12Driver::D3d12Driver");

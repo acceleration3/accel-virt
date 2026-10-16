@@ -8,6 +8,8 @@
  * becomes a lost context there rather than wherever somebody remembered to
  * look. */
 #include "harness/framework/test_registry.hpp"
+#include "proto/generated/opencl/cl_protocol_ids.h"
+#include "icd/opencl/unanswered_transport.hpp"
 #include "icd/common/opened_objects.hpp"
 #include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
@@ -149,6 +151,46 @@ TEST(guest_cl_context, a_context_going_releases_the_shared_objects_it_still_hold
   for (std::uint32_t index = sent; index < rig.kmt().commands(); index++)
       released = released || rig.kmt().command_id(index) == av::CommandHeader::release_shared_object_id;
   CHECK(released); }
+
+/* A call the context holds - one whose only answer is its status, sent
+ * unanswered - then an import of another API's memory, which waits on its
+ * answer: the import goes behind the held call in the one batch, in the
+ * order the application made them, as every command on the context does. */
+TEST(guest_cl_context, an_import_goes_behind_the_calls_the_context_holds)
+{ ClContextRig rig;
+  arena_answers(rig);
+  std::uint32_t adapter = 0u;
+  std::uint32_t found = 0u;
+  CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), Status::ok);
+  std::uint32_t elsewhere = 0u;
+  CHECK_STATUS(rig.kmt().create_device(adapter, elsewhere), Status::ok);
+  const av::AllocationDescriptor carrier(av::AllocationKind::client, true, av::SurfaceLayout(), 4096u,
+                                         av::ScanoutTarget());
+  std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  CHECK_STATUS(carrier.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4096u);
+  CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  std::uint32_t allocation = 0u;
+  CHECK_STATUS(rig.kmt().create_shared_allocation(elsewhere, bytes, sizeof bytes, allocation), Status::ok);
+  std::uint64_t handle = 0u;
+  CHECK_STATUS(rig.kmt().share_object(elsewhere, allocation, handle), Status::ok);
+  const std::uint64_t properties[] = {0x2061u, handle, 0u};   /* OPAQUE_WIN32 */
+  GuestClContext      context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  const std::uint32_t before = rig.kmt().commands();
+  av::icd::UnansweredTransport unanswered(*context.wire());
+  CHECK_EQ(av::clproto::av_clReleaseKernel(unanswered, 0x4242u), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), before);
+  av::clicd::ClPropertyList list;
+  CHECK(list.read(properties));
+  rig.host().shared_object(0u, 0x9001u);
+  std::uint64_t made = 0u;
+  CHECK_EQ(context.external().open(*context.wire(), context.guest_device(), list, 4096u, made), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(before), av::clproto::kCmd_clReleaseKernel);
+  CHECK_EQ(rig.kmt().command_id(before + 1u), av::CommandHeader::open_shared_object_id);
+  rig.host().shared_object(0u, 0u); }
 
 /* The context's invariant is its parts': a shared-object table that cannot be
  * true makes the context that owns it untrue too, which is what stops a broken
@@ -371,13 +413,12 @@ struct GuestClContextProbe {
     { context.state_ = GuestClContext::State::made; }
     static void          say_it_was_never_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::created; }
-    /* The lock around the transport, taken away and put back: it owns
-     * nothing, so a context without it leaks nothing - it is simply a
+    /* The lock around the channel's transport, taken away and put back: it
+     * owns nothing, so a context without it leaks nothing - it is simply a
      * teardown that stopped halfway. */
-    static void          drop_the_lock(GuestClContext &context) { context.locked_.destroy(); }
+    static void          drop_the_lock(GuestClContext &context) { icd::HostChannelProbe(context.channel_).drop_locked(); }
     static void          restore_the_lock(GuestClContext &context)
-    { static_cast<void>(context.locked_.construct(context.channel_.batched(),
-                                                  context.send_lock_)); }
+    { icd::HostChannelProbe(context.channel_).restore_locked(); }
     /* A link on a context that says it has made nothing. It points at
      * nothing, so nothing is released. */
     static void          stray_link(GuestClContext &context) { icd::ContextLinkProbe(context.link_).link() = 0u; }

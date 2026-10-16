@@ -9,7 +9,6 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/publish_gate.hpp"
-#include "guest/transport/unsent_batch.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
@@ -33,7 +32,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), ahead_(nullptr), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(memory), answer_(memory)
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -44,7 +43,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), ahead_(nullptr), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -267,22 +266,97 @@ void KmtTransport::forget(const PublishGate &gate)
     if (held_ == &gate) held_ = nullptr;
 }
 
-void KmtTransport::send_after(UnsentBatch &batch)
+void KmtTransport::hold_in(uint8_t *block, size_t capacity)
 {
-    AV_SCOPE("KmtTransport::send_after");
-    ahead_ = &batch;
+    AV_SCOPE("KmtTransport::hold_in");
+    pending_.adopt(block, capacity);
+    pending_.clear();
 }
 
-void KmtTransport::drop(const UnsentBatch &batch)
+size_t KmtTransport::held() const
 {
-    AV_SCOPE("KmtTransport::drop");
-    if (ahead_ == &batch) ahead_ = nullptr;
+    AV_SCOPE("KmtTransport::held");
+    return pending_.used();
 }
 
-bool KmtTransport::sent_ahead()
+size_t KmtTransport::holding_capacity() const
 {
-    AV_SCOPE("KmtTransport::sent_ahead");
-    return ahead_ == nullptr || ahead_->flush() == Status::ok;
+    AV_SCOPE("KmtTransport::holding_capacity");
+    return pending_.capacity();
+}
+
+TransportResult KmtTransport::flush()
+{
+    AV_SCOPE("KmtTransport::flush");
+    if (faulted_ || !established()) return TransportResult::failed;
+    if (pending_.used() == 0u) return TransportResult::ok;
+    uint64_t              fence = 0u;
+    const TransportResult sent = publish_batch(pending_.bytes(), static_cast<uint32_t>(pending_.used()), fence);
+    pending_.clear();
+    /* What was held is gone either way, and a context missing commands its
+     * application made is no context to go on sending on. */
+    if (sent != TransportResult::ok) faulted_ = true;
+    return sent;
+}
+
+/* Every lease taken before them is named by them or by what went before, so
+ * they are whole as far as the arena is concerned. */
+TransportResult KmtTransport::hold_framed(const uint8_t *framed, size_t length)
+{
+    AV_SCOPE("KmtTransport::hold_framed");
+    if (faulted_ || !established() || framed == nullptr || length == 0u) return TransportResult::failed;
+    if (pending_.capacity() == 0u) {
+        if (length > max_batch) return TransportResult::failed;
+        blobs_.seal();
+        uint64_t fence = 0u;
+        return publish_batch(framed, static_cast<uint32_t>(length), fence);
+    }
+    if (length > pending_.capacity()) return TransportResult::failed;
+    if (!pending_.fits(length) && flush() != TransportResult::ok) return TransportResult::failed;
+    static_cast<void>(pending_.append(framed, length));   /* an empty block holds it */
+    blobs_.seal();
+    return TransportResult::ok;
+}
+
+TransportResult KmtTransport::hold(uint32_t command_id, const WireWriter &writer, uint8_t flags)
+{
+    AV_SCOPE("KmtTransport::hold");
+    if (writer.spilled()) return hold_pieces(command_id, writer, flags);
+    if (!pending_.frame(command_id, writer, flags)) return TransportResult::failed;
+    blobs_.seal();
+    return TransportResult::ok;
+}
+
+/* The block is sent each time a piece fills it: those batches carry the
+ * command before it is whole, so its leases are sealed only with its last
+ * piece, and stay lent until the batch that carries that has run. */
+TransportResult KmtTransport::hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags)
+{
+    AV_SCOPE("KmtTransport::hold_pieces");
+    ScopeExit given_back([this] { spill_.release(); });
+    if (writer.status() != Status::ok) return TransportResult::failed;
+    CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
+    while (!pieces.done()) {
+        if (pending_.frame_piece(pieces)) continue;
+        if (pending_.used() == 0u || flush() != TransportResult::ok) return TransportResult::failed;
+    }
+    blobs_.seal();
+    return TransportResult::ok;
+}
+
+TransportResult KmtTransport::publish_held_answered(WireReader &reply)
+{
+    AV_SCOPE("KmtTransport::publish_held_answered");
+    uint64_t              fence = 0u;
+    const TransportResult sent = publish_batch(pending_.bytes(), static_cast<uint32_t>(pending_.used()), fence);
+    pending_.clear();
+    if (sent != TransportResult::ok) {
+        faulted_ = true;
+        return sent;
+    }
+    const TransportResult answered = await(fence, reply);
+    answered_ = answered == TransportResult::ok;
+    return answered;
 }
 
 uint64_t KmtTransport::submissions_through_doorbell() const
@@ -338,10 +412,10 @@ void KmtTransport::teardown()
     watch_.read_page(nullptr);
     fences_ = TransportFence();
     faulted_ = false;
-    /* A gate is its device's, and a stream its session's, which a transport
-     * torn down outlives no longer. */
+    /* A gate is its device's, which a transport torn down outlives no
+     * longer; what was held was for the context that went. */
     held_ = nullptr;
-    ahead_ = nullptr;
+    pending_.clear();
     answered_ = false;
     spill_.release();
     answer_.release();
@@ -379,7 +453,11 @@ WireWriter KmtTransport::request_writer()
 {
     AV_SCOPE("KmtTransport::request_writer");
     if (staging_bytes_ <= CommandHeader::encoded_size) return WireWriter(nullptr, 0u);
-    return WireWriter(staging_ + CommandHeader::encoded_size, staging_bytes_ - CommandHeader::encoded_size, spill_);
+    const size_t room = staging_bytes_ - CommandHeader::encoded_size;
+    if (pending_.capacity() == 0u) return WireWriter(staging_ + CommandHeader::encoded_size, room, spill_);
+    if (!pending_.fits(FramedBlock::header_bytes + room) && flush() != TransportResult::ok)
+        return WireWriter(nullptr, 0u);
+    return pending_.lend(room, spill_);
 }
 
 TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, uint8_t flags, uint64_t &fence)
@@ -392,13 +470,14 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     const uint32_t command_size = static_cast<uint32_t>(CommandHeader::encoded_size) + body;
     static_cast<void>(CommandHeader(command_id, command_size, flags).encode(staging_,
                                                                             CommandHeader::encoded_size));
+    blobs_.seal();
     return publish_batch(staging_, command_size, fence);
 }
 
 /* The staging is free once the command spilled out of it, so each piece is
  * framed there and published as a batch of its own; the ring takes one at a
  * time however long the command, and the fence of the last is the
- * command's. */
+ * command's - the batch its leases are sealed into. */
 TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags,
                                              uint64_t &fence)
 {
@@ -408,6 +487,7 @@ TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWrit
     while (!pieces.done()) {
         const size_t framed = pieces.frame_next(staging_, staging_bytes_);
         if (framed == 0u) return TransportResult::failed;
+        if (pieces.done()) blobs_.seal();
         const TransportResult sent = publish_batch(staging_, static_cast<uint32_t>(framed), fence);
         if (sent != TransportResult::ok) return sent;
     }
@@ -449,10 +529,13 @@ bool KmtTransport::drain()
 }
 
 /* The oldest batches the host has yet to run are waited for one at a time,
- * so the host keeps working on the rest while their leases come back. */
+ * so the host keeps working on the rest while their leases come back. What
+ * is held is sent first: its leases come back only once it has run. */
 bool KmtTransport::make_room_for_blobs(size_t bytes)
 {
     AV_SCOPE("KmtTransport::make_room_for_blobs");
+    if (blobs_.room() >= bytes) return true;
+    if (flush() != TransportResult::ok) return false;
     retire_consumed();
     while (blobs_.room() < bytes && fences_.outstanding() != 0u && !faulted_) {
         const uint64_t oldest = fences_.oldest();
@@ -570,56 +653,38 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
 TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("KmtTransport::send_async");
-    if (faulted_ || !sent_ahead()) return TransportResult::failed;
+    if (faulted_) return TransportResult::failed;
+    if (pending_.capacity() != 0u) return hold(command_id, writer, 0u);
     uint64_t fence = 0u;
     return publish(command_id, writer, 0u, fence);
 }
 
+/* An answer is the host having run its batch and every one before it. */
 void KmtTransport::end_call()
 {
     AV_SCOPE("KmtTransport::end_call");
     if (!answered_) return;
     answered_ = false;
-    blobs_.retire_all();
+    blobs_.retire_through(answered_fence_);
     answer_.release();
-}
-
-WireSpill &KmtTransport::spill()
-{
-    AV_SCOPE("KmtTransport::spill");
-    return spill_;
-}
-
-void KmtTransport::give_back_spill()
-{
-    AV_SCOPE("KmtTransport::give_back_spill");
-    spill_.release();
 }
 
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::send_sync");
-    if (faulted_ || !sent_ahead()) return TransportResult::failed;
+    reply = WireReader(nullptr, 0u);
+    if (faulted_) return TransportResult::failed;
+    if (pending_.capacity() != 0u) {
+        if (!established() || hold(command_id, writer, CommandHeader::generate_reply) != TransportResult::ok)
+            return TransportResult::failed;
+        return publish_held_answered(reply);
+    }
     uint64_t              fence = 0u;
     const TransportResult sent = publish(command_id, writer, CommandHeader::generate_reply, fence);
     if (sent != TransportResult::ok) return sent;
     const TransportResult answered = await(fence, reply);
     answered_ = answered == TransportResult::ok;
     return answered;
-}
-
-/* The batch is judged whole before a byte reaches the ring: a frame the device
- * would fault the context for is the caller's mistake, not the context's. */
-/* For a stream that framed the batch itself and knows none of it answers:
- * reading every header back to learn that cost more than writing them, once
- * a Flush lets a batch grow to thousands of commands. */
-TransportResult KmtTransport::send_async_batch(const uint8_t *framed, size_t length)
-{
-    AV_SCOPE("KmtTransport::send_async_batch");
-    if (faulted_ || !established() || framed == nullptr || length == 0u || length > max_batch)
-        return TransportResult::failed;
-    uint64_t fence = 0u;
-    return publish_batch(framed, static_cast<uint32_t>(length), fence);
 }
 
 uint64_t KmtTransport::marker_address() const
@@ -641,21 +706,8 @@ BatchMark KmtTransport::newest_mark() const
     return BatchMark(connection_.device(), context_, fence_object, newest_fence_);
 }
 
-/* For a stream whose batch ends in the one command that answers. */
-TransportResult KmtTransport::send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply)
-{
-    AV_SCOPE("KmtTransport::send_answered_batch");
-    reply = WireReader(nullptr, 0u);
-    if (faulted_ || !established() || framed == nullptr || length == 0u || length > max_batch)
-        return TransportResult::failed;
-    uint64_t              fence = 0u;
-    const TransportResult sent = publish_batch(framed, static_cast<uint32_t>(length), fence);
-    if (sent != TransportResult::ok) return sent;
-    const TransportResult answered = await(fence, reply);
-    answered_ = answered == TransportResult::ok;
-    return answered;
-}
-
+/* The batch is judged whole before a byte reaches the ring: a frame the device
+ * would fault the context for is the caller's mistake, not the context's. */
 TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::send_batch");
@@ -668,7 +720,8 @@ TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, W
     bool           replying = false;
     Status         framing = Status::ok;
     while ((framing = stream.next(header, payload)) == Status::ok) replying = replying || header.generates_reply();
-    if (framing != Status::no_space) return TransportResult::failed;
+    if (framing != Status::no_space || flush() != TransportResult::ok) return TransportResult::failed;
+    blobs_.seal();
     uint64_t              fence = 0u;
     const TransportResult sent = publish_batch(framed, static_cast<uint32_t>(length), fence);
     if (sent != TransportResult::ok || !replying) return sent;
@@ -755,6 +808,7 @@ Status KmtTransport::await_slot(uint64_t fence, WireReader &reply)
         }
     }
     fences_.close(fence);
+    answered_fence_ = fence;
     const Status read = reply_.read(fence, reply);
     if (read == Status::ok || read == Status::too_large) return read;
     faulted_ = true;
@@ -849,8 +903,18 @@ Status KmtTransport::nop(uint32_t &answered)
     WireReader            answer(nullptr, 0u);
     const TransportResult sent = send_sync(CommandHeader::nop_id, request, answer);
     answered = static_cast<uint32_t>(answer.remaining());
+    end_call();
     if (sent != TransportResult::ok) return Status::invalid_state;
     return answered != 0u ? Status::malformed : Status::ok;
+}
+
+/* An answer with bytes in it is still an answer: the host ran what came
+ * before it. */
+Status KmtTransport::run_held()
+{
+    AV_SCOPE("KmtTransport::run_held");
+    uint32_t answered = 0u;
+    return nop(answered) == Status::invalid_state ? Status::invalid_state : Status::ok;
 }
 
 WireArena      &KmtTransport::decode_arena()
@@ -875,7 +939,7 @@ bool KmtTransport::invariants_hold() const
     AV_SCOPE("KmtTransport::invariants_hold");
     /* An established context has its name and its DMA buffer mapped; the ring
      * and fence keep their own invariants, tested with them. */
-    return context_ == 0u || (allocations_[name_index] != 0u && dma_address_ != 0u);
+    return pending_.invariants_hold() && (context_ == 0u || (allocations_[name_index] != 0u && dma_address_ != 0u));
 }
 
 }  // namespace av

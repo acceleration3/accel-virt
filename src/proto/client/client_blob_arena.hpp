@@ -1,15 +1,25 @@
 /* Room a large array is lent so it crosses to the host as a blob rather than
  * inline in the ring.
  *
- * The generated OpenGL client asks the transport for this, takes a lease when
- * an array is worth it, copies the array into the lease's memory, and sends the
+ * The generated clients ask the transport for this, take a lease when an
+ * array is worth it, copy the array into the lease's memory, and send the
  * lease's offset instead of the bytes. When there is no arena to lend from -
  * no host-visible memory - `ready()` is false and the client sends inline
- * instead (feature 043). A one-way command is read when the host runs it,
- * after its send (feature 050), so a lease lives until the host has run the
- * batch that carried it: an answer retires every lease together, and a batch
- * the host has finished retires the leases taken before it was published
- * (mark, retire_through).
+ * instead (feature 043). The host reads a lease when it runs the command that
+ * names it, which may be long after the lease was taken: the command can be
+ * held in a batch, or framed in pieces across several (feature 050). So a
+ * lease lives until the host has run the batch that carried the whole of its
+ * command, and no sooner. The transport that frames the commands says when a
+ * command is whole (seal), which batch carried what was sealed (mark), and
+ * how far the host has run (retire_through); an answer is the host having
+ * run its batch and everything before it.
+ *
+ * Resident Evil 4 is why this is the lease's lifetime and not the next
+ * batch's or the next answer's: a Direct3D 12 heap's import, sent and
+ * answered while the stream still held a 70-85 KB shader in a lease, retired
+ * that lease; the next shader was copied over it before the batch carrying
+ * the first reached the host, which read the wrong code and removed the
+ * device.
  *
  * The arena is a ring: a lease is taken above the newest, or from the start
  * of the block once the room above runs out and the oldest leases there have
@@ -66,17 +76,23 @@ public:
      * room, a count of zero, or no arena. */
     ClientBlobLease take(size_t count);
     /* Returns the most recent lease's room, for an array whose command
-     * overflowed the ring before it was sent. Only the top rewinds, which is
-     * the only lease not yet sent. */
+     * overflowed the ring before it was sent. Only the top rewinds, and only
+     * while it is unsealed: a sealed lease's command was framed. */
     void            give_back(const ClientBlobLease &lease);
-    /* Every lease back at once: the host has answered a command sent after
-     * all of them, so it has read every one. */
-    void            retire_all();
-    /* The batch `fence` was just published carrying every lease taken so far:
-     * once the host has run it, they are retired. Fences arrive increasing. */
+    /* Every lease taken so far is named by a command framed whole, which the
+     * next batch marked carries if no earlier one did. The command still
+     * being written - or framed in pieces, some already published - is not
+     * whole, and its leases stay out of every mark until it is. */
+    void            seal();
+    /* The batch `fence` was just published, carrying every lease sealed so
+     * far: once the host has run it, they are retired. Fences arrive
+     * increasing. */
     void            mark(uint64_t fence);
-    /* The host has run every batch up to `fence`: the leases taken before the
-     * newest of them was published go back to lending. */
+    /* The host has run every batch up to `fence` - it finished them, or it
+     * answered a command in the newest: the leases sealed before the newest
+     * of them was published go back to lending. Once none is live the next
+     * lease starts at the block's start again, with the whole block above
+     * it. */
     void            retire_through(uint64_t fence);
     /* `count` bytes off the top for a caller that keeps them itself - frames
      * the host writes that the guest shows later, which no retire may lend
@@ -103,8 +119,11 @@ public:
     static constexpr uint32_t max_marks = 64u;
 
 private:
-    /* Where the top stood when `fence` was published, and on which lap of the
-     * block. */
+    /* Nothing lent or marked: the next lease starts at the block's start. */
+    void empty();
+
+    /* Where the seal stood when `fence` was published, and on which lap of
+     * the block. */
     struct Mark {
         uint64_t fence_;
         size_t   top_;
@@ -124,6 +143,10 @@ private:
     /* Laps the top has started, and the lap base_ is on. */
     uint64_t lap_;
     uint64_t base_lap_;
+    /* Where the newest whole command's leases end, and on which lap: never
+     * behind base_ nor ahead of top_. */
+    size_t   sealed_;
+    uint64_t sealed_lap_;
     Mark     marks_[max_marks];
     uint32_t first_mark_;
     uint32_t mark_count_;

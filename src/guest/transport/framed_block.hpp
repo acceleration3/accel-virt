@@ -1,10 +1,12 @@
 /* Commands framed one after another into a block of the owner's, as the
  * device reads a batch: each is lent room right after a header's worth of
  * the block, and framing writes the header in front of what was written.
- * BatchedTransport, D3dCommandStream and Vulkan's CommandBatch each frame
- * into one; when the block goes to the host and what grows it are theirs. */
-#ifndef AV_ICD_FRAMED_BLOCK_HPP
-#define AV_ICD_FRAMED_BLOCK_HPP
+ * KmtTransport holds a context's commands in one, a Direct3D deferred
+ * context records into one, and Vulkan's CommandBatch frames a command
+ * buffer into one; when the block goes to the host and what grows it are
+ * theirs. */
+#ifndef AV_GUEST_FRAMED_BLOCK_HPP
+#define AV_GUEST_FRAMED_BLOCK_HPP
 
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -13,11 +15,9 @@
 #include <stdint.h>
 
 namespace av {
+
 class CommandPieces;
 class WireSpill;
-}  // namespace av
-
-namespace av::icd {
 
 struct FramedBlockProbe;
 
@@ -69,6 +69,6 @@ private:
     size_t   used_;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
-#endif  // AV_ICD_FRAMED_BLOCK_HPP
+#endif  // AV_GUEST_FRAMED_BLOCK_HPP

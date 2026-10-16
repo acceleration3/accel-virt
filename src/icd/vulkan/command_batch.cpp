@@ -110,7 +110,7 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     if (failure_ != Status::ok) return TransportResult::failed;
     const size_t before = framed_.used();
     if (writer.spilled()) {
-        if (record_pieces(command_id, writer)) return TransportResult::ok;
+        if (record_spilled(command_id, writer)) return TransportResult::ok;
         failure_ = Status::no_memory;
         refused_ = command_id;
         return TransportResult::failed;
@@ -126,22 +126,25 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     return TransportResult::ok;
 }
 
-/* Each piece where the last command recorded would be: a full block grows,
- * and one at the command limit goes as a batch of its own first. */
-bool CommandBatch::record_pieces(uint32_t command_id, const WireWriter &writer)
+/* Never in pieces of its own: pieces split over batches published one at a
+ * time, the send lock let go between them, let another thread's command in
+ * between them, and the device took that command for the one they belonged
+ * to. A command no batch holds goes alone, as one run of the transport's
+ * pieces under the lock. */
+bool CommandBatch::record_spilled(uint32_t command_id, WireWriter &writer)
 {
-    AV_SCOPE("CommandBatch::record_pieces");
+    AV_SCOPE("CommandBatch::record_spilled");
     ScopeExit given_back([this] { spill_.release(); });
     if (writer.status() != Status::ok) return false;
+    const size_t whole = FramedBlock::header_bytes + writer.offset();
+    while (!framed_.fits(whole) && framed_.capacity() < Connection::command_bytes)
+        if (!grow()) return false;
+    if (!framed_.fits(whole) && framed_.used() != 0u && !flush()) return false;
+    if (!framed_.fits(whole)) return connection_.send_command(command_id, writer) == TransportResult::ok;
+    const size_t  before = framed_.used();
     CommandPieces pieces(command_id, 0u, writer.bytes(), writer.offset());
-    while (!pieces.done()) {
-        const size_t before = framed_.used();
-        if (framed_.frame_piece(pieces)) {
-            last_ = before;
-            continue;
-        }
-        if (framed_.capacity() == Connection::command_bytes ? !flush() : !grow()) return false;
-    }
+    static_cast<void>(framed_.frame_piece(pieces));   /* it fits whole: the command alone */
+    last_ = before;
     return true;
 }
 

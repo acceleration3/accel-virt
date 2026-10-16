@@ -92,6 +92,7 @@ private:
     WireArena         decode_arena_;
     ClientBlobArena   blobs_;
     uint32_t          refused_;
+    uint64_t          answers_;
     std::uint64_t     next_key_;
     ImportedBlob      region_;
     ImportedBlob      memories_[max_memories];

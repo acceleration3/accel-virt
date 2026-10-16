@@ -15,10 +15,11 @@ namespace av::clicd {
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
                                icd::ThreadLock &send_lock, icd::ThreadLock &blocks_lock, LogSink &log,
                                icd::SharedHandles &handles)
-    : memory_(memory), send_lock_(send_lock), log_(log),
+    : memory_(memory), log_(log),
       link_(connection), gl_share_(0u), wakes_(false),
-      channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)),
-      locked_(), blocks_(blocks_lock), staging_(blocks_lock),
+      channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
+               send_lock),
+      blocks_(blocks_lock), staging_(blocks_lock),
       svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -93,7 +94,6 @@ Status GuestClContext::build(uint32_t gl_share)
      * asking the driver. */
     const Status opened = channel_.open(link_.device(), GlContextOptions().sharing(gl_share));
     if (opened != Status::ok) return opened;
-    static_cast<void>(locked_.construct(channel_.batched(), send_lock_));
     if (channel_.arena_view() == nullptr) {
         log_.write("avcl: buffers are staged; a map copies in and out");
         return Status::ok;
@@ -122,8 +122,7 @@ void GuestClContext::teardown()
     /* Before the transport goes, and only while it can still carry a release:
      * the device counts this context as a holder of every object it opened,
      * and a lost context's are released by the device with the context. */
-    if (state_ == State::made && locked_.constructed()) external_.release_all(locked_.object());
-    if (locked_.constructed()) locked_.destroy();
+    if (state_ == State::made && channel_.opened()) external_.release_all(channel_.wire());
     /* Before the arena goes: a block naming memory that is gone is an
      * address this context must not be able to hand out. */
     blocks_.lend(nullptr, 0u);
@@ -153,7 +152,7 @@ ClientTransport *GuestClContext::wire()
         notify_.say("avcl: the context's device was lost: every call on it now answers CL_OUT_OF_RESOURCES");
         return nullptr;
     }
-    return &locked_.object();
+    return &channel_.wire();
 }
 
 ClArenaBlocks &GuestClContext::staging()
@@ -341,7 +340,7 @@ bool GuestClContext::invariants_hold() const
     /* The channel and the lock around it are opened together and torn down
      * together, so one without the other is a make or a teardown that
      * stopped halfway. */
-    if (channel_.opened() != locked_.constructed() || !channel_.invariants_hold()) return false;
+    if (!channel_.invariants_hold()) return false;
     if (state_ == State::created) {
         /* Nothing is held before a make, and a make that failed held nothing
          * after it either. */

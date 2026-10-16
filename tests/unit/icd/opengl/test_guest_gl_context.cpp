@@ -4,6 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
@@ -547,9 +548,9 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   CHECK_STATUS(made->make(), Status::ok);
   CHECK(made->invariants_hold());
   av::icd::HostChannelProbe channel(GuestGlContextProbe::channel(*made));
-  channel.drop_batched();
+  channel.drop_locked();
   CHECK(!made->invariants_hold());
-  channel.restore_batched();
+  channel.restore_locked();
   CHECK(made->invariants_hold());
   GuestGlContextProbe::connect(*made, false);
   CHECK(!made->invariants_hold());
@@ -634,6 +635,30 @@ TEST(guest_gl_context, run_held_has_the_host_run_the_held_calls_before_it_return
   CHECK_EQ(rig.kmt().command_id(before), av::glproto::kCmd_glBindTexture);
   CHECK_EQ(rig.kmt().command_id(before + 1u), av::CommandHeader::nop_id);
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
+
+/* A held call whose array crossed in a blob lease, then the publish barrier
+ * another API's context asks for: the call goes first, in the one batch the
+ * barrier's answer comes back for, and its lease is lent again only once
+ * that answer says the host ran it - not while the call still waits. */
+TEST(guest_gl_context, a_held_calls_lease_stays_lent_until_the_batch_carrying_it_has_run)
+{ GlContextRig rig;
+  Context      context(rig);
+  rig.host().gl_make(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  av::ClientBlobArena &arena = av::glicd::GuestGlContextProbe::channel(*context).transport().blobs();
+  CHECK(arena.ready());
+  constexpr std::uint32_t named = 2048u;
+  static std::uint32_t    buffers[named];
+  for (std::uint32_t at = 0u; at < named; at++) buffers[at] = at + 1u;
+  const std::uint32_t before = rig.kmt().commands();
+  av::glproto::av_glBindBuffersBase(*context->wire(), 0x8A11u, 0u, static_cast<std::int32_t>(named), buffers);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK_EQ(arena.used(), sizeof buffers);
+  rig.host().nop();
+  CHECK_STATUS(context->run_held(), Status::ok);
+  CHECK_EQ(rig.kmt().command_id(before), av::glproto::kCmd_glBindBuffersBase);
+  CHECK_EQ(rig.kmt().command_id(before + 1u), av::CommandHeader::nop_id);
+  CHECK_EQ(arena.used(), 0u); }
 
 namespace {
 

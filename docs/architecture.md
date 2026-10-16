@@ -143,11 +143,11 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 | Directory | Holds |
 |---|---|
 | `guest/kmt/` | the `Kmt` contract (D3DKMT), its small value types, `AvgpuAdapters` (every avgpu adapter, the primary display's first), `AdapterSearch` (one of them, held open) and avgpu's PCI identity |
-| `guest/transport/` | the av transport over Kmt, and host memory as a process holds it: `HostAllocation` (a host window chunk and its import, docs/host-memory.md) and the arenas built on it |
+| `guest/transport/` | the av transport over Kmt - the one place a driver's commands are held for a batch (`KmtTransport::hold_in`, framed in a `FramedBlock`), so every command goes in the order it was made and a blob lease is retired only once the batch carrying its command has run - and host memory as a process holds it: `HostAllocation` (a host window chunk and its import, docs/host-memory.md) and the arenas built on it |
 | `guest/suite/` | avtest's scenarios, and the step and report framework the probes use too |
 | `guest/probe/` | the probe programs' portable halves: Vulkan, GL, CL and D3D work, the `*_entry` seams, shaders |
 | `guest/inspect/` | avinspect, over its `InspectHost` seam |
-| `icd/common/` | what two or more user-mode drivers share: transports and the host channel over them (`HostChannel`, which keeps every host allocation it opened), waits, locks, handle tables, connections, window seams |
+| `icd/common/` | what two or more user-mode drivers share: transports and the host channel over them (`HostChannel`, which keeps every host allocation it opened and owns the channel's send lock and its publish barrier), waits, locks, handle tables, connections, window seams |
 | `icd/vulkan/`, `icd/opengl/`, `icd/opencl/` | each ICD's logic |
 | `icd/d3d/` | the Direct3D user-mode driver's portable logic; `ddi/` mirrors the runtimes' structures |
 | `icd/vendor/` | the ADL and NVAPI libraries' portable logic (docs/vendor-libraries.md); `ddi/` mirrors their structures |

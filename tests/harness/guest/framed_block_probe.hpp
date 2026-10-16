@@ -4,12 +4,12 @@
 #ifndef AV_FRAMED_BLOCK_PROBE_HPP
 #define AV_FRAMED_BLOCK_PROBE_HPP
 
-#include "icd/common/framed_block.hpp"
+#include "guest/transport/framed_block.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 
 struct FramedBlockProbe {
     explicit FramedBlockProbe(FramedBlock &target);
@@ -21,6 +21,6 @@ struct FramedBlockProbe {
     FramedBlock &framed;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
 #endif  // AV_FRAMED_BLOCK_PROBE_HPP

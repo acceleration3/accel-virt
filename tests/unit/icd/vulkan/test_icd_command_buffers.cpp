@@ -9,7 +9,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "harness/icd/framed_block_probe.hpp"
+#include "harness/guest/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"

@@ -1,9 +1,9 @@
-#include "icd/common/framed_block.hpp"
+#include "guest/transport/framed_block.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/submission/command_pieces.hpp"
 
-namespace av::icd {
+namespace av {
 
 FramedBlock::FramedBlock(uint8_t *block, size_t capacity)
     : block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u)
@@ -107,4 +107,4 @@ bool FramedBlock::invariants_hold() const
     return used_ <= capacity_ && (block_ != nullptr || capacity_ == 0u);
 }
 
-}  // namespace av::icd
+}  // namespace av

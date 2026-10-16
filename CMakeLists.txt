@@ -470,9 +470,8 @@ target_link_options(av_vendor PUBLIC ${AV_TEST_FLAGS})
 
 file(GLOB_RECURSE AV_D3D_UMD_SOURCES CONFIGURE_DEPENDS src/icd/d3d/*.cpp)
 add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
-  ${CMAKE_SOURCE_DIR}/src/icd/common/batched_transport.cpp
-  ${CMAKE_SOURCE_DIR}/src/icd/common/framed_block.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/host_channel.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/locked_transport.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/pieces.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/report_gate.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/row_pieces.cpp

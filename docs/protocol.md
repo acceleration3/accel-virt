@@ -410,6 +410,15 @@ command. A piece followed by anything but a command of the context's API,
 or a piece asking for an answer, is command framing, fault 5; no host
 memory to gather into is fault 6.
 
+On the guest, only the transport frames pieces (`KmtTransport`): a driver
+that batches has its commands held by the transport itself, and a command
+longer than any batch a recording holds - a Vulkan command buffer's - is sent
+alone through it under the channel's send lock. So nothing comes between a
+command's pieces, every command reaches the context in the order the
+application made it whoever sends it, and a blob lease a command names is
+lent again only once the host has run the batch carrying the whole command,
+not the batch carrying its first piece (`ClientBlobArena::seal`).
+
 An answer longer than the reply slot is not dropped: the slot says *too
 large* with the length required, and the executor keeps the answer until
 the next command it runs (ABI `answer_part`). The producer, still holding

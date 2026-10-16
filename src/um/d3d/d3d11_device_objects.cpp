@@ -187,7 +187,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     /* Another process - DWM - may open the key as soon as the kernel hands
      * it the handle, on its own stream: the host must have made the resource
      * by then, contents included. */
-    if (kernel_visible && wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (kernel_visible && wire().run_held() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
 /* Published under the key the miniport minted, as the size its allocation

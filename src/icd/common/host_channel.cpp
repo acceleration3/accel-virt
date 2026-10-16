@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "icd/common/thread_lock_hold.hpp"
 
 namespace av::icd {
 
@@ -16,10 +17,11 @@ ChannelShape::ChannelShape(SubApi sub_api, uint8_t ring_order, uint32_t reply_by
     AV_SCOPE("ChannelShape::ChannelShape");
 }
 
-HostChannel::HostChannel(BlockSource &memory, LogSink &log, const char *prefix, const ChannelShape &shape)
-    : memory_(memory), lines_(log, prefix), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
+HostChannel::HostChannel(BlockSource &memory, LogSink &log, const char *prefix, const ChannelShape &shape,
+                         ThreadLock &lock)
+    : memory_(memory), lines_(log, prefix), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
-      arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(),
+      arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
       device_(nullptr), memories_(memory)
 {
     AV_SCOPE("HostChannel::HostChannel");
@@ -47,8 +49,9 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
     if (batch_bytes_ != 0u) {
         batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes_, Pool::paged));
         if (batch_block_ == nullptr) return Status::no_memory;
-        static_cast<void>(batched_.construct(transport_.object(), batch_block_, batch_bytes_, staging_bytes_));
+        transport_.object().hold_in(batch_block_, batch_bytes_);
     }
+    static_cast<void>(locked_.construct(transport_.object(), lock_));
     device_ = &device;
     if (arena_bytes_ != 0u && open_arena(device) != Status::ok) {
         /* A device that will not import leaves the channel usable, with bulk
@@ -82,7 +85,7 @@ void HostChannel::close(bool lost)
 {
     AV_SCOPE("HostChannel::close");
     /* What was sent last still reaches the host before its context goes. */
-    if (!lost && batched_.constructed()) static_cast<void>(batched_.object().flush());
+    if (!lost && transport_.constructed()) static_cast<void>(transport_.object().flush());
     close_memories(lost);
     device_ = nullptr;
     if (arena_.constructed()) {
@@ -92,7 +95,7 @@ void HostChannel::close(bool lost)
         if (closed != Status::ok) lines_.write("the blob arena did not close whole");
         arena_.destroy();
     }
-    batched_.destroy();
+    locked_.destroy();
     transport_.destroy();
     if (batch_block_ != nullptr) memory_.release(batch_block_);
     batch_block_ = nullptr;
@@ -105,6 +108,7 @@ Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAl
     AV_SCOPE("HostChannel::open_memory");
     made = nullptr;
     if (!opened() || faulted()) return Status::invalid_state;
+    const ThreadLockHold release(lock_);
     ObjectStorage<HostAllocation> *kept = nullptr;
     if (memories_.create(kept) != Status::ok) return Status::no_memory;
     static_cast<void>(kept->construct(*device_, transport_.object()));   /* a fresh slot */
@@ -120,6 +124,7 @@ Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAl
 Status HostChannel::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("HostChannel::close_memory");
+    const ThreadLockHold release(lock_);
     ObjectStorage<HostAllocation> *const kept = memories_.find_if(
         [&allocation](const ObjectStorage<HostAllocation> &held) { return &held.object() == &allocation; });
     if (kept == nullptr) return Status::invalid_parameter;
@@ -132,6 +137,7 @@ HostAllocation *HostChannel::find_memory(uint64_t handle)
 {
     AV_SCOPE("HostChannel::find_memory");
     if (handle == 0u) return nullptr;
+    const ThreadLockHold release(lock_);
     ObjectStorage<HostAllocation> *const kept = memories_.find_if(
         [handle](const ObjectStorage<HostAllocation> &held) { return held.object().handle() == handle; });
     return kept != nullptr ? &kept->object() : nullptr;
@@ -166,6 +172,45 @@ bool HostChannel::faulted() const
     return transport_.constructed() && transport_.object().faulted();
 }
 
+ClientTransport &HostChannel::wire()
+{
+    AV_SCOPE("HostChannel::wire");
+    return locked_.object();
+}
+
+TransportResult HostChannel::flush()
+{
+    AV_SCOPE("HostChannel::flush");
+    if (!opened()) return TransportResult::failed;
+    const ThreadLockHold release(lock_);
+    return transport_.object().flush();
+}
+
+TransportResult HostChannel::send_batch(const uint8_t *framed, size_t length)
+{
+    AV_SCOPE("HostChannel::send_batch");
+    if (!opened()) return TransportResult::failed;
+    const ThreadLockHold release(lock_);
+    WireReader           unanswered(nullptr, 0u);
+    return transport_.object().send_batch(framed, length, unanswered);
+}
+
+TransportResult HostChannel::send_command(uint32_t command_id, WireWriter &writer)
+{
+    AV_SCOPE("HostChannel::send_command");
+    if (!opened()) return TransportResult::failed;
+    const ThreadLockHold release(lock_);
+    return transport_.object().send_async(command_id, writer);
+}
+
+Status HostChannel::run_held()
+{
+    AV_SCOPE("HostChannel::run_held");
+    if (!opened()) return Status::invalid_state;
+    const ThreadLockHold release(lock_);
+    return transport_.object().run_held();
+}
+
 KmtTransport &HostChannel::transport()
 {
     AV_SCOPE("HostChannel::transport");
@@ -176,12 +221,6 @@ const KmtTransport &HostChannel::transport() const
 {
     AV_SCOPE("HostChannel::transport");
     return transport_.object();
-}
-
-BatchedTransport &HostChannel::batched()
-{
-    AV_SCOPE("HostChannel::batched");
-    return batched_.object();
 }
 
 uint8_t *HostChannel::arena_view() const
@@ -213,10 +252,10 @@ void HostChannel::report(StateWriter &writer) const
 bool HostChannel::invariants_hold() const
 {
     AV_SCOPE("HostChannel::invariants_hold");
-    if (!opened()) return staging_ == nullptr && batch_block_ == nullptr;
-    if (staging_ == nullptr) return false;
-    if (batched_.constructed() != (batch_bytes_ != 0u) || batched_.constructed() != (batch_block_ != nullptr))
+    if (!opened()) return staging_ == nullptr && batch_block_ == nullptr && !locked_.constructed();
+    if (staging_ == nullptr || !locked_.constructed() || (batch_bytes_ != 0u) != (batch_block_ != nullptr))
         return false;
+    if (transport_.object().holding_capacity() != (batch_block_ != nullptr ? batch_bytes_ : 0u)) return false;
     return transport_.object().invariants_hold();
 }
 

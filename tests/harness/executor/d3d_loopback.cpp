@@ -24,7 +24,7 @@ D3dLoopback::D3dLoopback(D3dBackend &backend, HostMemorySource *source, std::siz
     : backend_(backend), source_(source), command_(static_cast<uint8_t *>(std::calloc(command_bytes, 1u))),
       reply_(static_cast<uint8_t *>(std::calloc(reply_bytes, 1u))),
       arena_block_(static_cast<uint8_t *>(std::aligned_alloc(16u, arena_bytes))), arena_(arena_block_, arena_bytes),
-      decode_arena_(nullptr, 0u), blobs_(), refused_(0u), next_key_(1u), region_(), memories_()
+      decode_arena_(nullptr, 0u), blobs_(), refused_(0u), answers_(0u), next_key_(1u), region_(), memories_()
 {
     if (region_bytes == 0u) return;
     if (open(HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), region_bytes, region_))
@@ -134,7 +134,10 @@ TransportResult D3dLoopback::send_sync(uint32_t command_id, WireWriter &writer, 
     std::size_t answered = 0u;
     if (!run(command_id, writer, true, answered)) return TransportResult::failed;
     /* An answer means the host has read every lease sent before it. */
-    blobs_.retire_all();
+    answers_++;
+    blobs_.seal();
+    blobs_.mark(answers_);
+    blobs_.retire_through(answers_);
     reply = WireReader(reply_, answered);
     return TransportResult::ok;
 }

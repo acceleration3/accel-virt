@@ -16,12 +16,22 @@
  * (docs/protocol.md, "Long commands"): a writer it lends that outgrows the
  * staging spills into memory of the transport's own, and the command crosses
  * in pieces, each a batch; an answer longer than the reply slot is fetched in
- * parts into memory of its own, kept until the call ends. */
+ * parts into memory of its own, kept until the call ends.
+ *
+ * A driver that batches has its commands held here (hold_in), not in a
+ * layer of its own over the transport: held anywhere else, a command of the
+ * transport's own - a Direct3D 12 heap's blob import - went to the host
+ * ahead of commands the application made before it, and the blob leases
+ * those commands named were retired and lent again before the host read
+ * them. Held here, every command goes in the order it was made whoever sends
+ * it, and a lease is retired only once the host has run the batch that
+ * carried the whole of its command (ClientBlobArena::seal). */
 #ifndef AV_KMT_TRANSPORT_HPP
 #define AV_KMT_TRANSPORT_HPP
 
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
+#include "guest/transport/framed_block.hpp"
 #include "guest/transport/guest_doorbell.hpp"
 #include "guest/transport/host_watch.hpp"
 #include "guest/transport/reply_reader.hpp"
@@ -47,7 +57,6 @@ class ContextViewsRecord;
 
 class GuestConnection;
 class PublishGate;
-class UnsentBatch;
 struct KmtTransportProbe;
 
 class KmtTransport final : public ClientTransport {
@@ -120,13 +129,29 @@ public:
     void                 hold(PublishGate &gate);
     /* `gate` is going away: a hold by it is dropped, one by another kept. */
     void                 forget(const PublishGate &gate);
-    /* From now on a command of the transport's own (send_async, send_sync)
-     * is published only after `batch` has sent what it holds back - a stream
-     * whose commands carry blob leases (UnsentBatch). One stream at a time;
-     * `batch` outlives this or is dropped first. */
-    void                 send_after(UnsentBatch &batch);
-    /* `batch` is going away: dropped if it is the one followed. */
-    void                 drop(const UnsentBatch &batch);
+    /* From now on what is sent asynchronously is held in `capacity` bytes at
+     * `block`, the caller's, which outlives this: one batch goes when the
+     * block cannot take another command, when a command asks for an answer
+     * (it is the batch's last) and at flush. A command an application made
+     * one call at a time was a batch, a fence and a publish of the tail each.
+     * A block too small for a command of the staging's room frames it in
+     * pieces; a null block holds nothing. */
+    void                 hold_in(uint8_t *block, size_t capacity);
+    /* What is held, published now, answered by nothing. ok with nothing
+     * held; failed on a faulted context, or when the batch could not be
+     * published - refused, or longer than the ring - which faults it, since
+     * what it held is lost. */
+    [[nodiscard]] TransportResult flush();
+    /* The bytes held, and the most the block holds; 0 for a transport that
+     * holds nothing. */
+    size_t                        held() const;
+    size_t                        holding_capacity() const;
+    /* Whole commands framed elsewhere, none asking for an answer - a
+     * Direct3D command list's - held behind what is held, what is held going
+     * first when they do not fit with it; published at once by a transport
+     * that holds nothing. failed for more than the block holds, or as flush
+     * fails. */
+    [[nodiscard]] TransportResult hold_framed(const uint8_t *framed, size_t length);
     /* Has the driver set the event `handle` names - this process's, one it may
      * set - whenever the host raises on this context, and when the context is
      * lost or goes (docs/protocol.md, "Wake event record"). invalid_state
@@ -151,32 +176,44 @@ public:
     uint32_t             ring() const;
 
     /* A round trip of the transport's own no-op (feature 044), which the
-     * device answers itself: ok when answered with nothing; invalid_state when
-     * the call failed, which lost the context; malformed when the answer held
-     * bytes, `answered` saying how many. */
+     * device answers itself, behind what is held: ok when answered with
+     * nothing; invalid_state when the call failed, which lost the context;
+     * malformed when the answer held bytes, `answered` saying how many. The
+     * call is ended before this returns. */
     [[nodiscard]] Status nop(uint32_t &answered);
+    /* The publish barrier: what is held is sent, and the host has run it and
+     * everything before it when this returns - before another process or
+     * another API's context names an object those commands made, which it
+     * reaches on a context of its own that nothing orders after this one.
+     * A Direct3D 11 resource whose key DWM opens, an OpenGL object an OpenCL
+     * context acquires. invalid_state when the context faulted. */
+    [[nodiscard]] Status run_held();
 
-    /* Lent the staging, spilling into spill() past it. */
+    /* Lent the staging's room - in the held block when holding, the block
+     * sent first when that room is not left in it - spilling into memory of
+     * the transport's own past it. */
     WireWriter      request_writer() override;
+    /* Held when holding; published otherwise. */
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
+    /* Published behind what is held, as one batch, and waited for. */
     TransportResult send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
     /* Nothing is held for a caller: one thread owns this transport. A call
-     * the host answered retires every blob lease, since the host has run
-     * every command sent before it. */
+     * the host answered retires the blob leases of every batch up to the
+     * one answered. */
     void            end_call() override;
-    /* `length` bytes of CommandHeader-framed commands, published as one batch:
-     * the whole batch is judged before anything is written, and one that does
-     * not frame exactly is refused without faulting the context. When any
-     * command asks for an answer the call waits, and `reply` is the answer the
-     * device kept - the last such command's; otherwise it is empty. An
-     * answered batch ends its call as a synchronous command does: end_call
-     * retires every blob lease. */
-    /* Room for a `bytes` lease in the blob arena, waiting for the oldest
-     * batches the host has yet to run to come back - not for all of them.
-     * false when what is unsent holds the room, or the context faulted. */
+    /* Room for a `bytes` lease in the blob arena: what is held is sent, and
+     * the oldest batches the host has yet to run are waited for - not all of
+     * them. false when even the host having run everything leaves too little,
+     * or the context faulted. */
     [[nodiscard]] bool make_room_for_blobs(size_t bytes);
+    /* `length` bytes of CommandHeader-framed commands, published behind what
+     * is held as one batch: the whole batch is judged before anything is
+     * written, and one that does not frame exactly is refused without
+     * faulting the context. When any command asks for an answer the call
+     * waits, and `reply` is the answer the device kept - the last such
+     * command's; otherwise it is empty. An answered batch ends its call as a
+     * synchronous command does. */
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
-    TransportResult send_async_batch(const uint8_t *framed, size_t length);
     /* The GPU address a packet on another of this process's contexts names:
      * the transport's DMA buffer, which every context of the process reaches
      * and the miniport reads nothing of there. */
@@ -188,14 +225,8 @@ public:
     /* The same newest batch, for another thread of this process to wait on
      * (BatchMark). */
     BatchMark    newest_mark() const;
-    TransportResult send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply);
     WireArena      &decode_arena() override;
     ClientBlobArena &blobs() override;
-    /* Where a writer a transport over this one lends spills to: such a
-     * transport frames what spilled in pieces (CommandPieces) and gives the
-     * memory back with give_back_spill once they are sent. */
-    WireSpill       &spill();
-    void             give_back_spill();
 
     bool invariants_hold() const;
 
@@ -234,9 +265,13 @@ private:
     [[nodiscard]] bool room_for_fence();
     uint64_t           published_now() const;
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
-    /* What the followed stream holds back, sent ahead of a command of the
-     * transport's own: false when it could not be. */
-    [[nodiscard]] bool            sent_ahead();
+    /* The command `writer` wrote, framed into the held block - in pieces
+     * past it, the block sent each time it fills - and its leases sealed. */
+    [[nodiscard]] TransportResult hold(uint32_t command_id, const WireWriter &writer, uint8_t flags);
+    [[nodiscard]] TransportResult hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);
+    /* What is held, published as one batch whose last command asks for an
+     * answer, and the answer awaited. */
+    [[nodiscard]] TransportResult publish_held_answered(WireReader &reply);
     /* Waits for the context and points `reply` at the answer for `fence`. */
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
     bool                          replied_within_spin(uint64_t fence);
@@ -283,11 +318,12 @@ private:
     bool             faulted_;
     /* What the next batch written waits for; null when nothing is held. */
     PublishGate     *held_;
-    /* The stream whose held-back commands go before the transport's own;
-     * null when there is none. */
-    UnsentBatch     *ahead_;
-    /* A synchronous call was answered since the last end_call. */
+    /* The commands held for one batch; no block when nothing is held. */
+    FramedBlock      pending_;
+    /* A synchronous call was answered since the last end_call, and the
+     * newest fence an answer came back for. */
     bool             answered_;
+    uint64_t         answered_fence_;
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;
     /* A command longer than the staging, while it is written and sent. */

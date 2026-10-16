@@ -20,12 +20,16 @@ uint8_t *HostChannelProbe::swap_batch_block(uint8_t *block)
     return kept;
 }
 
-void HostChannelProbe::drop_batched() { channel.batched_.destroy(); }
+void HostChannelProbe::drop_locked() { channel.locked_.destroy(); }
 
-void HostChannelProbe::restore_batched()
+void HostChannelProbe::restore_locked()
 {
-    static_cast<void>(channel.batched_.construct(channel.transport_.object(), channel.batch_block_,
-                                                 channel.batch_bytes_, channel.staging_bytes_));
+    static_cast<void>(channel.locked_.construct(channel.transport_.object(), channel.lock_));
+}
+
+void HostChannelProbe::restore_holding()
+{
+    channel.transport_.object().hold_in(channel.batch_block_, channel.batch_bytes_);
 }
 
 void HostChannelProbe::build_transport(GuestConnection &device)

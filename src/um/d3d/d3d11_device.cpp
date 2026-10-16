@@ -168,7 +168,7 @@ HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_
     if (recorded_.object().initialize() != Status::ok) return E_OUTOFMEMORY;
     const uint32_t device = parent.channel_.object().device();
     d3d::CommandRecording &recorded = recorded_.object();
-    static_cast<void>(recording_.construct(session_.transport(), recorded.bytes(), recorded.capacity()));
+    static_cast<void>(recording_.construct(session_.transport()));
     recording_.object().record(recorded);
     /* Recorded for the parent's device, which execution selects first. */
     recording_.object().selected(device);

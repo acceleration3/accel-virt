@@ -5,8 +5,8 @@
  * record into. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "harness/icd/framed_block_probe.hpp"
-#include "icd/common/framed_block.hpp"
+#include "harness/guest/framed_block_probe.hpp"
+#include "guest/transport/framed_block.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/command_pieces.hpp"
@@ -20,8 +20,8 @@
 using av::CommandHeader;
 using av::Status;
 using av::WireWriter;
-using av::icd::FramedBlock;
-using av::icd::FramedBlockProbe;
+using av::FramedBlock;
+using av::FramedBlockProbe;
 
 namespace {
 

@@ -184,12 +184,15 @@ TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_vie
    * nothing. */
   CHECK(!blobs.take(16u * mib - KmtBlobArena::error_word_bytes).taken());
   CHECK_EQ(blobs.used(), 4196u);
-  /* Only the top lease rewinds; retiring returns them all. */
+  /* Only the top lease rewinds; a batch carrying the rest, once run,
+   * returns them all. */
   blobs.give_back(first);
   CHECK_EQ(blobs.used(), 4196u);
   blobs.give_back(second);
   CHECK_EQ(blobs.used(), 4096u);
-  blobs.retire_all();
+  blobs.seal();
+  blobs.mark(1u);
+  blobs.retire_through(1u);
   CHECK_EQ(blobs.used(), 0u);
   CHECK(!blobs.take(16u * mib).taken());
   CHECK(blobs.take(16u * mib - KmtBlobArena::error_word_bytes).taken());

@@ -21,7 +21,7 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : memory_(memory), log_(log), lines_(log, "avumd: "), devices_(memory),
       adapters_(kmt, memory, log, "the host answers no Direct3D 9 on this adapter", session_arena_bytes, 0u,
-                d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Finish9, d3d9proto::kCmd_Flush9)
+                d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Flush9)
 {
     AV_SCOPE("D3d9Driver::D3d9Driver");
 }

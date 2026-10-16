@@ -3,15 +3,18 @@
  * The runtime calls a device from whichever thread the application uses, and
  * each of a process's devices may be on a different one, all recording into
  * the one stream. So a command is recorded under the process's lock, and the
- * stream is told which device is speaking before it is lent a writer: the
- * host runs each command on its own device's pipeline state. The lock is held
- * from the writer being lent until an asynchronous command is recorded or a
- * synchronous call ends, as LockedTransport holds it, so another device's
- * round trip cannot replace a reply mid-decode. */
+ * stream is told which device is speaking before it is lent a writer
+ * (D3dDeviceSelection): the host runs each command on its own device's
+ * pipeline state. The lock is held from the writer being lent until an
+ * asynchronous command is recorded or a synchronous call ends
+ * (LockedTransport), so another device's round trip cannot replace a reply
+ * mid-decode. */
 #ifndef AV_D3D_DEVICE_CHANNEL_HPP
 #define AV_D3D_DEVICE_CHANNEL_HPP
 
 #include "core/support/status.hpp"
+#include "icd/common/locked_transport.hpp"
+#include "icd/d3d/d3d_device_selection.hpp"
 #include "proto/client/client_transport.hpp"
 
 #include <stddef.h>
@@ -46,6 +49,9 @@ public:
      * inline (D3dCommandStream::inline_data), under the lock. */
     [[nodiscard]] Status flush();
     [[nodiscard]] Status application_flush();
+    /* The publish barrier, under the lock (KmtTransport::run_held): before
+     * another process opens what this device just made. */
+    [[nodiscard]] Status run_held();
     /* A deferred context's recording, taken out of its stream. */
     [[nodiscard]] Status take_recorded(uint8_t *out, size_t capacity, size_t &length);
     size_t               recorded_bytes();
@@ -65,21 +71,19 @@ public:
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
 
-    /* Between calls a channel is idle: no call left its lock held. */
+    /* The lock is held exactly while a command is written or a reply read,
+     * and the stream is sound. */
     bool invariants_hold() const;
 
 private:
-    enum class Phase : uint8_t { idle, writing, answering };
-
-    void let_go();
-
     D3dCommandStream &stream_;
     icd::ThreadLock  &lock_;
     uint32_t          device_;
     /* The stream's recorded_total() just after a command list's closing
      * ClearState11: a list executed right after needs no opening one. */
     uint64_t          cleared_at_;
-    Phase             phase_;
+    D3dDeviceSelection selection_;
+    icd::LockedTransport locked_;
 };
 
 }  // namespace av::d3d

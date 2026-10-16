@@ -2,7 +2,6 @@
 
 #include "core/platform/block_source.hpp"
 #include "guest/transport/host_allocation.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/driver_log.hpp"
@@ -16,13 +15,12 @@
 namespace av::d3d {
 
 D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint64_t slice_store_size,
-                       uint32_t select_command, uint32_t finish_command, uint32_t flush_command)
-    : memory_(memory), log_(log), lock_(), connection_(kmt),
+                       uint32_t select_command, uint32_t flush_command)
+    : log_(log), lock_(), connection_(kmt),
       channel_(memory, log, "avumd: ",
-               icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, 0u, arena_size)),
-      stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), batch_(nullptr), members_(0u), next_id_(0u),
-      select_command_(select_command),
-      finish_command_(finish_command), flush_command_(flush_command)
+               icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
+      stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), members_(0u), next_id_(0u),
+      select_command_(select_command), flush_command_(flush_command)
 {
     AV_SCOPE("D3dSession::D3dSession");
 }
@@ -79,8 +77,6 @@ Status D3dSession::escape(uint8_t *data, uint32_t size)
 HRESULT D3dSession::open(uint32_t adapter)
 {
     AV_SCOPE("D3dSession::open");
-    batch_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
-    if (batch_ == nullptr) return E_OUTOFMEMORY;
     if (connection_.open(adapter) != Status::ok) {
         log_.write("avumd: no device on the adapter for a Direct3D session");
         return E_FAIL;
@@ -89,12 +85,8 @@ HRESULT D3dSession::open(uint32_t adapter)
      * and guest RAM's when not (the kernel decides). */
     const Status opened = channel_.open(connection_);
     if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
-    static_cast<void>(stream_.construct(channel_.transport(), batch_, batch_bytes));
-    stream_.object().speak_with(select_command_, finish_command_, flush_command_);
-    /* A heap's blob import, made under the same lock between the stream's
-     * commands, would otherwise reach the host ahead of them and retire the
-     * leases they carry (UnsentBatch). */
-    channel_.transport().send_after(stream_.object());
+    static_cast<void>(stream_.construct(channel_.transport()));
+    stream_.object().speak_with(select_command_, flush_command_);
     if (channel_.arena_view() != nullptr)
         query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes(), lent_bytes);
     if (host_has_slices()) open_slices();
@@ -150,14 +142,12 @@ uint8_t *D3dSession::slice_view() const
 Status D3dSession::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
 {
     AV_SCOPE("D3dSession::open_memory");
-    const icd::ThreadLockHold held(lock_);
     return channel_.open_memory(bytes, memory, made);
 }
 
 void D3dSession::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("D3dSession::close_memory");
-    const icd::ThreadLockHold held(lock_);
     static_cast<void>(channel_.close_memory(allocation));
 }
 
@@ -175,13 +165,10 @@ void D3dSession::close()
     slice_store_ = nullptr;
     if (stream_.constructed()) {
         static_cast<void>(stream_.object().flush());
-        channel_.transport().drop(stream_.object());
         stream_.destroy();
     }
     channel_.close(false);
     connection_.close();
-    if (batch_ != nullptr) memory_.release(batch_);
-    batch_ = nullptr;
 }
 
 uint32_t D3dSession::next_id()

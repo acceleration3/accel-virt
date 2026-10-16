@@ -11,14 +11,16 @@
  * records a command buffer's commands in the order they arrive, whichever
  * batch carried them. The generated client encodes a command before its size
  * is known, so each is lent a fixed room, and one that outgrows it spills
- * into memory of the batch's own and is recorded in pieces (docs/protocol.md,
- * "Long commands"). Memory refused while growing latches one failure, and end
- * answers it rather than ship a batch with a command missing. */
+ * into memory of the batch's own and is recorded whole - the block growing,
+ * or sent to make room - or, longer than any batch, sent alone through the
+ * connection (docs/protocol.md, "Long commands"). Memory refused while
+ * growing latches one failure, and end answers it rather than ship a batch
+ * with a command missing. */
 #ifndef AV_ICD_COMMAND_BATCH_HPP
 #define AV_ICD_COMMAND_BATCH_HPP
 
 #include "core/support/status.hpp"
-#include "icd/common/framed_block.hpp"
+#include "guest/transport/framed_block.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/wire/spill_block.hpp"
@@ -81,8 +83,9 @@ private:
     [[nodiscard]] bool grow();
     /* Publishes what is recorded so far, at the command limit. */
     [[nodiscard]] bool flush();
-    /* A writer that spilled, recorded piece by piece. */
-    [[nodiscard]] bool record_pieces(uint32_t command_id, const WireWriter &writer);
+    /* A writer that spilled, recorded whole, or sent alone when no batch
+     * holds it. */
+    [[nodiscard]] bool record_spilled(uint32_t command_id, WireWriter &writer);
 
     BlockSource    &memory_;
     Connection     &connection_;

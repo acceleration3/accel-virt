@@ -220,7 +220,6 @@ private:
     void                 teardown();
 
     BlockSource                   &memory_;
-    icd::ThreadLock               &send_lock_;
     LogSink                  &log_;
     const GlExtensionPolicy       &policy_;
     int32_t                        pixel_format_;

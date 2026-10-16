@@ -38,7 +38,7 @@ size_t   ClientBlobLease::bytes() const
 
 ClientBlobArena::ClientBlobArena()
     : block_(nullptr), lent_(0u), capacity_(0u), base_(0u), top_(0u), end_(0u), wrapped_(false), lap_(0u),
-      base_lap_(0u), marks_{}, first_mark_(0u), mark_count_(0u)
+      base_lap_(0u), sealed_(0u), sealed_lap_(0u), marks_{}, first_mark_(0u), mark_count_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
 }
@@ -55,7 +55,7 @@ void ClientBlobArena::lend(uint8_t *block, size_t capacity)
     block_ = block;
     lent_ = block == nullptr ? 0u : capacity;
     capacity_ = lent_;
-    retire_all();
+    empty();
 }
 
 bool ClientBlobArena::ready() const
@@ -85,11 +85,11 @@ ClientBlobLease ClientBlobArena::take(size_t count)
 }
 
 /* A lease that was the first of a lap takes the lap back with it: nothing was
- * published since it was taken, so no mark names the lap. */
+ * sealed since it was taken, so no mark names the lap. */
 void ClientBlobArena::give_back(const ClientBlobLease &lease)
 {
     AV_SCOPE("ClientBlobArena::give_back");
-    if (!lease.taken() || lease.offset() + lease.bytes() != top_) return;
+    if (!lease.taken() || lease.offset() + lease.bytes() != top_ || (sealed_ == top_ && sealed_lap_ == lap_)) return;
     top_ = static_cast<size_t>(lease.offset());
     if (wrapped_ && top_ == 0u) {
         top_ = end_;
@@ -98,13 +98,20 @@ void ClientBlobArena::give_back(const ClientBlobLease &lease)
     }
 }
 
-void ClientBlobArena::retire_all()
+void ClientBlobArena::empty()
 {
-    AV_SCOPE("ClientBlobArena::retire_all");
-    base_ = top_ = end_ = 0u;
+    AV_SCOPE("ClientBlobArena::empty");
+    base_ = top_ = end_ = sealed_ = 0u;
     wrapped_ = false;
-    base_lap_ = lap_;
+    base_lap_ = sealed_lap_ = lap_;
     first_mark_ = mark_count_ = 0u;
+}
+
+void ClientBlobArena::seal()
+{
+    AV_SCOPE("ClientBlobArena::seal");
+    sealed_ = top_;
+    sealed_lap_ = lap_;
 }
 
 void ClientBlobArena::mark(uint64_t fence)
@@ -112,14 +119,14 @@ void ClientBlobArena::mark(uint64_t fence)
     AV_SCOPE("ClientBlobArena::mark");
     if (mark_count_ != 0u) {
         Mark &newest = marks_[(first_mark_ + mark_count_ - 1u) % max_marks];
-        /* Nothing taken since the newest mark, or no slot for another: the
+        /* Nothing sealed since the newest mark, or no slot for another: the
          * newest covers this batch too. */
-        if ((newest.top_ == top_ && newest.lap_ == lap_) || mark_count_ == max_marks) {
-            newest = Mark{fence, top_, lap_};
+        if ((newest.top_ == sealed_ && newest.lap_ == sealed_lap_) || mark_count_ == max_marks) {
+            newest = Mark{fence, sealed_, sealed_lap_};
             return;
         }
     }
-    marks_[(first_mark_ + mark_count_) % max_marks] = Mark{fence, top_, lap_};
+    marks_[(first_mark_ + mark_count_) % max_marks] = Mark{fence, sealed_, sealed_lap_};
     mark_count_++;
 }
 
@@ -137,6 +144,9 @@ void ClientBlobArena::retire_through(uint64_t fence)
         first_mark_ = (first_mark_ + 1u) % max_marks;
         mark_count_--;
     }
+    /* Marks left cover nothing past base_, and a lease taken at the start
+     * has the whole block above it rather than what the last lap left. */
+    if (!wrapped_ && base_ == top_) empty();
 }
 
 /* Only a top no lease lives in, so the leases keep the room they have. */
@@ -188,7 +198,11 @@ bool ClientBlobArena::invariants_hold() const
     AV_SCOPE("ClientBlobArena::invariants_hold");
     const bool laid = wrapped_ ? top_ <= base_ && base_ <= end_ && end_ <= capacity_
                                : base_ <= top_ && top_ <= capacity_;
-    return laid && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u) && mark_count_ <= max_marks &&
+    /* The seal is on base_'s lap at or above it - below end_ once wrapped -
+     * or on top_'s new lap at or below top_. */
+    const bool sealed = sealed_lap_ == base_lap_ ? base_ <= sealed_ && sealed_ <= (wrapped_ ? end_ : top_)
+                                                 : wrapped_ && sealed_lap_ == lap_ && sealed_ <= top_;
+    return laid && sealed && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u) && mark_count_ <= max_marks &&
            first_mark_ < max_marks && (wrapped_ ? lap_ == base_lap_ + 1u : lap_ == base_lap_);
 }
 

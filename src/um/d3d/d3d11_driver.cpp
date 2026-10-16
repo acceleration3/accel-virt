@@ -26,7 +26,7 @@ constexpr uint64_t slice_store_bytes = uint64_t{128} << 20u;
 D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     : memory_(memory), log_(log), trace_(), rows_(), devices_(memory),
       adapters_(kmt, memory, log, "the host answers no Direct3D 11 on this adapter", session_arena_bytes, slice_store_bytes,
-                d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Finish11, d3dproto::kCmd_Flush11)
+                d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Flush11)
 {
     AV_SCOPE("D3d11Driver::D3d11Driver");
     trace_.open();

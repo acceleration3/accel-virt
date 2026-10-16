@@ -25,7 +25,6 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
-#include "icd/common/locked_transport.hpp"
 #include "icd/opencl/cl_d3d11_objects.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_property_list.hpp"
@@ -73,7 +72,7 @@ public:
      * memory and crosses in pieces (docs/protocol.md, "Long commands"), so
      * this sizes what is batched, not what can be sent. */
     static constexpr size_t   staging_bytes = 256u * 1024u;
-    /* The calls held before they go as one batch (icd::BatchedTransport):
+    /* The calls the transport holds before they go as one batch (hold_in):
      * two of the largest a command can be, well inside the ring. */
     static constexpr size_t   batch_bytes = 2u * staging_bytes;
     static constexpr uint64_t arena_bytes = uint64_t{32} << 20u;
@@ -198,13 +197,11 @@ private:
     void                 teardown();
 
     BlockSource        &memory_;
-    icd::ThreadLock    &send_lock_;
     LogSink       &log_;
     icd::ContextLink    link_;
     uint32_t            gl_share_;
     bool                wakes_;
     icd::HostChannel                     channel_;
-    ObjectStorage<icd::LockedTransport>  locked_;
     ClArenaBlocks                        blocks_;
     ClArenaBlocks                        staging_;
     SvmTable                             svm_;

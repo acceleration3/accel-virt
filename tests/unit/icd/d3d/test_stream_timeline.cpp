@@ -44,7 +44,7 @@ class Fixture {
 public:
     explicit Fixture(std::uint16_t views)
         : connection_(kmt_), transport_(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes),
-          stream_(transport_, block_, block_bytes), lock_(trace_, 'S'), timeline_(stream_, transport_, lock_)
+          stream_(transport_), lock_(trace_, 'S'), timeline_(stream_, transport_, lock_)
     {
         kmt_.add_adapter(av, 3200u);
         kmt_.answer_views_up_to(views);
@@ -53,6 +53,7 @@ public:
         static_cast<void>(kmt_.enumerate_adapters(adapters, 1u, count));
         CHECK_STATUS(connection_.open(adapters[0]), Status::ok);
         CHECK_STATUS(transport_.initialize(), Status::ok);
+        transport_.hold_in(block_, block_bytes);
     }
     ~Fixture() { transport_.teardown(); }
 

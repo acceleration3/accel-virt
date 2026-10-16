@@ -53,14 +53,13 @@ public:
     /* `arena_size` is the blob arena the session opens: bulk data crosses
      * through it, and query results and the slice store's bookkeeping take
      * its end. */
-    /* `select_command`, `finish_command` and `flush_command` are what the
-     * session's stream selects a device, waits for the host and flushes with
-     * (D3dCommandStream::speak_with): Direct3D 11's for 11 and 12, Direct3D
-     * 9's for 9. */
+    /* `select_command` and `flush_command` are what the session's stream
+     * selects a device and flushes with (D3dCommandStream::speak_with):
+     * Direct3D 11's for 11 and 12, Direct3D 9's for 9. */
     /* `slice_store_size` is the host upload memory dynamic buffers are drawn
      * from in place: 0 for a runtime that places none there. */
     D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint64_t slice_store_size,
-               uint32_t select_command, uint32_t finish_command, uint32_t flush_command);
+               uint32_t select_command, uint32_t flush_command);
     ~D3dSession();
     D3dSession(const D3dSession &) = delete;
     D3dSession &operator=(const D3dSession &) = delete;
@@ -126,7 +125,6 @@ private:
      * place. */
     void    open_slices();
 
-    BlockSource                         &memory_;
     LogSink                        &log_;
     SrwLock                              lock_;
     GuestConnection                      connection_;
@@ -139,11 +137,9 @@ private:
     HostAllocation                      *slice_store_;
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
-    uint8_t                             *batch_;
     uint32_t                             members_;
     uint32_t                             next_id_;
     uint32_t                             select_command_;
-    uint32_t                             finish_command_;
     uint32_t                             flush_command_;
 };
 

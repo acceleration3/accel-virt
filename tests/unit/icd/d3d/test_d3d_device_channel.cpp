@@ -61,7 +61,8 @@ using av::KmtTransportProbe;
 namespace {
 
 const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
-constexpr std::uint8_t  ring_order = 16u;
+/* A ring that takes a whole held block, as the session's does. */
+constexpr std::uint8_t  ring_order = 20u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::size_t   block_bytes = D3dCommandStream::command_room + 4096u;
@@ -72,7 +73,7 @@ class Fixture {
 public:
     Fixture()
         : connection_(kmt_), transport_(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes),
-          stream_(transport_, block_, block_bytes), lock_(trace_, 'P'), a_(stream_, lock_, device_a),
+          stream_(transport_), lock_(trace_, 'P'), a_(stream_, lock_, device_a),
           b_(stream_, lock_, device_b), twelve_(stream_, lock_, 0u)
     {
         kmt_.add_adapter(av, 3200u);
@@ -81,6 +82,7 @@ public:
         static_cast<void>(kmt_.enumerate_adapters(adapters, 1u, count));
         CHECK_STATUS(connection_.open(adapters[0]), Status::ok);
         CHECK_STATUS(transport_.initialize(), Status::ok);
+        transport_.hold_in(block_, block_bytes);
     }
     ~Fixture() { transport_.teardown(); }
 
@@ -169,24 +171,27 @@ TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
   CHECK(!fixture.lock().held());
   CHECK(std::strcmp(fixture.trace().text(), "Pp") == 0); }
 
-/* A full arena is emptied by one Finish, and the room is asked once the
- * answer retired the leases: asked before, a full arena refused every first
- * upload that needed it (DWM's "an upload larger than the arena"). */
-TEST(d3d_device_channel, room_is_made_by_one_finish_in_a_full_arena)
+/* A full arena whose leases the commands the stream holds name is emptied
+ * by sending them and waiting for the host to run them - not by a Finish,
+ * whose answer once retired leases the host had not been sent yet - and the
+ * room is asked once they are back: asked before, a full arena refused every
+ * first upload that needed it (DWM's "an upload larger than the arena"). */
+TEST(d3d_device_channel, room_held_commands_hold_comes_back_once_they_are_sent_and_run)
 { Fixture fixture;
   alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
+  static std::uint8_t             upload[sizeof block];
   av::ClientBlobArena &arena = fixture.transport().blobs();
   arena.lend(block, sizeof block);
-  CHECK(arena.take(arena.room()).taken());
+  const Box whole = {};
+  CHECK(av_d3d_UpdateSubresource(fixture.a(), 1u, 0u, 0u, whole, 0u, 0u, 0u, upload, sizeof upload));
   CHECK_EQ(arena.room(), 0u);
-  std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
-  CHECK(reply != nullptr);
-  static_cast<void>(av::ReplyHeader(1u, 4u).encode(reply, av::ReplyHeader::encoded_size));
-  const std::uint32_t answered = 0u;
-  std::memcpy(reply + av::ReplyHeader::encoded_size, &answered, sizeof answered);
+  CHECK_EQ(fixture.kmt().commands(), 0u);
   const std::size_t past_inline = av::d3d::D3dCommandStream::inline_data + 1u;
   CHECK(fixture.a().make_room_for(past_inline));
   CHECK(arena.room() >= past_inline);
+  std::uint32_t ids[4] = {}, selected[4] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
+  CHECK_EQ(ids[1], kCmd_UpdateSubresource);
   CHECK(!fixture.lock().held()); }
 
 /* Room a published batch holds comes back by waiting for the host to run
@@ -370,8 +375,7 @@ void answer_create9(Fixture &fixture, std::uint32_t hresult)
  * would name a device the host keeps no Direct3D 11 state for. */
 TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3d_9)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
-                            av::d3d9proto::kCmd_Flush9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
   answer_create9(fixture, 0u);
   std::uint32_t hresult = 1u;
   CHECK(fixture.a().open9(hresult));
@@ -401,8 +405,7 @@ TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3
  * faults the whole session. */
 TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
-                            av::d3d9proto::kCmd_Flush9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
   answer_create9(fixture, 0u);
   std::uint32_t hresult = 1u;
   CHECK(fixture.a().open9(hresult));
@@ -426,8 +429,7 @@ TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
  * flush. The flush names its device first, or the host has none selected. */
 TEST(d3d_device_channel, an_application_flush_after_the_selected_device_closed_selects_its_own)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
-                            av::d3d9proto::kCmd_Flush9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
   CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.a(), 7u));
   CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.b(), 8u));
   CHECK(fixture.b().close9());
@@ -441,8 +443,7 @@ TEST(d3d_device_channel, an_application_flush_after_the_selected_device_closed_s
 
 TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_no_lock)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
-                            av::d3d9proto::kCmd_Flush9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
   std::uint32_t hresult = 0u;
   CHECK(!fixture.a().open9(hresult));
@@ -452,8 +453,7 @@ TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_n
  * its next command selects it first. */
 TEST(d3d_device_channel, a_refused_direct3d_9_open_leaves_the_next_command_to_select)
 { Fixture fixture;
-  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Finish9,
-                            av::d3d9proto::kCmd_Flush9);
+  fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
   answer_create9(fixture, 0x8876086Cu);
   std::uint32_t hresult = 0u;
   CHECK(fixture.a().open9(hresult));
@@ -541,22 +541,25 @@ TEST(d3d_device_channel, a_failed_stream_runs_no_command_list)
   CHECK_STATUS(fixture.b().execute(list, length), Status::invalid_state);
   CHECK(!fixture.lock().held()); }
 
-/* The stream holds one command's room past what it has recorded, so a list
- * longer than that makes room by flushing - for the list itself behind a
- * pile of draws, or for the clear after it - and a flush the kernel refuses
- * fails the command list, with no lock kept. */
+/* The transport holds what the stream sends in one block, so a list that
+ * does not fit behind a pile of draws sends them first, and a clear that does
+ * not fit behind a list nearly the block's size sends the list first - and a
+ * flush the kernel refuses fails the command list, with no lock kept. */
 TEST(d3d_device_channel, a_flush_the_kernel_refuses_fails_the_command_list)
-{ static std::uint8_t list[16384] = {};
-  const std::size_t length = recorded_draws(list, sizeof list, 300u);
+{ static std::uint8_t list[block_bytes] = {};
+  constexpr std::size_t draw = av::CommandHeader::encoded_size + 8u;
+  const std::size_t     length = recorded_draws(list, sizeof list, 300u);
   CHECK(length > 4096u);
   { Fixture fixture;
-    for (std::uint32_t draw = 0u; draw < 300u; draw++) CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+    while (fixture.stream().recorded_bytes() + length <= block_bytes) CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
     fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
     CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
     CHECK(!fixture.lock().held()); }
+  const std::size_t nearly_whole = recorded_draws(list, sizeof list, static_cast<std::uint32_t>((block_bytes - 512u) / draw));
+  CHECK(nearly_whole + draw + staging_bytes > block_bytes);
   { Fixture fixture;
     fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
-    CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
+    CHECK_STATUS(fixture.a().execute(list, nearly_whole), Status::invalid_state);
     CHECK(fixture.stream().failed());
     CHECK(!fixture.lock().held()); } }
 
@@ -580,3 +583,35 @@ TEST(d3d_device_channel, a_refused_flush_for_the_clear_before_a_list_fails_it)
   CHECK_STATUS(fixture.a().execute(list, length), Status::invalid_state);
   CHECK(fixture.stream().failed());
   CHECK(!fixture.lock().held()); }
+
+/* The publish barrier before another process opens what a device made - a
+ * shared resource's key, which DWM opens on a context of its own: what the
+ * stream holds goes with a no-op behind it, under the lock, and returns once
+ * the host has answered. A recording sends nothing, and a stream whose
+ * transport lost the context fails it. */
+TEST(d3d_device_channel, the_publish_barrier_runs_what_is_held_under_the_lock)
+{ Fixture fixture;
+  CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
+  fixture.trace().clear();
+  fixture.kmt().queue_answer(nullptr, 0u);
+  CHECK_STATUS(fixture.a().run_held(), Status::ok);
+  CHECK(std::strcmp(fixture.trace().text(), "Pp") == 0);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  std::uint32_t ids[4] = {}, selected[4] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 3u);
+  CHECK_EQ(ids[1], kCmd_Draw);
+  CHECK_EQ(ids[2], av::CommandHeader::nop_id);
+  CHECK(!fixture.stream().failed());
+  fixture.kmt().withhold_answer_at(1u);
+  CHECK_STATUS(fixture.a().run_held(), Status::invalid_state);
+  CHECK(fixture.stream().failed());
+  CHECK_STATUS(fixture.a().run_held(), Status::invalid_state);
+  CHECK(!fixture.lock().held());
+  Fixture recording;
+  av::MockPlatform          platform;
+  av::d3d::CommandRecording recorded(platform, block_bytes, block_bytes);
+  CHECK_STATUS(recorded.initialize(), Status::ok);
+  recording.stream().record(recorded);
+  CHECK_STATUS(recording.a().run_held(), Status::invalid_state);
+  CHECK_EQ(recording.kmt().commands(), 0u);
+  CHECK(!recording.stream().failed()); }

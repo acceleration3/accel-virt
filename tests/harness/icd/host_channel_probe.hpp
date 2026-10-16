@@ -22,9 +22,11 @@ struct HostChannelProbe {
      * close is what frees it. */
     uint8_t *swap_staging(uint8_t *staging);
     uint8_t *swap_batch_block(uint8_t *block);
-    /* The batch taken away and put back over the channel's own block. */
-    void     drop_batched();
-    void     restore_batched();
+    /* The lock around the transport taken away and put back; the
+     * transport made to hold in the channel's block again. */
+    void     drop_locked();
+    void     restore_locked();
+    void     restore_holding();
     /* A transport over `device` that no open made, never initialized; and
      * the channel's transport taken away, with nothing told. */
     void     build_transport(GuestConnection &device);

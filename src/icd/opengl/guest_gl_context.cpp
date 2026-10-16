@@ -32,10 +32,10 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
                                LogSink &log, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
-    : memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
+    : memory_(memory), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes)), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), frames_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), frames_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -185,9 +185,7 @@ void GuestGlContext::flush()
 {
     AV_SCOPE("GuestGlContext::flush");
     if (state_ != State::made) return;
-    send_lock_.acquire();
-    const TransportResult sent = channel_.batched().flush();
-    send_lock_.release();
+    const TransportResult sent = channel_.flush();
     if (sent != TransportResult::ok) log_.write("avgl: the held calls could not be sent");
 }
 
@@ -195,17 +193,7 @@ Status GuestGlContext::run_held()
 {
     AV_SCOPE("GuestGlContext::run_held");
     if (state_ != State::made) return Status::invalid_state;
-    send_lock_.acquire();
-    ClientTransport      &batch = channel_.batched();
-    WireWriter            request = batch.request_writer();
-    WireReader            answer(nullptr, 0u);
-    TransportResult       sent = TransportResult::failed;
-    {
-        const SyncCallScope call{batch};
-        sent = batch.send_sync(CommandHeader::nop_id, request, answer);
-    }
-    send_lock_.release();
-    if (sent == TransportResult::ok) return Status::ok;
+    if (channel_.run_held() == Status::ok) return Status::ok;
     log_.write("avgl: the held calls could not be run for another API");
     return Status::invalid_state;
 }
@@ -240,11 +228,11 @@ ClientTransport *GuestGlContext::wire()
         state_ = State::lost;
         log_.write("avgl: the context's device faulted; the context is lost");
     }
-    /* The batch itself, with no lock: WGL lets a context be current on one
-     * thread at a time, and it is only ever called on that one. The lock
+    /* The transport itself, with no lock: WGL lets a context be current on
+     * one thread at a time, and it is only ever called on that one. The lock
      * every call took serialised each context's calls against every other
      * context's, and cost a sixth of a draw-heavy thread's time. */
-    return state_ == State::made ? &channel_.batched() : nullptr;
+    return state_ == State::made ? &channel_.transport() : nullptr;
 }
 
 ClientArrayState &GuestGlContext::arrays()
@@ -469,7 +457,7 @@ uint64_t GuestGlContext::adapter_luid() const
 bool GuestGlContext::learn()
 {
     AV_SCOPE("GuestGlContext::learn");
-    ClientTransport &wire = channel_.batched();
+    ClientTransport &wire = channel_.transport();
     for (uint32_t row = 0u; row < strings; row++) {
         size_t length = 0u;
         if (!glproto::av_glGetString(wire, string_names[row], strings_[row], string_bytes - 1u, &length))
@@ -528,7 +516,7 @@ void GuestGlContext::teardown()
     /* A made context's host is still there to delete its staging buffer: a
      * buffer outlives its context while another shares its objects. */
     if (state_ == State::made)
-        staging_.release(channel_.batched());
+        staging_.release(channel_.transport());
     else
         staging_.forget();
     /* What the application sent last still reaches the host before its

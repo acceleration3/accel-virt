@@ -5,16 +5,15 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/thread_lock.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::icd {
 
 Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log)
-    : kmt_(kmt), lock_(lock), search_(kmt), connection_(kmt),
-      channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u)),
-      locked_(), luid_(0u), name_(), host_dma_buf_(false)
+    : kmt_(kmt), search_(kmt), connection_(kmt),
+      channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
+               lock),
+      opened_(false), luid_(0u), name_(), host_dma_buf_(false)
 {
     AV_SCOPE("Connection::Connection");
 }
@@ -39,7 +38,7 @@ Status Connection::open(uint64_t luid)
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
     const Status opened = channel_.open(connection_);
     if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::not_supported;
-    static_cast<void>(locked_.construct(channel_.transport(), lock_));
+    opened_ = true;
     undo.dismiss();
     return Status::ok;
 }
@@ -47,7 +46,7 @@ Status Connection::open(uint64_t luid)
 void Connection::close()
 {
     AV_SCOPE("Connection::close");
-    locked_.destroy();
+    opened_ = false;
     /* No batch and no arena: nothing differs for a faulted channel. */
     channel_.close(false);
     connection_.close();
@@ -71,7 +70,7 @@ void Connection::report(StateWriter &writer) const
 bool             Connection::opened() const
 {
     AV_SCOPE("Connection::opened");
-    return locked_.constructed();
+    return opened_;
 }
 bool             Connection::faulted() const
 {
@@ -110,37 +109,36 @@ uint64_t Connection::submissions() const
 ClientTransport &Connection::transport()
 {
     AV_SCOPE("Connection::transport");
-    return locked_.object();
+    return channel_.wire();
 }
 
 TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
 {
     AV_SCOPE("Connection::send_batch");
-    const icd::ThreadLockHold release(lock_);
-    WireReader unanswered(nullptr, 0u);
-    return channel_.transport().send_batch(framed, length, unanswered);
+    return channel_.send_batch(framed, length);
+}
+
+TransportResult Connection::send_command(uint32_t command_id, WireWriter &writer)
+{
+    AV_SCOPE("Connection::send_command");
+    return channel_.send_command(command_id, writer);
 }
 
 Status Connection::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
 {
     AV_SCOPE("Connection::open_memory");
-    made = nullptr;
-    if (!opened() || faulted()) return Status::invalid_state;
-    const icd::ThreadLockHold release(lock_);
     return channel_.open_memory(bytes, memory, made);
 }
 
 Status Connection::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("Connection::close_memory");
-    const icd::ThreadLockHold release(lock_);
     return channel_.close_memory(allocation);
 }
 
 HostAllocation *Connection::find_memory(uint64_t handle)
 {
     AV_SCOPE("Connection::find_memory");
-    const icd::ThreadLockHold release(lock_);
     return channel_.find_memory(handle);
 }
 

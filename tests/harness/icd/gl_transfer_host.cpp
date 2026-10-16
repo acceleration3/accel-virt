@@ -395,7 +395,13 @@ TransportResult GlTransferHost::send_sync(std::uint32_t command_id, WireWriter &
     return TransportResult::ok;
 }
 
-void             GlTransferHost::end_call() { blobs_.retire_all(); }
+/* Every command ran as it was sent: each is its own batch, run at once. */
+void GlTransferHost::end_call()
+{
+    blobs_.seal();
+    blobs_.mark(commands_);
+    blobs_.retire_through(commands_);
+}
 WireArena       &GlTransferHost::decode_arena() { return guest_arena_; }
 ClientBlobArena &GlTransferHost::blobs() { return blobs_; }
 

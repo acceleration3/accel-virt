@@ -1,7 +1,9 @@
-/* Room a large array is lent to cross as a blob. What matters to the OpenGL
- * client: a lease is handed out only from a ready arena with room, a lease
- * carries somewhere to copy to and an offset the host reads back, and the top
- * lease's room comes back when its command overflowed before it was sent. */
+/* Room a large array is lent to cross as a blob. What matters to the
+ * clients: a lease is handed out only from a ready arena with room, a lease
+ * carries somewhere to copy to and an offset the host reads back, the top
+ * lease's room comes back when its command overflowed before it was framed,
+ * and a lease is lent again only once the host has run the batch that
+ * carried the whole of its command. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/client/client_blob_arena.hpp"
 
@@ -32,6 +34,11 @@ struct ClientBlobArenaProbe {
         arena.capacity_ = 1u;
     }
     static void outgrow(ClientBlobArena &arena) { arena.capacity_ = arena.lent_ + 1u; }
+    /* A seal behind the oldest live lease, ahead of the newest, or on a lap
+     * neither is on. */
+    static void seal_behind(ClientBlobArena &arena) { arena.sealed_ = arena.base_ - 1u; }
+    static void seal_ahead(ClientBlobArena &arena) { arena.sealed_ = arena.top_ + 1u; }
+    static void seal_on_a_lost_lap(ClientBlobArena &arena) { arena.sealed_lap_ = arena.lap_ + 1u; }
 };
 
 }  // namespace av
@@ -110,18 +117,22 @@ TEST(client_blob_arena, an_untaken_lease_given_back_is_a_no_op)
   static_cast<void>(taken);
   CHECK(arena.invariants_hold()); }
 
-/* Every lease retires at once when an answer shows the host has read them
- * all: the next take starts at the beginning again, and the room is whole. */
-TEST(client_blob_arena, retiring_returns_every_lease_and_the_next_take_starts_at_zero)
+/* Once the host has run what carried every live lease, the next take starts
+ * at the beginning again with the whole block above it - not where the last
+ * lap left off, which would refuse a lease the empty arena has room for. */
+TEST(client_blob_arena, an_arena_emptied_by_the_host_lends_from_its_start_again)
 { std::uint8_t block[64];
   ClientBlobArena arena(block, sizeof block);
   ClientBlobLease first = arena.take(16u);
-  ClientBlobLease second = arena.take(48u);
+  ClientBlobLease second = arena.take(32u);
   CHECK(first.taken());
   CHECK(second.taken());
-  CHECK(!arena.take(1u).taken());
-  arena.retire_all();
+  CHECK(!arena.take(17u).taken());
+  arena.seal();
+  arena.mark(1u);
+  arena.retire_through(1u);
   CHECK_EQ(arena.used(), 0u);
+  CHECK_EQ(arena.room(), 64u);
   CHECK(arena.invariants_hold());
   ClientBlobLease again = arena.take(64u);
   CHECK(again.taken());
@@ -129,18 +140,65 @@ TEST(client_blob_arena, retiring_returns_every_lease_and_the_next_take_starts_at
   CHECK(again.data() == block);
   CHECK_EQ(arena.used(), 64u);
   CHECK(arena.invariants_hold());
-  /* A retire with nothing lent leaves it empty. */
-  arena.retire_all();
-  arena.retire_all();
-  CHECK_EQ(arena.used(), 0u);
+  /* Retiring with nothing marked leaves the live lease where it is. */
+  arena.retire_through(1u);
+  arena.retire_through(9u);
+  CHECK_EQ(arena.used(), 64u);
   CHECK(arena.invariants_hold()); }
 
 TEST(client_blob_arena, retiring_an_arena_with_no_block_keeps_it_unready)
 { ClientBlobArena arena;
-  arena.retire_all();
+  arena.seal();
+  arena.mark(1u);
+  arena.retire_through(1u);
   CHECK(!arena.ready());
   CHECK_EQ(arena.used(), 0u);
   CHECK(!arena.take(1u).taken());
+  CHECK(arena.invariants_hold()); }
+
+/* A command framed in pieces is published before it is whole: a batch that
+ * carries its first pieces, run by the host, must not retire the lease the
+ * command names, which the host reads only when the last piece arrives. Its
+ * room stays lent - not taken again - until a batch marked after the seal
+ * has run. */
+TEST(client_blob_arena, an_unsealed_lease_outlives_every_batch_marked_before_its_seal)
+{ std::uint8_t block[100];
+  ClientBlobArena arena(block, sizeof block);
+  CHECK(arena.take(10u).taken());
+  arena.seal();
+  arena.mark(1u);
+  const ClientBlobLease open = arena.take(60u);
+  CHECK_EQ(open.offset(), 10u);
+  arena.mark(2u);   /* the open command's first piece */
+  arena.mark(3u);   /* and its second */
+  arena.retire_through(3u);
+  CHECK_EQ(arena.used(), 60u);
+  /* 30 above, 10 below: the open lease's room is not lent again. */
+  CHECK(!arena.take(31u).taken());
+  const ClientBlobLease below = arena.take(10u);
+  CHECK(below.taken());
+  CHECK_EQ(below.offset(), 70u);
+  CHECK(arena.invariants_hold());
+  arena.seal();
+  arena.mark(4u);   /* the command itself */
+  arena.retire_through(3u);
+  CHECK_EQ(arena.used(), 70u);
+  arena.retire_through(4u);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+/* A lease whose command was framed is sealed: giving it back would let the
+ * next lease be copied over what a batch already names. */
+TEST(client_blob_arena, a_sealed_lease_is_not_given_back)
+{ std::uint8_t block[64];
+  ClientBlobArena arena(block, sizeof block);
+  const ClientBlobLease framed = arena.take(16u);
+  arena.seal();
+  arena.give_back(framed);
+  CHECK_EQ(arena.used(), 16u);
+  const ClientBlobLease dropped = arena.take(8u);
+  arena.give_back(dropped);
+  CHECK_EQ(arena.used(), 16u);
   CHECK(arena.invariants_hold()); }
 
 /* Memory lent later - a GL context's chunk once it is imported - replaces the
@@ -181,7 +239,9 @@ TEST(client_blob_arena, room_set_aside_comes_off_the_top_and_goes_back_last_firs
   const av::ClientBlobLease more = arena.set_aside(16u);
   CHECK_EQ(more.offset(), 16u);
   CHECK_EQ(arena.room(), 8u);
-  arena.retire_all();
+  arena.seal();
+  arena.mark(1u);
+  arena.retire_through(1u);
   CHECK_EQ(arena.room(), 16u);
   CHECK(!arena.take(17u).taken());
   CHECK(arena.invariants_hold());
@@ -218,7 +278,23 @@ TEST(client_blob_arena, the_invariant_catches_impossible_states)
   ClientBlobArena lapped(other, sizeof other);
   ClientBlobArenaProbe::lose_a_lap(lapped);
   CHECK(!lapped.invariants_hold());
-  CHECK(!outgrown.invariants_hold()); }
+  CHECK(!outgrown.invariants_hold());
+  ClientBlobArena behind(other, sizeof other);
+  CHECK(behind.take(8u).taken());
+  behind.seal();
+  behind.mark(1u);
+  CHECK(behind.take(8u).taken());
+  behind.retire_through(1u);
+  CHECK(behind.invariants_hold());
+  ClientBlobArenaProbe::seal_behind(behind);
+  CHECK(!behind.invariants_hold());
+  ClientBlobArena ahead(other, sizeof other);
+  CHECK(ahead.take(8u).taken());
+  ClientBlobArenaProbe::seal_ahead(ahead);
+  CHECK(!ahead.invariants_hold());
+  ClientBlobArena lost(other, sizeof other);
+  ClientBlobArenaProbe::seal_on_a_lost_lap(lost);
+  CHECK(!lost.invariants_hold()); }
 
 /* Bytes already inside the block cross by offset, with no lease: the first
  * and last byte of it, a span ending on its last byte, and room set aside -
@@ -260,8 +336,10 @@ TEST(client_blob_arena, a_run_batch_retires_the_leases_taken_before_it)
 { std::uint8_t block[100];
   ClientBlobArena arena(block, sizeof block);
   CHECK(arena.take(30u).taken());
+  arena.seal();
   arena.mark(1u);
   CHECK(arena.take(30u).taken());
+  arena.seal();
   arena.mark(2u);
   CHECK_EQ(arena.used(), 60u);
   arena.retire_through(1u);
@@ -278,8 +356,10 @@ TEST(client_blob_arena, a_lease_wraps_to_the_start_once_the_oldest_are_retired)
 { std::uint8_t block[100];
   ClientBlobArena arena(block, sizeof block);
   CHECK(arena.take(40u).taken());
+  arena.seal();
   arena.mark(1u);
   CHECK(arena.take(40u).taken());
+  arena.seal();
   arena.mark(2u);
   CHECK(!arena.take(30u).taken());   /* 20 above, and nothing retired below */
   CHECK_EQ(arena.room(), 20u);
@@ -293,6 +373,7 @@ TEST(client_blob_arena, a_lease_wraps_to_the_start_once_the_oldest_are_retired)
   CHECK_EQ(arena.room(), 10u);       /* up to the oldest */
   CHECK(!arena.take(11u).taken());
   CHECK(arena.invariants_hold());
+  arena.seal();
   arena.mark(3u);
   /* The old lap's last batch, then the new lap's. */
   arena.retire_through(2u);
@@ -307,15 +388,19 @@ TEST(client_blob_arena, a_mark_on_the_next_lap_retires_the_rest_of_the_last)
 { std::uint8_t block[100];
   ClientBlobArena arena(block, sizeof block);
   CHECK(arena.take(60u).taken());
+  arena.seal();
   arena.mark(1u);
+  CHECK(arena.take(10u).taken());     /* 60..70, unsealed */
   arena.retire_through(1u);
-  CHECK(arena.take(30u).taken());     /* 60..90 */
+  CHECK(arena.take(20u).taken());     /* 70..90 */
   CHECK(arena.take(50u).taken());     /* wraps: 0..50 */
+  arena.seal();
   arena.mark(2u);
   CHECK_EQ(arena.used(), 80u);
+  CHECK(arena.invariants_hold());
   arena.retire_through(2u);
   CHECK_EQ(arena.used(), 0u);
-  CHECK_EQ(arena.room(), 50u);        /* 50..100 */
+  CHECK_EQ(arena.room(), 100u);       /* empty: lent from the start again */
   CHECK(arena.invariants_hold()); }
 
 /* A batch that took nothing, or one past the marks there is room for, is
@@ -324,14 +409,16 @@ TEST(client_blob_arena, a_batch_that_took_nothing_or_had_no_slot_joins_the_newes
 { std::uint8_t block[1024];
   ClientBlobArena arena(block, sizeof block);
   CHECK(arena.take(10u).taken());
+  arena.seal();
   arena.mark(1u);
-  arena.mark(2u);                      /* nothing taken since */
+  arena.mark(2u);                      /* nothing sealed since */
   arena.retire_through(1u);
   CHECK_EQ(arena.used(), 10u);         /* the mark now waits for 2 */
   arena.retire_through(2u);
   CHECK_EQ(arena.used(), 0u);
   for (std::uint64_t fence = 3u; fence < 3u + ClientBlobArena::max_marks + 2u; fence++) {
       CHECK(arena.take(1u).taken());
+      arena.seal();
       arena.mark(fence);
   }
   const std::uint64_t last = 3u + ClientBlobArena::max_marks + 1u;
@@ -347,6 +434,7 @@ TEST(client_blob_arena, the_first_lease_of_a_lap_given_back_undoes_the_wrap)
 { std::uint8_t block[100];
   ClientBlobArena arena(block, sizeof block);
   CHECK(arena.take(50u).taken());
+  arena.seal();
   arena.mark(1u);
   CHECK(arena.take(30u).taken());
   arena.retire_through(1u);
@@ -364,9 +452,11 @@ TEST(client_blob_arena, room_is_not_set_aside_where_a_lease_still_lives)
 { std::uint8_t block[100];
   ClientBlobArena arena(block, sizeof block);
   CHECK(arena.take(70u).taken());
+  arena.seal();
   arena.mark(1u);
   CHECK(!arena.set_aside(40u).taken());
   CHECK(arena.take(10u).taken());      /* 70..80 */
+  arena.seal();
   arena.mark(2u);
   arena.retire_through(1u);
   CHECK(arena.take(25u).taken());      /* 20 left above: wraps to 0..25, the lap ending at 80 */

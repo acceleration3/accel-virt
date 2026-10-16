@@ -14,6 +14,7 @@
 #include "icd/common/host_channel.hpp"
 #include "proto/context/sub_api.hpp"
 #include "core/trace/function_scope.hpp"
+#include "um/common/srw_lock.hpp"
 #include "um/d3d/d3d_session.hpp"
 
 #include <stdint.h>
@@ -35,11 +36,9 @@ public:
     /* `refusal` says the host answered no capabilities for an adapter. A
      * session opens an arena of `arena_bytes`, a slice store of
      * `slice_store_bytes` (none for 0) where the host draws in place, and
-     * selects, finishes and flushes with the runtime's three commands
-     * (D3dCommandStream). */
+     * selects and flushes with the runtime's two commands (D3dCommandStream). */
     AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &log, const char *refusal, uint64_t arena_bytes,
-                    uint64_t slice_store_bytes, uint32_t select_command, uint32_t finish_command,
-                    uint32_t flush_command);
+                    uint64_t slice_store_bytes, uint32_t select_command, uint32_t flush_command);
     AdapterSessions(const AdapterSessions &) = delete;
     AdapterSessions &operator=(const AdapterSessions &) = delete;
 
@@ -79,7 +78,6 @@ private:
     uint64_t                       arena_bytes_;
     uint64_t slice_store_bytes_;
     uint32_t                       select_command_;
-    uint32_t                       finish_command_;
     uint32_t                       flush_command_;
     Caps                           caps_[max_adapters];
     ObjectStorage<d3d::D3dSession> sessions_[max_adapters][generations];
@@ -91,10 +89,10 @@ private:
 template <typename Caps>
 AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &log, const char *refusal,
                                        uint64_t arena_bytes, uint64_t slice_store_bytes, uint32_t select_command,
-                                       uint32_t finish_command, uint32_t flush_command)
+                                       uint32_t flush_command)
     : kmt_(kmt), memory_(memory), log_(log), lines_(log, "avumd: "), refusal_(refusal), arena_bytes_(arena_bytes),
       slice_store_bytes_(slice_store_bytes),
-      select_command_(select_command), finish_command_(finish_command), flush_command_(flush_command), caps_(),
+      select_command_(select_command), flush_command_(flush_command), caps_(),
       sessions_(), current_{}, adapters_{}
 {
     AV_SCOPE("AdapterSessions::AdapterSessions");
@@ -127,9 +125,11 @@ bool AdapterSessions<Caps>::learn(Caps &caps, uint32_t kmt_adapter)
     GuestConnection connection(kmt_);
     if (connection.open(kmt_adapter) != Status::ok) return false;
     ScopeExit        closed([&] { connection.close(); });
+    SrwLock          unshared;
     icd::HostChannel probe(memory_, log_, "avumd: ",
                            icd::ChannelShape(SubApi::d3d, probe_ring_order, probe_reply_bytes, probe_staging_bytes,
-                                             0u, 0u));
+                                             0u, 0u),
+                           unshared);
     if (probe.open(connection) != Status::ok) return false;
     const bool learned = caps.learn(probe.transport(), kmt_, kmt_adapter);
     probe.close(false);
@@ -162,7 +162,7 @@ d3d::D3dSession &AdapterSessions<Caps>::session(uint32_t slot)
     }
     if (!rows[current].constructed())
         static_cast<void>(rows[current].construct(kmt_, memory_, log_, arena_bytes_, slice_store_bytes_,
-                                                  select_command_, finish_command_, flush_command_));
+                                                  select_command_, flush_command_));
     return rows[current].object();
 }
 

@@ -6,17 +6,20 @@
 #include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
+#include "guest/transport/blob_import.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/host_watch.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "guest/transport/publish_gate.hpp"
-#include "guest/transport/unsent_batch.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/guest/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/escape/context_views_record.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/submission/batch_header.hpp"
+#include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/ring_header.hpp"
@@ -55,6 +58,8 @@ struct KmtTransportProbe {
     static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0u; }
     /* An established context with its buffer, and no name. */
     static void nameless(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0x1000u; t.allocations_[0] = 0u; }
+    /* More held than the held block holds. */
+    static void overhold(KmtTransport &t) { FramedBlockProbe(t.pending_).used() = t.pending_.capacity() + 1u; }
 };
 
 }  // namespace av
@@ -1671,64 +1676,14 @@ std::size_t frame_batch(std::uint8_t *bytes, std::uint32_t id, std::uint32_t cou
     return size * count;
 }
 
+/* Framed commands none of which asks for an answer: published, not waited for. */
+TransportResult send_framed(KmtTransport &transport, const std::uint8_t *framed, std::size_t length)
+{
+    WireReader unanswered(nullptr, 0u);
+    return transport.send_batch(framed, length, unanswered);
+}
+
 }  // namespace
-
-/* A stream that framed its batch itself and knows none of it answers sends it
- * whole, waits for nothing, and the device finds every command in it. */
-TEST(kmt_transport, an_async_batch_is_sent_whole_without_a_wait)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.open(), Status::ok);
-  std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
-                         sizeof transport_staging);
-  std::uint8_t framed[3u * 12u] = {};
-  const std::size_t length = frame_batch(framed, 0x10001u, 3u, false);
-  /* Nothing is sent before the transport is made. */
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::failed);
-  CHECK_STATUS(transport.initialize(), Status::ok);
-  CHECK(transport.send_async_batch(nullptr, length) == TransportResult::failed);
-  CHECK(transport.send_async_batch(framed, 0u) == TransportResult::failed);
-  CHECK(transport.send_async_batch(framed, std::size_t{1} << 32u) == TransportResult::failed);
-  CHECK_EQ(fixture.kmt().commands(), 0u);
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u);
-  CHECK_EQ(fixture.kmt().commands(), 3u);
-  CHECK_EQ(fixture.kmt().command_id(0u), 0x10001u);
-  CHECK_EQ(fixture.kmt().command_id(2u), 0x10003u);
-  CHECK(transport.invariants_hold());
-  transport.teardown(); }
-
-/* A batch ending in the one command that answers is awaited, and the reply is
- * that command's. */
-TEST(kmt_transport, an_answered_batch_is_awaited_and_answers_its_last_command)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.open(), Status::ok);
-  std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
-                         sizeof transport_staging);
-  std::uint8_t framed[2u * 12u] = {};
-  const std::size_t length = frame_batch(framed, 0x20001u, 2u, true);
-  WireReader reply(framed, sizeof framed);
-  CHECK(transport.send_answered_batch(framed, length, reply) == TransportResult::failed);
-  CHECK_EQ(reply.remaining(), 0u);
-  CHECK_STATUS(transport.initialize(), Status::ok);
-  CHECK(transport.send_answered_batch(nullptr, length, reply) == TransportResult::failed);
-  CHECK(transport.send_answered_batch(framed, 0u, reply) == TransportResult::failed);
-  CHECK(transport.send_answered_batch(framed, std::size_t{1} << 32u, reply) == TransportResult::failed);
-  const std::uint8_t answer[] = {0x42u, 0x43u};
-  fixture.kmt().queue_answer(answer, sizeof answer);
-  CHECK(transport.send_answered_batch(framed, length, reply) == TransportResult::ok);
-  CHECK_EQ(reply.remaining(), 2u);
-  CHECK_EQ(reply.read_u8(), 0x42u);
-  transport.end_call();
-  CHECK_EQ(fixture.kmt().commands(), 2u);
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 1u);
-  CHECK_EQ(fixture.kmt().queued_answers(), 0u);
-  /* A wait that fails faults the transport: nothing more is sent. */
-  fixture.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
-  CHECK(transport.send_answered_batch(framed, length, reply) == TransportResult::failed);
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::failed);
-  transport.teardown(); }
 
 /* The host has taken every batch but the newest: one more now keeps it fed. A
  * second batch it has not begun is the one to hold back and grow. */
@@ -1742,16 +1697,16 @@ TEST(kmt_transport, is_ready_for_a_batch_while_the_host_holds_no_more_than_the_n
   CHECK(transport.ready_for_batch());
   std::uint8_t framed[12u] = {};
   const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
   CHECK(transport.ready_for_batch());
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
   CHECK(!transport.ready_for_batch());
   /* The device finishing what was sent - a wait plays it - moves the head. */
   std::uint8_t answered[12u] = {};
   const std::size_t last = frame_batch(answered, 0x10002u, 1u, true);
   fixture.kmt().queue_answer(nullptr, 0u);
   WireReader reply(nullptr, 0u);
-  CHECK(transport.send_answered_batch(answered, last, reply) == TransportResult::ok);
+  CHECK(transport.send_batch(answered, last, reply) == TransportResult::ok);
   transport.end_call();
   CHECK(transport.ready_for_batch());
   transport.teardown(); }
@@ -1797,12 +1752,12 @@ TEST(kmt_transport, a_held_transport_passes_the_gate_once_before_its_next_batch_
   std::uint8_t framed[12u] = {};
   const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
   const std::uint32_t before = fixture.kmt().commands();
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
   CHECK_EQ(gate.passes(), 1u);
   CHECK_EQ(gate.sent_at_pass(), before);
   CHECK_EQ(fixture.kmt().commands(), before + 1u);
   CHECK(transport.ready_for_batch());
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
   CHECK_EQ(gate.passes(), 1u);
   CHECK(transport.invariants_hold());
   transport.teardown(); }
@@ -1824,7 +1779,7 @@ TEST(kmt_transport, an_answered_call_on_a_held_transport_passes_the_gate_before_
   fixture.kmt().queue_answer(answer, sizeof answer);
   const std::uint32_t before = fixture.kmt().commands();
   WireReader reply(nullptr, 0u);
-  CHECK(transport.send_answered_batch(answered, length, reply) == TransportResult::ok);
+  CHECK(transport.send_batch(answered, length, reply) == TransportResult::ok);
   CHECK_EQ(reply.read_u8(), 0x42u);
   transport.end_call();
   CHECK_EQ(gate.passes(), 1u);
@@ -1849,7 +1804,7 @@ TEST(kmt_transport, a_gate_forgotten_drops_its_own_hold_and_no_other)
   CHECK(transport.ready_for_batch());
   std::uint8_t framed[12u] = {};
   const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
   CHECK_EQ(holding.passes(), 0u);
   CHECK_EQ(other.passes(), 0u);
   transport.teardown(); }
@@ -1869,155 +1824,8 @@ TEST(kmt_transport, a_torn_down_transport_forgets_what_held_it)
   CHECK(transport.ready_for_batch());
   std::uint8_t framed[12u] = {};
   const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
   CHECK_EQ(gate.passes(), 0u);
-  transport.teardown(); }
-
-namespace {
-
-/* A stream's held-back commands, as the Direct3D command stream holds them:
- * a framed batch it sends on the transport when asked, counting each time it
- * is asked. One that refuses fails as a stream the host refused does. */
-class HeldCommands final : public av::UnsentBatch {
-public:
-    HeldCommands(KmtTransport &transport, bool refuses)
-        : transport_(transport), refuses_(refuses), framed_{}, length_(0u), flushes_(0u)
-    {
-    }
-    void hold(std::uint32_t id) { length_ = frame_batch(framed_, id, 1u, false); }
-    Status flush() override
-    {
-        flushes_++;
-        if (refuses_) return Status::invalid_state;
-        if (length_ == 0u) return Status::ok;
-        const TransportResult sent = transport_.send_async_batch(framed_, length_);
-        length_ = 0u;
-        return sent == TransportResult::ok ? Status::ok : Status::invalid_state;
-    }
-    std::uint32_t flushes() const { return flushes_; }
-
-private:
-    KmtTransport &transport_;
-    bool          refuses_;
-    std::uint8_t  framed_[12u];
-    std::size_t   length_;
-    std::uint32_t flushes_;
-};
-
-}  // namespace
-
-/* Resident Evil 4's compute shaders: the stream held commands whose arrays
- * were in blob leases when a heap's import - a command of the transport's own
- * - was sent and answered. Sent first, it retired those leases, the next
- * shader was copied over them, and the host read it in place of the first.
- * Followed, the stream's batch reaches the device first, so the answer
- * retires leases the host has run, and the transport's commands keep their
- * place after the stream's. */
-TEST(kmt_transport, a_followed_stream_sends_what_it_holds_before_the_transport_s_own_command)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.open(), Status::ok);
-  std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
-                         sizeof transport_staging);
-  CHECK_STATUS(transport.initialize(), Status::ok);
-  std::uint8_t room[64] = {};
-  transport.blobs().lend(room, sizeof room);
-  HeldCommands stream(transport, false);
-  transport.send_after(stream);
-  /* The stream's command, its array in a lease, held back. */
-  CHECK(transport.blobs().take(16u).taken());
-  stream.hold(0x10001u);
-  const std::uint8_t nothing = 0u;
-  fixture.kmt().queue_answer(&nothing, 0u);
-  WireWriter sync = transport.request_writer();
-  sync.write_u32(1u);
-  WireReader got(nullptr, 0u);
-  CHECK(transport.send_sync(0x30002u, sync, got) == TransportResult::ok);
-  transport.end_call();
-  CHECK_EQ(stream.flushes(), 1u);
-  CHECK_EQ(fixture.kmt().commands(), 2u);
-  CHECK_EQ(fixture.kmt().command_id(0u), 0x10001u);
-  CHECK_EQ(fixture.kmt().command_id(1u), 0x30002u);
-  CHECK_EQ(transport.blobs().used(), 0u);
-  /* An asynchronous command of its own goes after the stream's too. */
-  stream.hold(0x10002u);
-  WireWriter async = transport.request_writer();
-  async.write_u32(2u);
-  CHECK(transport.send_async(0x30001u, async) == TransportResult::ok);
-  transport.end_call();
-  CHECK_EQ(stream.flushes(), 2u);
-  CHECK_EQ(fixture.kmt().commands(), 4u);
-  CHECK_EQ(fixture.kmt().command_id(2u), 0x10002u);
-  CHECK_EQ(fixture.kmt().command_id(3u), 0x30001u);
-  /* With nothing held back, asking costs no batch. */
-  WireWriter alone = transport.request_writer();
-  alone.write_u32(3u);
-  CHECK(transport.send_async(0x30001u, alone) == TransportResult::ok);
-  CHECK_EQ(stream.flushes(), 3u);
-  CHECK_EQ(fixture.kmt().commands(), 5u);
-  /* The stream's own batches are not sent ahead of themselves. */
-  std::uint8_t framed[12u] = {};
-  const std::size_t length = frame_batch(framed, 0x10003u, 1u, false);
-  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
-  CHECK_EQ(stream.flushes(), 3u);
-  CHECK(transport.invariants_hold());
-  transport.teardown(); }
-
-/* A stream that cannot send what it holds - its device is lost - keeps the
- * transport's command from going ahead of it: the command fails unsent, and
- * the context is not faulted for it. */
-TEST(kmt_transport, a_stream_that_cannot_send_fails_the_transport_s_command_unsent)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.open(), Status::ok);
-  std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
-                         sizeof transport_staging);
-  CHECK_STATUS(transport.initialize(), Status::ok);
-  HeldCommands stream(transport, true);
-  transport.send_after(stream);
-  WireWriter async = transport.request_writer();
-  async.write_u32(1u);
-  CHECK(transport.send_async(0x30001u, async) == TransportResult::failed);
-  WireWriter sync = transport.request_writer();
-  sync.write_u32(2u);
-  WireReader got(nullptr, 0u);
-  CHECK(transport.send_sync(0x30002u, sync, got) == TransportResult::failed);
-  transport.end_call();
-  CHECK_EQ(stream.flushes(), 2u);
-  CHECK_EQ(fixture.kmt().commands(), 0u);
-  CHECK(!transport.faulted());
-  transport.teardown(); }
-
-/* A session closing drops its own stream and no other's; a transport torn
- * down follows none. */
-TEST(kmt_transport, a_dropped_or_torn_down_stream_is_no_longer_sent_ahead)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.open(), Status::ok);
-  std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
-                         sizeof transport_staging);
-  CHECK_STATUS(transport.initialize(), Status::ok);
-  HeldCommands followed(transport, false);
-  HeldCommands other(transport, false);
-  transport.send_after(followed);
-  transport.drop(other);
-  WireWriter first = transport.request_writer();
-  first.write_u32(1u);
-  CHECK(transport.send_async(0x30001u, first) == TransportResult::ok);
-  CHECK_EQ(followed.flushes(), 1u);
-  transport.drop(followed);
-  WireWriter second = transport.request_writer();
-  second.write_u32(2u);
-  CHECK(transport.send_async(0x30001u, second) == TransportResult::ok);
-  CHECK_EQ(followed.flushes(), 1u);
-  transport.send_after(followed);
-  transport.teardown();
-  CHECK_STATUS(transport.initialize(), Status::ok);
-  WireWriter third = transport.request_writer();
-  third.write_u32(3u);
-  CHECK(transport.send_async(0x30001u, third) == TransportResult::ok);
-  CHECK_EQ(followed.flushes(), 1u);
-  CHECK_EQ(other.flushes(), 0u);
   transport.teardown(); }
 
 /* What a packet on another of this process's contexts names: the transport's
@@ -2078,11 +1886,8 @@ TEST(kmt_transport, a_command_longer_than_the_staging_goes_in_pieces_a_batch_eac
   /* 2500 bytes through 1016 a batch: two pieces and the command. */
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), submitted + 3u);
   CHECK(!transport.faulted());
-  /* The spill went back with the send: a writer from it now is a new one. */
-  av::WireSpill &spill = transport.spill();
-  std::size_t    capacity = 0u;
-  CHECK(spill.grow(nullptr, 0u, 1u, capacity) != nullptr);
-  transport.give_back_spill();
+  /* The spill went back with the send. */
+  CHECK_EQ(memory.live_allocations(), 0u);
   transport.teardown(); }
 
 /* The last batch's commands are what the mock journals: the final piece
@@ -2206,3 +2011,434 @@ TEST(kmt_transport, without_memory_a_command_past_the_staging_fails_alone)
   CHECK(transport.send_async(0x10007u, writer) == TransportResult::failed);
   CHECK(!transport.faulted());
   transport.teardown(); }
+
+/* ---- what the transport holds (hold_in) ------------------------------------
+ * A driver that batches has its commands held by the transport itself, so
+ * that a command of the transport's own goes behind them in the order the
+ * application made them, and a blob lease is retired only once the host has
+ * run the batch that carried the whole of the command naming it. */
+
+namespace {
+
+/* A transport over the fixture's connection, set up, holding in `block`
+ * unless it is null, with spill memory from `memory`. */
+class Holding {
+public:
+    Holding(Fixture &fixture, av::MockPlatform &memory, std::uint8_t ring_order, std::uint8_t *block,
+            std::size_t capacity)
+        : staging_{}, transport_(fixture.connection(), memory, SubApi::d3d, ring_order, reply_bytes, staging_,
+                                 sizeof staging_)
+    {
+        CHECK_STATUS(transport_.initialize(), Status::ok);
+        if (block != nullptr) transport_.hold_in(block, capacity);
+    }
+    ~Holding() { transport_.teardown(); }
+
+    KmtTransport &transport() { return transport_; }
+    /* A command of `body` bytes, sent asynchronously. */
+    TransportResult send(std::uint32_t id, std::uint32_t body)
+    {
+        WireWriter writer = transport_.request_writer();
+        writer.write_zeros(body);
+        return transport_.send_async(id, writer);
+    }
+
+private:
+    std::uint8_t staging_[staging_bytes];
+    KmtTransport transport_;
+};
+
+}  // namespace
+
+/* What is sent asynchronously waits in the block, a flush sends it as one
+ * batch, and a flush of nothing sends nothing. */
+TEST(kmt_transport_holding, what_is_sent_asynchronously_is_held_until_a_flush_sends_it_whole)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  CHECK_EQ(transport.holding_capacity(), sizeof block);
+  CHECK_EQ(transport.held(), 0u);
+  CHECK(transport.flush() == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 0u);
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  CHECK(holding.send(0x30002u, 4u) == TransportResult::ok);
+  CHECK_EQ(transport.held(), 2u * (CommandHeader::encoded_size + 4u));
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(transport.flush() == TransportResult::ok);
+  CHECK_EQ(transport.held(), 0u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.kmt().command_id(1u), 0x30002u);
+  CHECK(transport.invariants_hold());
+  /* A transport that holds nothing publishes each command at once. */
+  Holding plain(fixture, memory, 16u, nullptr, 0u);
+  CHECK_EQ(plain.transport().holding_capacity(), 0u);
+  CHECK(plain.send(0x30003u, 4u) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 3u);
+  CHECK_EQ(plain.transport().held(), 0u); }
+
+/* A command that asks for an answer goes as the last of one batch with what
+ * is held, and its answer is the batch's. */
+TEST(kmt_transport_holding, an_answered_command_goes_last_in_one_batch_with_what_is_held)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  const std::uint8_t answer[] = {0x42u};
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(7u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x30002u, writer, reply) == TransportResult::ok);
+  CHECK_EQ(reply.read_u8(), 0x42u);
+  transport.end_call();
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x30001u);
+  CHECK_EQ(fixture.kmt().command_id(1u), 0x30002u);
+  CHECK_EQ(transport.held(), 0u); }
+
+/* Resident Evil 4, in every API's terms: a command held with its array in a
+ * blob lease, then a command of the transport's own - a heap's blob import -
+ * sent and answered. Sent ahead, the import's answer retired the lease, the
+ * next array was copied over it, and the host read that one in its place.
+ * Held by the transport, the import goes behind the held command in the one
+ * batch, and the answer retires only what that batch carried. */
+TEST(kmt_transport_holding, a_command_of_the_transports_own_goes_behind_what_is_held)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  std::uint8_t     room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  WireWriter held = transport.request_writer();
+  const av::ClientBlobLease shader = transport.blobs().take(48u);
+  std::memset(shader.data(), 0x5A, shader.bytes());
+  held.write_u64(shader.offset());
+  CHECK(transport.send_async(0x30001u, held) == TransportResult::ok);
+  /* The next array finds no room over the held one's. */
+  CHECK(!transport.blobs().take(48u).taken());
+  std::uint8_t answer[av::BlobImportAnswer::encoded_size] = {};
+  CHECK_STATUS(av::BlobImportAnswer(av::BlobImportAnswer::imported, 0x77u).encode(answer, sizeof answer), Status::ok);
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  av::BlobImport heap(transport);
+  CHECK_STATUS(heap.import(5u), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x30001u);
+  CHECK_EQ(fixture.kmt().command_id(1u), CommandHeader::import_blob_id);
+  /* Its batch has run: the room is lent again, from the start. */
+  CHECK_EQ(transport.blobs().used(), 0u);
+  CHECK_EQ(room[0], 0x5Au);
+  CHECK_EQ(transport.blobs().take(48u).offset(), 0u);
+  heap.forget();
+  CHECK(transport.invariants_hold()); }
+
+/* A command too long for one batch is published a piece at a time, and the
+ * host can run the first pieces long before the last arrives; the lease the
+ * command names is read only then. Taken to be carried by the first piece's
+ * batch, it was lent again as soon as that had run - and the next lease was
+ * copied over it while the command naming it waited for its last piece. It
+ * stays lent until the batch carrying the command itself has run, whether
+ * the transport holds commands or publishes each at once. */
+TEST(kmt_transport_holding, a_long_commands_lease_stays_lent_across_the_batches_its_pieces_fill)
+{ for (const bool holds : {false, true}) {
+      Fixture fixture;
+      CHECK_STATUS(fixture.open(), Status::ok);
+      av::MockPlatform memory;
+      std::uint8_t     block[2048] = {};
+      Holding          holding(fixture, memory, 12u, holds ? block : nullptr, sizeof block);
+      KmtTransport    &transport = holding.transport();
+      std::uint8_t     room[100] = {};
+      transport.blobs().lend(room, sizeof room);
+      WireWriter writer = transport.request_writer();
+      const av::ClientBlobLease named = transport.blobs().take(60u);
+      std::memset(named.data(), 0xA5, named.bytes());
+      writer.write_u64(named.offset());
+      writer.write_zeros(6000u);
+      CHECK(writer.spilled());
+      CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+      /* The pieces filled the 4 KiB ring, and the host ran the first. */
+      CHECK(fixture.kmt().calls(MockKmt::Call::wait_for_context) >= 1u);
+      CHECK_EQ(transport.blobs().used(), 60u);
+      CHECK(!transport.blobs().take(60u).taken());
+      CHECK_EQ(room[59], 0xA5u);
+      CHECK(!transport.faulted());
+      /* The command itself sent and run, its room comes back whole. */
+      CHECK(transport.make_room_for_blobs(100u));
+      CHECK_EQ(transport.blobs().used(), 0u);
+      CHECK_EQ(fixture.kmt().command_id(fixture.kmt().commands() - 1u), 0x30001u);
+      CHECK_EQ(memory.live_allocations(), 0u);
+      CHECK(transport.invariants_hold());
+  } }
+
+/* A writer is lent the staging's room in the block, which is sent first when
+ * that room is not left in it; a block smaller than a header holds nothing. */
+TEST(kmt_transport_holding, a_writer_finding_no_room_left_in_the_block_sends_it_first)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[2u * staging_bytes] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  CHECK(holding.send(0x30001u, 8u) == TransportResult::ok);
+  CHECK(holding.send(0x30002u, staging_bytes - CommandHeader::encoded_size) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(holding.send(0x30003u, 8u) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(transport.held(), CommandHeader::encoded_size + 8u);
+  /* No room for a header: lent nothing, and nothing held. */
+  std::uint8_t tiny[4] = {};
+  Holding      cramped(fixture, memory, 16u, tiny, sizeof tiny);
+  CHECK(cramped.send(0x30004u, 0u) == TransportResult::failed);
+  WireWriter nothing_lent = cramped.transport().request_writer();
+  nothing_lent.write_u8(1u);
+  CHECK(nothing_lent.status() != Status::ok);
+  CHECK_EQ(cramped.transport().held(), 0u);
+  CHECK(!cramped.transport().faulted()); }
+
+/* What a spill grows by at least (SpillBlock): past it, a second growth. */
+constexpr std::size_t spill_least = 64u * 1024u;
+
+/* A writer that failed is held no more than it is published, and the context
+ * goes on; a long one that failed gives its spill back. */
+TEST(kmt_transport_holding, a_failed_writer_is_not_held)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  WireWriter long_one = transport.request_writer();
+  long_one.write_zeros(spill_least);
+  CHECK(long_one.spilled());
+  memory.fail_allocation_at(1u);
+  long_one.write_zeros(spill_least);
+  CHECK(long_one.status() != Status::ok);
+  CHECK(transport.send_async(0x30001u, long_one) == TransportResult::failed);
+  CHECK_EQ(memory.live_allocations(), 0u);
+  WireWriter asking = transport.request_writer();
+  asking.write_zeros(spill_least);
+  memory.fail_allocation_at(1u);
+  asking.write_zeros(spill_least);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x30002u, asking, reply) == TransportResult::failed);
+  CHECK_EQ(transport.held(), 0u);
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(!transport.faulted()); }
+
+/* Held commands that cannot be published are lost, and the context with
+ * them: a refused batch, or a block longer than the ring it goes into. */
+TEST(kmt_transport_holding, a_held_batch_that_cannot_be_published_loses_the_context)
+{ { Fixture fixture;
+    CHECK_STATUS(fixture.open(), Status::ok);
+    av::MockPlatform memory;
+    std::uint8_t     block[4096] = {};
+    Holding          holding(fixture, memory, 16u, block, sizeof block);
+    CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+    fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+    CHECK(holding.transport().flush() == TransportResult::failed);
+    CHECK(holding.transport().faulted());
+    CHECK_EQ(holding.transport().held(), 0u);
+    CHECK(holding.transport().flush() == TransportResult::failed);
+    CHECK(holding.send(0x30002u, 4u) == TransportResult::failed); }
+  { Fixture fixture;
+    CHECK_STATUS(fixture.open(), Status::ok);
+    av::MockPlatform memory;
+    static std::uint8_t block[8192];
+    Holding             holding(fixture, memory, 12u, block, sizeof block);
+    for (std::uint32_t command = 0u; command < 6u; command++)
+        CHECK(holding.send(0x30001u, staging_bytes - CommandHeader::encoded_size) == TransportResult::ok);
+    CHECK(holding.transport().flush() == TransportResult::failed);
+    CHECK(holding.transport().faulted()); }
+  { Fixture fixture;
+    CHECK_STATUS(fixture.open(), Status::ok);
+    av::MockPlatform memory;
+    std::uint8_t     block[4096] = {};
+    Holding          holding(fixture, memory, 16u, block, sizeof block);
+    CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+    fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+    WireWriter writer = holding.transport().request_writer();
+    WireReader reply(nullptr, 0u);
+    CHECK(holding.transport().send_sync(0x30002u, writer, reply) == TransportResult::failed);
+    CHECK(holding.transport().faulted());
+    holding.transport().end_call(); }
+  /* Before the context is made there is nothing to publish into. */
+  Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[staging_bytes] = {};
+  std::uint8_t block[256] = {};
+  KmtTransport unmade(fixture.connection(), SubApi::d3d, 16u, reply_bytes, staging, sizeof staging);
+  unmade.hold_in(block, sizeof block);
+  CHECK(unmade.flush() == TransportResult::failed);
+  WireWriter writer = unmade.request_writer();
+  WireReader reply(nullptr, 0u);
+  CHECK(unmade.send_sync(0x30002u, writer, reply) == TransportResult::failed);
+  CHECK(!unmade.faulted()); }
+
+/* A long command is framed in pieces into the block, which is sent each time
+ * they fill it; one that cannot be - its batch refused, or no room in an
+ * empty block for a byte of it - fails. */
+TEST(kmt_transport_holding, a_long_command_is_held_in_pieces_and_fails_where_they_cannot_go)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[2u * staging_bytes] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  WireWriter long_one = transport.request_writer();
+  long_one.write_zeros(5u * staging_bytes);
+  CHECK(transport.send_async(0x30001u, long_one) == TransportResult::ok);
+  CHECK(fixture.kmt().commands() >= 2u);
+  for (std::uint32_t index = 0u; index < fixture.kmt().commands(); index++)
+      CHECK_EQ(fixture.kmt().command_id(index), CommandHeader::piece_id);
+  CHECK(transport.flush() == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().command_id(fixture.kmt().commands() - 1u), 0x30001u);
+  CHECK_EQ(memory.live_allocations(), 0u);
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  WireWriter refused = transport.request_writer();
+  refused.write_zeros(5u * staging_bytes);
+  CHECK(transport.send_async(0x30002u, refused) == TransportResult::failed);
+  CHECK(transport.faulted());
+  CHECK_EQ(memory.live_allocations(), 0u);
+  /* A block a piece's header does not fit. */
+  std::uint8_t tiny[CommandHeader::encoded_size] = {};
+  Holding      cramped(fixture, memory, 16u, tiny, sizeof tiny);
+  cramped.transport().hold_in(block, sizeof block);
+  WireWriter pieced = cramped.transport().request_writer();
+  pieced.write_zeros(2u * staging_bytes);
+  cramped.transport().hold_in(tiny, sizeof tiny);
+  CHECK(cramped.transport().send_async(0x30003u, pieced) == TransportResult::failed);
+  CHECK(!cramped.transport().faulted());
+  CHECK_EQ(memory.live_allocations(), 0u); }
+
+/* Whole commands framed elsewhere - a Direct3D command list - join what is
+ * held, what is held going first when they do not fit with it; a transport
+ * that holds nothing publishes them at once. */
+TEST(kmt_transport_holding, framed_commands_join_what_is_held)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[64] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  std::uint8_t framed[5u * 12u] = {};
+  const std::size_t two = frame_batch(framed, 0x10001u, 2u, false);
+  CHECK(transport.hold_framed(framed, two) == TransportResult::ok);
+  CHECK_EQ(transport.held(), two);
+  CHECK(transport.hold_framed(framed, two) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(transport.hold_framed(framed, two) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 4u);
+  CHECK_EQ(transport.held(), two);
+  const std::size_t five = frame_batch(framed, 0x10001u, 5u, false);
+  CHECK(five <= sizeof block);
+  CHECK(transport.hold_framed(framed, five) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 6u);
+  CHECK(transport.hold_framed(framed, 0u) == TransportResult::failed);
+  CHECK(transport.hold_framed(nullptr, two) == TransportResult::failed);
+  static std::uint8_t longer[128];
+  CHECK(transport.hold_framed(longer, sizeof longer) == TransportResult::failed);
+  CHECK_EQ(transport.held(), five);
+  Holding plain(fixture, memory, 16u, nullptr, 0u);
+  CHECK(plain.transport().hold_framed(framed, two) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), 8u);
+  CHECK(plain.transport().hold_framed(framed, std::size_t{1} << 32u) == TransportResult::failed);
+  /* What is held cannot go, so neither can they. */
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(transport.hold_framed(framed, five) == TransportResult::failed);
+  CHECK(transport.hold_framed(framed, two) == TransportResult::failed); }
+
+/* Framed commands sent and waited on go behind what is held; a held batch
+ * that cannot go fails them unsent. */
+TEST(kmt_transport_holding, a_framed_batch_goes_behind_what_is_held)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x30001u);
+  CHECK_EQ(fixture.kmt().command_id(1u), 0x10001u);
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(send_framed(transport, framed, length) == TransportResult::failed);
+  CHECK_EQ(fixture.kmt().commands(), 2u); }
+
+/* Room in the arena that only held commands' leases fill comes back by
+ * sending them and waiting; room already there costs nothing; a held batch
+ * that cannot go makes none. */
+TEST(kmt_transport_holding, room_held_commands_hold_comes_back_once_they_are_sent_and_run)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  std::uint8_t     room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  WireWriter writer = transport.request_writer();
+  writer.write_u64(transport.blobs().take(64u).offset());
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  CHECK(transport.make_room_for_blobs(0u));
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(transport.make_room_for_blobs(64u));
+  CHECK_EQ(fixture.kmt().commands(), 1u);
+  CHECK_EQ(transport.blobs().room(), 64u);
+  WireWriter again = transport.request_writer();
+  again.write_u64(transport.blobs().take(64u).offset());
+  CHECK(transport.send_async(0x30001u, again) == TransportResult::ok);
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(!transport.make_room_for_blobs(1u));
+  CHECK(transport.faulted()); }
+
+/* The publish barrier: what is held is sent with a no-op behind it, and
+ * returns once the host has answered - an answer with bytes in it included,
+ * which a host still ran everything before. A context that faulted runs
+ * nothing. The no-op's call is ended, so the leases it ran are retired. */
+TEST(kmt_transport_holding, the_publish_barrier_runs_what_is_held_before_it_returns)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  std::uint8_t     room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  WireWriter writer = transport.request_writer();
+  writer.write_u64(transport.blobs().take(32u).offset());
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  fixture.kmt().queue_answer(nullptr, 0u);
+  CHECK_STATUS(transport.run_held(), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x30001u);
+  CHECK_EQ(fixture.kmt().command_id(1u), CommandHeader::nop_id);
+  CHECK_EQ(transport.blobs().used(), 0u);
+  const std::uint8_t chatty[] = {1u, 2u};
+  fixture.kmt().queue_answer(chatty, sizeof chatty);
+  CHECK_STATUS(transport.run_held(), Status::ok);
+  fixture.kmt().withhold_answer_at(1u);
+  CHECK_STATUS(transport.run_held(), Status::invalid_state);
+  CHECK(transport.faulted()); }
+
+TEST(kmt_transport_holding, the_invariant_catches_more_held_than_the_block_holds)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[256] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  CHECK(holding.transport().invariants_hold());
+  KmtTransportProbe::overhold(holding.transport());
+  CHECK(!holding.transport().invariants_hold());
+  holding.transport().hold_in(block, sizeof block);
+  CHECK(holding.transport().invariants_hold()); }

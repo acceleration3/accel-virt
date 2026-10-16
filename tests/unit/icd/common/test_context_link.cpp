@@ -49,7 +49,7 @@ void fault(HostChannel &channel)
 TEST(context_link, an_unheld_link_names_nothing_and_loses_nothing)
 { ClContextRig rig;
   ContextLink  link(rig.connection());
-  HostChannel  channel(rig.platform(), rig.log(), "avtest: ", plain());
+  HostChannel  channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.send_lock());
   CHECK(!link.held());
   CHECK_EQ(link.link(), IcdConnection::no_link);
   CHECK(!link.lost(channel));
@@ -101,8 +101,8 @@ TEST(context_link, a_faulted_channel_loses_the_device_for_every_context_on_it)
   CHECK_STATUS(first.acquire(), Status::ok);
   CHECK_STATUS(sibling.acquire(), Status::ok);
   CHECK_EQ(first.link(), sibling.link());
-  HostChannel faulting(rig.platform(), rig.log(), "avtest: ", plain());
-  HostChannel quiet(rig.platform(), rig.log(), "avtest: ", plain());
+  HostChannel faulting(rig.platform(), rig.log(), "avtest: ", plain(), rig.send_lock());
+  HostChannel quiet(rig.platform(), rig.log(), "avtest: ", plain(), rig.send_lock());
   CHECK_STATUS(faulting.open(first.device()), Status::ok);
   CHECK(!first.lost(faulting));
   CHECK(!sibling.lost(quiet));

@@ -1,0 +1,50 @@
+#include "icd/d3d/d3d_device_selection.hpp"
+
+#include "core/trace/function_scope.hpp"
+#include "icd/d3d/d3d_command_stream.hpp"
+
+namespace av::d3d {
+
+D3dDeviceSelection::D3dDeviceSelection(D3dCommandStream &stream, uint32_t device) : stream_(stream), device_(device)
+{
+    AV_SCOPE("D3dDeviceSelection::D3dDeviceSelection");
+}
+
+WireWriter D3dDeviceSelection::request_writer()
+{
+    AV_SCOPE("D3dDeviceSelection::request_writer");
+    static_cast<void>(stream_.speak_as(device_));
+    return stream_.request_writer();
+}
+
+TransportResult D3dDeviceSelection::send_async(uint32_t command_id, WireWriter &writer)
+{
+    AV_SCOPE("D3dDeviceSelection::send_async");
+    return stream_.send_async(command_id, writer);
+}
+
+TransportResult D3dDeviceSelection::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
+{
+    AV_SCOPE("D3dDeviceSelection::send_sync");
+    return stream_.send_sync(command_id, writer, reply);
+}
+
+void D3dDeviceSelection::end_call()
+{
+    AV_SCOPE("D3dDeviceSelection::end_call");
+    stream_.end_call();
+}
+
+WireArena &D3dDeviceSelection::decode_arena()
+{
+    AV_SCOPE("D3dDeviceSelection::decode_arena");
+    return stream_.decode_arena();
+}
+
+ClientBlobArena &D3dDeviceSelection::blobs()
+{
+    AV_SCOPE("D3dDeviceSelection::blobs");
+    return stream_.blobs();
+}
+
+}  // namespace av::d3d
