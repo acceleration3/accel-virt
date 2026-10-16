@@ -25,8 +25,10 @@
 #ifndef AV_CLICD_CL_ICD_ROOT_HPP
 #define AV_CLICD_CL_ICD_ROOT_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/trace/state_reporter.hpp"
+#include "icd/common/refused_calls.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
 #include "icd/opencl/cl_destructor_callbacks.hpp"
@@ -846,6 +848,10 @@ private:
      * as long as the longest - the extension list. */
     ClInfoAnswers<host_extensions_bytes> device_answers_;
     ClPendingReads         reads_;
+    /* The ICD's lines said once: every refused call, and what else
+     * ClRefusalLog names. */
+    KeyedLog               lines_;
+    icd::RefusedCalls      refused_;
     ClRefusalLog           refusals_;
     /* Under lock_, as the object releases that make them due are. */
     ClDestructorCallbacks  destructor_callbacks_;

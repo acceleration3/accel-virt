@@ -1,9 +1,9 @@
-/* The calls an application was refused: an entry point this ICD does not
- * serve, or one that answered an error. Each entry point, with each error it
- * answered, is named in the log the first time. An application that only
- * reports "a problem" - Photoshop's Blur Gallery - otherwise leaves nothing to
- * say which call it was refused, and one that retries in a loop would
- * otherwise write a line per call. */
+/* What OpenCL alone refuses an application, beyond the calls every driver
+ * names through icd::RefusedCalls: a query with the question it was asked,
+ * a map with what ran out, a buffer released while mapped, and a transfer run
+ * ahead of a user event. Each is named in the ICD's log the first time. An
+ * application that only reports "a problem" - Photoshop's Blur Gallery -
+ * otherwise leaves nothing to say which call it was refused. */
 #ifndef AV_CLICD_CL_REFUSAL_LOG_HPP
 #define AV_CLICD_CL_REFUSAL_LOG_HPP
 
@@ -11,23 +11,14 @@
 
 #include <stdint.h>
 
-namespace av {
-class BlockSource;
-class LogSink;
-}  // namespace av
-
 namespace av::clicd {
 
 class ClRefusalLog {
 public:
-    ClRefusalLog(BlockSource &memory, LogSink &log);
+    explicit ClRefusalLog(KeyedLog &lines);
     ClRefusalLog(const ClRefusalLog &) = delete;
     ClRefusalLog &operator=(const ClRefusalLog &) = delete;
 
-    /* `entry_point` is a literal, the generated refusal's or the hook's, so
-     * one entry point is one pointer. */
-    void     note(const char *entry_point);
-    void     note_failure(const char *entry_point, int32_t error);
     /* A query `entry_point` refused, named with the query the first time it
      * is: what says which of an application's questions this device cannot
      * answer, which the entry point alone does not. */
@@ -46,7 +37,7 @@ public:
     uint32_t named() const;
 
 private:
-    KeyedLog  lines_;
+    KeyedLog &lines_;
 };
 
 }  // namespace av::clicd

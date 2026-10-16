@@ -24,9 +24,6 @@ constexpr uint32_t stage_vertex = 0u;
 /* What a lost device's line is logged once under. */
 /* Calls the trace logs, and what says it is off. */
 constexpr uint32_t trace_most = 20000u;
-/* Failed calls are said whether or not the device traces, but only the
- * first few: an application that retries one forever says it once. */
-constexpr uint32_t failures_most = 32u;
 constexpr uint32_t trace_none = ~0u;
 constexpr uint32_t stage_pixel = 1u;
 constexpr uint32_t components = 4u;
@@ -60,12 +57,12 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter)
-    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(),
+    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(), allocations_(kernel_, lines_), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
-      readback_(nullptr), readback_bytes_(0u), traced_(trace_none), failures_(0u),
+      readback_(nullptr), readback_bytes_(0u), traced_(trace_none),
       call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
@@ -181,11 +178,9 @@ void D3d9Device::note_failure(const char *call, uint32_t hresult)
 {
     AV_SCOPE("D3d9Device::note_failure");
     constexpr uint32_t still_drawing = 0x8876021Cu;   /* D3DERR_WASSTILLDRAWING */
-    if (hresult == still_drawing || failures_ >= failures_most) return;
-    failures_++;
-    LogLine line(lines_);
-    line.text("d3d9 ").text(call).text(" failed ").hex(hresult, 8u);
-    line.write();
+    /* Said whether or not the device traces, once for each call and answer:
+     * an application that retries one forever says it once. */
+    if (hresult != still_drawing) refused_.failed(call, static_cast<int32_t>(hresult));
 }
 
 uint64_t D3d9Device::microseconds() const
@@ -237,7 +232,7 @@ HRESULT D3d9Device::lost(const char *call)
 void D3d9Device::not_implemented(const char *call)
 {
     AV_SCOPE("D3d9Device::not_implemented");
-    lines_.once(call);
+    refused_.unserved(call);
 }
 
 /* ---------------------------------------------------------------- state */
@@ -765,7 +760,7 @@ HRESULT D3d9Device::state_set(D3DDDIARG_STATESET *args)
         if (named == nullptr) return E_INVALIDARG;
         named->capture(shadow_);
         return S_OK;
-    default: not_implemented("a Direct3D 9 state block operation this driver has no use for"); return S_OK;
+    default: not_implemented("a Direct3D 9 state block operation it has no use for"); return S_OK;
     }
 }
 

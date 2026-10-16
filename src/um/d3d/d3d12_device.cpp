@@ -43,7 +43,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), log_(log), lines_(memory, log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
+    : session_(session), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, removal_(), library_blob_()
 {
     AV_SCOPE("D3d12Device::D3d12Device");
@@ -84,28 +84,18 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     return S_OK;
 }
 
-/* A call this driver answered with a failure: the runtime passes it on as
- * the API's HRESULT and says nothing of where it came from. */
-void D3d12Device::refused(const char *slot, uint32_t hresult)
-{
-    AV_SCOPE("D3d12Device::refused");
-    LogLine(lines_).text("Direct3D 12 ").text(slot).text(" refused, HRESULT ").hex(hresult, 8u).write();
-}
-
 HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
 {
     AV_SCOPE("D3d12Device::answered");
     /* E_PENDING is MakeResident's answer when it queued paging, not a refusal. */
-    if (FAILED(hresult) && hresult != E_PENDING && lines_.first(slot, hresult)) {
-        refused(slot, static_cast<uint32_t>(hresult));
-    }
+    if (FAILED(hresult) && hresult != E_PENDING) refused_.failed(slot, hresult);
     return hresult;
 }
 
 void D3d12Device::unsupported(const char *slot)
 {
     AV_SCOPE("D3d12Device::unsupported");
-    lines_.once_name("Direct3D 12 slot not implemented:", slot);
+    refused_.unserved(slot);
 }
 
 d3d::D3dDeviceChannel &D3d12Device::wire()
@@ -346,7 +336,7 @@ bool D3d12Device::follow(const QueueRecord &queue)
     AV_SCOPE("D3d12Device::follow");
     const HRESULT followed = follower_.constructed() ? follower_.object().follow(queue.context) : E_FAIL;
     if (SUCCEEDED(followed)) return true;
-    refused("pfnSubmitCommandCb", static_cast<uint32_t>(followed));
+    refused_.failed("pfnSubmitCommandCb", followed);
     lost("the queue's context refused its packet");
     return false;
 }

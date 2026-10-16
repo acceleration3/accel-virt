@@ -23,6 +23,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/common/refused_calls.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/context_slices.hpp"
@@ -274,6 +275,7 @@ private:
     d3d::WriteMaps         maps_;
     LogSink          &log_;
     KeyedLog         lines_;
+    icd::RefusedCalls refused_;
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;

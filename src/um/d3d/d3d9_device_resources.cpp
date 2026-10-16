@@ -674,7 +674,7 @@ HRESULT D3d9Device::color_fill(const D3DDDIARG_COLORFILL *args)
 HRESULT D3d9Device::depth_fill(const D3DDDIARG_DEPTHFILL *)
 {
     AV_SCOPE("D3d9Device::depth_fill");
-    not_implemented("DepthFill is not implemented");
+    not_implemented("DepthFill");
     return S_OK;
 }
 

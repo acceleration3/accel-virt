@@ -182,7 +182,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     heap.memory = nullptr;
     heap.address = addresses_.reserve(args.ByteSize);
     if (heap.address == 0u) {
-        refused("heap address space, bytes", static_cast<uint32_t>(args.ByteSize));
+        LogLine(lines_).text("no guest address space for a heap of ").number(args.ByteSize).text(" bytes").write();
         return E_OUTOFMEMORY;
     }
     if (heap.type != heap_default) {
@@ -279,7 +279,7 @@ HRESULT D3d12Device::create_heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 
 {
     AV_SCOPE("D3d12Device::create_heap_and_resource");
     const HRESULT made = heap_and_resource(heap_args, heap_handle, runtime, args, clear, handle);
-    if (FAILED(made)) refused("CreateHeapAndResource", static_cast<uint32_t>(made));
+    if (FAILED(made)) refused_.failed("CreateHeapAndResource", made);
     return made;
 }
 

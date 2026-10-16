@@ -5,6 +5,7 @@
  * (pfnGetMipPacking), and the host's vkd3d-proton tiles by the same shapes, so
  * the host's answer is the runtime's. An update of the mappings crosses in
  * pieces of what one command carries (TilePieces). */
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/tile_pieces.hpp"
@@ -32,7 +33,7 @@ HRESULT D3d12Device::reserve_resource(const D3D12DDIARG_CREATERESOURCE_0109 &arg
     if (desc.dimension == buffer_dimension) {
         resource.address = addresses_.reserve(desc.width);
         if (resource.address == 0u) {
-            refused("reserved buffer address space, bytes", static_cast<uint32_t>(desc.width));
+            LogLine(lines_).text("no guest address space for a reserved buffer of ").number(desc.width).text(" bytes").write();
             return E_OUTOFMEMORY;
         }
     }

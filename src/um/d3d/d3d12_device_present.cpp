@@ -42,7 +42,7 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
     allocate.pAllocationInfo = &info;
     const HRESULT made = core_->pfnAllocateCb(runtime_, &allocate);
     if (FAILED(made)) {
-        refused("pfnAllocateCb for a swap chain buffer", static_cast<uint32_t>(made));
+        refused_.failed("pfnAllocateCb for a swap chain buffer", made);
         return made;
     }
     /* Made for the runtime's resource, the allocation is the runtime's to

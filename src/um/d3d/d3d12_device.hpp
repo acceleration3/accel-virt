@@ -30,6 +30,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/device_removal.hpp"
@@ -77,7 +78,6 @@ public:
 
     /* A slot this driver has no implementation of was called: logged once. */
     void unsupported(const char *slot);
-    void refused(const char *slot, uint32_t hresult);
     /* `hresult`, what the DDI `slot` answered, logged when it is a refusal:
      * once for each slot and HRESULT. */
     HRESULT answered(const char *slot, HRESULT hresult);
@@ -156,6 +156,7 @@ private:
     LogSink                         &log_;
     KeyedLog                         lines_;
     /* Refusals logged so far; some slots are asked in a loop. */
+    icd::RefusedCalls                refused_;
     const D3d12HostCaps                  &caps_;
     void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;

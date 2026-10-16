@@ -20,6 +20,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
@@ -229,6 +230,7 @@ private:
     BlockSource                         &memory_;
     LogSink                        &log_;
     KeyedLog                        lines_;
+    icd::RefusedCalls               refused_;
     /* Why the device is gone, said once, by the first call that found it. */
     d3d::DeviceRemoval              removal_;
     const D3d9HostCaps                  &caps_;
@@ -266,7 +268,6 @@ private:
     uint8_t                             *readback_;
     size_t                               readback_bytes_;
     uint32_t                             traced_;
-    uint32_t                             failures_;
     /* While tracing: when the call in progress began, and the time the
      * device's calls took since the last present, and how many. */
     uint64_t                             call_began_;

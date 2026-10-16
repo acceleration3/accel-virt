@@ -132,7 +132,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
       contexts_(memory, connection_, send_lock, log, extensions_, shared_handles_),
-      manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_(0u), profile_noted_(false)
+      manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_(0u)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
     generated::fill_proc_table(proc_table_);
@@ -634,8 +634,7 @@ uint64_t GlIcdRoot::mint_sync_token()
 void GlIcdRoot::note_profile(const GuestGlContext &context)
 {
     AV_SCOPE("GlIcdRoot::note_profile");
-    if (profile_noted_) return;
-    profile_noted_ = true;
+    if (!lines_.first("the host granted a profile", 0)) return;
     const GrantedProfile &profile = context.profile();
     LogLine line(lines_);
     line.text("the host granted a ");

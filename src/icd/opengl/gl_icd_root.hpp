@@ -210,8 +210,6 @@ private:
      * has yet to claim, by thread. */
     KeyedSlots<uint32_t, uint64_t> pending_;
     uint64_t          sync_tokens_;
-    /* Whether the host's answer about profiles has been named (feature 051). */
-    bool              profile_noted_;
 
     friend struct GlIcdRootProbe;
 };

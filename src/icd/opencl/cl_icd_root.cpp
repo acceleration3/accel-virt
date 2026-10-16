@@ -76,7 +76,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(memory, kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
-      watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), refusals_(memory, log),
+      watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), lines_(memory, log, "avcl: "), refused_(lines_), refusals_(lines_),
       destructor_callbacks_(memory)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
@@ -778,7 +778,7 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
     ClDestructorCallbacks::Due due(memory_);
     destructor_callbacks_.take(gone, went, due);
     lock_.release();
-    if (due.lost() != 0u) refusals_.note_failure("a destructor callback, for want of memory", CL_OUT_OF_HOST_MEMORY);
+    if (due.lost() != 0u) refused_.failed("a destructor callback, for want of memory", CL_OUT_OF_HOST_MEMORY);
     /* After the host let go and the context's transport went, as a driver
      * calls them once the object's memory is gone, and with no lock held: a
      * callback may release or make another object. */
@@ -1718,13 +1718,13 @@ cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_by
 void ClIcdRoot::note_refused(const char *entry_point)
 {
     AV_SCOPE("ClIcdRoot::note_refused");
-    refusals_.note(entry_point);
+    refused_.unserved(entry_point);
 }
 
 cl_int ClIcdRoot::noted(const char *entry_point, cl_int result)
 {
     AV_SCOPE("ClIcdRoot::noted");
-    refusals_.note_failure(entry_point, result);
+    if (result < 0) refused_.failed(entry_point, result);
     return result;
 }
 

@@ -5,27 +5,9 @@
 
 namespace av::clicd {
 
-ClRefusalLog::ClRefusalLog(BlockSource &memory, LogSink &log) : lines_(memory, log, "avcl: ")
+ClRefusalLog::ClRefusalLog(KeyedLog &lines) : lines_(lines)
 {
     AV_SCOPE("ClRefusalLog::ClRefusalLog");
-}
-
-void ClRefusalLog::note(const char *entry_point)
-{
-    AV_SCOPE("ClRefusalLog::note");
-    if (entry_point == nullptr || !lines_.first(entry_point, 0)) return;
-    lines_.name("an entry point this ICD does not serve was called:", entry_point);
-}
-
-void ClRefusalLog::note_failure(const char *entry_point, int32_t error)
-{
-    AV_SCOPE("ClRefusalLog::note_failure");
-    if (entry_point == nullptr || error >= 0 || !lines_.first(entry_point, error)) return;
-    char       bytes[32];
-    TextBuffer answer(bytes, sizeof bytes);
-    answer.append("answered -");
-    answer.append_decimal(static_cast<uint64_t>(-static_cast<int64_t>(error)));
-    lines_.name(entry_point, answer.text());
 }
 
 void ClRefusalLog::note_query(const char *entry_point, uint32_t query, int32_t error)
