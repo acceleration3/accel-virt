@@ -7,9 +7,7 @@
 #ifndef AV_CONTEXT_SESSION_HPP
 #define AV_CONTEXT_SESSION_HPP
 
-#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
-#include "device/host/stdio_log.hpp"
 #include "executor/import_table.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "proto/wire/spill_block.hpp"
@@ -20,6 +18,7 @@
 
 namespace av {
 
+class DriverLog;
 class GpuClockHold;
 class HostMemorySource;
 class SessionBackend;
@@ -39,7 +38,9 @@ public:
      * something to carry inside the object that owns the sessions. */
     static constexpr size_t arena_bytes = 1u << 20;
 
-    ContextSession();
+    /* `lines` is where a command or a blob refused here is said: it ends
+     * the context, and the device says only which batch it was in. */
+    explicit ContextSession(DriverLog &lines);
     ContextSession(const ContextSession &) = delete;
     ContextSession &operator=(const ContextSession &) = delete;
 
@@ -127,10 +128,7 @@ private:
     ImportTable     imports_;
     size_t          starved_;
     bool            faulted_;
-    /* QEMU's stderr: a command or a blob refused here ends the context, and the
-     * device says only which batch it was in. */
-    StdioLog        sink_;
-    DriverLog       lines_;
+    DriverLog      &lines_;
 };
 
 }  // namespace av

@@ -19,9 +19,7 @@
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_runtime.hpp"
-#include "core/log/driver_log.hpp"
 #include "core/support/object_storage.hpp"
-#include "device/host/stdio_log.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -34,9 +32,12 @@
 
 namespace av {
 
+class ExecutorLog;
+
 class LoaderHostApis final : public HostApis {
 public:
-    LoaderHostApis();
+    /* What the shares and the Direct3D devices see is written to `log`. */
+    explicit LoaderHostApis(ExecutorLog &log);
     ~LoaderHostApis();
 
     /* Asks the host's Vulkan once. A host with no instance and no device is
@@ -74,23 +75,20 @@ private:
      * here for the reason the displays are: a device made inside a guest's
      * first batch would cost it dxgkrnl's timeout. */
     D3dRuntime      d3d_runtime_;
-    D3d11HostDevice d3d11_devices_[HostGpuSet::max_gpus];
+    ObjectStorage<D3d11HostDevice> d3d11_devices_[HostGpuSet::max_gpus];
     /* Each GPU's compositing context, and the memory source on it
      * (docs/host-memory.md), opened as the GPU is found and closed after
      * every API that imports from it. */
     CompositorDevice compositors_[HostGpuSet::max_gpus];
     ObjectStorage<CompositorMemory> exporters_[HostGpuSet::max_gpus];
     ObjectStorage<HostMemorySource> sources_[HostGpuSet::max_gpus];
-    D3d12HostDevice d3d12_devices_[HostGpuSet::max_gpus];
+    ObjectStorage<D3d12HostDevice> d3d12_devices_[HostGpuSet::max_gpus];
     D3d9HostDevice  d3d9_devices_[HostGpuSet::max_gpus];
     /* What every GPU's shares and surfaces are kept in, and the shares,
      * before the devices whose textures they hold are closed and after they
      * are made. */
     HostHeap                   heap_;
     ObjectStorage<SharedSurfaces> surfaces_[HostGpuSet::max_gpus];
-    /* QEMU's stderr, where what the shares see is written. */
-    StdioLog                   share_sink_;
-    DriverLog                  share_lines_;
     ObjectStorage<HostShares>  shares_[HostGpuSet::max_gpus];
     uint32_t count_;
     bool     opened_;

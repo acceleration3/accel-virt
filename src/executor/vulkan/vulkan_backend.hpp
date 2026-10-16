@@ -26,6 +26,7 @@
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class SharedImageShape;
 
@@ -37,9 +38,9 @@ class SourceMemory;
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
 public:
     /* Its tables grow from a heap of its own; a test hands it the source to
-     * grow from instead. */
-    VulkanBackend();
-    explicit VulkanBackend(BlockSource &blocks);
+     * grow from instead. `lines` is where its submissions' timing is said. */
+    explicit VulkanBackend(DriverLog &lines);
+    VulkanBackend(BlockSource &blocks, DriverLog &lines);
 
     /* Binds this context to the GPU the device is bound to, which must outlive
      * it: the one physical device an enumeration answers, and the memory

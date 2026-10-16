@@ -25,12 +25,14 @@ struct ID3D12Resource;
 namespace av {
 
 class D3d11HostDevice;
+class DriverLog;
 class D3d12HostDevice;
 class SessionShares;
 
 class D3d12Presentation {
 public:
-    D3d12Presentation();
+    /* `lines` is where a presentation that cannot be shown is said. */
+    explicit D3d12Presentation(DriverLog &lines);
     ~D3d12Presentation();
     D3d12Presentation(const D3d12Presentation &) = delete;
     D3d12Presentation &operator=(const D3d12Presentation &) = delete;
@@ -53,6 +55,7 @@ private:
      * the first present. */
     [[nodiscard]] bool connect();
 
+    DriverLog       &lines_;
     D3d12HostDevice *device12_;
     D3d11HostDevice *device11_;
     SessionShares   *shares_;

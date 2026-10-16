@@ -23,6 +23,16 @@ LogLine &LogLine::number(uint64_t value)
     return *this;
 }
 
+LogLine &LogLine::tenths(uint64_t value)
+{
+    AV_SCOPE("LogLine::tenths");
+    constexpr uint64_t tenth = 10u;
+    body_.append_decimal(value / tenth);
+    body_.append(".");
+    body_.append_decimal(value % tenth);
+    return *this;
+}
+
 LogLine &LogLine::hex(uint64_t value, uint32_t digits)
 {
     AV_SCOPE("LogLine::hex");

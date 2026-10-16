@@ -21,13 +21,11 @@
 #ifndef AV_D3D9_SESSION_HPP
 #define AV_D3D9_SESSION_HPP
 
-#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d9_flip_shares.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
-#include "device/host/stdio_log.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_server.h"
 
 #include <stdint.h>
@@ -38,6 +36,7 @@ struct IUnknown;
 
 namespace av {
 
+class DriverLog;
 class D3d9HostDevice;
 class SharedSurfaces;
 class SessionShares;
@@ -57,7 +56,8 @@ public:
      * `objects` the session's object table: the guest names every object of
      * a session from one id space, so Direct3D 9's share Direct3D 11's table.
      * `blocks` is what the session's tables grow in. */
-    D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks);
+    /* `lines` is where the host log is read when a guest's command fails. */
+    D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks, DriverLog &lines);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
@@ -197,9 +197,7 @@ private:
      * enumerate, to validate a create, to create, to ask multisample levels -
      * and a process may hold any number at once. */
     GuestDevices<IDirect3DDevice9> devices_;
-    /* QEMU's stderr, where the host log is read when a guest's command fails. */
-    StdioLog        sink_;
-    DriverLog       lines_;
+    DriverLog      &lines_;
     CommandRefusal  refusal_;
     /* The decode arena of the command running; null between commands. */
     WireArena      *arena_;

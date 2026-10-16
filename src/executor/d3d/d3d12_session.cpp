@@ -24,7 +24,6 @@
 #include "proto/resources/surface_point.hpp"
 #include "proto/wire/wire_arena.hpp"
 
-#include <stdio.h>
 
 
 namespace av {
@@ -138,11 +137,11 @@ StagedFrame *PresentedResource::stage()
 }  // namespace
 
 D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
-                           EventfdWake &fence_wake, WatchedBlocks &blocks)
+                           EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), views_(objects_, addresses_),
-      pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_), clock_()
+      pipelines_(objects_), presentation_(lines), tile_update_(), arena_(nullptr), removed_(0u), lines_(lines), refusal_(lines_), clock_()
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }

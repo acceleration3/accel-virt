@@ -5,20 +5,18 @@
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/owned_fd.hpp"
-#include "device/host/stdio_log.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/surface_identity.hpp"
 
-#include <stdio.h>
 #include <unistd.h>
 
 namespace av {
 
-D3d12Presentation::D3d12Presentation()
-    : device12_(nullptr), device11_(nullptr), shares_(nullptr), fence_(nullptr), order_()
+D3d12Presentation::D3d12Presentation(DriverLog &lines)
+    : lines_(lines), device12_(nullptr), device11_(nullptr), shares_(nullptr), fence_(nullptr), order_()
 {
     AV_SCOPE("D3d12Presentation::D3d12Presentation");
 }
@@ -91,8 +89,7 @@ bool D3d12Presentation::connect()
     OwnedFd timeline;
     if (!device12_->export_fence(made, timeline) || !order_.connect(*device11_, timeline)) {
         made->Release();
-        StdioLog sink(stderr);
-        DriverLog(sink, "virtio-gpu-av: d3d12: ").write("no timeline shared with DXVK; presents cannot be shown");
+        lines_.write("no timeline shared with DXVK; presents cannot be shown");
         return false;
     }
     fence_ = made;

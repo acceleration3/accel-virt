@@ -29,8 +29,6 @@
 #ifndef AV_D3D11_HOST_DEVICE_HPP
 #define AV_D3D11_HOST_DEVICE_HPP
 
-#include "core/log/driver_log.hpp"
-#include "device/host/stdio_log.hpp"
 #include "device/shim/posix_lock.hpp"
 #include "core/support/object_pool.hpp"
 #include "executor/host_device_renewal.hpp"
@@ -62,6 +60,7 @@ struct ID3D11VkExtContext2;
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class VulkanBuffer;
 
@@ -76,7 +75,9 @@ class WakeSignal;
 
 class D3d11HostDevice final : public RenewableDevice {
 public:
-    D3d11HostDevice();
+    /* `lines` is where a surface the host would not share, a loss and a
+     * renewal are seen. */
+    explicit D3d11HostDevice(DriverLog &lines);
     ~D3d11HostDevice();
     D3d11HostDevice(const D3d11HostDevice &) = delete;
     D3d11HostDevice &operator=(const D3d11HostDevice &) = delete;
@@ -308,9 +309,7 @@ private:
      * the desktop's among them. */
     uint32_t                waiting_;
     uint64_t                taken_;
-    /* QEMU's stderr, where a surface the host would not share is seen. */
-    StdioLog                sink_;
-    DriverLog               lines_;
+    DriverLog              &lines_;
     /* What a wait on the GPU measures its deadline on. */
     MonotonicClock          clock_;
     /* The shared resources a renewal carries from the lost device to the

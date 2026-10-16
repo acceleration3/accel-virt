@@ -1,22 +1,24 @@
 #include "executor/shim/loader_host_apis.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/executor_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/shim/physical_device_identity.hpp"
 
-#include <stdio.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
 
 namespace av {
 
-LoaderHostApis::LoaderHostApis()
+LoaderHostApis::LoaderHostApis(ExecutorLog &log)
     : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
-      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{}, share_sink_(stderr),
-      share_lines_(share_sink_, "virtio-gpu-av: shares: "), shares_{}, count_(0u), opened_(false)
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{},
+      shares_{}, count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
-    for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, share_lines_));
+    for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, log.shares()));
+    for (ObjectStorage<D3d11HostDevice> &device : d3d11_devices_) static_cast<void>(device.construct(log.d3d11()));
+    for (ObjectStorage<D3d12HostDevice> &device : d3d12_devices_) static_cast<void>(device.construct(log.d3d12()));
     for (ObjectStorage<SharedSurfaces> &surfaces : surfaces_) static_cast<void>(surfaces.construct(heap_));
     for (uint32_t i = 0u; i < HostGpuSet::max_gpus; i++)
         static_cast<void>(exporters_[i].construct(compositors_[i]));
@@ -29,6 +31,8 @@ LoaderHostApis::~LoaderHostApis()
     for (ObjectStorage<SharedSurfaces> &surfaces : surfaces_) surfaces.destroy();
     for (ObjectStorage<HostShares> &shares : shares_) shares.destroy();
     for (ObjectStorage<CompositorMemory> &exporter : exporters_) exporter.destroy();
+    for (ObjectStorage<D3d12HostDevice> &device : d3d12_devices_) device.destroy();
+    for (ObjectStorage<D3d11HostDevice> &device : d3d11_devices_) device.destroy();
 }
 
 void LoaderHostApis::open()
@@ -83,12 +87,13 @@ void LoaderHostApis::enumerate()
      * about each GPU in turn is one factory and one enumeration. */
     if (d3d_runtime_.open()) {
         for (uint32_t i = 0u; i < found; i++)
-            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
+            if (d3d11_devices_[i].object().open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
-                if (compositors_[i].opened()) d3d11_devices_[i].use_compositor(&compositors_[i]);
+                if (compositors_[i].opened()) d3d11_devices_[i].object().use_compositor(&compositors_[i]);
                 /* Direct3D 12 rides on the same sub-API: a session speaks
                  * whichever the guest's runtime asks for. */
-                if (d3d12_devices_[i].open(d3d_runtime_, uuids_[i].raw())) d3d11_devices_[i].pair(&d3d12_devices_[i]);
+                if (d3d12_devices_[i].object().open(d3d_runtime_, uuids_[i].raw()))
+                    d3d11_devices_[i].object().pair(&d3d12_devices_[i].object());
                 /* So does Direct3D 9, where DXVK's d3d9 is there too. */
                 static_cast<void>(d3d9_devices_[i].open(d3d_runtime_, uuids_[i].raw()));
             }
@@ -101,10 +106,10 @@ void LoaderHostApis::close()
     AV_SCOPE("LoaderHostApis::close");
     for (uint32_t i = 0u; i < count_; i++) {
         gl_displays_[i].close();
-        d3d12_devices_[i].close();
+        d3d12_devices_[i].object().close();
         d3d9_devices_[i].close();
-        d3d11_devices_[i].close();
-        d3d11_devices_[i].use_compositor(nullptr);
+        d3d11_devices_[i].object().close();
+        d3d11_devices_[i].object().use_compositor(nullptr);
         sources_[i].destroy();
         compositors_[i].close();
         opencl_devices_[i].forget();
@@ -161,7 +166,7 @@ const OpenClDevice *LoaderHostApis::opencl_device(uint32_t index)
 D3d11HostDevice *LoaderHostApis::d3d11_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d11_device");
-    return index < count_ && d3d11_devices_[index].placed() ? &d3d11_devices_[index] : nullptr;
+    return index < count_ && d3d11_devices_[index].object().placed() ? &d3d11_devices_[index].object() : nullptr;
 }
 
 D3d9HostDevice *LoaderHostApis::d3d9_device(uint32_t index)
@@ -173,7 +178,7 @@ D3d9HostDevice *LoaderHostApis::d3d9_device(uint32_t index)
 D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d12_device");
-    return index < count_ && d3d12_devices_[index].placed() ? &d3d12_devices_[index] : nullptr;
+    return index < count_ && d3d12_devices_[index].object().placed() ? &d3d12_devices_[index].object() : nullptr;
 }
 
 SharedSurfaces *LoaderHostApis::surfaces(uint32_t index)

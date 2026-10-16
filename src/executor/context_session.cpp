@@ -1,5 +1,6 @@
 #include "executor/context_session.hpp"
 
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/gpu_clock_hold.hpp"
@@ -9,14 +10,13 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
-#include <stdio.h>
 
 namespace av {
 
-ContextSession::ContextSession()
+ContextSession::ContextSession(DriverLog &lines)
     : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), heap_(), arena_(nullptr, 0u), answer_(heap_),
       answer_length_(0u), imports_(heap_), starved_(0u), faulted_(false),
-      sink_(stderr), lines_(sink_, "virtio-gpu-av: executor: ")
+      lines_(lines)
 {
     AV_SCOPE("ContextSession::ContextSession");
     arena_.overflow_into(heap_);

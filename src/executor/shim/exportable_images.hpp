@@ -24,10 +24,8 @@
 #ifndef AV_EXPORTABLE_IMAGES_HPP
 #define AV_EXPORTABLE_IMAGES_HPP
 
-#include "core/log/driver_log.hpp"
 #include "core/support/object_pool.hpp"
 #include "device/abi/av_executor.h"
-#include "device/host/stdio_log.hpp"
 #include "executor/shim/exportable_image.hpp"
 #include "executor/shim/host_heap.hpp"
 
@@ -39,6 +37,7 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class DxvkVulkanDevice;
 class ExportableImageInfo;
@@ -47,7 +46,8 @@ class Vkd3dImageExport;
 
 class ExportableImages {
 public:
-    explicit ExportableImages(DxvkVulkanDevice &vulkan);
+    /* `lines` is where a refused import is seen. */
+    ExportableImages(DxvkVulkanDevice &vulkan, DriverLog &lines);
     ~ExportableImages();
     ExportableImages(const ExportableImages &) = delete;
     ExportableImages &operator=(const ExportableImages &) = delete;
@@ -124,9 +124,7 @@ private:
     ObjectPool<ExportableImage> images_;
     /* Images let go of since the last collect: written by any thread. */
     uint32_t                    retired_;
-    /* QEMU's stderr: a refused import is seen nowhere else. */
-    StdioLog                    sink_;
-    DriverLog                   lines_;
+    DriverLog                  &lines_;
 };
 
 }  // namespace av

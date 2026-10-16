@@ -16,7 +16,9 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
+#include "executor/executor_log.hpp"
 #include "executor/executor_root.hpp"
+#include "device/host/stdio_log.hpp"
 #include "device/shim/host_trace.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/reporter_state_source.hpp"
@@ -58,8 +60,10 @@ public:
              * worth reading; a host without /dev/shm runs untraced. */
             (void)trace_.construct();
             (void)trace_.object().start("executor");
-            (void)apis_.construct();
-            (void)root_.construct();
+            (void)sink_.construct(stderr);
+            (void)log_.construct(sink_.object());
+            (void)apis_.construct(log_.object());
+            (void)root_.construct(log_.object());
             apis_.object().open();
             /* A host that serves nothing is a host this still answers for: the
              * root then offers no sub-API and the device describes no capset,
@@ -87,6 +91,9 @@ private:
     }
 
     av::ObjectStorage<av::HostTrace>      trace_;
+    /* QEMU's stderr, which its log collects: every line the library writes. */
+    av::ObjectStorage<av::StdioLog>       sink_;
+    av::ObjectStorage<av::ExecutorLog>    log_;
     av::ObjectStorage<av::LoaderHostApis> apis_;
     av::ObjectStorage<av::ExecutorRoot>   root_;
     av::ObjectStorage<av::ReporterStateSource> source_;

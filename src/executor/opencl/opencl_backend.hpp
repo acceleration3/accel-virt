@@ -39,6 +39,7 @@
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class SharedImageShape;
 
@@ -55,9 +56,9 @@ struct OpenClBackendProbe;
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
 public:
     /* Its tables grow from a heap of its own; a test hands it the source to
-     * grow from instead. */
-    OpenClBackend();
-    explicit OpenClBackend(BlockSource &blocks);
+     * grow from instead. `lines` is where what the host refused is said. */
+    explicit OpenClBackend(DriverLog &lines);
+    OpenClBackend(BlockSource &blocks, DriverLog &lines);
 
     /* Binds this context to the platform and device the host found for its
      * GPU, which must outlive it. False for a null device: a GPU the host
@@ -432,6 +433,7 @@ private:
     void            *marker_;
     uint64_t       ran_;
     bool           lost_;
+    DriverLog     &lines_;
 };
 
 }  // namespace av

@@ -69,17 +69,17 @@ void unpack_blob(void *user)
 
 }  // namespace
 
-OpenGlBackend::OpenGlBackend() : OpenGlBackend(heap_)
+OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
 
 /* heap_ is constructed before blocks are bound to it, whichever constructor
  * runs: it is declared first. */
-OpenGlBackend::OpenGlBackend(BlockSource &blocks)
+OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), guest_(), region_(guest_), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
-      lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
+      lost_(false), current_(false), lines_(lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }

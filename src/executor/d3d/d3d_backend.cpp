@@ -1,10 +1,11 @@
 #include "executor/d3d/d3d_backend.hpp"
+
+#include "executor/executor_log.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 
-#include <stdio.h>
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -110,12 +111,12 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
     }
 }
 
-D3dBackend::D3dBackend()
+D3dBackend::D3dBackend(ExecutorLog &log)
     : d3dproto::ServerDispatch(guest_), device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), fence_wake_(), clock_(), admitted_(false), held_(false), heap_(),
-      blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_), sink_(stderr),
-      lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
-      region_(guest_), imports_(nullptr), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_),
-      d3d9_(guest_, objects_, blocks_),
+      blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_),
+      lines_(log.d3d11()), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
+      region_(guest_), imports_(nullptr), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
+      d3d9_(guest_, objects_, blocks_, log.d3d9()),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
       slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)

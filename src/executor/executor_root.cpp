@@ -1,5 +1,7 @@
 #include "executor/executor_root.hpp"
 
+#include "executor/executor_log.hpp"
+
 #include "executor/shim/d3d11_host_device.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -24,11 +26,30 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][ContextSession::arena_
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot()
+ExecutorRoot::ExecutorRoot(ExecutorLog &log)
     : gpus_(), domains_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
       apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        static_cast<void>(sessions_[slot].construct(log.sessions()));
+        static_cast<void>(vulkan_[slot].construct(log.vulkan()));
+        static_cast<void>(opencl_[slot].construct(log.opencl()));
+        static_cast<void>(opengl_[slot].construct(log.opengl()));
+        static_cast<void>(d3d_[slot].construct(log));
+    }
+}
+
+ExecutorRoot::~ExecutorRoot()
+{
+    AV_SCOPE("ExecutorRoot::~ExecutorRoot");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        d3d_[slot].destroy();
+        opengl_[slot].destroy();
+        opencl_[slot].destroy();
+        vulkan_[slot].destroy();
+        sessions_[slot].destroy();
+    }
 }
 
 Status ExecutorRoot::initialize(HostApis &apis)
@@ -184,7 +205,7 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
         /* A slot in use refuses to be bound again, which is the test for in use
          * rather than a second one beside it. */
         SessionBackend &backend = *backend_in(slot, sub_api);
-        if (sessions_[slot].initialize(backend, decode_blocks[slot], ContextSession::arena_bytes) != Status::ok)
+        if (sessions_[slot].object().initialize(backend, decode_blocks[slot], ContextSession::arena_bytes) != Status::ok)
             continue;
         shares_[slot].bind(*apis_->shares(gpu->index()), options.domain, backend);
         /* Opened here, at the context's setup, on what the host found when it
@@ -194,19 +215,19 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
          * still refuse a context, and then the slot goes back. */
         if (!bind(slot, sub_api, *gpu, options, shared)) {
             shares_[slot].end();
-            sessions_[slot].release();
+            sessions_[slot].object().release();
             return nullptr;
         }
         apis_of_[slot] = sub_api;
         gpus_of_[slot] = gpu->index();
         HostMemorySource *const source = apis_->memory_source(gpu->index());
-        if (source != nullptr) sessions_[slot].draw_from(*source, options.domain);
+        if (source != nullptr) sessions_[slot].object().draw_from(*source, options.domain);
         /* Not OpenCL's: its kernels saturate the GPU between the guest's
          * waits, and the peak state's fixed clock is below what a saturated
          * GPU boosts to - held, the OpenCL samples lost 5 to 10%. */
         if (sub_api != AV_EXECUTOR_SUB_API_OPENCL && clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
-            sessions_[slot].hold_clocks(clocks_[gpu->index()]);
-        return &sessions_[slot];
+            sessions_[slot].object().hold_clocks(clocks_[gpu->index()]);
+        return &sessions_[slot].object();
     }
     return nullptr;
 }
@@ -215,10 +236,10 @@ SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
 {
     AV_SCOPE("ExecutorRoot::backend_in");
     switch (sub_api) {
-    case AV_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot];
-    case AV_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
-    case AV_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot];
-    case AV_EXECUTOR_SUB_API_D3D: return &d3d_[slot];
+    case AV_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot].object();
+    case AV_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot].object();
+    case AV_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot].object();
+    case AV_EXECUTOR_SUB_API_D3D: return &d3d_[slot].object();
     default: return nullptr;
     }
 }
@@ -227,10 +248,10 @@ const OpenGlBackend *ExecutorRoot::sharing(const ContextSession *share, const Ho
 {
     AV_SCOPE("ExecutorRoot::sharing");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (&sessions_[slot] != share) continue;
+        if (&sessions_[slot].object() != share) continue;
         const bool fits = share->live() && apis_of_[slot] == AV_EXECUTOR_SUB_API_OPENGL &&
                           gpus_of_[slot] == gpu.index();
-        return fits ? &opengl_[slot] : nullptr;
+        return fits ? &opengl_[slot].object() : nullptr;
     }
     return nullptr;
 }
@@ -245,10 +266,10 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
      * GL object (feature 053, T019). A host with no display shares nothing
      * and runs everything else. */
     case AV_EXECUTOR_SUB_API_OPENCL:
-        return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share,
-                                        sessions_[slot].imports());
+        return opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
+                                                 share, sessions_[slot].object().imports());
     case AV_EXECUTOR_SUB_API_OPENGL:
-        return opengl_[slot].initialize(apis_->gl_display(gpu.index()), &options, share);
+        return opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share);
     case AV_EXECUTOR_SUB_API_D3D: {
         /* A Direct3D 11 device the sessions before lost is made again for
          * this one once they are gone; the wait is for their workers, woken
@@ -256,10 +277,13 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
         constexpr uint32_t renew_wait_ms = 2000u;
         D3d11HostDevice *const device11 = apis_->d3d11_device(gpu.index());
         if (device11 == nullptr || !device11->renew(renew_wait_ms)) return false;
-        return d3d_[slot].initialize(shares_[slot], sessions_[slot].imports(), device11, apis_->d3d12_device(gpu.index()),
-                                     apis_->surfaces(gpu.index()), apis_->d3d9_device(gpu.index()));
+        return d3d_[slot].object().initialize(shares_[slot], sessions_[slot].object().imports(), device11,
+                                              apis_->d3d12_device(gpu.index()), apis_->surfaces(gpu.index()),
+                                              apis_->d3d9_device(gpu.index()));
     }
-    default: vulkan_[slot].initialize(gpu, apis_->memory_source(gpu.index()), sessions_[slot].imports()); return true;
+    default:
+        vulkan_[slot].object().initialize(gpu, apis_->memory_source(gpu.index()), sessions_[slot].object().imports());
+        return true;
     }
 }
 
@@ -348,7 +372,7 @@ void ExecutorRoot::report(StateWriter &writer)
     gpus_.report(writer);
     domains_.report(writer);
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (!sessions_[slot].live()) continue;
+        if (!sessions_[slot].object().live()) continue;
         writer.open("session", slot);
         writer.text("api", api_name(apis_of_[slot]));
         writer.number("gpu", gpus_of_[slot]);
@@ -385,7 +409,7 @@ uint32_t ExecutorRoot::live() const
     AV_SCOPE("ExecutorRoot::live");
     uint32_t running = 0u;
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (sessions_[slot].live()) running++;
+        if (sessions_[slot].object().live()) running++;
     }
     return running;
 }
@@ -400,7 +424,7 @@ uint32_t ExecutorRoot::slot_of(const ContextSession *session) const
 {
     AV_SCOPE("ExecutorRoot::slot_of");
     for (uint32_t slot = 0u; slot < max_sessions; slot++)
-        if (&sessions_[slot] == session) return slot;
+        if (&sessions_[slot].object() == session) return slot;
     return max_sessions;
 }
 

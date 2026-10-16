@@ -41,18 +41,18 @@ constexpr VulkanObjectKind object_kind(vkproto::HandleKind kind)
 
 }  // namespace
 
-VulkanBackend::VulkanBackend() : VulkanBackend(heap_)
+VulkanBackend::VulkanBackend(DriverLog &lines) : VulkanBackend(heap_, lines)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
 
 /* heap_ is constructed before blocks_ is bound to it, whichever constructor
  * runs: it is declared first. */
-VulkanBackend::VulkanBackend(BlockSource &blocks)
+VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
-      memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), parent_(0u),
-      ran_(0u)
+      memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
+      parent_(0u), ran_(0u)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }

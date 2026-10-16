@@ -3,7 +3,6 @@
 #include "core/support/extension_words.hpp"
 #include "core/support/growable_array.hpp"
 
-#include "device/host/stdio_log.hpp"
 #include "core/log/driver_log.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 
@@ -75,20 +74,20 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
     static_cast<ClEventRegistration *>(user_data)->completed();
 }
 
-OpenClBackend::OpenClBackend() : OpenClBackend(heap_)
+OpenClBackend::OpenClBackend(DriverLog &lines) : OpenClBackend(heap_, lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
 
 /* heap_ is constructed before blocks_ is bound to it, whichever constructor
  * runs: it is declared first. */
-OpenClBackend::OpenClBackend(BlockSource &blocks)
+OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
     : clproto::RealDispatch(guest_), heap_(), blocks_(blocks), bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
-      lost_(false)
+      lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
@@ -1085,9 +1084,7 @@ cl_mem OpenClBackend::image_over(cl_mem buffer, const SharedImageShape &shape)
     cl_mem const image = ::clCreateImage(static_cast<cl_context>(context_), CL_MEM_READ_WRITE, &named, &described,
                                          nullptr, &made);
     if (image == nullptr) {
-        StdioLog sink(stderr);
-        DriverLog(sink, "virtio-gpu-av: opencl: ")
-            .note_hex("a shared texture is opened as bytes, no image over its memory: error",
+        lines_.note_hex("a shared texture is opened as bytes, no image over its memory: error",
                       static_cast<uint32_t>(-made), 8u);
         return buffer;
     }

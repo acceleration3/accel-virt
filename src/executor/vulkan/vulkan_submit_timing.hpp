@@ -14,9 +14,12 @@
 
 namespace av {
 
+class DriverLog;
+
 class VulkanSubmitTiming {
 public:
-    VulkanSubmitTiming();
+    /* `lines` is where the timing is said. */
+    explicit VulkanSubmitTiming(DriverLog &lines);
     ~VulkanSubmitTiming();
     VulkanSubmitTiming(const VulkanSubmitTiming &) = delete;
     VulkanSubmitTiming &operator=(const VulkanSubmitTiming &) = delete;
@@ -39,6 +42,7 @@ private:
     void     report();
     uint64_t now() const;
 
+    DriverLog       &lines_;
     bool             enabled_;
     VkDevice         device_;
     VkQueue          queue_;

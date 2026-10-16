@@ -1,6 +1,9 @@
 /* A driver's lines (constitution IX), each prefixed with the driver's name -
- * "avvk: ", "avgl: ", "avcl: ", "avumd: ". KeyedLog adds the lines a caller
- * would otherwise write on every call, written once per key instead. */
+ * "avvk: ", "avgl: ", "avcl: ", "avumd: ". A binary has one, made by its root
+ * with the prefix the root chooses (the guest drivers' DriverSeams, the
+ * executor's ExecutorLog), and every class that writes a line is handed it:
+ * no call site types a prefix. KeyedLog adds the lines a caller would
+ * otherwise write on every call, written once per key instead. */
 #ifndef AV_DRIVER_LOG_HPP
 #define AV_DRIVER_LOG_HPP
 

@@ -1,5 +1,6 @@
 #include "executor/d3d/d3d9_session.hpp"
 
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
@@ -7,14 +8,14 @@
 #include "proto/generated/d3d9/d3d9_command_names.h"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
 
-#include <stdio.h>
 #include <string.h>
 
 namespace av {
 
-D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks)
+D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks,
+                         DriverLog &lines)
     : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
-      devices_(blocks), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr), lost_(false)
+      devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }

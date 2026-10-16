@@ -1,9 +1,9 @@
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/host/env_setting.hpp"
 
-#include <stdio.h>
 #include <time.h>
 
 namespace av {
@@ -14,8 +14,8 @@ constexpr uint64_t nanoseconds_per_second = 1000000000u;
 
 }  // namespace
 
-VulkanSubmitTiming::VulkanSubmitTiming()
-    : enabled_(EnvSetting("AV_VK_SUBMIT_TIMING").on()), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
+VulkanSubmitTiming::VulkanSubmitTiming(DriverLog &lines)
+    : lines_(lines), enabled_(EnvSetting("AV_VK_SUBMIT_TIMING").on()), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
       pool_(VK_NULL_HANDLE), queries_(VK_NULL_HANDLE), begin_{}, end_{}, pending_{}, next_(0u), oldest_(0u),
       period_ns_(1.0), last_end_(0u), busy_ns_(0u), gap_ns_(0u), gaps_(0u), long_gaps_(0u), timed_(0u), window_started_(0u)
 {
@@ -61,7 +61,7 @@ void VulkanSubmitTiming::queue_made(VkPhysicalDevice physical, VkDevice device, 
     device_ = device;
     queue_ = queue;
     window_started_ = now();
-    fprintf(stderr, "av-vk-timing: timing queue family %u\n", family);
+    lines_.note("timing queue family", family);
 }
 
 void VulkanSubmitTiming::harvest()
@@ -106,14 +106,23 @@ void VulkanSubmitTiming::report()
     AV_SCOPE("VulkanSubmitTiming::report");
     const uint64_t at = now();
     if (at - window_started_ < nanoseconds_per_second || timed_ == 0u) return;
-    const double seconds = static_cast<double>(at - window_started_) / 1e9;
-    fprintf(stderr,
-            "av-vk-timing: %.0f submits/s, GPU %.1f us in each, %.1f us idle before each (of %llu; %llu idle over "
-            "1 ms), in submits %.1f%% of the time\n",
-            static_cast<double>(timed_) / seconds, static_cast<double>(busy_ns_) / 1e3 / static_cast<double>(timed_),
-            gaps_ == 0u ? 0.0 : static_cast<double>(gap_ns_) / 1e3 / static_cast<double>(gaps_),
-            static_cast<unsigned long long>(gaps_), static_cast<unsigned long long>(long_gaps_),
-            100.0 * static_cast<double>(busy_ns_) / static_cast<double>(at - window_started_));
+    constexpr uint64_t ns_per_tenth_us = 100u;
+    constexpr uint64_t tenth_percents_per_whole = 1000u;
+    const uint64_t     window = at - window_started_;
+    LogLine(lines_)
+        .number((timed_ * nanoseconds_per_second + window / 2u) / window)
+        .text(" submits/s, GPU ")
+        .tenths(busy_ns_ / timed_ / ns_per_tenth_us)
+        .text(" us in each, ")
+        .tenths(gaps_ == 0u ? 0u : gap_ns_ / gaps_ / ns_per_tenth_us)
+        .text(" us idle before each (of ")
+        .number(gaps_)
+        .text("; ")
+        .number(long_gaps_)
+        .text(" idle over 1 ms), in submits ")
+        .tenths(busy_ns_ * tenth_percents_per_whole / window)
+        .text("% of the time")
+        .write();
     busy_ns_ = gap_ns_ = timed_ = gaps_ = long_gaps_ = 0u;
     window_started_ = at;
 }

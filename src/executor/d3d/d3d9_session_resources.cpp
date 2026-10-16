@@ -1,6 +1,7 @@
 /* D3d9Session's surfaces, textures and buffers, and what is written into,
  * read out of and copied between them (d3d9_session.hpp). */
 #include "core/support/scope_exit.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d9_texture_write.hpp"

@@ -15,7 +15,6 @@
 #ifndef AV_D3D12_SESSION_HPP
 #define AV_D3D12_SESSION_HPP
 
-#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
@@ -24,7 +23,6 @@
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
-#include "device/host/stdio_log.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/shim/d3d12_presentation.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_server.h"
@@ -41,6 +39,7 @@ struct D3D12_TEXTURE_COPY_LOCATION;
 
 namespace av {
 
+class DriverLog;
 class D3d11HostDevice;
 class SessionShares;
 class SharedSurfaces;
@@ -62,7 +61,7 @@ public:
      * `fence_wake` what wakes it when the GPU reaches a mark a queue left. */
     /* `blocks` is what the session's tables grow in. */
     D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
-                 EventfdWake &fence_wake, WatchedBlocks &blocks);
+                 EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. A CPU-visible heap is
@@ -211,9 +210,8 @@ private:
     /* The decoding command's arena, which containers are written into. */
     WireArena             *arena_;
     uint32_t               removed_;
-    /* QEMU's stderr, where the host log is read when a guest's command fails. */
-    StdioLog               sink_;
-    DriverLog              lines_;
+    /* Where the host log is read when a guest's command fails. */
+    DriverLog             &lines_;
     CommandRefusal         refusal_;
     /* What a drain's wait for the GPU measures its deadline on. */
     MonotonicClock         clock_;

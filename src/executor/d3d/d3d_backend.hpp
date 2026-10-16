@@ -13,7 +13,6 @@
 #ifndef AV_D3D_BACKEND_HPP
 #define AV_D3D_BACKEND_HPP
 
-#include "core/log/driver_log.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d11_batch_progress.hpp"
 #include "executor/d3d/d3d12_session.hpp"
@@ -31,7 +30,6 @@
 #include "executor/eventfd_wake.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/wake_signal.hpp"
-#include "device/host/stdio_log.hpp"
 #include "proto/generated/d3d/d3d_dispatch_server.h"
 
 #include <stdint.h>
@@ -44,6 +42,7 @@ struct ID3D11Buffer;
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class SharedImageShape;
 
@@ -52,6 +51,7 @@ struct D3dBackendProbe;
 class D3d11HostDevice;
 class D3d12HostDevice;
 class D3d9HostDevice;
+class ExecutorLog;
 class ImportTable;
 class SourceMemory;
 class SessionShares;
@@ -62,7 +62,8 @@ public:
     /* The most resources one rotation names: the wire's bound. */
     static constexpr uint32_t max_rotation = 16u;
 
-    D3dBackend();
+    /* Its Direct3D 11, 12 and 9 halves write to their parts of `log`. */
+    explicit D3dBackend(ExecutorLog &log);
 
     /* Binds this session to what the guest shares through `shares` - bound
      * to its domain, or not, and then it shares nothing - to its GPU's
@@ -291,9 +292,8 @@ private:
     /* Each device's pipeline state, by the guest's id, and the selected
      * one, which commands run on. */
     GuestDevices<ID3DDeviceContextState> states_;
-    /* QEMU's stderr, where the host log is read when a guest's command fails. */
-    StdioLog                sink_;
-    DriverLog               lines_;
+    /* Where the host log is read when a guest's command fails. */
+    DriverLog              &lines_;
     CommandRefusal          refusal_;
     /* The decode arena of the command running, which scratch - a shader's
      * container - is taken from; null between commands. */

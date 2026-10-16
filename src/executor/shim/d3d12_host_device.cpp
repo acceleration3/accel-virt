@@ -11,9 +11,9 @@
 
 namespace av {
 
-D3d12HostDevice::D3d12HostDevice()
-    : runtime_(nullptr), uuid_(), tenant_heap_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "),
-      renewal_(tenant_heap_, lines_), shown_by_(nullptr),
+D3d12HostDevice::D3d12HostDevice(DriverLog &lines)
+    : runtime_(nullptr), uuid_(), tenant_heap_(),
+      renewal_(tenant_heap_, lines), shown_by_(nullptr),
       device_(nullptr), capabilities_(), frames_()
 {
     AV_SCOPE("D3d12HostDevice::D3d12HostDevice");

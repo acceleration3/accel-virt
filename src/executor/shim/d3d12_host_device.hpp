@@ -18,8 +18,6 @@
 #ifndef AV_D3D12_HOST_DEVICE_HPP
 #define AV_D3D12_HOST_DEVICE_HPP
 
-#include "core/log/driver_log.hpp"
-#include "device/host/stdio_log.hpp"
 #include "executor/host_device_renewal.hpp"
 #include "executor/renewable_device.hpp"
 #include "executor/shim/d3d12_capabilities.hpp"
@@ -38,6 +36,7 @@ struct ID3D12RootSignature;
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class D3d11HostDevice;
 class D3dRuntime;
@@ -47,7 +46,8 @@ class Vkd3dImageExport;
 
 class D3d12HostDevice final : public RenewableDevice {
 public:
-    D3d12HostDevice();
+    /* `lines` is where a loss and a renewal are seen. */
+    explicit D3d12HostDevice(DriverLog &lines);
     ~D3d12HostDevice();
     D3d12HostDevice(const D3d12HostDevice &) = delete;
     D3d12HostDevice &operator=(const D3d12HostDevice &) = delete;
@@ -114,9 +114,6 @@ private:
     DeviceUuid         uuid_;
     /* Where the tenants' list grows from: before it, as it is destroyed after. */
     HostHeap           tenant_heap_;
-    /* QEMU's stderr, where a loss and a renewal are seen. */
-    StdioLog           sink_;
-    DriverLog          lines_;
     HostDeviceRenewal  renewal_;
     D3d11HostDevice   *shown_by_;
     ID3D12Device      *device_;

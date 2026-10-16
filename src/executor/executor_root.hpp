@@ -10,6 +10,7 @@
 #ifndef AV_EXECUTOR_ROOT_HPP
 #define AV_EXECUTOR_ROOT_HPP
 
+#include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "device/abi/av_executor.h"
@@ -28,6 +29,7 @@
 
 namespace av {
 
+class ExecutorLog;
 class SurfacePoint;
 
 class HostApis;
@@ -40,7 +42,9 @@ public:
     /* Sessions this library will hand out at once. */
     static constexpr uint32_t sessions = 64u;
 
-    ExecutorRoot();
+    /* Each session and backend writes to its part of `log`. */
+    explicit ExecutorRoot(ExecutorLog &log);
+    ~ExecutorRoot();
     ExecutorRoot(const ExecutorRoot &) = delete;
     ExecutorRoot &operator=(const ExecutorRoot &) = delete;
 
@@ -173,11 +177,12 @@ private:
     HostGpuSet      gpus_;
     ExecutorDomains domains_;
     GpuClockHold   clocks_[HostGpuSet::max_gpus];
-    ContextSession sessions_[max_sessions];
-    VulkanBackend  vulkan_[max_sessions];
-    OpenClBackend  opencl_[max_sessions];
-    OpenGlBackend  opengl_[max_sessions];
-    D3dBackend     d3d_[max_sessions];
+    /* Made with the root, each over its part of the log. */
+    ObjectStorage<ContextSession> sessions_[max_sessions];
+    ObjectStorage<VulkanBackend>  vulkan_[max_sessions];
+    ObjectStorage<OpenClBackend>  opencl_[max_sessions];
+    ObjectStorage<OpenGlBackend>  opengl_[max_sessions];
+    ObjectStorage<D3dBackend>     d3d_[max_sessions];
     /* What each session shares through, bound as it opens. */
     SessionShares  shares_[max_sessions];
     /* What each open session runs: its sub-API and its GPU's index, for a

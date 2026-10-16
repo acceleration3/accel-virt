@@ -26,8 +26,8 @@ constexpr uint32_t most_tilings = 16u;
 
 }  // namespace
 
-ExportableImages::ExportableImages(DxvkVulkanDevice &vulkan)
-    : vulkan_(vulkan), heap_(), images_(heap_), retired_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: ")
+ExportableImages::ExportableImages(DxvkVulkanDevice &vulkan, DriverLog &lines)
+    : vulkan_(vulkan), heap_(), images_(heap_), retired_(0u), lines_(lines)
 {
     AV_SCOPE("ExportableImages::ExportableImages");
 }

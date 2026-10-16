@@ -8,7 +8,6 @@
 #ifndef AV_OPENGL_BACKEND_HPP
 #define AV_OPENGL_BACKEND_HPP
 
-#include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
@@ -17,7 +16,6 @@
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/opengl/sync_tokens.hpp"
-#include "device/host/stdio_log.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
 #include "executor/shim/gl_host_import.hpp"
@@ -28,6 +26,7 @@
 
 namespace av {
 
+class DriverLog;
 class OwnedFd;
 class SharedImageShape;
 
@@ -37,9 +36,10 @@ class SourceMemory;
 class OpenGlBackend final : public SessionBackend {
 public:
     /* Its tables grow from a heap of its own; a test hands it the source to
-     * grow from instead. */
-    OpenGlBackend();
-    explicit OpenGlBackend(BlockSource &blocks);
+     * grow from instead. `lines` is where the host log is read when a
+     * guest's batch fails. */
+    explicit OpenGlBackend(DriverLog &lines);
+    OpenGlBackend(BlockSource &blocks, DriverLog &lines);
 
     /* Opens a context on the display the host keeps for this context's GPU,
      * which must outlive it, made with `options` (null: the defaults) and
@@ -140,9 +140,7 @@ private:
     bool        lost_;
     /* Whether this batch has made the context current yet. */
     bool        current_;
-    /* QEMU's stderr, where the host log is read when a guest's batch fails. */
-    StdioLog    sink_;
-    DriverLog   lines_;
+    DriverLog  &lines_;
 
     friend struct OpenGlBackendProbe;
 };
