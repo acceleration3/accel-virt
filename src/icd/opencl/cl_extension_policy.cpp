@@ -1,29 +1,9 @@
 #include "icd/opencl/cl_extension_policy.hpp"
 
+#include "core/support/extension_words.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av::clicd {
-
-namespace {
-
-size_t length_within(const char *text, size_t bytes)
-{
-    AV_SCOPE("length_within");
-    size_t length = 0u;
-    while (length < bytes && text[length] != '\0') ++length;
-    return length;
-}
-
-bool same_word(const char *text, const char *name, size_t length)
-{
-    AV_SCOPE("same_word");
-    for (size_t index = 0u; index < length; ++index) {
-        if (name[index] == '\0' || text[index] != name[index]) return false;
-    }
-    return name[length] == '\0';
-}
-
-}  // namespace
 
 /* The extensions this ICD reports, each with the test that proves it through
  * the ICD (tools/check_extension_policy.py).
@@ -147,23 +127,40 @@ ClExtensionPolicy::ClExtensionPolicy(const Row *rows, uint32_t count)
     if (count_ > max_rows) count_ = max_rows;
 }
 
-bool ClExtensionPolicy::offered_by(const char *host, size_t host_bytes, const char *name) const
+size_t ClExtensionPolicy::letters_of(const char *name) const
 {
-    AV_SCOPE("ClExtensionPolicy::offered_by");
-    if (host == nullptr || name == nullptr) return false;
-    const size_t bytes = length_within(host, host_bytes);
-    size_t at = 0u;
-    while (at < bytes) {
-        while (at < bytes && host[at] == ' ') ++at;
-        size_t end = at;
-        while (end < bytes && host[end] != ' ') ++end;
-        if (end > at && same_word(&host[at], name, end - at)) return true;
-        at = end;
-    }
-    return false;
+    AV_SCOPE("ClExtensionPolicy::letters_of");
+    size_t length = 0u;
+    while (length < name_bytes && name[length] != '\0') ++length;
+    return length;
 }
 
-bool ClExtensionPolicy::answered_by(const char *host, size_t host_bytes, const Row &row) const
+bool ClExtensionPolicy::same(const char *row_name, const char *name) const
+{
+    AV_SCOPE("ClExtensionPolicy::same");
+    const size_t length = letters_of(row_name);
+    for (size_t index = 0u; index < length; ++index) {
+        if (name[index] == '\0' || row_name[index] != name[index]) return false;
+    }
+    return name[length] == '\0';
+}
+
+uint32_t ClExtensionPolicy::vendor_of(const char *host) const
+{
+    AV_SCOPE("ClExtensionPolicy::vendor_of");
+    uint32_t vendor = 0u;
+    for (const char *digit = &host[1]; *digit != '\0'; ++digit) {
+        const char     c = *digit;
+        const uint32_t value = c >= '0' && c <= '9'   ? static_cast<uint32_t>(c - '0')
+                               : c >= 'A' && c <= 'F' ? static_cast<uint32_t>(c - 'A' + 10)
+                                                      : 16u;
+        if (value == 16u) return 0u;
+        vendor = (vendor << 4u) | value;
+    }
+    return vendor;
+}
+
+bool ClExtensionPolicy::answered_by(const ExtensionWords &host, const Row &row) const
 {
     AV_SCOPE("ClExtensionPolicy::answered_by");
     /* The host extension the row is answered over, when it is not the host's
@@ -176,35 +173,30 @@ bool ClExtensionPolicy::answered_by(const char *host, size_t host_bytes, const R
         /* "-*": answered here once the adapter is described, whatever it is. */
         if (row.host_[1] == '*' && row.host_[2] == '\0') return vendor_ != 0u;
         /* "-1002": answered here on an adapter of that PCI vendor. */
-        uint32_t vendor = 0u;
-        for (const char *digit = &row.host_[1]; *digit != '\0'; ++digit) {
-            const char c = *digit;
-            const uint32_t value = c >= '0' && c <= '9'   ? static_cast<uint32_t>(c - '0')
-                                   : c >= 'A' && c <= 'F' ? static_cast<uint32_t>(c - 'A' + 10)
-                                                          : 16u;
-            if (value == 16u) return false;
-            vendor = (vendor << 4u) | value;
-        }
-        return vendor_ != 0u && vendor == vendor_;
+        return vendor_ != 0u && vendor_of(row.host_) == vendor_;
     }
-    return offered_by(host, host_bytes, row.host_ != nullptr ? row.host_ : row.name_);
+    return host.holds(row.host_ != nullptr ? row.host_ : row.name_);
 }
 
 bool ClExtensionPolicy::reportable(const char *name) const
 {
     AV_SCOPE("ClExtensionPolicy::reportable");
     if (name == nullptr) return false;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        const char *const row = rows_[index].name_;
-        size_t length = 0u;
-        while (row[length] != '\0' && length < name_bytes) ++length;
-        if (same_word(row, name, length)) return true;
-    }
+    for (uint32_t index = 0u; index < count_; ++index)
+        if (same(rows_[index].name_, name)) return true;
     return false;
 }
 
-size_t ClExtensionPolicy::report(const char *host, size_t host_bytes, char *into,
-                                 size_t into_bytes) const
+bool ClExtensionPolicy::reports(const ExtensionWords &host, const char *name) const
+{
+    AV_SCOPE("ClExtensionPolicy::reports");
+    if (name == nullptr) return false;
+    for (uint32_t index = 0u; index < count_; ++index)
+        if (same(rows_[index].name_, name)) return answered_by(host, rows_[index]);
+    return false;
+}
+
+size_t ClExtensionPolicy::report(const ExtensionWords &host, char *into, size_t into_bytes) const
 {
     AV_SCOPE("ClExtensionPolicy::report");
     /* Measured first, then written: a caller asks the size and asks again
@@ -212,37 +204,33 @@ size_t ClExtensionPolicy::report(const char *host, size_t host_bytes, char *into
      * as much as happened to fit. */
     size_t needed = 1u;
     for (uint32_t index = 0u; index < count_; ++index) {
-        if (!answered_by(host, host_bytes, rows_[index])) continue;
-        size_t length = 0u;
-        while (rows_[index].name_[length] != '\0' && length < name_bytes) ++length;
-        needed += length + (needed > 1u ? 1u : 0u);
+        if (!answered_by(host, rows_[index])) continue;
+        needed += letters_of(rows_[index].name_) + (needed > 1u ? 1u : 0u);
     }
     if (into == nullptr || into_bytes < needed) return needed;
 
     size_t at = 0u;
     for (uint32_t index = 0u; index < count_; ++index) {
-        if (!answered_by(host, host_bytes, rows_[index])) continue;
+        if (!answered_by(host, rows_[index])) continue;
         if (at != 0u) into[at++] = ' ';
-        for (size_t letter = 0u; rows_[index].name_[letter] != '\0' && letter < name_bytes; ++letter) {
-            into[at++] = rows_[index].name_[letter];
-        }
+        const size_t length = letters_of(rows_[index].name_);
+        for (size_t letter = 0u; letter < length; ++letter) into[at++] = rows_[index].name_[letter];
     }
     into[at] = '\0';
     return needed;
 }
 
-size_t ClExtensionPolicy::report_versions(const char *host, size_t host_bytes, cl_name_version *into,
-                                          size_t room) const
+size_t ClExtensionPolicy::report_versions(const ExtensionWords &host, cl_name_version *into, size_t room) const
 {
     AV_SCOPE("ClExtensionPolicy::report_versions");
     size_t needed = 0u;
     for (uint32_t index = 0u; index < count_; ++index) {
-        if (answered_by(host, host_bytes, rows_[index])) ++needed;
+        if (answered_by(host, rows_[index])) ++needed;
     }
     if (into == nullptr || room < needed) return needed;
     size_t at = 0u;
     for (uint32_t index = 0u; index < count_; ++index) {
-        if (!answered_by(host, host_bytes, rows_[index])) continue;
+        if (!answered_by(host, rows_[index])) continue;
         cl_name_version &entry = into[at++];
         entry.version = CL_MAKE_VERSION(rows_[index].spec_version_, 0u, 0u);
         size_t letter = 0u;
@@ -272,13 +260,12 @@ bool ClExtensionPolicy::invariants_hold() const
     if (count_ != 0u && rows_ == nullptr) return false;
     for (uint32_t index = 0u; index < count_; ++index) {
         if (rows_[index].name_ == nullptr || rows_[index].test_ == nullptr) return false;
-        size_t length = 0u;
-        while (length < name_bytes && rows_[index].name_[length] != '\0') ++length;
+        const size_t length = letters_of(rows_[index].name_);
         if (length == 0u || length == name_bytes) return false;
         /* No name twice: reporting one twice would be a list no application
          * can parse into a set. */
         for (uint32_t other = index + 1u; other < count_; ++other) {
-            if (same_word(rows_[index].name_, rows_[other].name_, length)) return false;
+            if (same(rows_[index].name_, rows_[other].name_)) return false;
         }
     }
     return true;

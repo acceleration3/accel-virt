@@ -7,7 +7,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/extension_policy.hpp"
 #include "core/log/log_sink.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/common/thread_lock.hpp"
@@ -69,7 +68,7 @@ constexpr const char *const reset_status_names[] = {"glGetGraphicsResetStatus", 
 /* The GL extensions reported: a row arrives with the test that proves its
  * extension through this ICD (tools/check_extension_policy.py), and is still
  * only reported where the host's own list has it. */
-constexpr icd::ExtensionPolicy::Row reported_extensions[] = {
+constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_compatibility", 1u,
      "fullstack_opengl_icd.a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list"},
     /* The external objects (feature 053, T037), each answered over the host's
@@ -109,7 +108,7 @@ constexpr icd::ExtensionPolicy::Row reported_extensions[] = {
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The WGL extensions the functions DrvGetProcAddress answers make whole, each
  * with the test that proves it. */
-constexpr icd::ExtensionPolicy::Row reported_wgl_extensions[] = {
+constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {
     {"WGL_ARB_extensions_string", 1u, "gl_icd_root.answers_gl_and_wgl_names_it_implements"},
     {"WGL_ARB_pixel_format", 1u, "gl_icd_root.answers_pixel_format_attributes_and_choices_through_wgl"},
     {"WGL_ARB_create_context", 1u, "gl_icd_root.a_create_with_attributes_makes_the_context_and_opengl32s_hglrc_names_it"},

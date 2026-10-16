@@ -213,7 +213,9 @@ private:
     bool                 asked_for_itself() const;
     /* The host's strings and list lengths; false when the host answered none. */
     bool                 learn();
-    void                 cap_version();
+    /* The version string in `row` capped at OpenGL's major version and
+     * `most_minor`. */
+    void                 cap_version(uint32_t row, uint32_t most_minor);
     void                 teardown();
 
     BlockSource                   &memory_;

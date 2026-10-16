@@ -14,6 +14,8 @@
 #ifndef AV_CLICD_CL_PLATFORM_HPP
 #define AV_CLICD_CL_PLATFORM_HPP
 
+#include "icd/common/version_text.hpp"
+
 #include <CL/cl.h>
 #include <CL/cl_icd.h>
 
@@ -79,14 +81,14 @@ private:
 
     /* The one query whose answer is a string this builds rather than holds. */
     cl_int answer(const char *text, size_t value_bytes, void *value, size_t *size_ret) const;
+    size_t length_of(const char *text) const;
 
     /* First, and it stays first: the loader reads this word. */
     const cl_icd_dispatch *dispatch_;
     /* "OpenCL <major>.<minor> avgpu", built when the version is capped. */
     char                   version_[32];
     char                   name_[160];
-    uint32_t               major_;
-    uint32_t               minor_;
+    icd::VersionText       version_number_;
 };
 
 }  // namespace av::clicd

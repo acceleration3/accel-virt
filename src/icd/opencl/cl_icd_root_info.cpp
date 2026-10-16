@@ -4,6 +4,7 @@
  * device here can be split into, and a sampler's own answers. */
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "core/support/extension_words.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
@@ -33,14 +34,11 @@ bool names_feature(const cl_name_version &entry, const char *feature)
 cl_int ClIcdRoot::device_extension_versions(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::device_extension_versions");
-    ClientTransport *const wire = wire_of(*device.object());
-    if (wire == nullptr) return CL_INVALID_DEVICE;
-    char         host[host_extensions_bytes] = {};
-    size_t       answered = 0u;
-    const cl_int asked = host_device_info(*wire, device, CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
+    ExtensionWords host(memory_, Pool::paged);
+    const cl_int   asked = host_extensions(device, host);
     if (asked != CL_SUCCESS) return asked;
     cl_name_version listed[ClExtensionPolicy::max_rows] = {};
-    const size_t    count = device.extensions().report_versions(host, answered, listed, ClExtensionPolicy::max_rows);
+    const size_t    count = device.extensions().report_versions(host, listed, ClExtensionPolicy::max_rows);
     return ClInfoRequest(value_bytes, value, size_ret).give(listed, count * sizeof listed[0]);
 }
 
@@ -68,9 +66,9 @@ cl_int ClIcdRoot::platform_extension_versions(size_t value_bytes, void *value, s
     /* What CL_PLATFORM_EXTENSIONS names, as platform_info finds it: the rows
      * this ICD answers alone, before any host is asked. */
     const ClExtensionPolicy platform_wide(reported_extensions, reported_extension_count);
-    static const char       no_host[] = "";
+    const ExtensionWords    no_host(memory_, Pool::paged);
     cl_name_version         listed[ClExtensionPolicy::max_rows] = {};
-    const size_t count = platform_wide.report_versions(no_host, sizeof no_host, listed, ClExtensionPolicy::max_rows);
+    const size_t            count = platform_wide.report_versions(no_host, listed, ClExtensionPolicy::max_rows);
     return ClInfoRequest(value_bytes, value, size_ret).give(listed, count * sizeof listed[0]);
 }
 

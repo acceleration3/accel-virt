@@ -11,7 +11,7 @@
 #define AV_VULKAN_BACKEND_HPP
 
 #include "executor/vulkan/adopted_blobs.hpp"
-#include "executor/vulkan/extension_list.hpp"
+#include "core/support/extension_names.hpp"
 #include "executor/vulkan/host_exported_fds.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
@@ -335,7 +335,7 @@ private:
     PhysicalDeviceList listed_;
     /* The names the create being run is made with. One list serves instances
      * and devices: a create is one command, and nothing reads it afterwards. */
-    ExtensionList      extensions_;
+    ExtensionNames     extensions_;
     /* The application an instance being made names, at the host's version. */
     VkApplicationInfo  application_;
     /* The device the imports belong to. A VkDeviceMemory is a device's, and

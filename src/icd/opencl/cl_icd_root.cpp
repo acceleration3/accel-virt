@@ -1,5 +1,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "core/support/extension_words.hpp"
+
 #include "icd/opencl/cl_extension_policy.hpp"
 
 #include "icd/opencl/d3d11_bridge.hpp"
@@ -128,11 +130,11 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
          * cl_khr_d3d10_sharing before it asks which device a DXGI adapter is,
          * and found no OpenCL GPU while this was empty. */
         const ClExtensionPolicy platform_wide(reported_extensions, reported_extension_count);
-        static const char no_host[] = "";
-        const size_t needed = platform_wide.report(no_host, sizeof no_host, nullptr, 0u);
+        const ExtensionWords    no_host(memory_, Pool::paged);
+        const size_t            needed = platform_wide.report(no_host, nullptr, 0u);
         if (value != nullptr) {
             if (value_bytes < needed) return CL_INVALID_VALUE;
-            static_cast<void>(platform_wide.report(no_host, sizeof no_host, static_cast<char *>(value), value_bytes));
+            static_cast<void>(platform_wide.report(no_host, static_cast<char *>(value), value_bytes));
         }
         if (size_ret != nullptr) *size_ret = needed;
         return CL_SUCCESS;
@@ -413,10 +415,9 @@ cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClDevice &device, cl_d
     return asked.give(answer, answered);
 }
 
-cl_int ClIcdRoot::device_extensions(ClDevice &device, size_t value_bytes, void *value,
-                                    size_t *size_ret)
+cl_int ClIcdRoot::host_extensions(ClDevice &device, ExtensionWords &words)
 {
-    AV_SCOPE("ClIcdRoot::device_extensions");
+    AV_SCOPE("ClIcdRoot::host_extensions");
     ClientTransport *const wire = wire_of(*device.object());
     if (wire == nullptr) return CL_INVALID_DEVICE;
     char         host[host_extensions_bytes] = {};
@@ -426,14 +427,24 @@ cl_int ClIcdRoot::device_extensions(ClDevice &device, size_t value_bytes, void *
     /* `answered` needs no clamp of its own: the generated client refuses a
      * size the device reports past the room it was given, so a device that
      * answered CL_SUCCESS answered a length this buffer holds. */
+    return words.hold(host, answered) == Status::ok ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
+}
+
+cl_int ClIcdRoot::device_extensions(ClDevice &device, size_t value_bytes, void *value,
+                                    size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::device_extensions");
+    ExtensionWords host(memory_, Pool::paged);
+    const cl_int   asked = host_extensions(device, host);
+    if (asked != CL_SUCCESS) return asked;
     /* Measured, then written: the policy writes nothing into room its answer
      * does not fit, which is what lets the size query and the fetch be the
      * same call twice. */
-    const size_t needed = device.extensions().report(host, answered, nullptr, 0u);
+    const size_t needed = device.extensions().report(host, nullptr, 0u);
     if (size_ret != nullptr) *size_ret = needed;
     if (value == nullptr) return CL_SUCCESS;
     if (value_bytes < needed) return CL_INVALID_VALUE;
-    static_cast<void>(device.extensions().report(host, answered, static_cast<char *>(value), value_bytes));
+    static_cast<void>(device.extensions().report(host, static_cast<char *>(value), value_bytes));
     return CL_SUCCESS;
 }
 
@@ -441,13 +452,12 @@ cl_int ClIcdRoot::import_handle_types(ClDevice &device, size_t value_bytes, void
                                       size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::import_handle_types");
-    char         reported[host_extensions_bytes] = {};
-    const cl_int asked = device_extensions(device, sizeof reported, reported, nullptr);
+    ExtensionWords host(memory_, Pool::paged);
+    const cl_int   asked = host_extensions(device, host);
     if (asked != CL_SUCCESS) return asked;
     /* A query of an extension this device does not report is a query it does
      * not have, which is what the API answers CL_INVALID_VALUE for. */
-    if (!device.extensions().offered_by(reported, sizeof reported, "cl_khr_external_memory"))
-        return CL_INVALID_VALUE;
+    if (!device.extensions().reports(host, "cl_khr_external_memory")) return CL_INVALID_VALUE;
     const cl_external_memory_handle_type_khr taken = CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR;
     if (size_ret != nullptr) *size_ret = sizeof taken;
     if (value == nullptr) return CL_SUCCESS;
@@ -2888,10 +2898,10 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
      * where the host's OpenCL refused its GL context, as NVIDIA's refuses
      * every EGL one - can share with no GL context: answered as no device,
      * rather than one whose clCreateContext from this GL context must fail. */
-    char         reported[host_extensions_bytes] = {};
-    const cl_int listed = device_extensions(*device, sizeof reported, reported, nullptr);
+    ExtensionWords host(memory_, Pool::paged);
+    const cl_int   listed = host_extensions(*device, host);
     if (listed != CL_SUCCESS) return listed;
-    const bool shares = device->extensions().offered_by(reported, sizeof reported, "cl_khr_gl_sharing");
+    const bool shares = device->extensions().reports(host, "cl_khr_gl_sharing");
     if (size_ret != nullptr) *size_ret = shares ? sizeof(cl_device_id) : 0u;
     if (value == nullptr || !shares) return CL_SUCCESS;
     if (value_bytes < sizeof(cl_device_id)) return CL_INVALID_VALUE;

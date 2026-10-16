@@ -14,18 +14,10 @@ namespace {
 constexpr uint32_t implemented_major = 3u;
 constexpr uint32_t implemented_minor = 0u;
 
-size_t length_of(const char *text)
-{
-    AV_SCOPE("length_of");
-    size_t length = 0u;
-    while (text[length] != '\0') ++length;
-    return length;
-}
-
 }  // namespace
 
 ClPlatform::ClPlatform()
-    : dispatch_(nullptr), version_{}, name_{}, major_(implemented_major), minor_(implemented_minor)
+    : dispatch_(nullptr), version_{}, name_{}, version_number_("OpenCL ", implemented_major, implemented_minor)
 {
     AV_SCOPE("ClPlatform::ClPlatform");
     cap_version(implemented_major, implemented_minor);
@@ -81,24 +73,18 @@ bool ClPlatform::names_this(cl_platform_id platform) const
 void ClPlatform::cap_version(uint32_t major, uint32_t minor)
 {
     AV_SCOPE("ClPlatform::cap_version");
-    if (major > implemented_major || (major == implemented_major && minor > implemented_minor)) {
-        major = implemented_major;
-        minor = implemented_minor;
-    }
-    major_ = major;
-    minor_ = minor;
-    /* "OpenCL <major>.<minor> avgpu", which is the shape the specification
-     * fixes: the word, a space, the version, a space, and whatever the
-     * vendor cares to say. */
-    const char prefix[] = "OpenCL ";
-    size_t at = 0u;
-    for (size_t index = 0u; prefix[index] != '\0'; ++index) version_[at++] = prefix[index];
-    version_[at++] = static_cast<char>('0' + static_cast<char>(major_ % 10u));
-    version_[at++] = '.';
-    version_[at++] = static_cast<char>('0' + static_cast<char>(minor_ % 10u));
-    const char tail[] = " avgpu";
-    for (size_t index = 0u; tail[index] != '\0'; ++index) version_[at++] = tail[index];
-    version_[at] = '\0';
+    version_number_.cap(major, minor);
+    /* The word, a space, the version, a space, and whatever the vendor cares
+     * to say: the shape the specification fixes. */
+    version_number_.write(version_, sizeof version_, " avgpu");
+}
+
+size_t ClPlatform::length_of(const char *text) const
+{
+    AV_SCOPE("ClPlatform::length_of");
+    size_t length = 0u;
+    while (text[length] != '\0') ++length;
+    return length;
 }
 
 cl_int ClPlatform::answer(const char *text, size_t value_bytes, void *value, size_t *size_ret) const
@@ -133,7 +119,7 @@ cl_int ClPlatform::info(cl_platform_id platform, cl_platform_info name_asked, si
     case CL_PLATFORM_NUMERIC_VERSION: {
         if (value != nullptr) {
             if (value_bytes < sizeof(cl_version)) return CL_INVALID_VALUE;
-            *static_cast<cl_version *>(value) = CL_MAKE_VERSION(major_, minor_, 0u);
+            *static_cast<cl_version *>(value) = CL_MAKE_VERSION(version_number_.major(), version_number_.minor(), 0u);
         }
         if (size_ret != nullptr) *size_ret = sizeof(cl_version);
         return CL_SUCCESS;
@@ -156,8 +142,7 @@ cl_int ClPlatform::info(cl_platform_id platform, cl_platform_info name_asked, si
 bool ClPlatform::invariants_hold() const
 {
     AV_SCOPE("ClPlatform::invariants_hold");
-    if (major_ > implemented_major) return false;
-    if (major_ == implemented_major && minor_ > implemented_minor) return false;
+    if (!version_number_.invariants_hold()) return false;
     if (version_[0] == '\0') return false;
     /* The version string is terminated inside its room. */
     size_t index = 0u;

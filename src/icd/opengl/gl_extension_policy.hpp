@@ -8,7 +8,7 @@
 #ifndef AV_GLICD_GL_EXTENSION_POLICY_HPP
 #define AV_GLICD_GL_EXTENSION_POLICY_HPP
 
-#include "icd/common/extension_policy.hpp"
+#include "icd/common/extension_row.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -24,7 +24,7 @@ struct GlExtensionPolicyProbe;
 
 class GlExtensionPolicy {
 public:
-    using Row = icd::ExtensionPolicy::Row;
+    using Row = icd::ExtensionRow;
 
     static constexpr uint32_t max_host_names = 1024u;
     static constexpr uint32_t name_bytes = 256u;

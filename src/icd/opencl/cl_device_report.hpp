@@ -51,6 +51,7 @@
 
 #include "guest/kmt/pci_location.hpp"
 #include "icd/common/adapter_facts.hpp"
+#include "icd/common/version_text.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -116,6 +117,10 @@ private:
     /* "OpenCL C 3.0 avgpu" and its terminator, with room to spare. */
     static constexpr size_t version_bytes = 32u;
 
+    /* `host` read into `version`, and the answer it gives written to `text`. */
+    [[nodiscard]] Status observe(icd::VersionText &version, char *text, const char *host, size_t host_bytes);
+    /* The bytes of `text` before its terminator, no further than `bytes`. */
+    size_t length_within(const char *text, size_t bytes) const;
     cl_int answer(const void *from, size_t bytes, size_t value_bytes, void *value,
                   size_t *size_ret) const;
     cl_int answer_text(const char *text, size_t value_bytes, void *value, size_t *size_ret) const;
@@ -136,12 +141,10 @@ private:
 
     uint64_t                   luid_;
     icd::AdapterFacts          adapter_;
-    char                       version_[version_bytes];
-    char                       c_version_[version_bytes];
-    uint32_t                   major_;
-    uint32_t                   minor_;
-    uint32_t                   c_major_;
-    uint32_t                   c_minor_;
+    icd::VersionText           version_;
+    icd::VersionText           c_version_;
+    char                       version_text_[version_bytes];
+    char                       c_version_text_[version_bytes];
     cl_device_svm_capabilities svm_;
 };
 

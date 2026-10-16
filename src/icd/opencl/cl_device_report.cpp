@@ -35,113 +35,46 @@ constexpr cl_uint topology_pcie_amd = 1u;
 constexpr size_t  topology_bytes = 24u;
 constexpr size_t  topology_bus_at = 21u;
 
-size_t length_within(const char *text, size_t bytes)
-{
-    AV_SCOPE("length_within");
-    size_t length = 0u;
-    while (length < bytes && text[length] != '\0') ++length;
-    return length;
-}
-
-bool digit(char letter)
-{
-    AV_SCOPE("digit");
-    return letter >= '0' && letter <= '9';
-}
-
-bool at_most_implemented(uint32_t major, uint32_t minor)
-{
-    AV_SCOPE("at_most_implemented");
-    if (major > implemented_major) return false;
-    return major < implemented_major || minor <= implemented_minor;
-}
-
-/* "<prefix><major>.<minor>" followed by a space or by nothing, which is the
- * shape the specification fixes for both version strings. A number of more
- * than one digit is no OpenCL release, and reading only its first digit would
- * turn 12.0 into 1.0. */
-bool read_version(const char *host, size_t host_bytes, const char *prefix, uint32_t &major,
-                  uint32_t &minor)
-{
-    AV_SCOPE("read_version");
-    if (host == nullptr) return false;
-    const size_t length = length_within(host, host_bytes);
-    /* No terminator in the bytes the host gave: whatever follows is somebody
-     * else's memory, not the rest of a version. */
-    if (length == host_bytes) return false;
-    size_t at = 0u;
-    for (; prefix[at] != '\0'; ++at) {
-        if (at >= length || host[at] != prefix[at]) return false;
-    }
-    if (length - at < 3u) return false;
-    if (!digit(host[at]) || host[at + 1u] != '.' || !digit(host[at + 2u])) return false;
-    if (length - at > 3u && host[at + 3u] != ' ') return false;
-    major = static_cast<uint32_t>(host[at] - '0');
-    minor = static_cast<uint32_t>(host[at + 2u] - '0');
-    return true;
-}
-
-void write_version(char *into, const char *prefix, uint32_t major, uint32_t minor)
-{
-    AV_SCOPE("write_version");
-    size_t at = 0u;
-    for (size_t index = 0u; prefix[index] != '\0'; ++index) into[at++] = prefix[index];
-    into[at++] = static_cast<char>('0' + static_cast<char>(major));
-    into[at++] = '.';
-    into[at++] = static_cast<char>('0' + static_cast<char>(minor));
-    for (size_t index = 0u; reported_by[index] != '\0'; ++index) into[at++] = reported_by[index];
-    into[at] = '\0';
-}
-
-bool built_within(const char *text, size_t room)
-{
-    AV_SCOPE("built_within");
-    if (text[0] == '\0') return false;
-    return length_within(text, room) < room;
-}
-
 }  // namespace
 
 ClDeviceReport::ClDeviceReport(uint64_t adapter_luid)
-    : luid_(adapter_luid), adapter_(), version_{}, c_version_{},
-      major_(implemented_major),
-      minor_(implemented_minor), c_major_(implemented_major), c_minor_(implemented_minor), svm_(0u)
+    : luid_(adapter_luid), adapter_(), version_(device_prefix, implemented_major, implemented_minor),
+      c_version_(language_prefix, implemented_major, implemented_minor), version_text_{}, c_version_text_{},
+      svm_(0u)
 {
     AV_SCOPE("ClDeviceReport::ClDeviceReport");
-    write_version(version_, device_prefix, major_, minor_);
-    write_version(c_version_, language_prefix, c_major_, c_minor_);
+    version_.write(version_text_, sizeof version_text_, reported_by);
+    c_version_.write(c_version_text_, sizeof c_version_text_, reported_by);
+}
+
+Status ClDeviceReport::observe(icd::VersionText &version, char *text, const char *host, size_t host_bytes)
+{
+    AV_SCOPE("ClDeviceReport::observe");
+    const char  *rest = nullptr;
+    const Status read = version.read(host, host_bytes, rest);
+    if (read != Status::ok) return read;
+    version.write(text, version_bytes, reported_by);
+    return Status::ok;
 }
 
 Status ClDeviceReport::observe_version(const char *host, size_t host_bytes)
 {
     AV_SCOPE("ClDeviceReport::observe_version");
-    uint32_t major = 0u;
-    uint32_t minor = 0u;
-    if (!read_version(host, host_bytes, device_prefix, major, minor)) return Status::malformed;
-    if (!at_most_implemented(major, minor)) {
-        major = implemented_major;
-        minor = implemented_minor;
-    }
-    major_ = major;
-    minor_ = minor;
-    write_version(version_, device_prefix, major_, minor_);
-    return Status::ok;
+    return observe(version_, version_text_, host, host_bytes);
 }
 
 Status ClDeviceReport::observe_c_version(const char *host, size_t host_bytes)
 {
     AV_SCOPE("ClDeviceReport::observe_c_version");
-    uint32_t major = 0u;
-    uint32_t minor = 0u;
-    if (!read_version(host, host_bytes, language_prefix, major, minor)) return Status::malformed;
-    if (!at_most_implemented(major, minor)) {
-        major = implemented_major;
-        minor = implemented_minor;
-    }
-    c_major_ = major;
-    c_minor_ = minor;
-    write_version(c_version_, language_prefix, c_major_, c_minor_);
-    return Status::ok;
+    return observe(c_version_, c_version_text_, host, host_bytes);
+}
+
+size_t ClDeviceReport::length_within(const char *text, size_t bytes) const
+{
+    AV_SCOPE("ClDeviceReport::length_within");
+    size_t length = 0u;
+    while (length < bytes && text[length] != '\0') ++length;
+    return length;
 }
 
 void ClDeviceReport::observe_svm(cl_device_svm_capabilities host)
@@ -221,10 +154,10 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
         const cl_bool reported = luid_ != 0u ? CL_TRUE : CL_FALSE;
         return answer(&reported, sizeof reported, value_bytes, value, size_ret);
     }
-    case CL_DEVICE_VERSION: return answer_text(version_, value_bytes, value, size_ret);
-    case CL_DEVICE_OPENCL_C_VERSION: return answer_text(c_version_, value_bytes, value, size_ret);
+    case CL_DEVICE_VERSION: return answer_text(version_text_, value_bytes, value, size_ret);
+    case CL_DEVICE_OPENCL_C_VERSION: return answer_text(c_version_text_, value_bytes, value, size_ret);
     case CL_DEVICE_NUMERIC_VERSION: {
-        const cl_version reported = CL_MAKE_VERSION(major_, minor_, 0u);
+        const cl_version reported = CL_MAKE_VERSION(version_.major(), version_.minor(), 0u);
         return answer(&reported, sizeof reported, value_bytes, value, size_ret);
     }
     case CL_DEVICE_SVM_CAPABILITIES:
@@ -348,10 +281,9 @@ bool ClDeviceReport::names_adapter(uint64_t adapter_luid) const
 bool ClDeviceReport::invariants_hold() const
 {
     AV_SCOPE("ClDeviceReport::invariants_hold");
-    if (!at_most_implemented(major_, minor_)) return false;
-    if (!at_most_implemented(c_major_, c_minor_)) return false;
-    if (!built_within(version_, version_bytes)) return false;
-    if (!built_within(c_version_, version_bytes)) return false;
+    if (!version_.invariants_hold() || !c_version_.invariants_hold()) return false;
+    if (version_text_[0] == '\0' || length_within(version_text_, version_bytes) == version_bytes) return false;
+    if (c_version_text_[0] == '\0' || length_within(c_version_text_, version_bytes) == version_bytes) return false;
     return (svm_ & ~carried_svm) == 0u;
 }
 

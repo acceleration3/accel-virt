@@ -13,17 +13,21 @@
  * test, no row; no row, no report (constitution VI).
  *
  * The device's answer is one space-separated string, unlike Vulkan's array of
- * structures, so only the row type is shared with icd::ExtensionPolicy - the
+ * structures, so only the row type is shared with Vulkan's ExtensionPolicy - the
  * shape GlExtensionPolicy already takes for OpenGL's. */
 #ifndef AV_CLICD_CL_EXTENSION_POLICY_HPP
 #define AV_CLICD_CL_EXTENSION_POLICY_HPP
 
-#include "icd/common/extension_policy.hpp"
+#include "icd/common/extension_row.hpp"
 
 #include <CL/cl.h>
 
 #include <stddef.h>
 #include <stdint.h>
+
+namespace av {
+class ExtensionWords;
+}  // namespace av
 
 namespace av::clicd {
 
@@ -31,7 +35,7 @@ struct ClExtensionPolicyProbe;
 
 class ClExtensionPolicy {
 public:
-    using Row = icd::ExtensionPolicy::Row;
+    using Row = icd::ExtensionRow;
 
     /* An extension name past this is not one any registry has, so a host
      * string carrying one is a host string this does not believe. */
@@ -46,21 +50,20 @@ public:
     ClExtensionPolicy &operator=(const ClExtensionPolicy &) = delete;
 
     /* The reportable extensions of a device whose CL_DEVICE_EXTENSIONS is
-     * `host` - space-separated, and not necessarily terminated within
-     * `host_bytes` - written into `into` in the policy's order, space
-     * separated and terminated. Answers the bytes the answer needs including
-     * its terminator, whether or not it fitted; nothing is written when it
-     * did not fit, or when `into` is null. */
-    size_t report(const char *host, size_t host_bytes, char *into, size_t into_bytes) const;
+     * `host`, written into `into` in the policy's order, space separated and
+     * terminated. Answers the bytes the answer needs including its
+     * terminator, whether or not it fitted; nothing is written when it did
+     * not fit, or when `into` is null. */
+    size_t report(const ExtensionWords &host, char *into, size_t into_bytes) const;
     /* The same extensions, in the same order, as CL_DEVICE_EXTENSIONS_WITH_VERSION
      * names them: each with its row's version, which is the version this ICD
      * carries whatever the host's own is. Answers how many there are, whether
      * or not they fitted in `room` entries; nothing is written when they did
      * not, or when `into` is null. */
-    size_t report_versions(const char *host, size_t host_bytes, cl_name_version *into, size_t room) const;
+    size_t report_versions(const ExtensionWords &host, cl_name_version *into, size_t room) const;
 
-    /* Whether the host string offers `name`, as a whole word. */
-    bool offered_by(const char *host, size_t host_bytes, const char *name) const;
+    /* Whether report lists `name` for a device whose host offers `host`. */
+    bool reports(const ExtensionWords &host, const char *name) const;
     /* Whether a row names it; what the ICD asks before it acts on one. */
     bool reportable(const char *name) const;
     /* The PCI vendor the device's adapter presents, which a vendor's own rows
@@ -76,7 +79,14 @@ private:
 
     /* Whether a host offering `host` answers `row`: its own name, or the host
      * extension the row names instead. */
-    bool answered_by(const char *host, size_t host_bytes, const Row &row) const;
+    bool     answered_by(const ExtensionWords &host, const Row &row) const;
+    /* The letters of a row's name, at most name_bytes. */
+    size_t   letters_of(const char *name) const;
+    /* Whether a row's name is `name`. */
+    bool     same(const char *row_name, const char *name) const;
+    /* The PCI vendor an "-<hex>" row is answered on, from the hex after its
+     * dash; 0 for anything that is not hex. */
+    uint32_t vendor_of(const char *host) const;
 
     const Row *rows_;
     uint32_t   count_;

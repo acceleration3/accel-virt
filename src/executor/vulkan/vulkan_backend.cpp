@@ -59,7 +59,7 @@ VulkanBackend::VulkanBackend() : VulkanBackend(heap_)
 /* heap_ is constructed before blocks_ is bound to it, whichever constructor
  * runs: it is declared first. */
 VulkanBackend::VulkanBackend(BlockSource &blocks)
-    : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks),
+    : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), adopted_(), import_(), types_(), types_learnt_(false), parent_(0u),
       ran_(0u)
@@ -192,11 +192,12 @@ VulkanBackend *VulkanBackend::deciding()
 Status VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
 {
     AV_SCOPE("VulkanBackend::enable_identity");
-    const Status taken = extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames, 1u);
+    const Status taken = extensions_.take(create.ppEnabledExtensionNames, create.enabledExtensionCount, 1u);
     /* A list the loader will refuse anyway is left for it to refuse. */
     if (taken == Status::invalid_parameter) return Status::ok;
     if (taken != Status::ok) return taken;
-    extensions_.add(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    /* Into the room take made, so it cannot be refused. */
+    static_cast<void>(extensions_.add(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
     return Status::ok;
@@ -224,14 +225,15 @@ Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t 
     AV_SCOPE("VulkanBackend::enable_memory_import");
     constexpr uint32_t added = 4u;
     importing = create.enabledExtensionCount;
-    const Status taken = extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames, added);
+    const Status taken = extensions_.take(create.ppEnabledExtensionNames, create.enabledExtensionCount, added);
     if (taken == Status::invalid_parameter) return Status::ok;
     if (taken != Status::ok) return taken;
-    extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-    extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
-    extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+    /* Into the room take made, so none can be refused. */
+    static_cast<void>(extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME));
+    static_cast<void>(extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME));
+    static_cast<void>(extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME));
     importing = extensions_.count();
-    extensions_.add(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
+    static_cast<void>(extensions_.add(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME));
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
     return Status::ok;

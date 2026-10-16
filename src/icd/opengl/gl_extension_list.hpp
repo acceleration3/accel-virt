@@ -6,8 +6,14 @@
 #ifndef AV_GLICD_GL_EXTENSION_LIST_HPP
 #define AV_GLICD_GL_EXTENSION_LIST_HPP
 
-#include <stddef.h>
+#include "core/support/extension_names.hpp"
+#include "core/support/extension_words.hpp"
+
 #include <stdint.h>
+
+namespace av {
+class BlockSource;
+}  // namespace av
 
 namespace av::glicd {
 
@@ -15,15 +21,13 @@ struct GlExtensionListProbe;
 
 class GlExtensionList {
 public:
-    static constexpr uint32_t max_names = 64u;
-    static constexpr size_t   joined_bytes = 4096u;
-
-    GlExtensionList();
+    /* Both lists are kept in `memory`. */
+    explicit GlExtensionList(BlockSource &memory);
     GlExtensionList(const GlExtensionList &) = delete;
     GlExtensionList &operator=(const GlExtensionList &) = delete;
 
     /* False, keeping the list as it was, for a null or empty name, one held
-     * already, max_names held, or a name the joined string has no room for. */
+     * already, a name with a space in it, or no room for it. */
     bool        add(const char *name);
     uint32_t    count() const;
     /* Null past count(). */
@@ -31,15 +35,12 @@ public:
     /* The names separated by single spaces; empty for none. */
     const char *joined() const;
 
+    /* The joined string is exactly the names, in order. */
     bool invariants_hold() const;
 
 private:
-    size_t length_of(const char *name) const;
-
-    const char *names_[max_names];
-    uint32_t    count_;
-    char        joined_[joined_bytes];
-    size_t      length_;
+    ExtensionNames names_;
+    ExtensionWords joined_;
 
     friend struct GlExtensionListProbe;
 };

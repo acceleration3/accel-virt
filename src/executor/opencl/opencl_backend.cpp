@@ -1,8 +1,8 @@
 #include "executor/opencl/opencl_backend.hpp"
 
+#include "core/support/extension_words.hpp"
 #include "core/support/growable_array.hpp"
 
-#include "executor/opencl/cl_extension_list.hpp"
 #include "device/host/stdio_log.hpp"
 #include "core/log/driver_log.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
@@ -45,7 +45,7 @@ constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE
                                          CL_DEVICE_TYPE_ACCELERATOR | CL_DEVICE_TYPE_CUSTOM;
 
 /* The two extension names the guest is shown as this executor finds them
- * (ClExtensionList). */
+ * (on_clGetDeviceInfo). */
 constexpr const char *gl_sharing = "cl_khr_gl_sharing";
 constexpr const char *external_memory = "cl_khr_external_memory";
 
@@ -158,15 +158,27 @@ cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info par
     if (param_name != CL_DEVICE_EXTENSIONS)
         return RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size, param_value,
                                                 param_value_size_ret);
-    char         host[ClExtensionList::host_bytes] = {};
-    const cl_int asked = RealDispatch::on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof host, host, nullptr);
+    size_t       host_bytes = 0u;
+    const cl_int sized = RealDispatch::on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &host_bytes);
+    if (sized != CL_SUCCESS) return sized;
+    GrowableArray<char> host(blocks_, Pool::paged);
+    if (host_bytes > GrowableArray<char>::most_values ||
+        host.resize(static_cast<uint32_t>(host_bytes), '\0') != Status::ok)
+        return CL_OUT_OF_HOST_MEMORY;
+    const cl_int asked =
+        RealDispatch::on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, host_bytes, host.begin(), nullptr);
     if (asked != CL_SUCCESS) return asked;
-    ClExtensionList shown;
-    shown.hold(host, sizeof host);
+    ExtensionWords shown(blocks_, Pool::paged);
+    if (shown.hold(host.begin(), host_bytes) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
     if (!reaches_gl_) shown.strike(gl_sharing);
-    if (imports_) shown.add(external_memory);
-    else shown.strike(external_memory);
-    return shown.answer(param_value_size, param_value, param_value_size_ret);
+    if (!imports_) shown.strike(external_memory);
+    else if (shown.add(external_memory) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+    const size_t needed = shown.length() + 1u;
+    if (param_value_size_ret != nullptr) *param_value_size_ret = needed;
+    if (param_value == nullptr) return CL_SUCCESS;
+    if (param_value_size < needed) return CL_INVALID_VALUE;
+    __builtin_memcpy(param_value, shown.text(), needed);
+    return CL_SUCCESS;
 }
 
 cl_int OpenClBackend::on_clGetProgramInfo(cl_program program, cl_program_info param_name, size_t param_value_size,

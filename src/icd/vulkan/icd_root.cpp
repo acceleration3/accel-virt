@@ -46,19 +46,6 @@ namespace {
 constexpr const char *dma_buf_extension = "VK_EXT_external_memory_dma_buf";
 constexpr const char *win32_memory_extension = "VK_KHR_external_memory_win32";
 
-/* Whether `count` names hold `wanted`. Every name is known to be there: the one
- * caller has already put the list through first_refused and HostExtensionList,
- * either of which answers a null before this runs, so a check for one here
- * would be a branch nothing can take. */
-bool names_hold(const char *const *names, uint32_t count, const char *wanted)
-{
-    AV_SCOPE("names_hold");
-    if (names == nullptr) return false;
-    for (uint32_t index = 0u; index < count; index++)
-        if (__builtin_strcmp(names[index], wanted) == 0) return true;
-    return false;
-}
-
 using Entry = vkicd::generated::Entry;
 using Level = vkicd::generated::DispatchLevel;
 
@@ -436,13 +423,14 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
         return status == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INCOMPATIBLE_DRIVER;
     }
     pending_ = opened;
-    HostExtensionList asked;
-    if (asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount) != Status::ok) {
+    HostExtensionList asked(memory_);
+    const Status taken = asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount);
+    if (taken != Status::ok) {
         lines_.note("vkCreateInstance: the extensions it names are not a list this driver can pass on, count",
              create->enabledExtensionCount);
         release_connection(opened);
         pending_ = nullptr;
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
+        return taken == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     /* The window-system extensions are answered here, not by the host: it runs
      * on the host's own platform and has none of them (feature 046). */
@@ -714,26 +702,24 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
                     name != nullptr ? name : "(null)");
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
-    HostExtensionList asked;
-    if (asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount) != Status::ok) {
+    HostExtensionList asked(memory_);
+    const Status taken = asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount);
+    if (taken != Status::ok) {
         lines_.note("vkCreateDevice: the extensions it names are not a list this driver can pass on, count",
              create->enabledExtensionCount);
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
+        return taken == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_EXTENSION_NOT_PRESENT;
     }
     /* Where the host has it, the dma-buf extension is asked for beside the fd
      * one: a shared allocation is exported as a dma-buf so another process's
      * open can import it, and VkExportMemoryAllocateInfo naming that type on a
      * device made without the extension is refused (feature 053). */
-    if (names_hold(create->ppEnabledExtensionNames, create->enabledExtensionCount, win32_memory_extension)) {
+    if (asked.named(win32_memory_extension)) {
         /* Asked here rather than waiting for the application to enumerate:
          * what a shared allocation is exported as has to be settled before the
          * device is made, and an application may never ask for the list. */
         learn_host_sharing(*made, physical_device);
-        /* Not branched on, because it cannot fail: `take` refused a list longer
-         * than the table, and this list names the win32 extension - which take
-         * keeps for this ICD rather than passing on - so at most max_names - 1
-         * of its names reached the table and there is always room for one
-         * more. A branch nothing can take is one no test can judge. */
+        /* Not branched on, because it cannot fail: `take` made room for one
+         * more name. */
         if (made->connection()->host_has_dma_buf()) static_cast<void>(asked.add(dma_buf_extension));
     }
     /* A swapchain is this ICD's own, so the host's device is not asked for it. */

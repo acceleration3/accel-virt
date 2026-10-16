@@ -1,4 +1,4 @@
-#include "icd/common/extension_policy.hpp"
+#include "icd/vulkan/extension_policy.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/vulkan/vk_supported_extensions.h"

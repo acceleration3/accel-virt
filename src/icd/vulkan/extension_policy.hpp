@@ -15,8 +15,10 @@
  * imports them as the type asked (docs/host-memory.md, "Application
  * memory"), never the host's own import of a pointer. The host's list is read as bytes the host wrote: a name
  * is compared whole, terminator included, within its fixed field. */
-#ifndef AV_ICD_EXTENSION_POLICY_HPP
-#define AV_ICD_EXTENSION_POLICY_HPP
+#ifndef AV_VKICD_EXTENSION_POLICY_HPP
+#define AV_VKICD_EXTENSION_POLICY_HPP
+
+#include "icd/common/extension_row.hpp"
 
 #include <stdint.h>
 
@@ -26,7 +28,7 @@ namespace av::icd {
 
 class ExtensionPolicy {
 public:
-    struct Row;
+    using Row = ExtensionRow;
 
     /* `rows` is a constant table the owner keeps for as long as this. */
     ExtensionPolicy(const Row *rows, uint32_t count);
@@ -54,28 +56,8 @@ private:
 
     const Row *rows_;
     uint32_t   count_;
-
-public:
-    /* One reportable extension, an entry of a constant table. Its fields keep
-     * a member's trailing underscore, as ObjectPool's Chunk does, and it is
-     * defined after the data members, because tools/header_scan.py reads a
-     * class's members only up to its first nested type. */
-    struct Row {
-        const char *name_;
-        uint32_t    spec_version_;
-        /* The test that exercises the extension through this ICD, as
-         * suite.case. */
-        const char *test_;
-        /* The host extension this one is answered over, when it is not the
-         * host's own spelling of it: VK_KHR_external_memory_win32 is answered
-         * over the host's VK_KHR_external_memory_fd, since no Linux driver has
-         * a Win32 handle to give (feature 047, research.md §10). Null - the
-         * usual case - means the host must have this extension itself, and is
-         * what a row that says nothing about it gets. */
-        const char *host_ = nullptr;
-    };
 };
 
 }  // namespace av::icd
 
-#endif  // AV_ICD_EXTENSION_POLICY_HPP
+#endif  // AV_VKICD_EXTENSION_POLICY_HPP

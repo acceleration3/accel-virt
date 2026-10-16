@@ -59,6 +59,7 @@ class LogSink;
 
 namespace av {
 class BlockSource;
+class ExtensionWords;
 class ClientTransport;
 class Kmt;
 class StateWriter;
@@ -646,6 +647,8 @@ private:
                                          size_t *size_ret);
     cl_int           device_extensions(ClDevice &device, size_t value_bytes, void *value,
                                        size_t *size_ret);
+    /* The host device's own CL_DEVICE_EXTENSIONS into `words`. */
+    cl_int           host_extensions(ClDevice &device, ExtensionWords &words);
     /* CL_DEVICE_EXTENSIONS_WITH_VERSION: the same intersection, each with the
      * version this ICD carries. */
     cl_int           device_extension_versions(ClDevice &device, size_t value_bytes, void *value,

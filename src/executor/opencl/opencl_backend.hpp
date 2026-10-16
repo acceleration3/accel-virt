@@ -138,7 +138,7 @@ public:
     cl_int     on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
                                  cl_device_id *devices, cl_uint *num_devices) override;
     /* The host's answer, with the extension list the guest is shown in place
-     * of the host's own (ClExtensionList): `cl_khr_gl_sharing` where GL
+     * of the host's own: `cl_khr_gl_sharing` where GL
      * objects reach this GPU's OpenCL, `cl_khr_external_memory` where a
      * descriptor can be opened as a cl_mem. The guest's ICD reports both as
      * it reads them, so leaving either in where it fails would report an

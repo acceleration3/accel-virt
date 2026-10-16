@@ -12,36 +12,41 @@
 #ifndef AV_ICD_HOST_EXTENSION_LIST_HPP
 #define AV_ICD_HOST_EXTENSION_LIST_HPP
 
+#include "core/support/extension_names.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>
+
+namespace av {
+class BlockSource;
+}  // namespace av
 
 namespace av::icd {
 
 class HostExtensionList {
 public:
-    /* Well past what an application enables: vulkaninfo, DXVK and vkd3d-proton
-     * name a handful each. */
-    static constexpr uint32_t max_names = 64u;
-
-    HostExtensionList();
+    /* The names are kept in `memory`: as many as the application enables. */
+    explicit HostExtensionList(BlockSource &memory);
     HostExtensionList(const HostExtensionList &) = delete;
     HostExtensionList &operator=(const HostExtensionList &) = delete;
 
     /* The `count` names an application enabled, less the ones this ICD answers
-     * itself; too_large for a list longer than this holds. */
+     * itself, with room for one more. invalid_parameter for a count with no
+     * names or a null name; no_memory when there is no room for them. */
     [[nodiscard]] Status take(const char *const *names, uint32_t count);
     /* One more name the host is asked for, which no application named: the
      * dma-buf extension a shared allocation is exported through, where the
-     * host has it (feature 053). Ignored when the list already holds it, and
-     * false when there is no room. */
-    [[nodiscard]] bool   add(const char *name);
+     * host has it (feature 053). Ignored when the list already holds it; the
+     * one take made room for cannot be refused. */
+    [[nodiscard]] Status add(const char *name);
+    /* Whether the application named `name` itself. */
+    bool                 named(const char *name) const;
     const char *const   *names() const;
     uint32_t             count() const;
     /* How many of the application's names this ICD answers itself. */
     uint32_t             kept() const;
 
-    /* It never holds more names than it was given. */
+    /* It never holds more names than it was given and added. */
     bool invariants_hold() const;
 
 private:
@@ -51,15 +56,16 @@ private:
      * ICD answers it over a different host extension. */
     const char *host_spelling_of(const char *name) const;
 
-    const char *names_[max_names];
-    uint32_t    count_;
-    uint32_t    given_;
-    uint32_t    kept_;
+    ExtensionNames     names_;
+    /* The application's own list, which outlives the create it came in. */
+    const char *const *given_names_;
+    uint32_t           given_;
+    uint32_t           kept_;
     /* Names this ICD added on top of the list it was given: `add` is how the
      * driver asks the host for something the application never named, so they
      * are not part of `given_` and the invariant has to know they exist
      * (feature 053). */
-    uint32_t    added_;
+    uint32_t           added_;
 };
 
 }  // namespace av::icd

@@ -1,5 +1,7 @@
 #include "icd/opengl/guest_gl_context.hpp"
 
+#include "icd/common/version_text.hpp"
+
 #include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
@@ -24,6 +26,8 @@ namespace {
 
 constexpr uint32_t latest_major = 4u;
 constexpr uint32_t latest_minor = 6u;
+/* GLSL 4.60, the language OpenGL 4.6 carries. */
+constexpr uint32_t latest_language_minor = 60u;
 constexpr uint32_t no_error = 0u;
 
 }  // namespace
@@ -35,7 +39,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), log_(log), lines_(log, "avgl: "), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log), pinned_(memory, channel_),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), extensions_(memory), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -467,32 +471,28 @@ bool GuestGlContext::learn()
     glproto::av_glGetIntegerv(wire, GrantedProfile::mask_query, &mask);
     profile_.learn(major < 0 ? 0u : static_cast<uint32_t>(major), minor < 0 ? 0u : static_cast<uint32_t>(minor),
                    static_cast<uint32_t>(mask));
-    cap_version();
+    cap_version(version_row, latest_minor);
+    cap_version(shading_row, latest_language_minor);
     policy_.learn(wire, extensions_);
     return !channel_.faulted();
 }
 
-/* A host newer than the ICD implements is reported as 4.6: the version's
- * leading "major.minor" is rewritten, and the rest of the host's string kept. */
-void GuestGlContext::cap_version()
+/* A host newer than the ICD implements is reported as OpenGL 4.6 and GLSL
+ * 4.60: the string's leading "major.minor" is rewritten, and the rest of the
+ * host's string kept. */
+void GuestGlContext::cap_version(uint32_t row, uint32_t most_minor)
 {
     AV_SCOPE("GuestGlContext::cap_version");
-    char *const version = strings_[version_row];
-    uint32_t    major = 0u;
-    uint32_t    minor = 0u;
-    uint32_t    at = 0u;
-    while (version[at] >= '0' && version[at] <= '9') major = major * 10u + static_cast<uint32_t>(version[at++] - '0');
-    if (at == 0u || version[at] != '.') return;
-    const uint32_t minor_at = ++at;
-    while (version[at] >= '0' && version[at] <= '9') minor = minor * 10u + static_cast<uint32_t>(version[at++] - '0');
-    if (at == minor_at || major < latest_major || (major == latest_major && minor <= latest_minor)) return;
-    char       capped[string_bytes];
-    TextBuffer text(capped, sizeof capped);
-    text.append_decimal(latest_major);
-    text.append(".");
-    text.append_decimal(latest_minor);
-    text.append(version + at);
-    for (uint32_t byte = 0u; byte <= text.length(); byte++) version[byte] = capped[byte];
+    icd::VersionText version("", latest_major, most_minor);
+    char *const      text = strings_[row];
+    const char      *rest = nullptr;
+    if (version.read(text, string_bytes, rest) != Status::ok) return;
+    char capped[string_bytes];
+    version.write(capped, sizeof capped, rest);
+    for (uint32_t byte = 0u; byte < string_bytes; byte++) {
+        text[byte] = capped[byte];
+        if (capped[byte] == '\0') return;
+    }
 }
 
 void GuestGlContext::teardown()

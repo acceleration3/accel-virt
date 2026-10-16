@@ -498,9 +498,8 @@ file(GLOB_RECURSE AVUMD_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/d3d/*.cpp)
 list(REMOVE_ITEM AVUMD_SOURCES ${AVTEST_GENERATED})
-# ExtensionPolicy reports Khronos extensions, which a Direct3D driver has none
-# of; GdiWindowSurface is the ICDs' presentation seam.
-list(FILTER AVUMD_SOURCES EXCLUDE REGEX "(extension_policy|gdi_window_surface)\\.cpp$")
+# GdiWindowSurface is the ICDs' presentation seam.
+list(FILTER AVUMD_SOURCES EXCLUDE REGEX "gdi_window_surface\\.cpp$")
 list(APPEND AVUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d/d3d_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp

@@ -458,9 +458,7 @@ endif()
 # the pieces all three user-mode drivers share. Its own archive, apart from the
 # two ICDs', as the three DLLs are apart - and unlike them it needs no
 # generated tree, because the D3D DDI is the WDK's shape, not a registry's.
-# ExtensionPolicy is the one piece of src/icd/common a Direct3D driver has no
-# use for - it reports Khronos extensions - and it is the one that needs the
-# Vulkan headers, so this archive names what it takes rather than globbing.
+# This archive names what it takes rather than globbing.
 # The vendor management libraries' decisions (atiadlxx.dll, nvapi64.dll;
 # docs/vendor-libraries.md): portable, over the Kmt and a thread lock.
 file(GLOB_RECURSE AV_VENDOR_SOURCES CONFIGURE_DEPENDS src/icd/vendor/*.cpp)

@@ -27,7 +27,8 @@ constexpr uint32_t host_spelling_count = sizeof host_spellings / sizeof host_spe
 
 }  // namespace
 
-HostExtensionList::HostExtensionList() : names_{}, count_(0u), given_(0u), kept_(0u), added_(0u)
+HostExtensionList::HostExtensionList(BlockSource &memory)
+    : names_(memory, Pool::paged), given_names_(nullptr), given_(0u), kept_(0u), added_(0u)
 {
     AV_SCOPE("HostExtensionList::HostExtensionList");
 }
@@ -35,48 +36,57 @@ HostExtensionList::HostExtensionList() : names_{}, count_(0u), given_(0u), kept_
 Status HostExtensionList::take(const char *const *names, uint32_t count)
 {
     AV_SCOPE("HostExtensionList::take");
-    if (count > max_names) return Status::too_large;
-    if (names == nullptr && count != 0u) return Status::invalid_parameter;
-    count_ = 0u;
+    names_.clear();
+    given_names_ = nullptr;
+    given_ = 0u;
     kept_ = 0u;
     added_ = 0u;
+    if (names == nullptr && count != 0u) return Status::invalid_parameter;
+    /* A name the application did not give is not one to pass on; what
+     * answers for it is the caller's refusal, not a null dereference. */
+    for (uint32_t index = 0u; index < count; index++)
+        if (names[index] == nullptr) return Status::invalid_parameter;
+    if (count == ~uint32_t{0} || names_.reserve(count + 1u) != Status::ok) return Status::no_memory;
+    given_names_ = names;
     given_ = count;
     for (uint32_t index = 0u; index < count; index++) {
-        const char *const name = names[index];
-        /* A name the application did not give is not one to pass on; what
-         * answers for it is the caller's refusal, not a null dereference. */
-        if (name == nullptr) return Status::invalid_parameter;
-        if (is_the_icd_s(name)) {
+        if (is_the_icd_s(names[index])) {
             kept_++;
             continue;
         }
-        names_[count_++] = host_spelling_of(name);
+        /* Room was made, and an empty name is the loader's to refuse. */
+        static_cast<void>(names_.add(host_spelling_of(names[index])));
     }
     return Status::ok;
 }
 
-bool HostExtensionList::add(const char *name)
+Status HostExtensionList::add(const char *name)
 {
     AV_SCOPE("HostExtensionList::add");
-    if (name == nullptr) return false;
-    for (uint32_t index = 0u; index < count_; index++)
-        if (__builtin_strcmp(names_[index], name) == 0) return true;
-    if (count_ == max_names) return false;
-    names_[count_++] = name;
-    added_++;
-    return true;
+    if (names_.holds(name)) return Status::ok;
+    const Status added = names_.add(name);
+    if (added == Status::ok) added_++;
+    return added;
+}
+
+bool HostExtensionList::named(const char *name) const
+{
+    AV_SCOPE("HostExtensionList::named");
+    for (uint32_t index = 0u; index < given_; index++)
+        if (__builtin_strcmp(given_names_[index], name) == 0) return true;
+    return false;
 }
 
 const char *const *HostExtensionList::names() const
 {
     AV_SCOPE("HostExtensionList::names");
-    return count_ != 0u ? names_ : nullptr;
+    return names_.names();
 }
 
 uint32_t HostExtensionList::count() const
 {
     AV_SCOPE("HostExtensionList::count");
-    return count_;
+    return names_.count();
 }
 
 uint32_t HostExtensionList::kept() const
@@ -104,10 +114,9 @@ bool HostExtensionList::is_the_icd_s(const char *name) const
 bool HostExtensionList::invariants_hold() const
 {
     AV_SCOPE("HostExtensionList::invariants_hold");
-    /* Every name it holds came from the list it was given, and the ones it
-     * kept for this ICD are the rest of that list. `take` refuses a longer one
-     * before it writes anything, so there is no room left to overrun. */
-    return count_ + kept_ <= given_ + added_;
+    /* Every name it holds came from the list it was given or was added, and
+     * the ones it kept for this ICD are the rest of that list. */
+    return names_.invariants_hold() && names_.count() + kept_ <= given_ + added_;
 }
 
 }  // namespace av::icd
